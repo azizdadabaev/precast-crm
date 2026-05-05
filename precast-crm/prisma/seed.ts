@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { calculateSlab } from "../src/services/calculation-engine";
 
@@ -116,7 +116,7 @@ async function main() {
           rowsInitial: r.rows_initial,
           rowsFinal: r.rows_final,
           beamCount: r.beam_count,
-          beamGroups: r.beam_groups,
+          beamGroups: r.beam_groups as unknown as Prisma.InputJsonValue,
           blocksPerRow: r.blocks_per_row,
           totalBlocks: r.total_blocks,
           actualLength: r.actual_length,
@@ -124,7 +124,7 @@ async function main() {
           coveredArea: r.covered_area,
           delta: r.delta,
           concreteVolume: r.concrete_volume,
-          constants: r.constants as any,
+          constants: r.constants as unknown as Prisma.InputJsonValue,
         },
       });
 

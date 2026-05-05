@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { ok, handler } from "@/lib/api";
 import { clearAuthCookie } from "@/lib/auth";
 

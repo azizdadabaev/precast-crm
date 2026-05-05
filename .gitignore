@@ -1,0 +1,5 @@
+# Local Claude Code state — per-machine, not portable
+.claude/
+
+# TypeScript incremental build info
+**/tsconfig.tsbuildinfo

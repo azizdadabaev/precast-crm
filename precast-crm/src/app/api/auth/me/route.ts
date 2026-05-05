@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { ok, fail, handler } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
 

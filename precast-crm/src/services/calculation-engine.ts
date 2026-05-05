@@ -7,16 +7,21 @@
  *  All inputs come in via arguments; all results are returned.
  *  This makes the engine 100% testable and reusable.
  *
- *  This module replicates the Excel logic exactly:
- *    1. Beam length = width + 2 * BEARING
- *    2. Raw rows  = length / BEAM_SPACING
- *    3. Rounded rows
- *    4. Actual covered length = rows * BEAM_SPACING - EDGE_OFFSET
- *    5. Delta = actual_length - length
- *    6. If delta > TOLERANCE  → final_rows = rows - 1, else final_rows = rows
- *    7. Corrected length = actual_length - TOLERANCE * (rows - final_rows)
- *    8. Blocks per row = ceil((beam_length - BLOCK_EDGE_LOSS) / BLOCK_LENGTH)
- *    9. Total blocks = blocks_per_row * final_rows
+ *  Algorithm (remainder-based, replaces the legacy Excel "tolerance"
+ *  rule with a cleaner threshold model):
+ *
+ *    1. beam_length     = width + 2 * BEARING
+ *    2. rows_initial    = floor(length / BEAM_SPACING)
+ *       remainder       = length - rows_initial * BEAM_SPACING
+ *    3. Apply the remainder rule:
+ *         remainder = 0                           → exact fit
+ *         remainder ≥ FILLER_THRESHOLD            → +1 filler row only
+ *         remainder < FILLER_THRESHOLD (and > 0)  → +1 row AND +1 beam
+ *    4. Add manual extras (engineer overrides).
+ *    5. actual_length   = rows_final * BEAM_SPACING - EDGE_OFFSET
+ *    6. blocks_per_row  = ceil((beam_length - BLOCK_EDGE_LOSS) / BLOCK_LENGTH)
+ *    7. total_blocks    = blocks_per_row * rows_final
+ *    8. concrete_volume = width * actual_length * TOPPING_THICKNESS
  *
  *  All decimal results are kept at 3-digit precision via `round3`.
  * ─────────────────────────────────────────────────────────────────
@@ -25,36 +30,36 @@
 // ── Types ───────────────────────────────────────────────────────
 
 export interface CalculationConstants {
-  BEAM_SPACING: number; // 0.58 m
-  BEARING: number; // 0.15 m  – beam rests on each wall
-  EDGE_OFFSET: number; // 0.035 m – edge offset
-  BLOCK_LENGTH: number; // 0.195 m
-  BLOCK_EDGE_LOSS: number; // 0.2 m  – removed from beam_length before block fit
-  TOLERANCE: number; // 0.05 m  – row-correction tolerance
-  FILLER_THRESHOLD: number; // 0.20 m – remainder threshold for filler vs beam
-  TOPPING_THICKNESS: number; // m – concrete topping thickness (configurable)
+  BEAM_SPACING: number;       // 0.58 m  – pitch between beams
+  BEARING: number;            // 0.15 m  – beam rests on each wall
+  EDGE_OFFSET: number;        // 0.035 m – edge offset
+  BLOCK_LENGTH: number;       // 0.20 m  – nominal filler block length
+  BLOCK_EDGE_LOSS: number;    // 0.20 m  – removed from beam_length before block fit
+  TOLERANCE: number;          // 0.05 m  – kept for back-compat (unused by new rule)
+  FILLER_THRESHOLD: number;   // 0.20 m  – remainder ≥ this → filler-only row
+  TOPPING_THICKNESS: number;  // m       – concrete topping thickness
 }
 
 export const DEFAULT_CONSTANTS: CalculationConstants = {
   BEAM_SPACING: 0.58,
   BEARING: 0.15,
   EDGE_OFFSET: 0.035,
-  BLOCK_LENGTH: 0.200,
-  BLOCK_EDGE_LOSS: 0.2,
+  BLOCK_LENGTH: 0.20,
+  BLOCK_EDGE_LOSS: 0.20,
   TOLERANCE: 0.05,
   FILLER_THRESHOLD: 0.20,
-  TOPPING_THICKNESS: 0.05, // 5 cm topping by default
+  TOPPING_THICKNESS: 0.05,
 };
 
 export interface SlabInput {
   /** Slab width in meters (perpendicular to beams). */
   width: number;
-  /** Slab length in meters (parallel to beams – beams are laid along this dimension). */
+  /** Slab length in meters (parallel to beams). */
   length: number;
 }
 
 export interface BeamGroup {
-  length: number; // meters
+  length: number;
   qty: number;
 }
 
@@ -90,15 +95,9 @@ export function round3(n: number): number {
   return (sign * Math.round(Math.abs(n) * 1000)) / 1000;
 }
 
-/** Round half-away-from-zero to 2 decimal places. */
 export function round2(n: number): number {
   const sign = n < 0 ? -1 : 1;
   return (sign * Math.round(Math.abs(n) * 100)) / 100;
-}
-
-/** Excel-style ROUND: half away from zero. */
-function excelRound(n: number): number {
-  return n < 0 ? -Math.round(-n) : Math.round(n);
 }
 
 // ── Validation ──────────────────────────────────────────────────
@@ -117,99 +116,79 @@ function validateInput(input: SlabInput, c: CalculationConstants): void {
   if (!Number.isFinite(input.length) || input.length <= 0) {
     throw new CalculationError("length must be a positive finite number (meters)");
   }
-  if (c.BEAM_SPACING <= 0) {
-    throw new CalculationError("BEAM_SPACING must be > 0");
-  }
-  if (c.BLOCK_LENGTH <= 0) {
-    throw new CalculationError("BLOCK_LENGTH must be > 0");
-  }
+  if (c.BEAM_SPACING <= 0) throw new CalculationError("BEAM_SPACING must be > 0");
+  if (c.BLOCK_LENGTH <= 0) throw new CalculationError("BLOCK_LENGTH must be > 0");
 }
 
 // ── Main calculation ────────────────────────────────────────────
 
 /**
- * Calculate beam-and-block layout for a single slab.
+ * Calculate beam-and-block layout for a single rectangular slab.
  *
  * @param input      slab geometry (width × length, meters)
- * @param overrides  optional constants overrides (admin-tunable values)
+ * @param overrides  optional constants overrides (admin-tunable)
+ * @param manual     extra beams / fillers added by the engineer
  */
 export function calculateSlab(
   input: SlabInput,
   overrides: Partial<CalculationConstants> = {},
-  manual: { extraBeams?: number; extraFillers?: number } = {}
+  manual: { extraBeams?: number; extraFillers?: number } = {},
 ): SlabResult {
   const c: CalculationConstants = { ...DEFAULT_CONSTANTS, ...overrides };
   validateInput(input, c);
 
   const { width, length } = input;
+  const extraBeams = manual.extraBeams ?? 0;
+  const extraFillers = manual.extraFillers ?? 0;
 
-  // 1. Manufactured Beam length (Inner width + 15cm each side)
-  const beam_length = round3(width + 0.30);
+  // 1. Beam length = inner width + bearing on both ends
+  const beam_length = round3(width + 2 * c.BEARING);
 
-  // 2. Divide room length by beam spacing (58cm)
-  const base_intervals = Math.floor(length / c.BEAM_SPACING);
-  const remainder = round3(length % c.BEAM_SPACING);
+  // 2. Whole beam-spacing intervals plus the leftover length
+  const rows_initial = Math.floor(length / c.BEAM_SPACING);
+  const remainder = round3(length - rows_initial * c.BEAM_SPACING);
 
-  // Correction logic based on remainder (15cm threshold)
-  // If remainder >= 15cm -> Add extra pair (1 beam + 1 block row)
-  // If remainder < 15cm -> Add extra beam only
+  // 3. Remainder rule
+  let autoFillers = 0;
   let autoExtraBeams = 0;
-  let autoExtraFillers = 0;
-
   if (remainder > 0) {
-    if (remainder >= 0.15) {
+    autoFillers = 1;
+    if (remainder < c.FILLER_THRESHOLD) {
+      // remainder too small for a proper filler — add a beam too
       autoExtraBeams = 1;
-      autoExtraFillers = 1;
-    } else {
-      autoExtraBeams = 1;
-      autoExtraFillers = 0;
     }
-  } else {
-    // Exact multiple? Usually still need 1 more beam than block rows to close
-    autoExtraBeams = 1;
-    autoExtraFillers = 0;
   }
 
-  const rows_final = base_intervals + autoExtraFillers + (manual.extraFillers || 0);
-  const beam_count = base_intervals + autoExtraBeams + (manual.extraBeams || 0);
+  // 4. Final counts (auto + manual)
+  const rows_final = rows_initial + autoFillers + extraFillers;
+  const beam_count = rows_initial + autoExtraBeams + extraBeams;
 
-  // 3. Actual covered length (based on Pattern)
-  // If Pattern == Ғ-Б (Beams = Rows) -> Length = Beams * 0.58
-  // If Pattern == Б-Ғ-Б (Beams = Rows + 1) -> Length = (Beams-1) * 0.58 + 0.12
-  const isBGB = beam_count > rows_final;
-  const actual_length = isBGB 
-    ? round3((beam_count - 1) * c.BEAM_SPACING + 0.12)
-    : round3(beam_count * c.BEAM_SPACING);
-
+  // 5. Geometry
+  const actual_length = round3(rows_final * c.BEAM_SPACING - c.EDGE_OFFSET);
   const corrected_length = actual_length;
+  const delta = round3(actual_length - length);
 
-  // 4. Areas and Quantities for Pricing
-  // Block rows are priced by m2
-  const m2_area = round3(rows_final * c.BEAM_SPACING * beam_length);
-  // Extra beams (beams that don't have a corresponding block row) are priced by meter
-  const extra_beams_qty = Math.max(0, beam_count - rows_final);
-  const extra_beam_price_per_m = beam_length <= 4.30 ? 60 : (beam_length <= 5.30 ? 70 : (beam_length <= 6.30 ? 80 : 90));
-
-  // Legacy field for UI compatibility (Total Area)
-  const covered_area = m2_area; 
-
-  // STEP 6 – Blocks per row
+  // 6. Block packing
   const blocks_per_row = Math.ceil((beam_length - c.BLOCK_EDGE_LOSS) / c.BLOCK_LENGTH);
-
-  // STEP 7 – Total blocks
   const total_blocks = blocks_per_row * rows_final;
 
-  // Beam grouping
+  // 7. Concrete topping volume — poured area × thickness
+  const concrete_volume = round3(width * actual_length * c.TOPPING_THICKNESS);
+
+  // 8. UI helpers (not part of the core algorithm but used by the calculator UI)
+  const covered_area = round3(width * actual_length);
+  const m2_area = round3(rows_final * c.BEAM_SPACING * beam_length);
+  const extra_beams_qty = extraBeams;
+  const extra_beam_price_per_m =
+    beam_length <= 4.30 ? 60 :
+    beam_length <= 5.30 ? 70 :
+    beam_length <= 6.30 ? 80 : 90;
+
   const beam_groups: BeamGroup[] = [{ length: beam_length, qty: beam_count }];
-
-  // Concrete topping volume (m³) – area * topping
-  const concrete_volume = round3(actual_length * beam_length * c.TOPPING_THICKNESS);
-
-  const delta = round3(actual_length - length);
 
   return {
     beam_length,
-    rows_initial: base_intervals,
+    rows_initial,
     rows_final,
     beam_count,
     beam_groups,
@@ -224,9 +203,9 @@ export function calculateSlab(
     delta,
     concrete_volume,
     weights: {
-      beams_kg: round3(beam_count * beam_length * 15), // 15kg per linear meter
-      blocks_kg: round3(total_blocks * 16),           // 16kg per block
-      total_kg: round3((beam_count * beam_length * 15) + (total_blocks * 16)),
+      beams_kg: round3(beam_count * beam_length * 15), // 15 kg per linear meter of beam
+      blocks_kg: round3(total_blocks * 16),            // 16 kg per block
+      total_kg: round3(beam_count * beam_length * 15 + total_blocks * 16),
     },
     constants: c,
   };
@@ -250,7 +229,7 @@ export interface MultiSpanInput {
  * Width difference between min and max determines how many distinct
  * beam-length groups are produced (≤0.25 → 1, ≤0.50 → 2, ≤0.80 → 3, else 4).
  *
- * The row count and block math reuse the rectangular pipeline, applied to
+ * The row count and block math reuse the rectangular pipeline applied to
  * the widest band so the slab is fully covered.
  */
 export function calculateMultiSpan(
@@ -261,6 +240,7 @@ export function calculateMultiSpan(
   if (!input.widths.length) {
     throw new CalculationError("widths[] must contain at least one value");
   }
+
   const minW = Math.min(...input.widths);
   const maxW = Math.max(...input.widths);
   const span = maxW - minW;
@@ -271,21 +251,20 @@ export function calculateMultiSpan(
   else if (span <= 0.8) groupCount = 3;
   else groupCount = 4;
 
-  // Run the standard pipeline using the maximum width to ensure coverage.
+  // Run the standard pipeline against the widest band to ensure full coverage.
   const base = calculateSlab({ width: maxW, length: input.length }, overrides);
 
-  // Distribute the final row count evenly across the requested groups.
-  // Lengths in each group are interpolated linearly between min and max width.
+  // Distribute total beam_count across the requested groups.
   const groups: BeamGroup[] = [];
-  const rowsPerGroup = Math.floor(base.beam_count / groupCount);
-  let remainder = base.beam_count - rowsPerGroup * groupCount;
+  const perGroup = Math.floor(base.beam_count / groupCount);
+  let leftover = base.beam_count - perGroup * groupCount;
 
   for (let i = 0; i < groupCount; i++) {
     const t = groupCount === 1 ? 0 : i / (groupCount - 1);
     const widthAt = minW + (maxW - minW) * t;
     const beamLen = round3(widthAt + 2 * c.BEARING);
-    const qty = rowsPerGroup + (remainder > 0 ? 1 : 0);
-    if (remainder > 0) remainder--;
+    const qty = perGroup + (leftover > 0 ? 1 : 0);
+    if (leftover > 0) leftover--;
     groups.push({ length: beamLen, qty });
   }
 

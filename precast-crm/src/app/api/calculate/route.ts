@@ -1,4 +1,7 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CalculateRequestSchema } from "@/lib/validation";
 import { ok, fail, handler } from "@/lib/api";
@@ -46,7 +49,7 @@ export const POST = handler(async (req: NextRequest) => {
         rowsInitial: result.rows_initial,
         rowsFinal: result.rows_final,
         beamCount: result.beam_count,
-        beamGroups: result.beam_groups,
+        beamGroups: result.beam_groups as unknown as Prisma.InputJsonValue,
         blocksPerRow: result.blocks_per_row,
         totalBlocks: result.total_blocks,
         actualLength: result.actual_length,
@@ -54,7 +57,7 @@ export const POST = handler(async (req: NextRequest) => {
         coveredArea: result.covered_area,
         delta: result.delta,
         concreteVolume: result.concrete_volume,
-        constants: result.constants,
+        constants: result.constants as unknown as Prisma.InputJsonValue,
         pricePerM2: body.pricePerM2,
         totalSum: totalSum,
       },

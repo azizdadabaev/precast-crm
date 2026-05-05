@@ -98,39 +98,49 @@ takes optional constant overrides.
 
 ### Constants
 
-| Constant            | Default | Notes                         |
-| ------------------- | ------- | ----------------------------- |
-| `BEAM_SPACING`      | 0.58 m  | **Fixed** by company standard |
-| `BEARING`           | 0.15 m  | Per-end beam bearing on wall  |
-| `EDGE_OFFSET`       | 0.035 m | Edge offset                   |
-| `BLOCK_LENGTH`      | 0.195 m | Block length                  |
-| `BLOCK_EDGE_LOSS`   | 0.2 m   | Removed before block fit      |
-| `TOLERANCE`         | 0.05 m  | Row-correction threshold      |
-| `TOPPING_THICKNESS` | 0.05 m  | Concrete topping              |
+| Constant            | Default | Notes                                      |
+| ------------------- | ------- | ------------------------------------------ |
+| `BEAM_SPACING`      | 0.58 m  | **Fixed** by company standard              |
+| `BEARING`           | 0.15 m  | Per-end beam bearing on wall               |
+| `EDGE_OFFSET`       | 0.035 m | Edge offset                                |
+| `BLOCK_LENGTH`      | 0.20 m  | Filler block nominal length                |
+| `BLOCK_EDGE_LOSS`   | 0.20 m  | Removed from beam length before block fit  |
+| `FILLER_THRESHOLD`  | 0.20 m  | Remainder ≥ this → filler-only row         |
+| `TOLERANCE`         | 0.05 m  | Reserved (legacy; unused by current rule)  |
+| `TOPPING_THICKNESS` | 0.05 m  | Concrete topping thickness                 |
 
-### Algorithm (matches Excel exactly)
+### Algorithm (remainder-based)
 
 ```
 beam_length      = width + 2 * BEARING
-raw_rows         = length / BEAM_SPACING
-rows             = ROUND(raw_rows)            ← Excel half-away-from-zero
-actual_length    = rows * BEAM_SPACING - EDGE_OFFSET
-delta            = actual_length - length
-final_rows       = (delta > TOLERANCE) ? rows - 1 : rows
-corrected_length = actual_length - TOLERANCE * (rows - final_rows)
+rows_initial     = FLOOR(length / BEAM_SPACING)
+remainder        = length - rows_initial * BEAM_SPACING
+
+if remainder == 0:                            exact fit
+    rows_final  = rows_initial,    beam_count = rows_initial
+elif remainder >= FILLER_THRESHOLD:           add a filler row only
+    rows_final  = rows_initial + 1, beam_count = rows_initial
+else:                                         add filler row + extra beam
+    rows_final  = rows_initial + 1, beam_count = rows_initial + 1
+
+# manual engineer overrides applied on top
+rows_final  += extraFillers
+beam_count  += extraBeams
+
+actual_length    = rows_final * BEAM_SPACING - EDGE_OFFSET
 blocks_per_row   = CEIL((beam_length - BLOCK_EDGE_LOSS) / BLOCK_LENGTH)
-total_blocks     = blocks_per_row * final_rows
-concrete_volume  = width * corrected_length * TOPPING_THICKNESS
+total_blocks     = blocks_per_row * rows_final
+concrete_volume  = width * actual_length * TOPPING_THICKNESS
 ```
 
 ### Verified reference cases
 
-| Width × Length | Beams | Beam Length | Blocks/row | Total blocks | Correction? |
-| -------------- | ----- | ----------- | ---------- | ------------ | ----------- |
-| 4 × 6          | 10    | 4.30 m      | 22         | 220          | no          |
-| 3 × 5          | 8     | 3.30 m      | 16         | 128          | yes (−1)    |
-| 6 × 8          | 13    | 6.30 m      | 32         | 416          | yes (−1)    |
-| 2.5 × 3        | 5     | 2.80 m      | 14         | 70           | no          |
+| Width × Length | Beam length | Rows (initial → final) | Beams | Blocks/row | Total blocks |
+| -------------- | ----------- | ---------------------- | ----- | ---------- | ------------ |
+| 4 × 6          | 4.30 m      | 10 → 11 (filler)       | 10    | 21         | 231          |
+| 3 × 5          | 3.30 m      | 8 → 9 (filler)         | 8     | 16         | 144          |
+| 6 × 8          | 6.30 m      | 13 → 14 (filler)       | 13    | 31         | 434          |
+| 2.5 × 3        | 2.80 m      | 5 → 6 (extra beam)     | 6     | 13         | 78           |
 
 ### Multi-span (trapezoidal / irregular)
 

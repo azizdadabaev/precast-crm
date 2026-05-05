@@ -35,6 +35,7 @@ interface Project {
     totalBlocks: number;
     actualLength: string;
     correctedLength: string;
+    coveredArea: string | null;
     pricePerM2: string | null;
     totalSum: string | null;
     createdAt: string;
