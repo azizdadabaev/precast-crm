@@ -12,9 +12,9 @@ import { formatDate, formatMoney, formatNumber } from "@/lib/utils";
 
 interface QuoteDetail {
   id: string;
-  beamCost: string;
-  blockCost: string;
-  concreteCost: string;
+  roomsSubtotal: string;
+  discountPercent: string;
+  discountAmount: string;
   deliveryCost: string;
   otherCost: string;
   totalPrice: string;
@@ -27,15 +27,20 @@ interface QuoteDetail {
     shapeType: string;
     dimensions: { width?: number; length?: number; widths?: number[] };
     deal: { client: { id: string; name: string; phone: string; location: string | null } };
+    calculations: Array<{
+      id: string;
+      name: string | null;
+      pattern: "GB" | "BGB" | "GBG";
+      beamCount: number;
+      beamLength: string;
+      totalBlocks: number;
+      concreteVolume: string;
+      subtotal: string;
+    }>;
   };
-  calculation: {
-    beamCount: number;
-    beamLength: string;
-    totalBlocks: number;
-    concreteVolume: string;
-    beamGroups: { length: number; qty: number }[];
-  } | null;
 }
+
+const PATTERN_LABEL = { GB: "Г-Б", BGB: "Б-Г-Б", GBG: "Г-Б-Г" } as const;
 
 export default function QuoteDetailPage() {
   const params = useParams<{ id: string }>();
@@ -116,35 +121,33 @@ export default function QuoteDetailPage() {
             </div>
           </div>
 
-          {quote.calculation && (
+          {quote.project.calculations.length > 0 && (
             <div>
               <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
-                Materials
+                Rooms
               </div>
               <table className="excel-table">
                 <thead>
                   <tr>
-                    <th>Item</th>
-                    <th className="text-right">Quantity</th>
+                    <th>Room</th>
+                    <th className="text-center">Pattern</th>
+                    <th className="text-center">Beam length</th>
+                    <th className="text-center">Beams</th>
+                    <th className="text-center">Blocks</th>
+                    <th className="text-right">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {quote.calculation.beamGroups.map((g, i) => (
-                    <tr key={i}>
-                      <td>Beams — {formatNumber(g.length, 3)} m</td>
-                      <td className="text-right">{g.qty} pcs</td>
+                  {quote.project.calculations.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.name || "—"}</td>
+                      <td className="text-center">{PATTERN_LABEL[c.pattern]}</td>
+                      <td className="text-center">{formatNumber(c.beamLength, 2)} m</td>
+                      <td className="text-center">{c.beamCount}</td>
+                      <td className="text-center">{c.totalBlocks}</td>
+                      <td className="text-right">{formatMoney(c.subtotal)}</td>
                     </tr>
                   ))}
-                  <tr>
-                    <td>Blocks</td>
-                    <td className="text-right">{quote.calculation.totalBlocks} pcs</td>
-                  </tr>
-                  <tr>
-                    <td>Concrete topping</td>
-                    <td className="text-right">
-                      {formatNumber(quote.calculation.concreteVolume, 3)} m³
-                    </td>
-                  </tr>
                 </tbody>
               </table>
             </div>
@@ -163,16 +166,12 @@ export default function QuoteDetailPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td>Beams</td>
-                  <td className="text-right">{formatMoney(quote.beamCost)}</td>
+                  <td>Rooms subtotal</td>
+                  <td className="text-right">{formatMoney(quote.roomsSubtotal)}</td>
                 </tr>
                 <tr>
-                  <td>Blocks</td>
-                  <td className="text-right">{formatMoney(quote.blockCost)}</td>
-                </tr>
-                <tr>
-                  <td>Concrete</td>
-                  <td className="text-right">{formatMoney(quote.concreteCost)}</td>
+                  <td>Discount ({formatNumber(quote.discountPercent, 1)}%)</td>
+                  <td className="text-right text-rose-700">− {formatMoney(quote.discountAmount)}</td>
                 </tr>
                 <tr>
                   <td>Delivery</td>

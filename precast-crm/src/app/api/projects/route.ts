@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ProjectCreateSchema } from "@/lib/validation";
 import { ok, created, handler } from "@/lib/api";
+import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 
 export const GET = handler(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
@@ -13,56 +13,65 @@ export const GET = handler(async (req: NextRequest) => {
     where: { ...(dealId && { dealId }) },
     orderBy: { createdAt: "desc" },
     include: {
-      calculations: { orderBy: { createdAt: "desc" }, take: 1 },
+      calculations: { orderBy: { createdAt: "desc" } },
       deal: { include: { client: true } },
     },
   });
   return ok(projects);
 });
 
-import { calculateSlab } from "@/services/calculation-engine";
-
 export const POST = handler(async (req: NextRequest) => {
   const body = ProjectCreateSchema.parse(await req.json());
-  
+
   const project = await prisma.project.create({
     data: {
       dealId: body.dealId,
       name: body.name ?? null,
       shapeType: body.shapeType,
       dimensions: body.dimensions,
-      calculations: body.calculations ? {
-        create: body.calculations.map(calc => {
-          const result = calculateSlab(
-            { width: calc.width, length: calc.length },
-            {},
-            { extraBeams: calc.extraBeams, extraFillers: calc.extraFillers }
-          );
-          const area = calc.width * calc.length;
+      calculations: {
+        create: body.rooms.map((room) => {
+          const r = calculateSlab({
+            inner_width: room.innerWidth,
+            inner_length: room.innerLength,
+            bearing: room.bearing,
+            correction: room.correction,
+            extra_beams: room.extraBeams,
+            force_start_beam: room.forceStartBeam,
+            pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
+          });
           return {
-            name: calc.name,
-            inputWidth: calc.width,
-            inputLength: calc.length,
-            beamLength: result.beam_length,
-            rowsInitial: result.rows_initial,
-            rowsFinal: result.rows_final,
-            beamCount: result.beam_count,
-            beamGroups: result.beam_groups as unknown as Prisma.InputJsonValue,
-            blocksPerRow: result.blocks_per_row,
-            totalBlocks: result.total_blocks,
-            actualLength: result.actual_length,
-            correctedLength: result.corrected_length,
-            coveredArea: result.covered_area,
-            delta: result.delta,
-            concreteVolume: result.concrete_volume,
-            constants: result.constants as unknown as Prisma.InputJsonValue,
-            pricePerM2: calc.pricePerM2,
-            totalSum: calc.pricePerM2 ? area * calc.pricePerM2 : null,
-            extraBeams: calc.extraBeams,
-            extraFillers: calc.extraFillers,
+            name: room.name ?? null,
+            innerWidth: r.inner_width,
+            innerLength: r.inner_length,
+            bearing: r.bearing,
+            correction: r.correction,
+            extraBeams: r.extra_beams,
+            forceStartBeam: r.force_start_beam,
+            patternOverride: (room.patternOverride ?? null) as Pattern | null,
+            pitches: r.pitches,
+            remainder: r.remainder,
+            pattern: r.pattern,
+            patternAuto: r.pattern_auto,
+            beamLength: r.beam_length,
+            blocksPerRow: r.blocks_per_row,
+            beamCount: r.beam_count,
+            blockRows: r.block_rows,
+            totalBlocks: r.total_blocks,
+            monolithLength: r.monolith_length,
+            billedLength: r.billed_length,
+            monolithArea: r.monolith_area,
+            billedArea: r.billed_area,
+            concreteVolume: r.concrete_volume,
+            m2Price: r.m2_price,
+            extraBeamPricePerM: r.extra_beam_price_per_m,
+            m2Cost: r.m2_cost,
+            patternExtraCost: r.pattern_extra_cost,
+            manualExtraBeamsCost: r.manual_extra_beams_cost,
+            subtotal: r.subtotal,
           };
-        })
-      } : undefined
+        }),
+      },
     },
   });
 

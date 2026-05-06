@@ -1,65 +1,59 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { CalculateRequestSchema } from "@/lib/validation";
 import { ok, fail, handler } from "@/lib/api";
-import {
-  calculateSlab,
-  calculateMultiSpan,
-  type SlabResult,
-  type CalculationConstants,
-} from "@/services/calculation-engine";
+import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 
 export const POST = handler(async (req: NextRequest) => {
   const body = CalculateRequestSchema.parse(await req.json());
 
-  const overrides: Partial<CalculationConstants> = {};
-  if (body.toleranceOverride !== undefined) overrides.TOLERANCE = body.toleranceOverride;
-  if (body.toppingOverride !== undefined) overrides.TOPPING_THICKNESS = body.toppingOverride;
+  const result = calculateSlab({
+    inner_width: body.innerWidth,
+    inner_length: body.innerLength,
+    bearing: body.bearing,
+    correction: body.correction,
+    extra_beams: body.extraBeams,
+    force_start_beam: body.forceStartBeam,
+    pattern: body.patternOverride ?? undefined,
+  });
 
-  let result: SlabResult;
-
-  if (body.shapeType === "RECTANGULAR") {
-    if (body.width === undefined) return fail("width is required for RECTANGULAR shape", 422);
-    result = calculateSlab({ width: body.width, length: body.length }, overrides);
-  } else {
-    if (!body.widths || body.widths.length === 0) {
-      return fail("widths[] is required for TRAPEZOIDAL/IRREGULAR shapes", 422);
-    }
-    result = calculateMultiSpan({ length: body.length, widths: body.widths }, overrides);
-  }
-
-  // Persist if a project is provided
   if (body.projectId) {
     const exists = await prisma.project.findUnique({ where: { id: body.projectId } });
     if (!exists) return fail("Project not found", 404);
 
-    const area = (body.width ?? 0) * body.length;
-    const totalSum = body.pricePerM2 ? area * body.pricePerM2 : undefined;
-
     const saved = await prisma.calculation.create({
       data: {
         projectId: body.projectId,
-        name: body.name,
-        inputWidth: body.width ?? Math.max(...(body.widths ?? [0])),
-        inputLength: body.length,
+        name: body.name ?? null,
+        innerWidth: result.inner_width,
+        innerLength: result.inner_length,
+        bearing: result.bearing,
+        correction: result.correction,
+        extraBeams: result.extra_beams,
+        forceStartBeam: result.force_start_beam,
+        patternOverride: (body.patternOverride ?? null) as Pattern | null,
+        pitches: result.pitches,
+        remainder: result.remainder,
+        pattern: result.pattern,
+        patternAuto: result.pattern_auto,
         beamLength: result.beam_length,
-        rowsInitial: result.rows_initial,
-        rowsFinal: result.rows_final,
-        beamCount: result.beam_count,
-        beamGroups: result.beam_groups as unknown as Prisma.InputJsonValue,
         blocksPerRow: result.blocks_per_row,
+        beamCount: result.beam_count,
+        blockRows: result.block_rows,
         totalBlocks: result.total_blocks,
-        actualLength: result.actual_length,
-        correctedLength: result.corrected_length,
-        coveredArea: result.covered_area,
-        delta: result.delta,
+        monolithLength: result.monolith_length,
+        billedLength: result.billed_length,
+        monolithArea: result.monolith_area,
+        billedArea: result.billed_area,
         concreteVolume: result.concrete_volume,
-        constants: result.constants as unknown as Prisma.InputJsonValue,
-        pricePerM2: body.pricePerM2,
-        totalSum: totalSum,
+        m2Price: result.m2_price,
+        extraBeamPricePerM: result.extra_beam_price_per_m,
+        m2Cost: result.m2_cost,
+        patternExtraCost: result.pattern_extra_cost,
+        manualExtraBeamsCost: result.manual_extra_beams_cost,
+        subtotal: result.subtotal,
       },
     });
     return ok({ ...result, persistedId: saved.id });

@@ -12,6 +12,7 @@ export const DealStageEnum = z.enum([
 ]);
 export const DealStatusEnum = z.enum(["OPEN", "WON", "LOST"]);
 export const ShapeTypeEnum = z.enum(["RECTANGULAR", "TRAPEZOIDAL", "IRREGULAR"]);
+export const LayoutPatternEnum = z.enum(["GB", "BGB", "GBG"]);
 export const QuoteStatusEnum = z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED"]);
 export const PaymentStatusEnum = z.enum(["PAID", "PARTIAL", "UNPAID"]);
 export const RoleEnum = z.enum(["ADMIN", "SALES", "ENGINEER"]);
@@ -64,44 +65,35 @@ export const ProjectDimensionsSchema = z.object({
   notes: z.string().max(500).optional().nullable(),
 });
 
+export const RoomCalcInputSchema = z.object({
+  name: z.string().max(80).optional().nullable(),
+  innerWidth: z.coerce.number().positive(),
+  innerLength: z.coerce.number().positive(),
+  bearing: z.coerce.number().min(0).default(0.15),
+  correction: z.coerce.number().default(0),
+  extraBeams: z.coerce.number().int().min(0).default(0),
+  forceStartBeam: z.coerce.boolean().default(false),
+  patternOverride: LayoutPatternEnum.optional().nullable(),
+});
+
 export const ProjectCreateSchema = z.object({
   dealId: z.string().min(1),
   name: z.string().max(120).optional().nullable(),
   shapeType: ShapeTypeEnum.default("RECTANGULAR"),
   dimensions: ProjectDimensionsSchema,
-  calculations: z.array(z.object({
-    name: z.string().max(80).optional(),
-    width: z.coerce.number().positive(),
-    length: z.coerce.number().positive(),
-    pricePerM2: z.coerce.number().min(0).optional(),
-    extraBeams: z.coerce.number().int().min(0).default(0),
-    extraFillers: z.coerce.number().int().min(0).default(0),
-  })).optional(),
+  rooms: z.array(RoomCalcInputSchema).min(1),
 });
 
-// ── Calculation ─────────────────────────────────────────────────
-export const CalculateRequestSchema = z.object({
+// ── One-shot calculate (preview, optional persist) ──────────────
+export const CalculateRequestSchema = RoomCalcInputSchema.extend({
   projectId: z.string().optional(), // when set, persist the result
-  name: z.string().max(80).optional(), // Room name
-  pricePerM2: z.coerce.number().min(0).optional(), // Rate for this room
-  extraBeams: z.coerce.number().int().min(0).default(0),
-  extraFillers: z.coerce.number().int().min(0).default(0),
-  shapeType: ShapeTypeEnum.default("RECTANGULAR"),
-  width: z.coerce.number().positive().optional(),
-  length: z.coerce.number().positive(),
-  widths: z.array(z.coerce.number().positive()).optional(),
-  // Optional constants overrides (admin)
-  toleranceOverride: z.coerce.number().positive().optional(),
-  toppingOverride: z.coerce.number().positive().optional(),
 });
 
 // ── Quotes ──────────────────────────────────────────────────────
 export const QuoteCreateSchema = z.object({
   projectId: z.string().min(1),
   calculationId: z.string().optional().nullable(),
-  beamCost: z.coerce.number().min(0).default(0),
-  blockCost: z.coerce.number().min(0).default(0),
-  concreteCost: z.coerce.number().min(0).default(0),
+  discountPercent: z.coerce.number().min(0).max(100).default(0),
   deliveryCost: z.coerce.number().min(0).default(0),
   otherCost: z.coerce.number().min(0).default(0),
   status: QuoteStatusEnum.default("DRAFT"),

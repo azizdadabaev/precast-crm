@@ -20,16 +20,23 @@ export const GET = handler(async (req: NextRequest) => {
 
 export const POST = handler(async (req: NextRequest) => {
   const body = QuoteCreateSchema.parse(await req.json());
-  const total =
-    body.beamCost + body.blockCost + body.concreteCost + body.deliveryCost + body.otherCost;
+
+  // Sum the room subtotals stored on this project's calculations
+  const calcs = await prisma.calculation.findMany({
+    where: { projectId: body.projectId },
+    select: { subtotal: true },
+  });
+  const roomsSubtotal = calcs.reduce((s, c) => s + Number(c.subtotal), 0);
+  const discountAmount = roomsSubtotal * (body.discountPercent / 100);
+  const total = roomsSubtotal - discountAmount + body.deliveryCost + body.otherCost;
 
   const quote = await prisma.quote.create({
     data: {
       projectId: body.projectId,
       calculationId: body.calculationId ?? null,
-      beamCost: body.beamCost,
-      blockCost: body.blockCost,
-      concreteCost: body.concreteCost,
+      roomsSubtotal,
+      discountPercent: body.discountPercent,
+      discountAmount,
       deliveryCost: body.deliveryCost,
       otherCost: body.otherCost,
       totalPrice: total,

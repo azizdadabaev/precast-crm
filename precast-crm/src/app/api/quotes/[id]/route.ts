@@ -8,7 +8,12 @@ export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string
   const quote = await prisma.quote.findUnique({
     where: { id: ctx.params.id },
     include: {
-      project: { include: { deal: { include: { client: true } } } },
+      project: {
+        include: {
+          deal: { include: { client: true } },
+          calculations: { orderBy: { createdAt: "asc" } },
+        },
+      },
       calculation: true,
     },
   });

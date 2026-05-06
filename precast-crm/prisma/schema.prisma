@@ -46,6 +46,12 @@ enum ShapeType {
   IRREGULAR
 }
 
+enum LayoutPattern {
+  GB    // Г-Б — alternating, equal beam and block rows
+  BGB   // Б-Г-Б — extra closing beam
+  GBG   // Г-Б-Г — extra closing block row
+}
+
 enum QuoteStatus {
   DRAFT
   SENT
@@ -135,33 +141,50 @@ model Project {
 }
 
 model Calculation {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   projectId       String
   name            String? // Room label (e.g. "Kitchen")
-  // Inputs snapshot for reproducibility
-  inputWidth      Decimal  @db.Decimal(10, 3)
-  inputLength     Decimal  @db.Decimal(10, 3)
-  // Engine outputs
-  beamLength      Decimal  @db.Decimal(10, 3)
-  rowsInitial     Int
-  rowsFinal       Int
-  beamCount       Int
-  beamGroups      Json // [{ length, qty }]
+
+  // ── Inputs (snapshot for reproducibility) ──
+  innerWidth      Decimal       @db.Decimal(10, 3)
+  innerLength     Decimal       @db.Decimal(10, 3)
+  bearing         Decimal       @default(0.15) @db.Decimal(10, 3)
+  correction      Decimal       @default(0) @db.Decimal(10, 3)
+  extraBeams      Int           @default(0)
+  forceStartBeam  Boolean       @default(false)
+  patternOverride LayoutPattern? // user-picked; null = auto
+
+  // ── Pitch math ──
+  pitches         Int
+  remainder       Decimal       @db.Decimal(10, 3)
+  pattern         LayoutPattern // chosen (after override + force_start_beam)
+  patternAuto     LayoutPattern // what auto-pick would have chosen
+
+  // ── Geometry ──
+  beamLength      Decimal       @db.Decimal(10, 3)
   blocksPerRow    Int
+  beamCount       Int           // includes pattern's extra beam AND extraBeams
+  blockRows       Int
   totalBlocks     Int
-  actualLength    Decimal  @db.Decimal(10, 3)
-  correctedLength Decimal  @db.Decimal(10, 3)
-  coveredArea     Decimal  @db.Decimal(10, 3)
-  delta           Decimal  @db.Decimal(10, 3)
-  concreteVolume  Decimal  @db.Decimal(10, 3)
-  // Manual overrides
-  extraBeams      Int      @default(0)
-  extraFillers    Int      @default(0)
-  // Pricing (Excel replication)
-  pricePerM2      Decimal? @db.Decimal(14, 2)
-  totalSum        Decimal? @db.Decimal(14, 2)
-  // Constants used (for audit)
-  constants       Json
+
+  // Lengths (m)
+  monolithLength  Decimal       @db.Decimal(10, 3) // physical span
+  billedLength    Decimal       @db.Decimal(10, 3) // pitches × PITCH (for m² billing)
+
+  // Areas (m²)
+  monolithArea    Decimal       @db.Decimal(10, 3)
+  billedArea      Decimal       @db.Decimal(10, 3)
+
+  concreteVolume  Decimal       @db.Decimal(10, 3) // m³
+
+  // ── Pricing snapshot (UZS) ──
+  m2Price                 Decimal @db.Decimal(14, 2)
+  extraBeamPricePerM      Decimal @db.Decimal(14, 2)
+  m2Cost                  Decimal @db.Decimal(14, 2)
+  patternExtraCost        Decimal @db.Decimal(14, 2)
+  manualExtraBeamsCost    Decimal @db.Decimal(14, 2)
+  subtotal                Decimal @db.Decimal(14, 2)
+
   createdAt       DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -172,19 +195,23 @@ model Calculation {
 }
 
 model Quote {
-  id            String      @id @default(cuid())
-  projectId     String
-  calculationId String?
-  beamCost      Decimal     @default(0) @db.Decimal(14, 2)
-  blockCost     Decimal     @default(0) @db.Decimal(14, 2)
-  concreteCost  Decimal     @default(0) @db.Decimal(14, 2)
-  deliveryCost  Decimal     @default(0) @db.Decimal(14, 2)
-  otherCost     Decimal     @default(0) @db.Decimal(14, 2)
-  totalPrice    Decimal     @default(0) @db.Decimal(14, 2)
-  status        QuoteStatus @default(DRAFT)
-  notes         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String      @id @default(cuid())
+  projectId       String
+  calculationId   String?
+  // Pre-discount sum of all room subtotals on this project
+  roomsSubtotal   Decimal     @default(0) @db.Decimal(14, 2)
+  // Discount applied to grand total (0–100)
+  discountPercent Decimal     @default(0) @db.Decimal(5, 2)
+  discountAmount  Decimal     @default(0) @db.Decimal(14, 2)
+  // Optional per-line costs preserved for future itemization
+  deliveryCost    Decimal     @default(0) @db.Decimal(14, 2)
+  otherCost       Decimal     @default(0) @db.Decimal(14, 2)
+  // Final amount: roomsSubtotal − discountAmount + deliveryCost + otherCost
+  totalPrice      Decimal     @default(0) @db.Decimal(14, 2)
+  status          QuoteStatus @default(DRAFT)
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   calculation Calculation? @relation(fields: [calculationId], references: [id])

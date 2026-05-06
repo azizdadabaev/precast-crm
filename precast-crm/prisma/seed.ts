@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { calculateSlab } from "../src/services/calculation-engine";
 
@@ -12,7 +12,7 @@ async function main() {
   const salesPwd = await bcrypt.hash("sales123", 10);
   const engPwd = await bcrypt.hash("eng123", 10);
 
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@precast.local" },
     update: {},
     create: {
@@ -69,19 +69,21 @@ async function main() {
     clientIdx: number;
     stage: "NEW_LEAD" | "CONTACTED" | "CALCULATION" | "QUOTE_SENT" | "WON" | "LOST";
     status: "OPEN" | "WON" | "LOST";
-    width?: number;
-    length?: number;
-    value: number;
+    rooms?: { name?: string; innerWidth: number; innerLength: number }[];
     addQuote?: boolean;
+    discountPercent?: number;
     addPayment?: boolean;
   }> = [
-    { clientIdx: 0, stage: "NEW_LEAD", status: "OPEN", value: 0 },
-    { clientIdx: 1, stage: "CONTACTED", status: "OPEN", value: 0 },
-    { clientIdx: 2, stage: "CALCULATION", status: "OPEN", width: 4, length: 6, value: 0 },
-    { clientIdx: 3, stage: "QUOTE_SENT", status: "OPEN", width: 5, length: 8, value: 12_500_000, addQuote: true },
-    { clientIdx: 4, stage: "WON", status: "WON", width: 6, length: 10, value: 18_750_000, addQuote: true, addPayment: true },
-    { clientIdx: 0, stage: "WON", status: "WON", width: 3, length: 5, value: 7_200_000, addQuote: true, addPayment: true },
-    { clientIdx: 1, stage: "LOST", status: "LOST", value: 0 },
+    { clientIdx: 0, stage: "NEW_LEAD", status: "OPEN" },
+    { clientIdx: 1, stage: "CONTACTED", status: "OPEN" },
+    { clientIdx: 2, stage: "CALCULATION", status: "OPEN", rooms: [{ name: "Living room", innerWidth: 4, innerLength: 6 }] },
+    { clientIdx: 3, stage: "QUOTE_SENT", status: "OPEN", rooms: [{ name: "Hall", innerWidth: 5, innerLength: 8 }], addQuote: true },
+    { clientIdx: 4, stage: "WON", status: "WON", rooms: [
+      { name: "Kitchen", innerWidth: 4, innerLength: 6 },
+      { name: "Bedroom", innerWidth: 3.5, innerLength: 4.3 },
+    ], addQuote: true, discountPercent: 5, addPayment: true },
+    { clientIdx: 0, stage: "WON", status: "WON", rooms: [{ name: "Garage", innerWidth: 3, innerLength: 5 }], addQuote: true, addPayment: true },
+    { clientIdx: 1, stage: "LOST", status: "LOST" },
   ];
 
   for (const cfg of dealConfigs) {
@@ -91,76 +93,96 @@ async function main() {
         clientId: client.id,
         stage: cfg.stage,
         status: cfg.status,
-        value: cfg.value,
+        value: 0, // computed below if rooms exist
         assignedToId: sales.id,
       },
     });
 
-    if (cfg.width && cfg.length) {
+    if (cfg.rooms && cfg.rooms.length) {
       const project = await prisma.project.create({
         data: {
           dealId: deal.id,
-          name: `Slab ${cfg.width}×${cfg.length}m for ${client.name}`,
+          name: `Project for ${client.name}`,
           shapeType: "RECTANGULAR",
-          dimensions: { width: cfg.width, length: cfg.length },
+          dimensions: { width: cfg.rooms[0].innerWidth, length: cfg.rooms[0].innerLength },
         },
       });
 
-      const r = calculateSlab({ width: cfg.width, length: cfg.length });
-      const calc = await prisma.calculation.create({
-        data: {
-          projectId: project.id,
-          inputWidth: cfg.width,
-          inputLength: cfg.length,
-          beamLength: r.beam_length,
-          rowsInitial: r.rows_initial,
-          rowsFinal: r.rows_final,
-          beamCount: r.beam_count,
-          beamGroups: r.beam_groups as unknown as Prisma.InputJsonValue,
-          blocksPerRow: r.blocks_per_row,
-          totalBlocks: r.total_blocks,
-          actualLength: r.actual_length,
-          correctedLength: r.corrected_length,
-          coveredArea: r.covered_area,
-          delta: r.delta,
-          concreteVolume: r.concrete_volume,
-          constants: r.constants as unknown as Prisma.InputJsonValue,
-        },
-      });
+      const calcRows = [];
+      for (const room of cfg.rooms) {
+        const r = calculateSlab({ inner_width: room.innerWidth, inner_length: room.innerLength });
+        const calc = await prisma.calculation.create({
+          data: {
+            projectId: project.id,
+            name: room.name ?? null,
+            innerWidth: r.inner_width,
+            innerLength: r.inner_length,
+            bearing: r.bearing,
+            correction: r.correction,
+            extraBeams: r.extra_beams,
+            forceStartBeam: r.force_start_beam,
+            patternOverride: null,
+            pitches: r.pitches,
+            remainder: r.remainder,
+            pattern: r.pattern,
+            patternAuto: r.pattern_auto,
+            beamLength: r.beam_length,
+            blocksPerRow: r.blocks_per_row,
+            beamCount: r.beam_count,
+            blockRows: r.block_rows,
+            totalBlocks: r.total_blocks,
+            monolithLength: r.monolith_length,
+            billedLength: r.billed_length,
+            monolithArea: r.monolith_area,
+            billedArea: r.billed_area,
+            concreteVolume: r.concrete_volume,
+            m2Price: r.m2_price,
+            extraBeamPricePerM: r.extra_beam_price_per_m,
+            m2Cost: r.m2_cost,
+            patternExtraCost: r.pattern_extra_cost,
+            manualExtraBeamsCost: r.manual_extra_beams_cost,
+            subtotal: r.subtotal,
+          },
+        });
+        calcRows.push({ calc, result: r });
+      }
+
+      const roomsSubtotal = calcRows.reduce((s, c) => s + c.result.subtotal, 0);
 
       if (cfg.addQuote) {
-        const beamCost = Math.round(r.beam_count * r.beam_length * 35_000);
-        const blockCost = r.total_blocks * 12_000;
-        const concreteCost = Math.round(r.concrete_volume * 850_000);
-        const delivery = 500_000;
-        const total = beamCost + blockCost + concreteCost + delivery;
+        const discountPercent = cfg.discountPercent ?? 0;
+        const discountAmount = roomsSubtotal * (discountPercent / 100);
+        const deliveryCost = 500_000;
+        const total = roomsSubtotal - discountAmount + deliveryCost;
 
         await prisma.quote.create({
           data: {
             projectId: project.id,
-            calculationId: calc.id,
-            beamCost,
-            blockCost,
-            concreteCost,
-            deliveryCost: delivery,
+            calculationId: calcRows[0].calc.id,
+            roomsSubtotal,
+            discountPercent,
+            discountAmount,
+            deliveryCost,
             otherCost: 0,
             totalPrice: total,
             status: cfg.status === "WON" ? "ACCEPTED" : "SENT",
           },
         });
-      }
-    }
 
-    if (cfg.addPayment) {
-      await prisma.payment.create({
-        data: {
-          dealId: deal.id,
-          amount: cfg.value,
-          status: "PAID",
-          method: "Bank transfer",
-          paidAt: new Date(),
-        },
-      });
+        await prisma.deal.update({ where: { id: deal.id }, data: { value: total } });
+
+        if (cfg.addPayment) {
+          await prisma.payment.create({
+            data: {
+              dealId: deal.id,
+              amount: total,
+              status: "PAID",
+              method: "Bank transfer",
+              paidAt: new Date(),
+            },
+          });
+        }
+      }
     }
   }
 

@@ -9,30 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calculator, Save } from "lucide-react";
-import { formatNumber } from "@/lib/utils";
+import { ArrowLeft, Save } from "lucide-react";
 
 interface Deal {
   id: string;
   client: { name: string; phone: string };
   stage: string;
-}
-
-interface CalcResult {
-  beam_length: number;
-  rows_initial: number;
-  rows_final: number;
-  beam_count: number;
-  beam_groups: { length: number; qty: number }[];
-  blocks_per_row: number;
-  total_blocks: number;
-  actual_length: number;
-  corrected_length: number;
-  delta: number;
-  concrete_volume: number;
-  persistedId?: string;
 }
 
 import { MultiRoomCalculator, type SlabRow } from "@/components/calculation/MultiRoomCalculator";
@@ -48,31 +30,34 @@ export default function NewProjectPage() {
   const [dealId, setDealId] = useState("");
   const [name, setName] = useState("");
   const [rows, setRows] = useState<SlabRow[]>([]);
+  const [discountPercent, setDiscountPercent] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const saveProject = useMutation({
     mutationFn: async () => {
       if (rows.length === 0) throw new Error("Add at least one room");
-      
+
       const project = await api<{ id: string }>("/api/projects", {
         method: "POST",
         json: {
           dealId,
           name: name || undefined,
           shapeType: "RECTANGULAR",
-          dimensions: { 
-            width: rows[0].width, 
-            length: rows[0].length,
-            notes: `${rows.length} rooms`
+          dimensions: {
+            width: rows[0].innerWidth,
+            length: rows[0].innerLength,
+            notes: `${rows.length} rooms`,
           },
-          calculations: rows.map(r => ({
+          rooms: rows.map((r) => ({
             name: r.name,
-            width: r.width,
-            length: r.length,
-            pricePerM2: r.pricePerM2,
+            innerWidth: r.innerWidth,
+            innerLength: r.innerLength,
+            bearing: r.bearing,
+            correction: r.correction,
             extraBeams: r.extraBeams,
-            extraFillers: r.extraFillers,
-          }))
+            forceStartBeam: r.forceStartBeam,
+            patternOverride: r.patternOverride === "AUTO" ? null : r.patternOverride,
+          })),
         },
       });
 
@@ -82,7 +67,10 @@ export default function NewProjectPage() {
     onError: (e: Error) => setError(e.message),
   });
 
-  const canSave = dealId && rows.length > 0 && rows.every(r => r.width > 0 && r.length > 0);
+  const canSave =
+    dealId &&
+    rows.length > 0 &&
+    rows.every((r) => r.innerWidth > 0 && r.innerLength > 0 && r.bearing >= 0);
 
   return (
     <div className="space-y-5">
@@ -154,39 +142,16 @@ export default function NewProjectPage() {
               Standard 580mm spacing · 15cm bearings
             </div>
           </CardHeader>
-          <CardContent className="p-0">
-            <MultiRoomCalculator rows={rows} onChange={setRows} />
+          <CardContent className="p-4">
+            <MultiRoomCalculator
+              rows={rows}
+              onChange={setRows}
+              discountPercent={discountPercent}
+              onDiscountChange={setDiscountPercent}
+            />
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
-}
-
-function ResultBox({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-md border p-3 ${accent ? "bg-primary/5 border-primary/20" : "bg-muted/30"}`}
-    >
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="text-lg font-bold mt-1">{value}</div>
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between text-muted-foreground">
-      <span>{label}</span>
-      <span className="font-mono">{value}</span>
     </div>
   );
 }

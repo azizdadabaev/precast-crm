@@ -1,103 +1,162 @@
 /**
  * ─────────────────────────────────────────────────────────────────
- *  PRECAST BEAM-AND-BLOCK CALCULATION ENGINE
+ *  PRECAST BEAM-AND-BLOCK CALCULATION ENGINE — v2
  * ─────────────────────────────────────────────────────────────────
  *
  *  Pure module. NO database access. NO side effects.
- *  All inputs come in via arguments; all results are returned.
- *  This makes the engine 100% testable and reusable.
  *
- *  Algorithm (remainder-based, replaces the legacy Excel "tolerance"
- *  rule with a cleaner threshold model):
+ *  Three layout patterns (Шаблон):
+ *    Г-Б   "GB"   alternating, equal beam and block-row counts
+ *    Б-Г-Б "BGB"  extra closing beam (no extra block row)
+ *    Г-Б-Г "GBG"  extra closing block row (sits half on previous beam, half on wall)
  *
- *    1. beam_length     = width + 2 * BEARING
- *    2. rows_initial    = floor(length / BEAM_SPACING)
- *       remainder       = length - rows_initial * BEAM_SPACING
- *    3. Apply the remainder rule:
- *         remainder = 0                           → exact fit
- *         remainder ≥ FILLER_THRESHOLD            → +1 filler row only
- *         remainder < FILLER_THRESHOLD (and > 0)  → +1 row AND +1 beam
- *    4. Add manual extras (engineer overrides).
- *    5. actual_length   = rows_final * BEAM_SPACING - EDGE_OFFSET
- *    6. blocks_per_row  = ceil((beam_length - BLOCK_EDGE_LOSS) / BLOCK_LENGTH)
- *    7. total_blocks    = blocks_per_row * rows_final
- *    8. concrete_volume = width * actual_length * TOPPING_THICKNESS
+ *  Pipeline:
+ *    effective_length = inner_length + correction
+ *    pitches  = FLOOR(effective_length / PITCH)
+ *    R        = effective_length - pitches * PITCH
+ *    pattern auto-pick:
+ *      R = 0           → GB at `pitches`
+ *      R ≤ 0.20        → BGB at `pitches`     (+1 beam, +0.12 m visual)
+ *      R ≤ 0.45        → GBG at `pitches`     (+1 block row, +0.45 m visual)
+ *      R > 0.45        → GB  at `pitches + 1` (round up; over-covers)
+ *    User can override the pattern, in which case auto-pick's pitch bump is undone.
  *
- *  All decimal results are kept at 3-digit precision via `round3`.
+ *  Outputs are split into "monolith" (physical, what's actually built) and
+ *  "billed" (what the customer is charged for under the m² rate).
  * ─────────────────────────────────────────────────────────────────
  */
 
+// ── Physical constants (from the user's factory; not user-tunable) ──
+
+export const PITCH = 0.58;            // beam center-to-center spacing
+export const BEAM_WIDTH = 0.12;       // beam width along the length axis
+export const BLOCK_LENGTH = 0.20;     // block length along the beam axis
+export const BLOCK_VISIBLE = 0.45;    // visible block width (perpendicular to beam, between two beams)
+export const TOPPING_THICKNESS = 0.05;
+export const DEFAULT_BEARING = 0.15;
+
+// Auto-pick thresholds on the post-correction remainder R
+export const SMALL_REMAINDER = 0.20;  // R ≤ this → BGB (extra beam)
+export const MEDIUM_REMAINDER = 0.45; // R ≤ this → GBG (extra block); else extra pair (GB at N+1)
+
+// ── Pricing tables (UZS) ────────────────────────────────────────
+
+interface PriceTier {
+  max_beam_length: number;
+  price: number;
+}
+
+export const M2_PRICE_TIERS: readonly PriceTier[] = [
+  { max_beam_length: 4.30, price: 140_000 },
+  { max_beam_length: 5.30, price: 160_000 },
+  { max_beam_length: 6.30, price: 180_000 },
+  { max_beam_length: 7.30, price: 200_000 },
+  { max_beam_length: 8.30, price: 230_000 },
+] as const;
+
+export const EXTRA_BEAM_PRICE_TIERS: readonly PriceTier[] = [
+  { max_beam_length: 4.30, price: 60_000 },
+  { max_beam_length: 5.30, price: 70_000 },
+  { max_beam_length: 6.30, price: 80_000 },
+  { max_beam_length: 7.30, price: 100_000 },
+  { max_beam_length: 8.30, price: 120_000 },
+] as const;
+
+export const BLOCK_UNIT_PRICE = 6_000;
+
 // ── Types ───────────────────────────────────────────────────────
 
-export interface CalculationConstants {
-  BEAM_SPACING: number;       // 0.58 m  – pitch between beams
-  BEARING: number;            // 0.15 m  – beam rests on each wall
-  EDGE_OFFSET: number;        // 0.035 m – edge offset
-  BLOCK_LENGTH: number;       // 0.20 m  – nominal filler block length
-  BLOCK_EDGE_LOSS: number;    // 0.20 m  – removed from beam_length before block fit
-  TOLERANCE: number;          // 0.05 m  – kept for back-compat (unused by new rule)
-  FILLER_THRESHOLD: number;   // 0.20 m  – remainder ≥ this → filler-only row
-  TOPPING_THICKNESS: number;  // m       – concrete topping thickness
-}
-
-export const DEFAULT_CONSTANTS: CalculationConstants = {
-  BEAM_SPACING: 0.58,
-  BEARING: 0.15,
-  EDGE_OFFSET: 0.035,
-  BLOCK_LENGTH: 0.20,
-  BLOCK_EDGE_LOSS: 0.20,
-  TOLERANCE: 0.05,
-  FILLER_THRESHOLD: 0.20,
-  TOPPING_THICKNESS: 0.05,
-};
+export type Pattern = "GB" | "BGB" | "GBG";
 
 export interface SlabInput {
-  /** Slab width in meters (perpendicular to beams). */
-  width: number;
-  /** Slab length in meters (parallel to beams). */
-  length: number;
-}
-
-export interface BeamGroup {
-  length: number;
-  qty: number;
+  /** Inside-wall to inside-wall, perpendicular to beams (m). */
+  inner_width: number;
+  /** Inside-wall to inside-wall, parallel to beams (m). */
+  inner_length: number;
+  /** How far the beam sits onto the wall on each side (m). Default 0.15. */
+  bearing?: number;
+  /** Explicit pattern override; omit to use auto-pick. */
+  pattern?: Pattern;
+  /** Length adjustment applied before pitch math. Default 0. */
+  correction?: number;
+  /** Manual extra beams (charged per linear meter at the extra-beam tier). Default 0. */
+  extra_beams?: number;
+  /**
+   * Force a "starting beam" — promotes auto-picked GB to BGB by adding one beam.
+   * Has no effect on BGB/GBG. (Excel column "Боши балка булиши шарт".)
+   */
+  force_start_beam?: boolean;
 }
 
 export interface SlabResult {
-  beam_length: number;
-  rows_initial: number;
-  rows_final: number;
-  beam_count: number;
-  beam_groups: BeamGroup[];
-  blocks_per_row: number;
-  total_blocks: number;
-  actual_length: number;
-  corrected_length: number;
-  covered_area: number;
-  m2_area: number;
-  extra_beams_qty: number;
-  extra_beam_price_per_m: number;
-  delta: number;
+  // Echoed inputs
+  inner_width: number;
+  inner_length: number;
+  bearing: number;
+  correction: number;
+  extra_beams: number;
+  force_start_beam: boolean;
+
+  // Pitch math
+  effective_length: number;     // inner_length + correction
+  pitches: number;              // N — full PITCH spans actually used
+  remainder: number;            // R after `pitches` (informational)
+  pattern: Pattern;             // chosen pattern (after override + force_start_beam)
+  pattern_auto: Pattern;        // what auto-pick chose, before any override
+
+  // Geometry
+  beam_length: number;          // inner_width + 2 × bearing
+  blocks_per_row: number;       // CEIL(inner_width / BLOCK_LENGTH)
+  beam_count: number;           // includes pattern's extra beam AND manual extras
+  block_rows: number;           // includes pattern's extra block row
+  total_blocks: number;         // blocks_per_row × block_rows
+
+  // Lengths (m)
+  monolith_length: number;      // physical span actually built
+  billed_length: number;        // pitches × PITCH — the length used for m² billing
+
+  // Areas (m²)
+  monolith_area: number;        // beam_length × monolith_length
+  billed_area: number;          // beam_length × billed_length — what m²-rate is applied to
+
+  // Concrete topping volume (m³)
   concrete_volume: number;
-  weights: {
-    beams_kg: number;
-    blocks_kg: number;
-    total_kg: number;
-  };
-  constants: CalculationConstants;
+
+  // Pricing
+  m2_price: number;             // UZS / m²
+  extra_beam_price_per_m: number;
+  m2_cost: number;              // billed_area × m2_price
+  pattern_extra_cost: number;   // 0 | 1 extra beam | blocks_per_row × BLOCK_UNIT_PRICE
+  manual_extra_beams_cost: number;
+  subtotal: number;             // m2_cost + pattern_extra_cost + manual_extra_beams_cost
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-/** Round half-away-from-zero to 3 decimal places (avoids JS banker's rounding). */
-export function round3(n: number): number {
+/** Round half-away-from-zero to N decimals (avoids JS banker's rounding). */
+export function roundN(n: number, decimals: number): number {
+  const f = Math.pow(10, decimals);
   const sign = n < 0 ? -1 : 1;
-  return (sign * Math.round(Math.abs(n) * 1000)) / 1000;
+  return (sign * Math.round(Math.abs(n) * f)) / f;
+}
+export const round3 = (n: number) => roundN(n, 3);
+export const round2 = (n: number) => roundN(n, 2);
+
+/** Pick the price for a beam length from a tier table; clamps above the last tier to its price. */
+export function tierPrice(beam_length: number, tiers: readonly PriceTier[]): number {
+  const eps = 1e-9;
+  for (const t of tiers) {
+    if (beam_length <= t.max_beam_length + eps) return t.price;
+  }
+  return tiers[tiers.length - 1].price;
 }
 
-export function round2(n: number): number {
-  const sign = n < 0 ? -1 : 1;
-  return (sign * Math.round(Math.abs(n) * 100)) / 100;
+/** Auto-pick pattern from a post-correction remainder. Caller bumps `pitches` for the GB-at-N+1 case. */
+export function autoPickPattern(remainder: number): { pattern: Pattern; bumpPitches: boolean } {
+  if (remainder <= 1e-9) return { pattern: "GB", bumpPitches: false };
+  if (remainder <= SMALL_REMAINDER + 1e-9) return { pattern: "BGB", bumpPitches: false };
+  if (remainder <= MEDIUM_REMAINDER + 1e-9) return { pattern: "GBG", bumpPitches: false };
+  return { pattern: "GB", bumpPitches: true };
 }
 
 // ── Validation ──────────────────────────────────────────────────
@@ -109,164 +168,156 @@ export class CalculationError extends Error {
   }
 }
 
-function validateInput(input: SlabInput, c: CalculationConstants): void {
-  if (!Number.isFinite(input.width) || input.width <= 0) {
-    throw new CalculationError("width must be a positive finite number (meters)");
+function validate(input: SlabInput, bearing: number): void {
+  if (!Number.isFinite(input.inner_width) || input.inner_width <= 0) {
+    throw new CalculationError("inner_width must be a positive finite number (meters)");
   }
-  if (!Number.isFinite(input.length) || input.length <= 0) {
-    throw new CalculationError("length must be a positive finite number (meters)");
+  if (!Number.isFinite(input.inner_length) || input.inner_length <= 0) {
+    throw new CalculationError("inner_length must be a positive finite number (meters)");
   }
-  if (c.BEAM_SPACING <= 0) throw new CalculationError("BEAM_SPACING must be > 0");
-  if (c.BLOCK_LENGTH <= 0) throw new CalculationError("BLOCK_LENGTH must be > 0");
+  if (!Number.isFinite(bearing) || bearing < 0) {
+    throw new CalculationError("bearing must be a non-negative finite number (meters)");
+  }
+  if (input.extra_beams !== undefined && (!Number.isInteger(input.extra_beams) || input.extra_beams < 0)) {
+    throw new CalculationError("extra_beams must be a non-negative integer");
+  }
 }
 
 // ── Main calculation ────────────────────────────────────────────
 
-/**
- * Calculate beam-and-block layout for a single rectangular slab.
- *
- * @param input      slab geometry (width × length, meters)
- * @param overrides  optional constants overrides (admin-tunable)
- * @param manual     extra beams / fillers added by the engineer
- */
-export function calculateSlab(
-  input: SlabInput,
-  overrides: Partial<CalculationConstants> = {},
-  manual: { extraBeams?: number; extraFillers?: number } = {},
-): SlabResult {
-  const c: CalculationConstants = { ...DEFAULT_CONSTANTS, ...overrides };
-  validateInput(input, c);
+export function calculateSlab(input: SlabInput): SlabResult {
+  const bearing = input.bearing ?? DEFAULT_BEARING;
+  const correction = input.correction ?? 0;
+  const extra_beams = input.extra_beams ?? 0;
+  const force_start_beam = input.force_start_beam ?? false;
 
-  const { width, length } = input;
-  const extraBeams = manual.extraBeams ?? 0;
-  const extraFillers = manual.extraFillers ?? 0;
+  validate(input, bearing);
 
-  // 1. Beam length = inner width + bearing on both ends
-  const beam_length = round3(width + 2 * c.BEARING);
+  // Geometry that doesn't depend on pattern
+  const beam_length = round3(input.inner_width + 2 * bearing);
+  const blocks_per_row = Math.ceil(input.inner_width / BLOCK_LENGTH);
 
-  // 2. Whole beam-spacing intervals plus the leftover length
-  const rows_initial = Math.floor(length / c.BEAM_SPACING);
-  const remainder = round3(length - rows_initial * c.BEAM_SPACING);
+  // Pitch math
+  const effective_length = round3(input.inner_length + correction);
+  let pitches = Math.floor(effective_length / PITCH);
+  let remainder = round3(effective_length - pitches * PITCH);
 
-  // 3. Remainder rule
-  let autoFillers = 0;
-  let autoExtraBeams = 0;
-  if (remainder > 0) {
-    autoFillers = 1;
-    if (remainder < c.FILLER_THRESHOLD) {
-      // remainder too small for a proper filler — add a beam too
-      autoExtraBeams = 1;
-    }
+  // Auto-pick on the floor-pitch remainder
+  const auto = autoPickPattern(remainder);
+  const pattern_auto = auto.pattern;
+
+  // Choose final pattern: explicit override > force_start_beam > auto
+  let pattern: Pattern;
+  if (input.pattern) {
+    pattern = input.pattern;
+    // Explicit override never bumps pitches; user controls that via `correction`.
+  } else if (auto.bumpPitches) {
+    // Auto picked GB-at-N+1
+    pitches += 1;
+    remainder = 0;
+    pattern = "GB";
+  } else {
+    pattern = pattern_auto;
   }
 
-  // 4. Final counts (auto + manual)
-  const rows_final = rows_initial + autoFillers + extraFillers;
-  const beam_count = rows_initial + autoExtraBeams + extraBeams;
+  // force_start_beam promotes GB → BGB (only takes effect when pattern is GB and no override)
+  if (force_start_beam && pattern === "GB" && !input.pattern) {
+    pattern = "BGB";
+  }
 
-  // 5. Geometry
-  const actual_length = round3(rows_final * c.BEAM_SPACING - c.EDGE_OFFSET);
-  const corrected_length = actual_length;
-  const delta = round3(actual_length - length);
+  // Pattern → counts and visual extension
+  let beam_count_base: number;
+  let block_rows: number;
+  let extension: number;
+  switch (pattern) {
+    case "GB":
+      beam_count_base = pitches;
+      block_rows = pitches;
+      extension = 0;
+      break;
+    case "BGB":
+      beam_count_base = pitches + 1;
+      block_rows = pitches;
+      extension = BEAM_WIDTH;
+      break;
+    case "GBG":
+      beam_count_base = pitches;
+      block_rows = pitches + 1;
+      extension = BLOCK_VISIBLE;
+      break;
+  }
 
-  // 6. Block packing
-  const blocks_per_row = Math.ceil((beam_length - c.BLOCK_EDGE_LOSS) / c.BLOCK_LENGTH);
-  const total_blocks = blocks_per_row * rows_final;
+  const beam_count = beam_count_base + extra_beams;
+  const total_blocks = blocks_per_row * block_rows;
 
-  // 7. Concrete topping volume — poured area × thickness
-  const concrete_volume = round3(width * actual_length * c.TOPPING_THICKNESS);
+  // Lengths
+  const billed_length = round3(pitches * PITCH);
+  const monolith_length = round3(pitches * PITCH + extension);
 
-  // 8. UI helpers (not part of the core algorithm but used by the calculator UI)
-  const covered_area = round3(width * actual_length);
-  const m2_area = round3(rows_final * c.BEAM_SPACING * beam_length);
-  const extra_beams_qty = extraBeams;
-  const extra_beam_price_per_m =
-    beam_length <= 4.30 ? 60 :
-    beam_length <= 5.30 ? 70 :
-    beam_length <= 6.30 ? 80 : 90;
+  // Areas
+  const billed_area = round3(beam_length * billed_length);
+  const monolith_area = round3(beam_length * monolith_length);
 
-  const beam_groups: BeamGroup[] = [{ length: beam_length, qty: beam_count }];
+  // Concrete topping volume — poured over the actual built slab
+  const concrete_volume = round3(monolith_area * TOPPING_THICKNESS);
+
+  // Pricing
+  const m2_price = tierPrice(beam_length, M2_PRICE_TIERS);
+  const extra_beam_price_per_m = tierPrice(beam_length, EXTRA_BEAM_PRICE_TIERS);
+  const m2_cost = round2(billed_area * m2_price);
+  const pattern_extra_cost =
+    pattern === "BGB"
+      ? round2(beam_length * extra_beam_price_per_m)
+      : pattern === "GBG"
+        ? round2(blocks_per_row * BLOCK_UNIT_PRICE)
+        : 0;
+  const manual_extra_beams_cost = round2(extra_beams * beam_length * extra_beam_price_per_m);
+  const subtotal = round2(m2_cost + pattern_extra_cost + manual_extra_beams_cost);
 
   return {
+    inner_width: input.inner_width,
+    inner_length: input.inner_length,
+    bearing,
+    correction,
+    extra_beams,
+    force_start_beam,
+    effective_length,
+    pitches,
+    remainder,
+    pattern,
+    pattern_auto,
     beam_length,
-    rows_initial,
-    rows_final,
-    beam_count,
-    beam_groups,
     blocks_per_row,
+    beam_count,
+    block_rows,
     total_blocks,
-    actual_length,
-    corrected_length,
-    covered_area,
-    m2_area,
-    extra_beams_qty,
-    extra_beam_price_per_m,
-    delta,
+    monolith_length,
+    billed_length,
+    monolith_area,
+    billed_area,
     concrete_volume,
-    weights: {
-      beams_kg: round3(beam_count * beam_length * 15), // 15 kg per linear meter of beam
-      blocks_kg: round3(total_blocks * 16),            // 16 kg per block
-      total_kg: round3(beam_count * beam_length * 15 + total_blocks * 16),
-    },
-    constants: c,
+    m2_price,
+    extra_beam_price_per_m,
+    m2_cost,
+    pattern_extra_cost,
+    manual_extra_beams_cost,
+    subtotal,
   };
 }
 
-// ── Trapezoidal / irregular shapes ──────────────────────────────
+// ── Project total (across rooms, with grand-total discount) ────
 
-export interface MultiSpanInput {
-  /** Length of slab (along which rows are counted). */
-  length: number;
-  /**
-   * One width per "band". For trapezoidal shapes pass [topWidth, bottomWidth];
-   * for irregular shapes pass several segments. Each band produces its own
-   * beam group sized to the band's width.
-   */
-  widths: number[];
+export interface ProjectTotal {
+  rooms_subtotal: number;
+  discount_percent: number;
+  discount_amount: number;
+  total: number;
 }
 
-/**
- * Apply beam grouping rules from the spec for variable-width slabs.
- * Width difference between min and max determines how many distinct
- * beam-length groups are produced (≤0.25 → 1, ≤0.50 → 2, ≤0.80 → 3, else 4).
- *
- * The row count and block math reuse the rectangular pipeline applied to
- * the widest band so the slab is fully covered.
- */
-export function calculateMultiSpan(
-  input: MultiSpanInput,
-  overrides: Partial<CalculationConstants> = {},
-): SlabResult {
-  const c: CalculationConstants = { ...DEFAULT_CONSTANTS, ...overrides };
-  if (!input.widths.length) {
-    throw new CalculationError("widths[] must contain at least one value");
-  }
-
-  const minW = Math.min(...input.widths);
-  const maxW = Math.max(...input.widths);
-  const span = maxW - minW;
-
-  let groupCount: number;
-  if (span <= 0.25) groupCount = 1;
-  else if (span <= 0.5) groupCount = 2;
-  else if (span <= 0.8) groupCount = 3;
-  else groupCount = 4;
-
-  // Run the standard pipeline against the widest band to ensure full coverage.
-  const base = calculateSlab({ width: maxW, length: input.length }, overrides);
-
-  // Distribute total beam_count across the requested groups.
-  const groups: BeamGroup[] = [];
-  const perGroup = Math.floor(base.beam_count / groupCount);
-  let leftover = base.beam_count - perGroup * groupCount;
-
-  for (let i = 0; i < groupCount; i++) {
-    const t = groupCount === 1 ? 0 : i / (groupCount - 1);
-    const widthAt = minW + (maxW - minW) * t;
-    const beamLen = round3(widthAt + 2 * c.BEARING);
-    const qty = perGroup + (leftover > 0 ? 1 : 0);
-    if (leftover > 0) leftover--;
-    groups.push({ length: beamLen, qty });
-  }
-
-  return { ...base, beam_groups: groups };
+export function projectTotal(rooms: SlabResult[], discount_percent = 0): ProjectTotal {
+  const pct = Math.max(0, Math.min(100, discount_percent));
+  const rooms_subtotal = round2(rooms.reduce((s, r) => s + r.subtotal, 0));
+  const discount_amount = round2((rooms_subtotal * pct) / 100);
+  const total = round2(rooms_subtotal - discount_amount);
+  return { rooms_subtotal, discount_percent: pct, discount_amount, total };
 }

@@ -24,23 +24,36 @@ interface Project {
   calculations: Array<{
     id: string;
     name: string | null;
-    inputWidth: string;
-    inputLength: string;
+    innerWidth: string;
+    innerLength: string;
+    bearing: string;
+    pattern: "GB" | "BGB" | "GBG";
+    patternAuto: "GB" | "BGB" | "GBG";
     beamLength: string;
-    rowsInitial: number;
-    rowsFinal: number;
-    beamCount: number;
-    beamGroups: { length: number; qty: number }[];
     blocksPerRow: number;
+    beamCount: number;
+    blockRows: number;
     totalBlocks: number;
-    actualLength: string;
-    correctedLength: string;
-    coveredArea: string | null;
-    pricePerM2: string | null;
-    totalSum: string | null;
+    monolithLength: string;
+    billedLength: string;
+    monolithArea: string;
+    billedArea: string;
+    concreteVolume: string;
+    m2Price: string;
+    extraBeamPricePerM: string;
+    m2Cost: string;
+    patternExtraCost: string;
+    manualExtraBeamsCost: string;
+    subtotal: string;
     createdAt: string;
   }>;
 }
+
+const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
+  GB: "Г-Б",
+  BGB: "Б-Г-Б",
+  GBG: "Г-Б-Г",
+};
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -59,10 +72,12 @@ export default function ProjectDetailPage() {
     (acc, c) => ({
       blocks: acc.blocks + c.totalBlocks,
       beams: acc.beams + c.beamCount,
-      area: acc.area + Number(c.inputWidth) * Number(c.inputLength),
-      sum: acc.sum + Number(c.totalSum || 0),
+      monolithArea: acc.monolithArea + Number(c.monolithArea),
+      billedArea: acc.billedArea + Number(c.billedArea),
+      concrete: acc.concrete + Number(c.concreteVolume),
+      sum: acc.sum + Number(c.subtotal),
     }),
-    { blocks: 0, beams: 0, area: 0, sum: 0 }
+    { blocks: 0, beams: 0, monolithArea: 0, billedArea: 0, concrete: 0, sum: 0 }
   );
 
   return (
@@ -111,42 +126,52 @@ export default function ProjectDetailPage() {
             <table className="w-full text-sm border-collapse">
               <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
                 <tr>
-                  <th className="px-3 py-2 border-b bg-yellow-50">Name (Хона номи)</th>
-                  <th className="px-3 py-2 border-b text-center bg-yellow-50">W (Эни)</th>
-                  <th className="px-3 py-2 border-b text-center bg-yellow-50">L (Бўйи)</th>
-                  <th className="px-3 py-2 border-b text-center bg-green-50">Beam Len (Б.Уз.)</th>
-                  <th className="px-3 py-2 border-b text-center">Blks/Row (1 қат)</th>
-                  <th className="px-3 py-2 border-b text-center bg-orange-50">Total Blks (Жами)</th>
-                  <th className="px-3 py-2 border-b text-center bg-gray-100">Beams (Балка)</th>
-                  <th className="px-3 py-2 border-b text-center">Area (Майдон)</th>
-                  <th className="px-3 py-2 border-b text-center bg-green-50">Price (Нарх)</th>
-                  <th className="px-3 py-2 border-b text-right">Sum (Сумма)</th>
+                  <th className="px-3 py-2 border-b bg-yellow-50">Name</th>
+                  <th className="px-3 py-2 border-b text-center bg-yellow-50">W</th>
+                  <th className="px-3 py-2 border-b text-center bg-yellow-50">L</th>
+                  <th className="px-3 py-2 border-b text-center bg-blue-50">Pattern</th>
+                  <th className="px-3 py-2 border-b text-center bg-green-50">Beam Len</th>
+                  <th className="px-3 py-2 border-b text-center">Blks/Row</th>
+                  <th className="px-3 py-2 border-b text-center bg-orange-50">Total Blks</th>
+                  <th className="px-3 py-2 border-b text-center bg-gray-100">Beams</th>
+                  <th className="px-3 py-2 border-b text-center">Monolith</th>
+                  <th className="px-3 py-2 border-b text-center">Billed Area</th>
+                  <th className="px-3 py-2 border-b text-center bg-green-50">m² Rate</th>
+                  <th className="px-3 py-2 border-b text-right">Subtotal</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {project.calculations.map((c) => (
                   <tr key={c.id} className="hover:bg-muted/10 transition-colors">
                     <td className="px-3 py-2 font-medium bg-yellow-50/20">{c.name || "Unnamed Room"}</td>
-                    <td className="px-3 py-2 text-center bg-yellow-50/20">{formatNumber(c.inputWidth, 1)}</td>
-                    <td className="px-3 py-2 text-center bg-yellow-50/20">{formatNumber(c.inputLength, 1)}</td>
+                    <td className="px-3 py-2 text-center bg-yellow-50/20">{formatNumber(c.innerWidth, 2)}</td>
+                    <td className="px-3 py-2 text-center bg-yellow-50/20">{formatNumber(c.innerLength, 2)}</td>
+                    <td className="px-3 py-2 text-center text-xs font-medium bg-blue-50/30">
+                      {PATTERN_LABEL[c.pattern]}
+                      {c.pattern !== c.patternAuto && (
+                        <span className="text-muted-foreground"> (auto: {PATTERN_LABEL[c.patternAuto]})</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800">{formatNumber(c.beamLength, 2)}</td>
                     <td className="px-3 py-2 text-center">{c.blocksPerRow}</td>
                     <td className="px-3 py-2 text-center font-black bg-orange-50/20 text-orange-800">{c.totalBlocks}</td>
                     <td className="px-3 py-2 text-center font-black bg-gray-100/50">{c.beamCount}</td>
-                    <td className="px-3 py-2 text-center font-bold">{c.coveredArea ? formatNumber(c.coveredArea, 2) : "—"}</td>
-                    <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800">{c.pricePerM2 ? formatNumber(c.pricePerM2, 0) : "—"}</td>
+                    <td className="px-3 py-2 text-center text-xs">{formatNumber(c.monolithLength, 2)} m</td>
+                    <td className="px-3 py-2 text-center text-xs">{formatNumber(c.billedArea, 2)} m²</td>
+                    <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800">{formatNumber(c.m2Price, 0)}</td>
                     <td className="px-3 py-2 text-right font-black text-green-700">
-                      {c.totalSum ? formatNumber(c.totalSum, 0) : "—"}
+                      {formatNumber(c.subtotal, 0)}
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot className="bg-muted/20 font-black border-t-2 border-primary/10">
                 <tr>
-                  <td className="px-3 py-3 text-right" colSpan={5}>TOTALS (ЖАМИ):</td>
+                  <td className="px-3 py-3 text-right" colSpan={6}>TOTALS (ЖАМИ):</td>
                   <td className="px-3 py-3 text-center text-orange-800 bg-orange-50/50">{totals.blocks}</td>
                   <td className="px-3 py-3 text-center bg-gray-100">{totals.beams}</td>
-                  <td className="px-3 py-3 text-center text-xs">{formatNumber(totals.area, 2)} m²</td>
+                  <td className="px-3 py-3" colSpan={1}></td>
+                  <td className="px-3 py-3 text-center text-xs">{formatNumber(totals.billedArea, 2)} m²</td>
                   <td className="px-3 py-3 text-right text-green-800 bg-green-50/50 text-lg" colSpan={2}>{formatNumber(totals.sum, 0)}</td>
                 </tr>
               </tfoot>
@@ -169,9 +194,17 @@ export default function ProjectDetailPage() {
                <span className="text-muted-foreground">Total Block Pieces</span>
                <span className="font-bold">{totals.blocks}</span>
              </div>
+             <div className="flex justify-between border-b pb-2">
+               <span className="text-muted-foreground">Billed Area</span>
+               <span className="font-bold">{formatNumber(totals.billedArea, 2)} m²</span>
+             </div>
+             <div className="flex justify-between border-b pb-2">
+               <span className="text-muted-foreground">Monolith Area</span>
+               <span className="font-bold">{formatNumber(totals.monolithArea, 2)} m²</span>
+             </div>
              <div className="flex justify-between">
-               <span className="text-muted-foreground">Total Covered Area</span>
-               <span className="font-bold">{formatNumber(totals.area, 2)} m²</span>
+               <span className="text-muted-foreground">Concrete Topping</span>
+               <span className="font-bold">{totals.concrete.toFixed(2)} m³</span>
              </div>
           </CardContent>
         </Card>

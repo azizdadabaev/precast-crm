@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -19,26 +19,23 @@ interface Project {
   deal: { client: { name: string } };
   calculations: Array<{
     id: string;
+    name: string | null;
+    pattern: "GB" | "BGB" | "GBG";
     beamCount: number;
     totalBlocks: number;
-    concreteVolume: string;
     beamLength: string;
+    billedArea: string;
+    monolithLength: string;
+    subtotal: string;
   }>;
 }
 
-// ── Default unit prices (UZS). Admin can override later. ───────
-const DEFAULT_PRICES = {
-  beamPerMeter: 35000, // UZS per running meter of beam
-  blockEach: 12000, // UZS per block
-  concretePerM3: 850000, // UZS per m³
-  delivery: 500000, // flat default
-};
+const PATTERN_LABEL = { GB: "Г-Б", BGB: "Б-Г-Б", GBG: "Г-Б-Г" } as const;
 
 function QuoteNewInner() {
   const router = useRouter();
   const search = useSearchParams();
   const projectId = search.get("projectId") ?? "";
-  const calcId = search.get("calcId") ?? "";
 
   const { data: projects = [] } = useQuery<Project[]>({
     queryKey: ["projects-all"],
@@ -46,27 +43,18 @@ function QuoteNewInner() {
   });
 
   const project = projects.find((p) => p.id === projectId);
-  const calc = project?.calculations.find((c) => c.id === calcId) ?? project?.calculations[0];
 
-  const [beamCost, setBeamCost] = useState(0);
-  const [blockCost, setBlockCost] = useState(0);
-  const [concreteCost, setConcreteCost] = useState(0);
-  const [deliveryCost, setDeliveryCost] = useState(DEFAULT_PRICES.delivery);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [deliveryCost, setDeliveryCost] = useState(500_000);
   const [otherCost, setOtherCost] = useState(0);
   const [status, setStatus] = useState<"DRAFT" | "SENT">("DRAFT");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-fill from calculation once data arrives
-  useEffect(() => {
-    if (!calc) return;
-    const totalBeamMeters = calc.beamCount * Number(calc.beamLength);
-    setBeamCost(Math.round(totalBeamMeters * DEFAULT_PRICES.beamPerMeter));
-    setBlockCost(Math.round(calc.totalBlocks * DEFAULT_PRICES.blockEach));
-    setConcreteCost(Math.round(Number(calc.concreteVolume) * DEFAULT_PRICES.concretePerM3));
-  }, [calc]);
-
-  const total = beamCost + blockCost + concreteCost + deliveryCost + otherCost;
+  const roomsSubtotal =
+    project?.calculations.reduce((s, c) => s + Number(c.subtotal), 0) ?? 0;
+  const discountAmount = (roomsSubtotal * discountPercent) / 100;
+  const total = roomsSubtotal - discountAmount + deliveryCost + otherCost;
 
   const create = useMutation({
     mutationFn: () =>
@@ -74,10 +62,8 @@ function QuoteNewInner() {
         method: "POST",
         json: {
           projectId,
-          calculationId: calc?.id,
-          beamCost,
-          blockCost,
-          concreteCost,
+          calculationId: project?.calculations[0]?.id,
+          discountPercent,
           deliveryCost,
           otherCost,
           status,
@@ -92,7 +78,7 @@ function QuoteNewInner() {
     return (
       <div>
         <p className="text-muted-foreground">
-          Open a project and click <strong>Generate Quote</strong> to start.
+          Open a project and click <strong>New Quote</strong> to start.
         </p>
         <Button asChild variant="outline" className="mt-3">
           <Link href="/projects">Go to Projects</Link>
@@ -120,41 +106,57 @@ function QuoteNewInner() {
         </p>
       </div>
 
-      {!calc && (
+      {project.calculations.length === 0 ? (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
-            This project has no calculation yet — please run one first.
+            This project has no calculations yet — please run one first.
           </CardContent>
         </Card>
-      )}
-
-      {calc && (
+      ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Pricing (editable)</CardTitle>
+              <CardTitle>Rooms (auto-calculated subtotals)</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <PriceRow
-                label="Beams"
-                hint={`${calc.beamCount} × ${formatNumber(calc.beamLength, 3)} m`}
-                value={beamCost}
-                onChange={setBeamCost}
-              />
-              <PriceRow
-                label="Blocks"
-                hint={`${calc.totalBlocks} blocks`}
-                value={blockCost}
-                onChange={setBlockCost}
-              />
-              <PriceRow
-                label="Concrete topping"
-                hint={`${formatNumber(calc.concreteVolume, 3)} m³`}
-                value={concreteCost}
-                onChange={setConcreteCost}
-              />
-              <PriceRow label="Delivery" value={deliveryCost} onChange={setDeliveryCost} />
-              <PriceRow label="Other / extras" value={otherCost} onChange={setOtherCost} />
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-xs text-muted-foreground uppercase">
+                  <tr>
+                    <th className="text-left p-2">Name</th>
+                    <th className="text-center p-2">Pattern</th>
+                    <th className="text-center p-2">Beam L</th>
+                    <th className="text-center p-2">Beams</th>
+                    <th className="text-center p-2">Blocks</th>
+                    <th className="text-center p-2">Billed m²</th>
+                    <th className="text-right p-2">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {project.calculations.map((c) => (
+                    <tr key={c.id}>
+                      <td className="p-2 font-medium">{c.name || "—"}</td>
+                      <td className="p-2 text-center">{PATTERN_LABEL[c.pattern]}</td>
+                      <td className="p-2 text-center">{formatNumber(c.beamLength, 2)}</td>
+                      <td className="p-2 text-center">{c.beamCount}</td>
+                      <td className="p-2 text-center">{c.totalBlocks}</td>
+                      <td className="p-2 text-center">{formatNumber(c.billedArea, 2)}</td>
+                      <td className="p-2 text-right font-bold">{formatMoney(c.subtotal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-muted/20 border-t-2 font-bold">
+                  <tr>
+                    <td colSpan={6} className="p-2 text-right">Rooms subtotal</td>
+                    <td className="p-2 text-right">{formatMoney(roomsSubtotal)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </CardContent>
+
+            <CardContent className="space-y-3 border-t">
+              <PriceRow label="Discount %" value={discountPercent} onChange={setDiscountPercent} step="1" max={100} />
+              <PriceRow label="Delivery" value={deliveryCost} onChange={setDeliveryCost} step="10000" />
+              <PriceRow label="Other / extras" value={otherCost} onChange={setOtherCost} step="10000" />
 
               <div className="space-y-1.5 pt-3">
                 <Label>Status</Label>
@@ -182,9 +184,8 @@ function QuoteNewInner() {
               <CardTitle>Total</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <SummaryRow label="Beams" value={beamCost} />
-              <SummaryRow label="Blocks" value={blockCost} />
-              <SummaryRow label="Concrete" value={concreteCost} />
+              <SummaryRow label="Rooms subtotal" value={roomsSubtotal} />
+              <SummaryRow label={`Discount (${discountPercent}%)`} value={-discountAmount} />
               <SummaryRow label="Delivery" value={deliveryCost} />
               <SummaryRow label="Other" value={otherCost} />
               <div className="border-t pt-3">
@@ -219,26 +220,26 @@ export default function NewQuotePage() {
 
 function PriceRow({
   label,
-  hint,
   value,
   onChange,
+  step = "1000",
+  max,
 }: {
   label: string;
-  hint?: string;
   value: number;
   onChange: (n: number) => void;
+  step?: string;
+  max?: number;
 }) {
   return (
     <div className="grid grid-cols-3 gap-3 items-center">
-      <div className="col-span-1">
-        <Label>{label}</Label>
-        {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
-      </div>
+      <Label className="col-span-1">{label}</Label>
       <Input
         className="col-span-2 text-right font-mono"
         type="number"
         min="0"
-        step="1000"
+        max={max}
+        step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
       />
@@ -250,7 +251,8 @@ function SummaryRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono">{formatMoney(value)}</span>
+      <span className={`font-mono ${value < 0 ? "text-rose-700" : ""}`}>{formatMoney(value)}</span>
     </div>
   );
 }
+
