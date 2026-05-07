@@ -28,6 +28,19 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
     return fail("Cancellation requires ADMIN role or the cancel password.", 403);
   }
 
+  // The JWT's `sub` may outlive the User row (e.g. after a schema reset
+  // that re-seeded users with new IDs). Verify the actor exists before
+  // using their id as a foreign key — otherwise the OrderEvent insert
+  // throws P2003 and the whole cancellation fails.
+  const actorId = user?.sub
+    ? (
+        await prisma.user.findUnique({
+          where: { id: user.sub },
+          select: { id: true },
+        })
+      )?.id ?? null
+    : null;
+
   const existing = await prisma.order.findUnique({
     where: { id: ctx.params.id },
     include: { project: { select: { id: true, dealId: true } } },
@@ -59,7 +72,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
       data: {
         orderId: existing.id,
         type: "ORDER_CANCELED",
-        actorId: user?.sub ?? null,
+        actorId, // already resolved + verified above
         message: body.reason ?? null,
         payload: {
           method: isAdmin ? "admin" : "password",
