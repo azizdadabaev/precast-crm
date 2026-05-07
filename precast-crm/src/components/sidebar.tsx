@@ -28,11 +28,11 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: "/dashboard",    label: "Бошқарув",       sub: "Dashboard",     icon: LayoutDashboard },
   { href: "/calculations", label: "Калькулятор",    sub: "Calculations",  icon: Calculator },
-  { href: "/production",   label: "Ишлаб чиқариш",  sub: "Production",    icon: Hammer },
-  { href: "/inventory",    label: "Омбор",          sub: "Warehouse",     icon: Warehouse },
   { href: "/projects",     label: "Лойиҳалар",      sub: "Projects",      icon: FolderKanban },
   { href: "/orders",       label: "Буюртмалар",     sub: "Orders",        icon: PackageCheck },
   { href: "/clients",      label: "Мижозлар",       sub: "Clients",       icon: Users },
+  { href: "/production",   label: "Ишлаб чиқариш",  sub: "Production",    icon: Hammer },
+  { href: "/inventory",    label: "Омбор",          sub: "Warehouse",     icon: Warehouse },
 ];
 
 export function Sidebar() {
