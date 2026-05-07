@@ -3,3 +3,10 @@
 
 # TypeScript incremental build info
 **/tsconfig.tsbuildinfo
+
+# Build & tooling caches that may end up at the repo root if a tool runs from
+# the wrong dir (e.g. `npx next build` invoked above the project)
+.next/
+**/.next/
+node_modules/
+**/node_modules/
