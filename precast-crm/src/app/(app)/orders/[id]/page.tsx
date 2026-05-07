@@ -19,6 +19,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
+import { DeliveryProofDialog } from "@/components/orders/DeliveryProofDialog";
 
 interface OrderDetail {
   id: string;
@@ -40,6 +41,8 @@ interface OrderDetail {
   paidAt: string | null;
   canceledAt: string | null;
   cancelReason: string | null;
+  deliveryProofUrl: string | null;
+  deliveryProofUploadedAt: string | null;
   notes: string | null;
   client: { id: string; name: string; phone: string; address: string | null };
   project: {
@@ -80,6 +83,7 @@ export default function OrderDetailPage() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelPassword, setCancelPassword] = useState("");
   const [cancelReason, setCancelReason] = useState("");
+  const [proofOpen, setProofOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: order, isLoading } = useQuery<OrderDetail>({
@@ -96,6 +100,22 @@ export default function OrderDetailPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["order", params.id] }),
     onError: (e: Error) => setError(e.message),
   });
+
+  /** Upload the delivery photo and advance to DELIVERED in one shot. */
+  async function uploadDeliveryProof(file: File) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/orders/${params.id}/delivery-proof`, {
+      method: "POST",
+      body: fd,
+    });
+    const json = (await res.json()) as { ok: boolean; error?: string };
+    if (!res.ok || !json.ok) {
+      throw new Error(json.error ?? "Upload failed");
+    }
+    setProofOpen(false);
+    qc.invalidateQueries({ queryKey: ["order", params.id] });
+  }
 
   const cancelOrder = useMutation({
     mutationFn: () =>
@@ -193,12 +213,20 @@ export default function OrderDetailPage() {
               const reached = i <= currentIdx;
               const isCurrent = i === currentIdx;
               const canAdvance = i === currentIdx + 1;
+              const needsProof = canAdvance && s.key === "DELIVERED";
+              const onClick = () => {
+                if (needsProof) {
+                  setProofOpen(true);
+                } else {
+                  updateStatus.mutate(s.key);
+                }
+              };
               return (
                 <button
                   key={s.key}
                   type="button"
                   disabled={!canAdvance || updateStatus.isPending}
-                  onClick={() => updateStatus.mutate(s.key)}
+                  onClick={onClick}
                   className={[
                     "flex items-center gap-2 px-3 py-2 rounded-md text-sm border transition-colors",
                     reached
@@ -211,7 +239,11 @@ export default function OrderDetailPage() {
                 >
                   <Icon className="h-4 w-4" />
                   <span className="font-medium">{s.label}</span>
-                  {canAdvance && <span className="text-xs">→ click to advance</span>}
+                  {canAdvance && (
+                    <span className="text-xs">
+                      {needsProof ? "→ requires photo" : "→ click to advance"}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -282,6 +314,35 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
+      {/* Delivery proof — visible once uploaded */}
+      {order.deliveryProofUrl && (
+        <div className="rounded-lg border bg-background p-4 shadow-sm">
+          <div className="flex items-baseline justify-between mb-2">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Етказиб бериш фотоси · Delivery proof
+            </div>
+            {order.deliveryProofUploadedAt && (
+              <div className="text-[10px] text-muted-foreground">
+                Uploaded {formatDate(order.deliveryProofUploadedAt)}
+              </div>
+            )}
+          </div>
+          <a
+            href={order.deliveryProofUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block rounded-md overflow-hidden border bg-black/5 hover:opacity-95 transition-opacity"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={order.deliveryProofUrl}
+              alt="Truck loaded with order"
+              className="block w-full max-h-96 object-contain"
+            />
+          </a>
+        </div>
+      )}
+
       {/* Activity log */}
       <div className="rounded-lg border bg-background">
         <div className="px-4 py-3 border-b">
@@ -306,6 +367,13 @@ export default function OrderDetailPage() {
           ))}
         </ul>
       </div>
+
+      {/* Delivery proof modal — gates the IN_PRODUCTION → DELIVERED step */}
+      <DeliveryProofDialog
+        open={proofOpen}
+        onClose={() => setProofOpen(false)}
+        onUpload={uploadDeliveryProof}
+      />
 
       {/* Cancel modal */}
       {cancelOpen && (

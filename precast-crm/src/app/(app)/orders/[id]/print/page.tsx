@@ -22,6 +22,7 @@ interface OrderDetail {
   totalBeams: number;
   scheduledAt: string;
   placedAt: string;
+  deliveryProofUrl: string | null;
   client: { name: string; phone: string; address: string | null };
   project: {
     name: string | null;
@@ -189,6 +190,21 @@ export default function OrderPrintPage() {
           <div className="border-t border-black pt-1">Client signature · Мижоз имзоси</div>
         </div>
       </div>
+
+      {/* Delivery proof — printed on its own page so the invoice stays clean */}
+      {order.deliveryProofUrl && (
+        <div className="mt-8 print:break-before-page">
+          <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">
+            Етказиб бериш фотоси · Delivery proof
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={order.deliveryProofUrl}
+            alt="Truck loaded with order"
+            className="w-full max-h-[24cm] object-contain border"
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -269,6 +269,11 @@ model Order {
   canceledAt      DateTime?
   cancelReason    String?
 
+  // Proof-of-delivery photo (truck loaded with the product)
+  // — required by the UI before the IN_PRODUCTION → DELIVERED transition
+  deliveryProofUrl        String?
+  deliveryProofUploadedAt DateTime?
+
   notes           String?
 
   project       Project       @relation(fields: [projectId], references: [id])
