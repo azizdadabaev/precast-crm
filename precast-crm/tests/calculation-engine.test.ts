@@ -199,12 +199,14 @@ describe("calculateSlab — overrides", () => {
     expect(r.beam_count).toBe(11);
   });
 
-  it("force_start_beam is a no-op for BGB and GBG", () => {
+  it("force_start_beam is a no-op for BGB (already starts with a beam)", () => {
     const bgb = calculateSlab({ inner_width: 4, inner_length: 6, pattern: "BGB", force_start_beam: true });
     expect(bgb.pattern).toBe("BGB");
-    const gbg = calculateSlab({ inner_width: 4, inner_length: 4.3, pattern: "GBG", force_start_beam: true });
-    expect(gbg.pattern).toBe("GBG");
+    expect(bgb.pitches).toBe(10);
+    expect(bgb.beam_count).toBe(11);
   });
+  // GBG + force_start_beam IS NOT a no-op — it triggers the GBG→GB conversion.
+  // That behavior is asserted in the dedicated section below.
 });
 
 // ── Visual length / area extends with extras WITHOUT changing billed area ──
@@ -263,15 +265,35 @@ describe("calculateSlab — manual extras extend monolith visually but not bille
     expect(r.manual_extra_beams_cost).toBe(4.30 * 60_000);
   });
 
-  it("GBG with manual extras: monolith = pitch + 0.45 + extras × 0.12; billed unchanged", () => {
-    const r = calculateSlab({ inner_width: 4, inner_length: 4.3, extra_beams: 2 });
+  it("GBG + 0 extras stays GBG (no conversion without an added beam)", () => {
+    const r = calculateSlab({ inner_width: 4, inner_length: 4.3 });
+    expect(r.pattern_auto).toBe("GBG");
     expect(r.pattern).toBe("GBG");
-    expect(r.monolith_length).toBeCloseTo(7 * 0.58 + 0.45 + 2 * 0.12, 3); // 4.75
-    expect(r.billed_length).toBeCloseTo(7 * 0.58, 3);                     // 4.06
-    expect(r.billed_area).toBeCloseTo(4.30 * 4.06, 2);
-    // GBG extras = blocks_per_row × unit price; manual beams charged separately
-    expect(r.pattern_extra_cost).toBe(20 * 6_000);
-    expect(r.manual_extra_beams_cost).toBe(2 * 4.30 * 60_000);
+    expect(r.pitches).toBe(7);
+    expect(r.beam_count).toBe(7);
+    expect(r.block_rows).toBe(8);
+    expect(r.total_blocks).toBe(160);
+    expect(r.monolith_length).toBeCloseTo(7 * 0.58 + 0.45, 3); // 4.51
+    expect(r.billed_length).toBeCloseTo(7 * 0.58, 3);          // 4.06
+    expect(r.pattern_extra_cost).toBe(20 * 6_000);             // GBG block extras
+    expect(r.manual_extra_beams_cost).toBe(0);
+  });
+
+  it("GBG + 2 manual extras → 1 absorbed into pattern → GB at pitches+1, 1 stays manual", () => {
+    // 4 × 4.3 → auto GBG at 7 pitches.
+    // 1st extra promotes pattern to GB at 8 pitches; 2nd is a per-meter line item.
+    const r = calculateSlab({ inner_width: 4, inner_length: 4.3, extra_beams: 2 });
+    expect(r.pattern_auto).toBe("GBG");
+    expect(r.pattern).toBe("GB");
+    expect(r.pitches).toBe(8);
+    expect(r.beam_count).toBe(8 + 1);                          // GB count + 1 remaining manual
+    expect(r.block_rows).toBe(8);
+    expect(r.total_blocks).toBe(160);
+    expect(r.monolith_length).toBeCloseTo(8 * 0.58 + 0.12, 3); // 4.76
+    expect(r.billed_length).toBeCloseTo(8 * 0.58, 3);          // 4.64 (NOT 4.06)
+    expect(r.billed_area).toBeCloseTo(4.30 * 4.64, 2);
+    expect(r.pattern_extra_cost).toBe(0);                      // GB has no pattern extras
+    expect(r.manual_extra_beams_cost).toBe(1 * 4.30 * 60_000); // only 1 remaining
   });
 
   it("Plain GB at N pitches with N extras: monolith grows by N × 0.12; billed locked at pitches × PITCH", () => {
@@ -285,6 +307,59 @@ describe("calculateSlab — manual extras extend monolith visually but not bille
     expect(r.m2_cost).toBeCloseTo(24.94 * 140_000, 0);
     expect(r.pattern_extra_cost).toBe(0);                       // pure GB, no pattern extra
     expect(r.manual_extra_beams_cost).toBeCloseTo(3 * 4.30 * 60_000, 0); // 774,000 UZS
+  });
+
+  // ── User's GBG → GB conversion rule ─────────────────────────────
+
+  it("Explicit GBG (4×6) + 1 extra beam via +B → GB at pitches+1, billed as full Г-Б", () => {
+    // 4×6 → pitches base 10. Explicit GBG: block_rows=11, beam_count=10.
+    // +1 beam balances the extra block row → GB at 11 pitches, 11 beams ↔ 11 blocks.
+    const r = calculateSlab({ inner_width: 4, inner_length: 6, pattern: "GBG", extra_beams: 1 });
+    expect(r.pattern).toBe("GB");
+    expect(r.pitches).toBe(11);
+    expect(r.beam_count).toBe(11);                       // pattern only, no leftover manual
+    expect(r.block_rows).toBe(11);
+    expect(r.total_blocks).toBe(220);
+    expect(r.monolith_length).toBeCloseTo(6.38, 3);
+    expect(r.billed_length).toBeCloseTo(6.38, 3);        // billed length matches monolith now
+    expect(r.billed_area).toBeCloseTo(27.434, 3);
+    expect(r.pattern_extra_cost).toBe(0);                // no GBG block extras
+    expect(r.manual_extra_beams_cost).toBe(0);           // the manual was absorbed
+    expect(r.subtotal).toBeCloseTo(27.434 * 140_000, 0); // pure m² rate
+  });
+
+  it("Explicit GBG (4×6) + force_start_beam → GB at pitches+1 (StartB consumed by conversion)", () => {
+    const r = calculateSlab({ inner_width: 4, inner_length: 6, pattern: "GBG", force_start_beam: true });
+    expect(r.pattern).toBe("GB");
+    expect(r.pitches).toBe(11);
+    expect(r.beam_count).toBe(11);
+    expect(r.subtotal).toBeCloseTo(27.434 * 140_000, 0);
+  });
+
+  it("Explicit GBG + force_start_beam + 1 manual = GB at pitches+1, 1 manual extra remains", () => {
+    // force_start_beam consumes the conversion; the +B count survives.
+    const r = calculateSlab({
+      inner_width: 4,
+      inner_length: 6,
+      pattern: "GBG",
+      force_start_beam: true,
+      extra_beams: 1,
+    });
+    expect(r.pattern).toBe("GB");
+    expect(r.pitches).toBe(11);
+    expect(r.beam_count).toBe(11 + 1);
+    expect(r.monolith_length).toBeCloseTo(6.38 + 0.12, 3);
+    expect(r.billed_length).toBeCloseTo(6.38, 3);
+    expect(r.subtotal).toBeCloseTo(27.434 * 140_000 + 4.30 * 60_000, 0);
+  });
+
+  it("Auto-picked GBG (4×4.3) + 1 extra still triggers conversion to GB at pitches+1", () => {
+    const r = calculateSlab({ inner_width: 4, inner_length: 4.3, extra_beams: 1 });
+    expect(r.pattern_auto).toBe("GBG");
+    expect(r.pattern).toBe("GB");
+    expect(r.pitches).toBe(8);
+    expect(r.beam_count).toBe(8);
+    expect(r.subtotal).toBeCloseTo(8 * 0.58 * 4.30 * 140_000, 0);
   });
 
   it("Concrete volume tracks the physical slab (no manual-extra inflation)", () => {

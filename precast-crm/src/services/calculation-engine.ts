@@ -19,18 +19,30 @@
  *      R ≤ 0.20        → BGB at `pitches`     (+1 beam, +0.12 m visual)
  *      R ≤ 0.45        → GBG at `pitches`     (+1 block row, +0.45 m visual)
  *      R > 0.45        → GB  at `pitches + 1` (round up; over-covers)
- *    User can override the pattern (no pitch bump). force_start_beam
- *    promotes any GB pattern (auto OR explicit) into BGB.
+ *    User can override the pattern (no pitch bump).
+ *
+ *  "Add a starting beam" — sourced from either force_start_beam (StartB toggle)
+ *  or the first manual extra beam (+B column). Pattern-aware effect:
+ *    Г-Б   + start → Б-Г-Б at same pitches  (closing beam added)
+ *    Г-Б-Г + start → Г-Б at pitches+1       (the existing extra block row is
+ *                                             balanced by the new beam, so the
+ *                                             whole slab is now alternating
+ *                                             N+1 beams ↔ N+1 blocks; billed
+ *                                             as a normal Г-Б, no separate
+ *                                             pattern-extra line item)
+ *    Б-Г-Б + start → no-op (already starts with a beam)
+ *  Whichever source supplied the start beam is "consumed" by the promotion;
+ *  any additional manual extras remain as per-meter line items on top.
  *
  *  Length concepts (three of them, each with a clear job):
- *    billed_length   = pitches × PITCH                      ← used by the m²-rate ONLY
- *    slab_length     = billed_length + pattern_extension    ← what's poured concrete on
- *    monolith_length = slab_length + extra_beams × BEAM_WIDTH ← what we DISPLAY to user
+ *    billed_length   = pitches × PITCH                                  ← m²-rate base
+ *    slab_length     = billed_length + pattern_extension                ← physical slab
+ *    monolith_length = slab_length + effective_extras × BEAM_WIDTH      ← what UI shows
  *
- *  Each manual extra beam visually extends the slab by BEAM_WIDTH (0.12 m), but
- *  is billed as a separate per-meter line item — so the m²-rate area
- *  (`billed_area`) never changes when the user adds extras or toggles
- *  force_start_beam. Only `monolith_length` / `monolith_area` grow visually.
+ *  `effective_extras` may be lower than the user-input `extra_beams` when one
+ *  was absorbed by the GBG→GB conversion. Pricing fields (m2_cost,
+ *  pattern_extra_cost, manual_extra_beams_cost, subtotal) all reflect the
+ *  POST-conversion state.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -228,11 +240,20 @@ export function calculateSlab(input: SlabInput): SlabResult {
     pattern = pattern_auto;
   }
 
-  // force_start_beam promotes ANY GB pattern (auto or explicit override) to BGB.
-  // It's a no-op when the pattern is already BGB/GBG.
-  if (force_start_beam && pattern === "GB") {
+  // "Add a starting beam" — pattern-aware promotion. The start beam may come
+  // from the StartB toggle (`force_start_beam`) OR the first manual extra (+B).
+  // Whichever is consumed is what produces the conversion.
+  let effective_extra_beams = extra_beams;
+  if (pattern === "GBG" && (force_start_beam || effective_extra_beams >= 1)) {
+    // Г-Б-Г + start beam → Г-Б at pitches+1 (the extra block row is balanced)
+    pitches += 1;
+    pattern = "GB";
+    if (!force_start_beam) effective_extra_beams -= 1;
+  } else if (pattern === "GB" && force_start_beam) {
+    // Г-Б + start beam → Б-Г-Б at same pitches (closing beam added)
     pattern = "BGB";
   }
+  // BGB + start beam: already starts with a beam → no-op
 
   // Pattern → counts and visual extension
   let beam_count_base: number;
@@ -256,13 +277,13 @@ export function calculateSlab(input: SlabInput): SlabResult {
       break;
   }
 
-  const beam_count = beam_count_base + extra_beams;
+  const beam_count = beam_count_base + effective_extra_beams;
   const total_blocks = blocks_per_row * block_rows;
 
   // Lengths — three concepts, see file header
   const billed_length = round3(pitches * PITCH);
   const slab_length = round3(pitches * PITCH + extension);
-  const monolith_length = round3(slab_length + extra_beams * BEAM_WIDTH);
+  const monolith_length = round3(slab_length + effective_extra_beams * BEAM_WIDTH);
 
   // Areas
   const billed_area = round3(beam_length * billed_length);
@@ -282,7 +303,7 @@ export function calculateSlab(input: SlabInput): SlabResult {
       : pattern === "GBG"
         ? round2(blocks_per_row * BLOCK_UNIT_PRICE)
         : 0;
-  const manual_extra_beams_cost = round2(extra_beams * beam_length * extra_beam_price_per_m);
+  const manual_extra_beams_cost = round2(effective_extra_beams * beam_length * extra_beam_price_per_m);
   const subtotal = round2(m2_cost + pattern_extra_cost + manual_extra_beams_cost);
 
   return {
