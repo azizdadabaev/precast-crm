@@ -1,124 +1,163 @@
-# Handoff — Precast CRM (Calculation Engine Rework)
+# Handoff — Precast CRM
 
-> Drop this file path into your next Claude Code session as the first message
-> ("read HANDOFF.md and continue") and it will pick up exactly where we left off.
+> Drop this file path into your next Claude Code session ("read HANDOFF.md")
+> and it will pick up exactly where we left off.
 
-## Where we are
+## What this is
 
-The project skeleton is complete and **runs end-to-end** on the original machine.
-Build, type-check, and unit tests are all green. The blocker is **business logic**,
-not engineering: the calculation engine does math that doesn't match the company's
-real-world layout rules. The user wants to throw it away and rebuild it correctly.
+Beam-and-block flooring CRM for an Uzbek precast manufacturer. Operator-driven
+workflow:
 
-## What was already fixed in the last session
+```
+Calculator → Save Project (draft) → Place Order → In Production → Delivered → Paid
+                                       ↑ creates Client + Order atomically
+```
 
-- Rewrote `src/services/calculation-engine.ts` to a remainder-based rule (passes 18/18 tests, but the **rule itself is the thing the user is challenging**).
-- Fixed 6 TypeScript errors (Prisma JSON casts in `seed.ts`, `api/calculate/route.ts`, `api/projects/route.ts`; missing `coveredArea` field on the project page interface).
-- Wrapped `useSearchParams()` in `<Suspense>` on `src/app/login/page.tsx` so the production build succeeds.
-- Added `export const dynamic = "force-dynamic"` to all 14 API routes so `next build` doesn't try to prerender DB-touching endpoints.
-- Deleted loose root-level duplicate files (`calculation-engine.ts`, `calculation-engine.test.ts`, `schema.prisma`) and stray brace-expansion empty directories.
-- Synced the inner and outer README to document the new algorithm.
+Sidebar (UZ-primary):
+**Бошқарув · Калькулятор · Лойиҳалар · Буюртмалар · Мижозлар**
+(Pipeline + Quotes are hidden from nav; Deal model still backs the data.)
 
-Verified working: `npx tsc --noEmit` (0 errors), `npx vitest run` (18/18), `npx next build` (clean), `npm run db:push` + `npm run db:seed` (Postgres on `localhost:5432`, password `admin`, db `precast_crm`).
+## Setup on a fresh device
 
-## The actual open question — calculation logic
-
-The user said: **"the calculation logic is simply dumb. I want logical and consistent calculation logic. ask anything that is needed to correctly calculate any given area."**
-
-The user is on a different machine now and will answer the questions below in the next session. **Do not attempt to rewrite the engine until they answer.** Their answers determine everything.
-
-### Questions waiting for the user
-
-#### 1. Physical layout — pick A, B, or C
-- **A** — beams sit on the two opposite walls, blocks fill between beams → N beams, N−1 block rows
-- **B** — blocks sit on the wall, beams between → N beams, N+1 block rows
-- **C** — alternating, walls on block ends → N beams, N block rows
-
-#### 2. Room "length"
-What does L represent — inside-wall to inside-wall (clear), outside-to-outside, or something else?
-
-#### 3. Remainder rule
-For length L = 6 m: 6 ÷ 0.58 = 10.34. 10 full pitches use 5.80 m, leaving 20 cm.
-On site, what does the foreman actually do?
-- add an 11th beam (over-cover)?
-- leave 10 beams + a custom-cut 20 cm filler block strip?
-- widen the last gap?
-- round the room dimension at the sales stage?
-
-And: at what remainder threshold does the rule change? (current code uses 20 cm — is that right?)
-
-#### 4. Block dimensions (mm)
-- length along the beam direction: ___ (was variously 195 / 200 in the codebase)
-- width perpendicular to beam: ___ (the dimension that fills between beams)
-- height: ___
-- Are blocks ever cut to fit, or always whole?
-
-#### 5. The 35 mm `EDGE_OFFSET`
-Old code subtracts 35 mm from the covered length. What is it physically? Real, or remove it?
-
-#### 6. The 200 mm `BLOCK_EDGE_LOSS`
-Old code does `(beam_length − 200 mm) ÷ block_length`. What does the 200 mm represent?
-
-#### 7. Pricing model
-- per m² of floor — and "area" means raw `W × L`, covered length × W, block-row area, or other?
-- per linear meter of beam at price tiers?
-- per block?
-- delivery flat fee?
-
-#### 8. Original Excel / source
-If the user can share the spreadsheet, screenshot of formulas, or even a paper-notebook page — match those formulas one-to-one instead of guessing.
-
-## File map (where things live)
-
-- Engine (the thing being rewritten): [`src/services/calculation-engine.ts`](precast-crm/src/services/calculation-engine.ts)
-- Engine tests (will need updating once the rule is settled): [`tests/calculation-engine.test.ts`](precast-crm/tests/calculation-engine.test.ts)
-- Persistence (writes engine outputs to DB): [`src/app/api/calculate/route.ts`](precast-crm/src/app/api/calculate/route.ts), [`src/app/api/projects/route.ts`](precast-crm/src/app/api/projects/route.ts)
-- DB schema (`Calculation` model — note: stores `coveredArea` but engine returns `m2_area` etc., not yet persisted): [`prisma/schema.prisma`](precast-crm/prisma/schema.prisma)
-- Multi-room calculator UI (consumes `extra_beams_qty`, `m2_area`, `weights.total_kg` etc. — these are derived in the engine, not in the DB): [`src/components/calculation/MultiRoomCalculator.tsx`](precast-crm/src/components/calculation/MultiRoomCalculator.tsx)
-- Project detail page (was missing `coveredArea` in its TS interface — fixed): [`src/app/(app)/projects/[id]/page.tsx`](precast-crm/src/app/\(app\)/projects/[id]/page.tsx)
-
-## Local setup on the new machine
+Prereqs: **Node 18+**, **Postgres 14+**, **git**.
 
 ```powershell
 # 1. Clone
-cd C:\path\to\wherever
 git clone https://github.com/azizdadabaev/precast-crm.git
-cd precast-crm\precast-crm
+cd precast-crm\precast-crm   # NB: the Next.js project is the inner folder
 
-# 2. Install
+# 2. Install deps
 npm install
 
-# 3. Recreate .env (it's gitignored — copy from .env.example and edit DATABASE_URL)
+# 3. Make a local .env from the example, then edit DATABASE_URL with your Postgres password
 copy .env.example .env
-# Then open .env and set DATABASE_URL to your local Postgres connection string,
-# e.g. postgresql://postgres:YOUR_PASSWORD@localhost:5432/precast_crm?schema=public
-# JWT_SECRET can stay as the placeholder for local dev.
+notepad .env   # set DATABASE_URL to postgresql://postgres:YOUR_PASS@localhost:5432/precast_crm?schema=public
+              # set JWT_SECRET to a 32+ char random string
+              # ORDER_CANCEL_PASSWORD can stay as "etalontbm" or be changed
 
-# 4. Postgres setup (if not already running on the new machine)
-# Install Postgres, then:
-$env:PGPASSWORD = "YOUR_PASSWORD"
+# 4. Create the database (one-time)
+$env:PGPASSWORD = "YOUR_PASS"
 & "C:\Program Files\PostgreSQL\18\bin\psql.exe" -U postgres -h localhost -d postgres -c "CREATE DATABASE precast_crm"
 
-# 5. Apply schema + seed
-npm run db:push
-npm run db:seed         # admin@precast.local / admin123
+# 5. Apply schema and seed demo data
+npm run db:push        # push schema (no migration files; prototyping mode)
+npm run db:seed        # admin@precast.local / admin123 (and 4 demo clients + 2 demo orders)
 
-# 6. Start dev
-npm run dev             # http://localhost:3000
+# 6. Run the dev server
+npm run dev            # http://localhost:3000
 ```
 
-## Continuing the Claude Code session on the new machine
+**Login:** `admin@precast.local` / `admin123`
 
-Claude Code conversation history is **stored locally per machine** (under `~/.claude/projects/...`), so it does not transfer through git. The practical handoff is this file plus the user's own answers to the 8 questions above.
+If port 3000 is taken, Next will pick the next free port. The terminal output prints the URL.
 
-In the new Claude Code session, open the cloned repo and start with:
-> Read `HANDOFF.md`. I'm continuing from a different machine. Here are my answers to the open questions: …
+## Quick walkthrough of the app
 
-Claude will then have all the context it needs.
+1. Open **http://localhost:3000/calculations** (the operator's home).
+2. Type a client's **Name + Phone + Address** in the strip at the top. Phone has live autocomplete from the existing clients table.
+3. Add rooms — each row computes live (Beam length, pitches, blocks/row, beams, slab area, subtotal).
+4. **Save Project** (gray) — only phone is required. Stores a draft under `/projects`. Reopen any draft → opens the calculator pre-filled with the saved data.
+5. **Буюртма Бериш · Place Order** (orange) — requires Name + Phone + Address + at least one valid room. Opens a modal with a capacity calendar:
+   - Each day cell is colored by the m² already booked: green ≤ 300, yellow ≤ 450, orange ≤ 600, red > 600.
+   - Past days are disabled.
+   - Selected day previews the new order's m² impact.
+6. Confirming creates everything in one transaction: Client (deduped by normalized phone), Deal advanced to WON, Project marked ORDERED, Order with frozen pricing snapshot, OrderEvent for the audit trail. You land on **/orders/[id]** with a fresh order number `YYYY-MM-NNNN`.
+7. Status timeline on the order page: click pills to advance Placed → In Production → Delivered → Paid. Marking **Delivered** opens a modal that demands a **photo of the loaded truck** (JPG/PNG/WEBP, ≤8 MB). The image is stored under `public/uploads/orders/{orderId}/` and shown on both the order detail page and the printable invoice.
+8. **/orders** page has the same capacity calendar at the top — clicking a day filters the list to that day.
+9. Orders can be **canceled** by Admin (no password) or by anyone with the `ORDER_CANCEL_PASSWORD` env var (default `etalontbm`). Canceling frees the project back to Draft and moves the deal to LOST.
+10. **Print** any order at `/orders/[id]/print` — auto-triggers `window.print()`. The delivery proof prints on its own page.
 
-## Things that do NOT carry over
+## Architecture cheat-sheet
 
-- **`.env`** — gitignored. Recreate from `.env.example`.
-- **Postgres data** — lives only in the local Postgres on the original machine. On the new machine, `db:push` + `db:seed` recreate the schema and demo data fresh. (If you need the exact same data, run `pg_dump` on the original and `pg_restore` on the new — but for development, fresh seed is simpler.)
-- **Running dev server** — the `npm run dev` process on the original machine stops when that Claude session ends. Just start it again on the new machine.
-- **Conversation thread** — Claude Code sessions are local to the machine. This file is the substitute.
+```
+src/
+├── app/
+│   ├── (app)/                    Authenticated shell pages
+│   │   ├── dashboard/            Summary KPIs (deal-based for now)
+│   │   ├── calculations/         Calculator entry point (operator's home)
+│   │   ├── projects/             Drafts list + detail (?status=DRAFT default)
+│   │   ├── orders/               Placed orders list + detail + /print
+│   │   └── clients/              Client directory
+│   ├── api/
+│   │   ├── auth/                 login / logout / me / register
+│   │   ├── calculate/            One-shot preview (no persistence)
+│   │   ├── projects/             Save Project (draft) + list with search
+│   │   ├── orders/               Place Order, list, detail, capacity, cancel,
+│   │   │                         delivery-proof (multipart/form-data)
+│   │   ├── clients/              List + autocomplete + dedup-on-create
+│   │   └── dashboard/, deals/, payments/   (kept for future Pipeline use)
+│   └── login/                    Public
+├── components/
+│   ├── calculation/
+│   │   ├── ClientInfoBar.tsx     Name | Phone (autocomplete) | Address
+│   │   ├── MultiRoomCalculator.tsx  The grid + Add Room
+│   │   └── PlaceOrderDialog.tsx  Modal w/ capacity calendar + summary
+│   ├── orders/
+│   │   ├── CapacityCalendar.tsx  Reusable month heatmap
+│   │   └── DeliveryProofDialog.tsx  Image upload modal
+│   └── ui/                       shadcn primitives
+├── lib/
+│   ├── prisma.ts                 Prisma singleton
+│   ├── auth.ts                   JWT + bcrypt + cookies
+│   ├── validation.ts             Zod schemas for every API route
+│   ├── api.ts                    handler() wrapper, ok/fail/created
+│   ├── fetcher.ts                Typed client-side fetch
+│   ├── phone.ts                  Normalize + format + suffix-search
+│   ├── order-number.ts           YYYY-MM-NNNN allocator
+│   ├── calc-persistence.ts       SlabResult → Prisma payload mapper
+│   ├── uploads.ts                Filesystem image helper + validation
+│   └── utils.ts                  cn, formatMoney, formatDate, formatNumber
+├── services/
+│   └── calculation-engine.ts     THE engine — pure, no I/O. Tests in tests/.
+├── store/                        Zustand UI state (mostly unused now)
+└── middleware.ts                 Edge route protection
+```
+
+## Calculation engine, in one paragraph
+
+Three layout patterns: **Г-Б** (alternating), **Б-Г-Б** (extra closing beam),
+**Г-Б-Г** (extra closing block row). Pitch = 0.58 m. Beam length = inner_width
++ 2 × bearing (default 0.15). Blocks per row = CEIL(inner_width / 0.20).
+
+Auto-pick rule (post-correction remainder R = effective_length − pitches × PITCH):
+R = 0 → GB; R ≤ 0.20 → BGB; R ≤ 0.45 → GBG; R > 0.45 → GB at pitches+1.
+
+"Add a starting beam" (StartB toggle OR first manual extra beam): GB → BGB
+at same pitches; **GBG → GB at pitches+1** (the extra block row is balanced
+by the new beam, so the slab is now alternating N+1 ↔ N+1).
+
+Pricing tiers keyed by manufactured beam length (m² rate 140k–230k, per-m
+extra beam 60k–120k, blocks 6k each). m² billed on `pitches × PITCH × beam_length`
+ONLY — pattern extras (Б-Г-Б's extra beam, Г-Б-Г's extra blocks) and manual
+extras are separate per-line items. **Pricing is frozen at Place Order time.**
+
+42 vitest cases cover every pattern × extras combo. Phone helpers and order-number
+allocator have their own tests (60 total).
+
+## What's NOT implemented yet (deferred)
+
+Items 5, 11, 12, 14 from the 14 best-practices list:
+- **Recent calcs rail** at the top of /calculations
+- **Role gates** beyond cancel — currently anyone authenticated can save & order;
+  ENGINEER/SALES/ADMIN distinctions only enforce cancel
+- **Per-role discount caps** (5% / 15% / unlimited)
+- **Enter-key adds row** in the calculator
+
+## Keys facts to remember when you keep building
+
+- The Pipeline page (`/pipeline`) and route still exist; only the sidebar nav was hidden. Deal model is intact and used by the Order placement transaction (it advances Deal to WON).
+- Phones are stored **digits-only** in the DB (`998901112233`) and formatted on display (`+998 90 111 22 33`). Search supports last-4-digits.
+- `Quote` model was renamed to `Order`. The `/api/quotes/*` and `/quotes/*` routes were deleted.
+- `Client.location` was renamed to `Client.address`.
+- `Project.dealId` is **nullable** now; drafts can exist before a Deal.
+- Schema migrations use `prisma db push` (no migrations folder). For a fresh clone, `npm run db:push` is enough; for an existing DB with old data, `npm run db:push --force-reset` will drop everything and start over (seed data is regenerable).
+- `public/uploads/` is gitignored. Delivery photos live there per machine.
+- Memory files for Claude Code live under `~/.claude/projects/c--Users-…/memory/` per machine and **do not** sync via git. Re-create on the new device by saying "remember the calculation patterns / pricing tiers" once or letting Claude rediscover them from the code.
+
+## Verified local state at handoff
+
+- `npx tsc --noEmit` — 0 errors
+- `npx vitest run` — 60 / 60
+- `npx next build` — clean
+- Most recent commit: **`89281ee`** "Gate IN_PRODUCTION → DELIVERED behind a mandatory delivery photo"
+- Repo: https://github.com/azizdadabaev/precast-crm
