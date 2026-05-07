@@ -68,3 +68,82 @@
 .excel-table tr:hover td {
   @apply bg-accent/40;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   Spreadsheet-style data grid (used in the calculator)
+
+   The cell is the input. No inner border. No spinner arrows.
+   Tabular numerics, right-aligned numbers, subtle focus ring.
+   ────────────────────────────────────────────────────────────── */
+
+.grid-cell {
+  @apply p-0 align-middle border-r border-border/40 last:border-r-0;
+}
+
+.grid-input,
+.grid-select {
+  @apply block h-8 w-full bg-transparent border-0 px-2 text-sm
+         outline-none focus:outline-none
+         focus:bg-amber-50/60 focus:ring-1 focus:ring-inset focus:ring-primary/50
+         transition-colors;
+  /* Tabular numerics for consistent digit columns */
+  font-variant-numeric: tabular-nums;
+}
+
+.grid-input.is-numeric {
+  @apply text-right;
+}
+.grid-input.is-text {
+  @apply text-left font-medium;
+}
+
+/* Hide native number spinners — engineering inputs are typed, not spun */
+.grid-input[type="number"]::-webkit-outer-spin-button,
+.grid-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.grid-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Compact select for the pattern column */
+.grid-select {
+  @apply text-xs cursor-pointer pr-6;
+  /* Custom caret so we control its position/size */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4 L5 7 L8 4' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+/* Group-tinted cell backgrounds — gentle, not shouty */
+.grid-tint-input    { @apply bg-amber-50/40; }
+.grid-tint-pattern  { @apply bg-sky-50/40; }
+.grid-tint-computed { @apply bg-transparent; }
+.grid-tint-pricing  { @apply bg-emerald-50/40; }
+
+/* The grid table itself */
+.calc-grid {
+  @apply w-full border-collapse text-sm;
+}
+.calc-grid thead th {
+  @apply px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider
+         text-muted-foreground border-b border-border bg-muted/30
+         border-r border-border/40 last:border-r-0;
+}
+.calc-grid tbody tr {
+  @apply border-b border-border/40 hover:bg-muted/20 transition-colors;
+}
+.calc-grid tbody tr:nth-child(even) {
+  @apply bg-muted/[0.04];
+}
+.calc-grid tfoot td {
+  @apply px-2 py-2.5 border-t-2 border-border;
+}
+
+/* Subtle group separator (a heavier vertical line between input/pattern/etc.) */
+.grid-group-divider {
+  @apply border-r-2 border-border/60;
+}

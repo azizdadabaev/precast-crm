@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Info } from "lucide-react";
 import { calculateSlab, projectTotal, type SlabResult, type Pattern } from "@/services/calculation-engine";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/utils";
 
@@ -68,6 +67,36 @@ function recompute(row: SlabRow): SlabRow {
   }
 }
 
+// Header cell that supports a primary label + a small secondary translation
+function H({
+  primary,
+  secondary,
+  tip,
+  className,
+  align = "center",
+}: {
+  primary: string;
+  secondary?: string;
+  tip?: string;
+  className?: string;
+  align?: "left" | "center" | "right";
+}) {
+  const alignCls = align === "left" ? "text-left" : align === "right" ? "text-right" : "text-center";
+  return (
+    <th title={tip} className={`${alignCls} ${className ?? ""}`}>
+      <div className="flex items-center justify-center gap-1 leading-tight">
+        <span>{primary}</span>
+        {tip && <Info className="h-3 w-3 text-muted-foreground/60" />}
+      </div>
+      {secondary && (
+        <div className="text-[9px] font-normal normal-case text-muted-foreground/70 mt-0.5">
+          {secondary}
+        </div>
+      )}
+    </th>
+  );
+}
+
 export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscountChange }: Props) {
   const addRow = () => onChange([...rows, makeRow(rows.length + 1)]);
   const removeRow = (id: string) => onChange(rows.filter((r) => r.id !== id));
@@ -84,7 +113,6 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
     return { projTotal, beams, blocks, monolithArea, concrete };
   }, [rows, discountPercent]);
 
-  // Beam schedule (factory-friendly aggregate of beams by length)
   const schedule = useMemo(() => {
     const acc: Record<string, number> = {};
     for (const r of rows) {
@@ -96,168 +124,210 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
   }, [rows]);
 
   return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full text-sm border-collapse">
-          <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
+    <div className="space-y-5">
+      <div className="rounded-lg border border-border overflow-x-auto bg-background shadow-sm">
+        <table className="calc-grid">
+          <thead>
             <tr>
-              <th className="px-2 py-2 border-b min-w-[120px]">Name (Хона)</th>
-              <th className="px-2 py-2 border-b text-center bg-yellow-50 min-w-[70px]">W (Эни)</th>
-              <th className="px-2 py-2 border-b text-center bg-yellow-50 min-w-[70px]">L (Бўйи)</th>
-              <th className="px-2 py-2 border-b text-center bg-yellow-50 min-w-[70px]">Bear (Миниш)</th>
-              <th className="px-2 py-2 border-b text-center bg-yellow-50 min-w-[80px]">Corr (Корр.)</th>
-              <th className="px-2 py-2 border-b text-center bg-blue-50 min-w-[110px]">Pattern (Шаблон)</th>
-              <th className="px-2 py-2 border-b text-center min-w-[60px]">+B</th>
-              <th className="px-2 py-2 border-b text-center min-w-[60px]">Start B</th>
-              <th className="px-2 py-2 border-b text-center bg-green-50 min-w-[80px]">Beam Len</th>
-              <th className="px-2 py-2 border-b text-center min-w-[70px]">Blks/Row</th>
-              <th className="px-2 py-2 border-b text-center bg-orange-50 min-w-[80px]">Total Blks</th>
-              <th className="px-2 py-2 border-b text-center bg-gray-100 min-w-[70px]">Beams</th>
-              <th className="px-2 py-2 border-b text-center min-w-[80px]">Block Rows</th>
-              <th className="px-2 py-2 border-b text-center bg-blue-50/30 min-w-[80px]">Slab L (Бўйи)</th>
-              <th className="px-2 py-2 border-b text-center bg-blue-100/40 min-w-[90px]">Area (Юзаси)</th>
-              <th className="px-2 py-2 border-b text-center min-w-[90px]">m² Rate</th>
-              <th className="px-2 py-2 border-b text-right bg-green-50 min-w-[110px]">Subtotal</th>
-              <th className="px-2 py-2 border-b min-w-[40px]"></th>
+              {/* ── Inputs group ── */}
+              <H primary="Name" secondary="Хона" align="left" className="bg-amber-50/40" />
+              <H primary="W" secondary="Эни" tip="Inner width — clear inside-wall to inside-wall (m)" className="bg-amber-50/40" />
+              <H primary="L" secondary="Бўйи" tip="Inner length (m)" className="bg-amber-50/40" />
+              <H primary="Bear" secondary="Миниш" tip="Beam bearing onto each wall (m). Default 0.15" className="bg-amber-50/40" />
+              <H primary="Corr" secondary="Корр." tip="Correction added to L before pitch math (m). Use to nudge auto-pattern." className="bg-amber-50/40 grid-group-divider" />
+
+              {/* ── Pattern controls ── */}
+              <H primary="Pattern" secondary="Шаблон" className="bg-sky-50/40" />
+              <H primary="+B" tip="Manual extra beams. First one absorbs into pattern when GBG." className="bg-sky-50/40" />
+              <H primary="StartB" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="bg-sky-50/40 grid-group-divider" />
+
+              {/* ── Computed ── */}
+              <H primary="Beam L" secondary="Б.уз." />
+              <H primary="Pitches" secondary="N" />
+              <H primary="Blks/row" secondary="1 қат" />
+              <H primary="Beams" secondary="Балка" />
+              <H primary="Block rows" secondary="Қатор" />
+              <H primary="Total blks" secondary="Жами" />
+              <H primary="Slab L" secondary="Бўйи" />
+              <H primary="Slab Area" secondary="Юзаси" className="grid-group-divider" />
+
+              {/* ── Pricing ── */}
+              <H primary="m² rate" tip="UZS per m² of billed area, by beam length tier" className="bg-emerald-50/40" />
+              <H primary="Subtotal" secondary="UZS" align="right" className="bg-emerald-50/40" />
+              <th className="w-9 bg-emerald-50/40"></th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+
+          <tbody>
             {rows.map((row) => {
               const r = row.result;
+              const fmt = (v: number, d = 2) => formatNumber(v, d);
               return (
-                <tr key={row.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="p-1.5">
-                    <Input
-                      className="h-8 text-sm"
+                <tr key={row.id}>
+                  {/* Inputs */}
+                  <td className="grid-cell grid-tint-input">
+                    <input
+                      className="grid-input is-text"
                       value={row.name}
                       onChange={(e) => updateRow(row.id, { name: e.target.value })}
+                      placeholder="Room name"
                     />
                   </td>
-                  <td className="p-1.5 bg-yellow-50/30">
-                    <Input
+                  <td className="grid-cell grid-tint-input">
+                    <input
                       type="number"
                       step="0.01"
-                      className="h-8 text-sm text-center"
+                      className="grid-input is-numeric"
                       value={row.innerWidth || ""}
                       onChange={(e) => updateRow(row.id, { innerWidth: Number(e.target.value) })}
+                      placeholder="0.00"
                     />
                   </td>
-                  <td className="p-1.5 bg-yellow-50/30">
-                    <Input
+                  <td className="grid-cell grid-tint-input">
+                    <input
                       type="number"
                       step="0.01"
-                      className="h-8 text-sm text-center"
+                      className="grid-input is-numeric"
                       value={row.innerLength || ""}
                       onChange={(e) => updateRow(row.id, { innerLength: Number(e.target.value) })}
+                      placeholder="0.00"
                     />
                   </td>
-                  <td className="p-1.5 bg-yellow-50/30">
-                    <Input
+                  <td className="grid-cell grid-tint-input">
+                    <input
                       type="number"
                       step="0.01"
-                      className="h-8 text-sm text-center"
+                      className="grid-input is-numeric"
                       value={row.bearing}
                       onChange={(e) => updateRow(row.id, { bearing: Number(e.target.value) })}
                     />
                   </td>
-                  <td className="p-1.5 bg-yellow-50/30">
-                    <Input
+                  <td className="grid-cell grid-tint-input grid-group-divider">
+                    <input
                       type="number"
                       step="0.01"
-                      className="h-8 text-sm text-center"
+                      className="grid-input is-numeric"
                       value={row.correction}
                       onChange={(e) => updateRow(row.id, { correction: Number(e.target.value) })}
                     />
                   </td>
-                  <td className="p-1.5 bg-blue-50/30">
+
+                  {/* Pattern controls */}
+                  <td className="grid-cell grid-tint-pattern">
                     <select
-                      className="h-8 w-full rounded border border-input bg-background px-2 text-xs"
+                      className="grid-select"
                       value={row.patternOverride}
                       onChange={(e) =>
                         updateRow(row.id, { patternOverride: e.target.value as Pattern | "AUTO" })
                       }
                     >
-                      <option value="AUTO">Auto{r ? ` → ${PATTERN_LABEL[r.pattern_auto]}` : ""}</option>
+                      <option value="AUTO">Auto{r ? ` · ${PATTERN_LABEL[r.pattern_auto]}` : ""}</option>
                       <option value="GB">Г-Б</option>
                       <option value="BGB">Б-Г-Б</option>
                       <option value="GBG">Г-Б-Г</option>
                     </select>
                   </td>
-                  <td className="p-1.5">
-                    <Input
+                  <td className="grid-cell grid-tint-pattern">
+                    <input
                       type="number"
                       min="0"
-                      className="h-8 text-sm text-center"
+                      step="1"
+                      className="grid-input is-numeric"
                       value={row.extraBeams}
                       onChange={(e) =>
-                        updateRow(row.id, { extraBeams: Math.max(0, Math.floor(Number(e.target.value) || 0)) })
+                        updateRow(row.id, {
+                          extraBeams: Math.max(0, Math.floor(Number(e.target.value) || 0)),
+                        })
                       }
                     />
                   </td>
-                  <td className="p-1.5 text-center">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={row.forceStartBeam}
-                      onChange={(e) => updateRow(row.id, { forceStartBeam: e.target.checked })}
-                    />
+                  <td className="grid-cell grid-tint-pattern grid-group-divider text-center">
+                    <label className="inline-flex items-center justify-center h-8 w-full cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary cursor-pointer"
+                        checked={row.forceStartBeam}
+                        onChange={(e) => updateRow(row.id, { forceStartBeam: e.target.checked })}
+                      />
+                    </label>
                   </td>
-                  <td className="p-1.5 text-center font-bold bg-green-50/30 text-green-800">
-                    {r ? formatNumber(r.beam_length, 2) : "—"}
+
+                  {/* Computed */}
+                  <td className="grid-cell px-2 text-right tabular-nums text-emerald-700 font-semibold">
+                    {r ? fmt(r.beam_length) : "—"}
                   </td>
-                  <td className="p-1.5 text-center">{r?.blocks_per_row ?? "—"}</td>
-                  <td className="p-1.5 text-center font-black bg-orange-50/30 text-orange-800">
+                  <td className="grid-cell px-2 text-right tabular-nums text-muted-foreground">
+                    {r ? r.pitches : "—"}
+                  </td>
+                  <td className="grid-cell px-2 text-right tabular-nums">
+                    {r?.blocks_per_row ?? "—"}
+                  </td>
+                  <td className="grid-cell px-2 text-right tabular-nums font-semibold">
+                    {r?.beam_count ?? "—"}
+                  </td>
+                  <td className="grid-cell px-2 text-right tabular-nums">
+                    {r?.block_rows ?? "—"}
+                  </td>
+                  <td className="grid-cell px-2 text-right tabular-nums text-orange-700 font-semibold">
                     {r?.total_blocks ?? "—"}
                   </td>
-                  <td className="p-1.5 text-center font-black bg-gray-100/50">{r?.beam_count ?? "—"}</td>
-                  <td className="p-1.5 text-center">{r?.block_rows ?? "—"}</td>
-                  <td className="p-1.5 text-center bg-blue-50/20 text-blue-800 text-xs">
-                    {r ? `${formatNumber(r.monolith_length, 2)} m` : "—"}
+                  <td className="grid-cell px-2 text-right tabular-nums text-xs text-blue-700">
+                    {r ? `${fmt(r.monolith_length)} m` : "—"}
                   </td>
-                  <td className="p-1.5 text-center bg-blue-100/30 text-xs">
-                    {r ? `${formatNumber(r.monolith_area, 2)} m²` : "—"}
+                  <td className="grid-cell px-2 text-right tabular-nums text-xs text-blue-700 grid-group-divider">
+                    {r ? `${fmt(r.monolith_area)} m²` : "—"}
                   </td>
-                  <td className="p-1.5 text-center text-xs">
-                    {r ? formatNumber(r.m2_price, 0) : "—"}
+
+                  {/* Pricing */}
+                  <td className="grid-cell px-2 text-right tabular-nums text-xs grid-tint-pricing">
+                    {r ? fmt(r.m2_price, 0) : "—"}
                   </td>
-                  <td className="p-1.5 text-right font-black bg-green-50/30 text-green-700">
-                    {r ? formatNumber(r.subtotal, 0) : "—"}
+                  <td className="grid-cell px-2 text-right tabular-nums font-bold text-emerald-800 grid-tint-pricing">
+                    {r ? fmt(r.subtotal, 0) : "—"}
                   </td>
-                  <td className="p-1.5 text-center">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-destructive hover:text-destructive/80"
+                  <td className="grid-cell text-center grid-tint-pricing">
+                    <button
+                      type="button"
+                      className="h-7 w-7 inline-flex items-center justify-center rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
                       onClick={() => removeRow(row.id)}
+                      aria-label="Remove room"
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </td>
                 </tr>
               );
             })}
+
             {rows.length === 0 && (
               <tr>
-                <td colSpan={18} className="p-8 text-center text-muted-foreground italic">
-                  No rooms added yet. Click "Add Room" to start.
+                <td colSpan={18} className="px-4 py-12 text-center text-muted-foreground">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="text-sm italic">No rooms yet.</div>
+                    <Button variant="outline" size="sm" onClick={addRow}>
+                      <Plus className="h-3.5 w-3.5 mr-1.5" /> Add the first room
+                    </Button>
+                  </div>
                 </td>
               </tr>
             )}
           </tbody>
+
           {rows.length > 0 && (
-            <tfoot className="bg-muted/20 font-black">
-              <tr>
-                <td className="p-2 text-right" colSpan={10}>
-                  TOTALS (ЖАМИ):
+            <tfoot>
+              <tr className="bg-muted/40 font-bold">
+                <td colSpan={10} className="px-3 text-right uppercase text-[11px] tracking-wider text-muted-foreground">
+                  Totals · Жами
                 </td>
-                <td className="p-2 text-center text-orange-800 bg-orange-50/50">{totals.blocks}</td>
-                <td className="p-2 text-center bg-gray-100">{totals.beams}</td>
-                <td colSpan={2}></td>
-                <td className="p-2 text-center text-xs bg-blue-100/30">
+                <td className="text-right px-2 tabular-nums">{totals.beams}</td>
+                <td></td>
+                <td className="text-right px-2 tabular-nums text-orange-700">{totals.blocks}</td>
+                <td></td>
+                <td className="text-right px-2 tabular-nums text-xs text-blue-700">
                   {formatNumber(totals.monolithArea, 2)} m²
                 </td>
-                <td colSpan={1}></td>
-                <td className="p-2 text-right bg-green-50/50 text-base">
+                <td></td>
+                <td className="text-right px-2 tabular-nums text-emerald-800">
                   {formatNumber(totals.projTotal.rooms_subtotal, 0)}
                 </td>
                 <td></td>
@@ -268,57 +338,75 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
       </div>
 
       {rows.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+        <Button variant="outline" size="sm" onClick={addRow} className="w-full border-dashed">
+          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add room · Янги хона
+        </Button>
+      )}
+
+      {rows.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Discount + grand total */}
-          <div className="bg-muted/30 rounded-xl p-4 border border-muted-foreground/10">
-            <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3">
-              Grand Total (Сўнгги нархи)
+          <div className="rounded-lg border bg-background p-4 shadow-sm">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              Grand Total · Сўнгги нархи
             </h3>
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Rooms subtotal</span>
-                <span className="font-bold">{formatNumber(totals.projTotal.rooms_subtotal, 0)}</span>
+                <span className="font-semibold tabular-nums">
+                  {formatNumber(totals.projTotal.rooms_subtotal, 0)}
+                </span>
               </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">Discount %</span>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="1"
-                  className="h-8 w-20 text-sm text-right"
-                  value={discountPercent}
-                  onChange={(e) =>
-                    onDiscountChange(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
-                  }
-                />
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    className="grid-input is-numeric h-8 w-20 rounded border border-input pr-5"
+                    value={discountPercent}
+                    onChange={(e) =>
+                      onDiscountChange(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
+                    }
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+                    %
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between text-rose-700">
-                <span className="text-muted-foreground">Discount amount</span>
-                <span>− {formatNumber(totals.projTotal.discount_amount, 0)}</span>
-              </div>
-              <div className="flex justify-between border-t pt-2 mt-2">
+              {discountPercent > 0 && (
+                <div className="flex justify-between text-rose-700">
+                  <span className="text-muted-foreground">Discount amount</span>
+                  <span className="tabular-nums">
+                    − {formatNumber(totals.projTotal.discount_amount, 0)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-baseline justify-between border-t pt-2.5 mt-2">
                 <span className="font-bold">Total</span>
-                <span className="font-black text-green-700 text-lg">
-                  {formatNumber(totals.projTotal.total, 0)} UZS
+                <span className="font-black text-emerald-700 text-xl tabular-nums">
+                  {formatNumber(totals.projTotal.total, 0)}
+                  <span className="text-xs font-normal text-muted-foreground ml-1">UZS</span>
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Factory beam schedule */}
-          <div className="bg-muted/30 rounded-xl p-4 border border-muted-foreground/10">
-            <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3">
-              Beam Schedule (Балкалар рўйхати)
+          {/* Beam schedule */}
+          <div className="rounded-lg border bg-background p-4 shadow-sm">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              Beam Schedule · Балкалар
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {schedule.map(([len, qty]) => (
                 <div
                   key={len}
-                  className="flex justify-between items-center bg-background rounded-lg px-3 py-2 border shadow-sm"
+                  className="flex justify-between items-center bg-muted/30 rounded px-3 py-1.5 text-sm"
                 >
-                  <span className="text-sm font-bold">{len} m</span>
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded font-black">
+                  <span className="font-semibold tabular-nums">{len} m</span>
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold">
                     {qty} pcs
                   </span>
                 </div>
@@ -329,39 +417,32 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
             </div>
           </div>
 
-          {/* Concrete + blocks summary */}
-          <div className="bg-muted/30 rounded-xl p-4 border border-muted-foreground/10">
-            <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-3">
-              Materials (Материаллар)
+          {/* Materials */}
+          <div className="rounded-lg border bg-background p-4 shadow-sm">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+              Materials · Материаллар
             </h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between border-b pb-2">
+            <div className="space-y-2.5 text-sm">
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Total blocks</span>
-                <span className="font-bold">{totals.blocks} pcs</span>
+                <span className="font-semibold tabular-nums">{totals.blocks}</span>
               </div>
-              <div className="flex justify-between border-b pb-2">
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Concrete topping</span>
-                <span className="font-bold text-green-700">
+                <span className="font-semibold tabular-nums text-emerald-700">
                   {totals.concrete.toFixed(2)} m³
                 </span>
               </div>
-              <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Slab area (visual)</span>
-                <span className="font-bold">{formatNumber(totals.monolithArea, 2)} m²</span>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Slab area</span>
+                <span className="font-semibold tabular-nums">
+                  {formatNumber(totals.monolithArea, 2)} m²
+                </span>
               </div>
             </div>
           </div>
         </div>
       )}
-
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={addRow}
-        className="w-full border-dashed mt-4"
-      >
-        <Plus className="h-4 w-4 mr-2" /> Add Room (Янги хона қўшиш)
-      </Button>
     </div>
   );
 }
