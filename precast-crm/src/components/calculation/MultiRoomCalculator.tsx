@@ -47,7 +47,11 @@ function makeRow(seq: number): SlabRow {
   };
 }
 
-function recompute(row: SlabRow): SlabRow {
+/** Run the engine for a single row. Returns the row with a fresh `result`,
+ *  or `result: null` if the inputs aren't valid yet. Exported so callers
+ *  (e.g. the Calculations page when re-opening a saved draft) can fill in
+ *  results without having to wait for the user to "wake up" each row. */
+export function recomputeRow(row: SlabRow): SlabRow {
   if (!(row.innerWidth > 0 && row.innerLength > 0 && row.bearing >= 0)) {
     return { ...row, result: null };
   }
@@ -101,7 +105,7 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
   const addRow = () => onChange([...rows, makeRow(rows.length + 1)]);
   const removeRow = (id: string) => onChange(rows.filter((r) => r.id !== id));
   const updateRow = (id: string, updates: Partial<SlabRow>) =>
-    onChange(rows.map((r) => (r.id === id ? recompute({ ...r, ...updates }) : r)));
+    onChange(rows.map((r) => (r.id === id ? recomputeRow({ ...r, ...updates }) : r)));
 
   const totals = useMemo(() => {
     const valid = rows.map((r) => r.result).filter((r): r is SlabResult => !!r);

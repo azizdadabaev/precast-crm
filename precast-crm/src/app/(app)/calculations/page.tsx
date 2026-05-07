@@ -10,6 +10,7 @@ import { ClientInfoBar, type ClientDraft } from "@/components/calculation/Client
 import { PlaceOrderDialog } from "@/components/calculation/PlaceOrderDialog";
 import {
   MultiRoomCalculator,
+  recomputeRow,
   type SlabRow,
 } from "@/components/calculation/MultiRoomCalculator";
 import { projectTotal } from "@/services/calculation-engine";
@@ -54,7 +55,9 @@ function CalculationsInner() {
       if (!raw) return;
       const parsed = JSON.parse(raw) as AutosaveState;
       if (parsed.client) setClient(parsed.client);
-      if (Array.isArray(parsed.rows)) setRows(parsed.rows);
+      // Always recompute on restore so a stale `result` from a prior session
+      // (e.g. after an engine rule change) gets refreshed.
+      if (Array.isArray(parsed.rows)) setRows(parsed.rows.map(recomputeRow));
       if (typeof parsed.discountPercent === "number") setDiscountPercent(parsed.discountPercent);
       if (parsed.matchedClientId) setMatchedClientId(parsed.matchedClientId);
     } catch {
@@ -104,19 +107,24 @@ function CalculationsInner() {
         address: p.client?.address ?? p.tentativeClientAddress ?? "",
       });
       setMatchedClientId(p.client?.id ?? null);
+      // Compute results immediately so the table is fully populated when the
+      // operator re-opens the draft — they don't have to "wake up" each row
+      // by clicking the Pattern dropdown.
       setRows(
-        p.calculations.map((c) => ({
-          id: Math.random().toString(36).slice(2, 9),
-          name: c.name ?? "",
-          innerWidth: Number(c.innerWidth),
-          innerLength: Number(c.innerLength),
-          bearing: Number(c.bearing),
-          correction: Number(c.correction),
-          extraBeams: c.extraBeams,
-          forceStartBeam: c.forceStartBeam,
-          patternOverride: c.patternOverride ?? "AUTO",
-          result: null, // will be recomputed by the calculator on first edit
-        })),
+        p.calculations.map((c) =>
+          recomputeRow({
+            id: Math.random().toString(36).slice(2, 9),
+            name: c.name ?? "",
+            innerWidth: Number(c.innerWidth),
+            innerLength: Number(c.innerLength),
+            bearing: Number(c.bearing),
+            correction: Number(c.correction),
+            extraBeams: c.extraBeams,
+            forceStartBeam: c.forceStartBeam,
+            patternOverride: c.patternOverride ?? "AUTO",
+            result: null,
+          }),
+        ),
       );
     } catch {
       /* ignore */
