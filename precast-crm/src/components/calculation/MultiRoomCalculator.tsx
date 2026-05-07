@@ -80,9 +80,8 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
     const beams = valid.reduce((s, r) => s + r.beam_count, 0);
     const blocks = valid.reduce((s, r) => s + r.total_blocks, 0);
     const monolithArea = valid.reduce((s, r) => s + r.monolith_area, 0);
-    const billedArea = valid.reduce((s, r) => s + r.billed_area, 0);
     const concrete = valid.reduce((s, r) => s + r.concrete_volume, 0);
-    return { projTotal, beams, blocks, monolithArea, billedArea, concrete };
+    return { projTotal, beams, blocks, monolithArea, concrete };
   }, [rows, discountPercent]);
 
   // Beam schedule (factory-friendly aggregate of beams by length)
@@ -115,8 +114,8 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
               <th className="px-2 py-2 border-b text-center bg-orange-50 min-w-[80px]">Total Blks</th>
               <th className="px-2 py-2 border-b text-center bg-gray-100 min-w-[70px]">Beams</th>
               <th className="px-2 py-2 border-b text-center min-w-[80px]">Block Rows</th>
-              <th className="px-2 py-2 border-b text-center bg-blue-50/30 min-w-[80px]">Monolith L</th>
-              <th className="px-2 py-2 border-b text-center bg-blue-100/40 min-w-[90px]">Billed Area</th>
+              <th className="px-2 py-2 border-b text-center bg-blue-50/30 min-w-[80px]">Slab L (Бўйи)</th>
+              <th className="px-2 py-2 border-b text-center bg-blue-100/40 min-w-[90px]">Area (Юзаси)</th>
               <th className="px-2 py-2 border-b text-center min-w-[90px]">m² Rate</th>
               <th className="px-2 py-2 border-b text-right bg-green-50 min-w-[110px]">Subtotal</th>
               <th className="px-2 py-2 border-b min-w-[40px]"></th>
@@ -216,7 +215,7 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     {r ? `${formatNumber(r.monolith_length, 2)} m` : "—"}
                   </td>
                   <td className="p-1.5 text-center bg-blue-100/30 text-xs">
-                    {r ? `${formatNumber(r.billed_area, 2)} m²` : "—"}
+                    {r ? `${formatNumber(r.monolith_area, 2)} m²` : "—"}
                   </td>
                   <td className="p-1.5 text-center text-xs">
                     {r ? formatNumber(r.m2_price, 0) : "—"}
@@ -255,7 +254,7 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                 <td className="p-2 text-center bg-gray-100">{totals.beams}</td>
                 <td colSpan={2}></td>
                 <td className="p-2 text-center text-xs bg-blue-100/30">
-                  {formatNumber(totals.billedArea, 2)} m²
+                  {formatNumber(totals.monolithArea, 2)} m²
                 </td>
                 <td colSpan={1}></td>
                 <td className="p-2 text-right bg-green-50/50 text-base">
@@ -347,7 +346,7 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                 </span>
               </div>
               <div className="flex justify-between border-b pb-2">
-                <span className="text-muted-foreground">Monolith area</span>
+                <span className="text-muted-foreground">Slab area (visual)</span>
                 <span className="font-bold">{formatNumber(totals.monolithArea, 2)} m²</span>
               </div>
             </div>

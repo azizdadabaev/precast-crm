@@ -188,15 +188,114 @@ describe("calculateSlab — overrides", () => {
     expect(r.beam_count).toBe(11);
   });
 
-  it("force_start_beam has no effect when explicit pattern is set", () => {
+  it("force_start_beam promotes explicit GB → BGB too (any GB → BGB)", () => {
     const r = calculateSlab({
       inner_width: 4,
       inner_length: 10 * PITCH,
       pattern: "GB",
       force_start_beam: true,
     });
+    expect(r.pattern).toBe("BGB");
+    expect(r.beam_count).toBe(11);
+  });
+
+  it("force_start_beam is a no-op for BGB and GBG", () => {
+    const bgb = calculateSlab({ inner_width: 4, inner_length: 6, pattern: "BGB", force_start_beam: true });
+    expect(bgb.pattern).toBe("BGB");
+    const gbg = calculateSlab({ inner_width: 4, inner_length: 4.3, pattern: "GBG", force_start_beam: true });
+    expect(gbg.pattern).toBe("GBG");
+  });
+});
+
+// ── Visual length / area extends with extras WITHOUT changing billed area ──
+
+describe("calculateSlab — manual extras extend monolith visually but not billed area", () => {
+  it("Auto GB-at-N+1 (4×6 + 0.30) plus 1 extra beam: shows 4.30×6.50 but bills 4.30×6.38", () => {
+    const r = calculateSlab({
+      inner_width: 4,
+      inner_length: 6,
+      correction: 0.30,
+      extra_beams: 1,
+    });
     expect(r.pattern).toBe("GB");
-    expect(r.beam_count).toBe(10);
+    expect(r.pitches).toBe(11);
+    expect(r.beam_count).toBe(12); // 11 + 1 manual
+    // Visual ↑
+    expect(r.monolith_length).toBeCloseTo(6.50, 3); // 11×0.58 + 0 + 1×0.12
+    expect(r.monolith_area).toBeCloseTo(27.95, 2);  // 4.30 × 6.50
+    // Billed ⇄ unchanged
+    expect(r.billed_length).toBeCloseTo(6.38, 3);
+    expect(r.billed_area).toBeCloseTo(27.434, 3);
+    // Pricing splits cleanly
+    expect(r.m2_cost).toBeCloseTo(27.434 * 140_000, 0);
+    expect(r.manual_extra_beams_cost).toBe(4.30 * 60_000);
+  });
+
+  it("Auto GB-at-N+1 with force_start_beam: BGB pattern, monolith = 6.50, billed = 6.38", () => {
+    const r = calculateSlab({
+      inner_width: 4,
+      inner_length: 6,
+      correction: 0.30,
+      force_start_beam: true,
+    });
+    expect(r.pattern_auto).toBe("GB");
+    expect(r.pattern).toBe("BGB");
+    expect(r.pitches).toBe(11);
+    expect(r.beam_count).toBe(12);                 // 11 + 1 (BGB pattern)
+    expect(r.monolith_length).toBeCloseTo(6.50, 3); // 11×0.58 + 0.12 (BGB ext)
+    expect(r.billed_length).toBeCloseTo(6.38, 3);
+    expect(r.billed_area).toBeCloseTo(27.434, 3);
+    // Pattern's extra beam billed at per-meter
+    expect(r.pattern_extra_cost).toBe(4.30 * 60_000);
+    expect(r.manual_extra_beams_cost).toBe(0);
+  });
+
+  it("BGB with manual extras stacks pattern + manual visual extensions", () => {
+    // 4×6 → auto BGB at N=10. +1 manual extra beam.
+    const r = calculateSlab({ inner_width: 4, inner_length: 6, extra_beams: 1 });
+    expect(r.pattern).toBe("BGB");
+    expect(r.beam_count).toBe(10 + 1 + 1);                      // pitches + BGB beam + manual
+    expect(r.monolith_length).toBeCloseTo(5.80 + 0.12 + 0.12, 3); // 6.04
+    expect(r.billed_length).toBeCloseTo(5.80, 3);
+    expect(r.billed_area).toBeCloseTo(24.94, 2);
+    expect(r.m2_cost).toBeCloseTo(24.94 * 140_000, 0);
+    expect(r.pattern_extra_cost).toBe(4.30 * 60_000);
+    expect(r.manual_extra_beams_cost).toBe(4.30 * 60_000);
+  });
+
+  it("GBG with manual extras: monolith = pitch + 0.45 + extras × 0.12; billed unchanged", () => {
+    const r = calculateSlab({ inner_width: 4, inner_length: 4.3, extra_beams: 2 });
+    expect(r.pattern).toBe("GBG");
+    expect(r.monolith_length).toBeCloseTo(7 * 0.58 + 0.45 + 2 * 0.12, 3); // 4.75
+    expect(r.billed_length).toBeCloseTo(7 * 0.58, 3);                     // 4.06
+    expect(r.billed_area).toBeCloseTo(4.30 * 4.06, 2);
+    // GBG extras = blocks_per_row × unit price; manual beams charged separately
+    expect(r.pattern_extra_cost).toBe(20 * 6_000);
+    expect(r.manual_extra_beams_cost).toBe(2 * 4.30 * 60_000);
+  });
+
+  it("Plain GB at N pitches with N extras: monolith grows by N × 0.12; billed locked at pitches × PITCH", () => {
+    // Use a length that auto-picks GB (R = 0): 5.80 m exactly = 10 pitches
+    const r = calculateSlab({ inner_width: 4, inner_length: 10 * PITCH, extra_beams: 3 });
+    expect(r.pattern).toBe("GB");
+    expect(r.pitches).toBe(10);
+    expect(r.monolith_length).toBeCloseTo(5.80 + 3 * 0.12, 3); // 6.16
+    expect(r.billed_length).toBeCloseTo(5.80, 3);
+    expect(r.billed_area).toBeCloseTo(24.94, 2);
+    expect(r.m2_cost).toBeCloseTo(24.94 * 140_000, 0);
+    expect(r.pattern_extra_cost).toBe(0);                       // pure GB, no pattern extra
+    expect(r.manual_extra_beams_cost).toBeCloseTo(3 * 4.30 * 60_000, 0); // 774,000 UZS
+  });
+
+  it("Concrete volume tracks the physical slab (no manual-extra inflation)", () => {
+    // Without extras
+    const r0 = calculateSlab({ inner_width: 4, inner_length: 10 * PITCH });
+    // With 5 extras
+    const r5 = calculateSlab({ inner_width: 4, inner_length: 10 * PITCH, extra_beams: 5 });
+    // monolith_length differs by 5 × 0.12 = 0.60
+    expect(r5.monolith_length - r0.monolith_length).toBeCloseTo(0.60, 3);
+    // concrete_volume identical
+    expect(r5.concrete_volume).toBeCloseTo(r0.concrete_volume, 4);
   });
 });
 

@@ -19,10 +19,18 @@
  *      R ≤ 0.20        → BGB at `pitches`     (+1 beam, +0.12 m visual)
  *      R ≤ 0.45        → GBG at `pitches`     (+1 block row, +0.45 m visual)
  *      R > 0.45        → GB  at `pitches + 1` (round up; over-covers)
- *    User can override the pattern, in which case auto-pick's pitch bump is undone.
+ *    User can override the pattern (no pitch bump). force_start_beam
+ *    promotes any GB pattern (auto OR explicit) into BGB.
  *
- *  Outputs are split into "monolith" (physical, what's actually built) and
- *  "billed" (what the customer is charged for under the m² rate).
+ *  Length concepts (three of them, each with a clear job):
+ *    billed_length   = pitches × PITCH                      ← used by the m²-rate ONLY
+ *    slab_length     = billed_length + pattern_extension    ← what's poured concrete on
+ *    monolith_length = slab_length + extra_beams × BEAM_WIDTH ← what we DISPLAY to user
+ *
+ *  Each manual extra beam visually extends the slab by BEAM_WIDTH (0.12 m), but
+ *  is billed as a separate per-meter line item — so the m²-rate area
+ *  (`billed_area`) never changes when the user adds extras or toggles
+ *  force_start_beam. Only `monolith_length` / `monolith_area` grow visually.
  * ─────────────────────────────────────────────────────────────────
  */
 
@@ -220,8 +228,9 @@ export function calculateSlab(input: SlabInput): SlabResult {
     pattern = pattern_auto;
   }
 
-  // force_start_beam promotes GB → BGB (only takes effect when pattern is GB and no override)
-  if (force_start_beam && pattern === "GB" && !input.pattern) {
+  // force_start_beam promotes ANY GB pattern (auto or explicit override) to BGB.
+  // It's a no-op when the pattern is already BGB/GBG.
+  if (force_start_beam && pattern === "GB") {
     pattern = "BGB";
   }
 
@@ -250,16 +259,18 @@ export function calculateSlab(input: SlabInput): SlabResult {
   const beam_count = beam_count_base + extra_beams;
   const total_blocks = blocks_per_row * block_rows;
 
-  // Lengths
+  // Lengths — three concepts, see file header
   const billed_length = round3(pitches * PITCH);
-  const monolith_length = round3(pitches * PITCH + extension);
+  const slab_length = round3(pitches * PITCH + extension);
+  const monolith_length = round3(slab_length + extra_beams * BEAM_WIDTH);
 
   // Areas
   const billed_area = round3(beam_length * billed_length);
   const monolith_area = round3(beam_length * monolith_length);
 
-  // Concrete topping volume — poured over the actual built slab
-  const concrete_volume = round3(monolith_area * TOPPING_THICKNESS);
+  // Concrete topping volume — poured over the physically built slab
+  // (does NOT include the visual extension from manual extra beams).
+  const concrete_volume = round3(beam_length * slab_length * TOPPING_THICKNESS);
 
   // Pricing
   const m2_price = tierPrice(beam_length, M2_PRICE_TIERS);

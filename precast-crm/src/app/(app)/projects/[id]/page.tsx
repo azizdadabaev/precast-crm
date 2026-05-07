@@ -73,11 +73,10 @@ export default function ProjectDetailPage() {
       blocks: acc.blocks + c.totalBlocks,
       beams: acc.beams + c.beamCount,
       monolithArea: acc.monolithArea + Number(c.monolithArea),
-      billedArea: acc.billedArea + Number(c.billedArea),
       concrete: acc.concrete + Number(c.concreteVolume),
       sum: acc.sum + Number(c.subtotal),
     }),
-    { blocks: 0, beams: 0, monolithArea: 0, billedArea: 0, concrete: 0, sum: 0 }
+    { blocks: 0, beams: 0, monolithArea: 0, concrete: 0, sum: 0 }
   );
 
   return (
@@ -134,8 +133,8 @@ export default function ProjectDetailPage() {
                   <th className="px-3 py-2 border-b text-center">Blks/Row</th>
                   <th className="px-3 py-2 border-b text-center bg-orange-50">Total Blks</th>
                   <th className="px-3 py-2 border-b text-center bg-gray-100">Beams</th>
-                  <th className="px-3 py-2 border-b text-center">Monolith</th>
-                  <th className="px-3 py-2 border-b text-center">Billed Area</th>
+                  <th className="px-3 py-2 border-b text-center">Slab L</th>
+                  <th className="px-3 py-2 border-b text-center">Area</th>
                   <th className="px-3 py-2 border-b text-center bg-green-50">m² Rate</th>
                   <th className="px-3 py-2 border-b text-right">Subtotal</th>
                 </tr>
@@ -157,7 +156,7 @@ export default function ProjectDetailPage() {
                     <td className="px-3 py-2 text-center font-black bg-orange-50/20 text-orange-800">{c.totalBlocks}</td>
                     <td className="px-3 py-2 text-center font-black bg-gray-100/50">{c.beamCount}</td>
                     <td className="px-3 py-2 text-center text-xs">{formatNumber(c.monolithLength, 2)} m</td>
-                    <td className="px-3 py-2 text-center text-xs">{formatNumber(c.billedArea, 2)} m²</td>
+                    <td className="px-3 py-2 text-center text-xs">{formatNumber(c.monolithArea, 2)} m²</td>
                     <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800">{formatNumber(c.m2Price, 0)}</td>
                     <td className="px-3 py-2 text-right font-black text-green-700">
                       {formatNumber(c.subtotal, 0)}
@@ -171,7 +170,7 @@ export default function ProjectDetailPage() {
                   <td className="px-3 py-3 text-center text-orange-800 bg-orange-50/50">{totals.blocks}</td>
                   <td className="px-3 py-3 text-center bg-gray-100">{totals.beams}</td>
                   <td className="px-3 py-3" colSpan={1}></td>
-                  <td className="px-3 py-3 text-center text-xs">{formatNumber(totals.billedArea, 2)} m²</td>
+                  <td className="px-3 py-3 text-center text-xs">{formatNumber(totals.monolithArea, 2)} m²</td>
                   <td className="px-3 py-3 text-right text-green-800 bg-green-50/50 text-lg" colSpan={2}>{formatNumber(totals.sum, 0)}</td>
                 </tr>
               </tfoot>
@@ -195,11 +194,7 @@ export default function ProjectDetailPage() {
                <span className="font-bold">{totals.blocks}</span>
              </div>
              <div className="flex justify-between border-b pb-2">
-               <span className="text-muted-foreground">Billed Area</span>
-               <span className="font-bold">{formatNumber(totals.billedArea, 2)} m²</span>
-             </div>
-             <div className="flex justify-between border-b pb-2">
-               <span className="text-muted-foreground">Monolith Area</span>
+               <span className="text-muted-foreground">Slab Area (visual)</span>
                <span className="font-bold">{formatNumber(totals.monolithArea, 2)} m²</span>
              </div>
              <div className="flex justify-between">
