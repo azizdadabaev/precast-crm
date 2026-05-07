@@ -4,6 +4,7 @@ import { calculateSlab } from "../src/services/calculation-engine";
 import { calcResultToCreatePayload } from "../src/lib/calc-persistence";
 import { normalizePhone } from "../src/lib/phone";
 import { nextOrderNumber, orderNumberMonthPrefix } from "../src/lib/order-number";
+import { applyStockMovement } from "../src/lib/inventory";
 
 const prisma = new PrismaClient();
 
@@ -232,6 +233,69 @@ async function main() {
       assignedToId: sales.id,
     },
   });
+
+  // ── Production entries (last 7 days) + initial inventory ────────
+  // Two batches so the inventory page isn't empty on first run.
+  // Quantities are intentionally larger than the seeded orders' demand,
+  // so the existing seed orders (which seed already places as PLACED /
+  // PAID) don't leave inventory in a weird negative state if a developer
+  // marks them DELIVERED to test the decrement.
+  const productionRuns = [
+    {
+      daysAgo: 6,
+      lines: [
+        { kind: "BEAM" as const, beamLength: 4.30, quantity: 40 },
+        { kind: "BEAM" as const, beamLength: 5.20, quantity: 25 },
+        { kind: "BEAM" as const, beamLength: 6.30, quantity: 18 },
+        { kind: "BLOCK" as const, beamLength: null, quantity: 1200 },
+      ],
+      notes: "Shift A · Monday casting batch",
+    },
+    {
+      daysAgo: 2,
+      lines: [
+        { kind: "BEAM" as const, beamLength: 4.30, quantity: 30 },
+        { kind: "BEAM" as const, beamLength: 6.30, quantity: 12 },
+        { kind: "BLOCK" as const, beamLength: null, quantity: 800 },
+      ],
+      notes: "Shift B · top-up",
+    },
+  ];
+
+  for (const run of productionRuns) {
+    const producedAt = new Date();
+    producedAt.setDate(producedAt.getDate() - run.daysAgo);
+
+    await prisma.$transaction(async (tx) => {
+      const entry = await tx.productionEntry.create({
+        data: {
+          producedAt,
+          notes: run.notes,
+          recordedById: sales.id,
+        },
+      });
+      for (const line of run.lines) {
+        await tx.productionLine.create({
+          data: {
+            productionEntryId: entry.id,
+            kind: line.kind,
+            beamLength: line.beamLength,
+            quantity: line.quantity,
+          },
+        });
+        await applyStockMovement(
+          tx,
+          { kind: line.kind, beamLength: line.beamLength, quantity: line.quantity },
+          line.quantity,
+          {
+            reason: "PRODUCTION",
+            productionEntryId: entry.id,
+            actorId: sales.id,
+          },
+        );
+      }
+    });
+  }
 
   console.log("✅ Seed complete");
   console.log("   Login: admin@precast.local / admin123");

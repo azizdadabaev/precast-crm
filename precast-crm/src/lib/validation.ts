@@ -152,3 +152,37 @@ export const CapacityRangeSchema = z.object({
   from: z.coerce.date(),
   to: z.coerce.date(),
 });
+
+// ── Inventory / Production ──────────────────────────────────────
+export const InventoryKindEnum = z.enum(["BEAM", "BLOCK"]);
+
+const ProductionLineSchema = z
+  .object({
+    kind: InventoryKindEnum,
+    beamLength: z.coerce.number().positive().optional().nullable(),
+    quantity: z.coerce.number().int().positive(),
+  })
+  .superRefine((line, ctx) => {
+    if (line.kind === "BEAM" && (line.beamLength == null || line.beamLength <= 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["beamLength"],
+        message: "beamLength is required for BEAM lines",
+      });
+    }
+  });
+
+export const ProductionEntryCreateSchema = z.object({
+  producedAt: z.coerce.date().optional(),
+  notes: z.string().max(2000).optional().nullable(),
+  lines: z.array(ProductionLineSchema).min(1, "at least one line is required"),
+});
+
+export const InventoryUpdateSchema = z.object({
+  lowStockThreshold: z.coerce.number().int().min(0).optional(),
+});
+
+export const InventoryAdjustmentSchema = z.object({
+  delta: z.coerce.number().int().refine((n) => n !== 0, "delta cannot be zero"),
+  note: z.string().min(3, "note is required").max(500),
+});

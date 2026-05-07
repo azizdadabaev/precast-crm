@@ -201,6 +201,24 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {/* Stock-warning banner — surfaced when delivery decremented inventory below zero */}
+      {order.events.some((e) => e.type === "STOCK_WARNING") && (
+        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="font-bold mb-1">Stock went negative on delivery</div>
+          <ul className="list-disc list-inside space-y-0.5 text-xs">
+            {order.events
+              .filter((e) => e.type === "STOCK_WARNING")
+              .slice(0, 5)
+              .map((e) => (
+                <li key={e.id}>{e.message}</li>
+              ))}
+          </ul>
+          <div className="text-xs text-amber-800 mt-2 italic">
+            Reconcile via a production log entry or manual stock adjustment in Омбор.
+          </div>
+        </div>
+      )}
+
       {/* Status timeline */}
       {!isCanceled ? (
         <div className="rounded-lg border bg-background p-4 shadow-sm">

@@ -4,6 +4,11 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail, handler } from "@/lib/api";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
+import {
+  calcSnapshotToInventoryLines,
+  decrementForDelivery,
+  formatInventoryLabel,
+} from "@/lib/inventory";
 
 /**
  * POST /api/orders/[id]/delivery-proof
@@ -45,6 +50,13 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
     throw e;
   }
 
+  // Pull the calculation snapshot for the inventory decrement
+  const project = await prisma.project.findUniqueOrThrow({
+    where: { id: order.projectId },
+    include: { calculations: true },
+  });
+  const inventoryLines = calcSnapshotToInventoryLines(project.calculations);
+
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.order.update({
       where: { id: order.id },
@@ -55,6 +67,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
         deliveryProofUploadedAt: new Date(),
       },
     });
+
     await tx.orderEvent.create({
       data: {
         orderId: order.id,
@@ -69,6 +82,24 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
         },
       },
     });
+
+    // Decrement inventory for every beam group + total blocks. Negative
+    // resulting stock is allowed (factory may have unlogged production)
+    // — we record a STOCK_WARNING event so the inventory page can flag
+    // the order and the operator can reconcile via a production log
+    // entry or manual adjustment.
+    const warnings = await decrementForDelivery(tx, order.id, inventoryLines);
+    for (const w of warnings) {
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "STOCK_WARNING",
+          message: `Stock went negative for ${formatInventoryLabel(w.kind, w.beamLength)} (now ${w.resultingQuantity}). Reconcile production log.`,
+          payload: w as object,
+        },
+      });
+    }
+
     return u;
   });
 

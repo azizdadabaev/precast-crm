@@ -4,6 +4,11 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { OrderUpdateSchema } from "@/lib/validation";
 import { ok, fail, handler } from "@/lib/api";
+import {
+  calcSnapshotToInventoryLines,
+  decrementForDelivery,
+  formatInventoryLabel,
+} from "@/lib/inventory";
 
 /** GET /api/orders/[id] — full order detail with related Project + Client + events */
 export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string } }) => {
@@ -62,6 +67,22 @@ export const PATCH = handler(async (req: NextRequest, ctx: { params: { id: strin
 
   if (!Object.keys(updates).length) return ok(existing);
 
+  // If this PATCH is what flips the order to DELIVERED, also decrement
+  // inventory atomically. The canonical UI path is the delivery-proof
+  // endpoint (which carries the truck photo), but we mirror the logic
+  // here so any programmatic DELIVERED transition can't bypass the
+  // stock book.
+  const willTransitionToDelivered =
+    body.status === "DELIVERED" && existing.status !== "DELIVERED";
+  let inventoryLines: ReturnType<typeof calcSnapshotToInventoryLines> = [];
+  if (willTransitionToDelivered) {
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { id: existing.projectId },
+      include: { calculations: true },
+    });
+    inventoryLines = calcSnapshotToInventoryLines(project.calculations);
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.order.update({ where: { id: existing.id }, data: updates });
     for (const ev of events) {
@@ -73,6 +94,19 @@ export const PATCH = handler(async (req: NextRequest, ctx: { params: { id: strin
           payload: ev.payload as object,
         },
       });
+    }
+    if (willTransitionToDelivered) {
+      const warnings = await decrementForDelivery(tx, existing.id, inventoryLines);
+      for (const w of warnings) {
+        await tx.orderEvent.create({
+          data: {
+            orderId: existing.id,
+            type: "STOCK_WARNING",
+            message: `Stock went negative for ${formatInventoryLabel(w.kind, w.beamLength)} (now ${w.resultingQuantity}). Reconcile production log.`,
+            payload: w as object,
+          },
+        });
+      }
     }
     return u;
   });

@@ -8,6 +8,8 @@ import {
   Calculator,
   FolderKanban,
   PackageCheck,
+  Hammer,
+  Warehouse,
   LogOut,
   Building2,
 } from "lucide-react";
@@ -24,11 +26,13 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: "/dashboard",    label: "Бошқарув",     sub: "Dashboard",     icon: LayoutDashboard },
-  { href: "/calculations", label: "Калькулятор",  sub: "Calculations",  icon: Calculator },
-  { href: "/projects",     label: "Лойиҳалар",    sub: "Projects",      icon: FolderKanban },
-  { href: "/orders",       label: "Буюртмалар",   sub: "Orders",        icon: PackageCheck },
-  { href: "/clients",      label: "Мижозлар",     sub: "Clients",       icon: Users },
+  { href: "/dashboard",    label: "Бошқарув",       sub: "Dashboard",     icon: LayoutDashboard },
+  { href: "/calculations", label: "Калькулятор",    sub: "Calculations",  icon: Calculator },
+  { href: "/production",   label: "Ишлаб чиқариш",  sub: "Production",    icon: Hammer },
+  { href: "/inventory",    label: "Омбор",          sub: "Warehouse",     icon: Warehouse },
+  { href: "/projects",     label: "Лойиҳалар",      sub: "Projects",      icon: FolderKanban },
+  { href: "/orders",       label: "Буюртмалар",     sub: "Orders",        icon: PackageCheck },
+  { href: "/clients",      label: "Мижозлар",       sub: "Clients",       icon: Users },
 ];
 
 export function Sidebar() {

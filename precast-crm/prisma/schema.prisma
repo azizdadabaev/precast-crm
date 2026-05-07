@@ -79,6 +79,19 @@ enum OrderEventType {
   DISCOUNT_APPLIED
   ORDER_CANCELED
   NOTE_ADDED
+  STOCK_WARNING
+}
+
+enum InventoryKind {
+  BEAM
+  BLOCK
+}
+
+enum StockMovementReason {
+  PRODUCTION
+  DELIVERY
+  MANUAL_ADJUSTMENT
+  CANCELLATION_RESTOCK
 }
 
 // ─────────────────────────────────────────────
@@ -94,8 +107,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  deals       Deal[]       @relation("AssignedDeals")
-  orderEvents OrderEvent[]
+  deals             Deal[]             @relation("AssignedDeals")
+  orderEvents       OrderEvent[]
+  productionEntries ProductionEntry[]
+  stockMovements    StockMovement[]
 
   @@map("users")
 }
@@ -280,6 +295,7 @@ model Order {
   client        Client        @relation(fields: [clientId], references: [id])
   primaryCalculation Calculation? @relation(fields: [primaryCalculationId], references: [id])
   events        OrderEvent[]
+  stockMovements StockMovement[]
 
   @@index([status])
   @@index([clientId])
@@ -330,4 +346,99 @@ model AppConfig {
   updatedAt DateTime @updatedAt
 
   @@map("app_config")
+}
+
+// ─────────────────────────────────────────────
+// Inventory module
+//
+// One InventoryItem row per (kind, beamLength) pair:
+//   - one BEAM row per distinct manufactured length (4.30, 5.20, 6.30, …)
+//   - one BLOCK row with beamLength = NULL
+//
+// Quantity is incremented by ProductionEntries (factory output) and
+// decremented when an order's status flips to DELIVERED. Negative stock is
+// allowed (records a STOCK_WARNING OrderEvent) so deliveries are never
+// blocked by an under-recorded production log. Manual adjustments by ADMIN
+// keep the books straight.
+// ─────────────────────────────────────────────
+
+model InventoryItem {
+  id                 String        @id @default(cuid())
+  kind               InventoryKind
+  // For BEAM: manufactured length in meters, rounded to 2 decimals (e.g. 4.30).
+  // For BLOCK: NULL (one row only, lookup by kind).
+  beamLength         Decimal?      @db.Decimal(10, 2)
+  quantity           Int           @default(0)
+  lowStockThreshold  Int           @default(10)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  movements StockMovement[]
+
+  // One row per distinct (kind, length). Postgres treats NULLs as distinct
+  // by default, but for our use we want exactly one BLOCK row — so the seed
+  // and inventory lib handle the BLOCK case by always upserting via this
+  // composite key.
+  @@unique([kind, beamLength], name: "kind_beamLength")
+  @@index([kind])
+  @@map("inventory_items")
+}
+
+model ProductionEntry {
+  id           String   @id @default(cuid())
+  producedAt   DateTime @default(now())
+  recordedById String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  recordedBy User?           @relation(fields: [recordedById], references: [id])
+  lines      ProductionLine[]
+  movements  StockMovement[]
+
+  @@index([producedAt])
+  @@index([recordedById])
+  @@map("production_entries")
+}
+
+model ProductionLine {
+  id                String        @id @default(cuid())
+  productionEntryId String
+  kind              InventoryKind
+  beamLength        Decimal?      @db.Decimal(10, 2)
+  quantity          Int
+
+  productionEntry ProductionEntry @relation(fields: [productionEntryId], references: [id], onDelete: Cascade)
+
+  @@index([productionEntryId])
+  @@map("production_lines")
+}
+
+// Append-only ledger of stock changes. Every increment / decrement leaves
+// a row here keyed back to the cause (production entry, order, or null
+// for manual adjustments).
+model StockMovement {
+  id                String              @id @default(cuid())
+  inventoryItemId   String
+  // +N for production / restock; -N for delivery / negative manual adjustment
+  change            Int
+  // The resulting quantity AFTER this movement was applied — saved here so
+  // the timeline can be reconstructed without replaying every prior row.
+  resultingQuantity Int
+  reason            StockMovementReason
+  productionEntryId String?
+  orderId           String?
+  actorId           String?
+  note              String?
+  createdAt         DateTime            @default(now())
+
+  inventoryItem   InventoryItem    @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  productionEntry ProductionEntry? @relation(fields: [productionEntryId], references: [id], onDelete: SetNull)
+  order           Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  actor           User?            @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryItemId])
+  @@index([orderId])
+  @@index([productionEntryId])
+  @@index([createdAt])
+  @@map("stock_movements")
 }

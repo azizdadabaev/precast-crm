@@ -5,6 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { CancelOrderSchema } from "@/lib/validation";
 import { ok, fail, handler } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  calcSnapshotToInventoryLines,
+  restockForCancellation,
+} from "@/lib/inventory";
 
 const CANCEL_PASSWORD = process.env.ORDER_CANCEL_PASSWORD ?? "etalontbm";
 
@@ -48,6 +52,20 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
   if (!existing) return fail("Order not found", 404);
   if (existing.status === "CANCELED") return fail("Order is already canceled", 422);
 
+  // If the order was already DELIVERED (or DELIVERED-then-PAID), the
+  // delivery decremented inventory. Cancellation must mirror it back.
+  // Cancelling a PLACED / IN_PRODUCTION order needs no restock — nothing
+  // ever left the warehouse.
+  const wasDelivered = existing.status === "DELIVERED" || existing.status === "PAID";
+  let restockLines: ReturnType<typeof calcSnapshotToInventoryLines> = [];
+  if (wasDelivered) {
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { id: existing.projectId },
+      include: { calculations: true },
+    });
+    restockLines = calcSnapshotToInventoryLines(project.calculations);
+  }
+
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.order.update({
       where: { id: existing.id },
@@ -77,9 +95,19 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
         payload: {
           method: isAdmin ? "admin" : "password",
           reason: body.reason ?? "",
+          restocked: wasDelivered,
         },
       },
     });
+    if (wasDelivered) {
+      await restockForCancellation(
+        tx,
+        existing.id,
+        restockLines,
+        actorId,
+        body.reason ?? null,
+      );
+    }
     return u;
   });
 
