@@ -52,17 +52,33 @@ enum LayoutPattern {
   GBG   // Г-Б-Г — extra closing block row
 }
 
-enum QuoteStatus {
-  DRAFT
-  SENT
-  ACCEPTED
-  REJECTED
+enum ProjectStatus {
+  DRAFT      // saved calculation, not yet placed as an order
+  ORDERED    // an Order exists for this project
+  ARCHIVED   // soft-deleted draft
+}
+
+enum OrderStatus {
+  PLACED          // Буюртма Берилди — newly placed
+  IN_PRODUCTION   // Ишлаб чиқарилмоқда
+  DELIVERED       // Етказиб берилди
+  PAID            // Тўланди
+  CANCELED        // Бекор қилинди
 }
 
 enum PaymentStatus {
   PAID
   PARTIAL
   UNPAID
+}
+
+enum OrderEventType {
+  ORDER_PLACED
+  STATUS_CHANGED
+  SCHEDULED_DATE_CHANGED
+  DISCOUNT_APPLIED
+  ORDER_CANCELED
+  NOTE_ADDED
 }
 
 // ─────────────────────────────────────────────
@@ -78,7 +94,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  deals Deal[] @relation("AssignedDeals")
+  deals       Deal[]       @relation("AssignedDeals")
+  orderEvents OrderEvent[]
 
   @@map("users")
 }
@@ -86,15 +103,18 @@ model User {
 model Client {
   id        String   @id @default(cuid())
   name      String
+  // Stored DIGITS-ONLY for stable lookup/dedup. Display formats it back.
   phone     String   @unique
-  location  String?
+  address   String?  // "Манзил" (renamed from `location`)
   language  Language @default(UZ)
   source    String?
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  deals Deal[]
+  deals    Deal[]
+  projects Project[]
+  orders   Order[]
 
   @@index([phone])
   @@index([createdAt])
@@ -124,19 +144,38 @@ model Deal {
 }
 
 model Project {
-  id         String    @id @default(cuid())
-  dealId     String
+  id         String        @id @default(cuid())
+  // Optional now: Calculations page can save a draft BEFORE a Deal exists.
+  // The Deal is materialized when an order is placed.
+  dealId     String?
+  // Hardened client link (set when ordered, or when the operator picks an
+  // existing client during the call). Null while we have only tentative info.
+  clientId   String?
+
   name       String?
-  shapeType  ShapeType @default(RECTANGULAR)
-  dimensions Json // { width, length, lengths?: [], notes?: string }
+  shapeType  ShapeType     @default(RECTANGULAR)
+  dimensions Json
+  status     ProjectStatus @default(DRAFT)
+
+  // Tentative client info captured during the phone call.
+  // Once the order is placed (or operator picks an existing client),
+  // this gets reconciled into a Client row and these fields are cleared.
+  tentativeClientName    String?
+  tentativeClientPhone   String? // stored DIGITS-ONLY for dedup
+  tentativeClientAddress String?
+
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  deal         Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  deal         Deal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   calculations Calculation[]
-  quotes       Quote[]
+  orders       Order[]
 
+  @@index([status])
   @@index([dealId])
+  @@index([clientId])
+  @@index([tentativeClientPhone])
   @@map("projects")
 }
 
@@ -163,19 +202,17 @@ model Calculation {
   // ── Geometry ──
   beamLength      Decimal       @db.Decimal(10, 3)
   blocksPerRow    Int
-  beamCount       Int           // includes pattern's extra beam AND extraBeams
+  beamCount       Int
   blockRows       Int
   totalBlocks     Int
 
-  // Lengths (m)
-  monolithLength  Decimal       @db.Decimal(10, 3) // physical span
-  billedLength    Decimal       @db.Decimal(10, 3) // pitches × PITCH (for m² billing)
+  monolithLength  Decimal       @db.Decimal(10, 3)
+  billedLength    Decimal       @db.Decimal(10, 3)
 
-  // Areas (m²)
   monolithArea    Decimal       @db.Decimal(10, 3)
   billedArea      Decimal       @db.Decimal(10, 3)
 
-  concreteVolume  Decimal       @db.Decimal(10, 3) // m³
+  concreteVolume  Decimal       @db.Decimal(10, 3)
 
   // ── Pricing snapshot (UZS) ──
   m2Price                 Decimal @db.Decimal(14, 2)
@@ -188,37 +225,80 @@ model Calculation {
   createdAt       DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  quotes  Quote[]
+  orders  Order[] // an Order may snapshot a particular Calculation as primary
 
   @@index([projectId])
   @@map("calculations")
 }
 
-model Quote {
-  id              String      @id @default(cuid())
-  projectId       String
-  calculationId   String?
-  // Pre-discount sum of all room subtotals on this project
-  roomsSubtotal   Decimal     @default(0) @db.Decimal(14, 2)
-  // Discount applied to grand total (0–100)
-  discountPercent Decimal     @default(0) @db.Decimal(5, 2)
-  discountAmount  Decimal     @default(0) @db.Decimal(14, 2)
-  // Optional per-line costs preserved for future itemization
-  deliveryCost    Decimal     @default(0) @db.Decimal(14, 2)
-  otherCost       Decimal     @default(0) @db.Decimal(14, 2)
-  // Final amount: roomsSubtotal − discountAmount + deliveryCost + otherCost
-  totalPrice      Decimal     @default(0) @db.Decimal(14, 2)
-  status          QuoteStatus @default(DRAFT)
+// ─────────────────────────────────────────────
+// Order — replaces the old Quote model.
+// Created by the Place Order ("Буюртма Бериш") action.
+// ─────────────────────────────────────────────
+
+model Order {
+  id              String       @id @default(cuid())
+  // Human-readable, monotonic per month: "2026-05-0001"
+  orderNumber     String       @unique
+  projectId       String       @unique // one Order per Project for now
+  clientId        String
+  primaryCalculationId String?
+
+  status          OrderStatus  @default(PLACED)
+
+  // Pricing snapshot — frozen at placement time
+  roomsSubtotal   Decimal      @db.Decimal(14, 2)
+  discountPercent Decimal      @default(0) @db.Decimal(5, 2)
+  discountAmount  Decimal      @default(0) @db.Decimal(14, 2)
+  deliveryCost    Decimal      @default(0) @db.Decimal(14, 2)
+  otherCost       Decimal      @default(0) @db.Decimal(14, 2)
+  totalPrice      Decimal      @db.Decimal(14, 2)
+
+  // Capacity snapshot at placement time — denormalized so the calendar
+  // can sum without joining calculations.
+  totalArea       Decimal      @db.Decimal(10, 3) // sum of monolithArea across rooms
+  totalBlocks     Int          @default(0)
+  totalBeams      Int          @default(0)
+
+  // Production / delivery scheduling
+  scheduledAt     DateTime     // when the customer wants delivery / production day
+  placedAt        DateTime     @default(now())
+  productionStartedAt DateTime?
+  deliveredAt     DateTime?
+  paidAt          DateTime?
+  canceledAt      DateTime?
+  cancelReason    String?
+
   notes           String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
 
-  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  calculation Calculation? @relation(fields: [calculationId], references: [id])
+  project       Project       @relation(fields: [projectId], references: [id])
+  client        Client        @relation(fields: [clientId], references: [id])
+  primaryCalculation Calculation? @relation(fields: [primaryCalculationId], references: [id])
+  events        OrderEvent[]
 
-  @@index([projectId])
   @@index([status])
-  @@map("quotes")
+  @@index([clientId])
+  @@index([scheduledAt])
+  @@index([placedAt])
+  @@map("orders")
+}
+
+// Append-only activity log on an Order.
+model OrderEvent {
+  id        String         @id @default(cuid())
+  orderId   String
+  type      OrderEventType
+  actorId   String?
+  message   String?
+  payload   Json?          // type-specific data (from/to status, prev value, etc.)
+  createdAt DateTime       @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("order_events")
 }
 
 model Payment {
@@ -238,10 +318,6 @@ model Payment {
   @@map("payments")
 }
 
-// Application-wide configuration. Stored in DB so that
-// the calculation engine constants (TOLERANCE, prices, etc.)
-// can be tuned without redeploy. The engine itself stays pure
-// — values are passed in as arguments.
 model AppConfig {
   id        String   @id @default(cuid())
   key       String   @unique

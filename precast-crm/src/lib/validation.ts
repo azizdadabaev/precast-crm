@@ -13,7 +13,14 @@ export const DealStageEnum = z.enum([
 export const DealStatusEnum = z.enum(["OPEN", "WON", "LOST"]);
 export const ShapeTypeEnum = z.enum(["RECTANGULAR", "TRAPEZOIDAL", "IRREGULAR"]);
 export const LayoutPatternEnum = z.enum(["GB", "BGB", "GBG"]);
-export const QuoteStatusEnum = z.enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED"]);
+export const ProjectStatusEnum = z.enum(["DRAFT", "ORDERED", "ARCHIVED"]);
+export const OrderStatusEnum = z.enum([
+  "PLACED",
+  "IN_PRODUCTION",
+  "DELIVERED",
+  "PAID",
+  "CANCELED",
+]);
 export const PaymentStatusEnum = z.enum(["PAID", "PARTIAL", "UNPAID"]);
 export const RoleEnum = z.enum(["ADMIN", "SALES", "ENGINEER"]);
 
@@ -31,8 +38,8 @@ export const RegisterSchema = LoginSchema.extend({
 // ── Clients ─────────────────────────────────────────────────────
 export const ClientCreateSchema = z.object({
   name: z.string().min(1, "name is required").max(120),
-  phone: z.string().min(5).max(40),
-  location: z.string().max(200).optional().nullable(),
+  phone: z.string().min(5).max(40), // raw input; normalized at handler
+  address: z.string().max(200).optional().nullable(),
   language: LanguageEnum.default("UZ"),
   source: z.string().max(80).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
@@ -57,7 +64,7 @@ export const DealUpdateSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
 });
 
-// ── Projects ────────────────────────────────────────────────────
+// ── Calculations / rooms ────────────────────────────────────────
 export const ProjectDimensionsSchema = z.object({
   width: z.coerce.number().positive(),
   length: z.coerce.number().positive(),
@@ -76,27 +83,57 @@ export const RoomCalcInputSchema = z.object({
   patternOverride: LayoutPatternEnum.optional().nullable(),
 });
 
-export const ProjectCreateSchema = z.object({
-  dealId: z.string().min(1),
-  name: z.string().max(120).optional().nullable(),
-  shapeType: ShapeTypeEnum.default("RECTANGULAR"),
-  dimensions: ProjectDimensionsSchema,
-  rooms: z.array(RoomCalcInputSchema).min(1),
-});
-
-// ── One-shot calculate (preview, optional persist) ──────────────
+// ── Calculate API (preview) ─────────────────────────────────────
 export const CalculateRequestSchema = RoomCalcInputSchema.extend({
-  projectId: z.string().optional(), // when set, persist the result
+  projectId: z.string().optional(),
 });
 
-// ── Quotes ──────────────────────────────────────────────────────
-export const QuoteCreateSchema = z.object({
-  projectId: z.string().min(1),
-  calculationId: z.string().optional().nullable(),
+// ── Save Project (Draft) ────────────────────────────────────────
+// Phone-only is required at save time; Name + Address are optional drafts.
+export const SaveProjectDraftSchema = z.object({
+  projectId: z.string().optional(), // update if provided, else create
+  name: z.string().max(120).optional().nullable(),
+  // Tentative client info (operator hasn't committed to creating a Client yet)
+  clientName: z.string().max(120).optional().nullable(),
+  clientPhone: z.string().min(3, "phone is required").max(40),
+  clientAddress: z.string().max(200).optional().nullable(),
+  shapeType: ShapeTypeEnum.default("RECTANGULAR"),
+  dimensions: ProjectDimensionsSchema.optional().nullable(),
+  rooms: z.array(RoomCalcInputSchema).default([]),
+});
+
+// ── Place Order (commits the deal) ──────────────────────────────
+// All four required: phone + name + address + at least 1 valid room.
+export const PlaceOrderSchema = z.object({
+  // Source — either an existing draft project, or inline rooms+client info
+  projectId: z.string().optional(),
+  clientName: z.string().min(1, "client name is required").max(120),
+  clientPhone: z.string().min(5, "client phone is required").max(40),
+  clientAddress: z.string().min(1, "client address is required").max(200),
+  // When projectId is omitted, we create the project from the rooms below
+  shapeType: ShapeTypeEnum.default("RECTANGULAR"),
+  dimensions: ProjectDimensionsSchema.optional().nullable(),
+  rooms: z.array(RoomCalcInputSchema).min(1, "at least one room is required"),
+  // Pricing
   discountPercent: z.coerce.number().min(0).max(100).default(0),
   deliveryCost: z.coerce.number().min(0).default(0),
   otherCost: z.coerce.number().min(0).default(0),
-  status: QuoteStatusEnum.default("DRAFT"),
+  // Required: when does the customer want delivery?
+  scheduledAt: z.coerce.date(),
+  notes: z.string().max(2000).optional().nullable(),
+});
+
+// ── Cancel order ────────────────────────────────────────────────
+// Either ADMIN role (no password) or password supplied. Server enforces.
+export const CancelOrderSchema = z.object({
+  reason: z.string().max(500).optional().nullable(),
+  password: z.string().optional().nullable(),
+});
+
+// ── Update order status / scheduled date ───────────────────────
+export const OrderUpdateSchema = z.object({
+  status: OrderStatusEnum.optional(),
+  scheduledAt: z.coerce.date().optional(),
   notes: z.string().max(2000).optional().nullable(),
 });
 
@@ -108,4 +145,10 @@ export const PaymentCreateSchema = z.object({
   method: z.string().max(80).optional().nullable(),
   reference: z.string().max(120).optional().nullable(),
   paidAt: z.coerce.date().optional().nullable(),
+});
+
+// ── Capacity calendar ───────────────────────────────────────────
+export const CapacityRangeSchema = z.object({
+  from: z.coerce.date(),
+  to: z.coerce.date(),
 });

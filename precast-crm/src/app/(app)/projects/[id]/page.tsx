@@ -14,13 +14,17 @@ interface Project {
   id: string;
   name: string | null;
   shapeType: string;
+  status: "DRAFT" | "ORDERED" | "ARCHIVED";
   dimensions: { width?: number; length?: number; widths?: number[] };
   createdAt: string;
-  deal: {
-    id: string;
-    stage: string;
-    client: { id: string; name: string; phone: string };
-  };
+  // tentative client info (when no Client linked yet)
+  tentativeClientName: string | null;
+  tentativeClientPhone: string | null;
+  tentativeClientAddress: string | null;
+  // hardened client (set when ordered or matched on phone)
+  client: { id: string; name: string; phone: string; address: string | null } | null;
+  // related orders (one per project for now)
+  orders: Array<{ id: string; orderNumber: string; status: string; scheduledAt: string }>;
   calculations: Array<{
     id: string;
     name: string | null;
@@ -89,11 +93,19 @@ export default function ProjectDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-1" /> Back
         </Link>
         <div className="flex gap-2">
-          <Button variant="outline" asChild size="sm">
-            <Link href={`/quotes/new?projectId=${project.id}`}>
-              <FileText className="h-4 w-4 mr-2" /> New Quote
-            </Link>
-          </Button>
+          {project.status === "ORDERED" && project.orders[0] ? (
+            <Button variant="outline" asChild size="sm">
+              <Link href={`/orders/${project.orders[0].id}`}>
+                <FileText className="h-4 w-4 mr-2" /> Order {project.orders[0].orderNumber}
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="outline" asChild size="sm">
+              <Link href={`/calculations?fromProject=${project.id}`}>
+                <FileText className="h-4 w-4 mr-2" /> Place Order · Буюртма Бериш
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -104,7 +116,25 @@ export default function ProjectDetailPage() {
               {project.name || `Project ${project.id.slice(-6)}`}
             </h1>
             <p className="text-muted-foreground mt-1">
-              Client: <span className="text-foreground font-medium">{project.deal.client.name}</span> · {project.deal.client.phone}
+              Client:{" "}
+              <span className="text-foreground font-medium">
+                {project.client?.name ?? project.tentativeClientName ?? "—"}
+              </span>
+              {" · "}
+              {project.client?.phone ?? project.tentativeClientPhone ?? ""}
+              {(project.client?.address || project.tentativeClientAddress) && (
+                <>
+                  {" · "}
+                  {project.client?.address ?? project.tentativeClientAddress}
+                </>
+              )}
+              <span className="ml-3 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
+                {project.status === "DRAFT"
+                  ? "Лойиҳа · Draft"
+                  : project.status === "ORDERED"
+                  ? "Буюртма берилди · Ordered"
+                  : "Архив · Archived"}
+              </span>
             </p>
           </div>
           <div className="flex gap-6 text-sm">

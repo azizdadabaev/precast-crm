@@ -1,0 +1,74 @@
+export const dynamic = "force-dynamic";
+
+import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { CancelOrderSchema } from "@/lib/validation";
+import { ok, fail, handler } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
+
+const CANCEL_PASSWORD = process.env.ORDER_CANCEL_PASSWORD ?? "etalontbm";
+
+/**
+ * POST /api/orders/[id]/cancel
+ *
+ * Allowed when EITHER:
+ *   - the caller is ADMIN, OR
+ *   - the caller supplies the correct cancel password
+ *
+ * Effect: order.status = CANCELED, project goes back to DRAFT, deal moves to LOST.
+ */
+export const POST = handler(async (req: NextRequest, ctx: { params: { id: string } }) => {
+  const body = CancelOrderSchema.parse(await req.json());
+
+  const user = await getCurrentUser();
+  const isAdmin = user?.role === "ADMIN";
+  const passwordOk = body.password && body.password === CANCEL_PASSWORD;
+
+  if (!isAdmin && !passwordOk) {
+    return fail("Cancellation requires ADMIN role or the cancel password.", 403);
+  }
+
+  const existing = await prisma.order.findUnique({
+    where: { id: ctx.params.id },
+    include: { project: { select: { id: true, dealId: true } } },
+  });
+  if (!existing) return fail("Order not found", 404);
+  if (existing.status === "CANCELED") return fail("Order is already canceled", 422);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const u = await tx.order.update({
+      where: { id: existing.id },
+      data: {
+        status: "CANCELED",
+        canceledAt: new Date(),
+        cancelReason: body.reason ?? null,
+      },
+    });
+    // Free the project back to DRAFT so it can be edited / re-ordered
+    await tx.project.update({
+      where: { id: existing.projectId },
+      data: { status: "DRAFT" },
+    });
+    // Move deal to LOST
+    if (existing.project?.dealId) {
+      await tx.deal
+        .update({ where: { id: existing.project.dealId }, data: { stage: "LOST", status: "LOST" } })
+        .catch(() => null);
+    }
+    await tx.orderEvent.create({
+      data: {
+        orderId: existing.id,
+        type: "ORDER_CANCELED",
+        actorId: user?.sub ?? null,
+        message: body.reason ?? null,
+        payload: {
+          method: isAdmin ? "admin" : "password",
+          reason: body.reason ?? "",
+        },
+      },
+    });
+    return u;
+  });
+
+  return ok(updated);
+});

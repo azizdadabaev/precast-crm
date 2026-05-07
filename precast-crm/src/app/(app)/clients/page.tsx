@@ -20,16 +20,17 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Search } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { formatPhone } from "@/lib/phone";
 
 interface Client {
   id: string;
   name: string;
   phone: string;
-  location: string | null;
+  address: string | null;
   language: "UZ" | "RU";
   source: string | null;
   createdAt: string;
-  _count: { deals: number };
+  _count: { deals: number; orders: number };
 }
 
 export default function ClientsPage() {
@@ -50,9 +51,11 @@ export default function ClientsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Clients</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Мижозлар <span className="text-muted-foreground font-normal text-base">· Clients</span>
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Manage customers and their contact information
+            Auto-populated when an Order is placed. Search by name, phone (last 4 digits OK), or address.
           </p>
         </div>
         <NewClientDialog />
@@ -64,7 +67,7 @@ export default function ClientsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, phone, or location…"
+                placeholder="Қидириш · name, phone (last 4 digits OK), or address…"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 className="pl-9"
@@ -90,13 +93,13 @@ export default function ClientsPage() {
               <table className="excel-table">
                 <thead>
                   <tr>
-                    <th>Name</th>
-                    <th>Phone</th>
-                    <th>Location</th>
+                    <th>Исм · Name</th>
+                    <th>Тел · Phone</th>
+                    <th>Манзил · Address</th>
                     <th>Lang</th>
                     <th>Source</th>
-                    <th className="text-center">Deals</th>
-                    <th>Created</th>
+                    <th className="text-center">Orders</th>
+                    <th>Added</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -107,13 +110,13 @@ export default function ClientsPage() {
                           {c.name}
                         </Link>
                       </td>
-                      <td>{c.phone}</td>
-                      <td>{c.location ?? "—"}</td>
+                      <td className="tabular-nums">{formatPhone(c.phone)}</td>
+                      <td>{c.address ?? "—"}</td>
                       <td>
                         <Badge variant="outline">{c.language}</Badge>
                       </td>
                       <td>{c.source ?? "—"}</td>
-                      <td className="text-center">{c._count.deals}</td>
+                      <td className="text-center tabular-nums">{c._count.orders}</td>
                       <td className="text-muted-foreground">{formatDate(c.createdAt)}</td>
                     </tr>
                   ))}
@@ -133,7 +136,7 @@ function NewClientDialog() {
   const [form, setForm] = useState({
     name: "",
     phone: "",
-    location: "",
+    address: "",
     language: "UZ",
     source: "",
     notes: "",
@@ -146,7 +149,7 @@ function NewClientDialog() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clients"] });
       setOpen(false);
-      setForm({ name: "", phone: "", location: "", language: "UZ", source: "", notes: "" });
+      setForm({ name: "", phone: "", address: "", language: "UZ", source: "", notes: "" });
       setError(null);
     },
     onError: (e: Error) => setError(e.message),
@@ -189,10 +192,10 @@ function NewClientDialog() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Location</Label>
+              <Label>Манзил · Address</Label>
               <Input
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
             </div>
             <div className="space-y-1.5">

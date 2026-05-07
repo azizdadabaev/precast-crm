@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
-  Kanban,
   Calculator,
-  FileText,
+  FolderKanban,
+  PackageCheck,
   LogOut,
   Building2,
 } from "lucide-react";
@@ -16,12 +16,19 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/fetcher";
 import { useRouter } from "next/navigation";
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/clients", label: "Clients", icon: Users },
-  { href: "/pipeline", label: "Pipeline", icon: Kanban },
-  { href: "/projects", label: "Projects & Calculation", icon: Calculator },
-  { href: "/quotes", label: "Quotes", icon: FileText },
+interface NavItem {
+  href: string;
+  label: string;        // primary (UZ)
+  sub: string;          // secondary (EN)
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const NAV: NavItem[] = [
+  { href: "/dashboard",    label: "Бошқарув",     sub: "Dashboard",     icon: LayoutDashboard },
+  { href: "/calculations", label: "Калькулятор",  sub: "Calculations",  icon: Calculator },
+  { href: "/projects",     label: "Лойиҳалар",    sub: "Projects",      icon: FolderKanban },
+  { href: "/orders",       label: "Буюртмалар",   sub: "Orders",        icon: PackageCheck },
+  { href: "/clients",      label: "Мижозлар",     sub: "Clients",       icon: Users },
 ];
 
 export function Sidebar() {
@@ -50,7 +57,7 @@ export function Sidebar() {
       <nav className="flex-1 p-3 space-y-1">
         {NAV.map((item) => {
           const Icon = item.icon;
-          const active = pathname.startsWith(item.href);
+          const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
             <Link
               key={item.href}
@@ -62,8 +69,18 @@ export function Sidebar() {
                   : "text-foreground hover:bg-accent",
               )}
             >
-              <Icon className="h-4 w-4" />
-              {item.label}
+              <Icon className="h-4 w-4 shrink-0" />
+              <div className="flex-1 leading-tight">
+                <div className="font-medium">{item.label}</div>
+                <div
+                  className={cn(
+                    "text-[10px] uppercase tracking-wider",
+                    active ? "text-primary-foreground/70" : "text-muted-foreground",
+                  )}
+                >
+                  {item.sub}
+                </div>
+              </div>
             </Link>
           );
         })}

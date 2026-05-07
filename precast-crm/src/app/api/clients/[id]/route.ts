@@ -13,6 +13,7 @@ export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string
         orderBy: { createdAt: "desc" },
         include: { projects: true, payments: true },
       },
+      orders: { orderBy: { placedAt: "desc" }, take: 20 },
     },
   });
   if (!client) return fail("Client not found", 404);
