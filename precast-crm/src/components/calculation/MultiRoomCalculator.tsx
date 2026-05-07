@@ -130,30 +130,30 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
           <thead>
             <tr>
               {/* ── Inputs group ── */}
-              <H primary="Name" secondary="Хона" align="left" className="bg-amber-50/40" />
-              <H primary="W" secondary="Эни" tip="Inner width — clear inside-wall to inside-wall (m)" className="bg-amber-50/40" />
-              <H primary="L" secondary="Бўйи" tip="Inner length (m)" className="bg-amber-50/40" />
-              <H primary="Bear" secondary="Миниш" tip="Beam bearing onto each wall (m). Default 0.15" className="bg-amber-50/40" />
-              <H primary="Corr" secondary="Корр." tip="Correction added to L before pitch math (m). Use to nudge auto-pattern." className="bg-amber-50/40 grid-group-divider" />
+              <H primary="Хона" secondary="Name" align="left" className="bg-amber-50/40" />
+              <H primary="Эни" secondary="W · width" tip="Inner width — clear inside-wall to inside-wall (m)" className="bg-amber-50/40" />
+              <H primary="Бўйи" secondary="L · length" tip="Inner length (m)" className="bg-amber-50/40" />
+              <H primary="Миниш" secondary="Bearing" tip="Beam bearing onto each wall (m). Default 0.15" className="bg-amber-50/40" />
+              <H primary="Корр." secondary="Correction" tip="Correction added to L before pitch math (m). Use to nudge auto-pattern." className="bg-amber-50/40 grid-group-divider" />
 
               {/* ── Pattern controls ── */}
-              <H primary="Pattern" secondary="Шаблон" className="bg-sky-50/40" />
-              <H primary="+B" tip="Manual extra beams. First one absorbs into pattern when GBG." className="bg-sky-50/40" />
-              <H primary="StartB" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="bg-sky-50/40 grid-group-divider" />
+              <H primary="Шаблон" secondary="Pattern" className="bg-sky-50/40" />
+              <H primary="+Б" secondary="Extra beams" tip="Manual extra beams. First one absorbs into pattern when GBG." className="bg-sky-50/40" />
+              <H primary="Бош Б." secondary="Start beam" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="bg-sky-50/40 grid-group-divider" />
 
               {/* ── Computed ── */}
-              <H primary="Beam L" secondary="Б.уз." />
-              <H primary="Pitches" secondary="N" />
-              <H primary="Blks/row" secondary="1 қат" />
-              <H primary="Beams" secondary="Балка" />
-              <H primary="Block rows" secondary="Қатор" />
-              <H primary="Total blks" secondary="Жами" />
-              <H primary="Slab L" secondary="Бўйи" />
-              <H primary="Slab Area" secondary="Юзаси" className="grid-group-divider" />
+              <H primary="Б.уз." secondary="Beam length" />
+              <H primary="Қадам" secondary="Pitches · N" />
+              <H primary="1 қат." secondary="Blocks/row" />
+              <H primary="Балка" secondary="Beams" />
+              <H primary="Қатор" secondary="Block rows" />
+              <H primary="Жами ғишт" secondary="Total blocks" />
+              <H primary="Йиғма Б." secondary="Slab length" />
+              <H primary="Майдон" secondary="Slab area" className="grid-group-divider" />
 
               {/* ── Pricing ── */}
-              <H primary="m² rate" tip="UZS per m² of billed area, by beam length tier" className="bg-emerald-50/40" />
-              <H primary="Subtotal" secondary="UZS" align="right" className="bg-emerald-50/40" />
+              <H primary="м² нархи" secondary="Per m² rate" tip="UZS per m² of billed area, by beam length tier" className="bg-emerald-50/40" />
+              <H primary="Сумма" secondary="Subtotal · UZS" className="bg-emerald-50/40" />
               <th className="w-9 bg-emerald-50/40"></th>
             </tr>
           </thead>
@@ -252,37 +252,37 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     </label>
                   </td>
 
-                  {/* Computed */}
-                  <td className="grid-cell px-2 text-right tabular-nums text-emerald-700 font-semibold">
+                  {/* Computed — all centered to align with their headers */}
+                  <td className="grid-cell px-2 text-center tabular-nums text-emerald-700 font-semibold">
                     {r ? fmt(r.beam_length) : "—"}
                   </td>
-                  <td className="grid-cell px-2 text-right tabular-nums text-muted-foreground">
+                  <td className="grid-cell px-2 text-center tabular-nums text-muted-foreground">
                     {r ? r.pitches : "—"}
                   </td>
-                  <td className="grid-cell px-2 text-right tabular-nums">
+                  <td className="grid-cell px-2 text-center tabular-nums">
                     {r?.blocks_per_row ?? "—"}
                   </td>
-                  <td className="grid-cell px-2 text-right tabular-nums font-semibold">
+                  <td className="grid-cell px-2 text-center tabular-nums font-semibold">
                     {r?.beam_count ?? "—"}
                   </td>
-                  <td className="grid-cell px-2 text-right tabular-nums">
+                  <td className="grid-cell px-2 text-center tabular-nums">
                     {r?.block_rows ?? "—"}
                   </td>
-                  <td className="grid-cell px-2 text-right tabular-nums text-orange-700 font-semibold">
+                  <td className="grid-cell px-2 text-center tabular-nums text-orange-700 font-semibold">
                     {r?.total_blocks ?? "—"}
                   </td>
-                  <td className="grid-cell px-2 text-right tabular-nums text-xs text-blue-700">
+                  <td className="grid-cell px-2 text-center tabular-nums text-xs text-blue-700">
                     {r ? `${fmt(r.monolith_length)} m` : "—"}
                   </td>
-                  <td className="grid-cell px-2 text-right tabular-nums text-xs text-blue-700 grid-group-divider">
+                  <td className="grid-cell px-2 text-center tabular-nums text-xs text-blue-700 grid-group-divider">
                     {r ? `${fmt(r.monolith_area)} m²` : "—"}
                   </td>
 
                   {/* Pricing */}
-                  <td className="grid-cell px-2 text-right tabular-nums text-xs grid-tint-pricing">
+                  <td className="grid-cell px-2 text-center tabular-nums text-xs grid-tint-pricing">
                     {r ? fmt(r.m2_price, 0) : "—"}
                   </td>
-                  <td className="grid-cell px-2 text-right tabular-nums font-bold text-emerald-800 grid-tint-pricing">
+                  <td className="grid-cell px-2 text-center tabular-nums font-bold text-emerald-800 grid-tint-pricing">
                     {r ? fmt(r.subtotal, 0) : "—"}
                   </td>
                   <td className="grid-cell text-center grid-tint-pricing">
@@ -315,21 +315,36 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
 
           {rows.length > 0 && (
             <tfoot>
+              {/*
+                Column layout (19 cols):
+                  1 Name | 2 W | 3 L | 4 Bear | 5 Corr | 6 Pattern | 7 +B | 8 StartB
+                  | 9 BeamL | 10 Pitches | 11 Blks/row | 12 Beams | 13 Block rows
+                  | 14 Total blks | 15 Slab L | 16 Slab area | 17 m² rate
+                  | 18 Subtotal | 19 (delete)
+              */}
               <tr className="bg-muted/40 font-bold">
-                <td colSpan={10} className="px-3 text-right uppercase text-[11px] tracking-wider text-muted-foreground">
-                  Totals · Жами
+                <td colSpan={11} className="px-3 text-right uppercase text-[11px] tracking-wider text-muted-foreground">
+                  Жами · Totals
                 </td>
-                <td className="text-right px-2 tabular-nums">{totals.beams}</td>
+                {/* col 12: Beams */}
+                <td className="text-center px-2 tabular-nums">{totals.beams}</td>
+                {/* col 13: Block rows */}
                 <td></td>
-                <td className="text-right px-2 tabular-nums text-orange-700">{totals.blocks}</td>
+                {/* col 14: Total blocks */}
+                <td className="text-center px-2 tabular-nums text-orange-700">{totals.blocks}</td>
+                {/* col 15: Slab L */}
                 <td></td>
-                <td className="text-right px-2 tabular-nums text-xs text-blue-700">
+                {/* col 16: Slab area */}
+                <td className="text-center px-2 tabular-nums text-xs text-blue-700">
                   {formatNumber(totals.monolithArea, 2)} m²
                 </td>
+                {/* col 17: m² rate */}
                 <td></td>
-                <td className="text-right px-2 tabular-nums text-emerald-800">
+                {/* col 18: Subtotal */}
+                <td className="text-center px-2 tabular-nums text-emerald-800">
                   {formatNumber(totals.projTotal.rooms_subtotal, 0)}
                 </td>
+                {/* col 19: delete */}
                 <td></td>
               </tr>
             </tfoot>
@@ -348,17 +363,17 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
           {/* Discount + grand total */}
           <div className="rounded-lg border bg-background p-4 shadow-sm">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-              Grand Total · Сўнгги нархи
+              Сўнгги нархи · Grand Total
             </h3>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Rooms subtotal</span>
+                <span className="text-muted-foreground">Жами хоналар · Rooms subtotal</span>
                 <span className="font-semibold tabular-nums">
                   {formatNumber(totals.projTotal.rooms_subtotal, 0)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Discount %</span>
+                <span className="text-muted-foreground">Чегирма % · Discount</span>
                 <div className="relative">
                   <input
                     type="number"
@@ -378,14 +393,14 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
               </div>
               {discountPercent > 0 && (
                 <div className="flex justify-between text-rose-700">
-                  <span className="text-muted-foreground">Discount amount</span>
+                  <span className="text-muted-foreground">Чегирма суммаси · Discount amount</span>
                   <span className="tabular-nums">
                     − {formatNumber(totals.projTotal.discount_amount, 0)}
                   </span>
                 </div>
               )}
               <div className="flex items-baseline justify-between border-t pt-2.5 mt-2">
-                <span className="font-bold">Total</span>
+                <span className="font-bold">Сумма · Total</span>
                 <span className="font-black text-emerald-700 text-xl tabular-nums">
                   {formatNumber(totals.projTotal.total, 0)}
                   <span className="text-xs font-normal text-muted-foreground ml-1">UZS</span>
@@ -394,10 +409,10 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
             </div>
           </div>
 
-          {/* Beam schedule */}
+          {/* Production list — beams (by length) AND total blocks together */}
           <div className="rounded-lg border bg-background p-4 shadow-sm">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-              Beam Schedule · Балкалар
+              Балка + Ғишт · Production list
             </h3>
             <div className="space-y-1.5">
               {schedule.map(([len, qty]) => (
@@ -405,8 +420,10 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                   key={len}
                   className="flex justify-between items-center bg-muted/30 rounded px-3 py-1.5 text-sm"
                 >
-                  <span className="font-semibold tabular-nums">{len} m</span>
-                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold">
+                  <span className="font-semibold tabular-nums">
+                    Балка <span className="text-muted-foreground font-normal">·</span> {len} m
+                  </span>
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold tabular-nums">
                     {qty} pcs
                   </span>
                 </div>
@@ -414,27 +431,33 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
               {schedule.length === 0 && (
                 <div className="text-xs text-muted-foreground italic">No beams yet.</div>
               )}
+              {totals.blocks > 0 && (
+                <div className="flex justify-between items-center bg-orange-50/60 rounded px-3 py-1.5 text-sm border-t-2 border-orange-200/60 mt-2">
+                  <span className="font-semibold">
+                    Ғишт <span className="text-muted-foreground font-normal">· total blocks</span>
+                  </span>
+                  <span className="text-xs bg-orange-500/15 text-orange-800 px-2 py-0.5 rounded font-semibold tabular-nums">
+                    {totals.blocks} pcs
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Materials */}
+          {/* Materials — concrete + area only (counts moved into the production list) */}
           <div className="rounded-lg border bg-background p-4 shadow-sm">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-              Materials · Материаллар
+              Материаллар · Materials
             </h3>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Total blocks</span>
-                <span className="font-semibold tabular-nums">{totals.blocks}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Concrete topping</span>
+                <span className="text-muted-foreground">Бетон қатлами · Concrete topping</span>
                 <span className="font-semibold tabular-nums text-emerald-700">
                   {totals.concrete.toFixed(2)} m³
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Slab area</span>
+                <span className="text-muted-foreground">Йиғма майдон · Slab area</span>
                 <span className="font-semibold tabular-nums">
                   {formatNumber(totals.monolithArea, 2)} m²
                 </span>

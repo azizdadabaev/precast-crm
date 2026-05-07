@@ -91,7 +91,7 @@
 }
 
 .grid-input.is-numeric {
-  @apply text-right;
+  @apply text-center;
 }
 .grid-input.is-text {
   @apply text-left font-medium;
