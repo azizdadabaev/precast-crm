@@ -82,10 +82,11 @@
 
 .grid-input,
 .grid-select {
-  @apply block h-8 w-full bg-transparent border-0 px-2 text-sm
+  @apply block h-8 w-full bg-transparent border-0 px-1.5 text-sm
          outline-none focus:outline-none
          focus:bg-amber-50/60 focus:ring-1 focus:ring-inset focus:ring-primary/50
          transition-colors;
+  min-width: 0; /* let the cell define the width, not the input's intrinsic size */
   /* Tabular numerics for consistent digit columns */
   font-variant-numeric: tabular-nums;
 }
@@ -124,12 +125,13 @@
 .grid-tint-computed { @apply bg-transparent; }
 .grid-tint-pricing  { @apply bg-emerald-50/40; }
 
-/* The grid table itself */
+/* The grid table itself — fixed layout so colgroup widths are honored exactly */
 .calc-grid {
-  @apply w-full border-collapse text-sm;
+  @apply w-auto border-collapse text-sm;
+  table-layout: fixed;
 }
 .calc-grid thead th {
-  @apply px-2 py-2.5 text-[11px] font-semibold uppercase tracking-wider
+  @apply px-1.5 py-2.5 text-[11px] font-semibold uppercase tracking-wider
          text-muted-foreground border-b border-border bg-muted/30
          border-r border-border/40 last:border-r-0;
 }
@@ -140,7 +142,7 @@
   @apply bg-muted/[0.04];
 }
 .calc-grid tfoot td {
-  @apply px-2 py-2.5 border-t-2 border-border;
+  @apply px-1.5 py-2.5 border-t-2 border-border;
 }
 
 /* Subtle group separator (a heavier vertical line between input/pattern/etc.) */

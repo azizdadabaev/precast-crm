@@ -127,34 +127,57 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
     <div className="space-y-5">
       <div className="rounded-lg border border-border overflow-x-auto bg-background shadow-sm">
         <table className="calc-grid">
+          {/* Explicit column widths — table-layout: fixed honors these exactly */}
+          <colgroup>
+            <col width={108} />  {/* Хона          */}
+            <col width={56} />   {/* Эни           */}
+            <col width={56} />   {/* Бўйи          */}
+            <col width={62} />   {/* Миниш         */}
+            <col width={62} />   {/* Корр.         */}
+            <col width={104} />  {/* Шаблон        */}
+            <col width={48} />   {/* +Б            */}
+            <col width={56} />   {/* Бош Б.        */}
+            <col width={62} />   {/* Б.уз.         */}
+            <col width={56} />   {/* Қадам         */}
+            <col width={56} />   {/* 1 қат.        */}
+            <col width={56} />   {/* Балка         */}
+            <col width={56} />   {/* Қатор         */}
+            <col width={64} />   {/* Жами ғишт     */}
+            <col width={70} />   {/* Йиғма Б.      */}
+            <col width={78} />   {/* Майдон        */}
+            <col width={68} />   {/* м² нархи      */}
+            <col width={96} />   {/* Сумма         */}
+            <col width={36} />   {/* delete        */}
+          </colgroup>
+
           <thead>
             <tr>
-              {/* ── Inputs group ── */}
+              {/* ── Inputs ── */}
               <H primary="Хона" secondary="Name" align="left" className="bg-amber-50/40" />
-              <H primary="Эни" secondary="W · width" tip="Inner width — clear inside-wall to inside-wall (m)" className="bg-amber-50/40" />
-              <H primary="Бўйи" secondary="L · length" tip="Inner length (m)" className="bg-amber-50/40" />
+              <H primary="Эни" secondary="Width" tip="Inner width — clear inside-wall to inside-wall (m)" className="bg-amber-50/40" />
+              <H primary="Бўйи" secondary="Length" tip="Inner length (m)" className="bg-amber-50/40" />
               <H primary="Миниш" secondary="Bearing" tip="Beam bearing onto each wall (m). Default 0.15" className="bg-amber-50/40" />
               <H primary="Корр." secondary="Correction" tip="Correction added to L before pitch math (m). Use to nudge auto-pattern." className="bg-amber-50/40 grid-group-divider" />
 
-              {/* ── Pattern controls ── */}
+              {/* ── Pattern ── */}
               <H primary="Шаблон" secondary="Pattern" className="bg-sky-50/40" />
-              <H primary="+Б" secondary="Extra beams" tip="Manual extra beams. First one absorbs into pattern when GBG." className="bg-sky-50/40" />
-              <H primary="Бош Б." secondary="Start beam" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="bg-sky-50/40 grid-group-divider" />
+              <H primary="+Б" secondary="Extra" tip="Manual extra beams. First one absorbs into pattern when Г-Б-Г." className="bg-sky-50/40" />
+              <H primary="Бош Б." secondary="Start" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="bg-sky-50/40 grid-group-divider" />
 
               {/* ── Computed ── */}
-              <H primary="Б.уз." secondary="Beam length" />
-              <H primary="Қадам" secondary="Pitches · N" />
-              <H primary="1 қат." secondary="Blocks/row" />
+              <H primary="Б.уз." secondary="Beam L" />
+              <H primary="Қадам" secondary="Pitches" />
+              <H primary="1 қат." secondary="Per row" />
               <H primary="Балка" secondary="Beams" />
-              <H primary="Қатор" secondary="Block rows" />
-              <H primary="Жами ғишт" secondary="Total blocks" />
-              <H primary="Йиғма Б." secondary="Slab length" />
+              <H primary="Қатор" secondary="Rows" />
+              <H primary="Жами" secondary="Blocks" />
+              <H primary="Йиғма Б." secondary="Slab L" />
               <H primary="Майдон" secondary="Slab area" className="grid-group-divider" />
 
               {/* ── Pricing ── */}
-              <H primary="м² нархи" secondary="Per m² rate" tip="UZS per m² of billed area, by beam length tier" className="bg-emerald-50/40" />
-              <H primary="Сумма" secondary="Subtotal · UZS" className="bg-emerald-50/40" />
-              <th className="w-9 bg-emerald-50/40"></th>
+              <H primary="м² нархи" secondary="Rate" tip="UZS per m² of billed area, by beam length tier" className="bg-emerald-50/40" />
+              <H primary="Сумма" secondary="Subtotal" className="bg-emerald-50/40" />
+              <th className="bg-emerald-50/40"></th>
             </tr>
           </thead>
 
@@ -212,19 +235,30 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     />
                   </td>
 
-                  {/* Pattern controls */}
+                  {/* Pattern controls — resolved pattern always shown first
+                      so even if truncated, the part the site crew uses stays visible */}
                   <td className="grid-cell grid-tint-pattern">
                     <select
-                      className="grid-select"
+                      className="grid-select font-semibold text-sky-900"
                       value={row.patternOverride}
                       onChange={(e) =>
                         updateRow(row.id, { patternOverride: e.target.value as Pattern | "AUTO" })
                       }
                     >
-                      <option value="AUTO">Auto{r ? ` · ${PATTERN_LABEL[r.pattern_auto]}` : ""}</option>
-                      <option value="GB">Г-Б</option>
+                      <option value="AUTO">
+                        {r ? `${PATTERN_LABEL[r.pattern]} · auto` : "Auto"}
+                      </option>
+                      <option value="GB">
+                        {r && r.pattern === "BGB" && row.forceStartBeam
+                          ? "Г-Б → Б-Г-Б"
+                          : "Г-Б"}
+                      </option>
                       <option value="BGB">Б-Г-Б</option>
-                      <option value="GBG">Г-Б-Г</option>
+                      <option value="GBG">
+                        {r && r.pattern === "GB" && row.patternOverride === "GBG"
+                          ? "Г-Б-Г → Г-Б"
+                          : "Г-Б-Г"}
+                      </option>
                     </select>
                   </td>
                   <td className="grid-cell grid-tint-pattern">
