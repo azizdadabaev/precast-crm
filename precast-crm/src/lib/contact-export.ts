@@ -5,15 +5,20 @@
  * into WhatsApp / Telegram. The format is paste-friendly by design:
  *
  *   Client Name
- *   +998 90 111 22 33
+ *   +998901112233
  *   Address line
  *
  *   Next Client
- *   +998 93 555 44 66
+ *   +998935554466
  *   (address not on file)
  *
  * Rules (enforced by tests in tests/contact-export.test.ts):
- *   - Phone is rendered via `formatPhone` (digits-only DB → "+998 XX XXX XX XX").
+ *   - Phone is rendered via `formatPhoneCompact` (digits-only DB →
+ *     "+998901112233"). The unspaced form is what WhatsApp / Telegram
+ *     auto-detect as a clickable phone link, so the operator can paste
+ *     and the recipient can tap-to-call. Other UI surfaces (clients
+ *     table, order detail, etc.) still use the spaced format for
+ *     human readability.
  *   - Missing/empty address renders the literal string "(address not on file)"
  *     so the operator knows to ask. Whitespace-only addresses are treated
  *     as missing.
@@ -25,7 +30,7 @@
  * No DOM, no fetch, no Prisma. Use it client-side AND server-side.
  */
 
-import { formatPhone } from "./phone";
+import { formatPhoneCompact } from "./phone";
 
 export interface ClientForExport {
   name: string;
@@ -40,7 +45,7 @@ export function formatContactsForExport(clients: ClientForExport[]): string {
 
   const blocks = clients.map((c) => {
     const addr = c.address && c.address.trim() ? c.address : NO_ADDRESS;
-    const block = [c.name, formatPhone(c.phone), addr].join("\n");
+    const block = [c.name, formatPhoneCompact(c.phone), addr].join("\n");
     // Trim trailing whitespace per block (but keep internal whitespace).
     return block.replace(/[ \t]+$/gm, "");
   });

@@ -54,6 +54,21 @@ export function formatPhone(stored: string | null | undefined): string {
 }
 
 /**
+ * Compact format — the same number with no spaces, just the leading "+":
+ * "998901112233" → "+998901112233"
+ *
+ * Use this where the number will be pasted into a messenger that
+ * auto-detects clickable phone links (WhatsApp, Telegram). The
+ * unspaced form is the most reliable trigger for those detectors.
+ */
+export function formatPhoneCompact(stored: string | null | undefined): string {
+  const d = digitsOnly(stored);
+  if (!d) return "";
+  if (d.length === 12 && d.startsWith("998")) return `+${d}`;
+  return d;
+}
+
+/**
  * Match-friendly forms of a phone for searching by partial digits.
  * Returns an array of canonicalised digit strings to substring-match against.
  *

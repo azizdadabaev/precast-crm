@@ -3,6 +3,7 @@ import {
   digitsOnly,
   normalizePhone,
   formatPhone,
+  formatPhoneCompact,
   phoneMatches,
   phoneMatchForms,
 } from "../src/lib/phone";
@@ -41,6 +42,22 @@ describe("formatPhone", () => {
   });
   it("returns digits unchanged when not UZ-shaped", () => {
     expect(formatPhone("12345")).toBe("12345");
+  });
+});
+
+describe("formatPhoneCompact", () => {
+  it("returns the +998-prefixed digits with no spaces", () => {
+    expect(formatPhoneCompact("998901112233")).toBe("+998901112233");
+  });
+  it("strips formatting noise from the input first", () => {
+    expect(formatPhoneCompact("+998 (90) 111-22-33")).toBe("+998901112233");
+  });
+  it("returns empty for null/empty", () => {
+    expect(formatPhoneCompact(null)).toBe("");
+    expect(formatPhoneCompact("")).toBe("");
+  });
+  it("returns digits unchanged when not UZ-shaped", () => {
+    expect(formatPhoneCompact("12345")).toBe("12345");
   });
 });
 

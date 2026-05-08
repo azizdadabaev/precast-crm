@@ -15,7 +15,7 @@ describe("formatContactsForExport — pure formatter", () => {
       },
     ]);
     expect(out).toBe(
-      "Aliyev Construction\n+998 90 111 22 33\nTashkent, Yashnobod district",
+      "Aliyev Construction\n+998901112233\nTashkent, Yashnobod district",
     );
     expect(out.endsWith("\n")).toBe(false);
   });
@@ -34,10 +34,10 @@ describe("formatContactsForExport — pure formatter", () => {
     expect(/\s+$/.test(out)).toBe(false);
   });
 
-  it("formats every phone with the +998 XX XXX XX XX pattern", () => {
+  it("formats every phone with the unspaced +998NNNNNNNNN pattern (messenger-friendly)", () => {
     // DB-stored phones are always normalized (12 digits, starts with 998).
-    // The export formatter just applies the display mask — normalization
-    // already happened at write-time in the API layer.
+    // The export uses the COMPACT form (no spaces) so WhatsApp / Telegram
+    // auto-detect it as a clickable phone link.
     const out = formatContactsForExport([
       { name: "A", phone: "998901112233", address: "x" },
       { name: "B", phone: "998935554466", address: "x" },
@@ -46,7 +46,7 @@ describe("formatContactsForExport — pure formatter", () => {
     const phoneLines = out.split("\n").filter((l) => l.startsWith("+998"));
     expect(phoneLines).toHaveLength(3);
     for (const line of phoneLines) {
-      expect(line).toMatch(/^\+998 \d{2} \d{3} \d{2} \d{2}$/);
+      expect(line).toMatch(/^\+998\d{9}$/);
     }
   });
 
@@ -99,15 +99,15 @@ describe("formatContactsForExport — pure formatter", () => {
     expect(out).toBe(
       [
         "Aliyev Construction",
-        "+998 90 111 22 33",
+        "+998901112233",
         "Tashkent, Yashnobod district",
         "",
         "Karimov LLC",
-        "+998 93 555 44 66",
+        "+998935554466",
         "Samarkand, Registan st. 12",
         "",
         "BuildPro Group",
-        "+998 77 123 45 67",
+        "+998771234567",
         "(address not on file)",
       ].join("\n"),
     );
