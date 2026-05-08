@@ -56,11 +56,17 @@ interface OrderDetail {
     calculations: Array<{
       id: string;
       name: string | null;
+      innerWidth: string;
+      innerLength: string;
       pattern: "GB" | "BGB" | "GBG";
+      patternAuto: "GB" | "BGB" | "GBG";
       beamLength: string;
+      blocksPerRow: number;
       beamCount: number;
       totalBlocks: number;
+      monolithLength: string;
       monolithArea: string;
+      m2Price: string;
       subtotal: string;
     }>;
   };
@@ -109,6 +115,12 @@ const STATUS_FLOW: Array<{ key: OrderDetail["status"]; label: string; icon: Reac
   { key: "DISPATCHED",    label: "Dispatched",    icon: CreditCard }, // truck icon used elsewhere; CreditCard placeholder
   { key: "DELIVERED",     label: "Delivered",     icon: Truck },
 ];
+
+const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
+  GB: "Г-Б",
+  BGB: "Б-Г-Б",
+  GBG: "Г-Б-Г",
+};
 
 const PAYMENT_STATE_BADGE: Record<OrderDetail["paymentState"], { label: string; cls: string }> = {
   AWAITING_PAYMENT: { label: "Awaiting payment", cls: "bg-amber-100 text-amber-800" },
@@ -178,7 +190,7 @@ export default function OrderDetailPage() {
 
   const markDriverReturned = useMutation({
     mutationFn: (dispatchId: string) =>
-      api(`/api/dispatches/${dispatchId}/return`, { method: "POST" }),
+      api(`/api/dispatches/${dispatchId}/return`, { method: "PATCH" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["order", params.id] }),
     onError: (e: Error) => setError(e.message),
   });
@@ -200,6 +212,19 @@ export default function OrderDetailPage() {
 
   const isCanceled = order.status === "CANCELED";
   const currentIdx = STATUS_FLOW.findIndex((s) => s.key === order.status);
+
+  const calcTotals = order.project.calculations.reduce(
+    (acc, c) => ({
+      blocks: acc.blocks + c.totalBlocks,
+      beams: acc.beams + c.beamCount,
+      monolithArea: acc.monolithArea + Number(c.monolithArea),
+    }),
+    { blocks: 0, beams: 0, monolithArea: 0 },
+  );
+  const totalNum = Number(order.totalPrice);
+  const paidNum = Number(order.confirmedPaid);
+  const remainingNum = Math.max(0, totalNum - paidNum);
+  const fullyPaid = paidNum > 0 && remainingNum === 0;
 
   return (
     <div className="space-y-5">
@@ -247,6 +272,25 @@ export default function OrderDetailPage() {
               {" · "}
               <span className="tabular-nums">{formatPhone(order.client.phone)}</span>
               {order.client.address && <> · {order.client.address}</>}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                Schedule
+              </div>
+              <div className="inline-flex items-center gap-1.5 font-semibold">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="tabular-nums">
+                  {new Date(order.scheduledAt).toLocaleDateString("en-GB", {
+                    weekday: "short",
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                Placed {formatDate(order.placedAt)}
+              </span>
             </div>
           </div>
           <div className="text-right min-w-[16rem]">
@@ -307,6 +351,146 @@ export default function OrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Calculation summary — per-room breakdown + financial recap */}
+      {order.project.calculations.length > 0 && (
+        <div className="rounded-lg border bg-background overflow-hidden shadow-sm">
+          <div className="px-4 py-3 border-b">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Ҳисоб-китоб · Calculation Summary (Rooms)
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
+                <tr>
+                  <th className="px-3 py-2 border-b text-left bg-yellow-50">Name</th>
+                  <th className="px-3 py-2 border-b text-center bg-yellow-50">W</th>
+                  <th className="px-3 py-2 border-b text-center bg-yellow-50">L</th>
+                  <th className="px-3 py-2 border-b text-center bg-blue-50">Pattern</th>
+                  <th className="px-3 py-2 border-b text-center bg-green-50">Beam Len</th>
+                  <th className="px-3 py-2 border-b text-center">Blks/Row</th>
+                  <th className="px-3 py-2 border-b text-center bg-orange-50">Total Blks</th>
+                  <th className="px-3 py-2 border-b text-center bg-gray-100">Beams</th>
+                  <th className="px-3 py-2 border-b text-center">Slab L</th>
+                  <th className="px-3 py-2 border-b text-center">Area</th>
+                  <th className="px-3 py-2 border-b text-center bg-green-50">m² Rate</th>
+                  <th className="px-3 py-2 border-b text-right">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {order.project.calculations.map((c) => (
+                  <tr key={c.id} className="hover:bg-muted/10 transition-colors">
+                    <td className="px-3 py-2 font-medium bg-yellow-50/20">
+                      {c.name || "Unnamed Room"}
+                    </td>
+                    <td className="px-3 py-2 text-center bg-yellow-50/20 tabular-nums">
+                      {formatNumber(c.innerWidth, 2)}
+                    </td>
+                    <td className="px-3 py-2 text-center bg-yellow-50/20 tabular-nums">
+                      {formatNumber(c.innerLength, 2)}
+                    </td>
+                    <td className="px-3 py-2 text-center text-xs font-medium bg-blue-50/30">
+                      {PATTERN_LABEL[c.pattern]}
+                      {c.pattern !== c.patternAuto && (
+                        <span className="text-muted-foreground"> (auto: {PATTERN_LABEL[c.patternAuto]})</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800 tabular-nums">
+                      {formatNumber(c.beamLength, 2)}
+                    </td>
+                    <td className="px-3 py-2 text-center tabular-nums">{c.blocksPerRow}</td>
+                    <td className="px-3 py-2 text-center font-black bg-orange-50/20 text-orange-800 tabular-nums">
+                      {c.totalBlocks}
+                    </td>
+                    <td className="px-3 py-2 text-center font-black bg-gray-100/50 tabular-nums">
+                      {c.beamCount}
+                    </td>
+                    <td className="px-3 py-2 text-center text-xs tabular-nums">
+                      {formatNumber(c.monolithLength, 2)} m
+                    </td>
+                    <td className="px-3 py-2 text-center text-xs tabular-nums">
+                      {formatNumber(c.monolithArea, 2)} m²
+                    </td>
+                    <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800 tabular-nums">
+                      {formatNumber(c.m2Price, 0)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-black text-green-700 tabular-nums">
+                      {formatNumber(c.subtotal, 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-muted/20 font-black border-t-2 border-primary/10">
+                <tr>
+                  <td className="px-3 py-3 text-right" colSpan={6}>
+                    TOTALS (ЖАМИ):
+                  </td>
+                  <td className="px-3 py-3 text-center text-orange-800 bg-orange-50/50 tabular-nums">
+                    {calcTotals.blocks}
+                  </td>
+                  <td className="px-3 py-3 text-center bg-gray-100 tabular-nums">
+                    {calcTotals.beams}
+                  </td>
+                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3 text-center text-xs tabular-nums">
+                    {formatNumber(calcTotals.monolithArea, 2)} m²
+                  </td>
+                  <td
+                    className="px-3 py-3 text-right text-green-800 bg-green-50/50 text-lg tabular-nums"
+                    colSpan={2}
+                  >
+                    {formatNumber(order.roomsSubtotal, 0)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Financial recap — Total Sum / Paid / Remaining */}
+          <div className="border-t bg-muted/10 px-4 py-3">
+            <div className="flex flex-wrap items-end justify-end gap-x-10 gap-y-3">
+              <div className="text-right min-w-[7rem]">
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                  Жами · Total Sum
+                </div>
+                <div className="text-xl font-black tabular-nums text-emerald-700">
+                  {formatNumber(order.totalPrice, 0)}
+                  <span className="text-[10px] text-muted-foreground font-normal ml-1">UZS</span>
+                </div>
+              </div>
+              <div className="text-right min-w-[7rem]">
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                  Тўлов · Paid
+                </div>
+                <div
+                  className={`text-xl font-black tabular-nums ${
+                    paidNum > 0 ? "text-emerald-700" : "text-muted-foreground"
+                  }`}
+                >
+                  {formatNumber(paidNum, 0)}
+                </div>
+              </div>
+              <div className="text-right min-w-[7rem]">
+                <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                  Қолди · Remaining
+                </div>
+                <div
+                  className={`text-xl font-black tabular-nums ${
+                    fullyPaid
+                      ? "text-emerald-700"
+                      : remainingNum > 0
+                        ? "text-amber-700"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {fullyPaid ? "Тўланган" : formatNumber(remainingNum, 0)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
@@ -391,62 +575,6 @@ export default function OrderDetailPage() {
           )}
         </div>
       )}
-
-      {/* Schedule + breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-lg border bg-background p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
-            Schedule
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold">
-              {new Date(order.scheduledAt).toLocaleDateString("en-GB", {
-                weekday: "short",
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-          </div>
-          <div className="mt-2 text-xs text-muted-foreground">
-            Placed {formatDate(order.placedAt)}
-          </div>
-        </div>
-
-        <div className="rounded-lg border bg-background p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
-            Materials
-          </div>
-          <div className="space-y-1 text-sm">
-            <Row label="Slab area" value={`${formatNumber(order.totalArea, 2)} m²`} />
-            <Row label="Total beams" value={order.totalBeams} />
-            <Row label="Total blocks" value={order.totalBlocks} />
-          </div>
-        </div>
-
-        <div className="rounded-lg border bg-background p-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
-            Pricing breakdown
-          </div>
-          <div className="space-y-1 text-sm">
-            <Row label="Rooms subtotal" value={formatNumber(order.roomsSubtotal, 0)} />
-            {Number(order.discountPercent) > 0 && (
-              <Row
-                label={`Discount ${formatNumber(order.discountPercent, 1)}%`}
-                value={`− ${formatNumber(order.discountAmount, 0)}`}
-                rose
-              />
-            )}
-            {Number(order.deliveryCost) > 0 && (
-              <Row label="Delivery" value={formatNumber(order.deliveryCost, 0)} />
-            )}
-            {Number(order.otherCost) > 0 && (
-              <Row label="Other" value={formatNumber(order.otherCost, 0)} />
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Dispatch — visible once a driver has been assigned */}
       {order.dispatch && (
@@ -802,23 +930,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  rose,
-}: {
-  label: string;
-  value: string | number;
-  rose?: boolean;
-}) {
-  return (
-    <div className="flex justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`tabular-nums ${rose ? "text-rose-700" : ""}`}>{value}</span>
     </div>
   );
 }
