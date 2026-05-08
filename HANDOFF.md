@@ -228,6 +228,108 @@ model StockMovement        // append-only audit ledger
    note, projected qty preview shows; submitting writes a
    `MANUAL_ADJUSTMENT` movement.
 
+## Contact export (multi-select share) module
+
+Operators frequently need to give a new prospect the contact info of past
+clients in nearby regions, so the prospect can visit a finished slab and
+see how it performs in real life. Today that's a one-click export from
+the Clients page.
+
+### Privacy gate (always enforced)
+
+A client is only includable in an export when their `referenceConsent`
+is `GRANTED`. The state has three values:
+
+```prisma
+enum ReferenceConsent { NOT_ASKED  GRANTED  DENIED }
+```
+
+- **NOT_ASKED** — default for every existing and new client. No export.
+- **GRANTED** — operator explicitly recorded the client's consent. Export OK.
+- **DENIED** — operator recorded a refusal. Treated identically to
+  NOT_ASKED for export purposes; the difference matters only as audit.
+
+The gate is enforced **server-side** in `POST /api/clients/export` —
+even if the UI sends an ID list that includes non-consenting clients,
+the server filters them out before formatting. The dialog warns when
+some IDs were dropped: "2 clients excluded (no consent on file)".
+
+### Format
+
+`lib/contact-export.ts` is the pure formatter. Exact format rules
+(snapshot-tested in `tests/contact-export.test.ts`):
+
+```
+Aliyev Construction
++998 90 111 22 33
+Tashkent, Yashnobod district
+
+Karimov LLC
++998 93 555 44 66
+Samarkand, Registan st. 12
+
+BuildPro Group
++998 77 123 45 67
+(address not on file)
+```
+
+- Phone formatted via `lib/phone.ts` `formatPhone` (`+998 XX XXX XX XX`).
+- Missing/empty/whitespace-only address → literal `(address not on file)`.
+- Blocks separated by exactly one blank line; trailing whitespace stripped.
+- Whitespace WITHIN a name or address is preserved as-is.
+
+### Audit trail
+
+```prisma
+model ExportEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  clientIds  String[]    // Postgres text[]
+  exportedAt DateTime @default(now())
+  user       User     @relation(...)
+}
+```
+
+One row per call to `POST /api/clients/export`. Captures who handed out
+which contacts when. The `userId` FK is verified against the User table
+before insert (defense against stale JWTs after a schema reset — same
+pattern as the cancel route).
+
+### UI surfaces
+
+- `/clients` — leftmost checkbox column. Rows with consent ≠ GRANTED
+  show a disabled checkbox with a `title` of "Розилик берилмаган · No
+  consent on file". A "Select all (filtered)" header checkbox toggles
+  only the visible eligible rows. Selection state lives in a
+  `Set<string>` and is **cleared whenever filters change** (operators
+  re-confirm context after re-querying).
+- Sticky action bar above the table when ≥ 1 row is selected:
+  "Selected: N · Export Contacts · Clear".
+- `ExportDialog` (`components/clients/ExportDialog.tsx`) — fetches
+  the formatted text from the server, shows it in an editable textarea
+  (operators sometimes prune lines), 1-click "Copy to clipboard" with a
+  2-second "✓ Copied" confirmation state.
+- `/clients/[id]` — new "Reference Consent" card. Badge shows current
+  state (green/red/gray); "Update consent" opens `ConsentDialog` with a
+  radio group + optional note. Saves PATCH the client and stamp
+  `consentUpdatedAt`.
+
+### Validation gates
+
+- `ContactExportSchema` caps the IDs array at **50** to prevent
+  accidental "export everyone" via a buggy script.
+- The endpoint **requires authentication**. A stale JWT (user no longer
+  in DB) returns 401 with a "log out and back in" hint.
+
+### What's intentionally out of scope
+
+- No SMS/WhatsApp **sending** — operators paste into their messenger of
+  choice. The text format is the contract; sending is a separate PR.
+- No "Export All" button — every export is an explicit, scoped action.
+- No consent column on the main clients table — internal privacy
+  field, lives only on the detail page.
+- No bulk delete / bulk edit / bulk anything else.
+
 ## What's NOT implemented yet (deferred)
 
 Items 5, 11, 12, 14 from the 14 best-practices list:

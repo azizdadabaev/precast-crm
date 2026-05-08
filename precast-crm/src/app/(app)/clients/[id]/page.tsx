@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -7,18 +8,26 @@ import { api } from "@/lib/fetcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Plus, ShieldCheck, ShieldAlert, ShieldQuestion } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/utils";
+import { formatPhone } from "@/lib/phone";
+import {
+  ConsentDialog,
+  type ConsentValue,
+} from "@/components/clients/ConsentDialog";
 
 interface ClientDetail {
   id: string;
   name: string;
   phone: string;
-  location: string | null;
+  address: string | null;
   language: string;
   source: string | null;
   notes: string | null;
   createdAt: string;
+  referenceConsent: ConsentValue;
+  consentNote: string | null;
+  consentUpdatedAt: string | null;
   deals: Array<{
     id: string;
     stage: string;
@@ -29,9 +38,22 @@ interface ClientDetail {
   }>;
 }
 
+const CONSENT_LABEL: Record<ConsentValue, string> = {
+  GRANTED: "GRANTED · Розилик берилган",
+  DENIED: "DENIED · Розилик берилмаган",
+  NOT_ASKED: "NOT_ASKED · Сўралмаган",
+};
+
+const CONSENT_BADGE: Record<ConsentValue, { cls: string; Icon: React.ComponentType<{ className?: string }> }> = {
+  GRANTED:   { cls: "bg-emerald-100 text-emerald-800 border-emerald-300", Icon: ShieldCheck },
+  DENIED:    { cls: "bg-rose-100 text-rose-800 border-rose-300",          Icon: ShieldAlert },
+  NOT_ASKED: { cls: "bg-muted text-muted-foreground border-border",       Icon: ShieldQuestion },
+};
+
 export default function ClientDetailPage() {
   const params = useParams<{ id: string }>();
   const qc = useQueryClient();
+  const [consentOpen, setConsentOpen] = useState(false);
 
   const { data: client, isLoading } = useQuery<ClientDetail>({
     queryKey: ["client", params.id],
@@ -44,7 +66,16 @@ export default function ClientDetailPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["client", params.id] }),
   });
 
+  const updateConsent = useMutation({
+    mutationFn: (payload: { referenceConsent: ConsentValue; consentNote: string | null }) =>
+      api(`/api/clients/${params.id}`, { method: "PATCH", json: payload }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["client", params.id] }),
+  });
+
   if (isLoading || !client) return <div className="text-muted-foreground">Loading…</div>;
+
+  const consentBadge = CONSENT_BADGE[client.referenceConsent];
+  const ConsentIcon = consentBadge.Icon;
 
   return (
     <div className="space-y-5">
@@ -58,7 +89,9 @@ export default function ClientDetailPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{client.name}</h1>
-          <p className="text-sm text-muted-foreground">{client.phone}</p>
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {formatPhone(client.phone)}
+          </p>
         </div>
         <Button onClick={() => createDeal.mutate()}>
           <Plus className="h-4 w-4 mr-2" /> New Deal
@@ -71,8 +104,8 @@ export default function ClientDetailPage() {
             <CardTitle>Contact</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label="Phone" value={client.phone} />
-            <Row label="Location" value={client.location ?? "—"} />
+            <Row label="Phone" value={formatPhone(client.phone)} />
+            <Row label="Address · Манзил" value={client.address ?? "—"} />
             <Row label="Language" value={client.language} />
             <Row label="Source" value={client.source ?? "—"} />
             <Row label="Created" value={formatDate(client.createdAt)} />
@@ -90,6 +123,47 @@ export default function ClientDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Reference consent card — controls inclusion in contact-export */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle className="flex items-center gap-2">
+            <ConsentIcon className="h-5 w-5" />
+            Reference Consent
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setConsentOpen(true)}
+          >
+            Update consent
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center text-[11px] font-bold uppercase tracking-wider rounded px-2 py-0.5 border ${consentBadge.cls}`}
+            >
+              {CONSENT_LABEL[client.referenceConsent]}
+            </span>
+            {client.consentUpdatedAt && (
+              <span className="text-xs text-muted-foreground">
+                Last updated: {formatDate(client.consentUpdatedAt)}
+              </span>
+            )}
+          </div>
+          {client.consentNote && (
+            <p className="text-sm text-muted-foreground italic">
+              &ldquo;{client.consentNote}&rdquo;
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Controls whether this client is selectable in the export-contacts
+            flow on the Clients list. Operators must record an explicit answer
+            before the client can be shared with prospects.
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -138,6 +212,16 @@ export default function ClientDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <ConsentDialog
+        open={consentOpen}
+        onClose={() => setConsentOpen(false)}
+        initialValue={client.referenceConsent}
+        initialNote={client.consentNote}
+        onSubmit={async (next) => {
+          await updateConsent.mutateAsync(next);
+        }}
+      />
     </div>
   );
 }

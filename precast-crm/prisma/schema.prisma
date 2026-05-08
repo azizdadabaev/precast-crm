@@ -94,6 +94,16 @@ enum StockMovementReason {
   CANCELLATION_RESTOCK
 }
 
+// Privacy gate for the contact-export feature: a client can only be
+// included in an export if their consent state is GRANTED. NOT_ASKED is
+// the default for existing rows and any new client until the operator
+// explicitly records the answer.
+enum ReferenceConsent {
+  NOT_ASKED
+  GRANTED
+  DENIED
+}
+
 // ─────────────────────────────────────────────
 // MODELS
 // ─────────────────────────────────────────────
@@ -111,6 +121,7 @@ model User {
   orderEvents       OrderEvent[]
   productionEntries ProductionEntry[]
   stockMovements    StockMovement[]
+  exportEvents      ExportEvent[]
 
   @@map("users")
 }
@@ -127,12 +138,21 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Reference-export privacy gate: GRANTED means the client agreed to be
+  // listed when an operator exports contacts for a new prospect to visit
+  // their finished slab. NOT_ASKED is the default — operators must
+  // explicitly mark the answer.
+  referenceConsent  ReferenceConsent @default(NOT_ASKED)
+  consentNote       String?
+  consentUpdatedAt  DateTime?
+
   deals    Deal[]
   projects Project[]
   orders   Order[]
 
   @@index([phone])
   @@index([createdAt])
+  @@index([referenceConsent])
   @@map("clients")
 }
 
@@ -337,6 +357,26 @@ model Payment {
   @@index([dealId])
   @@index([status])
   @@map("payments")
+}
+
+// ─────────────────────────────────────────────
+// Audit trail for the contact-export feature.
+// One row per export the operator performs — keeps a permanent record of
+// who handed out which client contacts when, in case of a privacy
+// complaint or compliance review.
+// ─────────────────────────────────────────────
+
+model ExportEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  clientIds  String[] // Postgres text[] of Client.id values
+  exportedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([exportedAt])
+  @@map("export_events")
 }
 
 model AppConfig {

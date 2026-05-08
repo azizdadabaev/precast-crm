@@ -22,9 +22,19 @@ export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string
 
 export const PATCH = handler(async (req: NextRequest, ctx: { params: { id: string } }) => {
   const body = ClientUpdateSchema.parse(await req.json());
+
+  // Stamp consentUpdatedAt whenever the consent state itself moves. We
+  // also stamp it when only the note changes, since a note revision is a
+  // meaningful audit event even when the value didn't flip.
+  const touchedConsent =
+    body.referenceConsent !== undefined || body.consentNote !== undefined;
+
   const client = await prisma.client.update({
     where: { id: ctx.params.id },
-    data: body,
+    data: {
+      ...body,
+      ...(touchedConsent ? { consentUpdatedAt: new Date() } : {}),
+    },
   });
   return ok(client);
 });

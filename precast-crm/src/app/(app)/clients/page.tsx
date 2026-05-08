@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
@@ -18,9 +18,10 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Send, X } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
+import { ExportDialog } from "@/components/clients/ExportDialog";
 
 interface Client {
   id: string;
@@ -29,6 +30,7 @@ interface Client {
   address: string | null;
   language: "UZ" | "RU";
   source: string | null;
+  referenceConsent: "NOT_ASKED" | "GRANTED" | "DENIED";
   createdAt: string;
   _count: { deals: number; orders: number };
 }
@@ -36,6 +38,8 @@ interface Client {
 export default function ClientsPage() {
   const [q, setQ] = useState("");
   const [language, setLanguage] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exportOpen, setExportOpen] = useState(false);
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ["clients", q, language],
@@ -46,6 +50,57 @@ export default function ClientsPage() {
       return api(`/api/clients?${params.toString()}`);
     },
   });
+
+  // Clear selection whenever filters change — operators should re-confirm
+  // context after narrowing/widening the visible list (per spec).
+  useEffect(() => {
+    setSelected(new Set());
+  }, [q, language]);
+
+  const eligibleIds = useMemo(
+    () => clients.filter((c) => c.referenceConsent === "GRANTED").map((c) => c.id),
+    [clients],
+  );
+  const allEligibleSelected =
+    eligibleIds.length > 0 && eligibleIds.every((id) => selected.has(id));
+  const someEligibleSelected =
+    !allEligibleSelected && eligibleIds.some((id) => selected.has(id));
+
+  const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate = someEligibleSelected;
+    }
+  }, [someEligibleSelected]);
+
+  function toggleOne(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAllVisibleEligible() {
+    setSelected((prev) => {
+      if (allEligibleSelected) {
+        // deselect only the eligible ones; preserve any others (none, in
+        // practice, since ineligible can't get into the set)
+        const next = new Set(prev);
+        for (const id of eligibleIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of eligibleIds) next.add(id);
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
+  const selectedIds = useMemo(() => Array.from(selected), [selected]);
+  const selectedCount = selected.size;
 
   return (
     <div className="space-y-5">
@@ -84,6 +139,35 @@ export default function ClientsPage() {
             </Select>
           </div>
 
+          {/* Sticky action bar — appears when at least one row is selected */}
+          {selectedCount > 0 && (
+            <div className="sticky top-0 z-10 -mx-4 px-4 py-2.5 bg-primary text-primary-foreground rounded-t-md flex items-center justify-between shadow-sm">
+              <div className="text-sm">
+                <span className="font-bold tabular-nums">Selected: {selectedCount}</span>{" "}
+                client{selectedCount === 1 ? "" : "s"}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setExportOpen(true)}
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Export Contacts
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-primary-foreground hover:bg-primary-foreground/10"
+                  onClick={clearSelection}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="text-muted-foreground py-8 text-center">Loading…</div>
           ) : clients.length === 0 ? (
@@ -93,6 +177,21 @@ export default function ClientsPage() {
               <table className="excel-table">
                 <thead>
                   <tr>
+                    <th className="w-10 text-center">
+                      <input
+                        ref={headerCheckboxRef}
+                        type="checkbox"
+                        className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        checked={allEligibleSelected}
+                        onChange={toggleAllVisibleEligible}
+                        disabled={eligibleIds.length === 0}
+                        title={
+                          eligibleIds.length === 0
+                            ? "No clients with consent on file in current view"
+                            : "Select all clients with consent on file"
+                        }
+                      />
+                    </th>
                     <th>Исм · Name</th>
                     <th>Тел · Phone</th>
                     <th>Манзил · Address</th>
@@ -103,27 +202,51 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {clients.map((c) => (
-                    <tr key={c.id} className="cursor-pointer">
-                      <td className="font-medium">
-                        <Link href={`/clients/${c.id}`} className="hover:underline">
-                          {c.name}
-                        </Link>
-                      </td>
-                      <td className="tabular-nums">{formatPhone(c.phone)}</td>
-                      <td>{c.address ?? "—"}</td>
-                      <td>
-                        <Badge variant="outline">{c.language}</Badge>
-                      </td>
-                      <td>{c.source ?? "—"}</td>
-                      <td className="text-center tabular-nums">{c._count.orders}</td>
-                      <td className="text-muted-foreground">{formatDate(c.createdAt)}</td>
-                    </tr>
-                  ))}
+                  {clients.map((c) => {
+                    const eligible = c.referenceConsent === "GRANTED";
+                    const checked = selected.has(c.id);
+                    return (
+                      <tr key={c.id}>
+                        <td className="text-center">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                            checked={checked}
+                            disabled={!eligible}
+                            onChange={() => toggleOne(c.id)}
+                            title={
+                              eligible
+                                ? "Toggle selection"
+                                : "Розилик берилмаган · No consent on file"
+                            }
+                          />
+                        </td>
+                        <td className="font-medium">
+                          <Link href={`/clients/${c.id}`} className="hover:underline">
+                            {c.name}
+                          </Link>
+                        </td>
+                        <td className="tabular-nums">{formatPhone(c.phone)}</td>
+                        <td>{c.address ?? "—"}</td>
+                        <td>
+                          <Badge variant="outline">{c.language}</Badge>
+                        </td>
+                        <td>{c.source ?? "—"}</td>
+                        <td className="text-center tabular-nums">{c._count.orders}</td>
+                        <td className="text-muted-foreground">{formatDate(c.createdAt)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
+
+          <ExportDialog
+            open={exportOpen}
+            ids={selectedIds}
+            onClose={() => setExportOpen(false)}
+          />
         </CardContent>
       </Card>
     </div>

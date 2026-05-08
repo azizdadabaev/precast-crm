@@ -50,12 +50,24 @@ async function main() {
   });
 
   // ── Clients (phones stored digits-only for stable dedup) ────
-  const clientsRaw = [
-    { name: "Aliyev Construction", phone: "+998901112233", address: "Tashkent · Yunusobod", language: "UZ" as const, source: "Instagram" },
-    { name: "Karimov LLC",         phone: "+998935554466", address: "Samarkand · Registan",  language: "UZ" as const, source: "Referral" },
-    { name: "BuildPro Group",      phone: "+998771234567", address: "Tashkent · Mirzo-Ulugbek", language: "RU" as const, source: "Walk-in" },
-    { name: "Yusupov & Sons",      phone: "+998909876543", address: "Bukhara · Old town",     language: "UZ" as const, source: "Instagram" },
-    { name: "Stroy-Master",        phone: "+998997778899", address: "Tashkent · Chilanzar",   language: "RU" as const, source: "Referral" },
+  // Three demo clients have GRANTED consent so the contact-export feature
+  // has something to work with on a fresh DB. The remaining two stay at
+  // NOT_ASKED to exercise the disabled-checkbox path on the Clients page.
+  type Consent = "GRANTED" | "DENIED" | "NOT_ASKED";
+  const clientsRaw: Array<{
+    name: string;
+    phone: string;
+    address: string;
+    language: "UZ" | "RU";
+    source: string;
+    referenceConsent: Consent;
+    consentNote?: string;
+  }> = [
+    { name: "Aliyev Construction", phone: "+998901112233", address: "Tashkent · Yunusobod",     language: "UZ", source: "Instagram", referenceConsent: "GRANTED",   consentNote: "OK to share with prospects in Tashkent" },
+    { name: "Karimov LLC",         phone: "+998935554466", address: "Samarkand · Registan",     language: "UZ", source: "Referral",  referenceConsent: "GRANTED",   consentNote: "Confirmed by phone, Apr 2026" },
+    { name: "BuildPro Group",      phone: "+998771234567", address: "Tashkent · Mirzo-Ulugbek", language: "RU", source: "Walk-in",   referenceConsent: "NOT_ASKED" },
+    { name: "Yusupov & Sons",      phone: "+998909876543", address: "Bukhara · Old town",       language: "UZ", source: "Instagram", referenceConsent: "GRANTED",   consentNote: "Visits welcome on weekends" },
+    { name: "Stroy-Master",        phone: "+998997778899", address: "Tashkent · Chilanzar",     language: "RU", source: "Referral",  referenceConsent: "DENIED",    consentNote: "Asked not to be contacted by other prospects" },
   ];
 
   const clients = [];
@@ -64,7 +76,11 @@ async function main() {
     const client = await prisma.client.upsert({
       where: { phone: phoneNorm },
       update: {},
-      create: { ...c, phone: phoneNorm },
+      create: {
+        ...c,
+        phone: phoneNorm,
+        consentUpdatedAt: c.referenceConsent !== "NOT_ASKED" ? new Date() : null,
+      },
     });
     clients.push(client);
   }
