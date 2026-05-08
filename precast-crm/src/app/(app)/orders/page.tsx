@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
+import { paidVariant } from "@/lib/order-display";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 
 interface Order {
@@ -149,21 +150,22 @@ export default function OrdersPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left px-3 py-2">№</th>
+                <th className="text-left px-3 py-2 w-32 whitespace-nowrap">№</th>
                 <th className="text-left px-3 py-2">Мижоз · Client</th>
                 <th className="text-left px-3 py-2">Тел · Phone</th>
                 <th className="text-left px-3 py-2">Манзил · Address</th>
                 <th className="text-right px-3 py-2">Майдон · Area</th>
                 <th className="text-right px-3 py-2">Жами · Total</th>
-                <th className="text-left px-3 py-2">Status</th>
-                <th className="text-left px-3 py-2">Payment</th>
-                <th className="text-left px-3 py-2">Scheduled</th>
+                <th className="text-right px-3 py-2">Тўланган · Paid</th>
+                <th className="text-left px-3 py-2 w-32 whitespace-nowrap">Status</th>
+                <th className="text-left px-3 py-2 w-28 whitespace-nowrap">Payment</th>
+                <th className="text-left px-3 py-2 w-32 whitespace-nowrap">Scheduled</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {filtered.map((o) => (
                 <tr key={o.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-3 py-2 font-bold tabular-nums">
+                  <td className="px-3 py-2 font-bold tabular-nums whitespace-nowrap">
                     <Link href={`/orders/${o.id}`} className="hover:underline">
                       {o.orderNumber}
                     </Link>
@@ -179,21 +181,40 @@ export default function OrdersPage() {
                   <td className="px-3 py-2 text-right tabular-nums font-semibold">
                     {formatNumber(o.totalPrice, 0)}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {(() => {
+                      const v = paidVariant(o.confirmedPaid, o.totalPrice);
+                      if (v === "zero") {
+                        return <span className="text-muted-foreground">—</span>;
+                      }
+                      return (
+                        <span
+                          className={
+                            v === "full"
+                              ? "text-emerald-600 font-semibold"
+                              : "text-foreground"
+                          }
+                        >
+                          {formatNumber(o.confirmedPaid, 0)}
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
                     <span
                       className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${STATUS[o.status].cls}`}
                     >
                       {STATUS[o.status].label}
                     </span>
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 whitespace-nowrap">
                     <span
                       className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATE_BADGE[o.paymentState].cls}`}
                     >
                       {PAYMENT_STATE_BADGE[o.paymentState].label}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-xs">{formatDate(o.scheduledAt)}</td>
+                  <td className="px-3 py-2 text-xs whitespace-nowrap">{formatDate(o.scheduledAt)}</td>
                 </tr>
               ))}
             </tbody>
