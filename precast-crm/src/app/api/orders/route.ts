@@ -97,13 +97,31 @@ export const POST = handler(async (req: NextRequest) => {
           name: body.clientName,
           phone: phoneNorm,
           address: body.clientAddress,
+          // Capture consent at create time. NOT_ASKED is the default if the
+          // operator didn't tick the box.
+          ...(body.clientReferenceConsent
+            ? {
+                referenceConsent: body.clientReferenceConsent,
+                consentUpdatedAt: new Date(),
+              }
+            : {}),
         },
       });
     } else {
       // Update name/address if they changed (operator may have a more current address)
-      const updates: Record<string, string> = {};
+      const updates: Record<string, unknown> = {};
       if (client.name !== body.clientName) updates.name = body.clientName;
       if (client.address !== body.clientAddress) updates.address = body.clientAddress;
+      // Only UPGRADE consent from this endpoint — null leaves the field
+      // alone, and an existing GRANTED is never overwritten by a missing
+      // body. To revoke / set DENIED, operators use the client detail page.
+      if (
+        body.clientReferenceConsent &&
+        body.clientReferenceConsent !== client.referenceConsent
+      ) {
+        updates.referenceConsent = body.clientReferenceConsent;
+        updates.consentUpdatedAt = new Date();
+      }
       if (Object.keys(updates).length) {
         client = await tx.client.update({ where: { id: client.id }, data: updates });
       }

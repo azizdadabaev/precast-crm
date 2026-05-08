@@ -28,7 +28,12 @@ function CalculationsInner() {
   const router = useRouter();
   const search = useSearchParams();
 
-  const [client, setClient] = useState<ClientDraft>({ name: "", phone: "", address: "" });
+  const [client, setClient] = useState<ClientDraft>({
+    name: "",
+    phone: "",
+    address: "",
+    consentGranted: false,
+  });
   const [matchedClientId, setMatchedClientId] = useState<string | null>(null);
   const [rows, setRows] = useState<SlabRow[]>([]);
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -85,7 +90,13 @@ function CalculationsInner() {
         tentativeClientName: string | null;
         tentativeClientPhone: string | null;
         tentativeClientAddress: string | null;
-        client: { id: string; name: string; phone: string; address: string | null } | null;
+        client: {
+          id: string;
+          name: string;
+          phone: string;
+          address: string | null;
+          referenceConsent: "NOT_ASKED" | "GRANTED" | "DENIED";
+        } | null;
         calculations: Array<{
           id: string;
           name: string | null;
@@ -105,6 +116,7 @@ function CalculationsInner() {
         name: p.client?.name ?? p.tentativeClientName ?? "",
         phone: p.client?.phone ?? p.tentativeClientPhone ?? "",
         address: p.client?.address ?? p.tentativeClientAddress ?? "",
+        consentGranted: p.client?.referenceConsent === "GRANTED",
       });
       setMatchedClientId(p.client?.id ?? null);
       // Compute results immediately so the table is fully populated when the
@@ -173,6 +185,9 @@ function CalculationsInner() {
           clientName: client.name || null,
           clientPhone: client.phone,
           clientAddress: client.address || null,
+          // Only send when the operator actually checked the box. The server
+          // never downgrades from GRANTED — leaving it null is a no-op.
+          clientReferenceConsent: client.consentGranted ? "GRANTED" : null,
           shapeType: "RECTANGULAR",
           rooms: validRooms.map((r) => ({
             name: r.name,
@@ -203,6 +218,9 @@ function CalculationsInner() {
           clientName: client.name,
           clientPhone: client.phone,
           clientAddress: client.address,
+          // Only send when the operator actually checked the box. The server
+          // never downgrades — null leaves any existing consent intact.
+          clientReferenceConsent: client.consentGranted ? "GRANTED" : null,
           shapeType: "RECTANGULAR",
           rooms: validRooms.map((r) => ({
             name: r.name,
