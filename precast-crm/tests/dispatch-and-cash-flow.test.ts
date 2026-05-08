@@ -117,13 +117,17 @@ describe("DispatchCreateSchema", () => {
 });
 
 describe("PaymentRecordSchema", () => {
-  it("requires orderId, positive amount, and a method", () => {
+  it("requires orderId, positive amount, and a method (source defaults to IN_OFFICE_CASH)", () => {
     const r = PaymentRecordSchema.safeParse({
       orderId: "o1",
       amount: 1500000,
       method: "CASH",
     });
     expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.source).toBe("IN_OFFICE_CASH");
+      expect(r.data.handOverNow).toBe(false);
+    }
   });
 
   it("rejects zero or negative amounts", () => {
@@ -151,6 +155,69 @@ describe("PaymentRecordSchema", () => {
         method: "BITCOIN",
       }).success,
     ).toBe(false);
+  });
+
+  it("accepts handOverNow with IN_OFFICE_CASH", () => {
+    const r = PaymentRecordSchema.safeParse({
+      orderId: "o1",
+      amount: 1_000_000,
+      method: "CASH",
+      source: "IN_OFFICE_CASH",
+      handOverNow: true,
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects handOverNow when source is BANK_OR_ONLINE", () => {
+    const r = PaymentRecordSchema.safeParse({
+      orderId: "o1",
+      amount: 1_000_000,
+      method: "BANK_TRANSFER",
+      source: "BANK_OR_ONLINE",
+      handOverNow: true,
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("requires collectedByDriverId when source is FROM_DRIVER_AT_DELIVERY", () => {
+    expect(
+      PaymentRecordSchema.safeParse({
+        orderId: "o1",
+        amount: 1_000_000,
+        method: "CASH",
+        source: "FROM_DRIVER_AT_DELIVERY",
+      }).success,
+    ).toBe(false);
+    expect(
+      PaymentRecordSchema.safeParse({
+        orderId: "o1",
+        amount: 1_000_000,
+        method: "CASH",
+        source: "FROM_DRIVER_AT_DELIVERY",
+        collectedByDriverId: "drv-1",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects collectedByDriverId when source is not FROM_DRIVER_AT_DELIVERY", () => {
+    const r = PaymentRecordSchema.safeParse({
+      orderId: "o1",
+      amount: 1_000_000,
+      method: "CASH",
+      source: "IN_OFFICE_CASH",
+      collectedByDriverId: "drv-1",
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("BANK_OR_ONLINE without driver and without handover is valid", () => {
+    const r = PaymentRecordSchema.safeParse({
+      orderId: "o1",
+      amount: 2_000_000,
+      method: "BANK_TRANSFER",
+      source: "BANK_OR_ONLINE",
+    });
+    expect(r.success).toBe(true);
   });
 });
 

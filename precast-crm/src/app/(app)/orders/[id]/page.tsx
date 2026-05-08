@@ -14,6 +14,7 @@ import {
   Truck,
   CreditCard,
   Hammer,
+  Plus,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
 import { DispatchDialog } from "@/components/dispatch/DispatchDialog";
+import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 
 interface OrderDetail {
   id: string;
@@ -129,6 +131,7 @@ export default function OrderDetailPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [proofOpen, setProofOpen] = useState(false);
   const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [addPaymentOpen, setAddPaymentOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: order, isLoading } = useQuery<OrderDetail>({
@@ -510,6 +513,44 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {/* Add Payment — visible whenever there's still something owed
+           and the order isn't terminal. Sits above the Payments table
+           so operators have one obvious place to record cash that
+           arrives between placement and delivery. */}
+      {(() => {
+        const total = Number(order.totalPrice);
+        const confirmed = Number(order.confirmedPaid);
+        const pendingSum = order.payments
+          .filter((p) => p.status === "PENDING_CONFIRMATION")
+          .reduce((s, p) => s + Number(p.amount), 0);
+        const remaining = Math.max(0, total - confirmed - pendingSum);
+        const canAdd =
+          order.status !== "CANCELED" &&
+          !(order.status === "DELIVERED" && order.paymentState === "FULLY_PAID") &&
+          remaining > 0;
+        if (!canAdd) return null;
+        return (
+          <div className="rounded-lg border bg-background px-4 py-3 flex items-center justify-between gap-3">
+            <div className="text-sm">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                Тўлов қабул қилиш · Record a payment
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Customer paying between placement and delivery? Record it here — owner confirms it from <span className="font-mono">/payments</span>.
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => setAddPaymentOpen(true)}
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              Тўлов қўшиш · Add Payment
+            </Button>
+          </div>
+        );
+      })()}
+
       {/* Payments — chain of custody view */}
       {order.payments.length > 0 && (
         <div className="rounded-lg border bg-background overflow-hidden">
@@ -688,6 +729,24 @@ export default function OrderDetailPage() {
           Number(order.totalPrice) - Number(order.confirmedPaid),
         )}
         onDispatched={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
+      />
+
+      <AddPaymentDialog
+        open={addPaymentOpen}
+        onClose={() => setAddPaymentOpen(false)}
+        orderId={order.id}
+        currentRemaining={Math.max(
+          0,
+          Number(order.totalPrice) -
+            Number(order.confirmedPaid) -
+            order.payments
+              .filter((p) => p.status === "PENDING_CONFIRMATION")
+              .reduce((s, p) => s + Number(p.amount), 0),
+        )}
+        existingPendingTotal={order.payments
+          .filter((p) => p.status === "PENDING_CONFIRMATION")
+          .reduce((s, p) => s + Number(p.amount), 0)}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
       />
 
       {/* Cancel modal */}

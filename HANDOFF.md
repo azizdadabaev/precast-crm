@@ -405,6 +405,34 @@ client UI omits the confirm action for non-checkers, and the API gates
 return 403. Confirm/reject endpoints accept ADMIN as a superuser by
 convention even though the spec names OWNER as the operational role.
 
+### Three entry points for recording payments
+
+Customers don't pay at one moment — partials are common, transfers
+arrive between placement and delivery, drivers collect cash on site.
+All three paths converge on the same `Payment` row shape with status
+`PENDING_CONFIRMATION`; the owner confirms from `/payments`. The only
+difference is which chain-of-custody fields get stamped:
+
+| Entry point | Source | `collectedById` | `collectedAt` | `handedOverToOfficeAt` |
+| --- | --- | --- | --- | --- |
+| **Place Order dialog** (Тўлов field) | `IN_OFFICE_CASH` | null | null | null |
+| **Add Payment dialog** on order detail (mid-order) | `IN_OFFICE_CASH` or `BANK_OR_ONLINE` | null | null | set iff `handOverNow` & cash |
+| **Delivery Proof dialog** (cash collected on site) | `FROM_DRIVER_AT_DELIVERY` | dispatch.driverId | now | null (operator hand-over later) |
+
+The placement dialog and Add Payment dialog both go through `POST /api/payments`
+with the appropriate `source`. The delivery flow inlines the Payment
+creation in `delivery-proof/route.ts` so it can stay atomic with the
+order flip and inventory decrement, but the row shape matches.
+
+`/api/payments` rejects when `amount > totalPrice − confirmedPaid −
+sum(PENDING)` so we can't double-record while a previous payment is
+still in the owner's queue. It also rejects on CANCELED orders and on
+DELIVERED + FULLY_PAID orders.
+
+`ChainOfCustodyPanel` renders different step lists per shape: 3 steps
+for the driver path, 2 for in-office cash (recorded → handed over to
+owner), 1 for bank/online (no physical handover step at all).
+
 ### Lifecycle, end to end
 
 1. **Place order** — same as before. `paymentState = AWAITING_PAYMENT`,

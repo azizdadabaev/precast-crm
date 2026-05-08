@@ -215,17 +215,45 @@ export const DispatchCreateSchema = z.object({
 });
 
 // ── Payments ────────────────────────────────────────────────────
-// Recording a payment (any role). Created via the placement dialog
-// (no driver) OR via the delivery dialog's cash collection step (driver
-// set). recordedById comes from the auth cookie, not the body.
-export const PaymentRecordSchema = z.object({
-  orderId: z.string().min(1),
-  amount: z.coerce.number().positive(),
-  method: PaymentMethodEnum,
-  collectedById: z.string().optional().nullable(),
-  collectedAt: z.coerce.date().optional().nullable(),
-  notes: z.string().max(500).optional().nullable(),
-});
+// Recording a payment (any role). Three real entry points:
+//   - At placement (in-office cash or bank/online before delivery)
+//   - Mid-order via the Add Payment dialog on the order detail page
+//   - At delivery (driver collected on site)
+// All three land here via /api/payments. recordedById comes from the
+// auth cookie. The shape that ends up in the DB depends on `source`:
+//   IN_OFFICE_CASH         → no driver; handedOverToOfficeAt set if
+//                             handOverNow=true (operator passes to owner)
+//   BANK_OR_ONLINE         → no driver, no handover step at all
+//   FROM_DRIVER_AT_DELIVERY → collectedByDriverId required, collectedAt
+//                             stamped server-side
+export const PaymentSourceEnum = z.enum([
+  "IN_OFFICE_CASH",
+  "BANK_OR_ONLINE",
+  "FROM_DRIVER_AT_DELIVERY",
+]);
+
+export const PaymentRecordSchema = z
+  .object({
+    orderId: z.string().min(1),
+    amount: z.coerce.number().positive(),
+    method: PaymentMethodEnum,
+    source: PaymentSourceEnum.default("IN_OFFICE_CASH"),
+    handOverNow: z.boolean().default(false),
+    collectedByDriverId: z.string().optional().nullable(),
+    notes: z.string().max(500).optional().nullable(),
+  })
+  .refine(
+    (d) => !(d.source === "FROM_DRIVER_AT_DELIVERY" && !d.collectedByDriverId),
+    { path: ["collectedByDriverId"], message: "Driver is required when source is FROM_DRIVER_AT_DELIVERY" },
+  )
+  .refine(
+    (d) => !(d.source !== "FROM_DRIVER_AT_DELIVERY" && d.collectedByDriverId),
+    { path: ["collectedByDriverId"], message: "Driver should only be set when source is FROM_DRIVER_AT_DELIVERY" },
+  )
+  .refine(
+    (d) => !(d.source === "BANK_OR_ONLINE" && d.handOverNow),
+    { path: ["handOverNow"], message: "Bank/online payments cannot have a hand-over step" },
+  );
 
 // Confirm a Pending payment. Owner-only. The body is empty for the
 // happy path (matching expected); if the confirmer adjusts the amount,
