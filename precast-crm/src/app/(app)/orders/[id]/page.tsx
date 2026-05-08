@@ -19,12 +19,15 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
-import { DeliveryProofDialog } from "@/components/orders/DeliveryProofDialog";
+import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
+import { DispatchDialog } from "@/components/dispatch/DispatchDialog";
 
 interface OrderDetail {
   id: string;
   orderNumber: string;
-  status: "PLACED" | "IN_PRODUCTION" | "DELIVERED" | "PAID" | "CANCELED";
+  status: "PLACED" | "IN_PRODUCTION" | "DISPATCHED" | "DELIVERED" | "CANCELED";
+  paymentState: "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
+  confirmedPaid: string;
   roomsSubtotal: string;
   discountPercent: string;
   discountAmount: string;
@@ -67,14 +70,55 @@ interface OrderDetail {
     createdAt: string;
     actor: { id: string; name: string; email: string } | null;
   }>;
+  dispatch: {
+    id: string;
+    truckIdentifier: string | null;
+    expectedCollection: string;
+    notes: string | null;
+    dispatchedAt: string;
+    returnedAt: string | null;
+    driver: { id: string; name: string; phone: string };
+    dispatchedBy: { id: string; name: string } | null;
+  } | null;
+  payments: Array<{
+    id: string;
+    amount: string;
+    method: "CASH" | "BANK_TRANSFER" | "CLICK" | "PAYME" | "OTHER";
+    status: "PENDING_CONFIRMATION" | "CONFIRMED" | "REJECTED";
+    collectedAt: string | null;
+    recordedAt: string;
+    handedOverToOfficeAt: string | null;
+    confirmedAt: string | null;
+    rejectedAt: string | null;
+    rejectionReason: string | null;
+    adjustmentNote: string | null;
+    notes: string | null;
+    collectedByDriver: { id: string; name: string } | null;
+    recordedBy: { id: string; name: string } | null;
+    handedOverTo: { id: string; name: string } | null;
+    confirmedBy: { id: string; name: string } | null;
+    rejectedBy: { id: string; name: string } | null;
+  }>;
 }
 
 const STATUS_FLOW: Array<{ key: OrderDetail["status"]; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { key: "PLACED",        label: "Placed",        icon: CheckCircle2 },
   { key: "IN_PRODUCTION", label: "In production", icon: Hammer },
+  { key: "DISPATCHED",    label: "Dispatched",    icon: CreditCard }, // truck icon used elsewhere; CreditCard placeholder
   { key: "DELIVERED",     label: "Delivered",     icon: Truck },
-  { key: "PAID",          label: "Paid",          icon: CreditCard },
 ];
+
+const PAYMENT_STATE_BADGE: Record<OrderDetail["paymentState"], { label: string; cls: string }> = {
+  AWAITING_PAYMENT: { label: "Awaiting payment", cls: "bg-amber-100 text-amber-800" },
+  PARTIALLY_PAID:   { label: "Partially paid",   cls: "bg-sky-100 text-sky-800" },
+  FULLY_PAID:       { label: "Fully paid",       cls: "bg-emerald-100 text-emerald-800" },
+};
+
+const PAYMENT_STATUS_BADGE: Record<OrderDetail["payments"][number]["status"], { label: string; cls: string }> = {
+  PENDING_CONFIRMATION: { label: "Pending",   cls: "bg-amber-100 text-amber-800" },
+  CONFIRMED:            { label: "Confirmed", cls: "bg-emerald-100 text-emerald-800" },
+  REJECTED:             { label: "Rejected",  cls: "bg-rose-100 text-rose-800" },
+};
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -84,6 +128,7 @@ export default function OrderDetailPage() {
   const [cancelPassword, setCancelPassword] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [proofOpen, setProofOpen] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: order, isLoading } = useQuery<OrderDetail>({
@@ -101,10 +146,14 @@ export default function OrderDetailPage() {
     onError: (e: Error) => setError(e.message),
   });
 
-  /** Upload the delivery photo and advance to DELIVERED in one shot. */
-  async function uploadDeliveryProof(file: File) {
+  /** Upload the delivery photo + cash collection in one shot. */
+  async function uploadDeliveryProof(payload: DeliveryFormPayload) {
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", payload.file);
+    fd.append("cashAmount", String(payload.cashAmount));
+    fd.append("noCashCollected", String(payload.noCashCollected));
+    fd.append("noCashCollectedNote", payload.noCashCollectedNote ?? "");
+    fd.append("driverReturned", String(payload.driverReturned));
     const res = await fetch(`/api/orders/${params.id}/delivery-proof`, {
       method: "POST",
       body: fd,
@@ -116,6 +165,20 @@ export default function OrderDetailPage() {
     setProofOpen(false);
     qc.invalidateQueries({ queryKey: ["order", params.id] });
   }
+
+  const handoverPayment = useMutation({
+    mutationFn: (paymentId: string) =>
+      api(`/api/payments/${paymentId}/handover`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["order", params.id] }),
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const markDriverReturned = useMutation({
+    mutationFn: (dispatchId: string) =>
+      api(`/api/dispatches/${dispatchId}/return`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["order", params.id] }),
+    onError: (e: Error) => setError(e.message),
+  });
 
   const cancelOrder = useMutation({
     mutationFn: () =>
@@ -191,6 +254,14 @@ export default function OrderDetailPage() {
               {formatNumber(order.totalPrice, 0)}
               <span className="text-xs text-muted-foreground font-normal ml-1">UZS</span>
             </div>
+            <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
+              Confirmed paid: {formatNumber(order.confirmedPaid, 0)}
+            </div>
+            <span
+              className={`inline-block mt-1 text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATE_BADGE[order.paymentState].cls}`}
+            >
+              {PAYMENT_STATE_BADGE[order.paymentState].label}
+            </span>
           </div>
         </div>
       </div>
@@ -232,12 +303,11 @@ export default function OrderDetailPage() {
               const isCurrent = i === currentIdx;
               const canAdvance = i === currentIdx + 1;
               const needsProof = canAdvance && s.key === "DELIVERED";
+              const needsDispatch = canAdvance && s.key === "DISPATCHED";
               const onClick = () => {
-                if (needsProof) {
-                  setProofOpen(true);
-                } else {
-                  updateStatus.mutate(s.key);
-                }
+                if (needsProof) setProofOpen(true);
+                else if (needsDispatch) setDispatchOpen(true);
+                else updateStatus.mutate(s.key);
               };
               return (
                 <button
@@ -259,7 +329,11 @@ export default function OrderDetailPage() {
                   <span className="font-medium">{s.label}</span>
                   {canAdvance && (
                     <span className="text-xs">
-                      {needsProof ? "→ requires photo" : "→ click to advance"}
+                      {needsProof
+                        ? "→ requires photo + cash"
+                        : needsDispatch
+                          ? "→ assign driver"
+                          : "→ click to advance"}
                     </span>
                   )}
                 </button>
@@ -332,6 +406,175 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
+      {/* Dispatch — visible once a driver has been assigned */}
+      {order.dispatch && (
+        <div className="rounded-lg border bg-background p-4 shadow-sm space-y-3">
+          <div className="flex items-baseline justify-between">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Юбориш · Dispatch
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Dispatched {formatDate(order.dispatch.dispatchedAt)}
+              {order.dispatch.dispatchedBy && <> by {order.dispatch.dispatchedBy.name}</>}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Driver</div>
+              <Link href={`/drivers/${order.dispatch.driver.id}`} className="font-semibold hover:underline">
+                {order.dispatch.driver.name}
+              </Link>
+              <div className="text-xs text-muted-foreground tabular-nums">
+                {formatPhone(order.dispatch.driver.phone)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Truck</div>
+              <div className="font-semibold tabular-nums">
+                {order.dispatch.truckIdentifier ?? "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Expected</div>
+              <div className="font-semibold tabular-nums">
+                {formatNumber(order.dispatch.expectedCollection, 0)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Returned</div>
+              {order.dispatch.returnedAt ? (
+                <div className="font-semibold text-emerald-700">
+                  {formatDate(order.dispatch.returnedAt)}
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={markDriverReturned.isPending}
+                  onClick={() => markDriverReturned.mutate(order.dispatch!.id)}
+                >
+                  {markDriverReturned.isPending ? (
+                    <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                  ) : (
+                    <Truck className="h-3 w-3 mr-2" />
+                  )}
+                  Mark returned
+                </Button>
+              )}
+            </div>
+          </div>
+          {order.dispatch.notes && (
+            <div className="text-xs text-muted-foreground border-t pt-2">
+              <span className="font-semibold">Notes:</span> {order.dispatch.notes}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Payments — chain of custody view */}
+      {order.payments.length > 0 && (
+        <div className="rounded-lg border bg-background overflow-hidden">
+          <div className="px-4 py-3 border-b flex items-baseline justify-between">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Тўловлар · Payments
+            </div>
+            <div className="text-[10px] text-muted-foreground tabular-nums">
+              Confirmed: {formatNumber(order.confirmedPaid, 0)} / {formatNumber(order.totalPrice, 0)}
+            </div>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left px-3 py-2">Method</th>
+                <th className="text-right px-3 py-2">Amount</th>
+                <th className="text-left px-3 py-2">Status</th>
+                <th className="text-left px-3 py-2">Collected</th>
+                <th className="text-left px-3 py-2">Recorded</th>
+                <th className="text-left px-3 py-2">Handed over</th>
+                <th className="text-left px-3 py-2">Confirmed</th>
+                <th className="px-3 py-2 w-32"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {order.payments.map((p) => (
+                <tr key={p.id} className="hover:bg-muted/20">
+                  <td className="px-3 py-2 text-xs uppercase tracking-wider">{p.method}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                    {formatNumber(p.amount, 0)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATUS_BADGE[p.status].cls}`}
+                    >
+                      {PAYMENT_STATUS_BADGE[p.status].label}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {p.collectedByDriver ? p.collectedByDriver.name : "—"}
+                    {p.collectedAt && <div className="tabular-nums">{formatDate(p.collectedAt)}</div>}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {p.recordedBy ? p.recordedBy.name : "—"}
+                    <div className="tabular-nums">{formatDate(p.recordedAt)}</div>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {p.handedOverToOfficeAt ? (
+                      <>
+                        {p.handedOverTo?.name ?? "—"}
+                        <div className="tabular-nums">{formatDate(p.handedOverToOfficeAt)}</div>
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {p.confirmedAt ? (
+                      <>
+                        {p.confirmedBy?.name ?? "—"}
+                        <div className="tabular-nums">{formatDate(p.confirmedAt)}</div>
+                      </>
+                    ) : p.rejectedAt ? (
+                      <>
+                        <span className="text-rose-700">Rejected</span>
+                        {p.rejectedBy && <div>{p.rejectedBy.name}</div>}
+                        {p.rejectionReason && (
+                          <div className="italic">{p.rejectionReason}</div>
+                        )}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {p.status === "PENDING_CONFIRMATION" && !p.handedOverToOfficeAt && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={handoverPayment.isPending}
+                        onClick={() => handoverPayment.mutate(p.id)}
+                      >
+                        {handoverPayment.isPending ? (
+                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                        ) : null}
+                        Hand over
+                      </Button>
+                    )}
+                    {p.status === "PENDING_CONFIRMATION" && p.handedOverToOfficeAt && (
+                      <Link
+                        href="/payments"
+                        className="text-xs text-muted-foreground underline hover:no-underline"
+                      >
+                        Awaiting confirm →
+                      </Link>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Delivery proof — visible once uploaded */}
       {order.deliveryProofUrl && (
         <div className="rounded-lg border bg-background p-4 shadow-sm">
@@ -390,7 +633,22 @@ export default function OrderDetailPage() {
       <DeliveryProofDialog
         open={proofOpen}
         onClose={() => setProofOpen(false)}
+        expectedCollection={
+          order.dispatch
+            ? Number(order.dispatch.expectedCollection)
+            : Math.max(0, Number(order.totalPrice) - Number(order.confirmedPaid))
+        }
         onUpload={uploadDeliveryProof}
+      />
+      <DispatchDialog
+        open={dispatchOpen}
+        onClose={() => setDispatchOpen(false)}
+        orderId={order.id}
+        suggestedExpectedCollection={Math.max(
+          0,
+          Number(order.totalPrice) - Number(order.confirmedPaid),
+        )}
+        onDispatched={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
       />
 
       {/* Cancel modal */}

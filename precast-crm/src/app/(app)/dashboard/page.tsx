@@ -12,6 +12,8 @@ import {
   DollarSign,
   Target,
   Activity,
+  Truck,
+  AlertTriangle,
 } from "lucide-react";
 import {
   BarChart,
@@ -34,6 +36,8 @@ interface DashboardData {
     totalRevenue: number;
     avgDealValue: number;
     conversionRate: number;
+    cashOnRoad: number;
+    openDiscrepancies: number;
   };
   dealsByStage: { stage: string; count: number; value: number }[];
   leadsBySource: { source: string; count: number }[];
@@ -86,7 +90,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Total Leads" value={totals.totalLeads.toString()} icon={Users} />
         <KpiCard label="Total Deals" value={totals.totalDeals.toString()} icon={Briefcase} />
         <KpiCard label="Won Deals" value={totals.wonDeals.toString()} icon={Target} accent="success" />
@@ -101,10 +105,22 @@ export default function DashboardPage() {
           icon={Activity}
         />
         <KpiCard
-          label="Revenue (paid)"
+          label="Revenue (confirmed)"
           value={formatMoney(totals.totalRevenue)}
           icon={DollarSign}
           accent="success"
+        />
+        <KpiCard
+          label="Cash on the road"
+          value={formatMoney(totals.cashOnRoad)}
+          icon={Truck}
+          accent={totals.cashOnRoad > 0 ? "warning" : undefined}
+        />
+        <KpiCard
+          label="Open discrepancies"
+          value={totals.openDiscrepancies.toString()}
+          icon={AlertTriangle}
+          accent={totals.openDiscrepancies > 0 ? "danger" : undefined}
         />
       </div>
 
@@ -218,16 +234,22 @@ function KpiCard({
   label: string;
   value: string;
   icon: React.ComponentType<{ className?: string }>;
-  accent?: "success";
+  accent?: "success" | "warning" | "danger";
 }) {
+  const iconCls =
+    accent === "success"
+      ? "text-emerald-600"
+      : accent === "warning"
+        ? "text-amber-600"
+        : accent === "danger"
+          ? "text-rose-600"
+          : "text-muted-foreground";
   return (
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-          <Icon
-            className={`h-4 w-4 ${accent === "success" ? "text-emerald-600" : "text-muted-foreground"}`}
-          />
+          <Icon className={`h-4 w-4 ${iconCls}`} />
         </div>
         <div className="text-2xl font-bold mt-2 truncate">{value}</div>
       </CardContent>

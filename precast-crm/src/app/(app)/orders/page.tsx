@@ -13,7 +13,9 @@ import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 interface Order {
   id: string;
   orderNumber: string;
-  status: "PLACED" | "IN_PRODUCTION" | "DELIVERED" | "PAID" | "CANCELED";
+  status: "PLACED" | "IN_PRODUCTION" | "DISPATCHED" | "DELIVERED" | "CANCELED";
+  paymentState: "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
+  confirmedPaid: string;
   totalPrice: string;
   totalArea: string;
   scheduledAt: string;
@@ -25,9 +27,15 @@ interface Order {
 const STATUS: Record<Order["status"], { label: string; cls: string }> = {
   PLACED:        { label: "Placed",        cls: "bg-sky-100 text-sky-800" },
   IN_PRODUCTION: { label: "In production", cls: "bg-amber-100 text-amber-800" },
+  DISPATCHED:    { label: "Dispatched",    cls: "bg-orange-100 text-orange-800" },
   DELIVERED:     { label: "Delivered",     cls: "bg-emerald-100 text-emerald-800" },
-  PAID:          { label: "Paid",          cls: "bg-green-200 text-green-900" },
   CANCELED:      { label: "Canceled",      cls: "bg-rose-100 text-rose-800" },
+};
+
+const PAYMENT_STATE_BADGE: Record<Order["paymentState"], { label: string; cls: string }> = {
+  AWAITING_PAYMENT: { label: "Awaiting", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
+  PARTIALLY_PAID:   { label: "Partial",  cls: "bg-sky-50 text-sky-700 border border-sky-200" },
+  FULLY_PAID:       { label: "Fully paid", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
 };
 
 export default function OrdersPage() {
@@ -113,7 +121,7 @@ export default function OrdersPage() {
               ["PLACED", "Placed"],
               ["IN_PRODUCTION", "In prod"],
               ["DELIVERED", "Delivered"],
-              ["PAID", "Paid"],
+              ["DISPATCHED", "Dispatched"],
               ["CANCELED", "Canceled"],
             ] as const
           ).map(([v, label]) => (
@@ -148,6 +156,7 @@ export default function OrdersPage() {
                 <th className="text-right px-3 py-2">Майдон · Area</th>
                 <th className="text-right px-3 py-2">Жами · Total</th>
                 <th className="text-left px-3 py-2">Status</th>
+                <th className="text-left px-3 py-2">Payment</th>
                 <th className="text-left px-3 py-2">Scheduled</th>
               </tr>
             </thead>
@@ -175,6 +184,13 @@ export default function OrdersPage() {
                       className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${STATUS[o.status].cls}`}
                     >
                       {STATUS[o.status].label}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATE_BADGE[o.paymentState].cls}`}
+                    >
+                      {PAYMENT_STATE_BADGE[o.paymentState].label}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-xs">{formatDate(o.scheduledAt)}</td>

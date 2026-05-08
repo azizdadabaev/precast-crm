@@ -18,6 +18,22 @@ export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string
       client: true,
       project: { include: { calculations: { orderBy: { createdAt: "asc" } } } },
       primaryCalculation: true,
+      dispatch: {
+        include: {
+          driver: { select: { id: true, name: true, phone: true } },
+          dispatchedBy: { select: { id: true, name: true } },
+        },
+      },
+      payments: {
+        orderBy: { recordedAt: "desc" },
+        include: {
+          collectedByDriver: { select: { id: true, name: true } },
+          recordedBy: { select: { id: true, name: true } },
+          handedOverTo: { select: { id: true, name: true } },
+          confirmedBy: { select: { id: true, name: true } },
+          rejectedBy: { select: { id: true, name: true } },
+        },
+      },
       events: {
         orderBy: { createdAt: "desc" },
         include: { actor: { select: { id: true, name: true, email: true } } },
@@ -46,7 +62,9 @@ export const PATCH = handler(async (req: NextRequest, ctx: { params: { id: strin
     // Stamp transition timestamps
     if (body.status === "IN_PRODUCTION") updates.productionStartedAt = new Date();
     if (body.status === "DELIVERED") updates.deliveredAt = new Date();
-    if (body.status === "PAID") updates.paidAt = new Date();
+    // PAID is no longer an OrderStatus value (paid-ness lives on
+    // OrderPaymentState now). The paidAt timestamp on Order is set by
+    // the payment-confirmation flow, not by a status PATCH.
     events.push({
       type: "STATUS_CHANGED",
       payload: { from: existing.status, to: body.status },

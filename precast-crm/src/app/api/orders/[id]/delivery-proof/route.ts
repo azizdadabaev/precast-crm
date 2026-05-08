@@ -9,27 +9,51 @@ import {
   decrementForDelivery,
   formatInventoryLabel,
 } from "@/lib/inventory";
+import { getCurrentUser } from "@/lib/auth";
 
 /**
  * POST /api/orders/[id]/delivery-proof
  *
- * Multipart form-data with a single `file` field — an image of the truck
- * loaded with the product. Atomically:
- *   1. Persist the file under public/uploads/orders/{orderId}/.
- *   2. Set order.deliveryProofUrl + deliveredAt + status = DELIVERED.
- *   3. Append a STATUS_CHANGED event with the proof URL in its payload.
+ * Multipart form-data:
+ *   - file:                 truck-loaded photo (image/jpeg|png|webp, ≤ 8 MB)
+ *   - cashAmount:           number — what the driver collected (string)
+ *   - noCashCollected:      "true" if no cash was taken on site
+ *   - noCashCollectedNote:  required when noCashCollected = true
+ *   - driverReturned:       "true" if driver is already back at office
  *
- * Allowed only when the current status is IN_PRODUCTION (the natural
- * predecessor of DELIVERED). Calls from any other status return 422 to
- * prevent skipping the production step.
+ * Atomically:
+ *   1. Persist the photo (existing inventory decrement stays).
+ *   2. Flip status DISPATCHED (or IN_PRODUCTION pre-cash-custody) → DELIVERED.
+ *   3. If cashAmount > 0: create a Payment row (PENDING_CONFIRMATION,
+ *                          method = CASH, collectedById = dispatch.driverId)
+ *   4. If driverReturned: stamp dispatch.returnedAt
+ *   5. Inventory decrement + STOCK_WARNING events (existing behavior).
+ *
+ * Acceptable predecessor statuses are IN_PRODUCTION (no dispatch yet) or
+ * DISPATCHED (post-spec). The previous gate that required IN_PRODUCTION
+ * is loosened to permit DISPATCHED — driver delivered without going
+ * back through the production step.
  */
 export const POST = handler(async (req: NextRequest, ctx: { params: { id: string } }) => {
-  const order = await prisma.order.findUnique({ where: { id: ctx.params.id } });
+  const user = await getCurrentUser();
+  if (!user) return fail("Unauthorized", 401);
+  const actor = await prisma.user.findUnique({
+    where: { id: user.sub },
+    select: { id: true },
+  });
+  if (!actor) {
+    return fail("Your session is stale — please log out and log back in.", 401);
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: ctx.params.id },
+    include: { dispatch: true },
+  });
   if (!order) return fail("Order not found", 404);
   if (order.status === "CANCELED") return fail("Cannot modify a canceled order", 422);
-  if (order.status !== "IN_PRODUCTION") {
+  if (order.status !== "IN_PRODUCTION" && order.status !== "DISPATCHED") {
     return fail(
-      `Delivery proof can only be uploaded from "IN_PRODUCTION" (current: ${order.status})`,
+      `Delivery proof can only be uploaded from IN_PRODUCTION or DISPATCHED (current: ${order.status})`,
       422,
     );
   }
@@ -38,7 +62,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
   try {
     formData = await req.formData();
   } catch {
-    return fail("Expected multipart/form-data with a file field", 400);
+    return fail("Expected multipart/form-data", 400);
   }
 
   const file = formData.get("file");
@@ -50,7 +74,25 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
     throw e;
   }
 
-  // Pull the calculation snapshot for the inventory decrement
+  // Cash collection fields (all optional — operator may have not pulled
+  // any cash from this customer, e.g. they paid by transfer earlier).
+  const cashAmountRaw = (formData.get("cashAmount") as string) || "0";
+  const cashAmount = Number(cashAmountRaw) || 0;
+  const noCashCollected = formData.get("noCashCollected") === "true";
+  const noCashCollectedNote = (formData.get("noCashCollectedNote") as string) || "";
+  const driverReturned = formData.get("driverReturned") === "true";
+
+  if (noCashCollected) {
+    if (cashAmount !== 0) {
+      return fail("noCashCollected and cashAmount > 0 are mutually exclusive", 422);
+    }
+    if (!noCashCollectedNote || noCashCollectedNote.trim().length < 3) {
+      return fail("A note explaining why no cash was collected is required", 422);
+    }
+  }
+  if (cashAmount < 0) return fail("cashAmount cannot be negative", 422);
+
+  // Pull calc snapshot for inventory decrement
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: order.projectId },
     include: { calculations: true },
@@ -72,6 +114,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
       data: {
         orderId: order.id,
         type: "STATUS_CHANGED",
+        actorId: actor.id,
         message: "Delivered — proof photo uploaded",
         payload: {
           from: order.status,
@@ -83,11 +126,66 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
       },
     });
 
-    // Decrement inventory for every beam group + total blocks. Negative
-    // resulting stock is allowed (factory may have unlogged production)
-    // — we record a STOCK_WARNING event so the inventory page can flag
-    // the order and the operator can reconcile via a production log
-    // entry or manual adjustment.
+    // Cash recording: only when amount > 0. (noCashCollected → no row,
+    // event-only audit; the spec wants the operator's note in the
+    // OrderEvent payload.)
+    if (cashAmount > 0) {
+      const payment = await tx.payment.create({
+        data: {
+          orderId: order.id,
+          amount: cashAmount,
+          method: "CASH",
+          status: "PENDING_CONFIRMATION",
+          recordedById: actor.id,
+          recordedAt: new Date(),
+          collectedById: order.dispatch?.driverId ?? null,
+          collectedAt: new Date(),
+        },
+      });
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "PAYMENT_RECORDED",
+          actorId: actor.id,
+          message: `Cash collected: ${cashAmount} (pending confirmation)`,
+          payload: {
+            paymentId: payment.id,
+            amount: cashAmount,
+            method: "CASH",
+            collectedById: order.dispatch?.driverId ?? null,
+          },
+        },
+      });
+    } else if (noCashCollected) {
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "NOTE_ADDED",
+          actorId: actor.id,
+          message: `No cash collected on delivery: ${noCashCollectedNote}`,
+          payload: { reason: noCashCollectedNote },
+        },
+      });
+    }
+
+    // Driver-returned toggle stamps the dispatch.
+    if (driverReturned && order.dispatch && !order.dispatch.returnedAt) {
+      await tx.dispatch.update({
+        where: { id: order.dispatch.id },
+        data: { returnedAt: new Date() },
+      });
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: "DISPATCH_RETURNED",
+          actorId: actor.id,
+          message: "Driver returned to office (recorded with delivery)",
+          payload: { dispatchId: order.dispatch.id },
+        },
+      });
+    }
+
+    // Inventory decrement (existing behavior, unchanged).
     const warnings = await decrementForDelivery(tx, order.id, inventoryLines);
     for (const w of warnings) {
       await tx.orderEvent.create({

@@ -4,12 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import { X, Truck, Upload, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+export interface DeliveryFormPayload {
+  file: File;
+  cashAmount: number;
+  noCashCollected: boolean;
+  noCashCollectedNote: string | null;
+  driverReturned: boolean;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** Called with the chosen file. Component awaits the promise; closes
+  /** The dispatch's expected collection — pre-fills the cash amount input. */
+  expectedCollection: number;
+  /** Called with the chosen file + cash fields. Component awaits the promise; closes
    *  itself on resolve. */
-  onUpload: (file: File) => Promise<void>;
+  onUpload: (payload: DeliveryFormPayload) => Promise<void>;
 }
 
 const ACCEPT = "image/jpeg,image/png,image/webp";
@@ -25,7 +35,7 @@ const MAX_BYTES = 8 * 1024 * 1024;
  *   - Drag-and-drop or click-to-pick
  *   - Disabled confirm until a valid image is chosen
  */
-export function DeliveryProofDialog({ open, onClose, onUpload }: Props) {
+export function DeliveryProofDialog({ open, onClose, expectedCollection, onUpload }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +43,25 @@ export function DeliveryProofDialog({ open, onClose, onUpload }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  // Cash collection state — operator records what the driver actually
+  // brought back. Defaults to the dispatch's expected amount; operator
+  // adjusts down when the customer paid less, or toggles "no cash" if
+  // the customer is paying later.
+  const [cashAmount, setCashAmount] = useState<number | "">(expectedCollection);
+  const [noCashCollected, setNoCashCollected] = useState(false);
+  const [noCashCollectedNote, setNoCashCollectedNote] = useState("");
+  const [driverReturned, setDriverReturned] = useState(false);
+
+  // Re-sync the suggested cash amount when re-opening for a new dispatch
+  useEffect(() => {
+    if (open) {
+      setCashAmount(expectedCollection);
+      setNoCashCollected(false);
+      setNoCashCollectedNote("");
+      setDriverReturned(false);
+    }
+  }, [open, expectedCollection]);
 
   // Manage object URL lifecycle so we don't leak
   useEffect(() => {
@@ -75,10 +104,24 @@ export function DeliveryProofDialog({ open, onClose, onUpload }: Props) {
 
   async function confirm() {
     if (!file) return;
+    if (noCashCollected && noCashCollectedNote.trim().length < 3) {
+      setError("Please add a note explaining why no cash was collected.");
+      return;
+    }
+    if (!noCashCollected && cashAmount !== "" && Number(cashAmount) < 0) {
+      setError("Cash amount cannot be negative.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await onUpload(file);
+      await onUpload({
+        file,
+        cashAmount: noCashCollected ? 0 : Number(cashAmount || 0),
+        noCashCollected,
+        noCashCollectedNote: noCashCollected ? noCashCollectedNote.trim() : null,
+        driverReturned,
+      });
     } catch (e) {
       setError((e as Error).message);
       setSubmitting(false);
@@ -180,6 +223,77 @@ export function DeliveryProofDialog({ open, onClose, onUpload }: Props) {
               </div>
             </div>
           )}
+
+          {/* Cash collection */}
+          <div className="mt-5 space-y-3 border-t pt-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Нақд пул · Cash collected from customer
+            </div>
+
+            {!noCashCollected && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider">
+                  Сумма · Amount (UZS)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1000"
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm tabular-nums text-right focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  value={cashAmount}
+                  onChange={(e) =>
+                    setCashAmount(e.target.value === "" ? "" : Number(e.target.value))
+                  }
+                />
+                <div className="text-[11px] text-muted-foreground">
+                  Pre-filled with the dispatch's expected collection. Owner reconciles any shortfall later.
+                </div>
+              </div>
+            )}
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-4 w-4 mt-0.5 accent-primary cursor-pointer"
+                checked={noCashCollected}
+                onChange={(e) => {
+                  setNoCashCollected(e.target.checked);
+                  if (e.target.checked) setCashAmount(0);
+                }}
+              />
+              <div className="text-sm">
+                <span className="font-semibold">No cash collected</span>
+                <span className="text-muted-foreground"> · driver came back empty (e.g. customer will transfer later)</span>
+              </div>
+            </label>
+
+            {noCashCollected && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider">
+                  Сабаб · Reason (required, min 3 chars)
+                </label>
+                <input
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  value={noCashCollectedNote}
+                  onChange={(e) => setNoCashCollectedNote(e.target.value)}
+                  placeholder="e.g. Customer will pay by bank transfer tomorrow"
+                />
+              </div>
+            )}
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-4 w-4 mt-0.5 accent-primary cursor-pointer"
+                checked={driverReturned}
+                onChange={(e) => setDriverReturned(e.target.checked)}
+              />
+              <div className="text-sm">
+                <span className="font-semibold">Driver returned to office</span>
+                <span className="text-muted-foreground"> · stamps the dispatch's return time</span>
+              </div>
+            </label>
+          </div>
 
           {error && (
             <div className="mt-3 flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -10,6 +11,9 @@ import {
   PackageCheck,
   Hammer,
   Warehouse,
+  Truck,
+  Wallet,
+  AlertTriangle,
   LogOut,
   Building2,
 } from "lucide-react";
@@ -25,11 +29,19 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const NAV: NavItem[] = [
+interface NavItemWithGate extends NavItem {
+  /** When set, only these roles see this nav item. Undefined = visible to all. */
+  roles?: Array<"ADMIN" | "OWNER" | "SALES" | "ENGINEER" | "OPERATOR">;
+}
+
+const NAV: NavItemWithGate[] = [
   { href: "/dashboard",    label: "Бошқарув",       sub: "Dashboard",     icon: LayoutDashboard },
   { href: "/calculations", label: "Калькулятор",    sub: "Calculations",  icon: Calculator },
   { href: "/projects",     label: "Лойиҳалар",      sub: "Projects",      icon: FolderKanban },
+  { href: "/drivers",      label: "Хайдовчилар",    sub: "Drivers",       icon: Truck },
   { href: "/orders",       label: "Буюртмалар",     sub: "Orders",        icon: PackageCheck },
+  { href: "/payments",     label: "Тўловлар",       sub: "Payments",      icon: Wallet },
+  { href: "/discrepancies",label: "Тафовутлар",     sub: "Discrepancies", icon: AlertTriangle, roles: ["ADMIN", "OWNER"] },
   { href: "/clients",      label: "Мижозлар",       sub: "Clients",       icon: Users },
   { href: "/production",   label: "Ишлаб чиқариш",  sub: "Production",    icon: Hammer },
   { href: "/inventory",    label: "Омбор",          sub: "Warehouse",     icon: Warehouse },
@@ -38,6 +50,27 @@ const NAV: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Pull the current role once so role-gated nav items hide for users
+  // who can't access them. Server still enforces auth on each route.
+  useEffect(() => {
+    let alive = true;
+    api<{ role: string }>("/api/auth/me")
+      .then((u) => {
+        if (alive) setUserRole(u.role);
+      })
+      .catch(() => {
+        /* unauthenticated; the middleware will redirect */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const visibleNav = NAV.filter(
+    (item) => !item.roles || (userRole && item.roles.includes(userRole as never)),
+  );
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
@@ -58,8 +91,8 @@ export function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1">
-        {NAV.map((item) => {
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {visibleNav.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (

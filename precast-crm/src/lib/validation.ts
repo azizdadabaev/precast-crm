@@ -15,14 +15,38 @@ export const ShapeTypeEnum = z.enum(["RECTANGULAR", "TRAPEZOIDAL", "IRREGULAR"])
 export const LayoutPatternEnum = z.enum(["GB", "BGB", "GBG"]);
 export const ProjectStatusEnum = z.enum(["DRAFT", "ORDERED", "ARCHIVED"]);
 export const OrderStatusEnum = z.enum([
+  "DRAFT",
   "PLACED",
   "IN_PRODUCTION",
+  "DISPATCHED",
   "DELIVERED",
-  "PAID",
   "CANCELED",
 ]);
-export const PaymentStatusEnum = z.enum(["PAID", "PARTIAL", "UNPAID"]);
-export const RoleEnum = z.enum(["ADMIN", "SALES", "ENGINEER"]);
+export const OrderPaymentStateEnum = z.enum([
+  "AWAITING_PAYMENT",
+  "PARTIALLY_PAID",
+  "FULLY_PAID",
+]);
+export const PaymentStatusEnum = z.enum([
+  "PENDING_CONFIRMATION",
+  "CONFIRMED",
+  "REJECTED",
+]);
+export const PaymentMethodEnum = z.enum([
+  "CASH",
+  "BANK_TRANSFER",
+  "CLICK",
+  "PAYME",
+  "OTHER",
+]);
+export const DiscrepancyStatusEnum = z.enum([
+  "OPEN",
+  "RESOLVED_RECOVERED",
+  "RESOLVED_DISCOUNT",
+  "RESOLVED_WRITEOFF",
+  "DISPUTED",
+]);
+export const RoleEnum = z.enum(["ADMIN", "SALES", "ENGINEER", "OPERATOR", "OWNER"]);
 
 // ── Auth ────────────────────────────────────────────────────────
 export const LoginSchema = z.object({
@@ -160,14 +184,60 @@ export const OrderUpdateSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
 });
 
+// ── Drivers ─────────────────────────────────────────────────────
+export const DriverCreateSchema = z.object({
+  name: z.string().min(2, "name is required").max(120),
+  phone: z.string().min(5).max(40), // raw input; normalized in handler
+  notes: z.string().max(500).optional().nullable(),
+});
+
+export const DriverUpdateSchema = DriverCreateSchema.partial();
+
+// ── Dispatches ──────────────────────────────────────────────────
+// Operators set expectedCollection based on what the driver should
+// actually collect — discounts at this point are not enforced; the
+// owner adjudicates discrepancies later when confirming payment.
+export const DispatchCreateSchema = z.object({
+  driverId: z.string().min(1, "driver is required"),
+  truckIdentifier: z.string().max(40).optional().nullable(),
+  expectedCollection: z.coerce.number().min(0, "cannot be negative"),
+  notes: z.string().max(500).optional().nullable(),
+});
+
 // ── Payments ────────────────────────────────────────────────────
-export const PaymentCreateSchema = z.object({
-  dealId: z.string().min(1),
+// Recording a payment (any role). Created via the placement dialog
+// (no driver) OR via the delivery dialog's cash collection step (driver
+// set). recordedById comes from the auth cookie, not the body.
+export const PaymentRecordSchema = z.object({
+  orderId: z.string().min(1),
   amount: z.coerce.number().positive(),
-  status: PaymentStatusEnum.default("UNPAID"),
-  method: z.string().max(80).optional().nullable(),
-  reference: z.string().max(120).optional().nullable(),
-  paidAt: z.coerce.date().optional().nullable(),
+  method: PaymentMethodEnum,
+  collectedById: z.string().optional().nullable(),
+  collectedAt: z.coerce.date().optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+// Confirm a Pending payment. Owner-only. The body is empty for the
+// happy path (matching expected); if the confirmer adjusts the amount,
+// adjustmentNote is required. If the recorded amount is below the
+// dispatch's expectedCollection, discrepancyAction + discrepancyNote
+// are required (the route enforces this contextually since it depends
+// on the linked dispatch).
+export const PaymentConfirmSchema = z.object({
+  amount: z.coerce.number().positive().optional(),
+  adjustmentNote: z.string().max(500).optional().nullable(),
+  discrepancyAction: z.enum(["TRACK", "DISCOUNT", "WRITEOFF"]).optional(),
+  discrepancyNote: z.string().min(5, "note must be at least 5 chars").max(500).optional(),
+});
+
+export const PaymentRejectSchema = z.object({
+  reason: z.string().min(3, "reason is required").max(500),
+});
+
+// ── Discrepancies ───────────────────────────────────────────────
+export const DiscrepancyUpdateSchema = z.object({
+  status: DiscrepancyStatusEnum,
+  resolutionNote: z.string().min(5, "note must be at least 5 chars").max(500),
 });
 
 // ── Capacity calendar ───────────────────────────────────────────

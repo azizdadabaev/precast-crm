@@ -17,7 +17,7 @@ export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string
           orders: { orderBy: { placedAt: "desc" }, take: 5 },
         },
       },
-      payments: { orderBy: { createdAt: "desc" } },
+      // Payments now live on Order, not Deal. Pull them transitively if needed.
     },
   });
   if (!deal) return fail("Deal not found", 404);

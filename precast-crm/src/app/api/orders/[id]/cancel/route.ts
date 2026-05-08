@@ -52,11 +52,12 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
   if (!existing) return fail("Order not found", 404);
   if (existing.status === "CANCELED") return fail("Order is already canceled", 422);
 
-  // If the order was already DELIVERED (or DELIVERED-then-PAID), the
-  // delivery decremented inventory. Cancellation must mirror it back.
-  // Cancelling a PLACED / IN_PRODUCTION order needs no restock — nothing
-  // ever left the warehouse.
-  const wasDelivered = existing.status === "DELIVERED" || existing.status === "PAID";
+  // If the order was ever DELIVERED, the delivery transition decremented
+  // inventory; cancellation must mirror it back. We use deliveredAt as
+  // the check since PAID is no longer a status (payment lives on
+  // OrderPaymentState now). Cancelling a PLACED / IN_PRODUCTION /
+  // DISPATCHED order needs no restock — nothing left the warehouse.
+  const wasDelivered = existing.deliveredAt != null;
   let restockLines: ReturnType<typeof calcSnapshotToInventoryLines> = [];
   if (wasDelivered) {
     const project = await prisma.project.findUniqueOrThrow({

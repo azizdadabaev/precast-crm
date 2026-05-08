@@ -9,7 +9,14 @@ const COOKIE_NAME = "precast_token";
 
 const secretKey = new TextEncoder().encode(JWT_SECRET);
 
-export type AuthRole = "ADMIN" | "SALES" | "ENGINEER";
+export type AuthRole = "ADMIN" | "SALES" | "ENGINEER" | "OPERATOR" | "OWNER";
+
+/** Helper for the maker-checker payment / discrepancy gate.
+ *  Returns true for roles that can confirm payments, reject payments,
+ *  or resolve discrepancies. Adds ADMIN as a superuser by convention. */
+export function canConfirmCash(user: AuthPayload | null): boolean {
+  return !!user && (user.role === "ADMIN" || user.role === "OWNER");
+}
 
 export interface AuthPayload extends JWTPayload {
   sub: string; // user id

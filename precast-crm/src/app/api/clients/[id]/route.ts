@@ -11,7 +11,7 @@ export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string
     include: {
       deals: {
         orderBy: { createdAt: "desc" },
-        include: { projects: true, payments: true },
+        include: { projects: true },
       },
       orders: { orderBy: { placedAt: "desc" }, take: 20 },
     },

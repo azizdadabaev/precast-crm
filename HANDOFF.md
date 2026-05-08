@@ -9,13 +9,23 @@ Beam-and-block flooring CRM for an Uzbek precast manufacturer. Operator-driven
 workflow:
 
 ```
-Calculator → Save Project (draft) → Place Order → In Production → Delivered → Paid
+Calculator → Save Project (draft) → Place Order → In Production → Dispatched → Delivered
                                        ↑ creates Client + Order atomically
+                                                                    ↑ assign driver + truck
+                                                                                  ↑ photo + cash collected on site
+                                                                                              ↓
+                                                                                  Hand-over → Confirm (ADMIN/OWNER)
+                                                                                  → paymentState becomes FULLY_PAID
 ```
 
+Payment is **decoupled from order status** (no PAID status anymore). Order
+status tracks production/delivery; `paymentState` (AWAITING_PAYMENT /
+PARTIALLY_PAID / FULLY_PAID) tracks cash. See "Delivery & Cash Custody"
+below.
+
 Sidebar (UZ-primary):
-**Бошқарув · Калькулятор · Лойиҳалар · Буюртмалар · Мижозлар**
-(Pipeline + Quotes are hidden from nav; Deal model still backs the data.)
+**Бошқарув · Калькулятор · Лойиҳалар · Буюртмалар · Мижозлар · Ҳайдовчилар · Тўловлар · Тафовутлар**
+(Drivers / Payments / Discrepancies are ADMIN/OWNER-only. Pipeline + Quotes are hidden from nav; Deal model still backs the data.)
 
 ## Setup on a fresh device
 
@@ -330,6 +340,220 @@ pattern as the cancel route).
   field, lives only on the detail page.
 - No bulk delete / bulk edit / bulk anything else.
 
+## Delivery & Cash Custody module
+
+This is the dominant flow in the system. Cash is collected at the delivery
+site by the driver, then handed to the operator at the office, then
+confirmed by the owner. Each step is timestamped with the verified actor
+ID — the chain of custody IS the audit trail.
+
+### Why this shape
+
+The previous model gated production behind payment. Real-world Uzbekistan
+flow is the opposite: customer places order → factory produces → driver
+delivers and collects cash on the spot → operator records it → owner
+confirms it. The schema mirrors that flow exactly so each handoff is
+attributable.
+
+### Schema (3 new models, 1 new field on Order, 1 new enum)
+
+```prisma
+enum OrderStatus           { DRAFT  PLACED  IN_PRODUCTION  DISPATCHED  DELIVERED  CANCELED }
+                           // PAID is gone — paid-ness moved to paymentState
+enum OrderPaymentState     { AWAITING_PAYMENT  PARTIALLY_PAID  FULLY_PAID }
+enum PaymentStatus         { PENDING_CONFIRMATION  CONFIRMED  REJECTED }
+enum PaymentMethod         { CASH  BANK_TRANSFER  CLICK  PAYME  OTHER }
+enum DiscrepancyStatus     { OPEN  RESOLVED_RECOVERED  RESOLVED_DISCOUNT  RESOLVED_WRITEOFF  DISPUTED }
+enum UserRole              + OPERATOR, OWNER
+
+model Driver
+  name, phone @unique, active (default true), notes?
+  dispatches[], collectedPayments[]
+
+model Dispatch              // 1:0..1 with Order (orderId @unique for v1)
+  orderId @unique, driverId, dispatchedById?, truckIdentifier?,
+  expectedCollection (Decimal), notes?, dispatchedAt, returnedAt?
+
+model Payment
+  orderId, amount (Decimal), method, status (default PENDING_CONFIRMATION),
+  collectedById?, collectedAt?,                  // driver step
+  recordedById, recordedAt,                       // operator step
+  handedOverToOfficeById?, handedOverAt?,         // operator hand-over step
+  confirmedById?, confirmedAt?, adjustmentNote?,  // owner confirm step
+  rejectedById?, rejectedAt?, rejectionReason?,
+  note?
+  // 4 timestamps + 4 actor FKs = chain of custody
+
+model Discrepancy
+  orderId, paymentId?, driverId?, expectedAmount, receivedAmount, shortfall,
+  status (default OPEN), reportedById?, reportedAt,
+  resolvedById?, resolvedAt?, resolutionNote?
+```
+
+`Order` gained `paymentState` and `confirmedPaid` (a denormalized sum of
+CONFIRMED Payment.amount, recomputed inside the confirm transaction).
+
+### Maker-checker (the core invariant)
+
+- **Maker** (any authenticated role): records the payment, records the
+  hand-over to the office.
+- **Checker** (ADMIN or OWNER only — `canConfirmCash()` in `lib/auth.ts`):
+  confirms or rejects payments, resolves discrepancies.
+
+The same actor cannot both record AND confirm in the happy path; the
+client UI omits the confirm action for non-checkers, and the API gates
+return 403. Confirm/reject endpoints accept ADMIN as a superuser by
+convention even though the spec names OWNER as the operational role.
+
+### Lifecycle, end to end
+
+1. **Place order** — same as before. `paymentState = AWAITING_PAYMENT`,
+   no Dispatch yet.
+2. **Production** — operator advances PLACED → IN_PRODUCTION. Inventory
+   is *not* decremented yet (still happens at DELIVERED).
+3. **Dispatch** — operator clicks the DISPATCHED step on the order page,
+   picks a driver from the active list and a truck identifier, sets
+   `expectedCollection` (defaults to outstanding balance). Creates a
+   Dispatch row, flips the order to DISPATCHED, appends a `DISPATCHED`
+   OrderEvent.
+4. **Delivery + cash collection** — operator clicks DELIVERED, the
+   `DeliveryProofDialog` opens with truck-photo upload AND a cash
+   collection panel pre-filled from `dispatch.expectedCollection`. The
+   operator records what the driver actually brought back; if nothing,
+   they tick "no cash collected" and write a reason. On submit, the
+   route:
+   - validates + saves the photo
+   - decrements inventory inside the same transaction
+   - creates a Payment row (status=PENDING_CONFIRMATION,
+     collectedById=dispatch.driverId, recordedById=current user)
+   - if `driverReturned` was checked, stamps `dispatch.returnedAt`
+   - flips order to DELIVERED
+   - appends `DELIVERED` and `PAYMENT_RECORDED` OrderEvents
+5. **Hand-over to office** — operator goes back later and clicks
+   "Hand over" on the payment row. Stamps
+   `handedOverToOfficeById/At`. If the dispatch hasn't been marked
+   returned yet, that route also stamps `returnedAt`.
+6. **Confirm or reject** — owner opens `/payments` (Pending tab),
+   sees the chain of custody. Confirms-as-recorded for the happy path.
+   If the owner adjusts the amount, an adjustmentNote is required. If
+   the recorded amount is below `dispatch.expectedCollection`, a
+   DiscrepancyChoice (TRACK / DISCOUNT / WRITEOFF) + 5-char min note are
+   required. Confirm:
+   - sets `payment.status = CONFIRMED`, stamps `confirmedById/At`
+   - recomputes `order.confirmedPaid = SUM(CONFIRMED amounts)`
+   - sets `order.paymentState = FULLY_PAID` if `confirmedPaid >= totalPrice`,
+     `PARTIALLY_PAID` if > 0, else `AWAITING_PAYMENT`
+   - stamps `order.paidAt` only when transitioning to FULLY_PAID
+   - if shortfall: creates a Discrepancy with status
+     OPEN / RESOLVED_DISCOUNT / RESOLVED_WRITEOFF based on the action
+   - appends `PAYMENT_CONFIRMED` (and `DISCREPANCY_OPENED` when applicable)
+7. **Reject** — owner provides a 3-char min reason. Sets status=REJECTED,
+   stamps rejected actor + timestamp. Does NOT add to confirmedPaid.
+
+### Files of interest
+
+- `lib/auth.ts` — `AuthRole` now includes OPERATOR + OWNER. `canConfirmCash()`
+  is the maker-checker gate.
+- `lib/validation.ts` — `PaymentRecordSchema`, `PaymentConfirmSchema`,
+  `PaymentRejectSchema`, `DriverCreateSchema`, `DispatchCreateSchema`,
+  `DiscrepancyUpdateSchema`. Added `OrderPaymentStateEnum`,
+  `PaymentMethodEnum`, `DiscrepancyStatusEnum`.
+- `app/api/orders/[id]/dispatch/route.ts` — POST creates Dispatch + flips
+  to DISPATCHED.
+- `app/api/dispatches/[id]/return/route.ts` — POST stamps `returnedAt`.
+  Idempotent.
+- `app/api/orders/[id]/delivery-proof/route.ts` — multipart with
+  cashAmount, noCashCollected, noCashCollectedNote, driverReturned.
+  Creates the Payment row with collected-by = dispatch driver.
+- `app/api/payments/route.ts` — GET (filterable by orderId, status) /
+  POST (record). All routes return the full custody chain via Prisma includes.
+- `app/api/payments/[id]/handover/route.ts` — operator step, any role.
+- `app/api/payments/[id]/confirm/route.ts` — checker only; recomputes
+  `confirmedPaid` and `paymentState`, opens Discrepancies as needed.
+- `app/api/payments/[id]/reject/route.ts` — checker only; required reason.
+- `app/api/drivers/*` — list with augmented counts
+  (activeDispatchCount, discrepancyCount30d, lastDispatchAt), CRUD,
+  ADMIN/OWNER deactivate.
+- `app/api/discrepancies/*` — ADMIN/OWNER list + status PATCH with note.
+- `app/api/dashboard/route.ts` — revenue counts CONFIRMED Payments only;
+  added `cashOnRoad` (SUM expectedCollection where returnedAt=null) and
+  `openDiscrepancies` (count of OPEN rows).
+
+### UI surfaces
+
+- `/orders` — added "Dispatched" filter tab and a Payment column with
+  `paymentState` badge per row.
+- `/orders/[id]` — DISPATCHED step in the timeline triggers
+  `DispatchDialog`; DELIVERED step triggers the extended
+  `DeliveryProofDialog`. Below the breakdown grid: a Dispatch info panel
+  (driver + truck + expected + Mark Returned button) and a Payments table
+  (chain of custody with per-row Hand over action).
+- `/drivers` — list with active/inactive toggle (ADMIN/OWNER), opens
+  `DriverFormDialog`. `/drivers/[id]` shows recent dispatches + 30d
+  discrepancies.
+- `/payments` — checker queue. Tabs Pending / Confirmed / Rejected;
+  `ConfirmPaymentDialog` wraps `ChainOfCustodyPanel` + adjustment input
+  + `DiscrepancyChoice`. ADMIN/OWNER only.
+- `/discrepancies` — Open / Resolved / Disputed tabs; each row opens
+  `DiscrepancyUpdateDialog`. ADMIN/OWNER only.
+- Dashboard — added "Cash on the road" and "Open discrepancies" KPI
+  cards. Revenue tile relabelled "Revenue (confirmed)" and now sums only
+  CONFIRMED Payment.amount.
+
+### Tests
+
+- `tests/dispatch-and-cash-flow.test.ts` — 24 unit cases: schema
+  validation for the new endpoints, role-gate behaviour for
+  `canConfirmCash`, paymentState computation rule, enum shape (DISPATCHED
+  present, PAID absent).
+- DB-touching integration tests (production gate removed, dispatch
+  transition, delivery+collection, hand-over, audit log, computed-field
+  correctness) are not landed: this repo doesn't have a DB harness yet.
+  Worth adding alongside the inventory `describe.skip` block once we
+  stand up a test database.
+
+### Manual verification recipe
+
+1. Place an order and advance it to IN_PRODUCTION as before.
+2. From the order page, click **Dispatched**. Pick a driver + truck +
+   expected collection (defaults to outstanding). Order flips to
+   DISPATCHED; the Dispatch panel appears below the breakdown grid.
+3. Click **Delivered**. Upload a truck photo, confirm/edit the cash
+   amount, optionally tick "Driver returned to office". Submit. Order
+   flips to DELIVERED, inventory decrements, a PENDING payment row
+   appears in the Payments table.
+4. Click **Hand over** on the payment row (or skip — already stamped if
+   the driver-returned checkbox was used).
+5. Log in as ADMIN/OWNER (admin@precast.local). Open `/payments`. The
+   payment is in Pending. Open the dialog: chain of custody has 3
+   green steps. Confirm-as-recorded on the happy path. The dashboard's
+   Revenue tile updates.
+6. To exercise discrepancies: in step 3 enter an amount < expected.
+   In step 5, the dialog shows the DiscrepancyChoice. Pick TRACK with a
+   note → a row appears in `/discrepancies`. Resolve it via the
+   dialog with a 5+ char note.
+7. Cancel a DELIVERED order (admin or password) — inventory restocks
+   as before; existing payments are NOT auto-rejected (owner has to
+   reject them manually if appropriate).
+
+### Outstanding items / known limits
+
+- `Dispatch.orderId` is `@unique` for v1, so an order has at most one
+  dispatch. Re-dispatch (truck breakdown, driver swap) requires a schema
+  change to make this 1:N.
+- Cancel does NOT cascade to existing CONFIRMED payments. If an order
+  is canceled after the customer paid, the owner has to manually
+  reconcile (refund + reject the payment).
+- Existing ADMIN-only API gates that were NOT broadened to OWNER in
+  this PR (out of scope; flagged for a follow-up):
+  - `app/api/inventory/[id]/route.ts:12` — PATCH lowStockThreshold
+  - `app/api/inventory/[id]/adjust/route.ts:19` — manual stock adjust
+  - `app/api/orders/[id]/cancel/route.ts:28` — order cancellation
+    (also accepts the company `ORDER_CANCEL_PASSWORD` fallback)
+  - `app/(app)/inventory/page.tsx:58` — UI gate on inline threshold
+    edit + Adjust button (cosmetic; the API already enforces)
+  Spec wanted these flagged, not changed.
+
 ## What's NOT implemented yet (deferred)
 
 Items 5, 11, 12, 14 from the 14 best-practices list:
@@ -353,7 +577,7 @@ Items 5, 11, 12, 14 from the 14 best-practices list:
 ## Verified local state at handoff
 
 - `npx tsc --noEmit` — 0 errors
-- `npx vitest run` — 60 / 60
+- `npx vitest run` — 109 / 110 (1 pre-existing skip in `inventory.test.ts`)
 - `npx next build` — clean
-- Most recent commit: **`89281ee`** "Gate IN_PRODUCTION → DELIVERED behind a mandatory delivery photo"
+- Most recent commit: **`<update on next push>`** — "Delivery-First Payment Flow with Driver Cash Custody"
 - Repo: https://github.com/azizdadabaev/precast-crm

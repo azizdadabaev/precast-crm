@@ -18,6 +18,8 @@ enum UserRole {
   ADMIN
   SALES
   ENGINEER
+  OPERATOR  // cash-handling staff (records payments, dispatches trucks)
+  OWNER     // trusted confirmer — can confirm payments, resolve discrepancies
 }
 
 enum Language {
@@ -59,17 +61,43 @@ enum ProjectStatus {
 }
 
 enum OrderStatus {
+  DRAFT           // reserved (drafts currently live on Project.status; included for future workflow flexibility)
   PLACED          // Буюртма Берилди — newly placed
   IN_PRODUCTION   // Ишлаб чиқарилмоқда
+  DISPATCHED      // Жўнатилди — truck en route with driver
   DELIVERED       // Етказиб берилди
-  PAID            // Тўланди
   CANCELED        // Бекор қилинди
 }
 
+// Tracks how much of an Order's totalPrice is confirmed-paid.
+// Recomputed every time a Payment moves to/from CONFIRMED.
+enum OrderPaymentState {
+  AWAITING_PAYMENT
+  PARTIALLY_PAID
+  FULLY_PAID
+}
+
+// New three-state lifecycle. PENDING → CONFIRMED (owner) | REJECTED (owner).
 enum PaymentStatus {
-  PAID
-  PARTIAL
-  UNPAID
+  PENDING_CONFIRMATION
+  CONFIRMED
+  REJECTED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CLICK
+  PAYME
+  OTHER
+}
+
+enum DiscrepancyStatus {
+  OPEN                   // shortfall flagged, not yet resolved
+  RESOLVED_RECOVERED     // shortfall later collected (customer paid the rest)
+  RESOLVED_DISCOUNT      // owner approved as a retroactive discount
+  RESOLVED_WRITEOFF      // owner wrote off as a loss
+  DISPUTED               // disputed with driver/operator (HR / disciplinary)
 }
 
 enum OrderEventType {
@@ -80,6 +108,16 @@ enum OrderEventType {
   ORDER_CANCELED
   NOTE_ADDED
   STOCK_WARNING
+  // Cash custody / dispatch lifecycle events:
+  ORDER_DISPATCHED          // driver assigned, order on the road
+  DISPATCH_RETURNED         // driver back at office (or delivery rejected)
+  PAYMENT_RECORDED          // operator entered a Payment row (PENDING_CONFIRMATION)
+  PAYMENT_HANDED_OVER       // physical cash handed from driver to office
+  PAYMENT_CONFIRMED         // owner confirmed amount is correct
+  PAYMENT_REJECTED          // owner rejected the recorded payment
+  PAYMENT_ADJUSTED          // confirmer changed the amount (originalAmount kept)
+  DISCREPANCY_OPENED        // confirmer flagged a shortfall to track
+  DISCREPANCY_RESOLVED      // owner resolved it (recovered/discount/writeoff/disputed)
 }
 
 enum InventoryKind {
@@ -122,6 +160,15 @@ model User {
   productionEntries ProductionEntry[]
   stockMovements    StockMovement[]
   exportEvents      ExportEvent[]
+
+  // Cash-custody back-relations
+  dispatchedDispatches  Dispatch[]    @relation("DispatchDispatcher")
+  recordedPayments      Payment[]     @relation("PaymentRecorder")
+  handedOverToOfficeBy  Payment[]     @relation("PaymentHandedOverTo")
+  confirmedPayments     Payment[]     @relation("PaymentConfirmer")
+  rejectedPayments      Payment[]     @relation("PaymentRejecter")
+  reportedDiscrepancies Discrepancy[] @relation("DiscrepancyReporter")
+  resolvedDiscrepancies Discrepancy[] @relation("DiscrepancyResolver")
 
   @@map("users")
 }
@@ -170,7 +217,6 @@ model Deal {
   client     Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   assignedTo User?     @relation("AssignedDeals", fields: [assignedToId], references: [id])
   projects   Project[]
-  payments   Payment[]
 
   @@index([stage])
   @@index([status])
@@ -279,7 +325,11 @@ model Order {
   clientId        String
   primaryCalculationId String?
 
-  status          OrderStatus  @default(PLACED)
+  status          OrderStatus       @default(PLACED)
+  paymentState    OrderPaymentState @default(AWAITING_PAYMENT)
+  // Sum of all CONFIRMED payments for this order. Recomputed by the
+  // confirm/reject flows; never edited directly by the UI.
+  confirmedPaid   Decimal           @default(0) @db.Decimal(14, 2)
 
   // Pricing snapshot — frozen at placement time
   roomsSubtotal   Decimal      @db.Decimal(14, 2)
@@ -316,8 +366,13 @@ model Order {
   primaryCalculation Calculation? @relation(fields: [primaryCalculationId], references: [id])
   events        OrderEvent[]
   stockMovements StockMovement[]
+  // Cash-custody relations
+  dispatch      Dispatch?      // 0-or-1 active dispatch (orderId is @unique on Dispatch)
+  payments      Payment[]
+  discrepancies Discrepancy[]
 
   @@index([status])
+  @@index([paymentState])
   @@index([clientId])
   @@index([scheduledAt])
   @@index([placedAt])
@@ -342,21 +397,135 @@ model OrderEvent {
   @@map("order_events")
 }
 
+// ─────────────────────────────────────────────
+// Cash custody: Driver, Dispatch, Payment, Discrepancy
+//
+// The flow:
+//   PLACED → IN_PRODUCTION (any role; production starts regardless of payment)
+//   IN_PRODUCTION → DISPATCHED (any role; assigns a Driver, expectedCollection)
+//   DISPATCHED → DELIVERED (any role; uploads truck photo + records cash)
+//                 ↳ creates a Payment with status PENDING_CONFIRMATION,
+//                   collectedById = driver, recordedById = operator
+//   driver returns to office → operator clicks "Money received from driver"
+//                 ↳ payment.handedOverToOfficeBy/At set; still PENDING
+//   owner opens /payments → confirms or rejects
+//                 ↳ on confirm: status CONFIRMED, recompute Order.confirmedPaid
+//                   + Order.paymentState; if shortfall, create Discrepancy
+//                 ↳ on reject: status REJECTED with reason
+//
+// Maker-checker separation: only ADMIN and OWNER can confirm/reject.
+// All other roles record cash; they cannot confirm their own entries.
+// ─────────────────────────────────────────────
+
+model Driver {
+  id        String   @id @default(cuid())
+  name      String
+  // Stored DIGITS-ONLY for stable lookup/dedup, like Client.phone.
+  phone     String   @unique
+  notes     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dispatches    Dispatch[]
+  payments      Payment[]     @relation("PaymentCollector")
+  discrepancies Discrepancy[]
+
+  @@index([active, name])
+  @@map("drivers")
+}
+
+model Dispatch {
+  id                  String    @id @default(cuid())
+  orderId             String    @unique  // one active dispatch per order in v1
+  driverId            String
+  truckIdentifier     String?
+  expectedCollection  Decimal   @db.Decimal(14, 2)
+  notes               String?
+  dispatchedById      String
+  dispatchedAt        DateTime  @default(now())
+  // Set when the driver returns to the office. Null while on the road.
+  returnedAt          DateTime?
+
+  order        Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver       Driver @relation(fields: [driverId], references: [id])
+  dispatchedBy User   @relation("DispatchDispatcher", fields: [dispatchedById], references: [id])
+
+  @@index([driverId, dispatchedAt])
+  @@map("dispatches")
+}
+
 model Payment {
-  id        String        @id @default(cuid())
-  dealId    String
-  amount    Decimal       @db.Decimal(14, 2)
-  status    PaymentStatus @default(UNPAID)
-  method    String?
-  reference String?
-  paidAt    DateTime?
-  createdAt DateTime      @default(now())
+  id              String        @id @default(cuid())
+  orderId         String
+  amount          Decimal       @db.Decimal(14, 2)
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING_CONFIRMATION)
 
-  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  // ── Chain of custody ──
+  // Driver who took the cash from the customer (CASH only; null for transfers).
+  collectedById          String?
+  collectedAt            DateTime?
+  // Operator who entered the row in the app.
+  recordedById           String
+  recordedAt             DateTime  @default(now())
+  // Operator who physically received the cash from the driver at the office.
+  handedOverToOfficeById String?
+  handedOverToOfficeAt   DateTime?
+  // Owner who confirmed the amount is correct.
+  confirmedById          String?
+  confirmedAt            DateTime?
+  // Owner who rejected the row + the reason they gave.
+  rejectedById           String?
+  rejectedAt             DateTime?
+  rejectionReason        String?
 
-  @@index([dealId])
-  @@index([status])
+  // ── Adjustment audit ──
+  // If the confirmer changed the amount on the form, we keep the original
+  // here so the record explains the discrepancy.
+  originalAmount         Decimal?  @db.Decimal(14, 2)
+  adjustmentNote         String?
+
+  notes                  String?
+
+  order              Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  collectedByDriver  Driver? @relation("PaymentCollector", fields: [collectedById], references: [id])
+  recordedBy         User    @relation("PaymentRecorder", fields: [recordedById], references: [id])
+  handedOverTo       User?   @relation("PaymentHandedOverTo", fields: [handedOverToOfficeById], references: [id])
+  confirmedBy        User?   @relation("PaymentConfirmer", fields: [confirmedById], references: [id])
+  rejectedBy         User?   @relation("PaymentRejecter", fields: [rejectedById], references: [id])
+  discrepancies      Discrepancy[]
+
+  @@index([orderId])
+  @@index([status, recordedAt])
   @@map("payments")
+}
+
+model Discrepancy {
+  id              String              @id @default(cuid())
+  orderId         String
+  paymentId       String?            // the linked payment if confirmation produced one
+  driverId        String?            // who collected from the customer
+  expectedAmount  Decimal             @db.Decimal(14, 2)
+  receivedAmount  Decimal             @db.Decimal(14, 2)
+  shortfall       Decimal             @db.Decimal(14, 2)   // expected - received (always positive)
+  status          DiscrepancyStatus   @default(OPEN)
+  reportedById    String              // confirmer who flagged it
+  reportedAt      DateTime            @default(now())
+  resolvedById    String?
+  resolvedAt      DateTime?
+  resolutionNote  String?
+
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  payment    Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  driver     Driver?  @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  reportedBy User    @relation("DiscrepancyReporter", fields: [reportedById], references: [id])
+  resolvedBy User?   @relation("DiscrepancyResolver", fields: [resolvedById], references: [id])
+
+  @@index([driverId, reportedAt])
+  @@index([status])
+  @@index([orderId])
+  @@map("discrepancies")
 }
 
 // ─────────────────────────────────────────────
