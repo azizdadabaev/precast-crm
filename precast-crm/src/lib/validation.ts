@@ -168,7 +168,17 @@ export const PlaceOrderSchema = z.object({
   // Required: when does the customer want delivery?
   scheduledAt: z.coerce.date(),
   notes: z.string().max(2000).optional().nullable(),
-});
+  // Optional up-front payment captured in the placement dialog. When > 0
+  // the route creates a PENDING_CONFIRMATION Payment row in the same
+  // transaction (recordedById = current user; collectedById = null since
+  // there's no driver yet). The total-price ceiling is enforced in the
+  // route handler since totalPrice is computed server-side.
+  paidAmount: z.coerce.number().min(0).default(0),
+  paymentMethod: PaymentMethodEnum.optional().nullable(),
+}).refine(
+  (v) => !(v.paidAmount > 0) || !!v.paymentMethod,
+  { path: ["paymentMethod"], message: "paymentMethod is required when paidAmount > 0" },
+);
 
 // ── Cancel order ────────────────────────────────────────────────
 // Either ADMIN role (no password) or password supplied. Server enforces.

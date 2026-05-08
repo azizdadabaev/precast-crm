@@ -9,6 +9,7 @@ import {
   OrderStatusEnum,
   OrderPaymentStateEnum,
   PaymentStatusEnum,
+  PlaceOrderSchema,
 } from "../src/lib/validation";
 import { canConfirmCash, type AuthPayload } from "../src/lib/auth";
 
@@ -234,6 +235,80 @@ function paymentStateFor(confirmedPaid: number, totalPrice: number): "AWAITING_P
   if (confirmedPaid >= totalPrice) return "FULLY_PAID";
   return "PARTIALLY_PAID";
 }
+
+// ── Place-order up-front payment ───────────────────────────────────
+//
+// The placement endpoint accepts an optional paidAmount + paymentMethod
+// and creates a PENDING_CONFIRMATION Payment row in the same transaction
+// as the order. The total-price ceiling is enforced inside the route
+// (since totalPrice is computed server-side from the rooms snapshot),
+// not in Zod — those route-level cases are deferred until we have a DB
+// harness; the schema-level cases below cover the parts we can unit-test.
+
+const baseOrderBody = {
+  clientName: "Test Customer",
+  clientPhone: "+998901112233",
+  clientAddress: "Tashkent, somewhere",
+  rooms: [
+    {
+      innerWidth: 4,
+      innerLength: 5,
+      bearing: 0.15,
+      correction: 0,
+      extraBeams: 0,
+      forceStartBeam: false,
+    },
+  ],
+  scheduledAt: new Date("2026-06-01"),
+};
+
+describe("PlaceOrderSchema — up-front payment", () => {
+  it("accepts no payment fields (default paidAmount = 0)", () => {
+    const r = PlaceOrderSchema.safeParse({ ...baseOrderBody });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.paidAmount).toBe(0);
+  });
+
+  it("accepts paidAmount = 0 with no method", () => {
+    const r = PlaceOrderSchema.safeParse({ ...baseOrderBody, paidAmount: 0 });
+    expect(r.success).toBe(true);
+  });
+
+  it("accepts paidAmount > 0 with a method", () => {
+    const r = PlaceOrderSchema.safeParse({
+      ...baseOrderBody,
+      paidAmount: 5_000_000,
+      paymentMethod: "CASH",
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("rejects paidAmount > 0 without a method", () => {
+    const r = PlaceOrderSchema.safeParse({
+      ...baseOrderBody,
+      paidAmount: 5_000_000,
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects negative paidAmount", () => {
+    const r = PlaceOrderSchema.safeParse({
+      ...baseOrderBody,
+      paidAmount: -1,
+      paymentMethod: "CASH",
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("rejects unknown payment methods", () => {
+    const r = PlaceOrderSchema.safeParse({
+      ...baseOrderBody,
+      paidAmount: 100_000,
+      paymentMethod: "BITCOIN",
+    });
+    expect(r.success).toBe(false);
+  });
+});
 
 describe("paymentState computation", () => {
   it("AWAITING_PAYMENT when nothing confirmed", () => {

@@ -246,7 +246,7 @@ export default function OrderDetailPage() {
               {order.client.address && <> · {order.client.address}</>}
             </div>
           </div>
-          <div className="text-right">
+          <div className="text-right min-w-[16rem]">
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
               Жами · Total
             </div>
@@ -254,11 +254,50 @@ export default function OrderDetailPage() {
               {formatNumber(order.totalPrice, 0)}
               <span className="text-xs text-muted-foreground font-normal ml-1">UZS</span>
             </div>
-            <div className="text-xs text-muted-foreground tabular-nums mt-0.5">
-              Confirmed paid: {formatNumber(order.confirmedPaid, 0)}
-            </div>
+            {(() => {
+              const total = Number(order.totalPrice);
+              const paid = Number(order.confirmedPaid);
+              const remaining = Math.max(0, total - paid);
+              const fullyPaid = paid > 0 && remaining === 0;
+              const pendingAmount = order.payments
+                .filter((p) => p.status === "PENDING_CONFIRMATION")
+                .reduce((s, p) => s + Number(p.amount), 0);
+              return (
+                <div className="mt-2 space-y-0.5 text-sm">
+                  <div className="flex items-baseline justify-between gap-6">
+                    <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
+                      Тўлов · Paid
+                    </span>
+                    <span className={`tabular-nums font-semibold ${paid > 0 ? "text-emerald-700" : "text-muted-foreground"}`}>
+                      {formatNumber(paid, 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-6">
+                    <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
+                      Қолди · Remaining
+                    </span>
+                    <span
+                      className={`tabular-nums font-semibold ${
+                        fullyPaid
+                          ? "text-emerald-700"
+                          : remaining > 0
+                            ? "text-amber-700"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {fullyPaid ? "Тўланган" : formatNumber(remaining, 0)}
+                    </span>
+                  </div>
+                  {pendingAmount > 0 && (
+                    <div className="text-[11px] text-muted-foreground italic text-right">
+                      + {formatNumber(pendingAmount, 0)} pending confirmation
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <span
-              className={`inline-block mt-1 text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATE_BADGE[order.paymentState].cls}`}
+              className={`inline-block mt-2 text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATE_BADGE[order.paymentState].cls}`}
             >
               {PAYMENT_STATE_BADGE[order.paymentState].label}
             </span>

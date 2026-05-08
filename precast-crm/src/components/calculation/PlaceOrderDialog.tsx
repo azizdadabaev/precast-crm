@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/button";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 import { formatNumber } from "@/lib/utils";
 
+export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CLICK" | "PAYME" | "OTHER";
+
+const METHOD_OPTIONS: Array<{ value: PaymentMethod; label: string }> = [
+  { value: "CASH",          label: "Нақд · Cash" },
+  { value: "BANK_TRANSFER", label: "Банк · Bank transfer" },
+  { value: "CLICK",         label: "Click" },
+  { value: "PAYME",         label: "Payme" },
+  { value: "OTHER",         label: "Бошқа · Other" },
+];
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -24,25 +34,42 @@ interface Props {
     deliveryCost: number;
     totalPrice: number;
   };
-  /** Confirm handler — receives the chosen scheduled date */
-  onConfirm: (scheduledAt: Date) => Promise<void>;
+  /** Confirm handler — receives the chosen scheduled date and the
+   *  optional up-front payment captured in the dialog. paidAmount = 0
+   *  means "no payment row to create". */
+  onConfirm: (args: {
+    scheduledAt: Date;
+    paidAmount: number;
+    paymentMethod: PaymentMethod;
+  }) => Promise<void>;
 }
 
 export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
   const [date, setDate] = useState<Date | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paidAmount, setPaidAmount] = useState<number | "">(0);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
 
   if (!open) return null;
 
-  const canConfirm = !!date && !submitting;
+  const paidNum = paidAmount === "" ? 0 : Number(paidAmount);
+  const remainder = Math.max(0, summary.totalPrice - paidNum);
+  const fullyPaid = paidNum > 0 && paidNum >= summary.totalPrice;
+  const overPaid = paidNum > summary.totalPrice;
+
+  const canConfirm = !!date && !submitting && !overPaid;
 
   async function confirm() {
     if (!date) return;
+    if (overPaid) {
+      setError("Payment cannot exceed the total");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await onConfirm(date);
+      await onConfirm({ scheduledAt: date, paidAmount: paidNum, paymentMethod });
     } catch (e) {
       setError((e as Error).message);
       setSubmitting(false);
@@ -127,6 +154,70 @@ export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
                   <span className="text-xs text-muted-foreground font-normal">UZS</span>
                 </span>
               </div>
+            </div>
+
+            {/* Up-front payment — captured at placement, goes through
+                maker-checker (PENDING_CONFIRMATION until ADMIN/OWNER confirms). */}
+            <div className="border-t pt-3 space-y-2">
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Тўлов · Payment now
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={summary.totalPrice}
+                  step={1000}
+                  value={paidAmount}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPaidAmount(v === "" ? "" : Number(v));
+                  }}
+                  className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm tabular-nums text-right focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </label>
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Усул · Method
+                </span>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                  disabled={paidNum === 0}
+                  className="mt-1 w-full h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+                >
+                  {METHOD_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div
+                className={`flex items-baseline justify-between text-sm rounded px-2 py-1.5 ${
+                  fullyPaid
+                    ? "bg-emerald-50 text-emerald-800"
+                    : paidNum > 0
+                      ? "bg-amber-50 text-amber-900"
+                      : "text-muted-foreground"
+                }`}
+              >
+                <span className="font-semibold">
+                  {fullyPaid ? "Тўланган · Paid in full" : "Қолди · Remainder"}
+                </span>
+                <span className="tabular-nums font-bold">
+                  {formatNumber(remainder, 0)}
+                </span>
+              </div>
+              {overPaid && (
+                <div className="text-xs text-rose-700">
+                  Payment cannot exceed the total ({formatNumber(summary.totalPrice, 0)} UZS).
+                </div>
+              )}
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                Recorded as <span className="font-semibold">PENDING</span>. Owner confirms it on the Payments page; only then does the order's confirmedPaid update.
+              </p>
             </div>
           </aside>
         </div>

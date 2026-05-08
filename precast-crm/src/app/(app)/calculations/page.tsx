@@ -210,7 +210,11 @@ function CalculationsInner() {
   });
 
   const placeOrder = useMutation({
-    mutationFn: (scheduledAt: Date) =>
+    mutationFn: (args: {
+      scheduledAt: Date;
+      paidAmount: number;
+      paymentMethod: "CASH" | "BANK_TRANSFER" | "CLICK" | "PAYME" | "OTHER";
+    }) =>
       api<{ id: string; orderNumber: string }>("/api/orders", {
         method: "POST",
         json: {
@@ -235,7 +239,11 @@ function CalculationsInner() {
           discountPercent,
           deliveryCost: 0,
           otherCost: 0,
-          scheduledAt: scheduledAt.toISOString(),
+          scheduledAt: args.scheduledAt.toISOString(),
+          // Optional up-front payment — server creates a PENDING_CONFIRMATION
+          // Payment row in the placement transaction when paidAmount > 0.
+          paidAmount: args.paidAmount,
+          paymentMethod: args.paidAmount > 0 ? args.paymentMethod : null,
         },
       }),
     onSuccess: (order) => {
@@ -315,8 +323,8 @@ function CalculationsInner() {
         open={orderOpen}
         onClose={() => setOrderOpen(false)}
         summary={summary}
-        onConfirm={async (date) => {
-          await placeOrder.mutateAsync(date);
+        onConfirm={async ({ scheduledAt, paidAmount, paymentMethod }) => {
+          await placeOrder.mutateAsync({ scheduledAt, paidAmount, paymentMethod });
         }}
       />
     </div>

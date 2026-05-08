@@ -8,6 +8,7 @@ import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { nextOrderNumber, orderNumberMonthPrefix } from "@/lib/order-number";
+import { getUserFromRequest } from "@/lib/auth";
 
 /** GET /api/orders — list with optional search + status filter */
 export const GET = handler(async (req: NextRequest) => {
@@ -61,6 +62,23 @@ export const POST = handler(async (req: NextRequest) => {
   const phoneNorm = normalizePhone(body.clientPhone);
   if (!phoneNorm) return fail("phone is required", 422);
 
+  // Up-front payment: we'll create a Payment row in the same transaction
+  // as the Order. The recorder must be a real user (defends against a
+  // stale JWT after a schema reset — same pattern as cancel / export).
+  const paidAmount = body.paidAmount ?? 0;
+  let recorder: { id: string } | null = null;
+  if (paidAmount > 0) {
+    const user = await getUserFromRequest(req);
+    if (!user) return fail("Unauthorized", 401);
+    recorder = await prisma.user.findUnique({
+      where: { id: user.sub },
+      select: { id: true },
+    });
+    if (!recorder) {
+      return fail("Your session is stale — please log out and log back in.", 401);
+    }
+  }
+
   // Compute every room up-front so we have totals for the snapshot
   const computed = body.rooms.map((room) => ({
     input: room,
@@ -81,6 +99,15 @@ export const POST = handler(async (req: NextRequest) => {
   const totalBeams = computed.reduce((s, c) => s + c.result.beam_count, 0);
   const discountAmount = roomsSubtotal * (body.discountPercent / 100);
   const totalPrice = roomsSubtotal - discountAmount + body.deliveryCost + body.otherCost;
+
+  // Total ceiling for the up-front payment. Enforced here (not in Zod)
+  // because totalPrice is computed server-side from the rooms snapshot.
+  if (paidAmount > totalPrice) {
+    return fail(
+      `paidAmount (${paidAmount}) cannot exceed totalPrice (${totalPrice})`,
+      422,
+    );
+  }
 
   // Allocate the order number AFTER we know the placement month
   const placedAt = new Date();
@@ -242,6 +269,7 @@ export const POST = handler(async (req: NextRequest) => {
       data: {
         orderId: created.id,
         type: "ORDER_PLACED",
+        actorId: recorder?.id ?? null,
         message: `Order placed for ${client.name}`,
         payload: {
           totalPrice,
@@ -250,6 +278,40 @@ export const POST = handler(async (req: NextRequest) => {
         },
       },
     });
+
+    // 8. Up-front payment, if any. Stays PENDING_CONFIRMATION until the
+    //    owner confirms it via /payments — same maker-checker rule as the
+    //    delivery-side cash flow. confirmedPaid + paymentState do NOT
+    //    change here; the confirm route is the only place that writes them.
+    if (paidAmount > 0 && recorder && body.paymentMethod) {
+      const payment = await tx.payment.create({
+        data: {
+          orderId: created.id,
+          amount: paidAmount,
+          method: body.paymentMethod,
+          status: "PENDING_CONFIRMATION",
+          recordedById: recorder.id,
+          recordedAt: new Date(),
+          // No driver — this is in-office at placement, not a delivery handoff.
+          collectedById: null,
+          collectedAt: null,
+        },
+      });
+      await tx.orderEvent.create({
+        data: {
+          orderId: created.id,
+          type: "PAYMENT_RECORDED",
+          actorId: recorder.id,
+          message: `Payment of ${paidAmount} recorded at placement (${body.paymentMethod}). Awaiting confirmation.`,
+          payload: {
+            paymentId: payment.id,
+            amount: paidAmount,
+            method: body.paymentMethod,
+            recordedAtPlacement: true,
+          },
+        },
+      });
+    }
 
     return created;
   });
