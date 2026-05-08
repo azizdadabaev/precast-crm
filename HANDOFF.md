@@ -75,7 +75,7 @@ If port 3000 is taken, Next will pick the next free port. The terminal output pr
 7. Status timeline on the order page: click pills to advance Placed → In Production → Delivered → Paid. Marking **Delivered** opens a modal that demands a **photo of the loaded truck** (JPG/PNG/WEBP, ≤8 MB). The image is stored under `public/uploads/orders/{orderId}/` and shown on both the order detail page and the printable invoice.
 8. **/orders** page has the same capacity calendar at the top — clicking a day filters the list to that day.
 9. Orders can be **canceled** by Admin (no password) or by anyone with the `ORDER_CANCEL_PASSWORD` env var (default `etalontbm`). Canceling frees the project back to Draft and moves the deal to LOST.
-10. **Print** any order at `/orders/[id]/print` — auto-triggers `window.print()`. The delivery proof prints on its own page.
+10. **Print** any order at `/orders/[id]/print` — auto-triggers `window.print()`. The page is a single A4-portrait sheet with: header, client + delivery (driver/truck if dispatched), a two-row-per-room table (primary scan-line + technical detail line for beam length, beams, blocks/row, total blocks, slab length, m² rate), totals strip, pricing breakdown, payment status, signature block, and a footer with a QR code that opens the order detail page on the operator dashboard. Fully-paid orders show a faint diagonal "PAID" watermark behind the rooms table. Brand strings (`PRECAST CRM`, tagline, phone) are hardcoded constants at the top of the print page — TODO: move to `AppConfig` once an admin-config UI exists. The delivery proof, if uploaded, still prints on its own page after the invoice.
 
 ## Architecture cheat-sheet
 
