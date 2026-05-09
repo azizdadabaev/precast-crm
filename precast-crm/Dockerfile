@@ -32,13 +32,12 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy the full node_modules from the builder so prisma + tsx (used by db:seed)
+# work at runtime. This makes the image larger (~600MB) than a pure standalone
+# build (~200MB), but it lets `prisma db push` and `npm run db:seed` work
+# without juggling individual transitive deps. Acceptable for this app size.
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/tsx ./node_modules/tsx
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
-COPY --from=builder /app/node_modules/.bin/tsx ./node_modules/.bin/tsx
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
 RUN mkdir -p /app/public/uploads && chown -R nextjs:nodejs /app/public/uploads /app/.next
