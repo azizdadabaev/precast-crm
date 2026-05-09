@@ -348,7 +348,7 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
             <col width={64} />   {/* Жами ғишт     */}
             <col width={70} />   {/* Йиғма Б.      */}
             <col width={78} />   {/* Майдон        */}
-            <col width={68} />   {/* м² нархи      */}
+            <col width={108} />  {/* м² нархи (Select + native arrow + pencil) */}
             <col width={96} />   {/* Сумма         */}
             <col width={36} />   {/* delete        */}
           </colgroup>
@@ -760,7 +760,7 @@ function RateCell({
       title={tooltip}
     >
       <select
-        className="grid-input is-numeric w-20 text-center bg-transparent cursor-pointer"
+        className="grid-input is-numeric w-full min-w-0 text-center bg-transparent cursor-pointer pr-1"
         value={value}
         onChange={(e) => {
           const v = e.target.value;
