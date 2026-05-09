@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, PackageCheck, Loader2 } from "lucide-react";
+import { X, PackageCheck, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 import { formatNumber } from "@/lib/utils";
@@ -33,6 +33,18 @@ interface Props {
     discountAmount: number;
     deliveryCost: number;
     totalPrice: number;
+    /**
+     * Rooms whose Width has been rounded BELOW the engineering-calculated
+     * value (originalWidth) on the calculator. Empty array when none.
+     * Surfaced as a non-blocking notice in the dialog body so the operator
+     * sees the over-ride in context before placing the order.
+     */
+    undersizedRooms?: Array<{
+      name: string;
+      innerWidth: number;
+      innerLength: number;
+      originalWidth: number;
+    }>;
   };
   /** Confirm handler — receives the chosen scheduled date and the
    *  optional up-front payment captured in the dialog. paidAmount = 0
@@ -99,6 +111,32 @@ export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
         {/* Body */}
         <div className="p-5 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
           <div>
+            {summary.undersizedRooms && summary.undersizedRooms.length > 0 && (
+              <div className="mb-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <div className="flex items-start gap-2 font-semibold">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-700" />
+                  <span>
+                    {summary.undersizedRooms.length === 1
+                      ? "1 room is smaller than the engineering-calculated width"
+                      : `${summary.undersizedRooms.length} rooms are smaller than the engineering-calculated width`}
+                  </span>
+                </div>
+                <ul className="mt-1.5 space-y-0.5 text-xs pl-6 tabular-nums">
+                  {summary.undersizedRooms.map((r, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <span className="font-medium">{r.name}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span>
+                        {formatNumber(r.innerWidth, 2)} × {formatNumber(r.innerLength, 2)} m
+                      </span>
+                      <span className="text-amber-800">
+                        ⚠ ўлчам кичикроқ ({formatNumber(r.originalWidth, 3)} → {formatNumber(r.innerWidth, 3)})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <CapacityCalendar
               value={date}
               onChange={setDate}

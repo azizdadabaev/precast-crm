@@ -606,6 +606,24 @@ Items 5, 11, 12, 14 from the 14 best-practices list:
 - `public/uploads/` is gitignored. Delivery photos live there per machine.
 - Memory files for Claude Code live under `~/.claude/projects/c--Users-…/memory/` per machine and **do not** sync via git. Re-create on the new device by saying "remember the calculation patterns / pricing tiers" once or letting Claude rediscover them from the code.
 
+## Calculator — width rounding (5 / 10 cm grid)
+
+The production calculator's Width column has up/down chevron buttons
+beside each input that snap the value to a grid multiple. A toolbar
+above the table picks the grid (10 cm default; 5 cm alt) and persists
+the choice in `localStorage` under `calculator.roundingGrid`. A "Round
+all up" button applies the snap-up to every row in one click.
+
+When a row arrives with an engineering ground truth (the tapered
+sandbox prefill stamps `originalWidth = innerWidth` per room), rounding
+the value BELOW the original surfaces an amber ⚠ next to the input
+with a bilingual tooltip. The Place Order dialog repeats the warning
+in a compact list when any room is undersized — non-blocking, the
+operator decides. Manual rooms have `originalWidth = 0`, never warn.
+Drafts reopened from the DB lose `originalWidth` (it's a UI-only
+field), so the warning ceases — the assumption is the operator
+already validated dimensions when the draft was saved.
+
 ## Verified local state at handoff
 
 - `npx tsc --noEmit` — 0 errors

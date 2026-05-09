@@ -79,6 +79,10 @@ function CalculationsInner() {
             forceStartBeam: false,
             patternOverride: "AUTO",
             result: null,
+            // Engineering ground truth from the tapered sandbox — used by
+            // the calculator's undersize warning when the operator rounds
+            // a width below the engine-calculated value.
+            originalWidth: r.innerWidth,
           }),
         );
         setRows(newRows);
@@ -173,6 +177,11 @@ function CalculationsInner() {
             forceStartBeam: c.forceStartBeam,
             patternOverride: c.patternOverride ?? "AUTO",
             result: null,
+            // Drafts persisted to the DB don't carry the engineering
+            // ground truth — by the time a draft is reopened the operator
+            // has already validated the dimensions, so the undersize
+            // warning ceases (null = never warn).
+            originalWidth: null,
           }),
         ),
       );
@@ -196,6 +205,17 @@ function CalculationsInner() {
   const summary = useMemo(() => {
     const valid = validRooms.map((r) => r.result).filter((r): r is NonNullable<SlabRow["result"]> => !!r);
     const proj = projectTotal(valid, discountPercent);
+    // Per-room lines for the dialog — surfaced ONLY so the dialog can flag
+    // rooms that have been rounded below their engineering-calculated
+    // value. The full table still lives on the calculator page.
+    const undersizedRooms = validRooms
+      .filter((r) => (r.originalWidth ?? 0) > 0 && r.innerWidth < (r.originalWidth ?? 0))
+      .map((r) => ({
+        name: r.name || "Room",
+        innerWidth: r.innerWidth,
+        innerLength: r.innerLength,
+        originalWidth: r.originalWidth ?? 0,
+      }));
     return {
       clientName: client.name,
       clientPhone: client.phone,
@@ -209,6 +229,7 @@ function CalculationsInner() {
       discountAmount: proj.discount_amount,
       deliveryCost: 0,
       totalPrice: proj.total,
+      undersizedRooms,
     };
   }, [validRooms, discountPercent, client]);
 

@@ -1,10 +1,22 @@
 "use client";
 
-import { useMemo } from "react";
-import { Plus, Trash2, Info } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Plus,
+  Trash2,
+  Info,
+  ChevronUp,
+  ChevronDown,
+  AlertTriangle,
+  ArrowUpToLine,
+} from "lucide-react";
 import { calculateSlab, projectTotal, type SlabResult, type Pattern } from "@/services/calculation-engine";
 import { Button } from "@/components/ui/button";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, roundDownToGrid, roundUpToGrid } from "@/lib/utils";
+
+const GRID_STORAGE_KEY = "calculator.roundingGrid";
+type RoundingGrid = 0.05 | 0.1;
+const DEFAULT_GRID: RoundingGrid = 0.1;
 
 export interface SlabRow {
   id: string;
@@ -17,6 +29,14 @@ export interface SlabRow {
   forceStartBeam: boolean;    // default false
   patternOverride: Pattern | "AUTO";
   result: SlabResult | null;
+  /**
+   * Engineering-accurate width snapshot for the undersize warning. Set
+   * once when the row is created (via Add Room → 0, or via the tapered
+   * sandbox prefill → the engine's per-row inner width). NOT updated on
+   * manual edits — manual edits ARE the operator's override. Drafts
+   * reopened from the DB have this as null because we don't persist it.
+   */
+  originalWidth: number | null;
 }
 
 interface Props {
@@ -44,6 +64,9 @@ function makeRow(seq: number): SlabRow {
     forceStartBeam: false,
     patternOverride: "AUTO",
     result: null,
+    // Manual rooms have no engineering ground truth — the operator IS the
+    // source. Snapshot is 0 → the undersize warning never fires for them.
+    originalWidth: 0,
   };
 }
 
@@ -102,10 +125,51 @@ function H({
 }
 
 export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscountChange }: Props) {
+  // Page-level rounding granularity for the Width snap buttons. Persisted
+  // across sessions so operators don't reset their preference every visit.
+  const [roundingGrid, setRoundingGrid] = useState<RoundingGrid>(DEFAULT_GRID);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(GRID_STORAGE_KEY);
+    const parsed = raw === "0.05" ? 0.05 : raw === "0.1" ? 0.1 : null;
+    if (parsed !== null) setRoundingGrid(parsed as RoundingGrid);
+  }, []);
+  function changeGrid(g: RoundingGrid) {
+    setRoundingGrid(g);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(GRID_STORAGE_KEY, String(g));
+    }
+  }
+
   const addRow = () => onChange([...rows, makeRow(rows.length + 1)]);
   const removeRow = (id: string) => onChange(rows.filter((r) => r.id !== id));
   const updateRow = (id: string, updates: Partial<SlabRow>) =>
     onChange(rows.map((r) => (r.id === id ? recomputeRow({ ...r, ...updates }) : r)));
+
+  const onRoundUp = (id: string) => {
+    const room = rows.find((r) => r.id === id);
+    if (!room) return;
+    updateRow(id, { innerWidth: roundUpToGrid(room.innerWidth, roundingGrid) });
+  };
+  const onRoundDown = (id: string) => {
+    const room = rows.find((r) => r.id === id);
+    if (!room) return;
+    const next = roundDownToGrid(room.innerWidth, roundingGrid);
+    if (next <= 0) return;
+    updateRow(id, { innerWidth: next });
+  };
+  const onRoundAllUp = () => {
+    onChange(
+      rows.map((r) => {
+        if (r.innerWidth <= 0) return r;
+        return recomputeRow({
+          ...r,
+          innerWidth: roundUpToGrid(r.innerWidth, roundingGrid),
+        });
+      }),
+    );
+  };
+  const anyRowEligibleForSweep = rows.some((r) => r.innerWidth > 0);
 
   const totals = useMemo(() => {
     const valid = rows.map((r) => r.result).filter((r): r is SlabResult => !!r);
@@ -130,12 +194,56 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
 
   return (
     <div className="space-y-5">
+      {/* Toolbar — rounding grid selector + bulk snap-up. Sits above the
+          table so the choice is obvious; per-row arrows reflect this grid. */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Лабораторий ўлчам · Round to
+          </span>
+          <div className="flex rounded-md border bg-background overflow-hidden text-xs">
+            <button
+              type="button"
+              className={`px-3 h-7 font-semibold uppercase tracking-wider transition-colors ${
+                roundingGrid === 0.1
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+              onClick={() => changeGrid(0.1)}
+            >
+              10 см
+            </button>
+            <button
+              type="button"
+              className={`px-3 h-7 font-semibold uppercase tracking-wider transition-colors ${
+                roundingGrid === 0.05
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+              onClick={() => changeGrid(0.05)}
+            >
+              5 см
+            </button>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!anyRowEligibleForSweep}
+          onClick={onRoundAllUp}
+          title="Apply round-up to every row's Width using the current grid"
+        >
+          <ArrowUpToLine className="h-3.5 w-3.5 mr-1.5" />
+          Барча хоналарни юқорилаштириш · Round all up
+        </Button>
+      </div>
+
       <div className="rounded-lg border border-border overflow-x-auto bg-background shadow-sm">
         <table className="calc-grid">
           {/* Explicit column widths — table-layout: fixed honors these exactly */}
           <colgroup>
             <col width={108} />  {/* Хона          */}
-            <col width={56} />   {/* Эни           */}
+            <col width={104} />  {/* Эни (input + 2 arrows + warning) */}
             <col width={56} />   {/* Бўйи          */}
             <col width={62} />   {/* Миниш         */}
             <col width={62} />   {/* Корр.         */}
@@ -202,13 +310,11 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     />
                   </td>
                   <td className="grid-cell grid-tint-input">
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="grid-input is-numeric"
-                      value={row.innerWidth || ""}
-                      onChange={(e) => updateRow(row.id, { innerWidth: Number(e.target.value) })}
-                      placeholder="0.00"
+                    <WidthCell
+                      row={row}
+                      onWidthChange={(w) => updateRow(row.id, { innerWidth: w })}
+                      onRoundUp={() => onRoundUp(row.id)}
+                      onRoundDown={() => onRoundDown(row.id)}
                     />
                   </td>
                   <td className="grid-cell grid-tint-input">
@@ -506,6 +612,80 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Width input cell with snap-up/down arrows + undersize warning ──
+//
+// Pulled into its own component so the row body stays scannable. The
+// arrows reflect the parent's `roundingGrid`; clicking either one drives
+// updateRow via the parent. The warning fires only when the engine had a
+// meaningful original (originalWidth > 0) AND the current width has been
+// rounded BELOW it — manual rooms (originalWidth = 0) never warn.
+function WidthCell({
+  row,
+  onWidthChange,
+  onRoundUp,
+  onRoundDown,
+}: {
+  row: SlabRow;
+  onWidthChange: (w: number) => void;
+  onRoundUp: () => void;
+  onRoundDown: () => void;
+}) {
+  const original = row.originalWidth ?? 0;
+  const undersized = original > 0 && row.innerWidth > 0 && row.innerWidth < original;
+  const differs =
+    original > 0 && row.innerWidth > 0 && Math.abs(row.innerWidth - original) > 1e-6;
+  const inputTitle = differs
+    ? `Аслида: ${formatNumber(original, 3)} м · Originally calculated: ${formatNumber(original, 3)} m`
+    : undefined;
+  const warningTitle = `Ўлчам аслидан кичикроқ (${formatNumber(original, 3)} → ${formatNumber(row.innerWidth, 3)}). Девордан ўтмаслик мумкин. · Width is smaller than original (${formatNumber(original, 3)} → ${formatNumber(row.innerWidth, 3)}). May not reach the wall — verify.`;
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="number"
+        step="0.01"
+        className="grid-input is-numeric flex-1 min-w-0"
+        value={row.innerWidth || ""}
+        onChange={(e) => onWidthChange(Number(e.target.value))}
+        placeholder="0.00"
+        title={inputTitle}
+      />
+      <div className="flex flex-col gap-px">
+        <button
+          type="button"
+          aria-label="Юқорилаштириш · Round up"
+          title="Round up"
+          onClick={onRoundUp}
+          className="h-3 w-4 inline-flex items-center justify-center rounded border border-input bg-background hover:bg-muted text-muted-foreground"
+        >
+          <ChevronUp className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          aria-label="Тушириш · Round down"
+          title="Round down"
+          onClick={onRoundDown}
+          className="h-3 w-4 inline-flex items-center justify-center rounded border border-input bg-background hover:bg-muted text-muted-foreground"
+        >
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </div>
+      {undersized ? (
+        <span
+          role="img"
+          aria-label={warningTitle}
+          title={warningTitle}
+          className="inline-flex items-center justify-center text-amber-600 shrink-0"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+        </span>
+      ) : (
+        <span className="w-3.5 shrink-0" aria-hidden />
       )}
     </div>
   );
