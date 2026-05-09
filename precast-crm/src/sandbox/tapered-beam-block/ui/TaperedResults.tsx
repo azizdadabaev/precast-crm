@@ -171,7 +171,7 @@ function StrategyCard({ r }: { r: TaperResult }) {
             <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2">Group</th>
-                <th className="text-right px-3 py-2">Beam length (m)</th>
+                <th className="text-right px-3 py-2">Inner width (m)</th>
                 <th className="text-right px-3 py-2">Qty</th>
                 <th className="text-left px-3 py-2">Rows</th>
               </tr>
@@ -181,7 +181,7 @@ function StrategyCard({ r }: { r: TaperResult }) {
                 <tr key={i}>
                   <td className="px-3 py-2 font-medium">#{i + 1}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-emerald-700">
-                    {g.beamLength.toFixed(2)}
+                    {g.innerWidth.toFixed(2)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{g.qty}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">
@@ -199,7 +199,7 @@ function StrategyCard({ r }: { r: TaperResult }) {
             disabled={!canSend}
             onClick={handleSendToCalculator}
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            title="Each group becomes a calculator row: Width = beam length, Length = qty × spacing"
+            title="Each group becomes a calculator row: Width = inner width, Length = qty × spacing"
           >
             <Send className="h-4 w-4 mr-1.5" />
             Калькуляторга юбориш · Send to calculator
@@ -291,7 +291,7 @@ function ProductionNotes({ r }: { r: TaperResult }) {
 
 function DetailsExpander({ r }: { r: TaperResult }) {
   const [open, setOpen] = useState(false);
-  if (r.perRowBeamLengths.length === 0) return null;
+  if (r.perRowInnerWidths.length === 0) return null;
 
   // Pull [VERIFY] markers from BoM notes.
   const verifyMarkers = r.billOfMaterials.notes.filter((n) =>
@@ -316,10 +316,10 @@ function DetailsExpander({ r }: { r: TaperResult }) {
         <CardContent className="space-y-4 text-xs">
           <div>
             <div className="font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-              Per-row beam lengths (W_n)
+              Per-row inner widths (W_n)
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-1 tabular-nums">
-              {r.perRowBeamLengths.map((w, i) => (
+              {r.perRowInnerWidths.map((w, i) => (
                 <div
                   key={i}
                   className="flex justify-between border rounded px-2 py-1 bg-muted/20"

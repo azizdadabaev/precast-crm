@@ -30,8 +30,14 @@ export interface TaperInput {
 
 /** One physical beam SKU produced for the slab. */
 export interface BeamGroup {
-  /** Stock beam length in metres (rounded UP to BEAM_STOCK_STEP). */
-  beamLength: number;
+  /**
+   * Representative inner width in metres for this group — the maximum
+   * inner width across the rows this SKU covers, rounded UP to
+   * BEAM_STOCK_STEP. The actual beam member length is
+   * `innerWidth + 2 × bearing`; the calculator that consumes this
+   * computes the beam length itself.
+   */
+  innerWidth: number;
   /** Number of beams of this length. */
   qty: number;
   /** Row indices (0-based) covered by this SKU. */
@@ -73,10 +79,12 @@ export interface TaperResult {
   effectiveLength: number;
 
   /**
-   * W_n = width1 + (C_r × n) for n = 0..rowsPractical-1.
+   * Inner width at row n = width1 + (C_r × n) for n = 0..rowsPractical-1.
    * Sign of C_r is preserved — values may decrease on a narrowing slab.
+   * These are inner (wall-to-wall) widths, not beam member lengths;
+   * the beam member at row n is `perRowInnerWidths[n] + 2 × bearing`.
    */
-  perRowBeamLengths: number[];
+  perRowInnerWidths: number[];
 
   // ── Strategy decision ─────────────────────────────────────
   /** 1 / 2 / 3 / 4 / "hybrid" — the chosen grouping strategy. */

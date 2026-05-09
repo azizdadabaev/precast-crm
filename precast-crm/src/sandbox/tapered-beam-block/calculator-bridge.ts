@@ -15,7 +15,7 @@
  * that block (see sandbox README).
  *
  * Mapping rule the operator asked for:
- *   group.beamLength → row.innerWidth   (Width column)
+ *   group.innerWidth → row.innerWidth   (Width column)
  *   group.qty × beamSpacing → row.innerLength  (Length column)
  *   bearing = 0.15, correction = 0, extras = 0, pattern AUTO.
  */
@@ -62,7 +62,7 @@ export function buildBridgePayload(args: {
   const rows = args.groups.map((g, i) => ({
     id: `bridge-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 7)}`,
     name: `Group ${i + 1}`,
-    innerWidth: g.beamLength,
+    innerWidth: g.innerWidth,
     innerLength: roundTo(g.qty * args.beamSpacing, 3),
     bearing: DEFAULT_BEARING,
     correction: 0,

@@ -8,7 +8,7 @@ describe("§0 routing guard", () => {
     expect(r.isRectangular).toBe(true);
     expect(r.errors).toContain(ROUTING_MESSAGE_RECTANGULAR);
     // No further computation: the report fields are stubbed.
-    expect(r.perRowBeamLengths).toEqual([]);
+    expect(r.perRowInnerWidths).toEqual([]);
     expect(r.groups).toEqual([]);
     expect(r.groupCount).toBe(0);
     expect(r.requiresHybrid).toBe(false);

@@ -17,8 +17,8 @@ describe("§10 worked examples", () => {
     // Single-beam strategy: one group covering all rows.
     expect(r.groups).toHaveLength(1);
     expect(r.groups[0].qty).toBe(10);
-    // Stock beam length covers the widest row, rounded up to BEAM_STOCK_STEP.
-    expect(r.groups[0].beamLength).toBeGreaterThanOrEqual(3.9);
+    // Stock inner width covers the widest row, rounded up to BEAM_STOCK_STEP.
+    expect(r.groups[0].innerWidth).toBeGreaterThanOrEqual(3.9);
   });
 
   it("Example 2 — Medium taper (3 groups)", () => {
@@ -39,9 +39,9 @@ describe("§10 worked examples", () => {
     // Stock lengths must monotonically cover their group max.
     for (const g of r.groups) {
       const maxInGroup = Math.max(
-        ...g.rowsCovered.map((i) => r.perRowBeamLengths[i]),
+        ...g.rowsCovered.map((i) => r.perRowInnerWidths[i]),
       );
-      expect(g.beamLength).toBeGreaterThanOrEqual(maxInGroup - 1e-9);
+      expect(g.innerWidth).toBeGreaterThanOrEqual(maxInGroup - 1e-9);
     }
   });
 

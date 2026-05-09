@@ -104,19 +104,21 @@ export function decideHybrid({
 // ── Group construction ──────────────────────────────────────
 
 /**
- * Slice the per-row beam-length array into `targetGroups` contiguous
- * groups of approximately equal size, then pick a single stock beam
- * length for each group equal to the group's MAXIMUM row width
+ * Slice the per-row inner-width array into `targetGroups` contiguous
+ * groups of approximately equal size, then pick a single representative
+ * inner width for each group equal to the group's MAXIMUM row width
  * rounded up to BEAM_STOCK_STEP.
  *
+ * The stored value is an INNER WIDTH (wall-to-wall), not a beam member
+ * length — the consumer adds bearings when computing the beam to cut.
  * Stock catalog is [VERIFY §12]; we use a 5 cm step here as a
  * defensible placeholder. `notes[]` for the BoM call this out.
  */
 export function buildGroups(
-  perRowBeamLengths: number[],
+  perRowInnerWidths: number[],
   targetGroups: number,
 ): BeamGroup[] {
-  const N = perRowBeamLengths.length;
+  const N = perRowInnerWidths.length;
   if (N === 0) return [];
 
   const safeTarget = Math.max(1, Math.min(targetGroups, N));
@@ -131,7 +133,7 @@ export function buildGroups(
     let minWidth = Infinity;
     for (let i = startIdx; i <= endIdx; i++) {
       rowsCovered.push(i);
-      const w = perRowBeamLengths[i];
+      const w = perRowInnerWidths[i];
       if (w > maxWidth) maxWidth = w;
       if (w < minWidth) minWidth = w;
     }
@@ -140,7 +142,7 @@ export function buildGroups(
     // every row in the group is structurally covered.
     const stock = round3(roundUpToStep(maxWidth, BEAM_STOCK_STEP));
     groups.push({
-      beamLength: stock,
+      innerWidth: stock,
       qty: rowsCovered.length,
       rowsCovered,
     });
@@ -157,7 +159,7 @@ export function buildGroups(
  * factory still has a manageable SKU count even in the hybrid case.
  */
 export function buildGroupsForHybrid(
-  perRowBeamLengths: number[],
+  perRowInnerWidths: number[],
 ): BeamGroup[] {
-  return buildGroups(perRowBeamLengths, 2);
+  return buildGroups(perRowInnerWidths, 2);
 }

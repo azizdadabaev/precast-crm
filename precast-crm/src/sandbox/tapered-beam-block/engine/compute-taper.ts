@@ -105,9 +105,9 @@ export function computeTaper(input: TaperInput): TaperResult {
   // ceil-on-remainder is what we encode.
   const rowsPractical = Math.ceil(rowsRaw - EPS);
 
-  const perRowBeamLengths: number[] = [];
+  const perRowInnerWidths: number[] = [];
   for (let n = 0; n < rowsPractical; n++) {
-    perRowBeamLengths.push(round3(input.width1 + changePerRow * n));
+    perRowInnerWidths.push(round3(input.width1 + changePerRow * n));
   }
 
   // ── 5. Geometry-derived warnings ──────────────────────────
@@ -171,13 +171,13 @@ export function computeTaper(input: TaperInput): TaperResult {
     tier === "hybrid" ? Math.min(2, Math.max(1, rowsPractical)) : tier;
   const groups: BeamGroup[] =
     tier === "hybrid"
-      ? buildGroupsForHybrid(perRowBeamLengths)
-      : buildGroups(perRowBeamLengths, targetGroups);
+      ? buildGroupsForHybrid(perRowInnerWidths)
+      : buildGroups(perRowInnerWidths, targetGroups);
 
   // ── 9. Bill of materials (best-effort, with [VERIFY] notes) ─
   const billOfMaterials = computeBom({
     groups,
-    perRowBeamLengths,
+    perRowInnerWidths,
     rowsPractical,
     effectiveLength,
     beamSpacing,
@@ -199,7 +199,7 @@ export function computeTaper(input: TaperInput): TaperResult {
     rowsTheoretical,
     rowsPractical,
     effectiveLength,
-    perRowBeamLengths,
+    perRowInnerWidths,
 
     groupingStrategy: tier,
     groupCount: groups.length,
@@ -251,7 +251,7 @@ function makeStub(a: StubArgs): TaperResult {
     rowsTheoretical: 0,
     rowsPractical: 0,
     effectiveLength: a.effectiveLength,
-    perRowBeamLengths: [],
+    perRowInnerWidths: [],
 
     groupingStrategy: 1,
     groupCount: 0,
@@ -270,14 +270,14 @@ function makeStub(a: StubArgs): TaperResult {
 
 function computeBom({
   groups,
-  perRowBeamLengths,
+  perRowInnerWidths,
   rowsPractical,
   effectiveLength,
   beamSpacing,
   requiresHybrid,
 }: {
   groups: BeamGroup[];
-  perRowBeamLengths: number[];
+  perRowInnerWidths: number[];
   rowsPractical: number;
   effectiveLength: number;
   beamSpacing: number;
@@ -290,8 +290,8 @@ function computeBom({
   // engine has a precise formula tied to inner_width / BLOCK_LENGTH;
   // for the sandbox we use a coarse area-based estimate so the report
   // has SOMETHING to show, with a clear caveat.
-  const widestRow = perRowBeamLengths.length
-    ? Math.max(...perRowBeamLengths.map((w) => Math.abs(w)))
+  const widestRow = perRowInnerWidths.length
+    ? Math.max(...perRowInnerWidths.map((w) => Math.abs(w)))
     : 0;
   const approxBlocksPerRow = widestRow > 0 ? Math.ceil(widestRow / 0.2) : 0;
   const blocks = approxBlocksPerRow * rowsPractical;
