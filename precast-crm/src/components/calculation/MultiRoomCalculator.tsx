@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Plus,
   Trash2,
@@ -13,10 +13,7 @@ import {
 import { calculateSlab, projectTotal, type SlabResult, type Pattern } from "@/services/calculation-engine";
 import { Button } from "@/components/ui/button";
 import { formatNumber, roundDownToGrid, roundUpToGrid } from "@/lib/utils";
-
-const GRID_STORAGE_KEY = "calculator.roundingGrid";
-type RoundingGrid = 0.05 | 0.1;
-const DEFAULT_GRID: RoundingGrid = 0.1;
+import { useCalculatorStore } from "@/store/calculator";
 
 export interface SlabRow {
   id: string;
@@ -125,21 +122,11 @@ function H({
 }
 
 export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscountChange }: Props) {
-  // Page-level rounding granularity for the Width snap buttons. Persisted
-  // across sessions so operators don't reset their preference every visit.
-  const [roundingGrid, setRoundingGrid] = useState<RoundingGrid>(DEFAULT_GRID);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = window.localStorage.getItem(GRID_STORAGE_KEY);
-    const parsed = raw === "0.05" ? 0.05 : raw === "0.1" ? 0.1 : null;
-    if (parsed !== null) setRoundingGrid(parsed as RoundingGrid);
-  }, []);
-  function changeGrid(g: RoundingGrid) {
-    setRoundingGrid(g);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(GRID_STORAGE_KEY, String(g));
-    }
-  }
+  // Workspace-level rounding granularity, persisted via the calculator
+  // store. One setting applies to every row; survives in-app navigation
+  // and is keyed per user (see src/store/calculator.ts).
+  const roundingGrid = useCalculatorStore((s) => s.roundingGrid);
+  const changeGrid = useCalculatorStore((s) => s.setRoundingGrid);
 
   const addRow = () => onChange([...rows, makeRow(rows.length + 1)]);
   const removeRow = (id: string) => onChange(rows.filter((r) => r.id !== id));

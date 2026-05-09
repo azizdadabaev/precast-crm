@@ -606,6 +606,44 @@ Items 5, 11, 12, 14 from the 14 best-practices list:
 - `public/uploads/` is gitignored. Delivery photos live there per machine.
 - Memory files for Claude Code live under `~/.claude/projects/c--Users-…/memory/` per machine and **do not** sync via git. Re-create on the new device by saying "remember the calculation patterns / pricing tiers" once or letting Claude rediscover them from the code.
 
+## Calculator — auto-save & Clear button
+
+The calculator's session state (client info, rooms, discount, the
+rounding-grid choice, the active draftProjectId) auto-persists to
+`localStorage` so in-app navigation, browser refresh, and tab close
+don't drop the operator's work. Implementation lives in
+`src/store/calculator.ts` (Zustand + `persist` middleware) with a
+hydration hook in `src/store/useHydrateCalculator.ts`.
+
+Per-user keying: factory PCs are shared, so each operator sees their
+own draft. On app mount the hook fetches `/api/auth/me`, then points
+the persist storage at `calculator-draft-${userId}` and rehydrates.
+If `/me` fails (logged-out / network), it falls back to a shared
+`calculator-draft-anon` key so the calculator still works.
+
+One-shot migration: the pre-Zustand keys (`calc:autosave:v1` for
+session data, `calculator.roundingGrid` for the rounding preference)
+are read once on first hydration into the per-user slot, then
+deleted. Existing operators don't lose their in-flight draft.
+
+Two ways to clear the auto-save:
+- **Тозалаш · Clear** button in the calculator header — confirms via
+  dialog, wipes session fields (rooms, client, discount, draft id);
+  preserves the rounding-grid preference.
+- **Automatic** after a successful Place Order — the work is
+  committed permanently to the Order, no reason to hold the draft.
+
+The auto-save layer is INDEPENDENT of the Save Project / `/projects`
+DB persistence. Save Project still writes a `Project` row (and its
+calculations) to the database; the auto-save is a separate
+session-level safety net. After a successful Save, the auto-save is
+cleared too (the operator just committed; next edits start fresh).
+
+SSR safety: the persist middleware uses `skipHydration: true` and a
+custom `safeJSONStorage` adapter (in `src/store/calculator.ts`) that
+guards on `typeof window`. Hydration only fires from a client effect
+once `/api/auth/me` resolves.
+
 ## Calculator — width rounding (5 / 10 cm grid)
 
 The production calculator's Width column has up/down chevron buttons
