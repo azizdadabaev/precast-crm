@@ -1,29 +1,27 @@
 "use client";
 
-import { MetricCard } from "./MetricCard";
+import { Card } from "./Card";
+import { TrendIndicator } from "./TrendIndicator";
 import { formatNumber } from "@/lib/utils";
 import type { DashboardData } from "./types";
 
-interface Props {
+export function RevenueThisMonthCard({
+  data,
+}: {
   data: DashboardData["revenueThisMonth"];
-}
-
-export function RevenueThisMonthCard({ data }: Props) {
-  if (data.total === 0) {
+}) {
+  if (data.total === 0 && data.orderCount === 0) {
     return (
-      <MetricCard
-        value="0"
-        label="ЖОРИЙ ОЙ · This month"
-        sublabel="Бошланғич ой · Just getting started"
-      />
+      <Card label="Revenue this month" value={<span className="dash-card-empty">No revenue yet</span>} />
     );
   }
   return (
-    <MetricCard
-      variant="success"
-      value={`${formatNumber(data.total, 0)}`}
-      label="ЖОРИЙ ОЙ · This month (UZS)"
-      sublabel={`${data.orderCount} та буюртма · ${data.orderCount} orders`}
+    <Card
+      label="Revenue this month"
+      headerRight={<TrendIndicator trend={data.trend} />}
+      value={formatNumber(data.total, 0)}
+      unit="UZS"
+      meta={`${data.orderCount} orders · vs. last month`}
     />
   );
 }

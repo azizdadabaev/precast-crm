@@ -1,31 +1,30 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MetricCard } from "./MetricCard";
+import { Card } from "./Card";
 import { formatNumber } from "@/lib/utils";
 import type { DashboardData } from "./types";
 
-interface Props {
+export function OpenDiscrepanciesCard({
+  data,
+}: {
   data: DashboardData["openDiscrepancies"];
-}
-
-export function OpenDiscrepanciesCard({ data }: Props) {
+}) {
   const router = useRouter();
   if (data.count === 0) {
     return (
-      <MetricCard
-        value="0"
-        label="ТАФОВУТЛАР · Discrepancies"
-        sublabel="Барчаси яхши · All clear"
+      <Card
+        label="Open discrepancies"
+        value={<span className="dash-card-empty">All clear</span>}
       />
     );
   }
   return (
-    <MetricCard
-      variant="warning"
-      value={`⚠ ${data.count}`}
-      label="ТАФОВУТЛАР · Discrepancies"
-      sublabel={`${formatNumber(data.totalAmount, 0)} UZS ҳал қилинмаган`}
+    <Card
+      label="Open discrepancies"
+      value={String(data.count)}
+      meta={`${formatNumber(data.totalAmount, 0)} UZS unresolved`}
+      attention="warning"
       onClick={() => router.push("/discrepancies")}
     />
   );

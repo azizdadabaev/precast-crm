@@ -1,19 +1,25 @@
 "use client";
 
-import { MetricCard } from "./MetricCard";
+import { Card } from "./Card";
 import { formatNumber } from "@/lib/utils";
 import type { DashboardData } from "./types";
 
-interface Props {
+export function RevenueAllTimeCard({
+  data,
+}: {
   data: DashboardData["revenueAllTime"];
-}
-
-export function RevenueAllTimeCard({ data }: Props) {
+}) {
+  if (data.total === 0) {
+    return (
+      <Card label="Revenue all time" value={<span className="dash-card-empty">No revenue yet</span>} />
+    );
+  }
   return (
-    <MetricCard
-      value={data.total > 0 ? formatNumber(data.total, 0) : "0"}
-      label="ЖАМИ · All time (UZS)"
-      sublabel={`${data.orderCount} та буюртма · ${data.orderCount} orders`}
+    <Card
+      label="Revenue all time"
+      value={formatNumber(data.total, 0)}
+      unit="UZS"
+      meta={`${data.orderCount} orders since inception`}
     />
   );
 }

@@ -4,19 +4,37 @@
  * exactly. Cards consume these directly.
  */
 
+export interface Trend {
+  /** Whole-percent delta vs the previous period. Sign-preserving. */
+  deltaPct: number;
+  /** "flat" when |delta| < 1% so noise doesn't trigger green/red flashing. */
+  direction: "up" | "down" | "flat";
+  /** Whether an up arrow is good (revenue) or bad (receivables). */
+  polarity: "positive" | "negative";
+}
+
 export interface DashboardData {
   revenueThisMonth: {
     total: number;
     orderCount: number;
     periodStart: string;
     periodEnd: string;
+    trend: Trend | null;
   };
   revenueAllTime: {
     total: number;
     orderCount: number;
   };
-  averageOrderValue: { thisMonth: number; allTime: number };
-  outstandingReceivables: { total: number; orderCount: number };
+  averageOrderValue: {
+    thisMonth: number;
+    allTime: number;
+    trend: Trend | null;
+  };
+  outstandingReceivables: {
+    total: number;
+    orderCount: number;
+    trend: Trend | null;
+  };
   activeCustomers: {
     count: number;
     breakdown: { paid: number; partial: number; awaiting: number };

@@ -1,28 +1,27 @@
 "use client";
 
-import { MetricCard } from "./MetricCard";
+import { Card } from "./Card";
+import { TrendIndicator } from "./TrendIndicator";
 import { formatNumber } from "@/lib/utils";
 import type { DashboardData } from "./types";
 
-interface Props {
+export function AverageOrderValueCard({
+  data,
+}: {
   data: DashboardData["averageOrderValue"];
-}
-
-export function AverageOrderValueCard({ data }: Props) {
+}) {
   if (data.thisMonth === 0 && data.allTime === 0) {
     return (
-      <MetricCard
-        value="—"
-        label="ЎРТАЧА · Avg order"
-        sublabel="Маълумот етарли эмас · Not enough data"
-      />
+      <Card label="Avg order value" value={<span className="dash-card-empty">No orders yet</span>} />
     );
   }
   return (
-    <MetricCard
+    <Card
+      label="Avg order value"
+      headerRight={<TrendIndicator trend={data.trend} />}
       value={formatNumber(data.thisMonth, 0)}
-      label="ЎРТАЧА — БУ ОЙ · Avg this month (UZS)"
-      sublabel={`Жами ўртача: ${formatNumber(data.allTime, 0)} · All-time avg`}
+      unit="UZS"
+      meta={`All-time avg: ${formatNumber(data.allTime, 0)} UZS`}
     />
   );
 }

@@ -1,31 +1,28 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { MetricCard } from "./MetricCard";
+import { Card } from "./Card";
+import { TrendIndicator } from "./TrendIndicator";
 import { formatNumber } from "@/lib/utils";
 import type { DashboardData } from "./types";
 
-interface Props {
+export function ReceivablesCard({
+  data,
+}: {
   data: DashboardData["outstandingReceivables"];
-}
-
-export function ReceivablesCard({ data }: Props) {
+}) {
   const router = useRouter();
   if (data.total === 0) {
-    return (
-      <MetricCard
-        value="0"
-        label="ҚАРЗДОРЛИК · Outstanding"
-        sublabel="Барчаси тўланган · All clear"
-      />
-    );
+    return <Card label="Outstanding" value={<span className="dash-card-empty">All clear</span>} />;
   }
   return (
-    <MetricCard
-      variant="critical"
+    <Card
+      label="Outstanding"
+      headerRight={<TrendIndicator trend={data.trend} />}
       value={formatNumber(data.total, 0)}
-      label="ҚАРЗДОРЛИК · Outstanding (UZS)"
-      sublabel={`${data.orderCount} та буюртма · ${data.orderCount} orders`}
+      unit="UZS"
+      meta={`${data.orderCount} orders awaiting payment`}
+      attention="danger"
       onClick={() => router.push("/orders")}
     />
   );

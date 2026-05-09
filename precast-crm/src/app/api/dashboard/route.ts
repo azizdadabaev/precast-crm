@@ -27,11 +27,36 @@ interface RevenueAgg {
   orderCount: number;
 }
 
+/**
+ * Trend pill data. `deltaPct` is rounded to whole percent. `direction`
+ * derives from the sign — "flat" when |delta| < 1% so we don't flash a
+ * pill for noise. `polarity` controls the green/red color in the UI:
+ * "positive" means an up arrow is good (revenue), "negative" means an
+ * up arrow is bad (receivables).
+ */
+interface Trend {
+  deltaPct: number;
+  direction: "up" | "down" | "flat";
+  polarity: "positive" | "negative";
+}
+
 interface DashboardPayload {
-  revenueThisMonth: RevenueAgg & { periodStart: string; periodEnd: string };
+  revenueThisMonth: RevenueAgg & {
+    periodStart: string;
+    periodEnd: string;
+    trend: Trend | null;
+  };
   revenueAllTime: RevenueAgg;
-  averageOrderValue: { thisMonth: number; allTime: number };
-  outstandingReceivables: { total: number; orderCount: number };
+  averageOrderValue: {
+    thisMonth: number;
+    allTime: number;
+    trend: Trend | null;
+  };
+  outstandingReceivables: {
+    total: number;
+    orderCount: number;
+    trend: Trend | null;
+  };
   activeCustomers: {
     count: number;
     breakdown: { paid: number; partial: number; awaiting: number };
@@ -93,6 +118,25 @@ function endOfDay(d: Date): Date {
  *  dashboard's "100% booked" lines up with the calendar's red zone. */
 const CAPACITY_M2_PER_DAY = 600;
 
+/**
+ * Build a trend pill from a current vs previous-period number pair.
+ * Returns null when there's no previous-period basis (the first month
+ * of operation, or any case where dividing by zero is meaningless).
+ * |delta| < 1% renders as a flat arrow so noise doesn't trigger
+ * green/red flashing.
+ */
+function buildTrend(
+  current: number,
+  previous: number,
+  polarity: Trend["polarity"],
+): Trend | null {
+  if (previous <= 0) return null;
+  const deltaPct = Math.round(((current - previous) / previous) * 100);
+  const direction: Trend["direction"] =
+    Math.abs(deltaPct) < 1 ? "flat" : deltaPct > 0 ? "up" : "down";
+  return { deltaPct, direction, polarity };
+}
+
 export const GET = handler(async () => {
   const user = await getCurrentUser();
   if (!canConfirmCash(user)) {
@@ -102,6 +146,9 @@ export const GET = handler(async () => {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  // Previous calendar month — for "vs last month" trend pills.
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+  const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
   const todayStart = startOfDay(now);
   const todayEnd = endOfDay(now);
 
@@ -121,7 +168,9 @@ export const GET = handler(async () => {
   const [
     revenueAllTimeAgg,
     revenueThisMonthAgg,
+    revenuePrevMonthAgg,
     receivablesAgg,
+    receivablesPrevMonthAgg,
     activeCustomersDistinct,
     activeCustomersBreakdown,
     todayOrders,
@@ -145,12 +194,40 @@ export const GET = handler(async () => {
         placedAt: { gte: monthStart, lte: monthEnd },
       },
     }),
+    // Previous-month revenue + order count, for the trend pills.
+    prisma.order.aggregate({
+      _sum: { confirmedPaid: true },
+      _count: { _all: true },
+      where: {
+        status: { not: "CANCELED" },
+        placedAt: { gte: prevMonthStart, lte: prevMonthEnd },
+      },
+    }),
     // Outstanding = sum(totalPrice − confirmedPaid) on orders that
     // aren't canceled and aren't fully paid.
     prisma.order.findMany({
       where: {
         status: { not: "CANCELED" },
         paymentState: { in: ["AWAITING_PAYMENT", "PARTIALLY_PAID"] },
+      },
+      select: { totalPrice: true, confirmedPaid: true },
+    }),
+    // Receivables a month ago — proxy for the trend. We capture orders
+    // that were already-placed by `prevMonthEnd` AND were still
+    // un-paid at the time. Since `confirmedPaid` only ever monotonic-
+    // ally grows and our DB doesn't store historical snapshots, this
+    // is a best-available comparison: we reconstruct "what was
+    // outstanding last month" as `sum(totalPrice − confirmedPaid)`
+    // over orders placed by `prevMonthEnd`. If a payment confirmed
+    // after `prevMonthEnd` cleared an old order, the past number
+    // reflects what's CURRENTLY outstanding from those orders, which
+    // understates last month's true number. Acceptable for a trend
+    // pill — the direction is what matters.
+    prisma.order.findMany({
+      where: {
+        status: { not: "CANCELED" },
+        paymentState: { in: ["AWAITING_PAYMENT", "PARTIALLY_PAID"] },
+        placedAt: { lte: prevMonthEnd },
       },
       select: { totalPrice: true, confirmedPaid: true },
     }),
@@ -225,6 +302,13 @@ export const GET = handler(async () => {
   const avgAllTime = countAllTime > 0 ? Math.round(totalAllTime / countAllTime) : 0;
   const avgThisMonth = countThisMonth > 0 ? Math.round(totalThisMonth / countThisMonth) : 0;
 
+  // Previous-month numbers, for trend pills.
+  const totalPrevMonth = Number(revenuePrevMonthAgg._sum.confirmedPaid ?? 0);
+  const countPrevMonth = revenuePrevMonthAgg._count._all;
+  const avgPrevMonth = countPrevMonth > 0 ? Math.round(totalPrevMonth / countPrevMonth) : 0;
+  const revenueTrend = buildTrend(totalThisMonth, totalPrevMonth, "positive");
+  const avgOrderTrend = buildTrend(avgThisMonth, avgPrevMonth, "positive");
+
   // ── Receivables ──
   let receivablesTotal = 0;
   let receivablesOrders = 0;
@@ -235,6 +319,13 @@ export const GET = handler(async () => {
       receivablesOrders += 1;
     }
   }
+  let receivablesPrev = 0;
+  for (const o of receivablesPrevMonthAgg) {
+    const due = Number(o.totalPrice) - Number(o.confirmedPaid);
+    if (due > 0) receivablesPrev += due;
+  }
+  // Receivables: up = bad. Polarity NEGATIVE → up arrow renders red.
+  const receivablesTrend = buildTrend(receivablesTotal, receivablesPrev, "negative");
 
   // ── Active customers + breakdown ──
   const activeCustomersCount = activeCustomersDistinct.length;
@@ -331,15 +422,21 @@ export const GET = handler(async () => {
       orderCount: countThisMonth,
       periodStart: dateKey(monthStart),
       periodEnd: dateKey(monthEnd),
+      trend: revenueTrend,
     },
     revenueAllTime: {
       total: Math.round(totalAllTime),
       orderCount: countAllTime,
     },
-    averageOrderValue: { thisMonth: avgThisMonth, allTime: avgAllTime },
+    averageOrderValue: {
+      thisMonth: avgThisMonth,
+      allTime: avgAllTime,
+      trend: avgOrderTrend,
+    },
     outstandingReceivables: {
       total: Math.round(receivablesTotal),
       orderCount: receivablesOrders,
+      trend: receivablesTrend,
     },
     activeCustomers: { count: activeCustomersCount, breakdown },
     todayDeliveries: {

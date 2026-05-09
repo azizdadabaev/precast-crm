@@ -32,15 +32,23 @@ export default function DashboardPage() {
     const msg = (error as Error).message ?? "";
     const forbidden = /403|only admin|only owner/i.test(msg);
     return (
-      <div className="dashboard-page">
-        <h1 className="dashboard-h1">Бошқарув · Dashboard</h1>
-        <div className="ds-info-card mt-6">
-          <p className="text-sm text-[var(--ds-text-dark)]">
+      <div className="dashboard">
+        <header className="dashboard-header">
+          <h1>Бошқарув · Dashboard</h1>
+        </header>
+        <article className="dash-card">
+          <p
+            style={{
+              fontSize: "var(--dash-text-base)",
+              color: "var(--dash-text-secondary)",
+              margin: 0,
+            }}
+          >
             {forbidden
               ? "Бу саҳифага рухсат йўқ — фақат ADMIN ва OWNER кира олади."
               : `Юклаб бўлмади: ${msg}`}
           </p>
-        </div>
+        </article>
       </div>
     );
   }
@@ -48,19 +56,15 @@ export default function DashboardPage() {
   if (!data) return <DashboardSkeleton />;
 
   return (
-    <div className="dashboard-page space-y-12">
-      <header>
-        <h1 className="dashboard-h1">Бошқарув · Dashboard</h1>
-        <p className="dashboard-subtitle">
-          Real-time view of revenue, operations, and customer activity.
-        </p>
+    <div className="dashboard">
+      <header className="dashboard-header">
+        <h1>Бошқарув · Dashboard</h1>
+        <p>Real-time view of revenue, operations, and customer activity.</p>
       </header>
 
-      <section>
-        <h2 className="dashboard-section-title">
-          1. Молиявий · Financial health
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <section className="dashboard-section">
+        <h2>Financial health</h2>
+        <div className="dashboard-grid dashboard-grid-4">
           <RevenueThisMonthCard data={data.revenueThisMonth} />
           <RevenueAllTimeCard data={data.revenueAllTime} />
           <AverageOrderValueCard data={data.averageOrderValue} />
@@ -68,11 +72,9 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section>
-        <h2 className="dashboard-section-title">
-          2. Иш ҳолати · Operational status
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <section className="dashboard-section">
+        <h2>Operational status</h2>
+        <div className="dashboard-grid dashboard-grid-4">
           <ActiveCustomersCard data={data.activeCustomers} />
           <TodayDeliveriesCard data={data.todayDeliveries} />
           <OpenDiscrepanciesCard data={data.openDiscrepancies} />
@@ -80,11 +82,9 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section>
-        <h2 className="dashboard-section-title">
-          3. Бизнес ҳақида · Business insights
-        </h2>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <section className="dashboard-section">
+        <h2>Business insights</h2>
+        <div className="dashboard-grid dashboard-grid-3">
           <CustomersByCityCard data={data.customersByCity} />
           <TopCustomersCard data={data.topCustomers} />
           <WeekCapacityCard data={data.weekCapacity} />

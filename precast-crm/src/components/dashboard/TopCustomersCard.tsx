@@ -1,51 +1,41 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { InfoCard } from "./InfoCard";
+import { Card } from "./Card";
 import { formatNumber } from "@/lib/utils";
 import type { DashboardData } from "./types";
 
-interface Props {
+export function TopCustomersCard({
+  data,
+}: {
   data: DashboardData["topCustomers"];
-}
-
-export function TopCustomersCard({ data }: Props) {
+}) {
   const router = useRouter();
   if (data.length === 0) {
     return (
-      <InfoCard title="ЭНГ ЯХШИ · Top 5 customers">
-        <div className="flex-1 grid place-items-center text-sm text-[var(--ds-text-light)]">
-          Маълумот етарли эмас · Not enough data
-        </div>
-      </InfoCard>
+      <Card label="Top 5 customers" wide value={null}>
+        <div className="dash-card-empty">Not enough data</div>
+      </Card>
     );
   }
   return (
-    <InfoCard title="ЭНГ ЯХШИ · Top 5 customers">
-      <ol className="space-y-2 flex-1">
+    <Card label="Top 5 customers" wide value={null}>
+      <ol className="dash-list">
         {data.map((c, i) => (
-          <li
-            key={c.id}
-            className="flex items-center justify-between gap-3 cursor-pointer hover:bg-[var(--ds-bg-light)] p-2 rounded transition-colors"
-            onClick={() => router.push(`/clients/${c.id}`)}
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="ds-rank-badge">{i + 1}</span>
-              <span className="truncate text-[var(--ds-text-dark)] font-medium">
-                {c.name}
+          <li key={c.id} onClick={() => router.push(`/clients/${c.id}`)}>
+            <span className="dash-list-rank">{i + 1}</span>
+            <div className="dash-list-content">
+              <span className="dash-list-primary">{c.name}</span>
+              <span className="dash-list-secondary">
+                {c.orderCount} orders
               </span>
             </div>
-            <div className="text-right shrink-0">
-              <div className="text-[var(--ds-text-dark)] font-bold tabular-nums">
-                {formatNumber(c.totalRevenue, 0)}
-              </div>
-              <div className="text-xs text-[var(--ds-text-light)]">
-                {c.orderCount} та буюртма
-              </div>
-            </div>
+            <span className="dash-list-value">
+              {formatNumber(c.totalRevenue, 0)} UZS
+            </span>
           </li>
         ))}
       </ol>
-    </InfoCard>
+    </Card>
   );
 }

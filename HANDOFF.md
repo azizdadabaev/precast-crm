@@ -606,38 +606,60 @@ Items 5, 11, 12, 14 from the 14 best-practices list:
 - `public/uploads/` is gitignored. Delivery photos live there per machine.
 - Memory files for Claude Code live under `~/.claude/projects/c--Users-…/memory/` per machine and **do not** sync via git. Re-create on the new device by saying "remember the calculation patterns / pricing tiers" once or letting Claude rediscover them from the code.
 
-## Dashboard rebuild
+## Dashboard
 
-`/dashboard` was rebuilt around 11 KPI cards in 3 sections — financial
-health, operational status, business insights — using design-system
-tokens (gradient brand purple, semantic success/warning/critical, neutral
-ramp). Tokens live in `globals.css` scoped to `.dashboard-page` so they
-don't leak into the rest of the app. Cards are reusable primitives
-(`MetricCard`, `InfoCard`) with semantic variants; the 11 actual cards
-live under `src/components/dashboard/`.
+`/dashboard` shows 11 KPI cards in 3 sections — financial health,
+operational status, business insights — in a neutral SaaS aesthetic
+(Stripe / Linear / Vercel tradition). White cards on a soft-gray
+surface with hairline borders; color is reserved strictly for status
+signals:
 
-Cards 9–11 (Customers by city, Top 5 customers, Week capacity) use
-inline SVG (no chart library) — horizontal bar chart and half-circle
-gauge primitives implemented via `src/lib/svg-helpers.ts`
-(`describeArc`, `polarToCartesian`).
+  - **Trend pills** — small green / red tags in the upper-right of
+    revenue, avg order, and receivables cards. Polarity-aware:
+    receivables ↑ renders red because it's bad; revenue ↑ renders
+    green because it's good. |delta| < 1% renders neutral gray
+    (flat) so noise doesn't trigger flashing.
+  - **3 px left border** — the only chromatic accent on the card body
+    itself. Receivables card gets a red left edge when outstanding
+    > 0; discrepancies and cash-on-road cards get an amber left edge
+    when > 0. Card surface stays white either way.
+  - **Heavy / overbooked capacity bars** — gray for available and
+    moderate; amber for heavy; red for overbooked. Most days are
+    gray; red only fires the moment you're double-booked.
 
-API: `/api/dashboard` is gated to ADMIN + OWNER via `canConfirmCash`.
-The sidebar nav entry hides for other roles. Returns the full payload
-(revenue this month / all time, receivables, active customers, today's
-deliveries, open discrepancies, cash on the road, customers by city,
-top 5 customers, week capacity strip) in a single request. Cached
-server-side for 30 s; client polls every 60 s.
+That is the entire palette of color in the dashboard. No gradient
+backgrounds, no rainbow cards, no gradient text, no drop shadows
+beyond a 1 px hairline.
+
+Tokens (`--dash-*`) and component classes (`.dash-card`,
+`.dash-trend`, `.dash-bar-list`, `.dash-list`, `.dash-week-strip`)
+live in `globals.css` scoped to `.dashboard`. Card components live
+under `src/components/dashboard/` — `Card.tsx` is the single primitive
+shared by all 11 cards (with optional `wide` mode for the row 3 cards
+that hold lists/charts).
+
+Cards 9–11 use simple HTML/CSS — no charting library, no SVG. The
+horizontal bar list, ranked customer list, and week-capacity strip
+are all `<ul>` / `<ol>` with calculated `width: %` or `height: %`
+fills.
+
+API (`/api/dashboard`): gated ADMIN + OWNER via `canConfirmCash`.
+Returns previous-month aggregates alongside this-month so the cards
+can render trend pills without a second round-trip. Cached server-side
+30 s; client polls every 60 s. Receivables trend uses a
+"reconstructed-from-current" comparison (orders placed by last month's
+end that are still un-paid) — direction is reliable; magnitude is a
+slight under-estimate. Acceptable for a trend pill where the arrow is
+what matters.
 
 Address-to-city normalization (`src/lib/city-normalize.ts`) maps the
 13 largest Uzbek cities across Cyrillic / Latin / mixed transliteration
 into canonical names + an "Other" fallback bucket. 9 unit tests cover
-the patterns. Add new patterns there when a region's order volume
-warrants its own row.
+the patterns.
 
 Capacity thresholds in the week strip mirror the calendar's published
-limits: Available ≤ 300 m² (green), Moderate ≤ 450 (amber), Heavy
-≤ 600 (orange), Overbooked > 600 (red). The half-gauge color follows
-utilization %: < 50 green, < 75 blue, < 90 amber, ≥ 90 red.
+limits: Available ≤ 300 m² (gray), Moderate ≤ 450 (gray), Heavy
+≤ 600 (amber), Overbooked > 600 (red).
 
 ## Tapered sandbox — bump rule + endpoint contract (§15)
 

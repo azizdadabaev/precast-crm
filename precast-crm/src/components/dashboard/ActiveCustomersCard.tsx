@@ -1,28 +1,27 @@
 "use client";
 
-import { MetricCard } from "./MetricCard";
+import { Card } from "./Card";
 import type { DashboardData } from "./types";
 
-interface Props {
+export function ActiveCustomersCard({
+  data,
+}: {
   data: DashboardData["activeCustomers"];
-}
-
-export function ActiveCustomersCard({ data }: Props) {
+}) {
   if (data.count === 0) {
     return (
-      <MetricCard
-        value="0"
-        label="ФАОЛ МИЖОЗЛАР · Active customers"
-        sublabel="Mижозлар йўқ ҳали · No customers yet"
+      <Card
+        label="Active customers"
+        value={<span className="dash-card-empty">No customers yet</span>}
       />
     );
   }
   const { paid, partial, awaiting } = data.breakdown;
   return (
-    <MetricCard
+    <Card
+      label="Active customers"
       value={String(data.count)}
-      label="ФАОЛ МИЖОЗЛАР · Active customers"
-      sublabel={`${paid} тўланган · ${partial} қисман · ${awaiting} кутилмоқда`}
+      meta={`${paid} paid · ${partial} partial · ${awaiting} awaiting`}
     />
   );
 }

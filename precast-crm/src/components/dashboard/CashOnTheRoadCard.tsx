@@ -1,29 +1,29 @@
 "use client";
 
-import { MetricCard } from "./MetricCard";
+import { Card } from "./Card";
 import { formatNumber } from "@/lib/utils";
 import type { DashboardData } from "./types";
 
-interface Props {
+export function CashOnTheRoadCard({
+  data,
+}: {
   data: DashboardData["cashOnTheRoad"];
-}
-
-export function CashOnTheRoadCard({ data }: Props) {
+}) {
   if (data.total === 0) {
     return (
-      <MetricCard
-        value="0"
-        label="ЙЎЛДА НАҚД · Cash on the road"
-        sublabel="Йўлда ҳеч ким йўқ · No active dispatches"
+      <Card
+        label="Cash on the road"
+        value={<span className="dash-card-empty">No active dispatches</span>}
       />
     );
   }
   return (
-    <MetricCard
-      variant="warning"
+    <Card
+      label="Cash on the road"
       value={formatNumber(data.total, 0)}
-      label="ЙЎЛДА НАҚД · Cash on the road (UZS)"
-      sublabel={`${data.dispatchCount} ҳайдовчи · ${data.dispatchCount} drivers`}
+      unit="UZS"
+      meta={`${data.dispatchCount} drivers · in transit`}
+      attention="warning"
     />
   );
 }
