@@ -81,9 +81,18 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
 
   if (!payment) return null;
 
-  const expected = payment.order.dispatch?.expectedCollection
-    ? Number(payment.order.dispatch.expectedCollection)
-    : 0;
+  // The dispatch's expectedCollection is the amount the DRIVER was sent
+  // to collect on a particular delivery — it only makes sense to compare
+  // against payments actually collected by that driver. For in-office
+  // cash and bank/online transfers the dispatch number is unrelated, so
+  // showing "shortfall" against it is misleading and would force the
+  // owner to pick a discrepancy action for a payment that isn't actually
+  // short of anything. Gate on whether this payment carries a driver.
+  const fromDriver = !!payment.collectedByDriver;
+  const expected =
+    fromDriver && payment.order.dispatch?.expectedCollection
+      ? Number(payment.order.dispatch.expectedCollection)
+      : 0;
   const original = Number(payment.amount);
   const finalAmount = amount === "" ? 0 : Number(amount);
   const amountChanged = finalAmount !== original;
