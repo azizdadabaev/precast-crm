@@ -19,6 +19,7 @@ import {
   tierFromSeverity,
 } from "./grouping";
 import {
+  BLOCK_PITCH_M,
   DEFAULT_BEAM_SPACING,
   EPS,
   TOPPING_THICKNESS,
@@ -29,9 +30,10 @@ import {
 } from "./helpers";
 import {
   addGeometryWarnings,
+  addTransverseRibWarning,
   validateInputs,
 } from "./validation";
-import type { BeamGroup, TaperInput, TaperResult, Tier } from "./types";
+import type { BeamGroup, PerRowDetail, TaperInput, TaperResult, Tier } from "./types";
 
 // Routing message used when a rectangular input lands here by mistake.
 // Keep verbatim — the SPEC §0 wording is shown to the operator.
@@ -110,12 +112,32 @@ export function computeTaper(input: TaperInput): TaperResult {
     perRowInnerWidths.push(round3(input.width1 + changePerRow * n));
   }
 
+  // Per-row detail (the operator's "per-row mode" output). Each row
+  // gets its precise inner width and an exact block count derived from
+  // the production engine's formula.
+  const perRowDetails: PerRowDetail[] = perRowInnerWidths.map((w, i) => ({
+    rowIndex: i,
+    innerWidth: w,
+    blocksInRow: Math.ceil(Math.abs(w) / BLOCK_PITCH_M),
+  }));
+  const totalBlocksPerRowMode = perRowDetails.reduce(
+    (s, d) => s + d.blocksInRow,
+    0,
+  );
+
   // ── 5. Geometry-derived warnings ──────────────────────────
   const { warnings: geomWarnings } = addGeometryWarnings({
     cr: changePerRow,
     rowsPractical,
   });
   warnings.push(...geomWarnings);
+
+  // §14 — transverse distribution rib warning. Fires regardless of
+  // grouping or hybrid status; any row whose beam member length
+  // (innerWidth + 2 × bearing) exceeds 4.50 m triggers it. Bearing
+  // default is 0.15 m → trigger inner width threshold is 4.20 m.
+  const ribWarning = addTransverseRibWarning(perRowInnerWidths);
+  if (ribWarning) warnings.push(ribWarning);
 
   // ── 6. §4 — strategy from ΔW and from |C_r|, take the harsher ─
   const severity = severityFromCr(changePerRow);
@@ -175,6 +197,13 @@ export function computeTaper(input: TaperInput): TaperResult {
       : buildGroups(perRowInnerWidths, targetGroups);
 
   // ── 9. Bill of materials (best-effort, with [VERIFY] notes) ─
+  // Grouped block total: each group covers its qty of rows with a
+  // representative max inner width — every row in the group rounds UP
+  // to that width, so block count is ⌈g.innerWidth / BLOCK_PITCH⌉ × qty.
+  const totalBlocksGroupedMode = groups.reduce(
+    (s, g) => s + Math.ceil(Math.abs(g.innerWidth) / BLOCK_PITCH_M) * g.qty,
+    0,
+  );
   const billOfMaterials = computeBom({
     groups,
     perRowInnerWidths,
@@ -182,6 +211,7 @@ export function computeTaper(input: TaperInput): TaperResult {
     effectiveLength,
     beamSpacing,
     requiresHybrid: tier === "hybrid",
+    totalBlocksGroupedMode,
   });
 
   // ── 10. Return the full result ────────────────────────────
@@ -200,10 +230,13 @@ export function computeTaper(input: TaperInput): TaperResult {
     rowsPractical,
     effectiveLength,
     perRowInnerWidths,
+    perRowDetails,
 
     groupingStrategy: tier,
     groupCount: groups.length,
     groups,
+    totalBlocksPerRowMode,
+    totalBlocksGroupedMode,
 
     isRectangular: false,
     requiresHybrid: tier === "hybrid",
@@ -252,10 +285,13 @@ function makeStub(a: StubArgs): TaperResult {
     rowsPractical: 0,
     effectiveLength: a.effectiveLength,
     perRowInnerWidths: [],
+    perRowDetails: [],
 
     groupingStrategy: 1,
     groupCount: 0,
     groups: [],
+    totalBlocksPerRowMode: 0,
+    totalBlocksGroupedMode: 0,
 
     isRectangular: a.isRectangular,
     requiresHybrid: false,
@@ -275,6 +311,7 @@ function computeBom({
   effectiveLength,
   beamSpacing,
   requiresHybrid,
+  totalBlocksGroupedMode,
 }: {
   groups: BeamGroup[];
   perRowInnerWidths: number[];
@@ -282,22 +319,22 @@ function computeBom({
   effectiveLength: number;
   beamSpacing: number;
   requiresHybrid: boolean;
+  totalBlocksGroupedMode: number;
 }) {
   // Beams: total qty across groups, plus an [VERIFY] waste note.
   const beams = groups.reduce((s, g) => s + g.qty, 0);
 
-  // Block math is intentionally lightweight here. The production
-  // engine has a precise formula tied to inner_width / BLOCK_LENGTH;
-  // for the sandbox we use a coarse area-based estimate so the report
-  // has SOMETHING to show, with a clear caveat.
+  // Block math now uses the production engine's per-row formula
+  // (⌈inner_width / BLOCK_PITCH⌉). The grouped-mode total over-supplies
+  // versus per-row because each group rounds UP to its widest row;
+  // operators see both numbers in the Material Summary card.
   const widestRow = perRowInnerWidths.length
     ? Math.max(...perRowInnerWidths.map((w) => Math.abs(w)))
     : 0;
-  const approxBlocksPerRow = widestRow > 0 ? Math.ceil(widestRow / 0.2) : 0;
-  const blocks = approxBlocksPerRow * rowsPractical;
+  const blocks = totalBlocksGroupedMode;
 
   const notes: string[] = [
-    `Block count is a coarse estimate (rows × ⌈max width / 0.20 m⌉). ${VERIFY_TAG} — block catalog not yet integrated; refer to the production engine for exact figures.`,
+    `Block count uses the production engine's per-row formula (⌈inner_width / ${BLOCK_PITCH_M.toFixed(2)} m⌉). Grouped mode rounds UP per group; per-row mode is exact.`,
     `Concrete topping volume not computed here; thickness placeholder ${TOPPING_THICKNESS} m. ${VERIFY_TAG}`,
     `Waste allowances (placeholders): blocks ${(WASTE_BLOCKS_PCT * 100).toFixed(0)}%, beams ${(WASTE_BEAMS_PCT * 100).toFixed(0)}%. ${VERIFY_TAG}`,
   ];

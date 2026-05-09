@@ -37,6 +37,9 @@ export function roundUpToStep(value: number, step: number): number {
 /** Beam-spacing default (factory standard). */
 export const DEFAULT_BEAM_SPACING = 0.58;
 
+/** Bearing default — half of the wall-into-bearing length on each side. */
+export const DEFAULT_BEARING = 0.15;
+
 // ── [VERIFY §12] sentinels — placeholders only ──────────────
 //
 // Each value below is a defensible default we use to keep the engine
@@ -72,6 +75,15 @@ export const BEAM_STOCK_STEP = 0.05;
 // TODO §12: validate against current catalog.
 export const BLOCK_LENGTH_M = 0.5; // along the beam axis
 export const BLOCK_VISIBLE_M = 0.45; // visible width between two beams (placeholder)
+
+/**
+ * Block transverse pitch — the dimension that determines how many
+ * blocks fit between two beams across the inner width. Mirrors the
+ * production engine's `BLOCK_LENGTH` (0.20 m). Per-row block count
+ * is `Math.ceil(innerWidth / BLOCK_PITCH_M)`. Copied here, NOT
+ * imported, to keep the sandbox severable.
+ */
+export const BLOCK_PITCH_M = 0.2;
 
 /** Waste allowance — used only in the warning text, not in the BoM number. */
 // TODO §12: confirm with materials team.

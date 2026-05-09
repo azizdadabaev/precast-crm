@@ -109,3 +109,36 @@ export function addGeometryWarnings({
   }
   return { warnings };
 }
+
+/**
+ * Italian construction practice (D.M. 09/01/1996; EN 15037-related)
+ * requires transverse distribution ribs (nervature trasversali di
+ * ripartizione) on tapered slabs whose beam member length exceeds
+ * 4.50 m. Beam member = innerWidth + 2 × bearing; with bearing 0.15 m
+ * the trigger is innerWidth > 4.20 m on ANY row. The check is
+ * geometric only — it is not a substitute for structural design.
+ *
+ * Returns a single bilingual warning string when triggered, or null.
+ * Lives outside `addGeometryWarnings` so callers can flag the
+ * structural rib message specifically (UI uses a different icon for
+ * it).
+ */
+export const TRANSVERSE_RIB_WARNING_PREFIX =
+  "Trapeziya plitada beton balkalar 4.50 m dan узун";
+
+export function addTransverseRibWarning(
+  perRowInnerWidths: number[],
+): string | null {
+  const TRIGGER = 4.2 + 1e-9; // beam member > 4.50 ⇒ inner width > 4.20
+  const triggers = perRowInnerWidths.some((w) => Math.abs(w) > TRIGGER);
+  if (!triggers) return null;
+  return (
+    `${TRANSVERSE_RIB_WARNING_PREFIX} — қурилиш қоидаларига кўра кўндаланг ` +
+    "тақсимот қовурғаси (nervature trasversali) талаб қилинади. " +
+    "Структуравий муҳандис билан маслаҳатлашинг. · " +
+    "Tapered slab with beam members > 4.50 m — construction code " +
+    "requires transverse distribution ribs. Consult a structural " +
+    "engineer. (Reference: D.M. 09/01/1996; EN 15037-related " +
+    "practice; not a structural-design substitute.)"
+  );
+}

@@ -278,6 +278,23 @@ export const DiscrepancyUpdateSchema = z.object({
   resolutionNote: z.string().min(5, "note must be at least 5 chars").max(500),
 });
 
+// ── Tapered → calculator prefill ────────────────────────────────
+// Payload encoded into the `?prefill=` query param when the sandbox's
+// tapered calculator hands rooms over to the production calculator.
+// Cap rooms at 50 — a 25 m tapered slab is ~43 per-row entries, so 50
+// leaves headroom while preventing accidental "pump in everything".
+export const TaperedPrefillRoomSchema = z.object({
+  name: z.string().max(80).optional().nullable(),
+  innerWidth: z.coerce.number().positive(),
+  innerLength: z.coerce.number().positive(),
+});
+
+export const TaperedPrefillSchema = z.object({
+  source: z.literal("tapered-sandbox"),
+  mode: z.enum(["per-row", "grouped"]),
+  rooms: z.array(TaperedPrefillRoomSchema).min(1).max(50),
+});
+
 // ── Capacity calendar ───────────────────────────────────────────
 export const CapacityRangeSchema = z.object({
   from: z.coerce.date(),

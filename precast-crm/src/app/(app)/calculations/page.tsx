@@ -14,6 +14,8 @@ import {
   type SlabRow,
 } from "@/components/calculation/MultiRoomCalculator";
 import { projectTotal } from "@/services/calculation-engine";
+import { TaperedPrefillSchema } from "@/lib/validation";
+import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-bridge";
 
 const STORAGE_KEY = "calc:autosave:v1";
 
@@ -40,6 +42,7 @@ function CalculationsInner() {
   const [error, setError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
   const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
+  const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
 
   // ── Autosave to localStorage on every change ──
   useEffect(() => {
@@ -55,23 +58,40 @@ function CalculationsInner() {
   // ── Restore on mount ──
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // One-shot handoff from the tapered-beam-block sandbox. If the
-    // bridge key is present it wins over the autosave restore; we
-    // consume-on-read so a later visit falls back to autosave. See
-    // src/sandbox/tapered-beam-block/calculator-bridge.ts.
-    try {
-      const bridgeRaw = localStorage.getItem("calc:bridge-import:v1");
-      if (bridgeRaw) {
-        const bridge = JSON.parse(bridgeRaw) as AutosaveState;
-        if (bridge.client) setClient(bridge.client);
-        if (Array.isArray(bridge.rows)) setRows(bridge.rows.map(recomputeRow));
-        if (typeof bridge.discountPercent === "number") setDiscountPercent(bridge.discountPercent);
-        if (bridge.matchedClientId) setMatchedClientId(bridge.matchedClientId);
-        localStorage.removeItem("calc:bridge-import:v1");
+    // One-shot handoff from the tapered-beam-block sandbox via the
+    // `?prefill=` query param. If present, it wins over the autosave
+    // restore. We `router.replace` immediately afterward so a refresh
+    // doesn't re-prefill the same payload.
+    const prefillRaw = search.get("prefill");
+    if (prefillRaw) {
+      const decoded = decodePrefillParam(prefillRaw);
+      const parsed = decoded ? TaperedPrefillSchema.safeParse(decoded) : null;
+      if (parsed?.success) {
+        const newRows: SlabRow[] = parsed.data.rooms.map((r) =>
+          recomputeRow({
+            id: Math.random().toString(36).slice(2, 9),
+            name: r.name ?? "",
+            innerWidth: r.innerWidth,
+            innerLength: r.innerLength,
+            bearing: 0.15,
+            correction: 0,
+            extraBeams: 0,
+            forceStartBeam: false,
+            patternOverride: "AUTO",
+            result: null,
+          }),
+        );
+        setRows(newRows);
+        setPrefillNotice(
+          `Pre-filled from tapered sandbox · ${parsed.data.rooms.length} rooms (${parsed.data.mode})`,
+        );
+        // Clear the URL so refresh doesn't re-apply the prefill.
+        router.replace("/calculations", { scroll: false });
         return;
       }
-    } catch {
-      /* malformed bridge payload — fall through to autosave restore */
+      // Malformed / out-of-spec payload: fall through to autosave restore.
+      // (Don't clear the URL so the operator can paste it elsewhere if
+      // they're debugging the handoff.)
     }
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -314,6 +334,19 @@ function CalculationsInner() {
       {error && (
         <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
           {error}
+        </div>
+      )}
+
+      {prefillNotice && (
+        <div className="flex items-center justify-between text-sm bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-2 rounded">
+          <span>{prefillNotice}</span>
+          <button
+            type="button"
+            className="text-xs underline hover:no-underline"
+            onClick={() => setPrefillNotice(null)}
+          >
+            Dismiss
+          </button>
         </div>
       )}
 

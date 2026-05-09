@@ -14,8 +14,17 @@ export {
 export type {
   BeamGroup,
   BillOfMaterials,
+  PerRowDetail,
   Severity,
   TaperInput,
   TaperResult,
   Tier,
 } from "./types";
+
+export {
+  BLOCK_PITCH_M,
+  DEFAULT_BEAM_SPACING,
+  DEFAULT_BEARING,
+} from "./helpers";
+
+export { TRANSVERSE_RIB_WARNING_PREFIX } from "./validation";
