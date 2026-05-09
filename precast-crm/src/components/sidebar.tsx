@@ -36,7 +36,7 @@ interface NavItemWithGate extends NavItem {
 }
 
 const NAV: NavItemWithGate[] = [
-  { href: "/dashboard",    label: "Бошқарув",       sub: "Dashboard",     icon: LayoutDashboard },
+  { href: "/dashboard",    label: "Бошқарув",       sub: "Dashboard",     icon: LayoutDashboard, roles: ["ADMIN", "OWNER"] },
   { href: "/calculations", label: "Калькулятор",    sub: "Calculations",  icon: Calculator },
   { href: "/orders",       label: "Буюртмалар",     sub: "Orders",        icon: PackageCheck },
   { href: "/projects",     label: "Лойиҳалар",      sub: "Projects",      icon: FolderKanban },

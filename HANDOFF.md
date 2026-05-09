@@ -606,6 +606,39 @@ Items 5, 11, 12, 14 from the 14 best-practices list:
 - `public/uploads/` is gitignored. Delivery photos live there per machine.
 - Memory files for Claude Code live under `~/.claude/projects/c--Users-…/memory/` per machine and **do not** sync via git. Re-create on the new device by saying "remember the calculation patterns / pricing tiers" once or letting Claude rediscover them from the code.
 
+## Dashboard rebuild
+
+`/dashboard` was rebuilt around 11 KPI cards in 3 sections — financial
+health, operational status, business insights — using design-system
+tokens (gradient brand purple, semantic success/warning/critical, neutral
+ramp). Tokens live in `globals.css` scoped to `.dashboard-page` so they
+don't leak into the rest of the app. Cards are reusable primitives
+(`MetricCard`, `InfoCard`) with semantic variants; the 11 actual cards
+live under `src/components/dashboard/`.
+
+Cards 9–11 (Customers by city, Top 5 customers, Week capacity) use
+inline SVG (no chart library) — horizontal bar chart and half-circle
+gauge primitives implemented via `src/lib/svg-helpers.ts`
+(`describeArc`, `polarToCartesian`).
+
+API: `/api/dashboard` is gated to ADMIN + OWNER via `canConfirmCash`.
+The sidebar nav entry hides for other roles. Returns the full payload
+(revenue this month / all time, receivables, active customers, today's
+deliveries, open discrepancies, cash on the road, customers by city,
+top 5 customers, week capacity strip) in a single request. Cached
+server-side for 30 s; client polls every 60 s.
+
+Address-to-city normalization (`src/lib/city-normalize.ts`) maps the
+13 largest Uzbek cities across Cyrillic / Latin / mixed transliteration
+into canonical names + an "Other" fallback bucket. 9 unit tests cover
+the patterns. Add new patterns there when a region's order volume
+warrants its own row.
+
+Capacity thresholds in the week strip mirror the calendar's published
+limits: Available ≤ 300 m² (green), Moderate ≤ 450 (amber), Heavy
+≤ 600 (orange), Overbooked > 600 (red). The half-gauge color follows
+utilization %: < 50 green, < 75 blue, < 90 amber, ≥ 90 red.
+
 ## Tapered sandbox — bump rule + endpoint contract (§15)
 
 **Bug fixed:** the engine previously used `Math.ceil(rowsRaw − EPS)` for

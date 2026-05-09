@@ -1,88 +1,377 @@
 export const dynamic = "force-dynamic";
+export const revalidate = 30;
 
 import { prisma } from "@/lib/prisma";
-import { ok, handler } from "@/lib/api";
+import { ok, fail, handler } from "@/lib/api";
+import { canConfirmCash, getCurrentUser } from "@/lib/auth";
+import { normalizeCity } from "@/lib/city-normalize";
 
 /**
- * Dashboard KPIs.
+ * GET /api/dashboard — ADMIN | OWNER only.
  *
- * Cash-custody changes:
- *   - Revenue counts CONFIRMED Payments only (per spec; PENDING and
- *     REJECTED don't count). Method-agnostic — cash + transfer alike.
- *   - "Cash on the road" sums expectedCollection of dispatches whose
- *     returnedAt is null.
- *   - "Open discrepancies" counts Discrepancy rows with status = OPEN.
+ * Returns a single payload feeding all 11 dashboard cards. Aggregations
+ * use Prisma `aggregate` / `groupBy` where possible; per-row reduction
+ * runs over the (typically small) result sets only.
+ *
+ * Caching: Next's `revalidate = 30` keeps the response cached on the
+ * server for 30 s. The client polls every 60 s, so under steady load
+ * the DB is hit at most once per cache window.
+ *
+ * Timezone: Asia/Tashkent has no DST. The server runs in that zone in
+ * production (per HANDOFF.md). "This month" boundaries use local
+ * calendar dates.
  */
+
+interface RevenueAgg {
+  total: number;
+  orderCount: number;
+}
+
+interface DashboardPayload {
+  revenueThisMonth: RevenueAgg & { periodStart: string; periodEnd: string };
+  revenueAllTime: RevenueAgg;
+  averageOrderValue: { thisMonth: number; allTime: number };
+  outstandingReceivables: { total: number; orderCount: number };
+  activeCustomers: {
+    count: number;
+    breakdown: { paid: number; partial: number; awaiting: number };
+  };
+  todayDeliveries: {
+    count: number;
+    totalArea: number;
+    date: string;
+    orders: Array<{
+      id: string;
+      orderNumber: string;
+      clientName: string;
+      totalArea: number;
+    }>;
+  };
+  openDiscrepancies: { count: number; totalAmount: number };
+  cashOnTheRoad: {
+    total: number;
+    dispatchCount: number;
+    drivers: Array<{ id: string; name: string; expected: number }>;
+  };
+  customersByCity: Array<{ city: string; count: number; revenue: number }>;
+  topCustomers: Array<{
+    id: string;
+    name: string;
+    totalRevenue: number;
+    orderCount: number;
+  }>;
+  weekCapacity: {
+    utilizationPct: number;
+    days: Array<{ date: string; bookedM2: number; capacityM2: number }>;
+  };
+}
+
+/** Asia/Tashkent calendar-day key for a Date (server is already in that zone). */
+function dateKey(d: Date): string {
+  return (
+    d.getFullYear() +
+    "-" +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    "-" +
+    String(d.getDate()).padStart(2, "0")
+  );
+}
+
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+/** Capacity per day in m². Mirrors the calendar's heavy threshold so the
+ *  dashboard's "100% booked" lines up with the calendar's red zone. */
+const CAPACITY_M2_PER_DAY = 600;
+
 export const GET = handler(async () => {
+  const user = await getCurrentUser();
+  if (!canConfirmCash(user)) {
+    return fail("Only ADMIN or OWNER can view the dashboard", 403);
+  }
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const todayStart = startOfDay(now);
+  const todayEnd = endOfDay(now);
+
+  // The capacity strip shows Mon..Sun of the current week. Compute
+  // Monday by walking back from today. JavaScript's getDay() returns
+  // 0..6 with Sunday = 0; we treat Monday as day-1.
+  const weekStart = startOfDay(now);
+  const dow = (weekStart.getDay() + 6) % 7; // 0 = Mon, 6 = Sun
+  weekStart.setDate(weekStart.getDate() - dow);
+  const weekEnd = endOfDay(new Date(weekStart));
+  weekEnd.setDate(weekStart.getDate() + 6);
+
+  // ── 1+2. Revenue this month + all time ──
+  // Revenue = sum(confirmedPaid) on non-canceled orders. confirmedPaid
+  // is the only number that's actually been received & confirmed; using
+  // totalPrice would inflate revenue by orders that haven't been paid.
   const [
-    totalLeads,
-    totalDeals,
-    wonDeals,
-    revenueAgg,
-    avgDealAgg,
-    dealsByStage,
-    leadsBySource,
-    recentDeals,
-    cashOnRoadAgg,
-    openDiscrepancies,
+    revenueAllTimeAgg,
+    revenueThisMonthAgg,
+    receivablesAgg,
+    activeCustomersDistinct,
+    activeCustomersBreakdown,
+    todayOrders,
+    discrepanciesAgg,
+    discrepanciesCount,
+    cashOnRoadDispatches,
+    weekOrders,
+    cityRows,
+    topClientsRows,
   ] = await Promise.all([
-    prisma.client.count(),
-    prisma.deal.count(),
-    prisma.deal.count({ where: { status: "WON" } }),
-    prisma.payment.aggregate({
-      _sum: { amount: true },
-      where: { status: "CONFIRMED" },
-    }),
-    prisma.deal.aggregate({
-      _avg: { value: true },
-      where: { status: "WON" },
-    }),
-    prisma.deal.groupBy({
-      by: ["stage"],
+    prisma.order.aggregate({
+      _sum: { confirmedPaid: true },
       _count: { _all: true },
-      _sum: { value: true },
+      where: { status: { not: "CANCELED" } },
     }),
-    prisma.client.groupBy({
-      by: ["source"],
+    prisma.order.aggregate({
+      _sum: { confirmedPaid: true },
       _count: { _all: true },
+      where: {
+        status: { not: "CANCELED" },
+        placedAt: { gte: monthStart, lte: monthEnd },
+      },
     }),
-    prisma.deal.findMany({
-      take: 8,
-      orderBy: { createdAt: "desc" },
-      include: { client: { select: { name: true, phone: true } } },
+    // Outstanding = sum(totalPrice − confirmedPaid) on orders that
+    // aren't canceled and aren't fully paid.
+    prisma.order.findMany({
+      where: {
+        status: { not: "CANCELED" },
+        paymentState: { in: ["AWAITING_PAYMENT", "PARTIALLY_PAID"] },
+      },
+      select: { totalPrice: true, confirmedPaid: true },
     }),
-    prisma.dispatch.aggregate({
-      _sum: { expectedCollection: true },
-      where: { returnedAt: null },
+    prisma.order.groupBy({
+      by: ["clientId"],
+      where: { status: { not: "CANCELED" } },
+    }),
+    prisma.order.groupBy({
+      by: ["paymentState"],
+      _count: { clientId: true },
+      where: { status: { not: "CANCELED" } },
+    }),
+    prisma.order.findMany({
+      where: {
+        status: { not: "CANCELED" },
+        scheduledAt: { gte: todayStart, lte: todayEnd },
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        totalArea: true,
+        client: { select: { name: true } },
+      },
+      orderBy: { scheduledAt: "asc" },
+    }),
+    prisma.discrepancy.aggregate({
+      _sum: { shortfall: true },
+      where: { status: "OPEN" },
     }),
     prisma.discrepancy.count({ where: { status: "OPEN" } }),
+    prisma.dispatch.findMany({
+      where: { returnedAt: null },
+      select: {
+        expectedCollection: true,
+        driver: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.order.findMany({
+      where: {
+        status: { not: "CANCELED" },
+        scheduledAt: { gte: weekStart, lte: weekEnd },
+      },
+      select: { scheduledAt: true, totalArea: true },
+    }),
+    // City aggregation — pull each non-canceled order's client address +
+    // confirmedPaid + a unique-client tally. Aggregate in-memory because
+    // the city normalization happens in JS, not SQL.
+    prisma.order.findMany({
+      where: { status: { not: "CANCELED" } },
+      select: {
+        clientId: true,
+        confirmedPaid: true,
+        client: { select: { address: true } },
+      },
+    }),
+    // Top customers by revenue.
+    prisma.order.groupBy({
+      by: ["clientId"],
+      _sum: { confirmedPaid: true },
+      _count: { _all: true },
+      where: { status: { not: "CANCELED" } },
+      orderBy: { _sum: { confirmedPaid: "desc" } },
+      take: 5,
+    }),
   ]);
 
-  const totalRevenue = Number(revenueAgg._sum.amount ?? 0);
-  const avgDealValue = Number(avgDealAgg._avg.value ?? 0);
-  const conversionRate = totalDeals > 0 ? (wonDeals / totalDeals) * 100 : 0;
-  const cashOnRoad = Number(cashOnRoadAgg._sum.expectedCollection ?? 0);
+  // ── Revenue + average ──
+  const totalAllTime = Number(revenueAllTimeAgg._sum.confirmedPaid ?? 0);
+  const countAllTime = revenueAllTimeAgg._count._all;
+  const totalThisMonth = Number(revenueThisMonthAgg._sum.confirmedPaid ?? 0);
+  const countThisMonth = revenueThisMonthAgg._count._all;
+  const avgAllTime = countAllTime > 0 ? Math.round(totalAllTime / countAllTime) : 0;
+  const avgThisMonth = countThisMonth > 0 ? Math.round(totalThisMonth / countThisMonth) : 0;
 
-  return ok({
-    totals: {
-      totalLeads,
-      totalDeals,
-      wonDeals,
-      totalRevenue,
-      avgDealValue: Math.round(avgDealValue),
-      conversionRate: Math.round(conversionRate * 10) / 10,
-      cashOnRoad,
-      openDiscrepancies,
-    },
-    dealsByStage: dealsByStage.map((d) => ({
-      stage: d.stage,
-      count: d._count._all,
-      value: Number(d._sum.value ?? 0),
-    })),
-    leadsBySource: leadsBySource.map((l) => ({
-      source: l.source ?? "Unknown",
-      count: l._count._all,
-    })),
-    recentDeals,
+  // ── Receivables ──
+  let receivablesTotal = 0;
+  let receivablesOrders = 0;
+  for (const o of receivablesAgg) {
+    const due = Number(o.totalPrice) - Number(o.confirmedPaid);
+    if (due > 0) {
+      receivablesTotal += due;
+      receivablesOrders += 1;
+    }
+  }
+
+  // ── Active customers + breakdown ──
+  const activeCustomersCount = activeCustomersDistinct.length;
+  const breakdown = { paid: 0, partial: 0, awaiting: 0 };
+  for (const row of activeCustomersBreakdown) {
+    if (row.paymentState === "FULLY_PAID") breakdown.paid += row._count.clientId;
+    else if (row.paymentState === "PARTIALLY_PAID") breakdown.partial += row._count.clientId;
+    else if (row.paymentState === "AWAITING_PAYMENT") breakdown.awaiting += row._count.clientId;
+  }
+
+  // ── Today's deliveries ──
+  const todayCount = todayOrders.length;
+  const todayArea = todayOrders.reduce((s, o) => s + Number(o.totalArea), 0);
+
+  // ── Cash on the road ──
+  const cashOnRoadTotal = cashOnRoadDispatches.reduce(
+    (s, d) => s + Number(d.expectedCollection),
+    0,
+  );
+
+  // ── Customers by city ──
+  // For each canonical city, count UNIQUE clients and sum revenue.
+  const cityMap = new Map<string, { clients: Set<string>; revenue: number }>();
+  for (const row of cityRows) {
+    const city = normalizeCity(row.client.address);
+    const cur = cityMap.get(city) ?? { clients: new Set<string>(), revenue: 0 };
+    cur.clients.add(row.clientId);
+    cur.revenue += Number(row.confirmedPaid);
+    cityMap.set(city, cur);
+  }
+  const cityList = Array.from(cityMap.entries())
+    .map(([city, agg]) => ({
+      city,
+      count: agg.clients.size,
+      revenue: Math.round(agg.revenue),
+    }))
+    .sort((a, b) => b.count - a.count);
+  // Top 10 named + "Other" if non-zero.
+  const named = cityList.filter((c) => c.city !== "Other").slice(0, 10);
+  const other = cityList.find((c) => c.city === "Other");
+  const customersByCity =
+    other && other.count > 0 ? [...named, other] : named;
+
+  // ── Top 5 customers — hydrate names ──
+  const topClientIds = topClientsRows.map((r) => r.clientId);
+  const topClientNames = await prisma.client.findMany({
+    where: { id: { in: topClientIds } },
+    select: { id: true, name: true },
   });
+  const nameById = new Map(topClientNames.map((c) => [c.id, c.name]));
+  const topCustomers = topClientsRows
+    .map((r) => ({
+      id: r.clientId,
+      name: nameById.get(r.clientId) ?? "—",
+      totalRevenue: Math.round(Number(r._sum.confirmedPaid ?? 0)),
+      orderCount: r._count._all,
+    }))
+    // Drop any rows with totalRevenue = 0 — they're noise.
+    .filter((c) => c.totalRevenue > 0);
+
+  // ── Week capacity strip ──
+  const weekDays: Array<{ date: string; bookedM2: number; capacityM2: number }> = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(weekStart);
+    d.setDate(weekStart.getDate() + i);
+    weekDays.push({
+      date: dateKey(d),
+      bookedM2: 0,
+      capacityM2: CAPACITY_M2_PER_DAY,
+    });
+  }
+  const weekIndex = new Map(weekDays.map((d, i) => [d.date, i]));
+  for (const o of weekOrders) {
+    const key = dateKey(new Date(o.scheduledAt));
+    const i = weekIndex.get(key);
+    if (i !== undefined) {
+      weekDays[i].bookedM2 += Number(o.totalArea);
+    }
+  }
+  // Round bookedM2 for clean display.
+  for (const d of weekDays) {
+    d.bookedM2 = Math.round(d.bookedM2 * 10) / 10;
+  }
+  const totalBooked = weekDays.reduce((s, d) => s + d.bookedM2, 0);
+  const totalCapacity = weekDays.reduce((s, d) => s + d.capacityM2, 0);
+  const utilizationPct =
+    totalCapacity > 0
+      ? Math.round((totalBooked / totalCapacity) * 100)
+      : 0;
+
+  const payload: DashboardPayload = {
+    revenueThisMonth: {
+      total: Math.round(totalThisMonth),
+      orderCount: countThisMonth,
+      periodStart: dateKey(monthStart),
+      periodEnd: dateKey(monthEnd),
+    },
+    revenueAllTime: {
+      total: Math.round(totalAllTime),
+      orderCount: countAllTime,
+    },
+    averageOrderValue: { thisMonth: avgThisMonth, allTime: avgAllTime },
+    outstandingReceivables: {
+      total: Math.round(receivablesTotal),
+      orderCount: receivablesOrders,
+    },
+    activeCustomers: { count: activeCustomersCount, breakdown },
+    todayDeliveries: {
+      count: todayCount,
+      totalArea: Math.round(todayArea * 10) / 10,
+      date: dateKey(now),
+      orders: todayOrders.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        clientName: o.client.name,
+        totalArea: Math.round(Number(o.totalArea) * 10) / 10,
+      })),
+    },
+    openDiscrepancies: {
+      count: discrepanciesCount,
+      totalAmount: Math.round(Number(discrepanciesAgg._sum.shortfall ?? 0)),
+    },
+    cashOnTheRoad: {
+      total: Math.round(cashOnRoadTotal),
+      dispatchCount: cashOnRoadDispatches.length,
+      drivers: cashOnRoadDispatches
+        .filter((d) => d.driver)
+        .map((d) => ({
+          id: d.driver!.id,
+          name: d.driver!.name,
+          expected: Math.round(Number(d.expectedCollection)),
+        })),
+    },
+    customersByCity,
+    topCustomers,
+    weekCapacity: { utilizationPct, days: weekDays },
+  };
+
+  return ok(payload);
 });
