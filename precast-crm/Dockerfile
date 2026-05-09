@@ -39,6 +39,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
+# Source + tsconfig are needed by `npm run db:seed` — seed.ts imports from
+# `src/` via the `@/` path alias, so tsx needs both the files and the alias map.
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 RUN mkdir -p /app/public/uploads && chown -R nextjs:nodejs /app/public/uploads /app/.next
 
