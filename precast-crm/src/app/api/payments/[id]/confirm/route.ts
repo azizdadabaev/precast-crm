@@ -51,10 +51,17 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
     return fail("adjustmentNote (min 5 chars) is required when changing the amount", 422);
   }
 
-  // Discrepancy detection — only when amount is BELOW expectedCollection.
-  const expectedCollection = payment.order.dispatch?.expectedCollection
-    ? Number(payment.order.dispatch.expectedCollection)
-    : null;
+  // Discrepancy detection — driver-collected payments only. The
+  // dispatch's expectedCollection is the amount the DRIVER was sent to
+  // collect on a particular delivery; comparing it to in-office cash
+  // or bank/online transfers (which carry no driver) is meaningless and
+  // would force the confirmer to pick a discrepancy action for a
+  // payment that isn't actually short of anything sent for collection.
+  const fromDriver = payment.collectedById != null;
+  const expectedCollection =
+    fromDriver && payment.order.dispatch?.expectedCollection
+      ? Number(payment.order.dispatch.expectedCollection)
+      : null;
   const hasShortfall =
     expectedCollection != null && finalAmount < expectedCollection;
   const shortfall = hasShortfall ? expectedCollection! - finalAmount : 0;

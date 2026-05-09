@@ -75,7 +75,7 @@ If port 3000 is taken, Next will pick the next free port. The terminal output pr
 7. Status timeline on the order page: click pills to advance Placed → In Production → Delivered → Paid. Marking **Delivered** opens a modal that demands a **photo of the loaded truck** (JPG/PNG/WEBP, ≤8 MB). The image is stored under `public/uploads/orders/{orderId}/` and shown on both the order detail page and the printable invoice.
 8. **/orders** page has the same capacity calendar at the top — clicking a day filters the list to that day.
 9. Orders can be **canceled** by Admin (no password) or by anyone with the `ORDER_CANCEL_PASSWORD` env var (default `etalontbm`). Canceling frees the project back to Draft and moves the deal to LOST.
-10. **Print** any order at `/orders/[id]/print` — auto-triggers `window.print()`. The delivery proof prints on its own page.
+10. **Print** any order at `/orders/[id]/print` — auto-triggers `window.print()`. The page is a single A4-portrait sheet with: header, client + delivery (driver/truck if dispatched), a two-row-per-room table (primary scan-line + technical detail line for beam length, beams, blocks/row, total blocks, slab length, m² rate), totals strip, pricing breakdown, payment status, signature block, and a footer with a QR code that opens the order detail page on the operator dashboard. Fully-paid orders show a faint diagonal "PAID" watermark behind the rooms table. Brand strings (`PRECAST CRM`, tagline, phone) are hardcoded constants at the top of the print page — TODO: move to `AppConfig` once an admin-config UI exists. The delivery proof, if uploaded, still prints on its own page after the invoice.
 
 ## Architecture cheat-sheet
 
@@ -582,6 +582,10 @@ owner), 1 for bank/online (no physical handover step at all).
     edit + Adjust button (cosmetic; the API already enforces)
   Spec wanted these flagged, not changed.
 
+## Sandbox modules
+
+- **Tapered Beam-and-Block** (`src/sandbox/tapered-beam-block/`, route `/sandbox/tapered`, ADMIN-only sidebar entry "Тажриба · Sandbox · Tapered") — isolated playground for trapezoidal / irregular-quadrilateral slab math. Engine is pure with full Vitest coverage; UI mirrors the §9 SPEC.md report layout. Severable: deleting the folder + `src/app/(app)/sandbox/tapered/page.tsx` + the sidebar diff + the one-line `vitest.config.ts` `include` extension fully removes the feature. **Not for production planning** until merged into `services/calculation-engine.ts`.
+
 ## What's NOT implemented yet (deferred)
 
 Items 5, 11, 12, 14 from the 14 best-practices list:
@@ -601,6 +605,99 @@ Items 5, 11, 12, 14 from the 14 best-practices list:
 - Schema migrations use `prisma db push` (no migrations folder). For a fresh clone, `npm run db:push` is enough; for an existing DB with old data, `npm run db:push --force-reset` will drop everything and start over (seed data is regenerable).
 - `public/uploads/` is gitignored. Delivery photos live there per machine.
 - Memory files for Claude Code live under `~/.claude/projects/c--Users-…/memory/` per machine and **do not** sync via git. Re-create on the new device by saying "remember the calculation patterns / pricing tiers" once or letting Claude rediscover them from the code.
+
+## Calculator — per-row rate overrides
+
+The Rate column in the calculator is a Select containing **Auto** plus
+the 5 catalog tiers from `M2_PRICE_TIERS` in
+`src/services/calculation-engine.ts`. **Custom prices are not
+allowed** — the validation refines `m2PriceOverrideValue` against the
+tier table at the API boundary, and the persistence mapper
+(`src/lib/calc-persistence.ts`) re-checks before writing as
+defense-in-depth.
+
+Picking a non-Auto tier opens `RateOverrideDialog` (auto-pick vs.
+chosen rate side-by-side, optional 200-char free-text reason).
+Reverting to Auto applies immediately — going back to the catalog
+default is always safe.
+
+Override propagation: calculator store (Zustand auto-save) → Save
+Project (Calculation row gains `m2PriceOverride` / `m2PriceReason`
+columns) → Place Order (Order's `primaryCalculation` carries the
+same row, so the snapshot is automatic) → order detail page (amber
+text + Pencil icon, tooltip with auto value + reason) → printable
+invoice (compact "↑ Special rate" caption + reason on a sub-line).
+
+Auto-pick recomputes on every dimension change ONLY for un-overridden
+rows; once `m2PriceOverride === true`, the rate is sticky until the
+operator reverts. This means dimension changes can produce a row
+whose override is no longer the auto-pick — that's the intended
+behavior; the tooltip surfaces both values so the operator can
+notice.
+
+Schema: `Calculation` model gained two columns:
+```
+m2PriceOverride Boolean @default(false)
+m2PriceReason   String?
+```
+Additive, non-destructive — `db push` migrates existing data with
+defaults.
+
+## Calculator — auto-save & Clear button
+
+The calculator's session state (client info, rooms, discount, the
+rounding-grid choice, the active draftProjectId) auto-persists to
+`localStorage` so in-app navigation, browser refresh, and tab close
+don't drop the operator's work. Implementation lives in
+`src/store/calculator.ts` (Zustand + `persist` middleware) with a
+hydration hook in `src/store/useHydrateCalculator.ts`.
+
+Per-user keying: factory PCs are shared, so each operator sees their
+own draft. On app mount the hook fetches `/api/auth/me`, then points
+the persist storage at `calculator-draft-${userId}` and rehydrates.
+If `/me` fails (logged-out / network), it falls back to a shared
+`calculator-draft-anon` key so the calculator still works.
+
+One-shot migration: the pre-Zustand keys (`calc:autosave:v1` for
+session data, `calculator.roundingGrid` for the rounding preference)
+are read once on first hydration into the per-user slot, then
+deleted. Existing operators don't lose their in-flight draft.
+
+Two ways to clear the auto-save:
+- **Тозалаш · Clear** button in the calculator header — confirms via
+  dialog, wipes session fields (rooms, client, discount, draft id);
+  preserves the rounding-grid preference.
+- **Automatic** after a successful Place Order — the work is
+  committed permanently to the Order, no reason to hold the draft.
+
+The auto-save layer is INDEPENDENT of the Save Project / `/projects`
+DB persistence. Save Project still writes a `Project` row (and its
+calculations) to the database; the auto-save is a separate
+session-level safety net. After a successful Save, the auto-save is
+cleared too (the operator just committed; next edits start fresh).
+
+SSR safety: the persist middleware uses `skipHydration: true` and a
+custom `safeJSONStorage` adapter (in `src/store/calculator.ts`) that
+guards on `typeof window`. Hydration only fires from a client effect
+once `/api/auth/me` resolves.
+
+## Calculator — width rounding (5 / 10 cm grid)
+
+The production calculator's Width column has up/down chevron buttons
+beside each input that snap the value to a grid multiple. A toolbar
+above the table picks the grid (10 cm default; 5 cm alt) and persists
+the choice in `localStorage` under `calculator.roundingGrid`. A "Round
+all up" button applies the snap-up to every row in one click.
+
+When a row arrives with an engineering ground truth (the tapered
+sandbox prefill stamps `originalWidth = innerWidth` per room), rounding
+the value BELOW the original surfaces an amber ⚠ next to the input
+with a bilingual tooltip. The Place Order dialog repeats the warning
+in a compact list when any room is undersized — non-blocking, the
+operator decides. Manual rooms have `originalWidth = 0`, never warn.
+Drafts reopened from the DB lose `originalWidth` (it's a UI-only
+field), so the warning ceases — the assumption is the operator
+already validated dimensions when the draft was saved.
 
 ## Verified local state at handoff
 

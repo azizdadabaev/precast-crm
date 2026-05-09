@@ -1,10 +1,29 @@
 "use client";
 
-import { useMemo } from "react";
-import { Plus, Trash2, Info } from "lucide-react";
-import { calculateSlab, projectTotal, type SlabResult, type Pattern } from "@/services/calculation-engine";
+import { useMemo, useState } from "react";
+import {
+  Plus,
+  Trash2,
+  Info,
+  ChevronUp,
+  ChevronDown,
+  AlertTriangle,
+  ArrowUpToLine,
+  Pencil,
+} from "lucide-react";
+import {
+  calculateSlab,
+  projectTotal,
+  tierPrice,
+  M2_PRICE_TIERS,
+  round2,
+  type SlabResult,
+  type Pattern,
+} from "@/services/calculation-engine";
 import { Button } from "@/components/ui/button";
-import { formatNumber } from "@/lib/utils";
+import { formatNumber, roundDownToGrid, roundUpToGrid } from "@/lib/utils";
+import { useCalculatorStore } from "@/store/calculator";
+import { RateOverrideDialog } from "@/components/calculation/RateOverrideDialog";
 
 export interface SlabRow {
   id: string;
@@ -17,6 +36,26 @@ export interface SlabRow {
   forceStartBeam: boolean;    // default false
   patternOverride: Pattern | "AUTO";
   result: SlabResult | null;
+  /**
+   * Engineering-accurate width snapshot for the undersize warning. Set
+   * once when the row is created (via Add Room → 0, or via the tapered
+   * sandbox prefill → the engine's per-row inner width). NOT updated on
+   * manual edits — manual edits ARE the operator's override. Drafts
+   * reopened from the DB have this as null because we don't persist it.
+   */
+  originalWidth: number | null;
+  /**
+   * Per-row m² rate override. When `m2PriceOverride` is true, the
+   * engine's auto-pick from beam length is replaced with
+   * `m2PriceOverrideValue` (always a catalog tier price) and `result`'s
+   * m2_price / m2_cost / subtotal are recomputed in-place by
+   * `recomputeRow`. `m2PriceReason` is the operator's optional note,
+   * surfaced on hover in the calculator and stamped into the persisted
+   * `Calculation` row at save / order placement time.
+   */
+  m2PriceOverride: boolean;
+  m2PriceOverrideValue: number | null;
+  m2PriceReason: string | null;
 }
 
 interface Props {
@@ -44,6 +83,13 @@ function makeRow(seq: number): SlabRow {
     forceStartBeam: false,
     patternOverride: "AUTO",
     result: null,
+    // Manual rooms have no engineering ground truth — the operator IS the
+    // source. Snapshot is 0 → the undersize warning never fires for them.
+    originalWidth: 0,
+    // New rooms default to engine auto-pick.
+    m2PriceOverride: false,
+    m2PriceOverrideValue: null,
+    m2PriceReason: null,
   };
 }
 
@@ -65,10 +111,46 @@ export function recomputeRow(row: SlabRow): SlabRow {
       force_start_beam: row.forceStartBeam,
       pattern: row.patternOverride === "AUTO" ? undefined : row.patternOverride,
     });
-    return { ...row, result };
+    return { ...row, result: applyRateOverride(result, row) };
   } catch {
     return { ...row, result: null };
   }
+}
+
+/**
+ * If the row has a per-row rate override set, replace the engine's
+ * auto-picked m2_price + recompute the dependent m2_cost / subtotal.
+ * Defense-in-depth: only apply if the override value is a real catalog
+ * tier (Zod enforces this at the API boundary; this is a belt-and-
+ * braces check in case the store rehydrates a corrupt value).
+ */
+function applyRateOverride(result: SlabResult, row: SlabRow): SlabResult {
+  if (!row.m2PriceOverride || row.m2PriceOverrideValue == null) return result;
+  if (!M2_PRICE_TIERS.some((t) => t.price === row.m2PriceOverrideValue)) {
+    return result;
+  }
+  const newPrice = row.m2PriceOverrideValue;
+  const newCost = round2(result.billed_area * newPrice);
+  const newSubtotal = round2(
+    newCost + result.pattern_extra_cost + result.manual_extra_beams_cost,
+  );
+  return {
+    ...result,
+    m2_price: newPrice,
+    m2_cost: newCost,
+    subtotal: newSubtotal,
+  };
+}
+
+/** The auto-picked rate for a row, regardless of override state. Used
+ *  by the rate dropdown's "Auto" label and the override-indicator
+ *  tooltip. Returns 0 when the row hasn't been calculated yet. */
+export function autoPickedRate(row: SlabRow): number {
+  if (!row.result) return 0;
+  if (!row.m2PriceOverride) return row.result.m2_price;
+  // result.m2_price has been overridden — recover the auto value from
+  // the engine's tier table against the current beam_length.
+  return tierPrice(row.result.beam_length, M2_PRICE_TIERS);
 }
 
 // Header cell that supports a primary label + a small secondary translation
@@ -102,19 +184,92 @@ function H({
 }
 
 export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscountChange }: Props) {
+  // Workspace-level rounding granularity, persisted via the calculator
+  // store. One setting applies to every row; survives in-app navigation
+  // and is keyed per user (see src/store/calculator.ts).
+  const roundingGrid = useCalculatorStore((s) => s.roundingGrid);
+  const changeGrid = useCalculatorStore((s) => s.setRoundingGrid);
+
   const addRow = () => onChange([...rows, makeRow(rows.length + 1)]);
   const removeRow = (id: string) => onChange(rows.filter((r) => r.id !== id));
   const updateRow = (id: string, updates: Partial<SlabRow>) =>
     onChange(rows.map((r) => (r.id === id ? recomputeRow({ ...r, ...updates }) : r)));
+
+  // Per-row rate override flow. Picking a tier opens the confirmation
+  // dialog; "auto" reverts immediately (always-safe).
+  const [pendingPick, setPendingPick] = useState<{
+    rowId: string;
+    rate: number;
+    autoRate: number;
+    initialReason: string | null;
+  } | null>(null);
+
+  function handleRatePick(rowId: string, picked: "auto" | number) {
+    const room = rows.find((r) => r.id === rowId);
+    if (!room) return;
+    if (picked === "auto") {
+      // Reverting to auto is always safe — clear override fields and
+      // let recomputeRow snap m2_price back to the engine's tier.
+      updateRow(rowId, {
+        m2PriceOverride: false,
+        m2PriceOverrideValue: null,
+        m2PriceReason: null,
+      });
+      return;
+    }
+    // Choosing a tier — confirm before persisting.
+    setPendingPick({
+      rowId,
+      rate: picked,
+      autoRate: autoPickedRate(room),
+      initialReason: room.m2PriceReason,
+    });
+  }
+
+  function confirmRatePick(reason: string | null) {
+    if (!pendingPick) return;
+    updateRow(pendingPick.rowId, {
+      m2PriceOverride: true,
+      m2PriceOverrideValue: pendingPick.rate,
+      m2PriceReason: reason,
+    });
+    setPendingPick(null);
+  }
+
+  const onRoundUp = (id: string) => {
+    const room = rows.find((r) => r.id === id);
+    if (!room) return;
+    updateRow(id, { innerWidth: roundUpToGrid(room.innerWidth, roundingGrid) });
+  };
+  const onRoundDown = (id: string) => {
+    const room = rows.find((r) => r.id === id);
+    if (!room) return;
+    const next = roundDownToGrid(room.innerWidth, roundingGrid);
+    if (next <= 0) return;
+    updateRow(id, { innerWidth: next });
+  };
+  const onRoundAllUp = () => {
+    onChange(
+      rows.map((r) => {
+        if (r.innerWidth <= 0) return r;
+        return recomputeRow({
+          ...r,
+          innerWidth: roundUpToGrid(r.innerWidth, roundingGrid),
+        });
+      }),
+    );
+  };
+  const anyRowEligibleForSweep = rows.some((r) => r.innerWidth > 0);
 
   const totals = useMemo(() => {
     const valid = rows.map((r) => r.result).filter((r): r is SlabResult => !!r);
     const projTotal = projectTotal(valid, discountPercent);
     const beams = valid.reduce((s, r) => s + r.beam_count, 0);
     const blocks = valid.reduce((s, r) => s + r.total_blocks, 0);
+    const monolithLength = valid.reduce((s, r) => s + r.monolith_length, 0);
     const monolithArea = valid.reduce((s, r) => s + r.monolith_area, 0);
     const concrete = valid.reduce((s, r) => s + r.concrete_volume, 0);
-    return { projTotal, beams, blocks, monolithArea, concrete };
+    return { projTotal, beams, blocks, monolithLength, monolithArea, concrete };
   }, [rows, discountPercent]);
 
   const schedule = useMemo(() => {
@@ -129,12 +284,56 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
 
   return (
     <div className="space-y-5">
+      {/* Toolbar — rounding grid selector + bulk snap-up. Sits above the
+          table so the choice is obvious; per-row arrows reflect this grid. */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Лабораторий ўлчам · Round to
+          </span>
+          <div className="flex rounded-md border bg-background overflow-hidden text-xs">
+            <button
+              type="button"
+              className={`px-3 h-7 font-semibold uppercase tracking-wider transition-colors ${
+                roundingGrid === 0.1
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+              onClick={() => changeGrid(0.1)}
+            >
+              10 см
+            </button>
+            <button
+              type="button"
+              className={`px-3 h-7 font-semibold uppercase tracking-wider transition-colors ${
+                roundingGrid === 0.05
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+              onClick={() => changeGrid(0.05)}
+            >
+              5 см
+            </button>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!anyRowEligibleForSweep}
+          onClick={onRoundAllUp}
+          title="Apply round-up to every row's Width using the current grid"
+        >
+          <ArrowUpToLine className="h-3.5 w-3.5 mr-1.5" />
+          Барча хоналарни юқорилаштириш · Round all up
+        </Button>
+      </div>
+
       <div className="rounded-lg border border-border overflow-x-auto bg-background shadow-sm">
         <table className="calc-grid">
           {/* Explicit column widths — table-layout: fixed honors these exactly */}
           <colgroup>
             <col width={108} />  {/* Хона          */}
-            <col width={56} />   {/* Эни           */}
+            <col width={104} />  {/* Эни (input + 2 arrows + warning) */}
             <col width={56} />   {/* Бўйи          */}
             <col width={62} />   {/* Миниш         */}
             <col width={62} />   {/* Корр.         */}
@@ -149,7 +348,7 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
             <col width={64} />   {/* Жами ғишт     */}
             <col width={70} />   {/* Йиғма Б.      */}
             <col width={78} />   {/* Майдон        */}
-            <col width={68} />   {/* м² нархи      */}
+            <col width={108} />  {/* м² нархи (Select + native arrow + pencil) */}
             <col width={96} />   {/* Сумма         */}
             <col width={36} />   {/* delete        */}
           </colgroup>
@@ -201,13 +400,11 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     />
                   </td>
                   <td className="grid-cell grid-tint-input">
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="grid-input is-numeric"
-                      value={row.innerWidth || ""}
-                      onChange={(e) => updateRow(row.id, { innerWidth: Number(e.target.value) })}
-                      placeholder="0.00"
+                    <WidthCell
+                      row={row}
+                      onWidthChange={(w) => updateRow(row.id, { innerWidth: w })}
+                      onRoundUp={() => onRoundUp(row.id)}
+                      onRoundDown={() => onRoundDown(row.id)}
                     />
                   </td>
                   <td className="grid-cell grid-tint-input">
@@ -316,9 +513,16 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     {r ? `${fmt(r.monolith_area)} m²` : "—"}
                   </td>
 
-                  {/* Pricing */}
+                  {/* Pricing — rate is editable per-row, catalog-only */}
                   <td className="grid-cell px-2 text-center tabular-nums text-xs grid-tint-pricing">
-                    {r ? fmt(r.m2_price, 0) : "—"}
+                    {r ? (
+                      <RateCell
+                        row={row}
+                        onPick={(picked) => handleRatePick(row.id, picked)}
+                      />
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums font-bold text-emerald-800 grid-tint-pricing">
                     {r ? fmt(r.subtotal, 0) : "—"}
@@ -371,7 +575,9 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                 {/* col 14: Total blocks */}
                 <td className="text-center px-2 tabular-nums text-orange-700">{totals.blocks}</td>
                 {/* col 15: Slab L */}
-                <td></td>
+                <td className="text-center px-2 tabular-nums text-xs">
+                  {formatNumber(totals.monolithLength, 2)} m
+                </td>
                 {/* col 16: Slab area */}
                 <td className="text-center px-2 tabular-nums text-xs text-blue-700">
                   {formatNumber(totals.monolithArea, 2)} m²
@@ -503,6 +709,150 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
             </div>
           </div>
         </div>
+      )}
+
+      <RateOverrideDialog
+        open={!!pendingPick}
+        onClose={() => setPendingPick(null)}
+        autoRate={pendingPick?.autoRate ?? 0}
+        selectedRate={pendingPick?.rate ?? 0}
+        initialReason={pendingPick?.initialReason ?? null}
+        onConfirm={confirmRatePick}
+      />
+    </div>
+  );
+}
+
+// ── Rate cell — Select dropdown + Pencil indicator on overridden rows ──
+//
+// "Auto" is always present at the top of the list; its label shows the
+// engine's auto-picked tier so the operator can read off the current
+// rate even when an override is active. Selecting a non-Auto tier
+// triggers the parent's confirmation dialog. Reverting to Auto applies
+// immediately (no dialog — always safe). Per spec, table density is
+// preserved: overridden rows show ONE small Pencil icon and amber text;
+// no subtitle, no extra rows.
+function RateCell({
+  row,
+  onPick,
+}: {
+  row: SlabRow;
+  onPick: (picked: "auto" | number) => void;
+}) {
+  const r = row.result;
+  if (!r) return <>—</>;
+
+  const auto = autoPickedRate(row);
+  const overridden = row.m2PriceOverride;
+  const value = overridden ? String(r.m2_price) : "auto";
+
+  const tooltip = overridden
+    ? `Auto: ${formatNumber(auto, 0)} (${
+        r.m2_price > auto ? "↑ markup" : "↓ discount"
+      })${row.m2PriceReason ? `. Reason: ${row.m2PriceReason}` : ""}`
+    : undefined;
+
+  return (
+    <div
+      className={`flex items-center justify-center gap-1 ${
+        overridden ? "text-amber-700 font-semibold" : ""
+      }`}
+      title={tooltip}
+    >
+      <select
+        className="grid-input is-numeric w-full min-w-0 text-center bg-transparent cursor-pointer pr-1"
+        value={value}
+        onChange={(e) => {
+          const v = e.target.value;
+          onPick(v === "auto" ? "auto" : Number(v));
+        }}
+      >
+        <option value="auto">{formatNumber(auto, 0)}</option>
+        {M2_PRICE_TIERS.map((t) => (
+          <option key={t.price} value={String(t.price)}>
+            {formatNumber(t.price, 0)}
+          </option>
+        ))}
+      </select>
+      {overridden && (
+        <Pencil
+          className="h-3 w-3 text-amber-600 shrink-0"
+          aria-label="Rate override"
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Width input cell with snap-up/down arrows + undersize warning ──
+//
+// Pulled into its own component so the row body stays scannable. The
+// arrows reflect the parent's `roundingGrid`; clicking either one drives
+// updateRow via the parent. The warning fires only when the engine had a
+// meaningful original (originalWidth > 0) AND the current width has been
+// rounded BELOW it — manual rooms (originalWidth = 0) never warn.
+function WidthCell({
+  row,
+  onWidthChange,
+  onRoundUp,
+  onRoundDown,
+}: {
+  row: SlabRow;
+  onWidthChange: (w: number) => void;
+  onRoundUp: () => void;
+  onRoundDown: () => void;
+}) {
+  const original = row.originalWidth ?? 0;
+  const undersized = original > 0 && row.innerWidth > 0 && row.innerWidth < original;
+  const differs =
+    original > 0 && row.innerWidth > 0 && Math.abs(row.innerWidth - original) > 1e-6;
+  const inputTitle = differs
+    ? `Аслида: ${formatNumber(original, 3)} м · Originally calculated: ${formatNumber(original, 3)} m`
+    : undefined;
+  const warningTitle = `Ўлчам аслидан кичикроқ (${formatNumber(original, 3)} → ${formatNumber(row.innerWidth, 3)}). Девордан ўтмаслик мумкин. · Width is smaller than original (${formatNumber(original, 3)} → ${formatNumber(row.innerWidth, 3)}). May not reach the wall — verify.`;
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="number"
+        step="0.01"
+        className="grid-input is-numeric flex-1 min-w-0"
+        value={row.innerWidth || ""}
+        onChange={(e) => onWidthChange(Number(e.target.value))}
+        placeholder="0.00"
+        title={inputTitle}
+      />
+      <div className="flex flex-col gap-px">
+        <button
+          type="button"
+          aria-label="Юқорилаштириш · Round up"
+          title="Round up"
+          onClick={onRoundUp}
+          className="h-3 w-4 inline-flex items-center justify-center rounded border border-input bg-background hover:bg-muted text-muted-foreground"
+        >
+          <ChevronUp className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          aria-label="Тушириш · Round down"
+          title="Round down"
+          onClick={onRoundDown}
+          className="h-3 w-4 inline-flex items-center justify-center rounded border border-input bg-background hover:bg-muted text-muted-foreground"
+        >
+          <ChevronDown className="h-3 w-3" />
+        </button>
+      </div>
+      {undersized ? (
+        <span
+          role="img"
+          aria-label={warningTitle}
+          title={warningTitle}
+          className="inline-flex items-center justify-center text-amber-600 shrink-0"
+        >
+          <AlertTriangle className="h-3.5 w-3.5" />
+        </span>
+      ) : (
+        <span className="w-3.5 shrink-0" aria-hidden />
       )}
     </div>
   );

@@ -15,6 +15,7 @@ import {
   CreditCard,
   Hammer,
   Plus,
+  Pencil,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,8 @@ interface OrderDetail {
       monolithLength: string;
       monolithArea: string;
       m2Price: string;
+      m2PriceOverride: boolean;
+      m2PriceReason: string | null;
       subtotal: string;
     }>;
   };
@@ -217,9 +220,10 @@ export default function OrderDetailPage() {
     (acc, c) => ({
       blocks: acc.blocks + c.totalBlocks,
       beams: acc.beams + c.beamCount,
+      monolithLength: acc.monolithLength + Number(c.monolithLength),
       monolithArea: acc.monolithArea + Number(c.monolithArea),
     }),
-    { blocks: 0, beams: 0, monolithArea: 0 },
+    { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0 },
   );
   const totalNum = Number(order.totalPrice);
   const paidNum = Number(order.confirmedPaid);
@@ -412,8 +416,24 @@ export default function OrderDetailPage() {
                     <td className="px-3 py-2 text-center text-xs tabular-nums">
                       {formatNumber(c.monolithArea, 2)} m²
                     </td>
-                    <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800 tabular-nums">
-                      {formatNumber(c.m2Price, 0)}
+                    <td
+                      className={`px-3 py-2 text-center font-bold tabular-nums ${
+                        c.m2PriceOverride
+                          ? "bg-amber-50/40 text-amber-800"
+                          : "bg-green-50/20 text-green-800"
+                      }`}
+                      title={
+                        c.m2PriceOverride
+                          ? `Override · ${formatNumber(c.m2Price, 0)}${c.m2PriceReason ? `. Reason: ${c.m2PriceReason}` : ""}`
+                          : undefined
+                      }
+                    >
+                      <span className="inline-flex items-center justify-center gap-1">
+                        {formatNumber(c.m2Price, 0)}
+                        {c.m2PriceOverride && (
+                          <Pencil className="h-3 w-3 text-amber-600" />
+                        )}
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right font-black text-green-700 tabular-nums">
                       {formatNumber(c.subtotal, 0)}
@@ -432,7 +452,9 @@ export default function OrderDetailPage() {
                   <td className="px-3 py-3 text-center bg-gray-100 tabular-nums">
                     {calcTotals.beams}
                   </td>
-                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3 text-center text-xs tabular-nums">
+                    {formatNumber(calcTotals.monolithLength, 2)} m
+                  </td>
                   <td className="px-3 py-3 text-center text-xs tabular-nums">
                     {formatNumber(calcTotals.monolithArea, 2)} m²
                   </td>

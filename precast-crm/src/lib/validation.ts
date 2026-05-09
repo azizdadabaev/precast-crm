@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { M2_PRICE_TIERS } from "@/services/calculation-engine";
 
 // ── Enums ───────────────────────────────────────────────────────
 export const LanguageEnum = z.enum(["UZ", "RU"]);
@@ -111,7 +112,14 @@ export const ProjectDimensionsSchema = z.object({
   notes: z.string().max(500).optional().nullable(),
 });
 
-export const RoomCalcInputSchema = z.object({
+/**
+ * Plain object form of the room input — kept as a ZodObject (no
+ * refines) so consumers can still `.extend()` it. The refined version
+ * lives below and is what we put in `z.array(...)` for Save Project /
+ * Place Order; the override pair must be consistent there but the
+ * preview /api/calculate route doesn't need that check.
+ */
+export const RoomCalcInputBaseSchema = z.object({
   name: z.string().max(80).optional().nullable(),
   innerWidth: z.coerce.number().positive(),
   innerLength: z.coerce.number().positive(),
@@ -120,10 +128,49 @@ export const RoomCalcInputSchema = z.object({
   extraBeams: z.coerce.number().int().min(0).default(0),
   forceStartBeam: z.coerce.boolean().default(false),
   patternOverride: LayoutPatternEnum.optional().nullable(),
+  // Per-row rate override. Catalog-only — the operator can pick any of
+  // the 5 M²-price tiers in the engine but cannot type a custom number.
+  // When false, the engine's auto-pick from beam_length wins.
+  m2PriceOverride: z.coerce.boolean().default(false),
+  m2PriceOverrideValue: z.coerce
+    .number()
+    .nullable()
+    .optional()
+    .refine(
+      (v) =>
+        v === null ||
+        v === undefined ||
+        M2_PRICE_TIERS.some((t) => t.price === v),
+      { message: "Rate must match a catalog tier" },
+    ),
+  m2PriceReason: z.string().max(200).nullable().optional(),
 });
 
+/**
+ * Refined room input — enforces the override pair's consistency. Use
+ * this anywhere a room is being persisted or used to place an order.
+ * For the read-only preview endpoint use the base schema.
+ */
+export const RoomCalcInputSchema = RoomCalcInputBaseSchema
+  .refine(
+    (d) => !(d.m2PriceOverride && d.m2PriceOverrideValue == null),
+    { path: ["m2PriceOverrideValue"], message: "Override value is required when m2PriceOverride is true" },
+  )
+  .refine(
+    (d) =>
+      !(
+        !d.m2PriceOverride &&
+        (d.m2PriceOverrideValue != null ||
+          (d.m2PriceReason != null && d.m2PriceReason !== ""))
+      ),
+    { path: ["m2PriceOverride"], message: "Override value/reason can only be set when m2PriceOverride is true" },
+  );
+
 // ── Calculate API (preview) ─────────────────────────────────────
-export const CalculateRequestSchema = RoomCalcInputSchema.extend({
+// Uses the base (non-refined) schema so .extend() still works; the
+// preview endpoint doesn't care about override consistency since it
+// doesn't persist anything.
+export const CalculateRequestSchema = RoomCalcInputBaseSchema.extend({
   projectId: z.string().optional(),
 });
 
@@ -276,6 +323,23 @@ export const PaymentRejectSchema = z.object({
 export const DiscrepancyUpdateSchema = z.object({
   status: DiscrepancyStatusEnum,
   resolutionNote: z.string().min(5, "note must be at least 5 chars").max(500),
+});
+
+// ── Tapered → calculator prefill ────────────────────────────────
+// Payload encoded into the `?prefill=` query param when the sandbox's
+// tapered calculator hands rooms over to the production calculator.
+// Cap rooms at 50 — a 25 m tapered slab is ~43 per-row entries, so 50
+// leaves headroom while preventing accidental "pump in everything".
+export const TaperedPrefillRoomSchema = z.object({
+  name: z.string().max(80).optional().nullable(),
+  innerWidth: z.coerce.number().positive(),
+  innerLength: z.coerce.number().positive(),
+});
+
+export const TaperedPrefillSchema = z.object({
+  source: z.literal("tapered-sandbox"),
+  mode: z.enum(["per-row", "grouped"]),
+  rooms: z.array(TaperedPrefillRoomSchema).min(1).max(50),
 });
 
 // ── Capacity calendar ───────────────────────────────────────────

@@ -101,9 +101,18 @@ export default function PaymentsPage() {
             </thead>
             <tbody className="divide-y">
               {payments.map((p) => {
-                const expected = p.order.dispatch?.expectedCollection
-                  ? Number(p.order.dispatch.expectedCollection)
-                  : null;
+                // The dispatch's expectedCollection is the amount the
+                // DRIVER was asked to collect on a particular delivery —
+                // it only makes sense to compare against payments
+                // actually collected by that driver. For in-office cash
+                // and bank/online payments the dispatch number is
+                // unrelated, so showing "expected vs amount" produces a
+                // misleading "short" delta. Gate on collectedByDriver.
+                const fromDriver = !!p.collectedByDriver;
+                const expected =
+                  fromDriver && p.order.dispatch?.expectedCollection
+                    ? Number(p.order.dispatch.expectedCollection)
+                    : null;
                 const recorded = Number(p.amount);
                 const shortfall = expected != null ? expected - recorded : 0;
                 const Badge = STATUS_BADGE[p.status];

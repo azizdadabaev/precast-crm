@@ -3,10 +3,17 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { Save, PackageCheck } from "lucide-react";
+import { Save, PackageCheck, Trash2, Loader2 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
-import { ClientInfoBar, type ClientDraft } from "@/components/calculation/ClientInfoBar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { ClientInfoBar } from "@/components/calculation/ClientInfoBar";
 import { PlaceOrderDialog } from "@/components/calculation/PlaceOrderDialog";
 import {
   MultiRoomCalculator,
@@ -14,73 +21,89 @@ import {
   type SlabRow,
 } from "@/components/calculation/MultiRoomCalculator";
 import { projectTotal } from "@/services/calculation-engine";
-
-const STORAGE_KEY = "calc:autosave:v1";
-
-interface AutosaveState {
-  client: ClientDraft;
-  rows: SlabRow[];
-  discountPercent: number;
-  matchedClientId: string | null;
-}
+import { TaperedPrefillSchema } from "@/lib/validation";
+import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-bridge";
+import { useCalculatorStore } from "@/store/calculator";
+import { useHydrateCalculator } from "@/store/useHydrateCalculator";
 
 function CalculationsInner() {
   const router = useRouter();
   const search = useSearchParams();
 
-  const [client, setClient] = useState<ClientDraft>({
-    name: "",
-    phone: "",
-    address: "",
-    consentGranted: false,
-  });
-  const [matchedClientId, setMatchedClientId] = useState<string | null>(null);
-  const [rows, setRows] = useState<SlabRow[]>([]);
-  const [discountPercent, setDiscountPercent] = useState(0);
+  // Hydrate the persisted calculator store from localStorage. Until this
+  // resolves we render a skeleton so the operator never briefly sees an
+  // empty calculator before their auto-saved draft loads.
+  const { hydrated } = useHydrateCalculator();
+
+  // ── Persisted calculator state — fine-grained selectors ──
+  const client = useCalculatorStore((s) => s.client);
+  const setClient = useCalculatorStore((s) => s.setClient);
+  const matchedClientId = useCalculatorStore((s) => s.matchedClientId);
+  const setMatchedClientId = useCalculatorStore((s) => s.setMatchedClientId);
+  const rows = useCalculatorStore((s) => s.rows);
+  const setRows = useCalculatorStore((s) => s.setRows);
+  const discountPercent = useCalculatorStore((s) => s.discountPercent);
+  const setDiscountPercent = useCalculatorStore((s) => s.setDiscountPercent);
+  const draftProjectId = useCalculatorStore((s) => s.draftProjectId);
+  const setDraftProjectId = useCalculatorStore((s) => s.setDraftProjectId);
+  const loadFrom = useCalculatorStore((s) => s.loadFrom);
+  const clearAll = useCalculatorStore((s) => s.clearAll);
+
+  // ── Transient (UI-only) state — NOT persisted ──
   const [error, setError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
-  const [draftProjectId, setDraftProjectId] = useState<string | null>(null);
+  const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
-  // ── Autosave to localStorage on every change ──
+  // ── One-time effects on mount: prefill from URL, then ?fromProject= ──
   useEffect(() => {
+    if (!hydrated) return;
     if (typeof window === "undefined") return;
-    const payload: AutosaveState = { client, rows, discountPercent, matchedClientId };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      /* ignore */
-    }
-  }, [client, rows, discountPercent, matchedClientId]);
 
-  // ── Restore on mount ──
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as AutosaveState;
-      if (parsed.client) setClient(parsed.client);
-      // Always recompute on restore so a stale `result` from a prior session
-      // (e.g. after an engine rule change) gets refreshed.
-      if (Array.isArray(parsed.rows)) setRows(parsed.rows.map(recomputeRow));
-      if (typeof parsed.discountPercent === "number") setDiscountPercent(parsed.discountPercent);
-      if (parsed.matchedClientId) setMatchedClientId(parsed.matchedClientId);
-    } catch {
-      /* ignore */
+    // Sandbox handoff via `?prefill=…`. Wins over the persisted draft.
+    // The store's `loadFrom` resets all session fields first so a stale
+    // client phone or matchedClientId can't leak into the prefilled rooms.
+    const prefillRaw = search.get("prefill");
+    if (prefillRaw) {
+      const decoded = decodePrefillParam(prefillRaw);
+      const parsed = decoded ? TaperedPrefillSchema.safeParse(decoded) : null;
+      if (parsed?.success) {
+        const newRows: SlabRow[] = parsed.data.rooms.map((r) =>
+          recomputeRow({
+            id: Math.random().toString(36).slice(2, 9),
+            name: r.name ?? "",
+            innerWidth: r.innerWidth,
+            innerLength: r.innerLength,
+            bearing: 0.15,
+            correction: 0,
+            extraBeams: 0,
+            forceStartBeam: false,
+            patternOverride: "AUTO",
+            result: null,
+            // Engineering ground truth for the undersize-warning helper.
+            originalWidth: r.innerWidth,
+            // Sandbox prefill always lands at engine auto-pick.
+            m2PriceOverride: false,
+            m2PriceOverrideValue: null,
+            m2PriceReason: null,
+          }),
+        );
+        loadFrom({ rows: newRows });
+        setPrefillNotice(
+          `Pre-filled from tapered sandbox · ${parsed.data.rooms.length} rooms (${parsed.data.mode})`,
+        );
+        // Clear the URL so a refresh doesn't re-apply the same prefill.
+        router.replace("/calculations", { scroll: false });
+        return;
+      }
+      // Malformed payload: fall through to the persisted draft. We leave
+      // the URL alone so the operator can paste it elsewhere if debugging.
     }
-    // also: if a project id was passed in via ?fromProject=, load it
+
     const fromProject = search.get("fromProject");
     if (fromProject) loadProject(fromProject);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  function clearAutosave() {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-  }
+  }, [hydrated]);
 
   async function loadProject(id: string) {
     try {
@@ -107,23 +130,24 @@ function CalculationsInner() {
           extraBeams: number;
           forceStartBeam: boolean;
           patternOverride: "GB" | "BGB" | "GBG" | null;
+          m2Price: string;
+          m2PriceOverride: boolean;
+          m2PriceReason: string | null;
         }>;
       }>>("/api/projects?status=DRAFT");
       const p = projects.find((x) => x.id === id);
       if (!p) return;
-      setDraftProjectId(p.id);
-      setClient({
-        name: p.client?.name ?? p.tentativeClientName ?? "",
-        phone: p.client?.phone ?? p.tentativeClientPhone ?? "",
-        address: p.client?.address ?? p.tentativeClientAddress ?? "",
-        consentGranted: p.client?.referenceConsent === "GRANTED",
-      });
-      setMatchedClientId(p.client?.id ?? null);
-      // Compute results immediately so the table is fully populated when the
-      // operator re-opens the draft — they don't have to "wake up" each row
-      // by clicking the Pattern dropdown.
-      setRows(
-        p.calculations.map((c) =>
+      // Replace the calculator session in one shot. Transient banners stay.
+      loadFrom({
+        draftProjectId: p.id,
+        client: {
+          name: p.client?.name ?? p.tentativeClientName ?? "",
+          phone: p.client?.phone ?? p.tentativeClientPhone ?? "",
+          address: p.client?.address ?? p.tentativeClientAddress ?? "",
+          consentGranted: p.client?.referenceConsent === "GRANTED",
+        },
+        matchedClientId: p.client?.id ?? null,
+        rows: p.calculations.map((c) =>
           recomputeRow({
             id: Math.random().toString(36).slice(2, 9),
             name: c.name ?? "",
@@ -135,9 +159,19 @@ function CalculationsInner() {
             forceStartBeam: c.forceStartBeam,
             patternOverride: c.patternOverride ?? "AUTO",
             result: null,
+            // Drafts persisted to the DB don't carry the engineering
+            // ground truth; the undersize warning ceases.
+            originalWidth: null,
+            // Hydrate the rate override flag and value from the persisted
+            // calculation. m2Price stored on the row IS the effective rate
+            // (auto OR override), so when override is true we feed it back
+            // as the override value so recomputeRow stamps it onto result.
+            m2PriceOverride: c.m2PriceOverride,
+            m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
+            m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
           }),
         ),
-      );
+      });
     } catch {
       /* ignore */
     }
@@ -153,11 +187,26 @@ function CalculationsInner() {
     client.address.trim().length > 0 &&
     validRooms.length > 0 &&
     validRooms.every((r) => r.result);
+  const hasAnyContent =
+    rows.length > 0 ||
+    client.name.length > 0 ||
+    client.phone.length > 0 ||
+    client.address.length > 0;
 
   // ── Order summary ──
   const summary = useMemo(() => {
-    const valid = validRooms.map((r) => r.result).filter((r): r is NonNullable<SlabRow["result"]> => !!r);
+    const valid = validRooms
+      .map((r) => r.result)
+      .filter((r): r is NonNullable<SlabRow["result"]> => !!r);
     const proj = projectTotal(valid, discountPercent);
+    const undersizedRooms = validRooms
+      .filter((r) => (r.originalWidth ?? 0) > 0 && r.innerWidth < (r.originalWidth ?? 0))
+      .map((r) => ({
+        name: r.name || "Room",
+        innerWidth: r.innerWidth,
+        innerLength: r.innerLength,
+        originalWidth: r.originalWidth ?? 0,
+      }));
     return {
       clientName: client.name,
       clientPhone: client.phone,
@@ -171,6 +220,7 @@ function CalculationsInner() {
       discountAmount: proj.discount_amount,
       deliveryCost: 0,
       totalPrice: proj.total,
+      undersizedRooms,
     };
   }, [validRooms, discountPercent, client]);
 
@@ -198,12 +248,18 @@ function CalculationsInner() {
             extraBeams: r.extraBeams,
             forceStartBeam: r.forceStartBeam,
             patternOverride: r.patternOverride === "AUTO" ? null : r.patternOverride,
+            m2PriceOverride: r.m2PriceOverride,
+            m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
+            m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
           })),
         },
       }),
     onSuccess: (project) => {
       setDraftProjectId(project.id);
-      clearAutosave();
+      // Saved successfully → clear the auto-save draft. The operator can
+      // continue editing; the next edits will start fresh in the auto-save
+      // and Save Project will UPDATE this same draft id.
+      clearAll();
       router.push(`/projects/${project.id}`);
     },
     onError: (e: Error) => setError(e.message),
@@ -222,8 +278,6 @@ function CalculationsInner() {
           clientName: client.name,
           clientPhone: client.phone,
           clientAddress: client.address,
-          // Only send when the operator actually checked the box. The server
-          // never downgrades — null leaves any existing consent intact.
           clientReferenceConsent: client.consentGranted ? "GRANTED" : null,
           shapeType: "RECTANGULAR",
           rooms: validRooms.map((r) => ({
@@ -235,27 +289,45 @@ function CalculationsInner() {
             extraBeams: r.extraBeams,
             forceStartBeam: r.forceStartBeam,
             patternOverride: r.patternOverride === "AUTO" ? null : r.patternOverride,
+            m2PriceOverride: r.m2PriceOverride,
+            m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
+            m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
           })),
           discountPercent,
           deliveryCost: 0,
           otherCost: 0,
           scheduledAt: args.scheduledAt.toISOString(),
-          // Optional up-front payment — server creates a PENDING_CONFIRMATION
-          // Payment row in the placement transaction when paidAmount > 0.
           paidAmount: args.paidAmount,
           paymentMethod: args.paidAmount > 0 ? args.paymentMethod : null,
         },
       }),
     onSuccess: (order) => {
-      clearAutosave();
+      // Order is now committed permanently — drop the draft.
+      clearAll();
       router.push(`/orders/${order.id}`);
     },
     onError: (e: Error) => setError(e.message),
   });
 
+  function confirmClear() {
+    clearAll();
+    setClearConfirmOpen(false);
+    setError(null);
+    setPrefillNotice(null);
+  }
+
+  if (!hydrated) {
+    return (
+      <div className="flex items-center justify-center h-64 text-muted-foreground">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        Загрузка калькулятора…
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      {/* Header with the two action buttons */}
+      {/* Header with the action buttons */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -266,6 +338,17 @@ function CalculationsInner() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!hasAnyContent}
+            onClick={() => setClearConfirmOpen(true)}
+            title="Clear the calculator and start a new calculation"
+            className="text-rose-700 hover:text-rose-800 hover:bg-rose-50"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Тозалаш · Clear
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -299,6 +382,19 @@ function CalculationsInner() {
         </div>
       )}
 
+      {prefillNotice && (
+        <div className="flex items-center justify-between text-sm bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-2 rounded">
+          <span>{prefillNotice}</span>
+          <button
+            type="button"
+            className="text-xs underline hover:no-underline"
+            onClick={() => setPrefillNotice(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Client info — Name | Phone | Address */}
       <ClientInfoBar
         value={client}
@@ -327,6 +423,40 @@ function CalculationsInner() {
           await placeOrder.mutateAsync({ scheduledAt, paidAmount, paymentMethod });
         }}
       />
+
+      {/* Clear confirmation modal */}
+      <Dialog
+        open={clearConfirmOpen}
+        onOpenChange={(v) => !v && setClearConfirmOpen(false)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Калькуляторни тозаламоқчимисиз? · Clear calculator?</DialogTitle>
+            <DialogDescription>
+              Барча хоналар, мижоз маълумотлари ва ҳисоб-китоб йўқолади. Бу
+              амалли қайтариб бўлмайди. · All rooms, client info, and
+              calculations will be lost. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setClearConfirmOpen(false)}
+            >
+              Бекор қилиш · Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={confirmClear}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Тозалаш · Clear
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
