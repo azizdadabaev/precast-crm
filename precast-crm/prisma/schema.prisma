@@ -296,7 +296,16 @@ model Calculation {
   concreteVolume  Decimal       @db.Decimal(10, 3)
 
   // ── Pricing snapshot (UZS) ──
+  // m2Price is the EFFECTIVE rate used for m2Cost / subtotal — i.e. the
+  // operator's chosen tier when m2PriceOverride = true, otherwise the
+  // engine's auto-picked tier from beam_length. m2PriceOverride flags
+  // the row as a deliberate non-default; m2PriceReason carries the
+  // operator's optional explanation. The auto-picked rate is recoverable
+  // at any time by calling tierPrice(beam_length, M2_PRICE_TIERS), so we
+  // don't store it separately.
   m2Price                 Decimal @db.Decimal(14, 2)
+  m2PriceOverride         Boolean @default(false)
+  m2PriceReason           String?
   extraBeamPricePerM      Decimal @db.Decimal(14, 2)
   m2Cost                  Decimal @db.Decimal(14, 2)
   patternExtraCost        Decimal @db.Decimal(14, 2)

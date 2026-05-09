@@ -606,6 +606,43 @@ Items 5, 11, 12, 14 from the 14 best-practices list:
 - `public/uploads/` is gitignored. Delivery photos live there per machine.
 - Memory files for Claude Code live under `~/.claude/projects/c--Users-…/memory/` per machine and **do not** sync via git. Re-create on the new device by saying "remember the calculation patterns / pricing tiers" once or letting Claude rediscover them from the code.
 
+## Calculator — per-row rate overrides
+
+The Rate column in the calculator is a Select containing **Auto** plus
+the 5 catalog tiers from `M2_PRICE_TIERS` in
+`src/services/calculation-engine.ts`. **Custom prices are not
+allowed** — the validation refines `m2PriceOverrideValue` against the
+tier table at the API boundary, and the persistence mapper
+(`src/lib/calc-persistence.ts`) re-checks before writing as
+defense-in-depth.
+
+Picking a non-Auto tier opens `RateOverrideDialog` (auto-pick vs.
+chosen rate side-by-side, optional 200-char free-text reason).
+Reverting to Auto applies immediately — going back to the catalog
+default is always safe.
+
+Override propagation: calculator store (Zustand auto-save) → Save
+Project (Calculation row gains `m2PriceOverride` / `m2PriceReason`
+columns) → Place Order (Order's `primaryCalculation` carries the
+same row, so the snapshot is automatic) → order detail page (amber
+text + Pencil icon, tooltip with auto value + reason) → printable
+invoice (compact "↑ Special rate" caption + reason on a sub-line).
+
+Auto-pick recomputes on every dimension change ONLY for un-overridden
+rows; once `m2PriceOverride === true`, the rate is sticky until the
+operator reverts. This means dimension changes can produce a row
+whose override is no longer the auto-pick — that's the intended
+behavior; the tooltip surfaces both values so the operator can
+notice.
+
+Schema: `Calculation` model gained two columns:
+```
+m2PriceOverride Boolean @default(false)
+m2PriceReason   String?
+```
+Additive, non-destructive — `db push` migrates existing data with
+defaults.
+
 ## Calculator — auto-save & Clear button
 
 The calculator's session state (client info, rooms, discount, the

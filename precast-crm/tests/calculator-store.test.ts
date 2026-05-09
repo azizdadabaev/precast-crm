@@ -259,5 +259,8 @@ function makeRoom(id: string, innerWidth: number) {
     patternOverride: "AUTO" as const,
     result: null,
     originalWidth: innerWidth,
+    m2PriceOverride: false,
+    m2PriceOverrideValue: null,
+    m2PriceReason: null,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -9,11 +9,21 @@ import {
   ChevronDown,
   AlertTriangle,
   ArrowUpToLine,
+  Pencil,
 } from "lucide-react";
-import { calculateSlab, projectTotal, type SlabResult, type Pattern } from "@/services/calculation-engine";
+import {
+  calculateSlab,
+  projectTotal,
+  tierPrice,
+  M2_PRICE_TIERS,
+  round2,
+  type SlabResult,
+  type Pattern,
+} from "@/services/calculation-engine";
 import { Button } from "@/components/ui/button";
 import { formatNumber, roundDownToGrid, roundUpToGrid } from "@/lib/utils";
 import { useCalculatorStore } from "@/store/calculator";
+import { RateOverrideDialog } from "@/components/calculation/RateOverrideDialog";
 
 export interface SlabRow {
   id: string;
@@ -34,6 +44,18 @@ export interface SlabRow {
    * reopened from the DB have this as null because we don't persist it.
    */
   originalWidth: number | null;
+  /**
+   * Per-row m² rate override. When `m2PriceOverride` is true, the
+   * engine's auto-pick from beam length is replaced with
+   * `m2PriceOverrideValue` (always a catalog tier price) and `result`'s
+   * m2_price / m2_cost / subtotal are recomputed in-place by
+   * `recomputeRow`. `m2PriceReason` is the operator's optional note,
+   * surfaced on hover in the calculator and stamped into the persisted
+   * `Calculation` row at save / order placement time.
+   */
+  m2PriceOverride: boolean;
+  m2PriceOverrideValue: number | null;
+  m2PriceReason: string | null;
 }
 
 interface Props {
@@ -64,6 +86,10 @@ function makeRow(seq: number): SlabRow {
     // Manual rooms have no engineering ground truth — the operator IS the
     // source. Snapshot is 0 → the undersize warning never fires for them.
     originalWidth: 0,
+    // New rooms default to engine auto-pick.
+    m2PriceOverride: false,
+    m2PriceOverrideValue: null,
+    m2PriceReason: null,
   };
 }
 
@@ -85,10 +111,46 @@ export function recomputeRow(row: SlabRow): SlabRow {
       force_start_beam: row.forceStartBeam,
       pattern: row.patternOverride === "AUTO" ? undefined : row.patternOverride,
     });
-    return { ...row, result };
+    return { ...row, result: applyRateOverride(result, row) };
   } catch {
     return { ...row, result: null };
   }
+}
+
+/**
+ * If the row has a per-row rate override set, replace the engine's
+ * auto-picked m2_price + recompute the dependent m2_cost / subtotal.
+ * Defense-in-depth: only apply if the override value is a real catalog
+ * tier (Zod enforces this at the API boundary; this is a belt-and-
+ * braces check in case the store rehydrates a corrupt value).
+ */
+function applyRateOverride(result: SlabResult, row: SlabRow): SlabResult {
+  if (!row.m2PriceOverride || row.m2PriceOverrideValue == null) return result;
+  if (!M2_PRICE_TIERS.some((t) => t.price === row.m2PriceOverrideValue)) {
+    return result;
+  }
+  const newPrice = row.m2PriceOverrideValue;
+  const newCost = round2(result.billed_area * newPrice);
+  const newSubtotal = round2(
+    newCost + result.pattern_extra_cost + result.manual_extra_beams_cost,
+  );
+  return {
+    ...result,
+    m2_price: newPrice,
+    m2_cost: newCost,
+    subtotal: newSubtotal,
+  };
+}
+
+/** The auto-picked rate for a row, regardless of override state. Used
+ *  by the rate dropdown's "Auto" label and the override-indicator
+ *  tooltip. Returns 0 when the row hasn't been calculated yet. */
+export function autoPickedRate(row: SlabRow): number {
+  if (!row.result) return 0;
+  if (!row.m2PriceOverride) return row.result.m2_price;
+  // result.m2_price has been overridden — recover the auto value from
+  // the engine's tier table against the current beam_length.
+  return tierPrice(row.result.beam_length, M2_PRICE_TIERS);
 }
 
 // Header cell that supports a primary label + a small secondary translation
@@ -132,6 +194,47 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
   const removeRow = (id: string) => onChange(rows.filter((r) => r.id !== id));
   const updateRow = (id: string, updates: Partial<SlabRow>) =>
     onChange(rows.map((r) => (r.id === id ? recomputeRow({ ...r, ...updates }) : r)));
+
+  // Per-row rate override flow. Picking a tier opens the confirmation
+  // dialog; "auto" reverts immediately (always-safe).
+  const [pendingPick, setPendingPick] = useState<{
+    rowId: string;
+    rate: number;
+    autoRate: number;
+    initialReason: string | null;
+  } | null>(null);
+
+  function handleRatePick(rowId: string, picked: "auto" | number) {
+    const room = rows.find((r) => r.id === rowId);
+    if (!room) return;
+    if (picked === "auto") {
+      // Reverting to auto is always safe — clear override fields and
+      // let recomputeRow snap m2_price back to the engine's tier.
+      updateRow(rowId, {
+        m2PriceOverride: false,
+        m2PriceOverrideValue: null,
+        m2PriceReason: null,
+      });
+      return;
+    }
+    // Choosing a tier — confirm before persisting.
+    setPendingPick({
+      rowId,
+      rate: picked,
+      autoRate: autoPickedRate(room),
+      initialReason: room.m2PriceReason,
+    });
+  }
+
+  function confirmRatePick(reason: string | null) {
+    if (!pendingPick) return;
+    updateRow(pendingPick.rowId, {
+      m2PriceOverride: true,
+      m2PriceOverrideValue: pendingPick.rate,
+      m2PriceReason: reason,
+    });
+    setPendingPick(null);
+  }
 
   const onRoundUp = (id: string) => {
     const room = rows.find((r) => r.id === id);
@@ -410,9 +513,16 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     {r ? `${fmt(r.monolith_area)} m²` : "—"}
                   </td>
 
-                  {/* Pricing */}
+                  {/* Pricing — rate is editable per-row, catalog-only */}
                   <td className="grid-cell px-2 text-center tabular-nums text-xs grid-tint-pricing">
-                    {r ? fmt(r.m2_price, 0) : "—"}
+                    {r ? (
+                      <RateCell
+                        row={row}
+                        onPick={(picked) => handleRatePick(row.id, picked)}
+                      />
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums font-bold text-emerald-800 grid-tint-pricing">
                     {r ? fmt(r.subtotal, 0) : "—"}
@@ -599,6 +709,80 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
             </div>
           </div>
         </div>
+      )}
+
+      <RateOverrideDialog
+        open={!!pendingPick}
+        onClose={() => setPendingPick(null)}
+        autoRate={pendingPick?.autoRate ?? 0}
+        selectedRate={pendingPick?.rate ?? 0}
+        initialReason={pendingPick?.initialReason ?? null}
+        onConfirm={confirmRatePick}
+      />
+    </div>
+  );
+}
+
+// ── Rate cell — Select dropdown + Pencil indicator on overridden rows ──
+//
+// "Auto" is always present at the top of the list; its label shows the
+// engine's auto-picked tier so the operator can read off the current
+// rate even when an override is active. Selecting a non-Auto tier
+// triggers the parent's confirmation dialog. Reverting to Auto applies
+// immediately (no dialog — always safe). Per spec, table density is
+// preserved: overridden rows show ONE small Pencil icon and amber text;
+// no subtitle, no extra rows.
+function RateCell({
+  row,
+  onPick,
+}: {
+  row: SlabRow;
+  onPick: (picked: "auto" | number) => void;
+}) {
+  const r = row.result;
+  if (!r) return <>—</>;
+
+  const auto = autoPickedRate(row);
+  const overridden = row.m2PriceOverride;
+  const value = overridden ? String(r.m2_price) : "auto";
+
+  const tooltip = overridden
+    ? `Auto: ${formatNumber(auto, 0)} (${
+        r.m2_price > auto ? "↑ markup" : "↓ discount"
+      })${row.m2PriceReason ? `. Reason: ${row.m2PriceReason}` : ""}`
+    : undefined;
+
+  return (
+    <div
+      className={`flex items-center justify-center gap-1 ${
+        overridden ? "text-amber-700 font-semibold" : ""
+      }`}
+      title={tooltip}
+    >
+      <select
+        className="grid-input is-numeric w-20 text-center bg-transparent cursor-pointer"
+        value={value}
+        onChange={(e) => {
+          const v = e.target.value;
+          onPick(v === "auto" ? "auto" : Number(v));
+        }}
+      >
+        <option value="auto">
+          {overridden
+            ? `Авто (${formatNumber(auto, 0)})`
+            : `${formatNumber(auto, 0)} (auto)`}
+        </option>
+        {M2_PRICE_TIERS.map((t) => (
+          <option key={t.price} value={String(t.price)}>
+            {formatNumber(t.price, 0)}
+          </option>
+        ))}
+      </select>
+      {overridden && (
+        <Pencil
+          className="h-3 w-3 text-amber-600 shrink-0"
+          aria-label="Rate override"
+        />
       )}
     </div>
   );

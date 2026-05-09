@@ -82,6 +82,10 @@ function CalculationsInner() {
             result: null,
             // Engineering ground truth for the undersize-warning helper.
             originalWidth: r.innerWidth,
+            // Sandbox prefill always lands at engine auto-pick.
+            m2PriceOverride: false,
+            m2PriceOverrideValue: null,
+            m2PriceReason: null,
           }),
         );
         loadFrom({ rows: newRows });
@@ -126,6 +130,9 @@ function CalculationsInner() {
           extraBeams: number;
           forceStartBeam: boolean;
           patternOverride: "GB" | "BGB" | "GBG" | null;
+          m2Price: string;
+          m2PriceOverride: boolean;
+          m2PriceReason: string | null;
         }>;
       }>>("/api/projects?status=DRAFT");
       const p = projects.find((x) => x.id === id);
@@ -155,6 +162,13 @@ function CalculationsInner() {
             // Drafts persisted to the DB don't carry the engineering
             // ground truth; the undersize warning ceases.
             originalWidth: null,
+            // Hydrate the rate override flag and value from the persisted
+            // calculation. m2Price stored on the row IS the effective rate
+            // (auto OR override), so when override is true we feed it back
+            // as the override value so recomputeRow stamps it onto result.
+            m2PriceOverride: c.m2PriceOverride,
+            m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
+            m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
           }),
         ),
       });
@@ -234,6 +248,9 @@ function CalculationsInner() {
             extraBeams: r.extraBeams,
             forceStartBeam: r.forceStartBeam,
             patternOverride: r.patternOverride === "AUTO" ? null : r.patternOverride,
+            m2PriceOverride: r.m2PriceOverride,
+            m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
+            m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
           })),
         },
       }),
@@ -272,6 +289,9 @@ function CalculationsInner() {
             extraBeams: r.extraBeams,
             forceStartBeam: r.forceStartBeam,
             patternOverride: r.patternOverride === "AUTO" ? null : r.patternOverride,
+            m2PriceOverride: r.m2PriceOverride,
+            m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
+            m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
           })),
           discountPercent,
           deliveryCost: 0,

@@ -44,6 +44,8 @@ interface OrderDetail {
       monolithLength: string;
       monolithArea: string;
       m2Price: string;
+      m2PriceOverride: boolean;
+      m2PriceReason: string | null;
       subtotal: string;
     }>;
   };
@@ -286,8 +288,24 @@ export default function OrderPrintPage() {
                   <td className="px-1.5 py-1.5 text-center tabular-nums">
                     {formatNumber(c.monolithArea, 2)} m²
                   </td>
-                  <td className="px-1.5 py-1.5 text-center tabular-nums font-semibold bg-green-50/40 text-green-900">
+                  <td
+                    className={`px-1.5 py-1.5 text-center tabular-nums font-semibold ${
+                      c.m2PriceOverride
+                        ? "bg-amber-50/60 text-amber-900"
+                        : "bg-green-50/40 text-green-900"
+                    }`}
+                  >
                     {formatNumber(c.m2Price, 0)}
+                    {c.m2PriceOverride && (
+                      <div className="text-[8px] font-normal text-amber-800 leading-tight mt-0.5">
+                        ↑ Special rate
+                        {c.m2PriceReason && (
+                          <div className="text-[7px] text-amber-700 italic leading-tight">
+                            {c.m2PriceReason}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-1.5 py-1.5 text-right tabular-nums font-bold text-green-800">
                     {formatNumber(c.subtotal, 0)}
