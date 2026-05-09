@@ -767,11 +767,7 @@ function RateCell({
           onPick(v === "auto" ? "auto" : Number(v));
         }}
       >
-        <option value="auto">
-          {overridden
-            ? `Авто (${formatNumber(auto, 0)})`
-            : `${formatNumber(auto, 0)} (auto)`}
-        </option>
+        <option value="auto">{formatNumber(auto, 0)}</option>
         {M2_PRICE_TIERS.map((t) => (
           <option key={t.price} value={String(t.price)}>
             {formatNumber(t.price, 0)}
