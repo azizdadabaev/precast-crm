@@ -217,9 +217,10 @@ export default function OrderDetailPage() {
     (acc, c) => ({
       blocks: acc.blocks + c.totalBlocks,
       beams: acc.beams + c.beamCount,
+      monolithLength: acc.monolithLength + Number(c.monolithLength),
       monolithArea: acc.monolithArea + Number(c.monolithArea),
     }),
-    { blocks: 0, beams: 0, monolithArea: 0 },
+    { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0 },
   );
   const totalNum = Number(order.totalPrice);
   const paidNum = Number(order.confirmedPaid);
@@ -432,7 +433,9 @@ export default function OrderDetailPage() {
                   <td className="px-3 py-3 text-center bg-gray-100 tabular-nums">
                     {calcTotals.beams}
                   </td>
-                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3 text-center text-xs tabular-nums">
+                    {formatNumber(calcTotals.monolithLength, 2)} m
+                  </td>
                   <td className="px-3 py-3 text-center text-xs tabular-nums">
                     {formatNumber(calcTotals.monolithArea, 2)} m²
                   </td>

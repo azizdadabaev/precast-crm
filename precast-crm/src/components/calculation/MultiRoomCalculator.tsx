@@ -112,9 +112,10 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
     const projTotal = projectTotal(valid, discountPercent);
     const beams = valid.reduce((s, r) => s + r.beam_count, 0);
     const blocks = valid.reduce((s, r) => s + r.total_blocks, 0);
+    const monolithLength = valid.reduce((s, r) => s + r.monolith_length, 0);
     const monolithArea = valid.reduce((s, r) => s + r.monolith_area, 0);
     const concrete = valid.reduce((s, r) => s + r.concrete_volume, 0);
-    return { projTotal, beams, blocks, monolithArea, concrete };
+    return { projTotal, beams, blocks, monolithLength, monolithArea, concrete };
   }, [rows, discountPercent]);
 
   const schedule = useMemo(() => {
@@ -371,7 +372,9 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                 {/* col 14: Total blocks */}
                 <td className="text-center px-2 tabular-nums text-orange-700">{totals.blocks}</td>
                 {/* col 15: Slab L */}
-                <td></td>
+                <td className="text-center px-2 tabular-nums text-xs">
+                  {formatNumber(totals.monolithLength, 2)} m
+                </td>
                 {/* col 16: Slab area */}
                 <td className="text-center px-2 tabular-nums text-xs text-blue-700">
                   {formatNumber(totals.monolithArea, 2)} m²
