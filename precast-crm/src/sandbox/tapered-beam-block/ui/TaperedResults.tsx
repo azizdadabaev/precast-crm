@@ -154,12 +154,38 @@ function GeometryCard({ r }: { r: TaperResult }) {
           value={`${(r.changePerRow * 100).toFixed(2)} cm/row`}
           highlightCr={Math.abs(r.changePerRow) > 0.5}
         />
-        <Stat label="Rows (practical)" value={String(r.rowsPractical)} />
+        <Stat label="Pitches" value={String(r.rowsPractical)} />
+        <Stat label="Beams" value={String(r.beamCount)} />
         <Stat
           label="L_effective"
           value={`${r.effectiveLength.toFixed(3)} m`}
         />
+        <Stat
+          label="L_covered (= pitches × S)"
+          value={`${r.coveredLength.toFixed(3)} m`}
+        />
         <Stat label="Severity" value={r.severity} />
+        <div className="col-span-2 sm:col-span-4 text-[11px] text-muted-foreground border-t pt-2">
+          {r.bumped ? (
+            <>
+              <span className="font-semibold text-amber-700">Bump applied:</span>{" "}
+              R &gt; 0.45 m → covered length extended from{" "}
+              <span className="tabular-nums">
+                {(r.rowsPractical - 1).toFixed(0)} × {r.beamSpacing} ={" "}
+                {((r.rowsPractical - 1) * r.beamSpacing).toFixed(3)} m
+              </span>{" "}
+              to{" "}
+              <span className="tabular-nums">{r.coveredLength.toFixed(3)} m</span>{" "}
+              so the far wall has a beam.
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">No bump:</span> R ≤ 0.45 m;
+              the slab edge is absorbed by edge compensation rather than
+              extending the covered length.
+            </>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -457,7 +483,7 @@ function MaterialCard({
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Stat
               label="Total beams"
-              value={`${r.rowsPractical} (cut to order)`}
+              value={`${r.beamCount} (cut to order)`}
             />
             <Stat
               label="Total beam meters"
@@ -512,7 +538,7 @@ function ProductionNotes({ r }: { r: TaperResult }) {
       <li>SKU count: {r.groupCount}.</li>
       {r.requiresHybrid && (
         <li className="text-amber-800">
-          Hybrid: beams cover {r.groups.reduce((s, g) => s + g.qty, 0)} of {r.rowsPractical} rows;
+          Hybrid: beams cover {r.groups.reduce((s, g) => s + g.qty, 0)} of {r.beamCount} beams;
           remainder is monolithic.
         </li>
       )}

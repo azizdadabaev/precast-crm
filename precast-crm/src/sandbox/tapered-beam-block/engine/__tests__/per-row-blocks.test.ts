@@ -3,18 +3,21 @@ import { computeTaper } from "../compute-taper";
 import { BLOCK_PITCH_M } from "../helpers";
 
 describe("per-row blocks", () => {
-  it("acceptance geometry (3, 4, 5) produces 9 distinct rows climbing 3.000 → 3.928", () => {
+  it("acceptance geometry (3, 4, 5) produces 9 distinct beams climbing 3.000 → 4.000", () => {
     const r = computeTaper({ width1: 3, width2: 4, length: 5 });
 
     expect(r.errors).toEqual([]);
-    expect(r.rowsPractical).toBe(9);
+    // §15 bump rule: R = 5 − 8 × 0.58 = 0.36 ≤ 0.45 → no bump → 8 pitches, 9 beams.
+    expect(r.rowsPractical).toBe(8);
+    expect(r.bumped).toBe(false);
+    expect(r.beamCount).toBe(9);
     expect(r.perRowDetails).toHaveLength(9);
 
-    // Row 0 starts at width1, last row reaches width1 + 8 × C_r ≈ 3.928.
-    expect(r.perRowDetails[0].innerWidth).toBeCloseTo(3.0, 3);
-    expect(r.perRowDetails[8].innerWidth).toBeCloseTo(3.928, 3);
+    // Endpoint contract: first beam at width1, last at width2 — exactly.
+    expect(r.perRowDetails[0].innerWidth).toBeCloseTo(3.0, 9);
+    expect(r.perRowDetails[8].innerWidth).toBeCloseTo(4.0, 9);
 
-    // Every row's inner width is unique (no collapse / dedupe).
+    // Every beam's inner width is unique (no collapse / dedupe).
     const widths = r.perRowDetails.map((d) => d.innerWidth);
     const unique = new Set(widths.map((w) => w.toFixed(3)));
     expect(unique.size).toBe(9);

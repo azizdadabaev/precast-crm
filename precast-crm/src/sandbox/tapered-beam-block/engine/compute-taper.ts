@@ -26,6 +26,7 @@ import {
   VERIFY_TAG,
   WASTE_BEAMS_PCT,
   WASTE_BLOCKS_PCT,
+  pitchesWithBump,
   round3,
 } from "./helpers";
 import {
@@ -97,19 +98,49 @@ export function computeTaper(input: TaperInput): TaperResult {
   // RATE drifts visibly over many rows (e.g. ~5 cm over 14 rows for a
   // ΔW=0.70 m taper).
   const changePerMetre = deltaW / effectiveLength;
+  // C_r reported = ΔW / length × S, computed from the raw inputs (NOT
+  // from the bumped covered length). It's a reporting value the
+  // operator reads on the geometry card; the actual beam interpolation
+  // below uses the bumped covered length so the endpoints land on the
+  // walls exactly.
   const changePerRow = changePerMetre * beamSpacing;
-  const rowsRaw = input.length / beamSpacing;
+  const rowsRaw = effectiveLength / beamSpacing;
   const rowsTheoretical = round3(rowsRaw);
-  // §3.2: floor is the integer-row count; §3.7 then says "either a
-  // partial final row is added or the edge strip absorbs the
-  // difference". The spec's worked Example 1 (5.70/0.58=9.83 → 10)
-  // expects the partial-row-added behaviour to be the default, so
-  // ceil-on-remainder is what we encode.
-  const rowsPractical = Math.ceil(rowsRaw - EPS);
+  // §3.2 + §15 — bump rule (mirrors the production engine's autoPickPattern):
+  //   R = effectiveLength − floor(effectiveLength / S) × S
+  //   R > 0.45 → bump pitches by 1 so the far wall has a beam.
+  // The previous engine used `Math.ceil(rowsRaw − EPS)`, which always
+  // bumped on any non-zero remainder. That was too aggressive for
+  // R ≤ 0.45 cases and produced beam counts that didn't match the
+  // production engine's own rule.
+  const bumpDecision = pitchesWithBump(effectiveLength, beamSpacing);
+  const rowsPractical = bumpDecision.pitches;
+  const bumped = bumpDecision.bumped;
+  // Covered length = pitches × S. Beams sit at positions
+  // 0, S, 2S, ..., pitches × S; that's `pitches + 1` beams.
+  const coveredLength = round3(rowsPractical * beamSpacing);
+  const beamCount = rowsPractical + 1;
 
+  // Per-row inner widths via linear interpolation over `coveredLength`.
+  // Endpoint contract: W_0 === width1 and W_pitches === width2
+  // exactly (within rounding). Loop is INCLUSIVE of pitches, so the
+  // array length is rowsPractical + 1 — one beam at each pitch
+  // boundary, including both walls.
   const perRowInnerWidths: number[] = [];
-  for (let n = 0; n < rowsPractical; n++) {
-    perRowInnerWidths.push(round3(input.width1 + changePerRow * n));
+  if (rowsPractical === 0) {
+    // Degenerate geometry — single wall, no interpolation. Validation
+    // already errored, but be defensive.
+    perRowInnerWidths.push(round3(input.width1));
+  } else {
+    for (let n = 0; n <= rowsPractical; n++) {
+      const t = (n * beamSpacing) / coveredLength;
+      const w = input.width1 + (input.width2 - input.width1) * t;
+      perRowInnerWidths.push(round3(w));
+    }
+    // Guarantee the endpoints exactly, defending against floating-point
+    // drift in the linear interpolation above.
+    perRowInnerWidths[0] = round3(input.width1);
+    perRowInnerWidths[rowsPractical] = round3(input.width2);
   }
 
   // Per-row detail (the operator's "per-row mode" output). Each row
@@ -166,14 +197,15 @@ export function computeTaper(input: TaperInput): TaperResult {
     }
   }
 
-  // Reject the degenerate "every row a unique SKU" case (§8) when it
+  // Reject the degenerate "every beam a unique SKU" case (§8) when it
   // wasn't already absorbed by the hybrid branch above. With my
-  // grouping algorithm, hybrid fires whenever group_count >= rows, so
-  // this is a defensive fallback.
+  // grouping algorithm, hybrid fires whenever group_count >= beams, so
+  // this is a defensive fallback. Compare against beamCount (=
+  // rowsPractical + 1) since beams are what get SKU'd, not pitches.
   if (
     typeof tier === "number" &&
-    tier >= rowsPractical &&
-    rowsPractical > 0
+    tier >= beamCount &&
+    beamCount > 0
   ) {
     errors.push(
       "Geometry would require a unique beam SKU per row — refusing " +
@@ -228,7 +260,10 @@ export function computeTaper(input: TaperInput): TaperResult {
     changePerRow,
     rowsTheoretical,
     rowsPractical,
+    beamCount,
     effectiveLength,
+    coveredLength,
+    bumped,
     perRowInnerWidths,
     perRowDetails,
 
@@ -283,7 +318,10 @@ function makeStub(a: StubArgs): TaperResult {
     changePerRow: 0,
     rowsTheoretical: 0,
     rowsPractical: 0,
+    beamCount: 0,
     effectiveLength: a.effectiveLength,
+    coveredLength: 0,
+    bumped: false,
     perRowInnerWidths: [],
     perRowDetails: [],
 

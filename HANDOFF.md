@@ -606,6 +606,37 @@ Items 5, 11, 12, 14 from the 14 best-practices list:
 - `public/uploads/` is gitignored. Delivery photos live there per machine.
 - Memory files for Claude Code live under `~/.claude/projects/c--Users-…/memory/` per machine and **do not** sync via git. Re-create on the new device by saying "remember the calculation patterns / pricing tiers" once or letting Claude rediscover them from the code.
 
+## Tapered sandbox — bump rule + endpoint contract (§15)
+
+**Bug fixed:** the engine previously used `Math.ceil(rowsRaw − EPS)` for
+the practical row count and produced `rowsPractical` beam widths via
+`width1 + C_r × n` for `n = 0..rowsPractical-1`. That left the
+closing wall uncovered: input `(width1=2, width2=4, length=4)`
+produced 7 beams ending at 3.74 m, leaving 52 cm of slab without a
+beam at the `width2 = 4.0` wall.
+
+**Fix:** mirror the production engine's `autoPickPattern` bump rule
+in the sandbox. Pitch count = `floor(length / S)` plus **+1 if
+`R > 0.45`**; the slab now has `pitches + 1` beams (one at each pitch
+boundary including both walls). Widths are computed by linear
+interpolation over `coveredLength = pitches × S`, so
+`perRowInnerWidths[0] = width1` and
+`perRowInnerWidths[pitches] = width2` exactly — guaranteed for every
+input.
+
+`TaperResult` gains three fields: `beamCount` (= `rowsPractical + 1`),
+`coveredLength`, and `bumped` (the boolean indicator surfaced in the
+geometry card so operators can see when the rule fired). The §10
+worked examples in `src/sandbox/tapered-beam-block/SPEC.md` are
+updated to reflect the new beam counts (Example 1 → 11 beams,
+Example 2 → 16, Example 3 → 3 with no bump). Constants
+`SMALL_REMAINDER = 0.20` and `MEDIUM_REMAINDER = 0.45` are copied
+into sandbox helpers per the SPEC §0 isolation rule.
+
+23 new tests across `bump-rule.test.ts`, `endpoint-widths.test.ts`,
+and `reproducer.test.ts`. The pre-existing test suite (47 cases) was
+updated for the new beam counts and continues to pass.
+
 ## Calculator — per-row rate overrides
 
 The Rate column in the calculator is a Select containing **Auto** plus

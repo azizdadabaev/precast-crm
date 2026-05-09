@@ -66,12 +66,31 @@ Output is for **quotation, manufacturing planning, and contractor support** — 
 S = 0.58 m   (beam center spacing)
 ```
 
-### 3.2 Row count
+### 3.2 Row count and beam count
 ```
-N_theoretical = length / S
-N_practical   = floor(N_theoretical)
+N_theoretical  = length / S
+N_pitches_raw  = floor(N_theoretical)
+R              = length − N_pitches_raw × S      (remainder)
+
+if R > 0.45:
+    N_pitches  = N_pitches_raw + 1               (§15 bump)
+else:
+    N_pitches  = N_pitches_raw
+
+N_beams        = N_pitches + 1                   (one beam at each pitch boundary,
+                                                  including both walls)
+L_covered      = N_pitches × S                   (length over which interpolation runs)
 ```
-If a remainder exists, either a partial final row is added or the edge strip absorbs the difference (see §3.7).
+
+The bump rule is borrowed verbatim from the production engine's
+`autoPickPattern`. The tapered engine doesn't apply patterns — it just
+needs the **pitch** count so its **beam** count covers from `width1`
+(at position 0) to `width2` (at position `L_covered`) inclusive.
+
+Edge cases: when `R ≤ 0.45`, the slab edge between `L_covered` and
+`length` is absorbed by edge compensation (see §3.7). When `R > 0.45`,
+the bump extends `L_covered` past `length` by ≤ 0.13 m — also absorbed
+by bearing + edge compensation.
 
 ### 3.3 Taper magnitude
 ```
@@ -86,10 +105,21 @@ C_r = C_m × 0.58               (change per row)
 ```
 Sign convention: `C_r > 0` → widening; `C_r < 0` → narrowing.
 
-### 3.5 Beam length at row n (n = 0 is the start side)
+### 3.5 Inner width at beam n (n = 0 is the start-side wall)
 ```
-W_n = width1 + (C_r × n)
+W_n = width1 + (width2 − width1) × (n × S / L_covered)    for n = 0..N_pitches
 ```
+
+Endpoint contract — non-negotiable:
+```
+W_0           = width1   (always)
+W_{N_pitches} = width2   (always)
+```
+Linear interpolation between, monotonic in the sign of (`width2 − width1`).
+The array length is `N_pitches + 1 = N_beams`. The previous
+formulation `W_n = width1 + C_r × n for n = 0..N_practical−1` produced
+`N_practical` widths and missed the closing beam at `width2`; that was
+the §15 bug, fixed here.
 
 ### 3.6 Irregular quadrilateral — effective length
 When `length1 ≠ length2`:
@@ -233,30 +263,44 @@ Suggested placeholders until confirmed:
 ### Example 1 — Mild trapezoid (single beam)
 ```
 width1 = 3.70 m,  width2 = 3.90 m,  length = 5.70 m
-ΔW  = 0.20 m
-C_r = (0.20 / 5.70) × 0.58 = 0.0204 m  (2.04 cm/row)
-N   = 5.70 / 0.58 ≈ 9.83 → 10 rows
+ΔW         = 0.20 m
+C_r        = (0.20 / 5.70) × 0.58 = 0.0204 m  (2.04 cm/row, reported)
+floor(L/S) = 9   →  R = 5.70 − 9 × 0.58 = 0.48
+R > 0.45  →  bump (§15)  →  N_pitches = 10
+N_beams    = 11
+L_covered  = 5.80 m
+W_0  = 3.700  (= width1)
+W_10 = 3.900  (= width2)
 ```
-**Strategy:** one beam size at 3.90 m. Edge compensation: 20 cm absorbed across rows via cut blocks or edge concrete.
+**Strategy:** one beam size at 3.90 m, qty = 11. Edge compensation: 20 cm absorbed across rows via cut blocks or edge concrete.
 
 ### Example 2 — Medium taper (3 groups)
 ```
 width1 = 3.75 m,  width2 = 4.45 m,  length = 8.70 m
-ΔW  = 0.70 m
-C_r = (0.70 / 8.70) × 0.58 = 0.0467 m  (4.67 cm/row)
-N   = 8.70 / 0.58 = 15 rows
+ΔW         = 0.70 m
+C_r        = (0.70 / 8.70) × 0.58 = 0.0467 m  (4.67 cm/row, reported)
+floor(L/S) = 15  →  R = 0.00  →  no bump  →  N_pitches = 15
+N_beams    = 16
+L_covered  = 8.70 m
+W_0  = 3.750  (= width1)
+W_15 = 4.450  (= width2)
 ```
-**Strategy:** 3 beam groups — 3.90 m, 4.15 m, 4.45 m. Three stopper settings; efficient for prestressing-bed batching.
+**Strategy:** 3 beam groups, total qty = 16. Three stopper settings; efficient for prestressing-bed batching.
 
 ### Example 3 — Extreme wedge (hybrid)
 ```
 width1 = 5.00 m,  width2 = 2.00 m,  length = 1.60 m
-ΔW  = −3.00 m
-C_r = (−3.00 / 1.60) × 0.58 = −1.0875 m
-N   = 1.60 / 0.58 ≈ 2.76 rows
+ΔW         = −3.00 m
+C_r        = (−3.00 / 1.60) × 0.58 = −1.0875 m
+floor(L/S) = 2   →  R = 1.60 − 2 × 0.58 = 0.44
+R ≤ 0.45  →  no bump  →  N_pitches = 2
+N_beams    = 3
+L_covered  = 1.16 m  (slab edge at 1.60 m absorbed by edge compensation)
+W_0 = 5.000  (= width1)
+W_2 = 2.000  (= width2)
 ```
-**Warning:** extreme taper, only ~3 rows. Hybrid slab required.
-**Strategy:** beams at 5.00 m and 3.90 m; final wedge poured monolithically.
+**Warning:** extreme |C_r|, only 3 beams. Hybrid slab required.
+**Strategy:** beam-block portion uses 2 groups; final wedge poured monolithically.
 
 ## 11. Behavior Rules
 
@@ -265,7 +309,9 @@ N   = 1.60 / 0.58 ≈ 2.76 rows
 - Minimize production complexity first
 - Use edge infill where it's economically favorable
 - Aggressive tapers → hybrid systems
-- Every output must include: **taper per row, row count, production strategy, installation strategy**
+- **The first and last beams sit at the slab walls** (positions 0 and `L_covered`). Inner widths there equal `width1` and `width2` exactly — the engine guarantees this for every input.
+- **When `R > 0.45`, covered length is extended by one pitch** (§15) so the far wall has a beam, instead of leaving 45+ cm of slab unsupported.
+- Every output must include: **taper per row, row count (= pitches), beam count (= pitches + 1), production strategy, installation strategy**
 
 ## 12. Open Items to Verify
 
@@ -279,3 +325,32 @@ Items marked `[VERIFY]` above:
 - Block catalog beyond the 500×100×200 mm hourdi
 - Confirmed waste allowances
 - Formal standards reference (Eurocode clause numbers, local Uzbek norms)
+
+## 15. Bump rule (mirrors production engine `autoPickPattern`)
+
+The remainder `R = length − floor(length / S) × S` decides whether the
+practical pitch count is kept or bumped:
+
+| `R` band         | Action       | Production engine equivalent |
+| ---------------- | ------------ | ---------------------------- |
+| `R = 0`          | no bump      | GB at `floor(L/S)` exactly   |
+| `R ≤ 0.20`       | no bump      | BGB pattern (extra beam, no extra pitch) |
+| `R ≤ 0.45`       | no bump      | GBG pattern (extra block row, no extra pitch) |
+| `R > 0.45`       | **+1 pitch** | GB at `floor(L/S) + 1`       |
+
+The tapered engine uses ONLY the pitch decision — it doesn't apply
+patterns. The bump exists because tapered-slab geometry breaks down
+visibly when there's no closing beam at `width2`: a slab with
+`R = 0.52` would otherwise have ≥ 45 cm of unsupported far edge.
+Edge compensation can absorb up to ≤ 0.45 m, so the rule is "if more
+than that, add a pitch and let the bearing absorb the small over-extend
+on the far end" (the production engine's exact stance).
+
+The previous tapered-engine implementation used `Math.ceil(rowsRaw − ε)`
+which always bumped on any non-zero remainder. That was inconsistent
+with production and over-counted beams for `R ∈ (0, 0.45]`.
+
+### Reference
+Constants `SMALL_REMAINDER = 0.20` and `MEDIUM_REMAINDER = 0.45` are
+copied from `src/services/calculation-engine.ts` per SPEC §0
+(sandbox stays self-contained — do not import from production).

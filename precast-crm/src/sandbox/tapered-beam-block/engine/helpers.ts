@@ -40,6 +40,50 @@ export const DEFAULT_BEAM_SPACING = 0.58;
 /** Bearing default — half of the wall-into-bearing length on each side. */
 export const DEFAULT_BEARING = 0.15;
 
+// ── Bump rule (mirrors the production engine's autoPickPattern) ──
+// Copied from `src/services/calculation-engine.ts` to keep the sandbox
+// self-contained per SPEC §0. The tapered engine uses ONLY the
+// pitches-bump decision: it doesn't apply patterns (Г-Б / Б-Г-Б / Г-Б-Г),
+// it just decides whether the practical pitch count stays at floor()
+// or bumps by 1. The bumped covered length determines where the last
+// beam sits — and the spec requires that beam to land on the wall at
+// width2 exactly (= last position in the per-row width interpolation).
+
+export const SMALL_REMAINDER = 0.20;  // R ≤ this → BGB territory in production; no pitch bump
+export const MEDIUM_REMAINDER = 0.45; // R ≤ this → GBG territory; no pitch bump. R > this → bump.
+
+/**
+ * Decide whether the practical row count should be kept or bumped,
+ * based on the remainder R = length − pitches × beamSpacing.
+ *
+ *   R = 0     → no bump (slab edge sits on a pitch line)
+ *   R ≤ 0.20  → no bump (production handles via BGB extra beam)
+ *   R ≤ 0.45  → no bump (production handles via GBG extra blocks)
+ *   R > 0.45  → BUMP pitches by 1 (production: GB at N+1; here:
+ *                extend covered length so the far-wall beam lands)
+ *
+ * Returns the chosen pitch count, the raw remainder for reporting, and
+ * whether the bump fired (UI surfaces this for transparency).
+ */
+export function pitchesWithBump(
+  length: number,
+  beamSpacing: number,
+): { pitches: number; remainder: number; bumped: boolean } {
+  const epsilon = 1e-9;
+  if (
+    !Number.isFinite(length) ||
+    !Number.isFinite(beamSpacing) ||
+    beamSpacing <= 0
+  ) {
+    return { pitches: 0, remainder: 0, bumped: false };
+  }
+  const raw = Math.max(0, Math.floor(length / beamSpacing));
+  const remainder = round3(length - raw * beamSpacing);
+  const bumped = remainder > MEDIUM_REMAINDER + epsilon;
+  const pitches = bumped ? raw + 1 : raw;
+  return { pitches, remainder, bumped };
+}
+
 // ── [VERIFY §12] sentinels — placeholders only ──────────────
 //
 // Each value below is a defensible default we use to keep the engine

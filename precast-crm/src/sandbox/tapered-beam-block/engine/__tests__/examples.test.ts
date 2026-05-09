@@ -9,14 +9,22 @@ describe("§10 worked examples", () => {
     expect(r.deltaW).toBeCloseTo(0.2, 6);
     // (0.20 / 5.70) × 0.58 ≈ 0.020350877…
     expect(r.changePerRow).toBeCloseTo(0.0204, 3);
+    // §15 bump rule: R = 5.70 − 9 × 0.58 = 0.48 > 0.45 → bump → 10 pitches
     expect(r.rowsPractical).toBe(10);
+    expect(r.bumped).toBe(true);
+    // Beams = pitches + 1, one at each pitch boundary including both walls.
+    expect(r.beamCount).toBe(11);
     expect(r.groupingStrategy).toBe(1);
     expect(r.requiresHybrid).toBe(false);
     expect(r.severity).toBe("small");
 
-    // Single-beam strategy: one group covering all rows.
+    // Endpoint contract: first and last beams sit on the walls exactly.
+    expect(r.perRowInnerWidths[0]).toBeCloseTo(3.7, 9);
+    expect(r.perRowInnerWidths[r.rowsPractical]).toBeCloseTo(3.9, 9);
+
+    // Single-beam strategy: one group covering all 11 beams.
     expect(r.groups).toHaveLength(1);
-    expect(r.groups[0].qty).toBe(10);
+    expect(r.groups[0].qty).toBe(11);
     // Stock inner width covers the widest row, rounded up to BEAM_STOCK_STEP.
     expect(r.groups[0].innerWidth).toBeGreaterThanOrEqual(3.9);
   });
@@ -28,14 +36,21 @@ describe("§10 worked examples", () => {
     expect(r.deltaW).toBeCloseTo(0.7, 6);
     // (0.70 / 8.70) × 0.58 ≈ 0.0467
     expect(r.changePerRow).toBeCloseTo(0.0467, 3);
+    // 8.70 / 0.58 = 15 exactly → R = 0 → no bump → 15 pitches, 16 beams.
     expect(r.rowsPractical).toBe(15);
+    expect(r.bumped).toBe(false);
+    expect(r.beamCount).toBe(16);
     expect(r.groupingStrategy).toBe(3);
     expect(r.severity).toBe("medium");
     expect(r.requiresHybrid).toBe(false);
 
+    // Endpoint contract.
+    expect(r.perRowInnerWidths[0]).toBeCloseTo(3.75, 9);
+    expect(r.perRowInnerWidths[r.rowsPractical]).toBeCloseTo(4.45, 9);
+
     expect(r.groups).toHaveLength(3);
-    // Sum of group quantities equals practical row count.
-    expect(r.groups.reduce((s, g) => s + g.qty, 0)).toBe(15);
+    // Sum of group quantities equals beamCount.
+    expect(r.groups.reduce((s, g) => s + g.qty, 0)).toBe(16);
     // Stock lengths must monotonically cover their group max.
     for (const g of r.groups) {
       const maxInGroup = Math.max(
@@ -52,8 +67,18 @@ describe("§10 worked examples", () => {
     expect(r.deltaW).toBeCloseTo(-3.0, 6);
     // (-3.00 / 1.60) × 0.58 ≈ −1.0875 (sign preserved → narrowing)
     expect(r.changePerRow).toBeCloseTo(-1.0875, 3);
+    // §15 bump rule: R = 1.60 − 2 × 0.58 = 0.44 ≤ 0.45 → no bump.
+    // The previous engine used `ceil` which gave 3 pitches here; the
+    // new bump rule mirrors the production engine and stops at 2.
+    expect(r.rowsPractical).toBe(2);
+    expect(r.bumped).toBe(false);
+    expect(r.beamCount).toBe(3);
     expect(r.requiresHybrid).toBe(true);
     expect(r.groupingStrategy).toBe("hybrid");
+
+    // Endpoint contract — even on the hybrid path.
+    expect(r.perRowInnerWidths[0]).toBeCloseTo(5.0, 9);
+    expect(r.perRowInnerWidths[r.rowsPractical]).toBeCloseTo(2.0, 9);
 
     // Both extreme-taper and short-row warnings should appear.
     const joinedWarnings = r.warnings.join(" | ").toLowerCase();

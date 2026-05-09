@@ -87,16 +87,44 @@ export interface TaperResult {
   changePerRow: number;
   /** Raw row count length / spacing. */
   rowsTheoretical: number;
-  /** floor(rowsTheoretical) — the practical row count. */
+  /**
+   * The chosen pitch count after the bump rule (§15). This is the
+   * number of pitch SEGMENTS — there are `rowsPractical + 1` beams
+   * on the slab (one at each pitch boundary, including both walls).
+   */
   rowsPractical: number;
+  /**
+   * Total beam count, including the closing beam at the wide-end wall.
+   * Equals `rowsPractical + 1`. Use this for any "how many SKUs" or
+   * "how many beams" question.
+   */
+  beamCount: number;
   /** L_effective if irregular quad, else `length`. */
   effectiveLength: number;
+  /**
+   * Covered length after the bump decision: `rowsPractical × beamSpacing`.
+   * This is the length over which inner-width interpolation happens, so
+   * `perRowInnerWidths[0] === width1` and
+   * `perRowInnerWidths[rowsPractical] === width2` are exact (within
+   * floating-point rounding).
+   */
+  coveredLength: number;
+  /**
+   * True when `length − floor(length / S) × S > 0.45`, i.e. the bump
+   * rule fired and the practical pitch count was raised by 1 so the
+   * far wall has a beam. Surfaced in the UI's geometry card so the
+   * operator can see the decision.
+   */
+  bumped: boolean;
 
   /**
-   * Inner width at row n = width1 + (C_r × n) for n = 0..rowsPractical-1.
-   * Sign of C_r is preserved — values may decrease on a narrowing slab.
-   * These are inner (wall-to-wall) widths, not beam member lengths;
-   * the beam member at row n is `perRowInnerWidths[n] + 2 × bearing`.
+   * Inner width at beam n for n = 0..rowsPractical (inclusive).
+   * Endpoint contract:
+   *   perRowInnerWidths[0]              === width1   (always)
+   *   perRowInnerWidths[rowsPractical]  === width2   (always)
+   * Interpolation is linear over `coveredLength`. Sign of (width2 −
+   * width1) is preserved — values decrease on a narrowing slab.
+   * The array length is `rowsPractical + 1` (= beamCount).
    */
   perRowInnerWidths: number[];
 
