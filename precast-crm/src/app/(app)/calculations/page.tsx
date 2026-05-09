@@ -55,6 +55,24 @@ function CalculationsInner() {
   // ── Restore on mount ──
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // One-shot handoff from the tapered-beam-block sandbox. If the
+    // bridge key is present it wins over the autosave restore; we
+    // consume-on-read so a later visit falls back to autosave. See
+    // src/sandbox/tapered-beam-block/calculator-bridge.ts.
+    try {
+      const bridgeRaw = localStorage.getItem("calc:bridge-import:v1");
+      if (bridgeRaw) {
+        const bridge = JSON.parse(bridgeRaw) as AutosaveState;
+        if (bridge.client) setClient(bridge.client);
+        if (Array.isArray(bridge.rows)) setRows(bridge.rows.map(recomputeRow));
+        if (typeof bridge.discountPercent === "number") setDiscountPercent(bridge.discountPercent);
+        if (bridge.matchedClientId) setMatchedClientId(bridge.matchedClientId);
+        localStorage.removeItem("calc:bridge-import:v1");
+        return;
+      }
+    } catch {
+      /* malformed bridge payload — fall through to autosave restore */
+    }
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;

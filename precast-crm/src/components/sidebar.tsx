@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   LogOut,
   Building2,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ const NAV: NavItemWithGate[] = [
   { href: "/clients",      label: "Мижозлар",       sub: "Clients",       icon: Users },
   { href: "/production",   label: "Ишлаб чиқариш",  sub: "Production",    icon: Hammer },
   { href: "/inventory",    label: "Омбор",          sub: "Warehouse",     icon: Warehouse },
+  { href: "/sandbox/tapered", label: "Тажриба",     sub: "Sandbox · Tapered", icon: FlaskConical, roles: ["ADMIN"] },
 ];
 
 export function Sidebar() {

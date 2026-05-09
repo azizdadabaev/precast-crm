@@ -582,6 +582,10 @@ owner), 1 for bank/online (no physical handover step at all).
     edit + Adjust button (cosmetic; the API already enforces)
   Spec wanted these flagged, not changed.
 
+## Sandbox modules
+
+- **Tapered Beam-and-Block** (`src/sandbox/tapered-beam-block/`, route `/sandbox/tapered`, ADMIN-only sidebar entry "Тажриба · Sandbox · Tapered") — isolated playground for trapezoidal / irregular-quadrilateral slab math. Engine is pure with full Vitest coverage; UI mirrors the §9 SPEC.md report layout. Severable: deleting the folder + `src/app/(app)/sandbox/tapered/page.tsx` + the sidebar diff + the one-line `vitest.config.ts` `include` extension fully removes the feature. **Not for production planning** until merged into `services/calculation-engine.ts`.
+
 ## What's NOT implemented yet (deferred)
 
 Items 5, 11, 12, 14 from the 14 best-practices list:
