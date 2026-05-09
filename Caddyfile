@@ -1,0 +1,26 @@
+# Caddy reverse proxy for Precast CRM.
+#
+# Default: HTTP-only on :80, suitable for "deploy on a VPS IP, no domain yet".
+#
+# To enable HTTPS once you have a domain:
+#   1. Point an A record at the VPS IP.
+#   2. Replace the ":80 {" line below with "crm.example.com {"  (your real host).
+#   3. Set NEXT_PUBLIC_APP_URL=https://crm.example.com and remove COOKIE_SECURE
+#      (or set it to true) in .env.
+#   4. `docker compose up -d` — Caddy auto-issues a Let's Encrypt cert on first request.
+
+:80 {
+	encode zstd gzip
+
+	# Larger upload ceiling for delivery-proof photos (8 MB cap is enforced in the app).
+	request_body {
+		max_size 16MB
+	}
+
+	reverse_proxy app:3000 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
