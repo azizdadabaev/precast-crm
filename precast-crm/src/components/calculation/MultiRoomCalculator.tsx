@@ -347,10 +347,10 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
             <col width={56} />   {/* Бош Б.        */}
             <col width={62} />   {/* Б.уз.         */}
             <col width={56} />   {/* Қадам         */}
-            <col width={56} />   {/* 1 қат.        */}
-            <col width={56} />   {/* Балка         */}
             <col width={56} />   {/* Қатор         */}
+            <col width={56} />   {/* 1 қат.        */}
             <col width={64} />   {/* Жами ғишт     */}
+            <col width={56} />   {/* Балка         */}
             <col width={70} />   {/* Йиғма Б.      */}
             <col width={78} />   {/* Майдон        */}
             <col width={108} />  {/* м² нархи (Select + native arrow + pencil) */}
@@ -372,13 +372,19 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
               <H primary="+Б" secondary="Extra" tip="Manual extra beams. First one absorbs into pattern when Г-Б-Г." className="bg-sky-50/40" />
               <H primary="Бош Б." secondary="Start" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="bg-sky-50/40 grid-group-divider" />
 
-              {/* ── Computed ── */}
+              {/* ── Computed ──
+                  Order: Beam L → Pitches → Rows → Per Row → Blocks → Beams.
+                  The three middle columns (Rows, Per Row, Blocks) are
+                  the "block math" group — Rows × Per Row = Blocks —
+                  so they share a soft amber HEADER tint. Cell bodies
+                  stay default; the tint signals grouping without
+                  adding visual weight to every row. */}
               <H primary="Б.уз." secondary="Beam L" />
               <H primary="Қадам" secondary="Pitches" />
-              <H primary="1 қат." secondary="Per row" />
+              <H primary="Қатор" secondary="Rows" className="bg-amber-100" />
+              <H primary="1 қат." secondary="Per row" className="bg-amber-100" />
+              <H primary="Жами" secondary="Blocks" className="bg-amber-100" />
               <H primary="Балка" secondary="Beams" />
-              <H primary="Қатор" secondary="Rows" />
-              <H primary="Жами" secondary="Blocks" />
               <H primary="Йиғма Б." secondary="Slab L" />
               <H primary="Майдон" secondary="Slab area" className="grid-group-divider" />
 
@@ -487,6 +493,12 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                   </td>
 
                   {/* Computed — all centered to align with their headers.
+                      Order matches the header above: Beam L → Pitches
+                      → Rows → Per Row → Blocks → Beams. Cell bodies
+                      have no amber tint — header background carries
+                      the grouping signal. The "Blocks" cell drops the
+                      previous orange text tint so the totals row can
+                      own the per-block color emphasis.
                       Extras-only rows (length=0 + extras>=1) zero-out
                       pattern/pitch/m² fields; render those columns as
                       em-dashes so the operator sees this row is special. */}
@@ -497,16 +509,16 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     {r && !r.is_extras_only ? r.pitches : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums">
+                    {r && !r.is_extras_only ? r.block_rows : "—"}
+                  </td>
+                  <td className="grid-cell px-2 text-center tabular-nums">
                     {r && !r.is_extras_only ? r.blocks_per_row : "—"}
+                  </td>
+                  <td className="grid-cell px-2 text-center tabular-nums">
+                    {r && !r.is_extras_only ? r.total_blocks : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums font-semibold">
                     {r?.beam_count ?? "—"}
-                  </td>
-                  <td className="grid-cell px-2 text-center tabular-nums">
-                    {r && !r.is_extras_only ? r.block_rows : "—"}
-                  </td>
-                  <td className="grid-cell px-2 text-center tabular-nums text-orange-700 font-semibold">
-                    {r && !r.is_extras_only ? r.total_blocks : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums text-xs text-blue-700">
                     {r ? `${fmt(r.monolith_length)} m` : "—"}
@@ -562,22 +574,35 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
           {rows.length > 0 && (
             <tfoot>
               {/*
-                Column layout (19 cols):
+                Column layout (19 cols, post block-group reorder):
                   1 Name | 2 W | 3 L | 4 Bear | 5 Corr | 6 Pattern | 7 +B | 8 StartB
-                  | 9 BeamL | 10 Pitches | 11 Blks/row | 12 Beams | 13 Block rows
-                  | 14 Total blks | 15 Slab L | 16 Slab area | 17 m² rate
-                  | 18 Subtotal | 19 (delete)
+                  | 9 BeamL | 10 Pitches | 11 Block rows | 12 Blks/row
+                  | 13 Total blks | 14 Beams | 15 Slab L | 16 Slab area
+                  | 17 m² rate | 18 Subtotal | 19 (delete)
+
+                Visual emphasis on the two material totals:
+                  - Block totals (col 13): amber-100 bg + amber-800 text,
+                    matching the soft amber group header tint above.
+                  - Beams total (col 14): emerald-50 bg + emerald-700 text
+                    to differentiate the other material category.
+                These two numbers drive production planning — operators
+                read them before clicking Place Order.
               */}
               <tr className="bg-muted/40 font-bold">
-                <td colSpan={11} className="px-3 text-right uppercase text-[11px] tracking-wider text-muted-foreground">
+                {/* Label fills cols 1-12 (Name through Per Row — none of
+                    those columns have meaningful sums). The two material
+                    totals start at col 13. */}
+                <td colSpan={12} className="px-3 text-right uppercase text-[11px] tracking-wider text-muted-foreground">
                   Жами · Totals
                 </td>
-                {/* col 12: Beams */}
-                <td className="text-center px-2 tabular-nums">{totals.beams}</td>
-                {/* col 13: Block rows */}
-                <td></td>
-                {/* col 14: Total blocks */}
-                <td className="text-center px-2 tabular-nums text-orange-700">{totals.blocks}</td>
+                {/* col 13: Total blocks — material total */}
+                <td className="text-center px-2 tabular-nums bg-amber-100 text-amber-800 font-bold">
+                  {totals.blocks}
+                </td>
+                {/* col 14: Beams — material total */}
+                <td className="text-center px-2 tabular-nums bg-emerald-50 text-emerald-700 font-bold">
+                  {totals.beams}
+                </td>
                 {/* col 15: Slab L */}
                 <td className="text-center px-2 tabular-nums text-xs">
                   {formatNumber(totals.monolithLength, 2)} m
