@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { formatNumber, roundDownToGrid, roundUpToGrid } from "@/lib/utils";
 import { useCalculatorStore } from "@/store/calculator";
 import { RateOverrideDialog } from "@/components/calculation/RateOverrideDialog";
+import { NumberInput } from "@/components/calculation/NumberInput";
 
 export interface SlabRow {
   id: string;
@@ -98,7 +99,11 @@ function makeRow(seq: number): SlabRow {
  *  (e.g. the Calculations page when re-opening a saved draft) can fill in
  *  results without having to wait for the user to "wake up" each row. */
 export function recomputeRow(row: SlabRow): SlabRow {
-  if (!(row.innerWidth > 0 && row.innerLength > 0 && row.bearing >= 0)) {
+  // Accept either a real slab (length>0) OR extras-only (length=0 + extras>=1).
+  // Width and bearing always required; bearing of 0 is valid for "no bearing".
+  const hasSlab = row.innerLength > 0;
+  const hasExtrasOnly = row.innerLength === 0 && row.extraBeams >= 1;
+  if (!(row.innerWidth > 0 && row.bearing >= 0 && (hasSlab || hasExtrasOnly))) {
     return { ...row, result: null };
   }
   try {
@@ -408,31 +413,29 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     />
                   </td>
                   <td className="grid-cell grid-tint-input">
-                    <input
-                      type="number"
+                    <NumberInput
                       step="0.01"
                       className="grid-input is-numeric"
-                      value={row.innerLength || ""}
-                      onChange={(e) => updateRow(row.id, { innerLength: Number(e.target.value) })}
+                      value={row.innerLength}
+                      onChange={(n) => updateRow(row.id, { innerLength: n })}
                       placeholder="0.00"
+                      showZeroAsEmpty
                     />
                   </td>
                   <td className="grid-cell grid-tint-input">
-                    <input
-                      type="number"
+                    <NumberInput
                       step="0.01"
                       className="grid-input is-numeric"
                       value={row.bearing}
-                      onChange={(e) => updateRow(row.id, { bearing: Number(e.target.value) })}
+                      onChange={(n) => updateRow(row.id, { bearing: n })}
                     />
                   </td>
                   <td className="grid-cell grid-tint-input grid-group-divider">
-                    <input
-                      type="number"
+                    <NumberInput
                       step="0.01"
                       className="grid-input is-numeric"
                       value={row.correction}
-                      onChange={(e) => updateRow(row.id, { correction: Number(e.target.value) })}
+                      onChange={(n) => updateRow(row.id, { correction: n })}
                     />
                   </td>
 
@@ -463,17 +466,13 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     </select>
                   </td>
                   <td className="grid-cell grid-tint-pattern">
-                    <input
-                      type="number"
+                    <NumberInput
                       min="0"
                       step="1"
                       className="grid-input is-numeric"
                       value={row.extraBeams}
-                      onChange={(e) =>
-                        updateRow(row.id, {
-                          extraBeams: Math.max(0, Math.floor(Number(e.target.value) || 0)),
-                        })
-                      }
+                      onChange={(n) => updateRow(row.id, { extraBeams: n })}
+                      integer
                     />
                   </td>
                   <td className="grid-cell grid-tint-pattern grid-group-divider text-center">
@@ -487,24 +486,27 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     </label>
                   </td>
 
-                  {/* Computed — all centered to align with their headers */}
+                  {/* Computed — all centered to align with their headers.
+                      Extras-only rows (length=0 + extras>=1) zero-out
+                      pattern/pitch/m² fields; render those columns as
+                      em-dashes so the operator sees this row is special. */}
                   <td className="grid-cell px-2 text-center tabular-nums text-emerald-700 font-semibold">
                     {r ? fmt(r.beam_length) : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums text-muted-foreground">
-                    {r ? r.pitches : "—"}
+                    {r && !r.is_extras_only ? r.pitches : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums">
-                    {r?.blocks_per_row ?? "—"}
+                    {r && !r.is_extras_only ? r.blocks_per_row : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums font-semibold">
                     {r?.beam_count ?? "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums">
-                    {r?.block_rows ?? "—"}
+                    {r && !r.is_extras_only ? r.block_rows : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums text-orange-700 font-semibold">
-                    {r?.total_blocks ?? "—"}
+                    {r && !r.is_extras_only ? r.total_blocks : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums text-xs text-blue-700">
                     {r ? `${fmt(r.monolith_length)} m` : "—"}
@@ -513,15 +515,17 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     {r ? `${fmt(r.monolith_area)} m²` : "—"}
                   </td>
 
-                  {/* Pricing — rate is editable per-row, catalog-only */}
+                  {/* Pricing — rate is editable per-row, catalog-only.
+                      Extras-only rows have no m² rate (subtotal comes
+                      from the per-meter extra-beam tier in the engine). */}
                   <td className="grid-cell px-2 text-center tabular-nums text-xs grid-tint-pricing">
-                    {r ? (
+                    {r && !r.is_extras_only ? (
                       <RateCell
                         row={row}
                         onPick={(picked) => handleRatePick(row.id, picked)}
                       />
                     ) : (
-                      "—"
+                      <span className="text-muted-foreground">—</span>
                     )}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums font-bold text-emerald-800 grid-tint-pricing">
@@ -813,14 +817,14 @@ function WidthCell({
 
   return (
     <div className="flex items-center gap-1">
-      <input
-        type="number"
+      <NumberInput
         step="0.01"
         className="grid-input is-numeric flex-1 min-w-0"
-        value={row.innerWidth || ""}
-        onChange={(e) => onWidthChange(Number(e.target.value))}
+        value={row.innerWidth}
+        onChange={(n) => onWidthChange(n)}
         placeholder="0.00"
         title={inputTitle}
+        showZeroAsEmpty
       />
       <div className="flex flex-col gap-px">
         <button

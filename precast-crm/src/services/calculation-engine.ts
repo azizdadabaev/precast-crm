@@ -143,12 +143,24 @@ export interface SlabResult {
   concrete_volume: number;
 
   // Pricing
-  m2_price: number;             // UZS / m²
+  m2_price: number;             // UZS / m²  (0 in extras-only mode — no m² billing)
   extra_beam_price_per_m: number;
-  m2_cost: number;              // billed_area × m2_price
+  m2_cost: number;              // billed_area × m2_price (0 in extras-only mode)
   pattern_extra_cost: number;   // 0 | 1 extra beam | blocks_per_row × BLOCK_UNIT_PRICE
   manual_extra_beams_cost: number;
   subtotal: number;             // m2_cost + pattern_extra_cost + manual_extra_beams_cost
+
+  /**
+   * True when the row is in "extras-only mode" — `inner_length=0` AND
+   * `extra_beams>=1`. In this mode there's no slab pattern, no pitch
+   * math, no m² billing — just N extra beams charged at the per-meter
+   * tier price. UI consumers should render pitches / blocks_per_row /
+   * block_rows / total_blocks / m2_price as em-dashes when this is
+   * true (the engine returns 0/sentinel values for those fields).
+   *
+   * False for every length>0 path (including length>0 + extras>0).
+   */
+  is_extras_only: boolean;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -192,9 +204,22 @@ function validate(input: SlabInput, bearing: number): void {
   if (!Number.isFinite(input.inner_width) || input.inner_width <= 0) {
     throw new CalculationError("inner_width must be a positive finite number (meters)");
   }
-  if (!Number.isFinite(input.inner_length) || input.inner_length <= 0) {
-    throw new CalculationError("inner_length must be a positive finite number (meters)");
+
+  // length=0 is normally invalid, but is allowed in "extras-only mode":
+  // operator wants to bill a few extra beams (reinforcing beams, edge
+  // beams in a balcony, etc.) without a full room slab. Requires
+  // extras>=1; without extras the row would have nothing to compute.
+  const isExtrasOnlyMode =
+    input.inner_length === 0 && (input.extra_beams ?? 0) >= 1;
+  if (!isExtrasOnlyMode) {
+    if (!Number.isFinite(input.inner_length) || input.inner_length <= 0) {
+      throw new CalculationError("inner_length must be a positive finite number (meters)");
+    }
+  } else if (!Number.isFinite(input.inner_length)) {
+    // Even in extras-only mode, NaN/Infinity for length is still wrong.
+    throw new CalculationError("inner_length must be a finite number");
   }
+
   if (!Number.isFinite(bearing) || bearing < 0) {
     throw new CalculationError("bearing must be a non-negative finite number (meters)");
   }
@@ -212,6 +237,13 @@ export function calculateSlab(input: SlabInput): SlabResult {
   const force_start_beam = input.force_start_beam ?? false;
 
   validate(input, bearing);
+
+  // Extras-only short-circuit. validate() already accepted the case;
+  // the rest of calculateSlab assumes a real slab. See SlabResult's
+  // is_extras_only doc for what UI / persistence should do.
+  if (input.inner_length === 0 && extra_beams >= 1) {
+    return calculateExtrasOnly(input, bearing, extra_beams);
+  }
 
   // Geometry that doesn't depend on pattern
   const beam_length = round3(input.inner_width + 2 * bearing);
@@ -334,6 +366,68 @@ export function calculateSlab(input: SlabInput): SlabResult {
     pattern_extra_cost,
     manual_extra_beams_cost,
     subtotal,
+    is_extras_only: false,
+  };
+}
+
+// ── Extras-only mode ───────────────────────────────────────────
+//
+// Operator entered width and a number of extra beams but NO length —
+// they want N reinforcing/edge beams as their own line item, with no
+// underlying slab. Engine produces a row that bills purely on the
+// per-meter extra-beam tier; pattern/pitch/m² fields return 0 and the
+// UI renders them as em-dashes. concrete_volume covers the actual
+// physical footprint of the extras (width × N × BEAM_WIDTH × topping).
+
+function calculateExtrasOnly(
+  input: SlabInput,
+  bearing: number,
+  extra_beams: number,
+): SlabResult {
+  const beam_length = round3(input.inner_width + 2 * bearing);
+  const slab_length = round3(extra_beams * BEAM_WIDTH);
+  const slab_area = round3(input.inner_width * slab_length);
+
+  const extra_beam_price_per_m = tierPrice(beam_length, EXTRA_BEAM_PRICE_TIERS);
+  const extras_subtotal = round2(extra_beams * beam_length * extra_beam_price_per_m);
+
+  return {
+    inner_width: input.inner_width,
+    inner_length: 0,
+    bearing,
+    correction: input.correction ?? 0,
+    extra_beams,
+    force_start_beam: input.force_start_beam ?? false,
+
+    // No pitch math in extras-only mode.
+    effective_length: 0,
+    pitches: 0,
+    remainder: 0,
+    pattern: "GB",        // sentinel; UI ignores when is_extras_only
+    pattern_auto: "GB",   // sentinel
+
+    beam_length,
+    blocks_per_row: 0,
+    beam_count: extra_beams,
+    block_rows: 0,
+    total_blocks: 0,
+
+    monolith_length: slab_length,   // = extras × 0.12
+    billed_length: 0,               // m² billing not used
+
+    monolith_area: slab_area,
+    billed_area: 0,                 // m² billing not used
+
+    concrete_volume: round3(input.inner_width * slab_length * TOPPING_THICKNESS),
+
+    m2_price: 0,                    // sentinel: not applicable
+    extra_beam_price_per_m,
+    m2_cost: 0,                     // not used in extras-only
+    pattern_extra_cost: 0,          // no pattern, no pattern extras
+    manual_extra_beams_cost: extras_subtotal,
+    subtotal: extras_subtotal,
+
+    is_extras_only: true,
   };
 }
 
