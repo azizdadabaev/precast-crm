@@ -3,9 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DealCreateSchema } from "@/lib/validation";
-import { ok, created, handler } from "@/lib/api";
+import { ok, created } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 
-export const GET = handler(async (req: NextRequest) => {
+export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const stage = searchParams.get("stage") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
@@ -27,7 +28,7 @@ export const GET = handler(async (req: NextRequest) => {
   return ok(deals);
 });
 
-export const POST = handler(async (req: NextRequest) => {
+export const POST = withPermission("order.create", async (req: NextRequest) => {
   const body = DealCreateSchema.parse(await req.json());
   const deal = await prisma.deal.create({
     data: body,

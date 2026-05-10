@@ -2,8 +2,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 30;
 
 import { prisma } from "@/lib/prisma";
-import { ok, fail, handler } from "@/lib/api";
-import { canConfirmCash, getCurrentUser } from "@/lib/auth";
+import { ok } from "@/lib/api";
+import { withPermissionAny } from "@/lib/api-auth";
 import { normalizeCity } from "@/lib/city-normalize";
 
 /**
@@ -137,11 +137,15 @@ function buildTrend(
   return { deltaPct, direction, polarity };
 }
 
-export const GET = handler(async () => {
-  const user = await getCurrentUser();
-  if (!canConfirmCash(user)) {
-    return fail("Only ADMIN or OWNER can view the dashboard", 403);
-  }
+// Dashboard accepts EITHER dashboard.viewBasic (ops view) OR
+// dashboard.view (financial view). Templates split the two: SALES /
+// INVENTORY get only viewBasic, ACCOUNTANT gets only view, and
+// OWNER / ADMIN get both. Phase 3 will mask the financial fields
+// server-side for viewBasic-only callers; right now the route returns
+// the full payload to anyone with at least one of the two permissions.
+export const GET = withPermissionAny(
+  ["dashboard.viewBasic", "dashboard.view"],
+  async () => {
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);

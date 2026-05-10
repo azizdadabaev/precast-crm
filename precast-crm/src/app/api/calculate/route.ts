@@ -1,12 +1,12 @@
 export const dynamic = "force-dynamic";
 
-import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CalculateRequestSchema } from "@/lib/validation";
-import { ok, fail, handler } from "@/lib/api";
+import { ok, fail } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 
-export const POST = handler(async (req: NextRequest) => {
+export const POST = withPermission("calculator.use", async (req) => {
   const body = CalculateRequestSchema.parse(await req.json());
 
   const result = calculateSlab({

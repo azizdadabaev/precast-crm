@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ContactExportSchema } from "@/lib/validation";
-import { ok, fail, handler } from "@/lib/api";
-import { getCurrentUser } from "@/lib/auth";
+import { ok } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 import { formatContactsForExport } from "@/lib/contact-export";
 
 /**
@@ -22,20 +22,8 @@ import { formatContactsForExport } from "@/lib/contact-export";
  * schema reset), we 401 — better to force re-login than to silently
  * lose the audit link.
  */
-export const POST = handler(async (req: NextRequest) => {
+export const POST = withPermission("client.export", async (req: NextRequest, { user }) => {
   const body = ContactExportSchema.parse(await req.json());
-
-  // Resolve actor + verify the row still exists (the JWT outlives the
-  // user table on `prisma db push --force-reset`, see cancel-route fix).
-  const user = await getCurrentUser();
-  if (!user) return fail("Unauthorized", 401);
-  const actor = await prisma.user.findUnique({
-    where: { id: user.sub },
-    select: { id: true },
-  });
-  if (!actor) {
-    return fail("Your session is stale — please log out and log back in.", 401);
-  }
 
   // Load only the consenting clients. We DO load by id with the consent
   // filter rather than loading all and filtering in JS so a request for
@@ -60,7 +48,7 @@ export const POST = handler(async (req: NextRequest) => {
   // Audit trail — one row per export call.
   await prisma.exportEvent.create({
     data: {
-      userId: actor.id,
+      userId: user.id,
       clientIds: ordered.map((c) => c.id),
     },
   });

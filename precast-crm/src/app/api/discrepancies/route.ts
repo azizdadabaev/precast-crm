@@ -2,19 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ok, fail, handler } from "@/lib/api";
-import { getCurrentUser, hasRole } from "@/lib/auth";
+import { ok } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 
 /**
- * GET /api/discrepancies   (ADMIN | OWNER only)
+ * GET /api/discrepancies — discrepancy.view
  *   ?status=OPEN | RESOLVED_RECOVERED | RESOLVED_DISCOUNT | RESOLVED_WRITEOFF | DISPUTED
  */
-export const GET = handler(async (req: NextRequest) => {
-  const user = await getCurrentUser();
-  if (!hasRole(user, "ADMIN", "OWNER")) {
-    return fail("Only ADMIN or OWNER can view discrepancies", 403);
-  }
-
+export const GET = withPermission("discrepancy.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") ?? undefined;
 

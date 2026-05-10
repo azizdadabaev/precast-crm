@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ProductionEntryCreateSchema } from "@/lib/validation";
-import { ok, fail, created, handler } from "@/lib/api";
-import { getCurrentUser } from "@/lib/auth";
+import { ok, created } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 import {
   applyStockMovement,
   canonicalBeamLength,
@@ -12,10 +12,10 @@ import {
 } from "@/lib/inventory";
 
 /**
- * GET /api/production?days=14
+ * GET /api/production?days=14 — inventory.view
  * List recent ProductionEntries with their lines, newest first.
  */
-export const GET = handler(async (req: NextRequest) => {
+export const GET = withPermission("inventory.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const days = Math.min(180, Math.max(1, Number(searchParams.get("days") ?? 14)));
   const since = new Date();
@@ -33,7 +33,7 @@ export const GET = handler(async (req: NextRequest) => {
 });
 
 /**
- * POST /api/production
+ * POST /api/production — inventory.manage
  *
  * Atomically:
  *   1. Insert the ProductionEntry (with the operator who logged it).
@@ -42,14 +42,8 @@ export const GET = handler(async (req: NextRequest) => {
  *      StockMovement (reason = PRODUCTION) so the audit trail captures
  *      where the increment came from.
  */
-export const POST = handler(async (req: NextRequest) => {
+export const POST = withPermission("inventory.manage", async (req: NextRequest, { user }) => {
   const body = ProductionEntryCreateSchema.parse(await req.json());
-
-  // Resolve actor (defensive — JWT sub may outlive the user row after a reset)
-  const user = await getCurrentUser();
-  const recordedById = user?.sub
-    ? (await prisma.user.findUnique({ where: { id: user.sub }, select: { id: true } }))?.id ?? null
-    : null;
 
   const entry = await prisma.$transaction(async (tx) => {
     const producedAt = body.producedAt ?? new Date();
@@ -58,7 +52,7 @@ export const POST = handler(async (req: NextRequest) => {
       data: {
         producedAt,
         notes: body.notes ?? null,
-        recordedById,
+        recordedById: user.id,
       },
     });
 
@@ -84,19 +78,19 @@ export const POST = handler(async (req: NextRequest) => {
         {
           reason: "PRODUCTION",
           productionEntryId: e.id,
-          actorId: recordedById,
+          actorId: user.id,
         },
       );
     }
 
     return tx.productionEntry.findUniqueOrThrow({
       where: { id: e.id },
-      include: { lines: true, recordedBy: { select: { id: true, name: true, email: true } } },
+      include: {
+        lines: true,
+        recordedBy: { select: { id: true, name: true, email: true } },
+      },
     });
   });
 
   return created(entry);
 });
-
-// Defensive: keep this around so tsc warns if the import gets removed
-void fail;

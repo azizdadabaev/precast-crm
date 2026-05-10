@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PaymentRecordSchema } from "@/lib/validation";
-import { ok, fail, created, handler } from "@/lib/api";
-import { getCurrentUser } from "@/lib/auth";
+import { ok, fail, created } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 
 /**
  * GET /api/payments
@@ -15,7 +15,7 @@ import { getCurrentUser } from "@/lib/auth";
  * the /payments confirmer page can render the chain panel without an
  * extra query.
  */
-export const GET = handler(async (req: NextRequest) => {
+export const GET = withPermission("payment.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const orderId = searchParams.get("orderId") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
@@ -72,19 +72,8 @@ export const GET = handler(async (req: NextRequest) => {
  *     so we can't double-record while a previous record is still awaiting confirmation
  *   - handOverNow stamps the office hand-over fields atomically (in-office cash only)
  */
-export const POST = handler(async (req: NextRequest) => {
+export const POST = withPermission("payment.record", async (req: NextRequest, { user }) => {
   const body = PaymentRecordSchema.parse(await req.json());
-
-  const user = await getCurrentUser();
-  if (!user) return fail("Unauthorized", 401);
-  // Verify the actor exists in the DB (defends against stale JWTs after a reset)
-  const recorder = await prisma.user.findUnique({
-    where: { id: user.sub },
-    select: { id: true },
-  });
-  if (!recorder) {
-    return fail("Your session is stale — please log out and log back in.", 401);
-  }
 
   const order = await prisma.order.findUnique({
     where: { id: body.orderId },
@@ -133,14 +122,14 @@ export const POST = handler(async (req: NextRequest) => {
         amount: body.amount,
         method: body.method,
         status: "PENDING_CONFIRMATION",
-        recordedById: recorder.id,
+        recordedById: user.id,
         recordedAt: now,
         // Driver chain: only when driver collected on site.
         collectedById: body.collectedByDriverId ?? null,
         collectedAt: body.source === "FROM_DRIVER_AT_DELIVERY" ? now : null,
         // Office hand-over: only when the operator is passing cash to the
         // owner immediately. Bank/online has no physical handover.
-        handedOverToOfficeById: body.handOverNow ? recorder.id : null,
+        handedOverToOfficeById: body.handOverNow ? user.id : null,
         handedOverToOfficeAt: body.handOverNow ? now : null,
         notes: body.notes ?? null,
       },
@@ -149,7 +138,7 @@ export const POST = handler(async (req: NextRequest) => {
       data: {
         orderId: body.orderId,
         type: "PAYMENT_RECORDED",
-        actorId: recorder.id,
+        actorId: user.id,
         message: buildEventMessage(body),
         payload: {
           paymentId: p.id,

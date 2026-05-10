@@ -3,15 +3,16 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PlaceOrderSchema } from "@/lib/validation";
-import { ok, fail, created, handler } from "@/lib/api";
+import { ok, fail, created } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
+import { can } from "@/lib/permissions";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { nextOrderNumber, orderNumberMonthPrefix } from "@/lib/order-number";
-import { getUserFromRequest } from "@/lib/auth";
 
-/** GET /api/orders — list with optional search + status filter */
-export const GET = handler(async (req: NextRequest) => {
+/** GET /api/orders — order.view */
+export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status") ?? undefined;
@@ -26,7 +27,6 @@ export const GET = handler(async (req: NextRequest) => {
       { client: { address: { contains: q, mode: "insensitive" } } },
     ];
     if (phoneForms.length) {
-      // any of the suffix forms appearing as a substring of the stored phone
       for (const f of phoneForms) {
         filters.push({ client: { phone: { contains: f } } });
       }
@@ -46,7 +46,7 @@ export const GET = handler(async (req: NextRequest) => {
 });
 
 /**
- * POST /api/orders — Place Order. Atomic transaction:
+ * POST /api/orders — order.create. Atomic transaction:
  *   1. Resolve or create the Client (dedup by normalized phone)
  *   2. Use the existing draft Project, or create a new one inline from the rooms
  *   3. Calculate every room (or reuse already-persisted Calculations)
@@ -55,28 +55,25 @@ export const GET = handler(async (req: NextRequest) => {
  *   6. Create an OrderEvent (ORDER_PLACED) entry
  *   7. Mark the Project status = ORDERED, link clientId, clear tentative fields
  *   8. Advance Deal stage to WON (creating the Deal if missing)
+ *   9. Optional up-front payment row (PENDING_CONFIRMATION)
+ *
+ * Up-front payment additionally requires payment.record. Most users
+ * with order.create also have payment.record (SALES, OWNER, ADMIN);
+ * gated here so a CUSTOM user without payment.record can still
+ * place orders but can't book partial payments inline.
  */
-export const POST = handler(async (req: NextRequest) => {
+export const POST = withPermission("order.create", async (req: NextRequest, { user }) => {
   const body = PlaceOrderSchema.parse(await req.json());
 
   const phoneNorm = normalizePhone(body.clientPhone);
   if (!phoneNorm) return fail("phone is required", 422);
 
-  // Up-front payment: we'll create a Payment row in the same transaction
-  // as the Order. The recorder must be a real user (defends against a
-  // stale JWT after a schema reset — same pattern as cancel / export).
   const paidAmount = body.paidAmount ?? 0;
-  let recorder: { id: string } | null = null;
-  if (paidAmount > 0) {
-    const user = await getUserFromRequest(req);
-    if (!user) return fail("Unauthorized", 401);
-    recorder = await prisma.user.findUnique({
-      where: { id: user.sub },
-      select: { id: true },
-    });
-    if (!recorder) {
-      return fail("Your session is stale — please log out and log back in.", 401);
-    }
+  if (paidAmount > 0 && !can(user, "payment.record")) {
+    return fail(
+      "Сизга тўлов киритиш рухсати йўқ · You can't record payments — place the order with paidAmount=0 and add payment separately",
+      403,
+    );
   }
 
   // Compute every room up-front so we have totals for the snapshot
@@ -98,10 +95,9 @@ export const POST = handler(async (req: NextRequest) => {
   const totalBlocks = computed.reduce((s, c) => s + c.result.total_blocks, 0);
   const totalBeams = computed.reduce((s, c) => s + c.result.beam_count, 0);
   const discountAmount = roomsSubtotal * (body.discountPercent / 100);
-  const totalPrice = roomsSubtotal - discountAmount + body.deliveryCost + body.otherCost;
+  const totalPrice =
+    roomsSubtotal - discountAmount + body.deliveryCost + body.otherCost;
 
-  // Total ceiling for the up-front payment. Enforced here (not in Zod)
-  // because totalPrice is computed server-side from the rooms snapshot.
   if (paidAmount > totalPrice) {
     return fail(
       `paidAmount (${paidAmount}) cannot exceed totalPrice (${totalPrice})`,
@@ -109,7 +105,6 @@ export const POST = handler(async (req: NextRequest) => {
     );
   }
 
-  // Allocate the order number AFTER we know the placement month
   const placedAt = new Date();
   const year = placedAt.getFullYear();
   const month = placedAt.getMonth() + 1;
@@ -124,8 +119,6 @@ export const POST = handler(async (req: NextRequest) => {
           name: body.clientName,
           phone: phoneNorm,
           address: body.clientAddress,
-          // Capture consent at create time. NOT_ASKED is the default if the
-          // operator didn't tick the box.
           ...(body.clientReferenceConsent
             ? {
                 referenceConsent: body.clientReferenceConsent,
@@ -135,13 +128,9 @@ export const POST = handler(async (req: NextRequest) => {
         },
       });
     } else {
-      // Update name/address if they changed (operator may have a more current address)
       const updates: Record<string, unknown> = {};
       if (client.name !== body.clientName) updates.name = body.clientName;
       if (client.address !== body.clientAddress) updates.address = body.clientAddress;
-      // Only UPGRADE consent from this endpoint — null leaves the field
-      // alone, and an existing GRANTED is never overwritten by a missing
-      // body. To revoke / set DENIED, operators use the client detail page.
       if (
         body.clientReferenceConsent &&
         body.clientReferenceConsent !== client.referenceConsent
@@ -162,8 +151,6 @@ export const POST = handler(async (req: NextRequest) => {
         include: { calculations: true },
       });
       if (!project) throw new Error("PROJECT_NOT_FOUND");
-      // Replace its calculations with the freshly computed ones (operator may
-      // have edited rooms before pressing Place Order)
       await tx.calculation.deleteMany({ where: { projectId: project.id } });
       await tx.calculation.createMany({
         data: computed.map((c) => ({
@@ -172,7 +159,6 @@ export const POST = handler(async (req: NextRequest) => {
         })),
       });
     } else {
-      // Inline: build the project from the request rooms in one go
       project = await tx.project.create({
         data: {
           clientId: client.id,
@@ -193,7 +179,6 @@ export const POST = handler(async (req: NextRequest) => {
       });
     }
 
-    // Re-fetch with calculations (after createMany)
     const projectWithCalcs = await tx.project.findUniqueOrThrow({
       where: { id: project.id },
       include: { calculations: { orderBy: { createdAt: "asc" } } },
@@ -223,7 +208,7 @@ export const POST = handler(async (req: NextRequest) => {
       });
     }
 
-    // 5. Update Project — link client, mark ORDERED, attach Deal, clear tentatives
+    // 5. Update Project
     const updatedProject = await tx.project.update({
       where: { id: projectWithCalcs.id },
       data: {
@@ -238,7 +223,7 @@ export const POST = handler(async (req: NextRequest) => {
 
     // 6. Create the Order
     const primaryCalc = projectWithCalcs.calculations[0];
-    const created = await tx.order.create({
+    const createdOrder = await tx.order.create({
       data: {
         orderNumber,
         projectId: updatedProject.id,
@@ -267,9 +252,9 @@ export const POST = handler(async (req: NextRequest) => {
     // 7. Activity log
     await tx.orderEvent.create({
       data: {
-        orderId: created.id,
+        orderId: createdOrder.id,
         type: "ORDER_PLACED",
-        actorId: recorder?.id ?? null,
+        actorId: user.id,
         message: `Order placed for ${client.name}`,
         payload: {
           totalPrice,
@@ -279,29 +264,25 @@ export const POST = handler(async (req: NextRequest) => {
       },
     });
 
-    // 8. Up-front payment, if any. Stays PENDING_CONFIRMATION until the
-    //    owner confirms it via /payments — same maker-checker rule as the
-    //    delivery-side cash flow. confirmedPaid + paymentState do NOT
-    //    change here; the confirm route is the only place that writes them.
-    if (paidAmount > 0 && recorder && body.paymentMethod) {
+    // 8. Up-front payment, if any.
+    if (paidAmount > 0 && body.paymentMethod) {
       const payment = await tx.payment.create({
         data: {
-          orderId: created.id,
+          orderId: createdOrder.id,
           amount: paidAmount,
           method: body.paymentMethod,
           status: "PENDING_CONFIRMATION",
-          recordedById: recorder.id,
+          recordedById: user.id,
           recordedAt: new Date(),
-          // No driver — this is in-office at placement, not a delivery handoff.
           collectedById: null,
           collectedAt: null,
         },
       });
       await tx.orderEvent.create({
         data: {
-          orderId: created.id,
+          orderId: createdOrder.id,
           type: "PAYMENT_RECORDED",
-          actorId: recorder.id,
+          actorId: user.id,
           message: `Payment of ${paidAmount} recorded at placement (${body.paymentMethod}). Awaiting confirmation.`,
           payload: {
             paymentId: payment.id,
@@ -313,7 +294,7 @@ export const POST = handler(async (req: NextRequest) => {
       });
     }
 
-    return created;
+    return createdOrder;
   });
 
   return created(order);

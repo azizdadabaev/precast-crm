@@ -3,17 +3,20 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { OrderUpdateSchema } from "@/lib/validation";
-import { ok, fail, handler } from "@/lib/api";
+import { ok, fail } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 import {
   calcSnapshotToInventoryLines,
   decrementForDelivery,
   formatInventoryLabel,
 } from "@/lib/inventory";
 
-/** GET /api/orders/[id] — full order detail with related Project + Client + events */
-export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string } }) => {
+type Params = { id: string };
+
+/** GET /api/orders/[id] — order.view */
+export const GET = withPermission<Params>("order.view", async (_req: NextRequest, { params }) => {
   const order = await prisma.order.findUnique({
-    where: { id: ctx.params.id },
+    where: { id: params.id },
     include: {
       client: true,
       project: { include: { calculations: { orderBy: { createdAt: "asc" } } } },
@@ -44,11 +47,11 @@ export const GET = handler(async (_req: NextRequest, ctx: { params: { id: string
   return ok(order);
 });
 
-/** PATCH /api/orders/[id] — update status, scheduledAt, notes (with timeline event) */
-export const PATCH = handler(async (req: NextRequest, ctx: { params: { id: string } }) => {
+/** PATCH /api/orders/[id] — order.edit. Updates status, scheduledAt, notes (with timeline event). */
+export const PATCH = withPermission<Params>("order.edit", async (req: NextRequest, { params }) => {
   const body = OrderUpdateSchema.parse(await req.json());
 
-  const existing = await prisma.order.findUnique({ where: { id: ctx.params.id } });
+  const existing = await prisma.order.findUnique({ where: { id: params.id } });
   if (!existing) return fail("Order not found", 404);
   if (existing.status === "CANCELED") {
     return fail("Cannot modify a canceled order — un-cancel via /cancel endpoint", 422);

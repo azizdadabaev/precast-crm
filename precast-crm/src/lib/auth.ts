@@ -2,8 +2,10 @@ import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me-please-32chars!";
+const JWT_SECRET =
+  process.env.JWT_SECRET ?? "dev-secret-change-me-please-32chars!";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "7d";
 const COOKIE_NAME = "precast_token";
 
@@ -21,29 +23,55 @@ export type AuthRole =
   | "ACCOUNTANT"
   | "CUSTOM";
 
-/** Helper for the maker-checker payment / discrepancy gate.
- *  Returns true for roles that can confirm payments, reject payments,
- *  or resolve discrepancies. Adds ADMIN as a superuser by convention. */
-export function canConfirmCash(user: AuthPayload | null): boolean {
-  return !!user && (user.role === "ADMIN" || user.role === "OWNER");
-}
-
-export interface AuthPayload extends JWTPayload {
-  sub: string; // user id
+// Shape returned by getCurrentUser / getUserFromRequest. DB-backed:
+// every call hits the users table so permission edits, disables, and
+// password resets take effect on the very next request without
+// re-issuing the JWT (see permissions plan, Q2 = Option A).
+export interface AuthUser {
+  id: string;
   email: string;
   name: string;
   role: AuthRole;
+  permissions: string[];
+  isActive: boolean;
+  mustChangePassword: boolean;
+}
+
+// JWT payload shape — only the user id (`sub`) is load-bearing; the
+// rest is non-authoritative metadata. Permissions and isActive are
+// always re-read from the DB, never trusted from the token.
+export interface AuthPayload extends JWTPayload {
+  sub: string;
+  email: string;
+  name: string;
+  role: AuthRole;
+}
+
+/** Helper for the maker-checker payment / discrepancy gate.
+ *  Kept as a thin alias for `can(user, "payment.confirm")` — see
+ *  src/lib/permissions.ts. Existing callers still work. */
+export function canConfirmCash(
+  user: { role: AuthRole } | { permissions: string[] } | null,
+): boolean {
+  if (!user) return false;
+  if ("permissions" in user) return user.permissions.includes("payment.confirm");
+  return user.role === "ADMIN" || user.role === "OWNER";
 }
 
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 10);
 }
 
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
+export async function verifyPassword(
+  plain: string,
+  hash: string,
+): Promise<boolean> {
   return bcrypt.compare(plain, hash);
 }
 
-export async function signToken(payload: Omit<AuthPayload, "iat" | "exp">): Promise<string> {
+export async function signToken(
+  payload: Omit<AuthPayload, "iat" | "exp">,
+): Promise<string> {
   return new SignJWT(payload as JWTPayload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -76,28 +104,57 @@ export async function clearAuthCookie() {
   cookies().delete(COOKIE_NAME);
 }
 
-export async function getCurrentUser(): Promise<AuthPayload | null> {
-  const token = cookies().get(COOKIE_NAME)?.value;
-  if (!token) return null;
-  return verifyToken(token);
+// Internal: given a verified JWT payload, look up the live user.
+// Returns null if the user no longer exists (was deleted) — this is
+// what makes permission/disable changes effective immediately, with
+// no JWT re-issue.
+async function loadUserFromPayload(
+  payload: AuthPayload | null,
+): Promise<AuthUser | null> {
+  if (!payload?.sub) return null;
+  const u = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      permissions: true,
+      isActive: true,
+      mustChangePassword: true,
+    },
+  });
+  return u as AuthUser | null;
 }
 
-export async function getUserFromRequest(req: NextRequest): Promise<AuthPayload | null> {
-  // Cookie first
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  const token = cookies().get(COOKIE_NAME)?.value;
+  if (!token) return null;
+  return loadUserFromPayload(await verifyToken(token));
+}
+
+export async function getUserFromRequest(
+  req: NextRequest,
+): Promise<AuthUser | null> {
   const cookieToken = req.cookies.get(COOKIE_NAME)?.value;
   if (cookieToken) {
-    const u = await verifyToken(cookieToken);
+    const u = await loadUserFromPayload(await verifyToken(cookieToken));
     if (u) return u;
   }
-  // Bearer fallback (useful for API clients)
   const auth = req.headers.get("authorization");
   if (auth?.startsWith("Bearer ")) {
-    return verifyToken(auth.slice(7));
+    return loadUserFromPayload(await verifyToken(auth.slice(7)));
   }
   return null;
 }
 
-export function hasRole(user: AuthPayload | null, ...roles: AuthRole[]): boolean {
+/** Legacy role-based gate. Prefer `can(user, action)` from
+ *  src/lib/permissions.ts in new code. Kept for callers like
+ *  hasRole(user, "OWNER") in routes that haven't been migrated yet. */
+export function hasRole(
+  user: { role: AuthRole } | null,
+  ...roles: AuthRole[]
+): boolean {
   return !!user && roles.includes(user.role);
 }
 
