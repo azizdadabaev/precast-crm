@@ -1,10 +1,19 @@
 export const dynamic = "force-dynamic";
 
-import { ok, fail, handler } from "@/lib/api";
-import { getCurrentUser } from "@/lib/auth";
+import { ok } from "@/lib/api";
+import { withAuth } from "@/lib/api-auth";
 
-export const GET = handler(async () => {
-  const u = await getCurrentUser();
-  if (!u) return fail("Unauthorized", 401);
-  return ok({ id: u.sub, email: u.email, name: u.name, role: u.role });
+// Every authenticated user can read their own session — no specific
+// permission required. The client uses this to bootstrap the UI
+// (sidebar filtering, role badge, mustChangePassword redirect).
+export const GET = withAuth(async (_req, { user }) => {
+  return ok({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    permissions: user.permissions,
+    isActive: user.isActive,
+    mustChangePassword: user.mustChangePassword,
+  });
 });

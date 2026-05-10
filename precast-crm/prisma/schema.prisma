@@ -14,12 +14,18 @@ datasource db {
 // ENUMS
 // ─────────────────────────────────────────────
 
+// Role values are PERMISSION TEMPLATES, not access controls. The actual
+// access for a user comes from User.permissions (the source of truth).
+// When adding a user, the operator picks a role to pre-fill the
+// permissions checklist; after creation, the role is metadata only.
 enum UserRole {
-  ADMIN
-  SALES
-  ENGINEER
-  OPERATOR  // cash-handling staff (records payments, dispatches trucks)
-  OWNER     // trusted confirmer — can confirm payments, resolve discrepancies
+  OWNER       // template: full access incl. user.disable + user.editPermissions
+  ADMIN       // template: management (no user.disable / user.editPermissions)
+  SALES       // template: customer-facing operations
+  INVENTORY   // template: warehouse
+  DRIVER      // template: delivery
+  ACCOUNTANT  // template: financial reporting
+  CUSTOM      // no template — operator picks every permission manually
 }
 
 enum Language {
@@ -151,9 +157,19 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
+  // role is the TEMPLATE label this user was created from. Source of
+  // truth for access is `permissions`, not `role`.
   role         UserRole @default(SALES)
+  // The actual access control. Strings from src/lib/permissions.ts ACTIONS.
+  permissions  String[] @default([])
+  isActive     Boolean  @default(true)
+  // Forces a /change-password redirect on first login after creation
+  // or after an admin reset.
+  mustChangePassword Boolean   @default(true)
+  lastLogin    DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  createdById  String?
 
   deals             Deal[]             @relation("AssignedDeals")
   orderEvents       OrderEvent[]
@@ -170,7 +186,37 @@ model User {
   reportedDiscrepancies Discrepancy[] @relation("DiscrepancyReporter")
   resolvedDiscrepancies Discrepancy[] @relation("DiscrepancyResolver")
 
+  // Self-relation: who created this user, and what users this user has created
+  createdBy             User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers          User[] @relation("UserCreatedBy")
+
+  // Audit-log back-relations
+  auditEntriesAsActor   UserAuditLog[] @relation("UserAuditActor")
+  auditEntriesAsTarget  UserAuditLog[] @relation("UserAuditTarget")
+
   @@map("users")
+}
+
+// Append-only audit log for user lifecycle events: created, permissions
+// changed, role template changed, disabled, enabled, password reset.
+// No UI in this PR — pure data persistence so when the audit history
+// is needed later, it's there.
+model UserAuditLog {
+  id        String   @id @default(cuid())
+  userId    String   // user being modified
+  actorId   String   // user doing the modifying
+  action    String   // "created" | "permissions_changed" | "role_changed"
+                     //  | "disabled" | "enabled" | "password_reset"
+  oldValue  String?  // JSON snapshot of previous state
+  newValue  String?  // JSON snapshot of new state
+  createdAt DateTime @default(now())
+
+  user  User @relation("UserAuditTarget", fields: [userId],  references: [id], onDelete: Cascade)
+  actor User @relation("UserAuditActor",  fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("user_audit_log")
 }
 
 model Client {

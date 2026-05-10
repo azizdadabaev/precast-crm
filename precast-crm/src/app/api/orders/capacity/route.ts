@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CapacityRangeSchema } from "@/lib/validation";
-import { ok, handler } from "@/lib/api";
+import { ok } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 
 /**
  * GET /api/orders/capacity?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -18,7 +19,7 @@ import { ok, handler } from "@/lib/api";
  * Days outside the requested range or with no orders are simply omitted.
  * The client fills in zeros for empty days.
  */
-export const GET = handler(async (req: NextRequest) => {
+export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const { from, to } = CapacityRangeSchema.parse({
     from: searchParams.get("from"),

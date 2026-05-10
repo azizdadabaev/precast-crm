@@ -2,14 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ok, fail, handler } from "@/lib/api";
+import { ok, fail } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import {
   calcSnapshotToInventoryLines,
   decrementForDelivery,
   formatInventoryLabel,
 } from "@/lib/inventory";
-import { getCurrentUser } from "@/lib/auth";
 
 /**
  * POST /api/orders/[id]/delivery-proof
@@ -34,19 +34,11 @@ import { getCurrentUser } from "@/lib/auth";
  * is loosened to permit DISPATCHED — driver delivered without going
  * back through the production step.
  */
-export const POST = handler(async (req: NextRequest, ctx: { params: { id: string } }) => {
-  const user = await getCurrentUser();
-  if (!user) return fail("Unauthorized", 401);
-  const actor = await prisma.user.findUnique({
-    where: { id: user.sub },
-    select: { id: true },
-  });
-  if (!actor) {
-    return fail("Your session is stale — please log out and log back in.", 401);
-  }
-
+export const POST = withPermission<{ id: string }>(
+  "order.edit",
+  async (req: NextRequest, { user, params }) => {
   const order = await prisma.order.findUnique({
-    where: { id: ctx.params.id },
+    where: { id: params.id },
     include: { dispatch: true },
   });
   if (!order) return fail("Order not found", 404);
@@ -114,7 +106,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
       data: {
         orderId: order.id,
         type: "STATUS_CHANGED",
-        actorId: actor.id,
+        actorId: user.id,
         message: "Delivered — proof photo uploaded",
         payload: {
           from: order.status,
@@ -136,7 +128,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
           amount: cashAmount,
           method: "CASH",
           status: "PENDING_CONFIRMATION",
-          recordedById: actor.id,
+          recordedById: user.id,
           recordedAt: new Date(),
           collectedById: order.dispatch?.driverId ?? null,
           collectedAt: new Date(),
@@ -146,7 +138,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
         data: {
           orderId: order.id,
           type: "PAYMENT_RECORDED",
-          actorId: actor.id,
+          actorId: user.id,
           message: `Cash collected: ${cashAmount} (pending confirmation)`,
           payload: {
             paymentId: payment.id,
@@ -161,7 +153,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
         data: {
           orderId: order.id,
           type: "NOTE_ADDED",
-          actorId: actor.id,
+          actorId: user.id,
           message: `No cash collected on delivery: ${noCashCollectedNote}`,
           payload: { reason: noCashCollectedNote },
         },
@@ -178,7 +170,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
         data: {
           orderId: order.id,
           type: "DISPATCH_RETURNED",
-          actorId: actor.id,
+          actorId: user.id,
           message: "Driver returned to office (recorded with delivery)",
           payload: { dispatchId: order.dispatch.id },
         },

@@ -3,13 +3,14 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { SaveProjectDraftSchema, ProjectStatusEnum } from "@/lib/validation";
-import { ok, fail, created, handler } from "@/lib/api";
+import { ok, fail, created } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 
-/** GET /api/projects — list projects with optional status + search */
-export const GET = handler(async (req: NextRequest) => {
+/** GET /api/projects — order.view. List projects with optional status + search. */
+export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const dealId = searchParams.get("dealId") ?? undefined;
   const status = searchParams.get("status") ?? undefined; // DRAFT | ORDERED | ARCHIVED
@@ -47,8 +48,8 @@ export const GET = handler(async (req: NextRequest) => {
   return ok(projects);
 });
 
-/** POST /api/projects — Save Project (draft). Phone-only required. */
-export const POST = handler(async (req: NextRequest) => {
+/** POST /api/projects — order.create. Save Project (draft). Phone-only required. */
+export const POST = withPermission("order.create", async (req: NextRequest) => {
   const body = SaveProjectDraftSchema.parse(await req.json());
 
   const phoneNorm = normalizePhone(body.clientPhone);

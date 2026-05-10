@@ -47,7 +47,15 @@ export const DiscrepancyStatusEnum = z.enum([
   "RESOLVED_WRITEOFF",
   "DISPUTED",
 ]);
-export const RoleEnum = z.enum(["ADMIN", "SALES", "ENGINEER", "OPERATOR", "OWNER"]);
+export const RoleEnum = z.enum([
+  "OWNER",
+  "ADMIN",
+  "SALES",
+  "INVENTORY",
+  "DRIVER",
+  "ACCOUNTANT",
+  "CUSTOM",
+]);
 
 // ── Auth ────────────────────────────────────────────────────────
 export const LoginSchema = z.object({
@@ -55,10 +63,43 @@ export const LoginSchema = z.object({
   password: z.string().min(6),
 });
 
-export const RegisterSchema = LoginSchema.extend({
-  name: z.string().min(2),
+// ── User management (Phase 5) ───────────────────────────────────
+// The permissions list is validated at the route handler — it has
+// the canonical ACTIONS set and a stricter check is cheaper there
+// than embedding the full enum here.
+export const CreateUserSchema = z.object({
+  name: z.string().min(2, "name must be at least 2 chars").max(120),
+  email: z.string().email().max(120),
+  password: z.string().min(8, "password must be at least 8 chars").max(200),
   role: RoleEnum.default("SALES"),
+  permissions: z.array(z.string()).default([]),
 });
+
+// All fields optional — only the supplied ones are touched. The
+// route validates each permission string against ACTIONS and gates
+// permissions edits on the user.editPermissions action. Disabling
+// (isActive=false) is gated on user.disable.
+export const UpdateUserSchema = z.object({
+  name: z.string().min(2).max(120).optional(),
+  role: RoleEnum.optional(),
+  permissions: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
+  // Optional: admin can reset another user's password to a new value.
+  // The new password gets `mustChangePassword=true` so the user is
+  // forced to change it on next login.
+  resetPassword: z.string().min(8).max(200).optional(),
+});
+
+// Self-service password change. `currentPassword` is empty when
+// the user is in the forced-change-on-first-login flow (the route
+// detects this via mustChangePassword on the user record).
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().optional().default(""),
+  newPassword: z.string().min(8, "password must be at least 8 chars").max(200),
+}).refine(
+  (d) => d.newPassword !== d.currentPassword,
+  { path: ["newPassword"], message: "new password must differ from current" },
+);
 
 // ── Clients ─────────────────────────────────────────────────────
 export const ReferenceConsentEnum = z.enum(["NOT_ASKED", "GRANTED", "DENIED"]);

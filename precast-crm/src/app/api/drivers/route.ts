@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DriverCreateSchema } from "@/lib/validation";
-import { ok, created, fail, handler } from "@/lib/api";
+import { ok, created, fail } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 import { normalizePhone } from "@/lib/phone";
 
 /**
@@ -14,7 +15,7 @@ import { normalizePhone } from "@/lib/phone";
  *   - active dispatches (no returnedAt yet)
  *   - discrepancies in last 30 days
  */
-export const GET = handler(async (req: NextRequest) => {
+export const GET = withPermission("driver.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const activeOnly = searchParams.get("activeOnly") === "true";
   const since = new Date();
@@ -61,10 +62,10 @@ export const GET = handler(async (req: NextRequest) => {
 });
 
 /**
- * POST /api/drivers   (any role)
+ * POST /api/drivers — driver.manage
  * Phone is normalized to digits-only so dedup is stable.
  */
-export const POST = handler(async (req: NextRequest) => {
+export const POST = withPermission("driver.manage", async (req: NextRequest) => {
   const body = DriverCreateSchema.parse(await req.json());
   const phoneNorm = normalizePhone(body.phone);
   if (!phoneNorm) return fail("phone is required", 422);

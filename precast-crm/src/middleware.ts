@@ -8,7 +8,6 @@ const secret = new TextEncoder().encode(JWT_SECRET);
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
-  "/api/auth/register",
   "/_next",
   "/favicon.ico",
 ];
@@ -19,14 +18,24 @@ function isPublic(pathname: string): boolean {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (isPublic(pathname)) return NextResponse.next();
+
+  // Forward the request path on a header so server components can
+  // read it without each layout/page receiving it as a prop. Used by
+  // src/app/(app)/layout.tsx → page-auth.ts to look up the permission
+  // rule for the current route.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+  const next = () =>
+    NextResponse.next({ request: { headers: requestHeaders } });
+
+  if (isPublic(pathname)) return next();
 
   const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return redirectToLogin(req);
 
   try {
     await jwtVerify(token, secret);
-    return NextResponse.next();
+    return next();
   } catch {
     return redirectToLogin(req);
   }

@@ -4,7 +4,8 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ClientCreateSchema } from "@/lib/validation";
-import { ok, created, fail, handler } from "@/lib/api";
+import { ok, created, fail } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 
 /**
@@ -14,7 +15,7 @@ import { normalizePhone, phoneMatchForms } from "@/lib/phone";
  *               calculator's autocomplete to dedup
  *   ?language=  filter UZ/RU
  */
-export const GET = handler(async (req: NextRequest) => {
+export const GET = withPermission("client.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim();
   const phone = searchParams.get("phone")?.trim();
@@ -59,7 +60,7 @@ export const GET = handler(async (req: NextRequest) => {
   return ok(clients);
 });
 
-export const POST = handler(async (req: NextRequest) => {
+export const POST = withPermission("client.create", async (req: NextRequest) => {
   const body = ClientCreateSchema.parse(await req.json());
   const phoneNorm = normalizePhone(body.phone);
   if (!phoneNorm) return fail("phone is required", 422);

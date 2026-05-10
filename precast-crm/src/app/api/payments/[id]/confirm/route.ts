@@ -4,8 +4,8 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PaymentConfirmSchema } from "@/lib/validation";
-import { ok, fail, handler } from "@/lib/api";
-import { getCurrentUser, canConfirmCash } from "@/lib/auth";
+import { ok, fail } from "@/lib/api";
+import { withPermission } from "@/lib/api-auth";
 
 /**
  * POST /api/payments/[id]/confirm   (ADMIN | OWNER only)
@@ -20,23 +20,13 @@ import { getCurrentUser, canConfirmCash } from "@/lib/auth";
  *      Discrepancy row with the appropriate status
  *   6. Append OrderEvent(s)
  */
-export const POST = handler(async (req: NextRequest, ctx: { params: { id: string } }) => {
-  const user = await getCurrentUser();
-  if (!canConfirmCash(user)) {
-    return fail("Only ADMIN or OWNER can confirm payments", 403);
-  }
-  const actor = await prisma.user.findUnique({
-    where: { id: user!.sub },
-    select: { id: true },
-  });
-  if (!actor) {
-    return fail("Your session is stale — please log out and log back in.", 401);
-  }
-
+export const POST = withPermission<{ id: string }>(
+  "payment.confirm",
+  async (req: NextRequest, { user, params }) => {
   const body = PaymentConfirmSchema.parse(await req.json());
 
   const payment = await prisma.payment.findUnique({
-    where: { id: ctx.params.id },
+    where: { id: params.id },
     include: { order: { include: { dispatch: true } } },
   });
   if (!payment) return fail("Payment not found", 404);
@@ -84,7 +74,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
       where: { id: payment.id },
       data: {
         status: "CONFIRMED",
-        confirmedById: actor.id,
+        confirmedById: user.id,
         confirmedAt: new Date(),
         amount: finalAmount,
         ...(amountChanged
@@ -101,7 +91,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
         data: {
           orderId: payment.orderId,
           type: "PAYMENT_ADJUSTED",
-          actorId: actor.id,
+          actorId: user.id,
           message: `Payment ${payment.id.slice(-6)} adjusted: ${originalAmount} → ${finalAmount}`,
           payload: {
             paymentId: payment.id,
@@ -157,9 +147,9 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
           receivedAmount: finalAmount,
           shortfall,
           status: discrepancyStatus,
-          reportedById: actor.id,
+          reportedById: user.id,
           reportedAt: new Date(),
-          resolvedById: isResolved ? actor.id : null,
+          resolvedById: isResolved ? user.id : null,
           resolvedAt: isResolved ? new Date() : null,
           resolutionNote: body.discrepancyNote!.trim(),
         },
@@ -170,7 +160,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
         data: {
           orderId: payment.orderId,
           type: "DISCREPANCY_OPENED",
-          actorId: actor.id,
+          actorId: user.id,
           message: `Discrepancy ${discrepancyStatus}: short by ${shortfall} (${body.discrepancyAction})`,
           payload: {
             discrepancyId: d.id,
@@ -190,7 +180,7 @@ export const POST = handler(async (req: NextRequest, ctx: { params: { id: string
       data: {
         orderId: payment.orderId,
         type: "PAYMENT_CONFIRMED",
-        actorId: actor.id,
+        actorId: user.id,
         message: `Payment ${payment.id.slice(-6)} confirmed: ${finalAmount}`,
         payload: {
           paymentId: payment.id,

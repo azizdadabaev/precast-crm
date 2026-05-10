@@ -22,7 +22,14 @@ function LoginForm() {
   const search = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // Pre-fill the error if redirect-to-login carried a flag from
+  // middleware or page-auth. Currently emitted: "disabled" (account
+  // is_active = false). Other flags can land here later.
+  const initialError =
+    search.get("error") === "disabled"
+      ? "Аккаунт ўчирилган · Account is disabled. Contact your administrator."
+      : null;
+  const [error, setError] = useState<string | null>(initialError);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
@@ -30,8 +37,17 @@ function LoginForm() {
     setError(null);
     setLoading(true);
     try {
-      await api("/api/auth/login", { method: "POST", json: { email, password } });
-      router.push(search.get("next") || "/dashboard");
+      const data = await api<{ redirectTo?: string }>("/api/auth/login", {
+        method: "POST",
+        json: { email, password },
+      });
+      // Prefer the explicit `?next=...` if set (came from a redirected
+      // request that wanted to come back here). Otherwise use the
+      // server's homeForUser-derived redirectTo, which routes the user
+      // to a page they actually have permission to see — or to
+      // /change-password if mustChangePassword is set.
+      const next = search.get("next") || data?.redirectTo || "/dashboard";
+      router.push(next);
       router.refresh();
     } catch (err) {
       setError((err as Error).message);
