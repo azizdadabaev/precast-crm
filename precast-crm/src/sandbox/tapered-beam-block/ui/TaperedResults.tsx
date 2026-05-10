@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Send, AlertTriangle, Building } from "lucide-react";
+import { Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DEFAULT_BEARING,
-  TRANSVERSE_RIB_WARNING_PREFIX,
   type TaperResult,
   type Tier,
 } from "../engine";
@@ -47,7 +46,6 @@ export function TaperedResults({ result }: { result: TaperResult | null }) {
 
   return (
     <div className="space-y-4">
-      {result.warnings.length > 0 && <WarningPanel warnings={result.warnings} />}
       <InputCard r={result} />
       <GeometryCard r={result} />
       <StrategyCard r={result} viewMode={viewMode} onChangeViewMode={setViewMode} />
@@ -73,36 +71,6 @@ function ErrorPanel({ errors }: { errors: string[] }) {
           {errors.map((e, i) => (
             <li key={i}>{e}</li>
           ))}
-        </ul>
-      </CardContent>
-    </Card>
-  );
-}
-
-function WarningPanel({ warnings }: { warnings: string[] }) {
-  return (
-    <Card className="border-amber-300 bg-amber-50">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-bold uppercase tracking-wider text-amber-900">
-          Огоҳлантириш · Warnings
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ul className="text-sm text-amber-900 space-y-1.5">
-          {warnings.map((w, i) => {
-            const isStructural = w.startsWith(TRANSVERSE_RIB_WARNING_PREFIX);
-            const Icon = isStructural ? Building : AlertTriangle;
-            return (
-              <li key={i} className="flex items-start gap-2">
-                <Icon
-                  className={`h-4 w-4 mt-0.5 shrink-0 ${
-                    isStructural ? "text-rose-700" : "text-amber-700"
-                  }`}
-                />
-                <span>{w}</span>
-              </li>
-            );
-          })}
         </ul>
       </CardContent>
     </Card>

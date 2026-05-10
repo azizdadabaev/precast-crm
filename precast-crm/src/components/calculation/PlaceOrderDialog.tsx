@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, PackageCheck, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
@@ -54,14 +54,38 @@ interface Props {
     paidAmount: number;
     paymentMethod: PaymentMethod;
   }) => Promise<void>;
+  /** Edit-mode flag. When true the dialog renames itself to "Save edits",
+   *  hides the up-front payment section (existing payments are preserved
+   *  by the edit endpoint), and reports `paidAmount = 0` on confirm so
+   *  the caller's onConfirm signature stays stable. */
+  editMode?: boolean;
+  /** Pre-fill the date picker with this. Used in edit-mode to default
+   *  to the order's existing scheduledAt; leave unset for fresh
+   *  placements (operator picks from the calendar). */
+  defaultScheduledAt?: Date | null;
 }
 
-export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
-  const [date, setDate] = useState<Date | null>(null);
+export function PlaceOrderDialog({
+  open,
+  onClose,
+  summary,
+  onConfirm,
+  editMode = false,
+  defaultScheduledAt = null,
+}: Props) {
+  const [date, setDate] = useState<Date | null>(defaultScheduledAt ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paidAmount, setPaidAmount] = useState<number | "">(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+
+  // Sync the picker to a newly-arrived default (e.g. edit-mode loads
+  // the order's scheduledAt after the dialog has already mounted).
+  // Operator's subsequent picks aren't overwritten because the prop
+  // only changes when entering/leaving edit-mode.
+  useEffect(() => {
+    if (defaultScheduledAt) setDate(defaultScheduledAt);
+  }, [defaultScheduledAt]);
 
   if (!open) return null;
 
@@ -74,14 +98,21 @@ export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
 
   async function confirm() {
     if (!date) return;
-    if (overPaid) {
+    if (!editMode && overPaid) {
       setError("Payment cannot exceed the total");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      await onConfirm({ scheduledAt: date, paidAmount: paidNum, paymentMethod });
+      // In edit-mode the up-front payment fields are hidden, so always
+      // emit zero / CASH default — the caller routes to the edit
+      // endpoint which doesn't read these fields.
+      await onConfirm({
+        scheduledAt: date,
+        paidAmount: editMode ? 0 : paidNum,
+        paymentMethod: editMode ? "CASH" : paymentMethod,
+      });
     } catch (e) {
       setError((e as Error).message);
       setSubmitting(false);
@@ -94,9 +125,15 @@ export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b">
           <div>
-            <h2 className="text-lg font-bold">Буюртма Бериш · Place Order</h2>
+            <h2 className="text-lg font-bold">
+              {editMode
+                ? "Таҳрирни сақлаш · Save edits"
+                : "Буюртма Бериш · Place Order"}
+            </h2>
             <p className="text-xs text-muted-foreground">
-              Pick a delivery / production date. Calendar shows existing load.
+              {editMode
+                ? "Replaces the existing snapshot in place. Existing payments preserved."
+                : "Pick a delivery / production date. Calendar shows existing load."}
             </p>
           </div>
           <button
@@ -195,7 +232,11 @@ export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
             </div>
 
             {/* Up-front payment — captured at placement, goes through
-                maker-checker (PENDING_CONFIRMATION until ADMIN/OWNER confirms). */}
+                maker-checker (PENDING_CONFIRMATION until ADMIN/OWNER confirms).
+                Hidden in edit-mode: existing payments are preserved as-is
+                by the edit endpoint; new payments go through the order's
+                Add Payment flow afterward. */}
+            {!editMode && (
             <div className="border-t pt-3 space-y-2">
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -257,6 +298,7 @@ export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
                 Recorded as <span className="font-semibold">PENDING</span>. Owner confirms it on the Payments page; only then does the order's confirmedPaid update.
               </p>
             </div>
+            )}
           </aside>
         </div>
 
@@ -266,8 +308,14 @@ export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
             <div className="text-sm text-destructive">{error}</div>
           ) : (
             <div className="text-xs text-muted-foreground">
-              Prices freeze at this moment. The Project's status flips to{" "}
-              <span className="font-semibold">ORDERED</span>.
+              {editMode
+                ? "Existing payments are preserved. Owner reconciles any over- or under-payment manually."
+                : (
+                  <>
+                    Prices freeze at this moment. The Project&apos;s status flips to{" "}
+                    <span className="font-semibold">ORDERED</span>.
+                  </>
+                )}
             </div>
           )}
           <div className="flex gap-2">
@@ -285,7 +333,9 @@ export function PlaceOrderDialog({ open, onClose, summary, onConfirm }: Props) {
               ) : (
                 <PackageCheck className="h-4 w-4 mr-2" />
               )}
-              Буюртма Бериш · Place Order
+              {editMode
+                ? "Таҳрирни сақлаш · Save edits"
+                : "Буюртма Бериш · Place Order"}
             </Button>
           </div>
         </div>

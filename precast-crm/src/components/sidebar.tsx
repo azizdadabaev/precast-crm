@@ -44,7 +44,8 @@ interface NavItem {
   permission: Action | Action[];
 }
 
-const NAV: NavItem[] = [
+/** Single source of truth for sidebar entries — desktop and the mobile drawer both consume this. */
+export const NAV: NavItem[] = [
   {
     href: "/dashboard",
     label: "Бошқарув",
@@ -131,12 +132,25 @@ const NAV: NavItem[] = [
   },
 ];
 
-function isVisible(user: AuthUser, item: NavItem): boolean {
+export function isVisible(user: AuthUser, item: NavItem): boolean {
   const list = Array.isArray(item.permission) ? item.permission : [item.permission];
   return canAny(user, list);
 }
 
-export function Sidebar({ user }: { user: AuthUser }) {
+/**
+ * Inner sidebar body — brand header, filtered nav, user footer.
+ *
+ * Shared by both the desktop `Sidebar` and the mobile drawer.
+ * `onNavigate` lets the mobile drawer close itself when a nav item
+ * is tapped; desktop omits it.
+ */
+export function SidebarBody({
+  user,
+  onNavigate,
+}: {
+  user: AuthUser;
+  onNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -148,11 +162,12 @@ export function Sidebar({ user }: { user: AuthUser }) {
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
+    onNavigate?.();
     router.push("/login");
   }
 
   return (
-    <aside className="w-64 shrink-0 border-r bg-card flex flex-col">
+    <>
       <div className="p-5 border-b">
         <div className="flex items-center gap-2">
           <div className="h-9 w-9 rounded-md bg-primary text-primary-foreground grid place-items-center">
@@ -174,8 +189,9 @@ export function Sidebar({ user }: { user: AuthUser }) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors min-h-11",
                 active
                   ? "bg-primary text-primary-foreground"
                   : "text-foreground hover:bg-accent",
@@ -211,22 +227,31 @@ export function Sidebar({ user }: { user: AuthUser }) {
               <Pencil
                 className="h-3 w-3 shrink-0"
                 aria-label="Permissions customized"
-                // The native title is the simplest tooltip — no toast/popover
-                // primitive needed. Phase 5's user list will surface the
-                // same indicator on a more prominent badge.
               />
             ) : null}
           </div>
         </div>
         <Button
           variant="ghost"
-          className="w-full justify-start"
+          className="w-full justify-start min-h-11"
           onClick={logout}
         >
           <LogOut className="h-4 w-4 mr-2" />
           Logout
         </Button>
       </div>
+    </>
+  );
+}
+
+/**
+ * Persistent desktop sidebar. Hidden below the `lg` breakpoint —
+ * the mobile topbar's drawer takes over there.
+ */
+export function Sidebar({ user }: { user: AuthUser }) {
+  return (
+    <aside className="hidden lg:flex w-64 shrink-0 border-r bg-card flex-col">
+      <SidebarBody user={user} />
     </aside>
   );
 }

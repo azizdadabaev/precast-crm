@@ -268,6 +268,23 @@ export const PlaceOrderSchema = z.object({
   { path: ["paymentMethod"], message: "paymentMethod is required when paidAmount > 0" },
 );
 
+// ── Edit order ──────────────────────────────────────────────────
+// Post-placement modification of a placed order. Same payload shape
+// as PlaceOrderSchema for the parts the engine cares about (rooms +
+// pricing levers + scheduledAt + notes), but no client info (the
+// order's client is locked in) and no inline up-front payment
+// (existing Payment rows are preserved as-is; if the new totalPrice
+// changes the paid/owed math, the maker-checker flow handles it
+// out-of-band per the spec).
+export const EditOrderSchema = z.object({
+  rooms: z.array(RoomCalcInputSchema).min(1, "at least one room is required"),
+  discountPercent: z.coerce.number().min(0).max(100).default(0),
+  deliveryCost: z.coerce.number().min(0).default(0),
+  otherCost: z.coerce.number().min(0).default(0),
+  scheduledAt: z.coerce.date(),
+  notes: z.string().max(2000).optional().nullable(),
+});
+
 // ── Cancel order ────────────────────────────────────────────────
 // Either ADMIN role (no password) or password supplied. Server enforces.
 export const CancelOrderSchema = z.object({

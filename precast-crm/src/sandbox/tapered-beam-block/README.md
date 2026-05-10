@@ -87,8 +87,7 @@ src/sandbox/tapered-beam-block/
     ├── TaperedInputs.tsx          Input form + irregular toggle
     ├── TaperedResults.tsx         §9 report rendering
     ├── ExampleLoader.tsx          §10 example pre-fill dropdown
-    ├── RectangularNotice.tsx      §0 routing guard message
-    └── EdgeCompensationHelp.tsx   §3.7 reference card
+    └── RectangularNotice.tsx      §0 routing guard message
 ```
 
 ## Constraints honored

@@ -586,6 +586,48 @@ owner), 1 for bank/online (no physical handover step at all).
 
 - **Tapered Beam-and-Block** (`src/sandbox/tapered-beam-block/`, route `/sandbox/tapered`, ADMIN-only sidebar entry "Тажриба · Sandbox · Tapered") — isolated playground for trapezoidal / irregular-quadrilateral slab math. Engine is pure with full Vitest coverage; UI mirrors the §9 SPEC.md report layout. Severable: deleting the folder + `src/app/(app)/sandbox/tapered/page.tsx` + the sidebar diff + the one-line `vitest.config.ts` `include` extension fully removes the feature. **Not for production planning** until merged into `services/calculation-engine.ts`.
 
+## Mobile-friendly calculator (Pattern 1 shipped)
+
+Below `lg` (1024 px) the calculator at `/calculations` now uses
+horizontal-scroll-with-sticky-columns: **Эни (Width)** and **Бўйи
+(Length)** stay pinned to the left edge while the rest of the
+18-column table scrolls sideways. A right-edge gradient + an inset
+shadow on the Length column boundary signal the scroll affordance.
+On desktop (≥ 1024 px) the calculator is **byte-identical** to the
+prior production layout — every change is gated on the `lg` Tailwind
+breakpoint.
+
+Other mobile-only refinements:
+
+- Calculator inputs (`.grid-input`, `.grid-select`) are 44 px tall on
+  phone/tablet (Apple HIG tap-target minimum) and revert to 32 px on
+  desktop. Defined in `src/app/globals.css`.
+- Per-row round-up/down arrows: on the desktop calculator they sit
+  inline with each Width input (unchanged). On `<lg` they relocate
+  into the row's Name cell (right side, vertically stacked) since
+  the sticky Width column is too narrow to host them comfortably.
+  Both render sites share `RowRoundArrows` inside
+  `MultiRoomCalculator.tsx` and call the same `onRoundUp(row.id)` /
+  `onRoundDown(row.id)` handlers — only the position changes.
+- The client-info card collapses to a one-line summary (Name · Phone
+  · Address with an Edit button) once Name + Phone are filled and
+  the operator taps outside. Tap the strip or clear a required field
+  to expand again. State machine in
+  `src/components/calculation/ClientInfoBar.tsx`. Desktop never sees
+  the collapsed strip — `lg:!block` keeps the form rendered at all
+  sizes.
+- On mobile only, the client form's Phone and Address fields share a
+  row (2-col grid) instead of stacking. Achieved via `lg:contents`
+  on the inner wrapper so the desktop 3-column grid is unchanged.
+
+The `/mobile-test` prototype branch was used to choose Pattern 1 and
+is fully deleted now (no `/mobile-test` files, no route mapping).
+The branch-wide hamburger sidebar (`MobileTopbar` + shared
+`SidebarBody`) shipped on the `mobile` branch is preserved.
+
+`Sheet` primitive lives at `src/components/ui/sheet.tsx`, authored
+manually on top of the already-installed `@radix-ui/react-dialog`.
+
 ## What's NOT implemented yet (deferred)
 
 Items 5, 11, 12, 14 from the 14 best-practices list:

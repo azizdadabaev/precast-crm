@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Phone, User, MapPin, CheckCircle2, ShieldCheck } from "lucide-react";
+import {
+  Phone,
+  User,
+  MapPin,
+  CheckCircle2,
+  ShieldCheck,
+  Pencil,
+} from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { formatPhone } from "@/lib/phone";
 
@@ -48,6 +55,42 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
+  // ── Mobile-only collapse state machine ──
+  // The whole card collapses to a one-line summary on phone/tablet
+  // once Name + Phone are filled and the operator taps anywhere
+  // outside the card. Tap the collapsed strip (or its Edit button)
+  // to expand again. Clearing Name or Phone force-expands.
+  // Has no effect on desktop — `lg:!block` reveals the form
+  // unconditionally at ≥1024 px.
+  const [isExpanded, setIsExpanded] = useState(true);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const canCollapse =
+    value.name.trim().length > 0 && value.phone.trim().length > 0;
+
+  useEffect(() => {
+    function onPointerDown(e: MouseEvent | TouchEvent) {
+      if (!isExpanded || !canCollapse) return;
+      const node = cardRef.current;
+      if (!node) return;
+      if (!node.contains(e.target as Node)) {
+        setIsExpanded(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("touchstart", onPointerDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("touchstart", onPointerDown);
+    };
+  }, [isExpanded, canCollapse]);
+
+  // Force-expand the moment Name or Phone clears.
+  useEffect(() => {
+    if (!canCollapse && !isExpanded) {
+      setIsExpanded(true);
+    }
+  }, [canCollapse, isExpanded]);
+
   // Debounced phone autocomplete
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -90,9 +133,28 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
     onMatch(null);
   }
 
+  // Mobile collapsed state: render only the summary strip.
+  // Desktop: the surrounding `lg:!block` on the form wrapper forces
+  // it visible regardless of `isExpanded`, so we never hit this path
+  // at ≥lg.
+  const showCollapsed = !isExpanded && canCollapse;
+
   return (
-    <div className="rounded-lg border bg-background p-3 shadow-sm">
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(180px,1fr)_minmax(200px,260px)_minmax(180px,1fr)] gap-3">
+    <div
+      ref={cardRef}
+      className="rounded-lg border bg-background shadow-sm"
+    >
+      {showCollapsed && (
+        <CollapsedSummary
+          client={value}
+          onEdit={() => setIsExpanded(true)}
+        />
+      )}
+
+      <div
+        className={`p-3 ${showCollapsed ? "hidden lg:!block" : "block"}`}
+      >
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(180px,1fr)_minmax(200px,260px)_minmax(180px,1fr)] gap-3">
         {/* Name (Исм) */}
         <Field
           icon={<User className="h-4 w-4 text-muted-foreground" />}
@@ -108,6 +170,11 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
           />
         </Field>
 
+        {/* Phone + Address share a row on mobile (2-col grid). The
+            outer `lg:contents` flattens this wrapper at ≥lg so Phone
+            and Address slot directly into the 3-col desktop layout
+            (cols 2 and 3) — no visual change on desktop. */}
+        <div className="grid grid-cols-2 gap-3 lg:contents">
         {/* Phone (Тел рақам) — primary identifier, with autocomplete */}
         <Field
           icon={<Phone className="h-4 w-4 text-muted-foreground" />}
@@ -153,11 +220,12 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
           </div>
         </Field>
 
-        {/* Address (Манзил) */}
+        {/* Address (Манзил) — required for Place Order. */}
         <Field
           icon={<MapPin className="h-4 w-4 text-muted-foreground" />}
           primary="Манзил"
           secondary="Address"
+          required
         >
           <input
             className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -166,6 +234,7 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
             onChange={(e) => onChange({ ...value, address: e.target.value })}
           />
         </Field>
+        </div>{/* close mobile Phone+Address wrapper (lg:contents on desktop) */}
       </div>
 
       {/* Reference-consent checkbox — checked = "operator confirmed the
@@ -201,7 +270,50 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
           </button>
         </div>
       )}
+      </div>{/* close form wrapper (hidden when mobile-collapsed) */}
     </div>
+  );
+}
+
+/**
+ * One-line summary rendered in place of the full form when the
+ * operator has Name + Phone filled and tapped outside on mobile.
+ * Visible only at <lg — desktop never sees it because the form
+ * wrapper has `lg:!block` overriding `hidden`.
+ */
+function CollapsedSummary({
+  client,
+  onEdit,
+}: {
+  client: ClientDraft;
+  onEdit: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      aria-label="Edit client info"
+      className="lg:hidden w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-accent/50 transition-colors"
+    >
+      <div className="truncate text-sm flex-1 min-w-0">
+        <User className="h-3.5 w-3.5 inline-block text-muted-foreground mr-1 align-text-bottom" />
+        <span className="font-medium">{client.name}</span>
+        <span className="text-muted-foreground"> · </span>
+        <Phone className="h-3.5 w-3.5 inline-block text-muted-foreground mr-1 align-text-bottom" />
+        <span className="tabular-nums">{client.phone}</span>
+        {client.address && (
+          <>
+            <span className="text-muted-foreground"> · </span>
+            <MapPin className="h-3.5 w-3.5 inline-block text-muted-foreground mr-1 align-text-bottom" />
+            <span>{client.address}</span>
+          </>
+        )}
+      </div>
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0 min-h-11 min-w-11 justify-center">
+        <Pencil className="h-3.5 w-3.5" />
+        <span>Edit</span>
+      </span>
+    </button>
   );
 }
 

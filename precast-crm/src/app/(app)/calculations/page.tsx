@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, Suspense } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Save, PackageCheck, Trash2, Loader2 } from "lucide-react";
@@ -46,6 +47,8 @@ function CalculationsInner() {
   const setDiscountPercent = useCalculatorStore((s) => s.setDiscountPercent);
   const draftProjectId = useCalculatorStore((s) => s.draftProjectId);
   const setDraftProjectId = useCalculatorStore((s) => s.setDraftProjectId);
+  const editingOrderId = useCalculatorStore((s) => s.editingOrderId);
+  const setEditingOrderId = useCalculatorStore((s) => s.setEditingOrderId);
   const loadFrom = useCalculatorStore((s) => s.loadFrom);
   const clearAll = useCalculatorStore((s) => s.clearAll);
 
@@ -54,6 +57,15 @@ function CalculationsInner() {
   const [orderOpen, setOrderOpen] = useState(false);
   const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  /** Order number + scheduled date for the edit-mode banner and dialog
+   *  default. Re-fetched on mount when editingOrderId is in the store
+   *  (so a refresh during edit mode keeps showing the right banner).
+   *  Transient — not persisted. */
+  const [editingOrderInfo, setEditingOrderInfo] = useState<{
+    orderNumber: string;
+    scheduledAt: Date;
+  } | null>(null);
+  const isEditingOrder = !!editingOrderId;
 
   // ── One-time effects on mount: prefill from URL, then ?fromProject= ──
   useEffect(() => {
@@ -100,10 +112,149 @@ function CalculationsInner() {
       // the URL alone so the operator can paste it elsewhere if debugging.
     }
 
+    // ?fromOrder=<id> wins over draft restoration: opening edit-mode
+    // for an existing order replaces the workspace contents.
+    const fromOrder = search.get("fromOrder");
+    if (fromOrder) {
+      void loadOrder(fromOrder);
+      // strip the query so a refresh doesn't double-load
+      router.replace("/calculations", { scroll: false });
+      return;
+    }
+
+    // Refresh during edit mode: URL doesn't have ?fromOrder= but the
+    // store still carries editingOrderId. Re-fetch so the banner +
+    // dialog default scheduledAt come back. Don't replace the rows
+    // (the autosaved version is what the user was editing).
+    if (editingOrderId) {
+      void refreshEditingOrderInfo(editingOrderId);
+    }
+
     const fromProject = search.get("fromProject");
     if (fromProject) loadProject(fromProject);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
+
+  /** Lightweight refetch used only to repopulate the banner + dialog
+   *  default after a refresh while editingOrderId is already in the
+   *  store. Does NOT replace the row data — the autosaved version
+   *  represents the operator's in-progress edits. */
+  async function refreshEditingOrderInfo(id: string) {
+    try {
+      const order = await api<{
+        id: string;
+        orderNumber: string;
+        scheduledAt: string;
+        status: string;
+      }>(`/api/orders/${id}`);
+      // If the order was canceled / dispatched / delivered while the
+      // operator had this tab open, drop edit-mode silently.
+      if (
+        order.status === "DISPATCHED" ||
+        order.status === "DELIVERED" ||
+        order.status === "CANCELED"
+      ) {
+        setEditingOrderId(null);
+        setEditingOrderInfo(null);
+        return;
+      }
+      setEditingOrderInfo({
+        orderNumber: order.orderNumber,
+        scheduledAt: new Date(order.scheduledAt),
+      });
+    } catch {
+      // Order may have been deleted or permissions revoked. Drop edit-mode.
+      setEditingOrderId(null);
+      setEditingOrderInfo(null);
+    }
+  }
+
+  /** Hydrate the calculator workspace from an existing order's
+   *  frozen snapshot for edit-mode. Replaces all session state.
+   *  Status checked server-side too — the edit endpoint refuses
+   *  DISPATCHED/DELIVERED/CANCELED. */
+  async function loadOrder(id: string) {
+    try {
+      const order = await api<{
+        id: string;
+        orderNumber: string;
+        status: string;
+        discountPercent: string;
+        scheduledAt: string;
+        client: {
+          id: string;
+          name: string;
+          phone: string;
+          address: string | null;
+          referenceConsent: "NOT_ASKED" | "GRANTED" | "DENIED";
+        };
+        project: {
+          id: string;
+          calculations: Array<{
+            id: string;
+            name: string | null;
+            innerWidth: string;
+            innerLength: string;
+            bearing: string;
+            correction: string;
+            extraBeams: number;
+            forceStartBeam: boolean;
+            patternOverride: "GB" | "BGB" | "GBG" | null;
+            m2Price: string;
+            m2PriceOverride: boolean;
+            m2PriceReason: string | null;
+          }>;
+        };
+      }>(`/api/orders/${id}`);
+
+      if (
+        order.status === "DISPATCHED" ||
+        order.status === "DELIVERED" ||
+        order.status === "CANCELED"
+      ) {
+        setError(
+          `Order ${order.orderNumber} is in status ${order.status} and can't be edited. Cancel + recreate instead.`,
+        );
+        return;
+      }
+
+      loadFrom({
+        editingOrderId: order.id,
+        client: {
+          name: order.client.name,
+          phone: order.client.phone,
+          address: order.client.address ?? "",
+          consentGranted: order.client.referenceConsent === "GRANTED",
+        },
+        matchedClientId: order.client.id,
+        discountPercent: Number(order.discountPercent),
+        rows: order.project.calculations.map((c) =>
+          recomputeRow({
+            id: Math.random().toString(36).slice(2, 9),
+            name: c.name ?? "",
+            innerWidth: Number(c.innerWidth),
+            innerLength: Number(c.innerLength),
+            bearing: Number(c.bearing),
+            correction: Number(c.correction),
+            extraBeams: c.extraBeams,
+            forceStartBeam: c.forceStartBeam,
+            patternOverride: c.patternOverride ?? "AUTO",
+            result: null,
+            originalWidth: null,
+            m2PriceOverride: c.m2PriceOverride,
+            m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
+            m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
+          }),
+        ),
+      });
+      setEditingOrderInfo({
+        orderNumber: order.orderNumber,
+        scheduledAt: new Date(order.scheduledAt),
+      });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
 
   async function loadProject(id: string) {
     try {
@@ -309,8 +460,61 @@ function CalculationsInner() {
     onError: (e: Error) => setError(e.message),
   });
 
+  /** Edit-mode submit. Sends the current rooms + pricing knobs to
+   *  PATCH /api/orders/<id>/edit, which re-runs the engine server-side
+   *  and replaces the order's frozen snapshot. Existing payment rows
+   *  are preserved; the route recomputes confirmedPaid + paymentState
+   *  for the new total. */
+  const editOrder = useMutation({
+    mutationFn: (args: { scheduledAt: Date }) => {
+      if (!editingOrderId) throw new Error("Not in edit-mode");
+      return api<{ id: string; orderNumber: string }>(
+        `/api/orders/${editingOrderId}/edit`,
+        {
+          method: "PATCH",
+          json: {
+            rooms: validRooms.map((r) => ({
+              name: r.name,
+              innerWidth: r.innerWidth,
+              innerLength: r.innerLength,
+              bearing: r.bearing,
+              correction: r.correction,
+              extraBeams: r.extraBeams,
+              forceStartBeam: r.forceStartBeam,
+              patternOverride: r.patternOverride === "AUTO" ? null : r.patternOverride,
+              m2PriceOverride: r.m2PriceOverride,
+              m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
+              m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
+            })),
+            discountPercent,
+            deliveryCost: 0,
+            otherCost: 0,
+            scheduledAt: args.scheduledAt.toISOString(),
+          },
+        },
+      );
+    },
+    onSuccess: (order) => {
+      // Edit committed — drop edit-mode AND the autosave snapshot so
+      // the next /calculations visit starts clean.
+      clearAll();
+      router.push(`/orders/${order.id}`);
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  /** Cancel edit-mode without saving. Returns to the order detail
+   *  page and wipes the edited rows from autosave. */
+  function cancelEditMode() {
+    const id = editingOrderId;
+    clearAll();
+    setEditingOrderInfo(null);
+    if (id) router.push(`/orders/${id}`);
+  }
+
   function confirmClear() {
     clearAll();
+    setEditingOrderInfo(null);
     setClearConfirmOpen(false);
     setError(null);
     setPrefillNotice(null);
@@ -327,54 +531,47 @@ function CalculationsInner() {
 
   return (
     <div className="space-y-5">
-      {/* Header with the action buttons */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Калькулятор · Calculator
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Quick calc during a phone call. Save as Project, or place an order directly.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={!hasAnyContent}
-            onClick={() => setClearConfirmOpen(true)}
-            title="Clear the calculator and start a new calculation"
-            className="text-rose-700 hover:text-rose-800 hover:bg-rose-50"
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Тозалаш · Clear
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canSaveDraft || saveDraft.isPending}
-            onClick={() => saveDraft.mutate()}
-            title={canSaveDraft ? "Save as draft (requires phone)" : "Phone is required"}
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {saveDraft.isPending ? "Saving…" : "Save Project"}
-          </Button>
-          <Button
-            size="sm"
-            className="bg-orange-500 hover:bg-orange-600 text-white"
-            disabled={!canPlaceOrder}
-            onClick={() => setOrderOpen(true)}
-            title={
-              canPlaceOrder
-                ? "Place an order"
-                : "Place Order needs Name + Phone + Address + at least 1 valid room"
-            }
-          >
-            <PackageCheck className="h-4 w-4 mr-2" />
-            Буюртма Бериш · Place Order
-          </Button>
-        </div>
+      {/* Header — title only. The action buttons (Clear / Save Project /
+          Place Order) moved to a dedicated bar after the calculator
+          totals so the user's eye lands on the numbers before the CTAs. */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {isEditingOrder
+            ? "Буюртмани таҳрирлаш · Edit Order"
+            : "Калькулятор · Calculator"}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {isEditingOrder
+            ? "Editing in place — saving replaces the existing order; no new order is placed."
+            : "Quick calc during a phone call. Save as Project, or place an order directly."}
+        </p>
       </div>
+
+      {/* Edit-mode banner — sky-tinted strip with a "Cancel edits"
+          escape that returns the operator to the order detail page
+          without saving. */}
+      {isEditingOrder && editingOrderInfo && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          <div>
+            Editing order{" "}
+            <Link
+              href={`/orders/${editingOrderId}`}
+              className="font-bold tabular-nums hover:underline"
+            >
+              {editingOrderInfo.orderNumber}
+            </Link>
+            . Save replaces the existing snapshot. Existing payments are preserved;
+            the owner reconciles any over- or under-payment manually.
+          </div>
+          <button
+            type="button"
+            onClick={cancelEditMode}
+            className="text-xs underline hover:no-underline shrink-0"
+          >
+            Cancel edits
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
@@ -406,21 +603,83 @@ function CalculationsInner() {
         onMatch={setMatchedClientId}
       />
 
-      {/* Calculator */}
+      {/* Calculator. The Clear / Save Project / Place Order buttons
+          render INSIDE the calculator's bottom toolbar via the
+          `actions` slot so they sit on the same row as Add room and
+          opposite the rounding controls — visually snapped to the
+          table. The handlers stay here on the page. */}
       <MultiRoomCalculator
         rows={rows}
         onChange={setRows}
         discountPercent={discountPercent}
         onDiscountChange={setDiscountPercent}
+        actions={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!hasAnyContent}
+              onClick={() => setClearConfirmOpen(true)}
+              title="Clear the calculator and start a new calculation"
+              className="text-rose-700 hover:text-rose-800 hover:bg-rose-50"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Тозалаш · Clear
+            </Button>
+            {/* Save Project hides in edit-mode — saving as a draft mid-edit
+                conflicts with the in-place semantics. The escape is "Cancel
+                edits" in the banner. */}
+            {!isEditingOrder && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!canSaveDraft || saveDraft.isPending}
+                onClick={() => saveDraft.mutate()}
+                title={canSaveDraft ? "Save as draft (requires phone)" : "Phone is required"}
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {saveDraft.isPending ? "Saving…" : "Save Project"}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+              disabled={!canPlaceOrder || editOrder.isPending}
+              onClick={() => setOrderOpen(true)}
+              title={
+                isEditingOrder
+                  ? "Save edits to this order — replaces the snapshot in place"
+                  : canPlaceOrder
+                    ? "Place an order"
+                    : "Place Order needs Name + Phone + Address + at least 1 valid room"
+              }
+            >
+              <PackageCheck className="h-4 w-4 mr-2" />
+              {isEditingOrder
+                ? editOrder.isPending
+                  ? "Saving…"
+                  : "Save edits"
+                : "Буюртма Бериш · Place Order"}
+            </Button>
+          </>
+        }
       />
 
-      {/* Place Order modal */}
+      {/* Place Order / Save edits modal — same dialog, two modes.
+          editMode hides the up-front payment section and routes the
+          confirm to /api/orders/<id>/edit instead of POST /api/orders. */}
       <PlaceOrderDialog
         open={orderOpen}
         onClose={() => setOrderOpen(false)}
         summary={summary}
+        editMode={isEditingOrder}
+        defaultScheduledAt={editingOrderInfo?.scheduledAt ?? null}
         onConfirm={async ({ scheduledAt, paidAmount, paymentMethod }) => {
-          await placeOrder.mutateAsync({ scheduledAt, paidAmount, paymentMethod });
+          if (isEditingOrder) {
+            await editOrder.mutateAsync({ scheduledAt });
+          } else {
+            await placeOrder.mutateAsync({ scheduledAt, paidAmount, paymentMethod });
+          }
         }}
       />
 

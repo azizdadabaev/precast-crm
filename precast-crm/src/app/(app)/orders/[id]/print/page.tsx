@@ -274,7 +274,7 @@ export default function OrderPrintPage() {
                     {formatNumber(c.beamLength, 2)}
                   </td>
                   <td className="px-1.5 py-1.5 text-center tabular-nums">
-                    {c.blocksPerRow}
+                    {c.blockRows > 0 ? c.blocksPerRow : "—"}
                   </td>
                   <td className="px-1.5 py-1.5 text-center tabular-nums font-bold bg-orange-50/40 text-orange-900">
                     {c.totalBlocks}

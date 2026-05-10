@@ -82,7 +82,9 @@
 
 .grid-input,
 .grid-select {
-  @apply block h-8 w-full bg-transparent border-0 px-1.5 text-sm
+  /* Tap target: 44px on phone/tablet (Apple HIG minimum), revert to
+     the original 32px on desktop where pointer accuracy is high. */
+  @apply block h-11 lg:h-8 w-full bg-transparent border-0 px-1.5 text-sm
          outline-none focus:outline-none
          focus:bg-amber-50/60 focus:ring-1 focus:ring-inset focus:ring-primary/50
          transition-colors;
@@ -125,9 +127,20 @@
 .grid-tint-computed { @apply bg-transparent; }
 .grid-tint-pricing  { @apply bg-emerald-50/40; }
 
-/* The grid table itself — fixed layout so colgroup widths are honored exactly */
+/* The grid table itself — fixed layout so colgroup widths are honored exactly.
+ *
+ * `w-max` (width: max-content) is critical: with `table-layout: fixed`
+ * and `w-auto`, the browser shrinks colgroup widths proportionally
+ * when the table can't fit the viewport — which on mobile breaks the
+ * sticky Width/Length columns (Width renders at ~30 px even though
+ * the colgroup says 104 px, and Length's sticky `left-[104px]` then
+ * lands far past Width's right edge, leaving a gap where scrolling
+ * columns peek through). `w-max` forces the table to render at the
+ * intrinsic sum of its colgroup widths; the wrapper's
+ * `overflow-x-auto` then lets the user scroll.
+ */
 .calc-grid {
-  @apply w-auto border-collapse text-sm;
+  @apply w-max border-collapse text-sm;
   table-layout: fixed;
 }
 .calc-grid thead th {

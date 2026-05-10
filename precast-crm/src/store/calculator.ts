@@ -38,6 +38,17 @@ interface CalculatorState {
    *  that "Save Project" UPDATES the existing draft instead of creating a
    *  duplicate. Persisted so it survives in-app navigation. */
   draftProjectId: string | null;
+  /** When opening an existing order via "Edit Order Details" on the order
+   *  detail page (?fromOrder=<id>), this carries the order id. While set,
+   *  the calculator runs in edit-mode: Save Project hides, "Place Order"
+   *  becomes "Save edits", and submit PATCHes the existing order instead
+   *  of creating a new one. Persisted so a refresh during edit doesn't
+   *  drop the user out of edit-mode silently. */
+  editingOrderId: string | null;
+  /** Per-column width overrides keyed by column id (px). null = use
+   *  default widths. Wiped by the calculator's "Reset to defaults"
+   *  button. Order is fixed; only widths are user-customizable. */
+  columnWidths: Record<string, number> | null;
   roundingGrid: RoundingGrid;
 
   // ── Actions ────────────────────────────────────────────────
@@ -46,13 +57,15 @@ interface CalculatorState {
   setRows: (rows: SlabRow[]) => void;
   setDiscountPercent: (pct: number) => void;
   setDraftProjectId: (id: string | null) => void;
+  setEditingOrderId: (id: string | null) => void;
+  setColumnWidths: (widths: Record<string, number> | null) => void;
   setRoundingGrid: (grid: RoundingGrid) => void;
   /**
    * Replace the entire calculator session. Used by /projects "open draft"
    * and by hydration migration. Pass partial state; everything else
    * resets to defaults so a draft load can't leak prior session bits.
    */
-  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDraftProjectId" | "setRoundingGrid">>) => void;
+  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDraftProjectId" | "setEditingOrderId" | "setColumnWidths" | "setRoundingGrid">>) => void;
   /** Wipe all draft state. Called from the Clear button and after a
    *  successful Place Order. */
   clearAll: () => void;
@@ -71,6 +84,8 @@ const INITIAL_STATE = {
   rows: [] as SlabRow[],
   discountPercent: 0,
   draftProjectId: null,
+  editingOrderId: null as string | null,
+  columnWidths: null as Record<string, number> | null,
   roundingGrid: 0.1 as RoundingGrid,
 };
 
@@ -80,6 +95,8 @@ interface PersistedShape {
   rows: SlabRow[];
   discountPercent: number;
   draftProjectId: string | null;
+  editingOrderId: string | null;
+  columnWidths: Record<string, number> | null;
   roundingGrid: RoundingGrid;
 }
 
@@ -173,6 +190,8 @@ export const useCalculatorStore = create<CalculatorState>()(
       setRows: (rows) => set({ rows }),
       setDiscountPercent: (pct) => set({ discountPercent: pct }),
       setDraftProjectId: (id) => set({ draftProjectId: id }),
+      setEditingOrderId: (id) => set({ editingOrderId: id }),
+      setColumnWidths: (widths) => set({ columnWidths: widths }),
       setRoundingGrid: (grid) => set({ roundingGrid: grid }),
 
       loadFrom: (next) =>
@@ -209,6 +228,8 @@ export const useCalculatorStore = create<CalculatorState>()(
         rows: s.rows,
         discountPercent: s.discountPercent,
         draftProjectId: s.draftProjectId,
+        editingOrderId: s.editingOrderId,
+        columnWidths: s.columnWidths,
         roundingGrid: s.roundingGrid,
       }),
       // Re-run the engine on each row after rehydrating. Defends against

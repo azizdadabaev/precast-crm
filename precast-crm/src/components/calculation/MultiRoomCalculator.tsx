@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -64,6 +64,104 @@ interface Props {
   onChange: (rows: SlabRow[]) => void;
   discountPercent: number;
   onDiscountChange: (pct: number) => void;
+  /**
+   * Page-level action buttons (Clear / Save Project / Place Order)
+   * rendered inline in the post-table toolbar, immediately after
+   * the "+ Add room" button. The page owns the click handlers; the
+   * calculator just hosts them so the toolbar visually snaps to
+   * the table without crossing component boundaries.
+   */
+  actions?: React.ReactNode;
+}
+
+// ── Column registry ─────────────────────────────────────────
+//
+// Stable IDs for the 19 columns. Used by the Customize Layout
+// feature to persist user-chosen order + widths in the calculator
+// store. Body / header / footer rendering all map over the active
+// order; the per-cell rendering still lives inline below as a switch
+// on these ids.
+//
+// Add a new column = add an id, add a COLUMN_DEFS entry, add a case
+// to renderHeaderCell/renderBodyCell/renderFooterCell.
+
+type ColumnId =
+  | "name"
+  | "width"
+  | "length"
+  | "bearing"
+  | "correction"
+  | "slabL"
+  | "pattern"
+  | "extras"
+  | "startBeam"
+  | "beamL"
+  | "pitches"
+  | "blockRows"
+  | "blocksPerRow"
+  | "totalBlocks"
+  | "beams"
+  | "slabArea"
+  | "rate"
+  | "subtotal"
+  | "deleteCol";
+
+interface ColumnDef {
+  /** Default px width when the user hasn't overridden. */
+  defaultWidth: number;
+  /** Cyrillic primary header label. */
+  primary: string;
+  /** English secondary header label. */
+  secondary: string;
+  /** Optional info-icon tooltip text on the header. */
+  tip?: string;
+  /** Optional className for the <th> (tints, dividers, etc.). */
+  headerCls?: string;
+  /** Excluded from the Customize panel's width inputs (e.g. delete cell). */
+  pinned?: boolean;
+}
+
+const COLUMN_DEFS: Record<ColumnId, ColumnDef> = {
+  name: { defaultWidth: 86, primary: "Хона", secondary: "Name", headerCls: "bg-amber-50/40 dark:bg-amber-950/30 text-left" },
+  width: { defaultWidth: 104, primary: "Эни", secondary: "Width", tip: "Inner width — clear inside-wall to inside-wall (m)" },
+  length: { defaultWidth: 56, primary: "Бўйи", secondary: "Length", tip: "Inner length (m)" },
+  bearing: { defaultWidth: 62, primary: "Миниш", secondary: "Bearing", tip: "Beam bearing onto each wall (m). Default 0.15", headerCls: "bg-amber-50/40 dark:bg-amber-950/30" },
+  correction: { defaultWidth: 62, primary: "Корр.", secondary: "Correction", tip: "Correction added to L before pitch math (m). Use to nudge auto-pattern.", headerCls: "bg-amber-50/40 dark:bg-amber-950/30 grid-group-divider" },
+  slabL: { defaultWidth: 70, primary: "Йиғма Б.", secondary: "Slab L" },
+  pattern: { defaultWidth: 104, primary: "Шаблон", secondary: "Pattern", headerCls: "bg-sky-50/40 dark:bg-sky-950/30" },
+  extras: { defaultWidth: 48, primary: "+Б", secondary: "Extra", tip: "Manual extra beams. First one absorbs into pattern when Г-Б-Г.", headerCls: "bg-sky-50/40 dark:bg-sky-950/30" },
+  startBeam: { defaultWidth: 56, primary: "Бош Б.", secondary: "Start", tip: "Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op", headerCls: "bg-sky-50/40 dark:bg-sky-950/30 grid-group-divider" },
+  beamL: { defaultWidth: 62, primary: "Б.уз.", secondary: "Beam L" },
+  pitches: { defaultWidth: 56, primary: "Қадам", secondary: "Pitches" },
+  blockRows: { defaultWidth: 56, primary: "Қатор", secondary: "Rows", headerCls: "bg-amber-100 dark:bg-amber-900/40" },
+  blocksPerRow: { defaultWidth: 56, primary: "1 қат.", secondary: "Per row", headerCls: "bg-amber-100 dark:bg-amber-900/40" },
+  totalBlocks: { defaultWidth: 64, primary: "Жами", secondary: "Blocks", headerCls: "bg-amber-100 dark:bg-amber-900/40" },
+  beams: { defaultWidth: 56, primary: "Балка", secondary: "Beams" },
+  slabArea: { defaultWidth: 78, primary: "Майдон", secondary: "Slab area", headerCls: "grid-group-divider" },
+  rate: { defaultWidth: 108, primary: "м² нархи", secondary: "Rate", tip: "UZS per m² of billed area, by beam length tier", headerCls: "bg-emerald-50/40" },
+  subtotal: { defaultWidth: 80, primary: "Сумма", secondary: "Subtotal", headerCls: "bg-emerald-50/40" },
+  deleteCol: { defaultWidth: 36, primary: "", secondary: "", headerCls: "bg-emerald-50/40", pinned: true },
+};
+
+const DEFAULT_COLUMN_ORDER: readonly ColumnId[] = [
+  "name", "width", "length", "bearing", "correction",
+  "slabL",
+  "pattern", "extras", "startBeam",
+  "beamL", "pitches", "blockRows", "blocksPerRow", "totalBlocks", "beams",
+  "slabArea",
+  "rate", "subtotal", "deleteCol",
+];
+
+const COLUMN_MIN_WIDTH = 32;
+const COLUMN_MAX_WIDTH = 320;
+
+/** Resolve effective width for a column from the user's overrides or default. */
+function widthForColumn(id: ColumnId, overrides: Record<string, number> | null): number {
+  const stored = overrides?.[id];
+  if (typeof stored === "number" && Number.isFinite(stored)) {
+    return Math.max(COLUMN_MIN_WIDTH, Math.min(COLUMN_MAX_WIDTH, stored));
+  }
+  return COLUMN_DEFS[id].defaultWidth;
 }
 
 const PATTERN_LABEL: Record<Pattern, string> = {
@@ -188,17 +286,94 @@ function H({
   );
 }
 
-export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscountChange }: Props) {
+export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscountChange, actions }: Props) {
   // Workspace-level rounding granularity, persisted via the calculator
   // store. One setting applies to every row; survives in-app navigation
   // and is keyed per user (see src/store/calculator.ts).
   const roundingGrid = useCalculatorStore((s) => s.roundingGrid);
   const changeGrid = useCalculatorStore((s) => s.setRoundingGrid);
 
-  const addRow = () => onChange([...rows, makeRow(rows.length + 1)]);
+  // Customize-layout: per-user column WIDTH overrides (order is fixed).
+  // `isCustomizingLayout` is a transient toggle for the panel.
+  const storedColumnWidths = useCalculatorStore((s) => s.columnWidths);
+  const setColumnWidths = useCalculatorStore((s) => s.setColumnWidths);
+  const [isCustomizingLayout, setIsCustomizingLayout] = useState(false);
+  const columnWidthOf = useCallback(
+    (id: ColumnId) => widthForColumn(id, storedColumnWidths),
+    [storedColumnWidths],
+  );
+
+  const commitColumnWidth = useCallback(
+    (id: ColumnId, px: number) => {
+      const clamped = Math.max(
+        COLUMN_MIN_WIDTH,
+        Math.min(COLUMN_MAX_WIDTH, Math.round(px)),
+      );
+      setColumnWidths({ ...(storedColumnWidths ?? {}), [id]: clamped });
+    },
+    [setColumnWidths, storedColumnWidths],
+  );
+
+  const resetLayout = useCallback(() => {
+    setColumnWidths(null);
+  }, [setColumnWidths]);
+
+  /**
+   * The row id whose Width input should focus on the next render.
+   * Set by `addRow` and the Shift+Enter shortcut; cleared by the
+   * `WidthCell` once it has focused its input. Single-shot — never
+   * re-fires on subsequent renders for the same id.
+   */
+  const [focusPendingId, setFocusPendingId] = useState<string | null>(null);
+
+  const addRow = () => {
+    const newRow = makeRow(rows.length + 1);
+    onChange([...rows, newRow]);
+    setFocusPendingId(newRow.id);
+  };
   const removeRow = (id: string) => onChange(rows.filter((r) => r.id !== id));
   const updateRow = (id: string, updates: Partial<SlabRow>) =>
     onChange(rows.map((r) => (r.id === id ? recomputeRow({ ...r, ...updates }) : r)));
+
+  // ── Auto-create a blank Room 1 whenever rows is empty. ──
+  // Triggers on:
+  //   - first visit (autosaved store hydrates to []),
+  //   - after Clear (clearAll wipes rows),
+  //   - after Place Order / Save edits success (also clearAll),
+  //   - if the operator deletes every room manually.
+  // Result: the calculator never shows an empty "No rooms yet" state;
+  // the operator always lands on a blank row they can type over.
+  useEffect(() => {
+    if (rows.length === 0) {
+      onChange([makeRow(1)]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.length]);
+
+  // ── Shift+Enter shortcut: add a new row + focus its Width input. ──
+  // Listener is global on the page (works regardless of which cell
+  // has focus), but it lives inside this component so it tears down
+  // automatically when the calculator unmounts. Refs avoid the
+  // empty-deps stale-closure problem on `rows` / `onChange`.
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || !e.shiftKey) return;
+      // Don't fire while typing inside a textarea (none today, but
+      // be defensive — Shift+Enter inserts a newline there).
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === "TEXTAREA") return;
+      e.preventDefault();
+      const newRow = makeRow(rowsRef.current.length + 1);
+      onChangeRef.current([...rowsRef.current, newRow]);
+      setFocusPendingId(newRow.id);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   // Per-row rate override flow. Picking a tier opens the confirmation
   // dialog; "auto" reverts immediately (always-safe).
@@ -288,104 +463,152 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
   }, [rows]);
 
   return (
-    <div className="space-y-5">
-      {/* Toolbar — rounding grid selector + bulk snap-up. Sits above the
-          table so the choice is obvious; per-row arrows reflect this grid. */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Лабораторий ўлчам · Round to
-          </span>
-          <div className="flex rounded-md border bg-background overflow-hidden text-xs">
-            <button
-              type="button"
-              className={`px-3 h-7 font-semibold uppercase tracking-wider transition-colors ${
-                roundingGrid === 0.1
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-              onClick={() => changeGrid(0.1)}
-            >
-              10 см
-            </button>
-            <button
-              type="button"
-              className={`px-3 h-7 font-semibold uppercase tracking-wider transition-colors ${
-                roundingGrid === 0.05
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-              onClick={() => changeGrid(0.05)}
-            >
-              5 см
-            </button>
+    <div className="space-y-3">
+
+      {isCustomizingLayout && (
+        <div className="rounded-lg border bg-card shadow-sm p-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider">
+                Устунлар тартиби · Customize layout
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Adjust each column&apos;s width in pixels. Changes persist
+                per-user. Click Reset to restore defaults.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={resetLayout}
+                disabled={!storedColumnWidths}
+                title="Restore default column widths"
+              >
+                Reset to defaults
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCustomizingLayout(false)}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+
+          {/* Per-column width inputs. Order is fixed; only widths are
+              user-customizable. */}
+          <div className="border-t pt-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+              Column widths (px)
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2">
+              {DEFAULT_COLUMN_ORDER.map((id) => {
+                const def = COLUMN_DEFS[id];
+                if (def.pinned) return null; // delete column not user-resizable
+                const w = columnWidthOf(id);
+                const isCustom =
+                  typeof storedColumnWidths?.[id] === "number" &&
+                  storedColumnWidths[id] !== def.defaultWidth;
+                return (
+                  <label
+                    key={id}
+                    className="flex items-center justify-between gap-2 text-sm py-1"
+                  >
+                    <span className="flex-1 min-w-0 truncate">
+                      <span className="font-medium">{def.primary}</span>
+                      <span className="text-muted-foreground ml-1.5 text-xs">
+                        · {def.secondary}
+                      </span>
+                    </span>
+                    <input
+                      type="number"
+                      min={COLUMN_MIN_WIDTH}
+                      max={COLUMN_MAX_WIDTH}
+                      step={4}
+                      value={w}
+                      onChange={(e) => {
+                        const next = Number(e.target.value);
+                        if (Number.isFinite(next)) commitColumnWidth(id, next);
+                      }}
+                      className={`w-20 h-8 rounded border bg-background px-2 text-sm tabular-nums text-right ${
+                        isCustom
+                          ? "border-primary/60"
+                          : "border-input"
+                      }`}
+                    />
+                    <span className="text-[10px] text-muted-foreground w-6 text-right">
+                      {def.defaultWidth}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!anyRowEligibleForSweep}
-          onClick={onRoundAllUp}
-          title="Apply round-up to every row's Width using the current grid"
-        >
-          <ArrowUpToLine className="h-3.5 w-3.5 mr-1.5" />
-          Барча хоналарни юқорилаштириш · Round all up
-        </Button>
-      </div>
+      )}
 
+      {/* Outer wrapper so the right-edge scroll affordance can pin to
+          the visible area regardless of the inner scroll position.
+          `relative` here only — the inner scroll container is unchanged
+          on desktop (overflow-x-auto already existed). */}
+      <div className="relative">
       <div className="rounded-lg border border-border overflow-x-auto bg-background shadow-sm">
         <table className="calc-grid">
-          {/* Explicit column widths — table-layout: fixed honors these exactly */}
+          {/* Colgroup — order is fixed (DEFAULT_COLUMN_ORDER), widths
+              come from `columnWidths` in the store with sensible
+              defaults. Width and Length keep their `w-11` mobile
+              class so the sticky 44 px works regardless of any
+              custom override (the override applies on desktop where
+              the column isn't sticky). */}
           <colgroup>
-            <col width={108} />  {/* Хона          */}
-            <col width={104} />  {/* Эни (input + 2 arrows + warning) */}
-            <col width={56} />   {/* Бўйи          */}
-            <col width={62} />   {/* Миниш         */}
-            <col width={62} />   {/* Корр.         */}
-            <col width={104} />  {/* Шаблон        */}
-            <col width={48} />   {/* +Б            */}
-            <col width={56} />   {/* Бош Б.        */}
-            <col width={62} />   {/* Б.уз.         */}
-            <col width={56} />   {/* Қадам         */}
-            <col width={56} />   {/* Қатор         */}
-            <col width={56} />   {/* 1 қат.        */}
-            <col width={64} />   {/* Жами ғишт     */}
-            <col width={56} />   {/* Балка         */}
-            <col width={70} />   {/* Йиғма Б.      */}
-            <col width={78} />   {/* Майдон        */}
-            <col width={108} />  {/* м² нархи (Select + native arrow + pencil) */}
-            <col width={96} />   {/* Сумма         */}
-            <col width={36} />   {/* delete        */}
+            {DEFAULT_COLUMN_ORDER.map((id) => {
+              const w = columnWidthOf(id);
+              const responsive =
+                id === "width" || id === "length" ? "w-11 lg:w-auto" : undefined;
+              return (
+                <col
+                  key={id}
+                  className={responsive}
+                  style={{ width: `${w}px` }}
+                />
+              );
+            })}
           </colgroup>
 
           <thead>
             <tr>
               {/* ── Inputs ── */}
               <H primary="Хона" secondary="Name" align="left" className="bg-amber-50/40" />
-              <H primary="Эни" secondary="Width" tip="Inner width — clear inside-wall to inside-wall (m)" className="bg-amber-50/40" />
-              <H primary="Бўйи" secondary="Length" tip="Inner length (m)" className="bg-amber-50/40" />
+              <H
+                primary="Эни"
+                secondary="Width"
+                tip="Inner width — clear inside-wall to inside-wall (m)"
+                className="sticky lg:static left-0 z-20 !bg-muted lg:!bg-amber-50/40"
+              />
+              <H
+                primary="Бўйи"
+                secondary="Length"
+                tip="Inner length (m)"
+                className="sticky lg:static left-11 lg:left-[104px] z-20 !bg-muted lg:!bg-amber-50/40 lg:shadow-none shadow-[inset_-2px_0_0_0_rgba(0,0,0,0.06)]"
+              />
               <H primary="Миниш" secondary="Bearing" tip="Beam bearing onto each wall (m). Default 0.15" className="bg-amber-50/40" />
               <H primary="Корр." secondary="Correction" tip="Correction added to L before pitch math (m). Use to nudge auto-pattern." className="bg-amber-50/40 grid-group-divider" />
+              <H primary="Йиғма Б." secondary="Slab L" />
 
               {/* ── Pattern ── */}
               <H primary="Шаблон" secondary="Pattern" className="bg-sky-50/40" />
               <H primary="+Б" secondary="Extra" tip="Manual extra beams. First one absorbs into pattern when Г-Б-Г." className="bg-sky-50/40" />
               <H primary="Бош Б." secondary="Start" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="bg-sky-50/40 grid-group-divider" />
 
-              {/* ── Computed ──
-                  Order: Beam L → Pitches → Rows → Per Row → Blocks → Beams.
-                  The three middle columns (Rows, Per Row, Blocks) are
-                  the "block math" group — Rows × Per Row = Blocks —
-                  so they share a soft amber HEADER tint. Cell bodies
-                  stay default; the tint signals grouping without
-                  adding visual weight to every row. */}
+              {/* ── Computed ── */}
               <H primary="Б.уз." secondary="Beam L" />
               <H primary="Қадам" secondary="Pitches" />
               <H primary="Қатор" secondary="Rows" className="bg-amber-100" />
               <H primary="1 қат." secondary="Per row" className="bg-amber-100" />
               <H primary="Жами" secondary="Blocks" className="bg-amber-100" />
               <H primary="Балка" secondary="Beams" />
-              <H primary="Йиғма Б." secondary="Slab L" />
               <H primary="Майдон" secondary="Slab area" className="grid-group-divider" />
 
               {/* ── Pricing ── */}
@@ -403,22 +626,48 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                 <tr key={row.id}>
                   {/* Inputs */}
                   <td className="grid-cell grid-tint-input">
-                    <input
-                      className="grid-input is-text"
-                      value={row.name}
-                      onChange={(e) => updateRow(row.id, { name: e.target.value })}
-                      placeholder="Room name"
-                    />
+                    {/* On <lg the row's round-up/down arrows live here
+                        instead of inside Width — see RowRoundArrows
+                        for the why. The input still stretches to the
+                        cell with `flex-1 min-w-0` so long names ellipsis
+                        truncate; the arrow stack stays put via
+                        `flex-shrink-0`. Desktop hides the arrows so
+                        the Name cell is just the input, exactly as
+                        before. */}
+                    <div className="flex items-center gap-1">
+                      <input
+                        className="grid-input is-text flex-1 min-w-0"
+                        value={row.name}
+                        onChange={(e) => updateRow(row.id, { name: e.target.value })}
+                        placeholder="Room name"
+                      />
+                      <div className="lg:hidden flex-shrink-0">
+                        <RowRoundArrows
+                          onUp={() => onRoundUp(row.id)}
+                          onDown={() => onRoundDown(row.id)}
+                          size="md"
+                        />
+                      </div>
+                    </div>
                   </td>
-                  <td className="grid-cell grid-tint-input">
+                  {/* Width: sticky on <lg so it pins as the user scrolls
+                      the rest of the row sideways. Bg is opaque on
+                      mobile, transparent-amber on desktop (matches the
+                      surrounding grid-tint-input column). */}
+                  <td className="grid-cell sticky lg:static left-0 z-10 bg-amber-50 lg:bg-amber-50/40">
                     <WidthCell
                       row={row}
                       onWidthChange={(w) => updateRow(row.id, { innerWidth: w })}
                       onRoundUp={() => onRoundUp(row.id)}
                       onRoundDown={() => onRoundDown(row.id)}
+                      shouldFocus={row.id === focusPendingId}
+                      onFocused={() => setFocusPendingId(null)}
                     />
                   </td>
-                  <td className="grid-cell grid-tint-input">
+                  {/* Length: second sticky col, offset by Width's 104 px.
+                      Right-edge inset shadow on mobile draws the
+                      "frozen boundary" line. */}
+                  <td className="grid-cell sticky lg:static left-11 lg:left-[104px] z-10 bg-amber-50 lg:bg-amber-50/40 lg:shadow-none shadow-[inset_-2px_0_0_0_rgba(0,0,0,0.06)]">
                     <NumberInput
                       step="0.01"
                       className="grid-input is-numeric"
@@ -443,6 +692,13 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                       value={row.correction}
                       onChange={(n) => updateRow(row.id, { correction: n })}
                     />
+                  </td>
+
+                  {/* Slab L (monolith_length) — moved here from after
+                      Beams so the resulting span sits next to the
+                      input dimensions that produce it. */}
+                  <td className="grid-cell px-2 text-center tabular-nums text-xs text-blue-700">
+                    {r ? `${fmt(r.monolith_length)} m` : "—"}
                   </td>
 
                   {/* Pattern controls — resolved pattern always shown first
@@ -512,7 +768,13 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                     {r && !r.is_extras_only ? r.block_rows : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums">
-                    {r && !r.is_extras_only ? r.blocks_per_row : "—"}
+                    {/* Edge-beam-only row (Length ≤ 0.20, auto-picks BGB
+                        at pitches=0): only a closing beam, no actual
+                        block rows. blocks_per_row from the width is
+                        cosmetically misleading there — gate on
+                        block_rows > 0. total_blocks is already 0 so
+                        the project total is unaffected. */}
+                    {r && !r.is_extras_only && r.block_rows > 0 ? r.blocks_per_row : "—"}
                   </td>
                   <td className="grid-cell px-2 text-center tabular-nums">
                     {r && !r.is_extras_only ? r.total_blocks : "—"}
@@ -520,9 +782,8 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                   <td className="grid-cell px-2 text-center tabular-nums font-semibold">
                     {r?.beam_count ?? "—"}
                   </td>
-                  <td className="grid-cell px-2 text-center tabular-nums text-xs text-blue-700">
-                    {r ? `${fmt(r.monolith_length)} m` : "—"}
-                  </td>
+                  {/* Slab L moved earlier in the row (right after
+                      Correction) — see header comment. */}
                   <td className="grid-cell px-2 text-center tabular-nums text-xs text-blue-700 grid-group-divider">
                     {r ? `${fmt(r.monolith_area)} m²` : "—"}
                   </td>
@@ -557,55 +818,50 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
               );
             })}
 
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={18} className="px-4 py-12 text-center text-muted-foreground">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="text-sm italic">No rooms yet.</div>
-                    <Button variant="outline" size="sm" onClick={addRow}>
-                      <Plus className="h-3.5 w-3.5 mr-1.5" /> Add the first room
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            )}
+            {/* No empty-state row — the auto-create effect above
+                guarantees rows.length >= 1, so we never render it.
+                Defensive removal: if the effect ever races (e.g.
+                during an unmount), the table just shows nothing for
+                a frame instead of stale empty-state UI. */}
           </tbody>
 
           {rows.length > 0 && (
             <tfoot>
               {/*
-                Column layout (19 cols, post block-group reorder):
-                  1 Name | 2 W | 3 L | 4 Bear | 5 Corr | 6 Pattern | 7 +B | 8 StartB
-                  | 9 BeamL | 10 Pitches | 11 Block rows | 12 Blks/row
-                  | 13 Total blks | 14 Beams | 15 Slab L | 16 Slab area
+                Column layout (19 cols — Slab L moved up next to inputs):
+                  1 Name | 2 W | 3 L | 4 Bear | 5 Corr
+                  | 6 Slab L
+                  | 7 Pattern | 8 +B | 9 StartB
+                  | 10 BeamL | 11 Pitches | 12 Block rows | 13 Blks/row
+                  | 14 Total blks | 15 Beams | 16 Slab area
                   | 17 m² rate | 18 Subtotal | 19 (delete)
 
                 Visual emphasis on the two material totals:
-                  - Block totals (col 13): amber-100 bg + amber-800 text,
+                  - Block totals (col 14): amber-100 bg + amber-800 text,
                     matching the soft amber group header tint above.
-                  - Beams total (col 14): emerald-50 bg + emerald-700 text
+                  - Beams total (col 15): emerald-50 bg + emerald-700 text
                     to differentiate the other material category.
                 These two numbers drive production planning — operators
                 read them before clicking Place Order.
               */}
               <tr className="bg-muted/40 font-bold">
-                {/* Label fills cols 1-12 (Name through Per Row — none of
-                    those columns have meaningful sums). The two material
-                    totals start at col 13. */}
-                <td colSpan={12} className="px-3 text-right uppercase text-[11px] tracking-wider text-muted-foreground">
+                {/* cols 1-5: label fills the input-group span. */}
+                <td colSpan={5} className="px-3 text-right uppercase text-[11px] tracking-wider text-muted-foreground">
                   Жами · Totals
                 </td>
-                {/* col 13: Total blocks — material total */}
+                {/* col 6: Slab L total — sits in its new column position. */}
+                <td className="text-center px-2 tabular-nums text-xs">
+                  {formatNumber(totals.monolithLength, 2)} m
+                </td>
+                {/* cols 7-13: Pattern through Per Row — no totals. */}
+                <td colSpan={7}></td>
+                {/* col 14: Total blocks — material total */}
                 <td className="text-center px-2 tabular-nums bg-amber-100 text-amber-800 font-bold">
                   {totals.blocks}
                 </td>
-                {/* col 14: Beams — material total */}
+                {/* col 15: Beams — material total */}
                 <td className="text-center px-2 tabular-nums bg-emerald-50 text-emerald-700 font-bold">
                   {totals.beams}
-                </td>
-                {/* col 15: Slab L */}
-                <td className="text-center px-2 tabular-nums text-xs">
-                  {formatNumber(totals.monolithLength, 2)} m
                 </td>
                 {/* col 16: Slab area */}
                 <td className="text-center px-2 tabular-nums text-xs text-blue-700">
@@ -624,11 +880,96 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
           )}
         </table>
       </div>
+        {/* Right-edge scroll affordance — only visible on <lg.
+            Sits OUTSIDE the inner overflow-x-auto so it stays pinned
+            to the visible right edge regardless of the user's scroll
+            position. `pointer-events-none` so it never swallows
+            taps on cells underneath. */}
+        <div
+          aria-hidden
+          className="lg:hidden pointer-events-none absolute top-0 right-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent rounded-r-lg"
+        />
+      </div>
 
+      {/* Bottom toolbar — visually snapped to the table.
+          LEFT: rounding grid selector + bulk Round all up.
+          RIGHT: Add room + page-level actions (Clear / Save / Place Order).
+          Hidden when there are no rows; the empty-state row inside the
+          table already exposes "Add the first room". */}
       {rows.length > 0 && (
-        <Button variant="outline" size="sm" onClick={addRow} className="w-full border-dashed">
-          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add room · Янги хона
-        </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="flex items-center flex-wrap gap-2 text-sm">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Лабораторий ўлчам · Round to
+            </span>
+            <div className="flex rounded-md border bg-background overflow-hidden text-xs">
+              <button
+                type="button"
+                className={`px-3 h-7 font-semibold uppercase tracking-wider transition-colors ${
+                  roundingGrid === 0.1
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+                onClick={() => changeGrid(0.1)}
+              >
+                10 см
+              </button>
+              <button
+                type="button"
+                className={`px-3 h-7 font-semibold uppercase tracking-wider transition-colors ${
+                  roundingGrid === 0.05
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+                onClick={() => changeGrid(0.05)}
+              >
+                5 см
+              </button>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!anyRowEligibleForSweep}
+              onClick={onRoundAllUp}
+              title="Барча хоналарни юқорилаштириш · Round all up — apply to every row's Width using the current grid"
+              aria-label="Барча хоналарни юқорилаштириш · Round all up"
+              className="h-7 w-7 p-0"
+            >
+              <ArrowUpToLine className="h-3.5 w-3.5" />
+            </Button>
+            {/* Customize layout — opens a side panel for column width
+                tweaking (per-user, persisted via the calculator store).
+                Reorder is intentionally absent in v1 — see panel for
+                why. */}
+            <Button
+              variant={isCustomizingLayout ? "default" : "outline"}
+              size="sm"
+              onClick={() => setIsCustomizingLayout((v) => !v)}
+              title="Customize column widths"
+              aria-label="Customize column widths"
+              className="h-7 px-2 text-[10px] uppercase tracking-wider"
+            >
+              {isCustomizingLayout ? "Done" : "Customize"}
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addRow}
+              className="border-dashed"
+              title="Shift+Enter also adds a new room and focuses its Width"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              <span>Add room · Янги хона</span>
+              <kbd className="ml-2 hidden sm:inline-flex items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                Shift + Enter
+              </kbd>
+            </Button>
+            {actions}
+          </div>
+        </div>
       )}
 
       {rows.length > 0 && (
@@ -648,15 +989,23 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
               <div className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">Чегирма % · Discount</span>
                 <div className="relative">
-                  <input
-                    type="number"
+                  {/* NumberInput already handles select-on-focus when
+                      the value is 0 (replaces the leading "0" cleanly
+                      when the operator types) and strips paste-time
+                      "02" → "2" leading zeros. Plain <input type=number>
+                      didn't, which left the "0" stuck in front of new
+                      digits — fixed by reusing the calculator's existing
+                      number-input primitive. */}
+                  <NumberInput
+                    step="1"
                     min="0"
                     max="100"
-                    step="1"
+                    integer
+                    showZeroAsEmpty
                     className="grid-input is-numeric h-8 w-20 rounded border border-input pr-5"
                     value={discountPercent}
-                    onChange={(e) =>
-                      onDiscountChange(Math.min(100, Math.max(0, Number(e.target.value) || 0)))
+                    onChange={(n) =>
+                      onDiscountChange(Math.min(100, Math.max(0, n)))
                     }
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
@@ -813,6 +1162,63 @@ function RateCell({
   );
 }
 
+/**
+ * Up/down round-arrow stack used by the row's Width control.
+ *
+ * Two render sites share this:
+ *   - desktop: inside `WidthCell`, sitting next to the Width input
+ *   - mobile (<lg): inside the Name cell, since the sticky Width
+ *     column on mobile is too narrow to comfortably hold both the
+ *     input and the arrows
+ *
+ * Both sites call the SAME parent handlers (`onRoundUp(row.id)` /
+ * `onRoundDown(row.id)`) — only the position changes. The `size`
+ * prop bumps the buttons to a fingertip-friendly target on mobile
+ * without affecting the dense desktop look.
+ */
+function RowRoundArrows({
+  onUp,
+  onDown,
+  size = "sm",
+}: {
+  onUp: () => void;
+  onDown: () => void;
+  size?: "sm" | "md";
+}) {
+  const cls =
+    size === "md"
+      ? "h-5 w-7 inline-flex items-center justify-center rounded border border-input bg-background hover:bg-muted text-muted-foreground"
+      : "h-3 w-4 inline-flex items-center justify-center rounded border border-input bg-background hover:bg-muted text-muted-foreground";
+  const iconCls = size === "md" ? "h-3.5 w-3.5" : "h-3 w-3";
+  return (
+    <div className="flex flex-col gap-px">
+      {/* tabIndex={-1} keeps these click-only — Tab from the Width
+          input lands on Length, not on the arrow buttons. The bulk
+          "Round all up" toolbar covers the keyboard-driven need. */}
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Юқорилаштириш · Round up"
+        title="Round up"
+        onClick={onUp}
+        className={cls}
+      >
+        <ChevronUp className={iconCls} />
+      </button>
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label="Тушириш · Round down"
+        title="Round down"
+        onClick={onDown}
+        className={cls}
+      >
+        <ChevronDown className={iconCls} />
+      </button>
+    </div>
+  );
+}
+
 // ── Width input cell with snap-up/down arrows + undersize warning ──
 //
 // Pulled into its own component so the row body stays scannable. The
@@ -820,17 +1226,40 @@ function RateCell({
 // updateRow via the parent. The warning fires only when the engine had a
 // meaningful original (originalWidth > 0) AND the current width has been
 // rounded BELOW it — manual rooms (originalWidth = 0) never warn.
+//
+// On <lg the arrow stack is HIDDEN here and re-rendered inside the row's
+// Name cell instead — the sticky Width column on mobile is too narrow
+// to host both the input and the arrows without crowding.
 function WidthCell({
   row,
   onWidthChange,
   onRoundUp,
   onRoundDown,
+  shouldFocus,
+  onFocused,
 }: {
   row: SlabRow;
   onWidthChange: (w: number) => void;
   onRoundUp: () => void;
   onRoundDown: () => void;
+  /** When true, focus + select the input on this render. Single-shot. */
+  shouldFocus?: boolean;
+  /** Called once the input has been focused so the parent can clear its pending flag. */
+  onFocused?: () => void;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Focus + select-all on the next paint after Shift+Enter / Add room.
+  // `select()` complements `NumberInput`'s onFocus select-on-zero — we
+  // explicit-select here so even non-zero default values get replaced
+  // cleanly when the operator types the next digit.
+  useEffect(() => {
+    if (!shouldFocus) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+    onFocused?.();
+  }, [shouldFocus, onFocused]);
   const original = row.originalWidth ?? 0;
   const undersized = original > 0 && row.innerWidth > 0 && row.innerWidth < original;
   const differs =
@@ -843,6 +1272,7 @@ function WidthCell({
   return (
     <div className="flex items-center gap-1">
       <NumberInput
+        ref={inputRef}
         step="0.01"
         className="grid-input is-numeric flex-1 min-w-0"
         value={row.innerWidth}
@@ -851,37 +1281,27 @@ function WidthCell({
         title={inputTitle}
         showZeroAsEmpty
       />
-      <div className="flex flex-col gap-px">
-        <button
-          type="button"
-          aria-label="Юқорилаштириш · Round up"
-          title="Round up"
-          onClick={onRoundUp}
-          className="h-3 w-4 inline-flex items-center justify-center rounded border border-input bg-background hover:bg-muted text-muted-foreground"
-        >
-          <ChevronUp className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          aria-label="Тушириш · Round down"
-          title="Round down"
-          onClick={onRoundDown}
-          className="h-3 w-4 inline-flex items-center justify-center rounded border border-input bg-background hover:bg-muted text-muted-foreground"
-        >
-          <ChevronDown className="h-3 w-3" />
-        </button>
+      {/* Arrows are visible on desktop only — the mobile copy lives
+          inside the row's Name cell to free the narrow sticky Width
+          column. Same handlers, same row id. */}
+      <div className="hidden lg:block">
+        <RowRoundArrows onUp={onRoundUp} onDown={onRoundDown} />
       </div>
+      {/* Warning glyph + layout placeholder. Hidden on <lg to give
+          the input the full 44 px sticky column width — the
+          undersize warning is a desktop convenience, the operator on
+          mobile accepts that they may not see it inline. */}
       {undersized ? (
         <span
           role="img"
           aria-label={warningTitle}
           title={warningTitle}
-          className="inline-flex items-center justify-center text-amber-600 shrink-0"
+          className="hidden lg:inline-flex items-center justify-center text-amber-600 shrink-0"
         >
           <AlertTriangle className="h-3.5 w-3.5" />
         </span>
       ) : (
-        <span className="w-3.5 shrink-0" aria-hidden />
+        <span className="hidden lg:inline-block w-3.5 shrink-0" aria-hidden />
       )}
     </div>
   );

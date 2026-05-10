@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -24,6 +24,7 @@ import { formatPhone } from "@/lib/phone";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
 import { DispatchDialog } from "@/components/dispatch/DispatchDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
+import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 
 interface OrderDetail {
   id: string;
@@ -64,6 +65,7 @@ interface OrderDetail {
       beamLength: string;
       blocksPerRow: number;
       beamCount: number;
+      blockRows: number;
       totalBlocks: number;
       monolithLength: string;
       monolithArea: string;
@@ -148,6 +150,10 @@ export default function OrderDetailPage() {
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [addPaymentOpen, setAddPaymentOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Captured by ShareCalculationButton — wraps the header card +
+   *  calculation summary card so the operator can ship a one-shot
+   *  image of the order to the customer. */
+  const shareRef = useRef<HTMLDivElement>(null);
 
   const { data: order, isLoading } = useQuery<OrderDetail>({
     queryKey: ["order", params.id],
@@ -232,32 +238,22 @@ export default function OrderDetailPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <Link
-          href="/orders"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to orders
-        </Link>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={`/orders/${order.id}/print`}>
-              <Printer className="h-4 w-4 mr-2" /> Print
-            </Link>
-          </Button>
-          {!isCanceled && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-rose-700 hover:bg-rose-50"
-              onClick={() => setCancelOpen(true)}
-            >
-              <Ban className="h-4 w-4 mr-2" /> Cancel order
-            </Button>
-          )}
-        </div>
-      </div>
+      {/* Back nav only — Print + Cancel moved down into the action bar
+          near Add Payment so all order-level actions sit together. */}
+      <Link
+        href="/orders"
+        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" /> Back to orders
+      </Link>
 
+      {/* Shareable area — wraps the header card + calculation summary
+          so ShareCalculationButton captures both together as one image.
+          flex+gap (not space-y-*) so html-to-image doesn't include any
+          phantom margin from the parent's space-y rule. p-4 gives the
+          captured image symmetric breathing room (avoids the "values
+          cut at the edge" feel on the bottom recap row). */}
+      <div ref={shareRef} className="flex flex-col gap-5 p-4 bg-background">
       {/* Header card */}
       <div className="rounded-lg border bg-background p-5 shadow-sm">
         <div className="flex flex-wrap items-baseline justify-between gap-4">
@@ -403,7 +399,7 @@ export default function OrderDetailPage() {
                     <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800 tabular-nums">
                       {formatNumber(c.beamLength, 2)}
                     </td>
-                    <td className="px-3 py-2 text-center tabular-nums">{c.blocksPerRow}</td>
+                    <td className="px-3 py-2 text-center tabular-nums">{c.blockRows > 0 ? c.blocksPerRow : "—"}</td>
                     <td className="px-3 py-2 text-center font-black bg-orange-50/20 text-orange-800 tabular-nums">
                       {c.totalBlocks}
                     </td>
@@ -513,6 +509,8 @@ export default function OrderDetailPage() {
           </div>
         </div>
       )}
+      </div>
+      {/* /shareRef */}
 
       {error && (
         <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
@@ -663,10 +661,11 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Add Payment — visible whenever there's still something owed
-           and the order isn't terminal. Sits above the Payments table
-           so operators have one obvious place to record cash that
-           arrives between placement and delivery. */}
+      {/* Order action bar — Print + Cancel + Add Payment grouped.
+          Print is always available; Cancel hides on canceled orders;
+          Add Payment shows only when there's outstanding balance and
+          the order isn't terminal-paid. The label "Тўлов қабул қилиш"
+          shows only when Add Payment is available. */}
       {(() => {
         const total = Number(order.totalPrice);
         const confirmed = Number(order.confirmedPaid);
@@ -678,25 +677,79 @@ export default function OrderDetailPage() {
           order.status !== "CANCELED" &&
           !(order.status === "DELIVERED" && order.paymentState === "FULLY_PAID") &&
           remaining > 0;
-        if (!canAdd) return null;
         return (
-          <div className="rounded-lg border bg-background px-4 py-3 flex items-center justify-between gap-3">
+          <div className="rounded-lg border bg-background px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                Тўлов қабул қилиш · Record a payment
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Customer paying between placement and delivery? Record it here — owner confirms it from <span className="font-mono">/payments</span>.
-              </div>
+              {canAdd ? (
+                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                  Тўлов қабул қилиш · Record a payment
+                </div>
+              ) : null}
             </div>
-            <Button
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => setAddPaymentOpen(true)}
-            >
-              <Plus className="h-4 w-4 mr-1.5" />
-              Тўлов қўшиш · Add Payment
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/orders/${order.id}/print`}>
+                  <Printer className="h-4 w-4 mr-2" /> Print
+                </Link>
+              </Button>
+              <ShareCalculationButton
+                targetRef={shareRef}
+                fileBase={`Order-${order.orderNumber}`}
+                disabled={order.project.calculations.length === 0}
+              />
+              {/* Edit Order Details — opens the calculator pre-filled
+                  from this order's snapshot (?fromOrder=<id>). Save in
+                  edit-mode PATCHes /api/orders/<id>/edit; no new order
+                  is placed. Disabled past IN_PRODUCTION (cancel-and-
+                  recreate is the only safe path once the truck rolls). */}
+              {(() => {
+                const editable =
+                  order.status === "PLACED" || order.status === "IN_PRODUCTION";
+                return (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild={editable}
+                    disabled={!editable}
+                    title={
+                      editable
+                        ? "Edit dimensions, pricing, schedule, or notes — saves in place, no new order placed."
+                        : `Editing locked once status reaches ${order.status}. Cancel + recreate to make changes.`
+                    }
+                  >
+                    {editable ? (
+                      <Link href={`/calculations?fromOrder=${order.id}`}>
+                        <Pencil className="h-4 w-4 mr-2" /> Edit Order Details
+                      </Link>
+                    ) : (
+                      <span>
+                        <Pencil className="h-4 w-4 mr-2" /> Edit Order Details
+                      </span>
+                    )}
+                  </Button>
+                );
+              })()}
+              {!isCanceled && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-rose-700 hover:bg-rose-50"
+                  onClick={() => setCancelOpen(true)}
+                >
+                  <Ban className="h-4 w-4 mr-2" /> Cancel order
+                </Button>
+              )}
+              {canAdd && (
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => setAddPaymentOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Тўлов қўшиш · Add Payment
+                </Button>
+              )}
+            </div>
           </div>
         );
       })()}

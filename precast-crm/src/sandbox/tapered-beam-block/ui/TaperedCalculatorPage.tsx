@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { FlaskConical } from "lucide-react";
 import { computeTaper, type TaperInput, type TaperResult } from "../engine";
 import { TaperedInputs } from "./TaperedInputs";
 import { TaperedResults } from "./TaperedResults";
-import { EdgeCompensationHelp } from "./EdgeCompensationHelp";
 
 /**
  * Top-level page component for the tapered-slab sandbox. Lives under
@@ -22,23 +20,6 @@ export function TaperedCalculatorPage() {
 
   return (
     <div className="space-y-5">
-      {/* Sandbox warning banner */}
-      <div className="rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3 text-amber-900">
-        <div className="flex items-start gap-3">
-          <FlaskConical className="h-5 w-5 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <div className="font-bold">
-              🧪 Тажриба зонаси · Sandbox — экспериментал, ишлаб чиқаришда ишлатиб бўлмайди.
-            </div>
-            <div className="text-sm">
-              This is an experimental tapered-slab calculator. Results MUST NOT
-              be used for real orders or production planning until merged into
-              the main engine.
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
           Қиялашган плита · Tapered Beam-and-Block
@@ -53,7 +34,6 @@ export function TaperedCalculatorPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="space-y-5">
           <TaperedInputs onCalculate={handleCalculate} />
-          <EdgeCompensationHelp />
         </div>
         <div>
           <TaperedResults result={result} />

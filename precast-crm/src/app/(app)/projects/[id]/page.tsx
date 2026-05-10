@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, FileText } from "lucide-react";
 import { formatDate, formatNumber } from "@/lib/utils";
+import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 
 interface Project {
   id: string;
@@ -61,6 +63,9 @@ const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
+  /** Captured by ShareCalculationButton — wraps project header +
+   *  calculation summary so operators can ship a one-shot image. */
+  const shareRef = useRef<HTMLDivElement>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["projects-all"],
@@ -93,6 +98,11 @@ export default function ProjectDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-1" /> Back
         </Link>
         <div className="flex gap-2">
+          <ShareCalculationButton
+            targetRef={shareRef}
+            fileBase={`Project-${project.name || project.id.slice(-6)}`}
+            disabled={project.calculations.length === 0}
+          />
           {project.status === "ORDERED" && project.orders[0] ? (
             <Button variant="outline" asChild size="sm">
               <Link href={`/orders/${project.orders[0].id}`}>
@@ -109,6 +119,12 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
+      {/* Shareable area — wraps project header + calculation summary so
+          ShareCalculationButton captures both as a single image.
+          flex+gap (not space-y-*) so html-to-image doesn't include any
+          phantom margin from the parent's space-y rule. p-4 gives the
+          captured image symmetric breathing room around all edges. */}
+      <div ref={shareRef} className="flex flex-col gap-6 p-4 bg-background">
       <div className="bg-card rounded-lg border p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -182,7 +198,7 @@ export default function ProjectDetailPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800">{formatNumber(c.beamLength, 2)}</td>
-                    <td className="px-3 py-2 text-center">{c.blocksPerRow}</td>
+                    <td className="px-3 py-2 text-center">{c.blockRows > 0 ? c.blocksPerRow : "—"}</td>
                     <td className="px-3 py-2 text-center font-black bg-orange-50/20 text-orange-800">{c.totalBlocks}</td>
                     <td className="px-3 py-2 text-center font-black bg-gray-100/50">{c.beamCount}</td>
                     <td className="px-3 py-2 text-center text-xs">{formatNumber(c.monolithLength, 2)} m</td>
@@ -208,6 +224,8 @@ export default function ProjectDetailPage() {
           </div>
         </CardContent>
       </Card>
+      </div>
+      {/* /shareRef */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>

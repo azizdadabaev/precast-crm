@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { Sidebar } from "@/components/sidebar";
+import { MobileTopbar } from "@/components/MobileTopbar";
 import { UnauthorizedBanner } from "@/components/UnauthorizedBanner";
 import { requirePermissionForPath } from "@/lib/page-auth";
 
@@ -31,8 +32,9 @@ export default async function AppShellLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar user={user} />
-      <main className="flex-1 overflow-auto">
-        <div className="px-6 py-6 max-w-[1400px]">
+      <main className="flex-1 overflow-auto flex flex-col">
+        <MobileTopbar user={user} />
+        <div className="px-4 py-4 lg:px-6 lg:py-6 max-w-[1400px] w-full">
           <UnauthorizedBanner />
           {children}
         </div>

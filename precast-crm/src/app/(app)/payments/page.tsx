@@ -90,6 +90,7 @@ export default function PaymentsPage() {
               <tr>
                 <th className="text-left px-3 py-2">Order</th>
                 <th className="text-left px-3 py-2">Client</th>
+                <th className="text-left px-3 py-2">Манзил · Address</th>
                 <th className="text-right px-3 py-2">Amount</th>
                 <th className="text-right px-3 py-2">Expected</th>
                 <th className="text-left px-3 py-2">Method</th>
@@ -131,6 +132,13 @@ export default function PaymentsPage() {
                           ? formatPhone((p as PaymentForConfirm & { order: { client?: { phone: string } } }).order.client!.phone)
                           : ""}
                       </div>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground max-w-[14rem]">
+                      {(() => {
+                        const addr = (p as PaymentForConfirm & { order: { client?: { address?: string | null } } })
+                          .order.client?.address;
+                        return addr ? <span className="line-clamp-2">{addr}</span> : <span>—</span>;
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">
                       {formatNumber(p.amount, 0)}

@@ -112,6 +112,7 @@ enum OrderEventType {
   SCHEDULED_DATE_CHANGED
   DISCOUNT_APPLIED
   ORDER_CANCELED
+  ORDER_EDITED              // post-placement edit of rooms / pricing snapshot
   NOTE_ADDED
   STOCK_WARNING
   // Cash custody / dispatch lifecycle events:

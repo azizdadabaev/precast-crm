@@ -36,7 +36,7 @@ export const GET = withPermission("payment.view", async (req: NextRequest) => {
           confirmedPaid: true,
           paymentState: true,
           status: true,
-          client: { select: { id: true, name: true, phone: true } },
+          client: { select: { id: true, name: true, phone: true, address: true } },
           dispatch: {
             select: {
               id: true,

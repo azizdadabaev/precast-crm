@@ -141,13 +141,17 @@ export default function OrdersPage() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border bg-background overflow-hidden">
+      {/* overflow-x-auto so the wide orders table scrolls horizontally
+          on mobile instead of cramming every column into the viewport.
+          Inner table uses `w-max` (intrinsic content width) so column
+          widths stay honored regardless of viewport size. */}
+      <div className="rounded-lg border bg-background overflow-x-auto">
         {isLoading ? (
           <div className="p-6 text-muted-foreground">Loading…</div>
         ) : filtered.length === 0 ? (
           <div className="py-12 text-center text-muted-foreground">No orders.</div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="w-max min-w-full text-sm">
             <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2 w-32 whitespace-nowrap">№</th>
