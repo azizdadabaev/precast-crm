@@ -100,6 +100,19 @@ export async function requirePermissionForPath(
   pathname: string,
 ): Promise<AuthUser> {
   const user = await requireAuth();
+
+  // Force-change flow: any user with mustChangePassword=true gets
+  // bounced to /change-password until they update their password.
+  // The change-password page itself is exempt (otherwise we'd loop).
+  // The login flow's redirectTo already sends them here on the first
+  // request, but this catches navigation away from /change-password.
+  if (
+    user.mustChangePassword &&
+    !pathname.startsWith("/change-password")
+  ) {
+    redirect("/change-password?force=1");
+  }
+
   const rule = ruleForPath(pathname);
 
   // Unmapped path — fall through to auth-only. Log so we notice.
