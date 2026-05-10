@@ -284,10 +284,11 @@ describe("canConfirmCash (maker-checker gate)", () => {
     expect(canConfirmCash(baseUser("OWNER"))).toBe(true);
   });
 
-  it("denies maker roles (OPERATOR, SALES, ENGINEER)", () => {
-    expect(canConfirmCash(baseUser("OPERATOR"))).toBe(false);
+  it("denies maker roles (SALES, INVENTORY, DRIVER, ACCOUNTANT)", () => {
     expect(canConfirmCash(baseUser("SALES"))).toBe(false);
-    expect(canConfirmCash(baseUser("ENGINEER"))).toBe(false);
+    expect(canConfirmCash(baseUser("INVENTORY"))).toBe(false);
+    expect(canConfirmCash(baseUser("DRIVER"))).toBe(false);
+    expect(canConfirmCash(baseUser("ACCOUNTANT"))).toBe(false);
   });
 
   it("denies anonymous", () => {

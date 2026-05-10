@@ -9,7 +9,17 @@ const COOKIE_NAME = "precast_token";
 
 const secretKey = new TextEncoder().encode(JWT_SECRET);
 
-export type AuthRole = "ADMIN" | "SALES" | "ENGINEER" | "OPERATOR" | "OWNER";
+// AuthRole tracks the role TEMPLATE the user was created from. The
+// real access-control comes from `permissions` (see src/lib/permissions.ts);
+// `role` here is metadata for display + UI templating only.
+export type AuthRole =
+  | "OWNER"
+  | "ADMIN"
+  | "SALES"
+  | "INVENTORY"
+  | "DRIVER"
+  | "ACCOUNTANT"
+  | "CUSTOM";
 
 /** Helper for the maker-checker payment / discrepancy gate.
  *  Returns true for roles that can confirm payments, reject payments,

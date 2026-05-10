@@ -5,6 +5,7 @@ import { calcResultToCreatePayload } from "../src/lib/calc-persistence";
 import { normalizePhone } from "../src/lib/phone";
 import { nextOrderNumber } from "../src/lib/order-number";
 import { applyStockMovement } from "../src/lib/inventory";
+import { getDefaultPermissionsForRole } from "../src/lib/permissions";
 
 const prisma = new PrismaClient();
 
@@ -12,51 +13,108 @@ async function main() {
   console.log("🌱 Seeding database…");
 
   // ── Users ──────────────────────────────────────────────────
-  // Two OWNERS per spec — they're the only roles (besides ADMIN) that can
-  // confirm/reject payments and resolve discrepancies. The first is the
-  // confirmed real name; the second is a placeholder until the brother's
-  // name is provided (TODO when known: replace owner2 below).
+  // Each demo user is created with permissions populated from the
+  // role template, mustChangePassword=false (these are demos), and
+  // isActive=true. Roles ENGINEER and OPERATOR were dropped from the
+  // schema; the cash-recording role is now ADMIN by default.
   const adminPwd = await bcrypt.hash("admin123", 10);
   const salesPwd = await bcrypt.hash("sales123", 10);
-  const engPwd = await bcrypt.hash("eng123", 10);
-  const opPwd = await bcrypt.hash("operator123", 10);
+  const inventoryPwd = await bcrypt.hash("inventory123", 10);
+  const driverPwd = await bcrypt.hash("driver123", 10);
+  const accountantPwd = await bcrypt.hash("accountant123", 10);
   const ownerPwd = await bcrypt.hash("owner123", 10);
 
-  await prisma.user.upsert({
+  const seedUser = (
+    role:
+      | "ADMIN"
+      | "OWNER"
+      | "SALES"
+      | "INVENTORY"
+      | "DRIVER"
+      | "ACCOUNTANT",
+  ) => ({
+    role,
+    permissions: getDefaultPermissionsForRole(role),
+    mustChangePassword: false,
+    isActive: true,
+  });
+
+  const admin = await prisma.user.upsert({
     where: { email: "admin@precast.local" },
-    update: {},
-    create: { name: "Admin", email: "admin@precast.local", passwordHash: adminPwd, role: "ADMIN" },
+    update: { ...seedUser("ADMIN") },
+    create: {
+      name: "Admin",
+      email: "admin@precast.local",
+      passwordHash: adminPwd,
+      ...seedUser("ADMIN"),
+    },
   });
 
   const sales = await prisma.user.upsert({
     where: { email: "sales@precast.local" },
-    update: {},
-    create: { name: "Sales Manager", email: "sales@precast.local", passwordHash: salesPwd, role: "SALES" },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "engineer@precast.local" },
-    update: {},
-    create: { name: "Engineer", email: "engineer@precast.local", passwordHash: engPwd, role: "ENGINEER" },
-  });
-
-  const operator = await prisma.user.upsert({
-    where: { email: "operator@precast.local" },
-    update: {},
-    create: { name: "Bekzod (Operator)", email: "operator@precast.local", passwordHash: opPwd, role: "OPERATOR" },
+    update: { ...seedUser("SALES") },
+    create: {
+      name: "Sales Manager",
+      email: "sales@precast.local",
+      passwordHash: salesPwd,
+      ...seedUser("SALES"),
+    },
   });
 
   const owner = await prisma.user.upsert({
     where: { email: "owner@precast.local" },
-    update: {},
-    create: { name: "Aziz Dadabaev", email: "owner@precast.local", passwordHash: ownerPwd, role: "OWNER" },
+    update: { ...seedUser("OWNER") },
+    create: {
+      name: "Aziz Dadabaev",
+      email: "owner@precast.local",
+      passwordHash: ownerPwd,
+      ...seedUser("OWNER"),
+    },
   });
 
   // TODO: replace "Owner Two" with the brother's real name once provided.
   await prisma.user.upsert({
     where: { email: "owner2@precast.local" },
-    update: {},
-    create: { name: "Owner Two", email: "owner2@precast.local", passwordHash: ownerPwd, role: "OWNER" },
+    update: { ...seedUser("OWNER") },
+    create: {
+      name: "Owner Two",
+      email: "owner2@precast.local",
+      passwordHash: ownerPwd,
+      ...seedUser("OWNER"),
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "inventory@precast.local" },
+    update: { ...seedUser("INVENTORY") },
+    create: {
+      name: "Inventory Manager",
+      email: "inventory@precast.local",
+      passwordHash: inventoryPwd,
+      ...seedUser("INVENTORY"),
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "driver@precast.local" },
+    update: { ...seedUser("DRIVER") },
+    create: {
+      name: "Driver Demo",
+      email: "driver@precast.local",
+      passwordHash: driverPwd,
+      ...seedUser("DRIVER"),
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "accountant@precast.local" },
+    update: { ...seedUser("ACCOUNTANT") },
+    create: {
+      name: "Accountant",
+      email: "accountant@precast.local",
+      passwordHash: accountantPwd,
+      ...seedUser("ACCOUNTANT"),
+    },
   });
 
   // ── Drivers ────────────────────────────────────────────────
@@ -231,7 +289,7 @@ async function main() {
           amount: deposit,
           method: "BANK_TRANSFER",
           status: "CONFIRMED",
-          recordedById: operator.id,
+          recordedById: admin.id,
           recordedAt: placedAt,
           confirmedById: owner.id,
           confirmedAt: placedAt,
@@ -254,7 +312,7 @@ async function main() {
           driverId: driver.id,
           truckIdentifier: "01 A 123 BC",
           expectedCollection: sc.expectedCollection!,
-          dispatchedById: operator.id,
+          dispatchedById: admin.id,
           dispatchedAt: placedAt,
           // Returned only for the post-delivery scenarios
           returnedAt: sc.state.startsWith("DELIVERED_") ? placedAt : null,
@@ -273,11 +331,11 @@ async function main() {
           amount: sc.actualCash!,
           method: "CASH",
           status: "PENDING_CONFIRMATION",
-          recordedById: operator.id,
+          recordedById: admin.id,
           recordedAt: placedAt,
           collectedById: driver.id,
           collectedAt: placedAt,
-          handedOverToOfficeById: operator.id,
+          handedOverToOfficeById: admin.id,
           handedOverToOfficeAt: placedAt,
         },
       });
@@ -294,11 +352,11 @@ async function main() {
           amount: sc.actualCash!,
           method: "CASH",
           status: "CONFIRMED",
-          recordedById: operator.id,
+          recordedById: admin.id,
           recordedAt: placedAt,
           collectedById: driver.id,
           collectedAt: placedAt,
-          handedOverToOfficeById: operator.id,
+          handedOverToOfficeById: admin.id,
           handedOverToOfficeAt: placedAt,
           confirmedById: owner.id,
           confirmedAt: placedAt,
@@ -329,11 +387,11 @@ async function main() {
           amount: received,
           method: "CASH",
           status: "CONFIRMED",
-          recordedById: operator.id,
+          recordedById: admin.id,
           recordedAt: placedAt,
           collectedById: driver.id,
           collectedAt: placedAt,
-          handedOverToOfficeById: operator.id,
+          handedOverToOfficeById: admin.id,
           handedOverToOfficeAt: placedAt,
           confirmedById: owner.id,
           confirmedAt: placedAt,
@@ -419,12 +477,13 @@ async function main() {
 
   console.log("✅ Seed complete");
   console.log("   Logins:");
-  console.log("     admin@precast.local        / admin123      (ADMIN)");
-  console.log("     owner@precast.local        / owner123      (OWNER · Aziz Dadabaev)");
-  console.log("     owner2@precast.local       / owner123      (OWNER · TODO replace name)");
-  console.log("     operator@precast.local     / operator123   (OPERATOR · Bekzod)");
-  console.log("     sales@precast.local        / sales123      (SALES)");
-  console.log("     engineer@precast.local     / eng123        (ENGINEER)");
+  console.log("     owner@precast.local        / owner123        (OWNER · Aziz Dadabaev)");
+  console.log("     owner2@precast.local       / owner123        (OWNER · TODO replace name)");
+  console.log("     admin@precast.local        / admin123        (ADMIN)");
+  console.log("     sales@precast.local        / sales123        (SALES)");
+  console.log("     inventory@precast.local    / inventory123    (INVENTORY)");
+  console.log("     driver@precast.local       / driver123       (DRIVER)");
+  console.log("     accountant@precast.local   / accountant123   (ACCOUNTANT)");
 }
 
 main()

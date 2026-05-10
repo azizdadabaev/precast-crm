@@ -8,7 +8,6 @@ const secret = new TextEncoder().encode(JWT_SECRET);
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
-  "/api/auth/register",
   "/_next",
   "/favicon.ico",
 ];
