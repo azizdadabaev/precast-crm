@@ -26,11 +26,11 @@ export default async function AppShellLayout({
   children: React.ReactNode;
 }) {
   const pathname = headers().get("x-pathname") ?? "/";
-  await requirePermissionForPath(pathname);
+  const user = await requirePermissionForPath(pathname);
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar user={user} />
       <main className="flex-1 overflow-auto">
         <div className="px-6 py-6 max-w-[1400px]">
           <UnauthorizedBanner />
