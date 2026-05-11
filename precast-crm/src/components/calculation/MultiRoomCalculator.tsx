@@ -286,6 +286,13 @@ function H({
   );
 }
 
+// Feature flag for the Customize-Layout toolbar button + side panel.
+// Operators have settled on the default column widths so the button
+// was retired from the page. Keeping the underlying state, panel
+// JSX, and store fields intact means flipping this back to `true`
+// restores the feature in one line — no code archaeology needed.
+const SHOW_CUSTOMIZE_LAYOUT = false;
+
 export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscountChange, actions }: Props) {
   // Workspace-level rounding granularity, persisted via the calculator
   // store. One setting applies to every row; survives in-app navigation
@@ -294,7 +301,8 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
   const changeGrid = useCalculatorStore((s) => s.setRoundingGrid);
 
   // Customize-layout: per-user column WIDTH overrides (order is fixed).
-  // `isCustomizingLayout` is a transient toggle for the panel.
+  // `isCustomizingLayout` is a transient toggle for the panel. Gated
+  // by SHOW_CUSTOMIZE_LAYOUT above — currently hidden from the UI.
   const storedColumnWidths = useCalculatorStore((s) => s.columnWidths);
   const setColumnWidths = useCalculatorStore((s) => s.setColumnWidths);
   const [isCustomizingLayout, setIsCustomizingLayout] = useState(false);
@@ -926,31 +934,39 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                 5 см
               </button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
+            {/* Round all up — same visual weight as the 5cm/10cm
+                toggles above (h-7 with a colored backdrop) so it
+                doesn't read as a tiny utility icon. Always wears
+                the "active" look since it's an action button, not a
+                radio toggle. */}
+            <button
+              type="button"
               disabled={!anyRowEligibleForSweep}
               onClick={onRoundAllUp}
               title="Барча хоналарни юқорилаштириш · Round all up — apply to every row's Width using the current grid"
               aria-label="Барча хоналарни юқорилаштириш · Round all up"
-              className="h-7 w-7 p-0"
+              className="h-7 px-3 inline-flex items-center gap-1.5 rounded-md border bg-primary text-primary-foreground font-semibold uppercase tracking-wider text-xs hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ArrowUpToLine className="h-3.5 w-3.5" />
-            </Button>
+              All
+            </button>
             {/* Customize layout — opens a side panel for column width
                 tweaking (per-user, persisted via the calculator store).
-                Reorder is intentionally absent in v1 — see panel for
-                why. */}
-            <Button
-              variant={isCustomizingLayout ? "default" : "outline"}
-              size="sm"
-              onClick={() => setIsCustomizingLayout((v) => !v)}
-              title="Customize column widths"
-              aria-label="Customize column widths"
-              className="h-7 px-2 text-[10px] uppercase tracking-wider"
-            >
-              {isCustomizingLayout ? "Done" : "Customize"}
-            </Button>
+                Hidden via SHOW_CUSTOMIZE_LAYOUT above; flip the const
+                back to true to re-expose. State + panel JSX still
+                live in this file so the feature returns in one diff. */}
+            {SHOW_CUSTOMIZE_LAYOUT && (
+              <Button
+                variant={isCustomizingLayout ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsCustomizingLayout((v) => !v)}
+                title="Customize column widths"
+                aria-label="Customize column widths"
+                className="h-7 px-2 text-[10px] uppercase tracking-wider"
+              >
+                {isCustomizingLayout ? "Done" : "Customize"}
+              </Button>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
