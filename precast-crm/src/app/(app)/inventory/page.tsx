@@ -6,13 +6,14 @@ import { Sliders, Package, Layers } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Chip } from "@/components/ui/chip";
 import { AdjustStockDialog } from "@/components/inventory/AdjustStockDialog";
 import {
   formatInventoryLabel,
   stockTier,
   type InventoryKind,
 } from "@/lib/inventory";
-import { formatDate } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 
 interface Movement {
   id: string;
@@ -100,13 +101,13 @@ export default function InventoryPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SummaryCard
-          icon={<Package className="h-5 w-5 text-emerald-600" />}
+          icon={<Package className="h-5 w-5 text-success" />}
           label="Балка · Beams in stock"
           value={totalBeams}
           rows={beams.length}
         />
         <SummaryCard
-          icon={<Layers className="h-5 w-5 text-orange-600" />}
+          icon={<Layers className="h-5 w-5 text-gold" />}
           label="Ғишт · Blocks in stock"
           value={totalBlocks}
           rows={blocks.length}
@@ -123,7 +124,7 @@ export default function InventoryPage() {
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+            <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2">Length</th>
                 <th className="text-right px-3 py-2">Qty</th>
@@ -132,7 +133,7 @@ export default function InventoryPage() {
                 <th className="px-3 py-2 w-24"></th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {beams.map((it) => (
                 <Row
                   key={it.id}
@@ -155,7 +156,7 @@ export default function InventoryPage() {
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+            <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2">Item</th>
                 <th className="text-right px-3 py-2">Qty</th>
@@ -164,7 +165,7 @@ export default function InventoryPage() {
                 <th className="px-3 py-2 w-24"></th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {blocks.map((it) => (
                 <Row
                   key={it.id}
@@ -212,15 +213,17 @@ function SummaryCard({
   rows: number;
 }) {
   return (
-    <div className="rounded-lg border bg-background p-4 shadow-sm">
-      <div className="flex items-center gap-2">
-        {icon}
-        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </div>
+        {icon}
       </div>
-      <div className="text-3xl font-black tabular-nums mt-1">{value}</div>
-      <div className="text-xs text-muted-foreground">
+      <div className="text-2xl font-bold tabular-nums tracking-tight text-foreground leading-tight font-mono">
+        {value}
+      </div>
+      <div className="mt-2 text-xs text-text-tertiary">
         {rows} SKU{rows === 1 ? "" : "s"}
       </div>
     </div>
@@ -237,21 +240,24 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border bg-background overflow-hidden">
-      <div className="px-4 py-3 border-b bg-muted/20">
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-border bg-muted">
         <div className="text-sm font-bold">{title}</div>
-        {subtitle && <div className="text-xs text-muted-foreground">{subtitle}</div>}
+        {subtitle && <div className="text-xs text-text-tertiary">{subtitle}</div>}
       </div>
       {children}
     </div>
   );
 }
 
-const REASON_BADGE: Record<Movement["reason"], { label: string; cls: string }> = {
-  PRODUCTION:           { label: "+production",  cls: "bg-emerald-100 text-emerald-800" },
-  DELIVERY:             { label: "−delivery",    cls: "bg-rose-100 text-rose-800" },
-  MANUAL_ADJUSTMENT:    { label: "manual",       cls: "bg-amber-100 text-amber-800" },
-  CANCELLATION_RESTOCK: { label: "+restock",     cls: "bg-sky-100 text-sky-800" },
+const REASON_META: Record<
+  Movement["reason"],
+  { label: string; variant: React.ComponentProps<typeof Chip>["variant"] }
+> = {
+  PRODUCTION:           { label: "+production", variant: "success" },
+  DELIVERY:             { label: "−delivery",   variant: "danger" },
+  MANUAL_ADJUSTMENT:    { label: "manual",      variant: "warning" },
+  CANCELLATION_RESTOCK: { label: "+restock",    variant: "default" },
 };
 
 function Row({
@@ -266,12 +272,12 @@ function Row({
   onSetThreshold: (t: number) => void;
 }) {
   const tier = stockTier(item.quantity, item.lowStockThreshold);
-  const tierCls =
+  const rowBorder =
     tier === "critical"
-      ? "bg-rose-50 text-rose-900"
+      ? "border-l-destructive"
       : tier === "low"
-        ? "bg-amber-50 text-amber-900"
-        : "";
+        ? "border-l-warning"
+        : "border-l-success";
 
   const length = item.beamLength ? Number(item.beamLength) : null;
   const label = formatInventoryLabel(item.kind, length);
@@ -279,22 +285,28 @@ function Row({
   const [draftThreshold, setDraftThreshold] = useEditableThreshold(item.lowStockThreshold);
 
   return (
-    <tr className={`hover:bg-muted/20 ${tierCls}`}>
-      <td className="px-3 py-2 font-semibold">{label}</td>
-      <td className="px-3 py-2 text-right tabular-nums font-bold">
+    <tr
+      className={cn(
+        "border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors",
+        "border-l-[3px]",
+        rowBorder,
+      )}
+    >
+      <td className="px-3 py-2.5 font-semibold">{label}</td>
+      <td className="px-3 py-2.5 text-right font-mono font-bold">
         {item.quantity}
         {item.quantity < 0 && (
-          <span className="ml-2 text-[10px] uppercase tracking-wider bg-rose-200 text-rose-900 px-1.5 py-0.5 rounded">
-            Negative
+          <span className="ml-2">
+            <Chip variant="danger">Negative</Chip>
           </span>
         )}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums">
+      <td className="px-3 py-2.5 text-right font-mono">
         {isAdmin ? (
           <Input
             type="number"
             min="0"
-            className="h-7 w-20 text-right tabular-nums ml-auto"
+            className="h-7 w-20 text-right ml-auto font-mono"
             value={draftThreshold}
             onChange={(e) => setDraftThreshold(Number(e.target.value) || 0)}
             onBlur={() => {
@@ -302,31 +314,31 @@ function Row({
             }}
           />
         ) : (
-          <span className="text-muted-foreground">{item.lowStockThreshold}</span>
+          <span className="text-text-tertiary">{item.lowStockThreshold}</span>
         )}
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-2.5">
         <div className="flex flex-wrap gap-1">
           {item.movements.length === 0 ? (
-            <span className="text-xs text-muted-foreground">no movements yet</span>
+            <span className="text-xs text-text-tertiary">no movements yet</span>
           ) : (
             item.movements.slice(0, 5).map((m) => {
-              const b = REASON_BADGE[m.reason];
+              const meta = REASON_META[m.reason];
               return (
-                <span
+                <Chip
                   key={m.id}
+                  variant={meta.variant}
                   title={`${formatDate(m.createdAt)} · ${m.note ?? ""}${m.order ? ` · ${m.order.orderNumber}` : ""}`}
-                  className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded px-1.5 py-0.5 tabular-nums ${b.cls}`}
                 >
-                  {b.label} {m.change > 0 ? "+" : ""}
+                  {meta.label} {m.change > 0 ? "+" : ""}
                   {m.change}
-                </span>
+                </Chip>
               );
             })
           )}
         </div>
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-2.5">
         {isAdmin && (
           <Button
             variant="outline"
