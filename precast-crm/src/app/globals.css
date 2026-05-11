@@ -216,20 +216,20 @@
    ────────────────────────────────────────────────────────────── */
 
 .dashboard {
-  /* Page surface — almost white but not pure (avoids monitor-glow harshness). */
-  --dash-bg: #fafafa;
-  /* Card surface — actual white, sits on the slightly off-white page. */
+  /* Etalon page surface (#f3f5fb) — soft blue-gray. */
+  --dash-bg: #f3f5fb;
+  /* Card surface — actual white, sits on the soft page. */
   --dash-card-bg: #ffffff;
-  /* Borders — barely there, just enough to separate adjacent cards. */
-  --dash-border: #e5e7eb;
-  --dash-border-strong: #d1d5db;
-  /* Text hierarchy */
-  --dash-text-primary: #111827;
-  --dash-text-secondary: #6b7280;
-  --dash-text-tertiary: #9ca3af;
-  /* Single accent — used sparingly, links + hover only. */
-  --dash-accent: #2563eb;
-  --dash-accent-hover: #1d4ed8;
+  /* Borders — etalon hairlines. */
+  --dash-border: #dde1f0;
+  --dash-border-strong: #c4cadf;
+  /* Text hierarchy — etalon trio. */
+  --dash-text-primary: #0c0f1a;
+  --dash-text-secondary: #5a6488;
+  --dash-text-tertiary: #9aa3bf;
+  /* Single accent — etalon electric blue. */
+  --dash-accent: #4e80ff;
+  --dash-accent-hover: #3d6fef;
   /* Semantic — used ONLY for status signals (trend pills, attention
      borders, heavy/overbooked bars). Never decoratively. */
   --dash-success: #059669;
@@ -256,22 +256,17 @@
   --dash-space-6: 1.5rem;
   --dash-space-8: 2rem;
   --dash-space-10: 2.5rem;
-  /* Radius */
+  /* Radius — etalon r=10px throughout. */
   --dash-radius-sm: 0.375rem;
-  --dash-radius-md: 0.5rem;
+  --dash-radius-md: 0.625rem;
   --dash-radius-lg: 0.75rem;
   /* Shadow — barely perceptible hairline */
   --dash-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --dash-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.06);
 
-  /* Page surface itself */
-  background: var(--dash-bg);
-  padding: var(--dash-space-8);
+  /* Page surface — the (app)/layout already wraps content in padding;
+     the dashboard tokens still scope to .dashboard so they don't leak. */
   min-height: 100%;
-}
-
-@media (max-width: 640px) {
-  .dashboard { padding: var(--dash-space-4); }
 }
 
 /* Header — clean, no gradient text. */
@@ -365,10 +360,11 @@
   font-variant-numeric: tabular-nums;
 }
 .dash-card-value {
+  font-family: var(--font-mono);
   font-size: var(--dash-text-2xl);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--dash-text-primary);
-  line-height: 1.2;
+  line-height: 1.15;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   display: flex;

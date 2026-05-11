@@ -32,10 +32,15 @@ export default function DashboardPage() {
     const msg = (error as Error).message ?? "";
     const forbidden = /403|only admin|only owner/i.test(msg);
     return (
-      <div className="dashboard">
-        <header className="dashboard-header">
-          <h1>Бошқарув · Dashboard</h1>
-        </header>
+      <div className="dashboard space-y-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Бошқарув{" "}
+            <span className="text-muted-foreground font-normal text-base">
+              · Dashboard
+            </span>
+          </h1>
+        </div>
         <article className="dash-card">
           <p
             style={{
@@ -56,11 +61,18 @@ export default function DashboardPage() {
   if (!data) return <DashboardSkeleton />;
 
   return (
-    <div className="dashboard">
-      <header className="dashboard-header">
-        <h1>Бошқарув · Dashboard</h1>
-        <p>Real-time view of revenue, operations, and customer activity.</p>
-      </header>
+    <div className="dashboard space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Бошқарув{" "}
+          <span className="text-muted-foreground font-normal text-base">
+            · Dashboard
+          </span>
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Real-time view of revenue, operations, and customer activity.
+        </p>
+      </div>
 
       <section className="dashboard-section">
         <h2>Financial health</h2>
