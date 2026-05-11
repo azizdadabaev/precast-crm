@@ -281,6 +281,12 @@ model Project {
   clientId   String?
 
   name       String?
+  // Monotonically increasing identifier displayed as "NNNND" — the
+  // "D" suffix brands the row as a saved draft, so an operator
+  // skimming downloads / chat history can tell drafts apart from
+  // real orders. Assigned at create time in POST /api/projects.
+  // Nullable so existing pre-feature rows can be backfilled lazily.
+  draftNumber Int?         @unique
   shapeType  ShapeType     @default(RECTANGULAR)
   dimensions Json
   status     ProjectStatus @default(DRAFT)

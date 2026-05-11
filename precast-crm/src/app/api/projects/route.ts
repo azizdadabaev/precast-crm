@@ -8,6 +8,7 @@ import { withPermission } from "@/lib/api-auth";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
+import { nextDraftNumber } from "@/lib/draft-number";
 
 /** GET /api/projects — order.view. List projects with optional status + search. */
 export const GET = withPermission("order.view", async (req: NextRequest) => {
@@ -126,9 +127,18 @@ export const POST = withPermission("order.create", async (req: NextRequest) => {
       return updated;
     }
 
+    // Allocate the next draft number atomically (within this tx).
+    // The @unique constraint on draftNumber catches the rare race;
+    // for this CRM's volume an inline max+1 is plenty.
+    const maxAgg = await tx.project.aggregate({
+      _max: { draftNumber: true },
+    });
+    const draftNumber = nextDraftNumber(maxAgg._max.draftNumber ?? null);
+
     return tx.project.create({
       data: {
         name: body.name ?? null,
+        draftNumber,
         shapeType: body.shapeType,
         dimensions: dim,
         status: "DRAFT",

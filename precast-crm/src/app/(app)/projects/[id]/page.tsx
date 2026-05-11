@@ -11,10 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, FileText } from "lucide-react";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { formatDraftNumber } from "@/lib/draft-number";
 
 interface Project {
   id: string;
   name: string | null;
+  draftNumber: number | null;
   shapeType: string;
   status: "DRAFT" | "ORDERED" | "ARCHIVED";
   dimensions: { width?: number; length?: number; widths?: number[] };
@@ -79,9 +81,14 @@ export default function ProjectDetailPage() {
 
   // Display label for an unnamed draft. The project.name column is
   // optional (operator can save a draft without typing a name), so
-  // we fall back to "Saved Draft <shortid>" — clearer than the
-  // earlier "Project <shortid>" which read like a real product name.
-  const displayName = project.name || `Saved Draft ${project.id.slice(-6)}`;
+  // we fall back to "Saved Draft NNNND" — NNNND is the monotonic
+  // draftNumber assigned at save time (see src/lib/draft-number.ts).
+  // Falls back to the id-tail for any pre-feature rows that haven't
+  // been backfilled with a draftNumber yet.
+  const draftLabel = project.draftNumber
+    ? formatDraftNumber(project.draftNumber)
+    : project.id.slice(-6);
+  const displayName = project.name || `Saved Draft ${draftLabel}`;
   const clientLabel =
     project.client?.name ?? project.tentativeClientName ?? "";
 
