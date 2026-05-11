@@ -84,7 +84,7 @@ export default function ProductionPage() {
         {isLoading ? (
           <div className="text-muted-foreground">Loading…</div>
         ) : grouped.length === 0 ? (
-          <div className="rounded-lg border bg-background p-8 text-center text-muted-foreground">
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
             No production entries yet.
           </div>
         ) : (
@@ -105,10 +105,13 @@ export default function ProductionPage() {
             const beamLines = Array.from(beamMap.entries()).sort((a, b) => a[0] - b[0]);
 
             return (
-              <div key={day} className="rounded-lg border bg-background overflow-hidden">
-                <div className="px-4 py-2 bg-muted/30 border-b flex items-baseline justify-between">
-                  <div className="text-sm font-semibold">{formatDate(day)}</div>
-                  <div className="text-xs text-muted-foreground">
+              <div
+                key={day}
+                className="rounded-lg border border-border bg-card overflow-hidden border-l-[3px] border-l-success"
+              >
+                <div className="px-4 py-2 bg-muted border-b border-border flex items-baseline justify-between">
+                  <div className="text-sm font-semibold font-mono">{formatDate(day)}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-text-tertiary">
                     {dayEntries.length} entr{dayEntries.length === 1 ? "y" : "ies"}
                   </div>
                 </div>
@@ -117,25 +120,29 @@ export default function ProductionPage() {
                     {beamLines.map(([len, qty]) => (
                       <div
                         key={len}
-                        className="flex items-baseline justify-between bg-muted/20 rounded px-3 py-1.5"
+                        className="flex items-baseline justify-between bg-muted rounded-md px-3 py-1.5 border border-border"
                       >
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-text-tertiary">
                           {formatInventoryLabel("BEAM", len)}
                         </span>
-                        <span className="font-semibold tabular-nums">+{qty}</span>
+                        <span className="font-mono font-bold tabular-nums text-success">
+                          +{qty}
+                        </span>
                       </div>
                     ))}
                     {blocks > 0 && (
-                      <div className="flex items-baseline justify-between bg-orange-50/60 rounded px-3 py-1.5">
-                        <span className="text-xs text-orange-800">Ғишт · Blocks</span>
-                        <span className="font-semibold tabular-nums text-orange-800">
+                      <div className="flex items-baseline justify-between bg-gold/10 rounded-md px-3 py-1.5 border border-gold/30">
+                        <span className="text-xs text-gold font-medium">
+                          Ғишт · Blocks
+                        </span>
+                        <span className="font-mono font-bold tabular-nums text-gold">
                           +{blocks}
                         </span>
                       </div>
                     )}
                   </div>
                   {dayEntries.some((e) => e.notes) && (
-                    <div className="text-xs text-muted-foreground mt-2 italic">
+                    <div className="text-xs text-text-tertiary mt-2 italic">
                       {dayEntries
                         .filter((e) => e.notes)
                         .map((e) => `"${e.notes}" — ${e.recordedBy?.name ?? "?"}`)
