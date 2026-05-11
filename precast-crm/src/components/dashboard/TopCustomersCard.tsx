@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Card } from "./Card";
 import { formatNumber } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import type { DashboardData } from "./types";
 
 export function TopCustomersCard({
@@ -10,16 +11,18 @@ export function TopCustomersCard({
 }: {
   data: DashboardData["topCustomers"];
 }) {
+  const t = useT();
   const router = useRouter();
+  const label = t("Юқори 5 мижоз", "Top 5 customers");
   if (data.length === 0) {
     return (
-      <Card label="Top 5 customers" wide value={null}>
-        <div className="dash-card-empty">Not enough data</div>
+      <Card label={label} wide value={null}>
+        <div className="dash-card-empty">{t("Маълумот етарли эмас", "Not enough data")}</div>
       </Card>
     );
   }
   return (
-    <Card label="Top 5 customers" wide value={null}>
+    <Card label={label} wide value={null}>
       <ol className="dash-list">
         {data.map((c, i) => (
           <li key={c.id} onClick={() => router.push(`/clients/${c.id}`)}>
@@ -27,7 +30,7 @@ export function TopCustomersCard({
             <div className="dash-list-content">
               <span className="dash-list-primary">{c.name}</span>
               <span className="dash-list-secondary">
-                {c.orderCount} orders
+                {c.orderCount} {t("буюртма", "orders")}
               </span>
             </div>
             <span className="dash-list-value">

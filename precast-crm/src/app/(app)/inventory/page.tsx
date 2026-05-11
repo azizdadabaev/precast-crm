@@ -14,6 +14,7 @@ import {
   type InventoryKind,
 } from "@/lib/inventory";
 import { formatDate, cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface Movement {
   id: string;
@@ -44,6 +45,7 @@ interface Me {
 }
 
 export default function InventoryPage() {
+  const t = useT();
   const qc = useQueryClient();
 
   const { data: me } = useQuery<Me>({
@@ -91,10 +93,14 @@ export default function InventoryPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Омбор <span className="text-muted-foreground font-normal text-base">· Warehouse</span>
+          Омбор
+          <span className="lang-en text-muted-foreground font-normal text-base">{" "}· Warehouse</span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          On-hand stock, low-stock thresholds, and recent movements per SKU.
+          {t(
+            "Мавжуд захира, кам захира остонаси ва ҳар бир маҳсулот бўйича сўнгги ҳаракатлар.",
+            "On-hand stock, low-stock thresholds, and recent movements per SKU.",
+          )}
         </p>
       </div>
 
@@ -102,34 +108,42 @@ export default function InventoryPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SummaryCard
           icon={<Package className="h-5 w-5 text-success" />}
-          label="Балка · Beams in stock"
+          label={t("Омбордаги балкалар", "Beams in stock")}
           value={totalBeams}
           rows={beams.length}
+          t={t}
         />
         <SummaryCard
           icon={<Layers className="h-5 w-5 text-gold" />}
-          label="Ғишт · Blocks in stock"
+          label={t("Омбордаги ғиштлар", "Blocks in stock")}
           value={totalBlocks}
           rows={blocks.length}
+          t={t}
         />
       </div>
 
       {/* Beams */}
-      <Section title="Балкалар · Beams" subtitle="One row per manufactured length">
+      <Section
+        title={t("Балкалар", "Beams")}
+        subtitle={t("Ҳар бир ишлаб чиқарилган узунлик учун битта қатор", "One row per manufactured length")}
+      >
         {isLoading ? (
-          <div className="text-muted-foreground p-4">Loading…</div>
+          <div className="text-muted-foreground p-4">{t("Юкланмоқда…", "Loading…")}</div>
         ) : beams.length === 0 ? (
           <div className="text-muted-foreground p-4 text-center">
-            No beam stock yet — log a production entry to populate.
+            {t(
+              "Балка захираси йўқ — тўлдириш учун ишлаб чиқариш ёзувини қайд этинг.",
+              "No beam stock yet — log a production entry to populate.",
+            )}
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left px-3 py-2">Length</th>
-                <th className="text-right px-3 py-2">Qty</th>
-                <th className="text-right px-3 py-2">Low-stock at</th>
-                <th className="text-left px-3 py-2">Recent movements</th>
+                <th className="text-left px-3 py-2">{t("Узунлик", "Length")}</th>
+                <th className="text-right px-3 py-2">{t("Сони", "Qty")}</th>
+                <th className="text-right px-3 py-2">{t("Кам захира остонаси", "Low-stock at")}</th>
+                <th className="text-left px-3 py-2">{t("Сўнгги ҳаракатлар", "Recent movements")}</th>
                 <th className="px-3 py-2 w-24"></th>
               </tr>
             </thead>
@@ -140,7 +154,8 @@ export default function InventoryPage() {
                   item={it}
                   isAdmin={!!isAdmin}
                   onAdjust={() => setAdjustItem(it)}
-                  onSetThreshold={(t) => updateThreshold.mutate({ id: it.id, threshold: t })}
+                  onSetThreshold={(n) => updateThreshold.mutate({ id: it.id, threshold: n })}
+                  t={t}
                 />
               ))}
             </tbody>
@@ -149,19 +164,19 @@ export default function InventoryPage() {
       </Section>
 
       {/* Blocks */}
-      <Section title="Ғиштлар · Blocks" subtitle="Single SKU">
+      <Section title={t("Ғиштлар", "Blocks")} subtitle={t("Битта маҳсулот", "Single SKU")}>
         {blocks.length === 0 ? (
           <div className="text-muted-foreground p-4 text-center">
-            No block stock yet.
+            {t("Ғишт захираси йўқ.", "No block stock yet.")}
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left px-3 py-2">Item</th>
-                <th className="text-right px-3 py-2">Qty</th>
-                <th className="text-right px-3 py-2">Low-stock at</th>
-                <th className="text-left px-3 py-2">Recent movements</th>
+                <th className="text-left px-3 py-2">{t("Маҳсулот", "Item")}</th>
+                <th className="text-right px-3 py-2">{t("Сони", "Qty")}</th>
+                <th className="text-right px-3 py-2">{t("Кам захира остонаси", "Low-stock at")}</th>
+                <th className="text-left px-3 py-2">{t("Сўнгги ҳаракатлар", "Recent movements")}</th>
                 <th className="px-3 py-2 w-24"></th>
               </tr>
             </thead>
@@ -172,7 +187,8 @@ export default function InventoryPage() {
                   item={it}
                   isAdmin={!!isAdmin}
                   onAdjust={() => setAdjustItem(it)}
-                  onSetThreshold={(t) => updateThreshold.mutate({ id: it.id, threshold: t })}
+                  onSetThreshold={(n) => updateThreshold.mutate({ id: it.id, threshold: n })}
+                  t={t}
                 />
               ))}
             </tbody>
@@ -206,11 +222,13 @@ function SummaryCard({
   label,
   value,
   rows,
+  t,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   rows: number;
+  t: (uz: string, en: string) => string;
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-5">
@@ -224,7 +242,7 @@ function SummaryCard({
         {value}
       </div>
       <div className="mt-2 text-xs text-text-tertiary">
-        {rows} SKU{rows === 1 ? "" : "s"}
+        {rows} {t("маҳсулот", rows === 1 ? "SKU" : "SKUs")}
       </div>
     </div>
   );
@@ -265,11 +283,13 @@ function Row({
   isAdmin,
   onAdjust,
   onSetThreshold,
+  t,
 }: {
   item: InventoryItem;
   isAdmin: boolean;
   onAdjust: () => void;
-  onSetThreshold: (t: number) => void;
+  onSetThreshold: (n: number) => void;
+  t: (uz: string, en: string) => string;
 }) {
   const tier = stockTier(item.quantity, item.lowStockThreshold);
   const rowBorder =
@@ -297,7 +317,7 @@ function Row({
         {item.quantity}
         {item.quantity < 0 && (
           <span className="ml-2">
-            <Chip variant="danger">Negative</Chip>
+            <Chip variant="danger">{t("Манфий", "Negative")}</Chip>
           </span>
         )}
       </td>
@@ -320,7 +340,7 @@ function Row({
       <td className="px-3 py-2.5">
         <div className="flex flex-wrap gap-1">
           {item.movements.length === 0 ? (
-            <span className="text-xs text-text-tertiary">no movements yet</span>
+            <span className="text-xs text-text-tertiary">{t("ҳаракатлар йўқ", "no movements yet")}</span>
           ) : (
             item.movements.slice(0, 5).map((m) => {
               const meta = REASON_META[m.reason];
@@ -346,7 +366,7 @@ function Row({
             onClick={onAdjust}
             className="h-7 text-xs"
           >
-            <Sliders className="h-3 w-3 mr-1" /> Adjust
+            <Sliders className="h-3 w-3 mr-1" /> {t("Созлаш", "Adjust")}
           </Button>
         )}
       </td>

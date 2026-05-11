@@ -12,6 +12,7 @@ import {
   type DiscrepancyStatusValue,
 } from "@/components/discrepancies/DiscrepancyUpdateDialog";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface Discrepancy {
   id: string;
@@ -28,11 +29,24 @@ interface Discrepancy {
   resolvedBy: { id: string; name: string } | null;
 }
 
-const TABS: Array<{ key: "OPEN" | "RESOLVED" | "DISPUTED"; label: string }> = [
-  { key: "OPEN", label: "Open" },
-  { key: "RESOLVED", label: "Resolved" },
-  { key: "DISPUTED", label: "Disputed" },
-];
+type DTabKey = "OPEN" | "RESOLVED" | "DISPUTED";
+const TABS: ReadonlyArray<DTabKey> = ["OPEN", "RESOLVED", "DISPUTED"] as const;
+function translateTab(k: DTabKey, t: (uz: string, en: string) => string): string {
+  switch (k) {
+    case "OPEN":     return t("Очиқ", "Open");
+    case "RESOLVED": return t("Ҳал қилинган", "Resolved");
+    case "DISPUTED": return t("Низоли", "Disputed");
+  }
+}
+function translateDStatus(s: DiscrepancyStatusValue, t: (uz: string, en: string) => string): string {
+  switch (s) {
+    case "OPEN":               return t("Очиқ", "Open");
+    case "RESOLVED_RECOVERED": return t("Қайтарилди", "Recovered");
+    case "RESOLVED_DISCOUNT":  return t("Чегирма", "Discount");
+    case "RESOLVED_WRITEOFF":  return t("Ҳисобдан чиқарилди", "Write-off");
+    case "DISPUTED":           return t("Низоли", "Disputed");
+  }
+}
 
 // Per-status visual: chip variant + readable label + colored row left-edge.
 const STATUS_META: Record<
@@ -57,8 +71,9 @@ function inTab(status: DiscrepancyStatusValue, tab: "OPEN" | "RESOLVED" | "DISPU
 }
 
 export default function DiscrepanciesPage() {
+  const t = useT();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"OPEN" | "RESOLVED" | "DISPUTED">("OPEN");
+  const [tab, setTab] = useState<DTabKey>("OPEN");
   const [target, setTarget] = useState<Discrepancy | null>(null);
 
   const { data: items = [], isLoading } = useQuery<Discrepancy[]>({
@@ -72,23 +87,26 @@ export default function DiscrepanciesPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Тафовутлар{" "}
-          <span className="text-muted-foreground font-normal text-base">
-            · Discrepancies
+          Тафовутлар
+          <span className="lang-en text-muted-foreground font-normal text-base">
+            {" "}· Discrepancies
           </span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Cash shortfalls flagged at confirmation time. ADMIN / OWNER only.
+          {t(
+            "Тасдиқлаш пайтида аниқланган нақд пул камомади. Фақат АДМИН / ЭГА.",
+            "Cash shortfalls flagged at confirmation time. ADMIN / OWNER only.",
+          )}
         </p>
       </div>
 
       {/* Underline tabs (etalon pattern) */}
       <div className="flex border-b border-border">
-        {TABS.map((t) => {
-          const active = tab === t.key;
+        {TABS.map((k) => {
+          const active = tab === k;
           return (
             <button
-              key={t.key}
+              key={k}
               type="button"
               className={cn(
                 "relative h-10 px-4 text-[12px] font-bold uppercase tracking-wider transition-colors",
@@ -96,9 +114,9 @@ export default function DiscrepanciesPage() {
                   ? "text-primary"
                   : "text-text-tertiary hover:text-foreground",
               )}
-              onClick={() => setTab(t.key)}
+              onClick={() => setTab(k)}
             >
-              {t.label}
+              {translateTab(k, t)}
               {active && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
               )}
@@ -109,26 +127,26 @@ export default function DiscrepanciesPage() {
 
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
-          <div className="p-6 text-muted-foreground">Loading…</div>
+          <div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
         ) : visible.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">
             <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            No {tab.toLowerCase()} discrepancies.
+            {t("Тафовут йўқ.", "No discrepancies.")}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="text-left px-3 py-2.5">Order #</th>
-                  <th className="text-left px-3 py-2.5">Client</th>
-                  <th className="text-left px-3 py-2.5">Driver</th>
-                  <th className="text-right px-3 py-2.5">Expected</th>
-                  <th className="text-right px-3 py-2.5">Received</th>
-                  <th className="text-right px-3 py-2.5">Short</th>
-                  <th className="text-left px-3 py-2.5">Status</th>
-                  <th className="text-left px-3 py-2.5">Reported</th>
-                  <th className="text-left px-3 py-2.5">Resolved</th>
+                  <th className="text-left px-3 py-2.5">{t("Буюртма №", "Order #")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Мижоз", "Client")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Ҳайдовчи", "Driver")}</th>
+                  <th className="text-right px-3 py-2.5">{t("Кутилган", "Expected")}</th>
+                  <th className="text-right px-3 py-2.5">{t("Олинган", "Received")}</th>
+                  <th className="text-right px-3 py-2.5">{t("Кам", "Short")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Ҳолат", "Status")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Қайд этилди", "Reported")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Ҳал қилинди", "Resolved")}</th>
                   <th className="px-3 py-2.5 w-24"></th>
                 </tr>
               </thead>
@@ -166,7 +184,7 @@ export default function DiscrepanciesPage() {
                         {formatNumber(d.shortfall, 0)}
                       </td>
                       <td className="px-3 py-2.5">
-                        <Chip variant={meta.variant}>{meta.label}</Chip>
+                        <Chip variant={meta.variant}>{translateDStatus(d.status, t)}</Chip>
                       </td>
                       <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
                         {formatDate(d.reportedAt)}
@@ -188,7 +206,7 @@ export default function DiscrepanciesPage() {
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <Button variant="outline" size="sm" onClick={() => setTarget(d)}>
-                          Update
+                          {t("Янгилаш", "Update")}
                         </Button>
                       </td>
                     </tr>
