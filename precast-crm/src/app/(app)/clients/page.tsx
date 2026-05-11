@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Search, Send, X } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { formatPhone } from "@/lib/phone";
 import { ExportDialog } from "@/components/clients/ExportDialog";
 
@@ -35,6 +36,7 @@ interface Client {
 }
 
 export default function ClientsPage() {
+  const t = useT();
   const [q, setQ] = useState("");
   const [language, setLanguage] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -106,10 +108,14 @@ export default function ClientsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Мижозлар <span className="text-muted-foreground font-normal text-base">· Clients</span>
+            Мижозлар
+            <span className="lang-en text-muted-foreground font-normal text-base">{" "}· Clients</span>
           </h1>
           <p className="text-sm text-muted-foreground">
-            Auto-populated when an Order is placed. Search by name, phone (last 4 digits OK), or address.
+            {t(
+              "Буюртма берилганда автоматик тўлдирилади. Исм, телефон (охирги 4 рақам ҳам бўлади) ёки манзил бўйича қидиринг.",
+              "Auto-populated when an Order is placed. Search by name, phone (last 4 digits OK), or address.",
+            )}
           </p>
         </div>
         <NewClientDialog />
@@ -119,7 +125,10 @@ export default function ClientsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
           <Input
-            placeholder="Қидириш · name, phone (last 4 digits OK), or address…"
+            placeholder={t(
+              "Қидириш · исм, телефон (охирги 4 рақам), ёки манзил…",
+              "Search · name, phone (last 4 digits OK), or address…",
+            )}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="pl-9"
@@ -130,9 +139,9 @@ export default function ClientsPage() {
           onChange={(e) => setLanguage(e.target.value)}
           className="sm:w-44"
         >
-          <option value="">All languages</option>
-          <option value="UZ">Uzbek</option>
-          <option value="RU">Russian</option>
+          <option value="">{t("Барча тиллар", "All languages")}</option>
+          <option value="UZ">{t("Ўзбекча", "Uzbek")}</option>
+          <option value="RU">{t("Русча", "Russian")}</option>
         </Select>
       </div>
 
@@ -141,7 +150,7 @@ export default function ClientsPage() {
         <div className="sticky top-2 z-10 px-4 py-2.5 bg-primary text-primary-foreground rounded-md flex items-center justify-between shadow-sm">
           <div className="text-sm">
             <span className="font-bold font-mono">{selectedCount}</span>{" "}
-            client{selectedCount === 1 ? "" : "s"} selected
+            {t(`мижоз танланди`, `client${selectedCount === 1 ? "" : "s"} selected`)}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -150,7 +159,7 @@ export default function ClientsPage() {
               onClick={() => setExportOpen(true)}
             >
               <Send className="h-4 w-4 mr-2" />
-              Export Contacts
+              {t("Контактларни экспорт қилиш", "Export Contacts")}
             </Button>
             <Button
               size="sm"
@@ -159,7 +168,7 @@ export default function ClientsPage() {
               onClick={clearSelection}
             >
               <X className="h-4 w-4 mr-1" />
-              Clear
+              {t("Тозалаш", "Clear")}
             </Button>
           </div>
         </div>
@@ -167,9 +176,9 @@ export default function ClientsPage() {
 
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
-          <div className="p-6 text-muted-foreground">Loading…</div>
+          <div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
         ) : clients.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">No clients found</div>
+          <div className="p-12 text-center text-muted-foreground">{t("Мижоз топилмади", "No clients found")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
@@ -185,18 +194,18 @@ export default function ClientsPage() {
                       disabled={eligibleIds.length === 0}
                       title={
                         eligibleIds.length === 0
-                          ? "No clients with consent on file in current view"
-                          : "Select all clients with consent on file"
+                          ? t("Жорий кўринишда розилик берган мижоз йўқ", "No clients with consent on file in current view")
+                          : t("Розилик берган барча мижозларни танлаш", "Select all clients with consent on file")
                       }
                     />
                   </th>
-                  <th className="text-left px-3 py-2.5">Исм · Name</th>
-                  <th className="text-left px-3 py-2.5">Тел · Phone</th>
-                  <th className="text-left px-3 py-2.5">Манзил · Address</th>
-                  <th className="text-left px-3 py-2.5">Lang</th>
-                  <th className="text-left px-3 py-2.5">Source</th>
-                  <th className="text-right px-3 py-2.5">Orders</th>
-                  <th className="text-left px-3 py-2.5">Added</th>
+                  <th className="text-left px-3 py-2.5">Исм<span className="lang-en"> · Name</span></th>
+                  <th className="text-left px-3 py-2.5">Тел<span className="lang-en"> · Phone</span></th>
+                  <th className="text-left px-3 py-2.5">Манзил<span className="lang-en"> · Address</span></th>
+                  <th className="text-left px-3 py-2.5">{t("Тил", "Lang")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Манба", "Source")}</th>
+                  <th className="text-right px-3 py-2.5">{t("Буюртма", "Orders")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Қўшилди", "Added")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -220,8 +229,8 @@ export default function ClientsPage() {
                           onChange={() => toggleOne(c.id)}
                           title={
                             eligible
-                              ? "Toggle selection"
-                              : "Розилик берилмаган · No consent on file"
+                              ? t("Танловни ўзгартириш", "Toggle selection")
+                              : t("Розилик берилмаган", "No consent on file")
                           }
                         />
                       </td>
@@ -270,6 +279,7 @@ export default function ClientsPage() {
 }
 
 function NewClientDialog() {
+  const t = useT();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -299,12 +309,12 @@ function NewClientDialog() {
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
-          New Client
+          {t("Янги мижоз", "New Client")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add New Client</DialogTitle>
+          <DialogTitle>{t("Янги мижоз қўшиш", "Add New Client")}</DialogTitle>
         </DialogHeader>
         <form
           onSubmit={(e) => {
@@ -314,7 +324,7 @@ function NewClientDialog() {
           className="space-y-3"
         >
           <div className="space-y-1.5">
-            <Label>Name *</Label>
+            <Label>{t("Исм *", "Name *")}</Label>
             <Input
               required
               value={form.name}
@@ -322,7 +332,7 @@ function NewClientDialog() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Phone *</Label>
+            <Label>{t("Телефон *", "Phone *")}</Label>
             <Input
               required
               value={form.phone}
@@ -331,33 +341,36 @@ function NewClientDialog() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Манзил · Address</Label>
+              <Label>Манзил<span className="lang-en"> · Address</span></Label>
               <Input
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Language</Label>
+              <Label>{t("Тил", "Language")}</Label>
               <Select
                 value={form.language}
                 onChange={(e) => setForm({ ...form, language: e.target.value })}
               >
-                <option value="UZ">Uzbek</option>
-                <option value="RU">Russian</option>
+                <option value="UZ">{t("Ўзбекча", "Uzbek")}</option>
+                <option value="RU">{t("Русча", "Russian")}</option>
               </Select>
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Source</Label>
+            <Label>{t("Манба", "Source")}</Label>
             <Input
-              placeholder="e.g. Instagram, referral, walk-in"
+              placeholder={t(
+                "масалан: Instagram, тавсия, кириб келган",
+                "e.g. Instagram, referral, walk-in",
+              )}
               value={form.source}
               onChange={(e) => setForm({ ...form, source: e.target.value })}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Notes</Label>
+            <Label>{t("Изоҳ", "Notes")}</Label>
             <Input
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
@@ -371,11 +384,11 @@ function NewClientDialog() {
           <div className="flex justify-end gap-2 pt-2">
             <DialogClose asChild>
               <Button type="button" variant="outline">
-                Cancel
+                {t("Бекор қилиш", "Cancel")}
               </Button>
             </DialogClose>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Saving…" : "Create"}
+              {mutation.isPending ? t("Сақланмоқда…", "Saving…") : t("Яратиш", "Create")}
             </Button>
           </div>
         </form>

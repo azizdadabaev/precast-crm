@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/fetcher";
+import { useT } from "@/lib/i18n";
 
 export default function LoginPage() {
   return (
@@ -16,6 +17,7 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
+  const t = useT();
   const router = useRouter();
   const search = useSearchParams();
   const [email, setEmail] = useState("");
@@ -64,16 +66,19 @@ function LoginForm() {
               EtalonSlabs
             </div>
             <div className="text-[10px] font-medium uppercase tracking-widest text-text-tertiary leading-none">
-              Manufacturing CRM
+              {t("Ишлаб чиқариш CRM", "Manufacturing CRM")}
             </div>
           </div>
         </div>
 
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
           <div className="mb-5">
-            <h1 className="text-xl font-bold tracking-tight">Sign in</h1>
+            <h1 className="text-xl font-bold tracking-tight">{t("Кириш", "Sign in")}</h1>
             <p className="text-sm text-text-tertiary">
-              Welcome back — please sign in to your account.
+              {t(
+                "Хуш келибсиз — илтимос ҳисобингизга киринг.",
+                "Welcome back — please sign in to your account.",
+              )}
             </p>
           </div>
 
@@ -90,7 +95,7 @@ function LoginForm() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("Парол", "Password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -106,10 +111,10 @@ function LoginForm() {
               </div>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
+              {loading ? t("Кирилмоқда…", "Signing in…") : t("Кириш", "Sign in")}
             </Button>
             <p className="text-[11px] font-mono text-text-tertiary text-center pt-2">
-              Default seed: admin@precast.local / admin123
+              {t("Стандарт уруғ:", "Default seed:")} admin@precast.local / admin123
             </p>
           </form>
         </div>

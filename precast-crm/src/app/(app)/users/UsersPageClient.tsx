@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Plus, Pencil } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { isUserCustomized, roleDisplayLabel } from "@/lib/permissions";
 import { AddUserDialog } from "@/components/users/AddUserDialog";
 import { EditUserDialog } from "@/components/users/EditUserDialog";
@@ -14,6 +15,7 @@ import type { AuthUser } from "@/lib/auth";
 import type { ManagedUser } from "./types";
 
 export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data: users = [], isLoading } = useQuery<ManagedUser[]>({
     queryKey: ["users"],
@@ -36,19 +38,22 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Фойдаланувчилар{" "}
-            <span className="text-muted-foreground font-normal text-base">
-              · Users
+            Фойдаланувчилар
+            <span className="lang-en text-muted-foreground font-normal text-base">
+              {" "}· Users
             </span>
           </h1>
           <p className="text-sm text-muted-foreground">
-            Add staff, customize permissions, disable accounts.
+            {t(
+              "Ходим қўшинг, рухсатларни мослаштиринг, ҳисобларни ўчиринг.",
+              "Add staff, customize permissions, disable accounts.",
+            )}
           </p>
         </div>
         {canCreate && (
           <Button onClick={() => setAddOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Add user
+            {t("Фойдаланувчи қўшиш", "Add user")}
           </Button>
         )}
       </div>
@@ -58,12 +63,12 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
           <table className="w-full text-sm">
             <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left px-3 py-2.5">Исм · Name</th>
+                <th className="text-left px-3 py-2.5">Исм<span className="lang-en"> · Name</span></th>
                 <th className="text-left px-3 py-2.5">Email</th>
-                <th className="text-left px-3 py-2.5">Шаблон · Template</th>
-                <th className="text-right px-3 py-2.5">Perms</th>
-                <th className="text-left px-3 py-2.5">Status</th>
-                <th className="text-left px-3 py-2.5">Last login</th>
+                <th className="text-left px-3 py-2.5">Шаблон<span className="lang-en"> · Template</span></th>
+                <th className="text-right px-3 py-2.5">{t("Рухсат", "Perms")}</th>
+                <th className="text-left px-3 py-2.5">{t("Ҳолат", "Status")}</th>
+                <th className="text-left px-3 py-2.5">{t("Сўнгги кириш", "Last login")}</th>
                 <th className="px-3 py-2.5 w-24"></th>
               </tr>
             </thead>
@@ -71,14 +76,14 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
               {isLoading && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                    Loading…
+                    {t("Юкланмоқда…", "Loading…")}
                   </td>
                 </tr>
               )}
               {!isLoading && users.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
-                    No users
+                    {t("Фойдаланувчилар йўқ", "No users")}
                   </td>
                 </tr>
               )}
@@ -102,7 +107,7 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
                       <div className="font-medium">{u.name}</div>
                       {u.id === currentUser.id && (
                         <div className="text-[10px] uppercase tracking-wider text-text-tertiary">
-                          you
+                          {t("сиз", "you")}
                         </div>
                       )}
                     </td>
@@ -115,7 +120,7 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
                         {customized && (
                           <Chip variant="neutral">
                             <Pencil className="h-2.5 w-2.5" />
-                            Custom
+                            {t("Махсус", "Custom")}
                           </Chip>
                         )}
                       </div>
@@ -127,10 +132,10 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
                       {u.isActive ? (
                         <Chip variant="success">
                           <span>●</span>
-                          <span>Active</span>
+                          <span>{t("Фаол", "Active")}</span>
                         </Chip>
                       ) : (
-                        <Chip variant="neutral">Disabled</Chip>
+                        <Chip variant="neutral">{t("Ўчирилган", "Disabled")}</Chip>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
@@ -144,7 +149,7 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
                           onClick={() => setEditTarget(u)}
                         >
                           <Pencil className="h-3.5 w-3.5 mr-1" />
-                          Edit
+                          {t("Таҳрирлаш", "Edit")}
                         </Button>
                       )}
                     </td>

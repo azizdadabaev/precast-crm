@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/fetcher";
+import { useT } from "@/lib/i18n";
 
 export function ChangePasswordClient({
   mustChange,
@@ -14,6 +15,7 @@ export function ChangePasswordClient({
   mustChange: boolean;
   userName: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [currentPwd, setCurrentPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
@@ -26,11 +28,11 @@ export function ChangePasswordClient({
     e.preventDefault();
     setError(null);
     if (newPwd.length < 8) {
-      setError("New password must be at least 8 chars");
+      setError(t("Янги парол камида 8 белги бўлиши керак", "New password must be at least 8 chars"));
       return;
     }
     if (newPwd !== confirmPwd) {
-      setError("Passwords do not match");
+      setError(t("Пароллар мос келмайди", "Passwords do not match"));
       return;
     }
     setBusy(true);
@@ -56,24 +58,28 @@ export function ChangePasswordClient({
       <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="mb-5">
           <h1 className="text-xl font-bold tracking-tight">
-            {mustChange
-              ? "Паролни ўзгартиринг"
-              : "Паролингизни янгиланг"}{" "}
-            <span className="text-muted-foreground font-normal text-base">
-              · {mustChange ? "Change password" : "Update password"}
+            {mustChange ? "Паролни ўзгартиринг" : "Паролингизни янгиланг"}
+            <span className="lang-en text-muted-foreground font-normal text-base">
+              {" "}· {mustChange ? "Change password" : "Update password"}
             </span>
           </h1>
           <p className="text-sm text-text-tertiary">
             {mustChange
-              ? `${userName}, please change your initial password before continuing.`
-              : `${userName}, enter and confirm a new password.`}
+              ? t(
+                  `${userName}, давом этишдан олдин дастлабки паролни ўзгартиринг.`,
+                  `${userName}, please change your initial password before continuing.`,
+                )
+              : t(
+                  `${userName}, янги паролни киритинг ва тасдиқланг.`,
+                  `${userName}, enter and confirm a new password.`,
+                )}
           </p>
         </div>
 
         <form onSubmit={submit} className="space-y-4">
           {!mustChange && (
             <div className="space-y-1.5">
-              <Label htmlFor="cur">Жорий парол · Current password</Label>
+              <Label htmlFor="cur">Жорий парол<span className="lang-en"> · Current password</span></Label>
               <Input
                 id="cur"
                 type="password"
@@ -85,7 +91,7 @@ export function ChangePasswordClient({
             </div>
           )}
           <div className="space-y-1.5">
-            <Label htmlFor="new">Янги парол · New password</Label>
+            <Label htmlFor="new">Янги парол<span className="lang-en"> · New password</span></Label>
             <Input
               id="new"
               type="password"
@@ -96,12 +102,12 @@ export function ChangePasswordClient({
               autoComplete="new-password"
             />
             <div className="text-xs text-text-tertiary">
-              Камида 8 белги · At least 8 chars.
+              Камида 8 белги<span className="lang-en">{" "}· At least 8 chars.</span>
             </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="confirm">
-              Тасдиқланг · Confirm new password
+              Тасдиқланг<span className="lang-en"> · Confirm new password</span>
             </Label>
             <Input
               id="confirm"
@@ -119,7 +125,7 @@ export function ChangePasswordClient({
           )}
           {success && (
             <div className="text-sm text-success bg-success/10 border border-success/30 px-3 py-2 rounded-md">
-              ✓ Янгиланди · Password updated
+              ✓ Янгиланди<span className="lang-en"> · Password updated</span>
             </div>
           )}
           <Button
@@ -128,10 +134,10 @@ export function ChangePasswordClient({
             disabled={busy || success}
           >
             {busy
-              ? "Сақланмоқда…"
+              ? t("Сақланмоқда…", "Saving…")
               : success
-                ? "Янгиланди ✓"
-                : "Сақлаш · Save"}
+                ? t("Янгиланди ✓", "Updated ✓")
+                : <>Сақлаш<span className="lang-en"> · Save</span></>}
           </Button>
         </form>
       </div>
