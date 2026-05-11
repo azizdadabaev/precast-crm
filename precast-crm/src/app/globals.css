@@ -32,16 +32,19 @@
     --input: 225 32% 90%;
     --border-strong: 227 27% 82%;     /* #c4cadf — divider, focus */
 
-    /* Brand accent — electric blue (primary CTAs, links, active filter) */
-    --accent: 220 100% 65%;           /* #4e80ff */
-    --accent-foreground: 0 0% 100%;
-    --accent-hover: 223 85% 59%;      /* #3d6fef */
-    --accent-dim: 220 100% 65%;       /* used with /10 opacity for chips */
-    --ring: 220 100% 65%;
-
-    /* Primary (CTAs) — same as accent in this palette */
+    /* Primary CTAs / brand → etalon electric blue (#4e80ff).
+       This is the only "brand color" in the system; chips and active
+       state indicators reuse it via `bg-primary/10` / `text-primary`. */
     --primary: 220 100% 65%;          /* #4e80ff */
     --primary-foreground: 0 0% 100%;
+    --primary-hover: 223 85% 59%;     /* #3d6fef */
+    --ring: 220 100% 65%;
+
+    /* Accent → SUBTLE hover surface (shadcn convention).
+       Used by Button outline/ghost variants, dropdown items, sidebar
+       hovers, etc. NOT the brand color — see `--primary` for that. */
+    --accent: 226 53% 96%;            /* #eef1fa (etalon surfaceActive) */
+    --accent-foreground: 225 38% 8%;  /* same as --foreground for AA */
 
     /* Secondary (subdued button) */
     --secondary: 229 27% 94%;
