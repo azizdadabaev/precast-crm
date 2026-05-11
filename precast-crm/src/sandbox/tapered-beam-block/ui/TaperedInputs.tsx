@@ -75,7 +75,7 @@ export function TaperedInputs({
   return (
     <Card>
       <CardHeader className="pb-3 border-b">
-        <CardTitle className="text-base">Кирувчи маълумотлар · Inputs</CardTitle>
+        <CardTitle className="text-base">Кирувчи маълумотлар<span className="lang-en"> · Inputs</span></CardTitle>
       </CardHeader>
       <CardContent className="pt-4 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -110,13 +110,13 @@ export function TaperedInputs({
               checked={form.useIrregular}
               onChange={(e) => set("useIrregular", e.target.checked)}
             />
-            Тўғри тўртбурчак эмас? · Irregular quadrilateral?
+            Тўғри тўртбурчак эмас?<span className="lang-en"> · Irregular quadrilateral?</span>
           </label>
           {form.useIrregular && (
             <div className="mt-3 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Foydalanish: ikki yon tomon uzunliklari farq qilsa to&apos;ldiring · Use these
-                only when the two length-direction sides differ.
+                Фойдаланиш: икки ён узунлиги фарқ қилса тўлдиринг
+                <span className="lang-en"> · Use these only when the two length-direction sides differ.</span>
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field
@@ -147,9 +147,9 @@ export function TaperedInputs({
             step={0.001}
           />
           {beamSpacingDeviates && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-              Стандарт қиймат — 0.58 м. Ўзгартирганингиз ишлаб чиқариш қоидаларига зид. ·
-              Standard is 0.58 m. Changing this contradicts factory conventions.
+            <p className="text-xs text-warning bg-warning/10 border border-warning/30 rounded px-2 py-1">
+              Стандарт қиймат — 0.58 м. Ўзгартиришингиз ишлаб чиқариш қоидаларига зид.
+              <span className="lang-en"> · Standard is 0.58 m. Changing this contradicts factory conventions.</span>
             </p>
           )}
         </div>
@@ -159,7 +159,7 @@ export function TaperedInputs({
             onClick={() => onCalculate(formToInput(form))}
             className="bg-primary"
           >
-            Ҳисоблаш · Calculate
+            Ҳисоблаш<span className="lang-en"> · Calculate</span>
           </Button>
           <ExampleLoader onLoad={handleExample} />
         </div>
