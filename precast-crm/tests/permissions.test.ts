@@ -175,25 +175,39 @@ describe("isUserCustomized", () => {
 });
 
 describe("homeForUser", () => {
-  it("sends users with dashboard.view to /dashboard", () => {
+  it("sends any user with order.view to /orders (top priority)", () => {
+    expect(homeForUser(activeUser(["order.view"]))).toBe("/orders");
+  });
+
+  it("prefers /orders even when the user also has dashboard.view", () => {
+    // Order page is the day-to-day workflow for everyone who can see
+    // it — dashboard is secondary. Owner/Admin/Sales/Inventory/
+    // Accountant/Driver templates all carry order.view, so this is
+    // the practical default landing for almost every user.
+    expect(
+      homeForUser(activeUser(["dashboard.view", "order.view"])),
+    ).toBe("/orders");
+  });
+
+  it("falls through to /dashboard when no order.view but has dashboard.view", () => {
     expect(homeForUser(activeUser(["dashboard.view"]))).toBe("/dashboard");
   });
 
-  it("sends users with only dashboard.viewBasic to /dashboard", () => {
+  it("falls through to /dashboard with only dashboard.viewBasic", () => {
     expect(homeForUser(activeUser(["dashboard.viewBasic"]))).toBe("/dashboard");
   });
 
-  it("sends sales-style users (calculator.use, no dashboard) to /calculations", () => {
+  it("falls through to /calculations for users with calculator.use only", () => {
     expect(
       homeForUser(activeUser(["calculator.use", "order.create"])),
     ).toBe("/calculations");
   });
 
-  it("sends inventory-only users to /inventory", () => {
+  it("falls through to /inventory for inventory-view-only users", () => {
     expect(homeForUser(activeUser(["inventory.view"]))).toBe("/inventory");
   });
 
-  it("sends driver-style users to /dispatches", () => {
+  it("falls through to /dispatches for dispatch.view users without order.view", () => {
     expect(
       homeForUser(activeUser(["dispatch.view", "payment.record"])),
     ).toBe("/dispatches");
@@ -205,7 +219,29 @@ describe("homeForUser", () => {
 
   it("falls back to /profile for inactive users (since can() returns false)", () => {
     expect(
-      homeForUser({ permissions: ["dashboard.view"], isActive: false }),
+      homeForUser({ permissions: ["order.view"], isActive: false }),
     ).toBe("/profile");
+  });
+});
+
+describe("ROLE_TEMPLATES — order.view coverage", () => {
+  it("every standard template includes order.view so login lands on /orders", () => {
+    // CUSTOM is the only template that intentionally has no defaults
+    // (operator picks per-user); every named role should grant
+    // order.view by default so the homeForUser priority works.
+    const namedRoles = [
+      "OWNER",
+      "ADMIN",
+      "SALES",
+      "INVENTORY",
+      "DRIVER",
+      "ACCOUNTANT",
+    ] as const;
+    for (const role of namedRoles) {
+      const perms = getDefaultPermissionsForRole(role);
+      expect(perms, `${role} should include order.view`).toContain(
+        "order.view",
+      );
+    }
   });
 });

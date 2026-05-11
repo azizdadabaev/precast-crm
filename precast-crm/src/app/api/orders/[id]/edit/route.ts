@@ -72,7 +72,20 @@ export const PATCH = withPermission<{ id: string }>(
     const totalArea = computed.reduce((s, c) => s + c.result.monolith_area, 0);
     const totalBlocks = computed.reduce((s, c) => s + c.result.total_blocks, 0);
     const totalBeams = computed.reduce((s, c) => s + c.result.beam_count, 0);
-    const discountAmount = roomsSubtotal * (body.discountPercent / 100);
+    // Same precedence rule as POST /api/orders: explicit amount wins
+    // over percent. Amount capped at subtotal.
+    let discountAmount: number;
+    let resolvedDiscountPercent: number;
+    if (body.discountAmount > 0) {
+      discountAmount = Math.min(body.discountAmount, roomsSubtotal);
+      resolvedDiscountPercent =
+        roomsSubtotal > 0
+          ? Math.round((discountAmount / roomsSubtotal) * 10000) / 100
+          : 0;
+    } else {
+      resolvedDiscountPercent = body.discountPercent;
+      discountAmount = roomsSubtotal * (resolvedDiscountPercent / 100);
+    }
     const newTotal = roomsSubtotal - discountAmount + body.deliveryCost + body.otherCost;
 
     // Recompute confirmedPaid + paymentState against the new total.
@@ -106,7 +119,7 @@ export const PATCH = withPermission<{ id: string }>(
     };
     const newSnapshot = {
       roomsSubtotal,
-      discountPercent: body.discountPercent,
+      discountPercent: resolvedDiscountPercent,
       discountAmount,
       deliveryCost: body.deliveryCost,
       otherCost: body.otherCost,
@@ -137,7 +150,7 @@ export const PATCH = withPermission<{ id: string }>(
         where: { id: existing.id },
         data: {
           roomsSubtotal,
-          discountPercent: body.discountPercent,
+          discountPercent: resolvedDiscountPercent,
           discountAmount,
           deliveryCost: body.deliveryCost,
           otherCost: body.otherCost,

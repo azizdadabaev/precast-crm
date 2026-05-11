@@ -284,7 +284,9 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "dashboard.viewBasic",
   ],
 
-  DRIVER: ["dispatch.view", "payment.record"],
+  // Drivers see the orders queue so they know what's outstanding on
+  // their route. They can't create or edit — order.view is read-only.
+  DRIVER: ["order.view", "dispatch.view", "payment.record"],
 
   ACCOUNTANT: [
     "order.view",
@@ -336,17 +338,20 @@ export function canAny(
 }
 
 // Decide where to redirect a user after login or after a failed
-// permission check. Picks the first page they actually have access to,
-// in priority order. /profile is the universal fallback (every active
-// user can change their own password).
+// permission check. /orders is the default landing for everyone who
+// can see it — operators across all roles spend the day on this page,
+// so dropping people there on login matches the actual workflow. We
+// fall through to dashboard / calculator / inventory / dispatch only
+// when the user doesn't have order.view (e.g. a CUSTOM-role user
+// whose operator un-ticked it). /profile is the universal fallback.
 export function homeForUser(user: PermissionSubject): string {
+  if (can(user, "order.view")) return "/orders";
   if (can(user, "dashboard.view") || can(user, "dashboard.viewBasic")) {
     return "/dashboard";
   }
   if (can(user, "calculator.use")) return "/calculations";
   if (can(user, "inventory.view")) return "/inventory";
   if (can(user, "dispatch.view")) return "/dispatches";
-  if (can(user, "order.view")) return "/orders";
   return "/profile";
 }
 

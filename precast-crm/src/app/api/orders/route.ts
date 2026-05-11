@@ -94,7 +94,24 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   const totalArea = computed.reduce((s, c) => s + c.result.monolith_area, 0);
   const totalBlocks = computed.reduce((s, c) => s + c.result.total_blocks, 0);
   const totalBeams = computed.reduce((s, c) => s + c.result.beam_count, 0);
-  const discountAmount = roomsSubtotal * (body.discountPercent / 100);
+  // Discount has two modes: exact UZS amount OR percentage. The
+  // client UI gates them mutually exclusive but the server resolves
+  // by precedence (amount > 0 wins) — safe even if a buggy client
+  // sends both. Amount is capped at the subtotal so a typo can't
+  // produce a negative total. The persisted discountPercent is
+  // back-computed from the amount for downstream consistency.
+  let discountAmount: number;
+  let resolvedDiscountPercent: number;
+  if (body.discountAmount > 0) {
+    discountAmount = Math.min(body.discountAmount, roomsSubtotal);
+    resolvedDiscountPercent =
+      roomsSubtotal > 0
+        ? Math.round((discountAmount / roomsSubtotal) * 10000) / 100
+        : 0;
+  } else {
+    resolvedDiscountPercent = body.discountPercent;
+    discountAmount = roomsSubtotal * (resolvedDiscountPercent / 100);
+  }
   const totalPrice =
     roomsSubtotal - discountAmount + body.deliveryCost + body.otherCost;
 
@@ -231,7 +248,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
         primaryCalculationId: primaryCalc?.id ?? null,
         status: "PLACED",
         roomsSubtotal,
-        discountPercent: body.discountPercent,
+        discountPercent: resolvedDiscountPercent,
         discountAmount,
         deliveryCost: body.deliveryCost,
         otherCost: body.otherCost,

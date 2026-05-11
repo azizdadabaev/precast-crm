@@ -53,6 +53,11 @@ interface NumberInputProps {
   placeholder?: string;
   title?: string;
   integer?: boolean;
+  /** Forwarded to the underlying <input>. Disabled fields don't
+   *  accept input, ignore commit, and pick up the `:disabled`
+   *  pseudo-class so existing Tailwind `disabled:opacity-*` rules
+   *  on the className prop just work. */
+  disabled?: boolean;
 }
 
 export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
@@ -73,6 +78,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
       placeholder,
       title,
       integer = false,
+      disabled = false,
     },
     ref,
   ) {
@@ -124,6 +130,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
         autoComplete="off"
         autoCorrect="off"
         spellCheck={false}
+        disabled={disabled}
         className={className}
         placeholder={placeholder}
         title={title ?? "Inline math: try 4*0.58 or 1+1.5"}

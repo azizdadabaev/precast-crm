@@ -45,6 +45,8 @@ function CalculationsInner() {
   const setRows = useCalculatorStore((s) => s.setRows);
   const discountPercent = useCalculatorStore((s) => s.discountPercent);
   const setDiscountPercent = useCalculatorStore((s) => s.setDiscountPercent);
+  const discountAmount = useCalculatorStore((s) => s.discountAmount);
+  const setDiscountAmount = useCalculatorStore((s) => s.setDiscountAmount);
   const draftProjectId = useCalculatorStore((s) => s.draftProjectId);
   const setDraftProjectId = useCalculatorStore((s) => s.setDraftProjectId);
   const editingOrderId = useCalculatorStore((s) => s.editingOrderId);
@@ -349,7 +351,7 @@ function CalculationsInner() {
     const valid = validRooms
       .map((r) => r.result)
       .filter((r): r is NonNullable<SlabRow["result"]> => !!r);
-    const proj = projectTotal(valid, discountPercent);
+    const proj = projectTotal(valid, discountPercent, discountAmount);
     const undersizedRooms = validRooms
       .filter((r) => (r.originalWidth ?? 0) > 0 && r.innerWidth < (r.originalWidth ?? 0))
       .map((r) => ({
@@ -373,7 +375,7 @@ function CalculationsInner() {
       totalPrice: proj.total,
       undersizedRooms,
     };
-  }, [validRooms, discountPercent, client]);
+  }, [validRooms, discountPercent, discountAmount, client]);
 
   // ── Mutations ──
   const saveDraft = useMutation({
@@ -445,6 +447,7 @@ function CalculationsInner() {
             m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
           })),
           discountPercent,
+          discountAmount,
           deliveryCost: 0,
           otherCost: 0,
           scheduledAt: args.scheduledAt.toISOString(),
@@ -487,6 +490,7 @@ function CalculationsInner() {
               m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
             })),
             discountPercent,
+            discountAmount,
             deliveryCost: 0,
             otherCost: 0,
             scheduledAt: args.scheduledAt.toISOString(),
@@ -613,6 +617,8 @@ function CalculationsInner() {
         onChange={setRows}
         discountPercent={discountPercent}
         onDiscountChange={setDiscountPercent}
+        discountAmount={discountAmount}
+        onDiscountAmountChange={setDiscountAmount}
         actions={
           <>
             <Button

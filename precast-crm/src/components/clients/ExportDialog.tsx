@@ -80,8 +80,36 @@ export function ExportDialog({ open, ids, onClose }: Props) {
   }, [open, ids]);
 
   async function copyToClipboard() {
+    setError(null);
     try {
-      await navigator.clipboard.writeText(text);
+      // Async Clipboard API only exists in secure contexts (HTTPS /
+      // localhost). The droplet currently serves over plain HTTP on
+      // an IP, so `navigator.clipboard` is `undefined` there and we'd
+      // crash with "Cannot read properties of undefined (reading
+      // 'writeText')". Fall back to the legacy document.execCommand
+      // pattern, which still works under HTTP across every browser
+      // we care about. Drop the fallback once Caddy is fronting a
+      // real domain with TLS (see DEPLOYMENT.md Step 5).
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        // Off-screen but reachable; iOS Safari needs the element to
+        // be in the DOM and `contenteditable` to allow selection.
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.top = "0";
+        ta.style.left = "0";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        if (!ok) throw new Error("execCommand returned false");
+      }
       setJustCopied(true);
       setTimeout(() => setJustCopied(false), 2000);
     } catch (e) {

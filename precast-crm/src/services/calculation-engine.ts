@@ -440,10 +440,38 @@ export interface ProjectTotal {
   total: number;
 }
 
-export function projectTotal(rooms: SlabResult[], discount_percent = 0): ProjectTotal {
-  const pct = Math.max(0, Math.min(100, discount_percent));
+/**
+ * Compute the project's grand total from the room subtotals and a
+ * single discount input. Discount can be expressed either as a
+ * percentage of the subtotal (the historical mode) OR as an explicit
+ * UZS amount — they're mutually exclusive at the call site:
+ *
+ *   - `discount_amount` (when > 0) wins. The percent in the return
+ *     value is back-computed from it so downstream code that reads
+ *     `discount_percent` stays consistent (rounded to 2 decimals).
+ *   - Otherwise we apply `discount_percent` as before.
+ *
+ * The amount is capped at the subtotal so a typo can't produce a
+ * negative total.
+ */
+export function projectTotal(
+  rooms: SlabResult[],
+  discount_percent = 0,
+  discount_amount_override?: number,
+): ProjectTotal {
   const rooms_subtotal = round2(rooms.reduce((s, r) => s + r.subtotal, 0));
-  const discount_amount = round2((rooms_subtotal * pct) / 100);
+
+  let discount_amount: number;
+  let pct: number;
+  if (discount_amount_override && discount_amount_override > 0) {
+    discount_amount = round2(Math.min(discount_amount_override, rooms_subtotal));
+    pct = rooms_subtotal > 0
+      ? round2((discount_amount / rooms_subtotal) * 100)
+      : 0;
+  } else {
+    pct = Math.max(0, Math.min(100, discount_percent));
+    discount_amount = round2((rooms_subtotal * pct) / 100);
+  }
   const total = round2(rooms_subtotal - discount_amount);
   return { rooms_subtotal, discount_percent: pct, discount_amount, total };
 }

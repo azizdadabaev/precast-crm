@@ -62,8 +62,17 @@ export interface SlabRow {
 interface Props {
   rows: SlabRow[];
   onChange: (rows: SlabRow[]) => void;
+  // Two mutually-exclusive ways to express the project's discount:
+  //   - discountPercent (0–100, applied to rooms_subtotal)
+  //   - discountAmount  (UZS, capped at rooms_subtotal)
+  // Whichever has a non-zero value wins (`discountAmount > 0` takes
+  // priority — see projectTotal in calculation-engine.ts). The UI
+  // disables one field while the other carries a value, so the
+  // operator can't accidentally enter both.
   discountPercent: number;
   onDiscountChange: (pct: number) => void;
+  discountAmount: number;
+  onDiscountAmountChange: (amount: number) => void;
   /**
    * Page-level action buttons (Clear / Save Project / Place Order)
    * rendered inline in the post-table toolbar, immediately after
@@ -293,7 +302,15 @@ function H({
 // restores the feature in one line — no code archaeology needed.
 const SHOW_CUSTOMIZE_LAYOUT = false;
 
-export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscountChange, actions }: Props) {
+export function MultiRoomCalculator({
+  rows,
+  onChange,
+  discountPercent,
+  onDiscountChange,
+  discountAmount,
+  onDiscountAmountChange,
+  actions,
+}: Props) {
   // Workspace-level rounding granularity, persisted via the calculator
   // store. One setting applies to every row; survives in-app navigation
   // and is keyed per user (see src/store/calculator.ts).
@@ -451,14 +468,14 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
 
   const totals = useMemo(() => {
     const valid = rows.map((r) => r.result).filter((r): r is SlabResult => !!r);
-    const projTotal = projectTotal(valid, discountPercent);
+    const projTotal = projectTotal(valid, discountPercent, discountAmount);
     const beams = valid.reduce((s, r) => s + r.beam_count, 0);
     const blocks = valid.reduce((s, r) => s + r.total_blocks, 0);
     const monolithLength = valid.reduce((s, r) => s + r.monolith_length, 0);
     const monolithArea = valid.reduce((s, r) => s + r.monolith_area, 0);
     const concrete = valid.reduce((s, r) => s + r.concrete_volume, 0);
     return { projTotal, beams, blocks, monolithLength, monolithArea, concrete };
-  }, [rows, discountPercent]);
+  }, [rows, discountPercent, discountAmount]);
 
   const schedule = useMemo(() => {
     const acc: Record<string, number> = {};
@@ -1002,36 +1019,62 @@ export function MultiRoomCalculator({ rows, onChange, discountPercent, onDiscoun
                   {formatNumber(totals.projTotal.rooms_subtotal, 0)}
                 </span>
               </div>
+              {/* Two mutually-exclusive discount inputs. The mode is
+                  inferred from which field carries a value:
+                    - amount > 0 → "by amount" mode; percent disabled
+                    - else        → "by percent" mode; amount disabled
+                  Mirrors projectTotal()'s precedence in the engine.
+                  Operators get exact control either way without a
+                  toggle. */}
               <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Чегирма % · Discount</span>
+                <span className="text-muted-foreground">Чегирма % · Discount %</span>
                 <div className="relative">
-                  {/* NumberInput already handles select-on-focus when
-                      the value is 0 (replaces the leading "0" cleanly
-                      when the operator types) and strips paste-time
-                      "02" → "2" leading zeros. Plain <input type=number>
-                      didn't, which left the "0" stuck in front of new
-                      digits — fixed by reusing the calculator's existing
-                      number-input primitive. */}
                   <NumberInput
                     step="1"
                     min="0"
                     max="100"
                     integer
                     showZeroAsEmpty
-                    className="grid-input is-numeric h-8 w-20 rounded border border-input pr-5"
+                    className="grid-input is-numeric h-8 w-20 rounded border border-input pr-5 disabled:opacity-40 disabled:cursor-not-allowed"
                     value={discountPercent}
                     onChange={(n) =>
                       onDiscountChange(Math.min(100, Math.max(0, n)))
                     }
+                    disabled={discountAmount > 0}
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
                     %
                   </span>
                 </div>
               </div>
-              {discountPercent > 0 && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Чегирма сумма · Discount UZS</span>
+                <div className="relative">
+                  <NumberInput
+                    step="1000"
+                    min="0"
+                    integer
+                    showZeroAsEmpty
+                    className="grid-input is-numeric h-8 w-32 rounded border border-input pr-12 disabled:opacity-40 disabled:cursor-not-allowed"
+                    value={discountAmount}
+                    onChange={(n) =>
+                      onDiscountAmountChange(Math.max(0, n))
+                    }
+                    disabled={discountPercent > 0}
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+                    UZS
+                  </span>
+                </div>
+              </div>
+              {totals.projTotal.discount_amount > 0 && (
                 <div className="flex justify-between text-rose-700">
-                  <span className="text-muted-foreground">Чегирма суммаси · Discount amount</span>
+                  <span className="text-muted-foreground">
+                    Чегирма · Applied
+                    {discountAmount > 0
+                      ? ` (${totals.projTotal.discount_percent}%)`
+                      : ""}
+                  </span>
                   <span className="tabular-nums">
                     − {formatNumber(totals.projTotal.discount_amount, 0)}
                   </span>

@@ -770,7 +770,8 @@ export default function OrderDetailPage() {
               Confirmed: {formatNumber(order.confirmedPaid, 0)} / {formatNumber(order.totalPrice, 0)}
             </div>
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2">Method</th>
@@ -860,6 +861,7 @@ export default function OrderDetailPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 

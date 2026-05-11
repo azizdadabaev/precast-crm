@@ -184,6 +184,9 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
         >
           <div className="relative">
             <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               className="w-full h-9 rounded-md border border-input bg-background px-2 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 tabular-nums"
               placeholder="+998 90 ___ __ __"
               value={value.phone}

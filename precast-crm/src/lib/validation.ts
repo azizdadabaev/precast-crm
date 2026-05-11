@@ -249,8 +249,12 @@ export const PlaceOrderSchema = z.object({
   shapeType: ShapeTypeEnum.default("RECTANGULAR"),
   dimensions: ProjectDimensionsSchema.optional().nullable(),
   rooms: z.array(RoomCalcInputSchema).min(1, "at least one room is required"),
-  // Pricing
+  // Pricing — discount has two mutually-exclusive modes; the server
+  // resolves them with the same precedence as the engine (amount > 0
+  // wins). Both default to 0 so legacy clients that don't send
+  // discountAmount keep the historical percentage-only behavior.
   discountPercent: z.coerce.number().min(0).max(100).default(0),
+  discountAmount: z.coerce.number().min(0).default(0),
   deliveryCost: z.coerce.number().min(0).default(0),
   otherCost: z.coerce.number().min(0).default(0),
   // Required: when does the customer want delivery?
@@ -279,6 +283,7 @@ export const PlaceOrderSchema = z.object({
 export const EditOrderSchema = z.object({
   rooms: z.array(RoomCalcInputSchema).min(1, "at least one room is required"),
   discountPercent: z.coerce.number().min(0).max(100).default(0),
+  discountAmount: z.coerce.number().min(0).default(0),
   deliveryCost: z.coerce.number().min(0).default(0),
   otherCost: z.coerce.number().min(0).default(0),
   scheduledAt: z.coerce.date(),

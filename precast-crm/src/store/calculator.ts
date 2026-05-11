@@ -33,7 +33,12 @@ interface CalculatorState {
   client: ClientDraft;
   matchedClientId: string | null;
   rows: SlabRow[];
+  // Two ways to express the grand-total discount; mutually exclusive
+  // at the UI level (one is disabled while the other is non-zero).
+  // See projectTotal() in calculation-engine.ts for the resolution
+  // rule: amount > 0 wins, else percent.
   discountPercent: number;
+  discountAmount: number;
   /** When opening a project from /projects, this carries the project id so
    *  that "Save Project" UPDATES the existing draft instead of creating a
    *  duplicate. Persisted so it survives in-app navigation. */
@@ -56,6 +61,7 @@ interface CalculatorState {
   setMatchedClientId: (id: string | null) => void;
   setRows: (rows: SlabRow[]) => void;
   setDiscountPercent: (pct: number) => void;
+  setDiscountAmount: (amount: number) => void;
   setDraftProjectId: (id: string | null) => void;
   setEditingOrderId: (id: string | null) => void;
   setColumnWidths: (widths: Record<string, number> | null) => void;
@@ -65,7 +71,7 @@ interface CalculatorState {
    * and by hydration migration. Pass partial state; everything else
    * resets to defaults so a draft load can't leak prior session bits.
    */
-  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDraftProjectId" | "setEditingOrderId" | "setColumnWidths" | "setRoundingGrid">>) => void;
+  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDiscountAmount" | "setDraftProjectId" | "setEditingOrderId" | "setColumnWidths" | "setRoundingGrid">>) => void;
   /** Wipe all draft state. Called from the Clear button and after a
    *  successful Place Order. */
   clearAll: () => void;
@@ -83,6 +89,7 @@ const INITIAL_STATE = {
   matchedClientId: null,
   rows: [] as SlabRow[],
   discountPercent: 0,
+  discountAmount: 0,
   draftProjectId: null,
   editingOrderId: null as string | null,
   columnWidths: null as Record<string, number> | null,
@@ -94,6 +101,7 @@ interface PersistedShape {
   matchedClientId: string | null;
   rows: SlabRow[];
   discountPercent: number;
+  discountAmount: number;
   draftProjectId: string | null;
   editingOrderId: string | null;
   columnWidths: Record<string, number> | null;
@@ -188,7 +196,18 @@ export const useCalculatorStore = create<CalculatorState>()(
       setClient: (next) => set({ client: next }),
       setMatchedClientId: (id) => set({ matchedClientId: id }),
       setRows: (rows) => set({ rows }),
-      setDiscountPercent: (pct) => set({ discountPercent: pct }),
+      setDiscountPercent: (pct) =>
+        // Mutex with discountAmount — setting percent to >0 clears
+        // the amount, mirroring the UI disable rule.
+        set((s) => ({
+          discountPercent: pct,
+          discountAmount: pct > 0 ? 0 : s.discountAmount,
+        })),
+      setDiscountAmount: (amount) =>
+        set((s) => ({
+          discountAmount: amount,
+          discountPercent: amount > 0 ? 0 : s.discountPercent,
+        })),
       setDraftProjectId: (id) => set({ draftProjectId: id }),
       setEditingOrderId: (id) => set({ editingOrderId: id }),
       setColumnWidths: (widths) => set({ columnWidths: widths }),
@@ -227,6 +246,7 @@ export const useCalculatorStore = create<CalculatorState>()(
         matchedClientId: s.matchedClientId,
         rows: s.rows,
         discountPercent: s.discountPercent,
+        discountAmount: s.discountAmount,
         draftProjectId: s.draftProjectId,
         editingOrderId: s.editingOrderId,
         columnWidths: s.columnWidths,
