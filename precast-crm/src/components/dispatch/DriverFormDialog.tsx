@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -22,6 +23,7 @@ interface Props {
 /** Add Driver dialog. Phone is normalized server-side; we just accept the
  *  raw operator input and pass it through. */
 export function DriverFormDialog({ open, onClose, onSubmit }: Props) {
+  const t = useT();
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
@@ -38,11 +40,11 @@ export function DriverFormDialog({ open, onClose, onSubmit }: Props) {
 
   async function save() {
     if (name.trim().length < 2) {
-      setError("Name is too short");
+      setError(t("Исм жуда қисқа", "Name is too short"));
       return;
     }
     if (phone.replace(/\D+/g, "").length < 5) {
-      setError("Phone is too short");
+      setError(t("Телефон жуда қисқа", "Phone is too short"));
       return;
     }
     setSubmitting(true);
@@ -73,19 +75,22 @@ export function DriverFormDialog({ open, onClose, onSubmit }: Props) {
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Янги хайдовчи · New Driver</DialogTitle>
+          <DialogTitle>Янги хайдовчи<span className="lang-en"> · New Driver</span></DialogTitle>
           <DialogDescription>
-            Phone is normalized to digits-only on save (matches the Client phone format).
+            {t(
+              "Сақлаш пайтида телефон фақат рақамларга нормаллаштирилади (мижоз телефони форматига мос).",
+              "Phone is normalized to digits-only on save (matches the Client phone format).",
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Исм · Name *</Label>
+            <Label>Исм<span className="lang-en"> · Name</span> *</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Olimjon Karimov" />
           </div>
           <div className="space-y-1.5">
-            <Label>Тел рақам · Phone *</Label>
+            <Label>Тел рақам<span className="lang-en"> · Phone</span> *</Label>
             <Input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -94,8 +99,15 @@ export function DriverFormDialog({ open, onClose, onSubmit }: Props) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Изоҳ · Notes</Label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. 12-ton truck, weekend backup" />
+            <Label>Изоҳ<span className="lang-en"> · Notes</span></Label>
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder={t(
+                "масалан: 12-тонна юк машина, дам олиш кунлари захира",
+                "e.g. 12-ton truck, weekend backup",
+              )}
+            />
           </div>
 
           {error && (
@@ -108,11 +120,11 @@ export function DriverFormDialog({ open, onClose, onSubmit }: Props) {
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("Бекор қилиш", "Cancel")}
           </Button>
           <Button size="sm" onClick={save} disabled={submitting}>
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Save
+            {t("Сақлаш", "Save")}
           </Button>
         </div>
       </DialogContent>
