@@ -827,10 +827,38 @@ Drafts reopened from the DB lose `originalWidth` (it's a UI-only
 field), so the warning ceases — the assumption is the operator
 already validated dimensions when the draft was saved.
 
+## Etalon UI redesign (branch `testui`)
+
+A Claude Design output for the CRM was applied as a multi-commit
+redesign on `testui`. Light-mode only, no engine / API / permission /
+schema changes — purely visual + structural. The source-of-truth
+design files live in `docs/design/` (5 JSX references + a static HTML
+preview + a one-pager `REDESIGN.md` mapping each handoff piece to the
+production file it informs).
+
+Key choices baked in:
+- **Tokens**: Manrope body + JetBrains Mono numerics, etalon light
+  palette (electric blue `#4e80ff` primary, soft-blue page bg
+  `#f3f5fb`, dark sidebar). Hex values are in `docs/design/REDESIGN.md`
+  and consumed via HSL vars in `src/app/globals.css`.
+- **Primitives**: new `<Chip>` (status pills, `bg-{color}/10
+  text-{color} border border-{color}/30`) and `<KpiCard>`.
+- **Layout shell**: dark `<Sidebar>` (240/60 px, collapsible, persisted)
+  + new `<TopBar>` (breadcrumb + search + bell) — both wired in
+  `(app)/layout.tsx`. Mobile drawer reuses `SidebarBody`.
+- **Per-screen pattern**: tables get colored row left-borders matching
+  the status, underline-style filter tabs, mono numerics, zebra
+  striping, and `<Chip>` for any status/role/payment-state badge.
+- **Calculator zone bands**: the Modo-inspired amber / sky / emerald
+  bands (Inputs / Pattern / Computed / Pricing) on the calculator
+  table are intentional — kept as-is per the design spec.
+
+To preview locally: `git checkout testui && npm run dev`. Merge into
+`main` once verified.
+
 ## Verified local state at handoff
 
 - `npx tsc --noEmit` — 0 errors
-- `npx vitest run` — 109 / 110 (1 pre-existing skip in `inventory.test.ts`)
+- `npx vitest run` — 334 passed, 1 skipped (pre-existing)
 - `npx next build` — clean
-- Most recent commit: **`<update on next push>`** — "Delivery-First Payment Flow with Driver Cash Custody"
 - Repo: https://github.com/azizdadabaev/precast-crm
