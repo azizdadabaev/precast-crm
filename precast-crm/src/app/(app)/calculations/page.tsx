@@ -540,9 +540,10 @@ function CalculationsInner() {
           totals so the user's eye lands on the numbers before the CTAs. */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          {isEditingOrder
-            ? "Буюртмани таҳрирлаш · Edit Order"
-            : "Калькулятор · Calculator"}
+          {isEditingOrder ? "Буюртмани таҳрирлаш" : "Калькулятор"}{" "}
+          <span className="text-muted-foreground font-normal text-base">
+            · {isEditingOrder ? "Edit Order" : "Calculator"}
+          </span>
         </h1>
         <p className="text-sm text-muted-foreground">
           {isEditingOrder
@@ -555,12 +556,12 @@ function CalculationsInner() {
           escape that returns the operator to the order detail page
           without saving. */}
       {isEditingOrder && editingOrderInfo && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-foreground">
           <div>
             Editing order{" "}
             <Link
               href={`/orders/${editingOrderId}`}
-              className="font-bold tabular-nums hover:underline"
+              className="font-mono font-bold text-primary hover:underline"
             >
               {editingOrderInfo.orderNumber}
             </Link>
@@ -570,7 +571,7 @@ function CalculationsInner() {
           <button
             type="button"
             onClick={cancelEditMode}
-            className="text-xs underline hover:no-underline shrink-0"
+            className="text-xs underline hover:no-underline shrink-0 text-text-tertiary hover:text-foreground"
           >
             Cancel edits
           </button>
@@ -578,13 +579,13 @@ function CalculationsInner() {
       )}
 
       {error && (
-        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 px-3 py-2 rounded-md">
           {error}
         </div>
       )}
 
       {prefillNotice && (
-        <div className="flex items-center justify-between text-sm bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-2 rounded">
+        <div className="flex items-center justify-between text-sm bg-success/10 border border-success/30 text-success px-3 py-2 rounded-md">
           <span>{prefillNotice}</span>
           <button
             type="button"
@@ -627,7 +628,7 @@ function CalculationsInner() {
               disabled={!hasAnyContent}
               onClick={() => setClearConfirmOpen(true)}
               title="Clear the calculator and start a new calculation"
-              className="text-rose-700 hover:text-rose-800 hover:bg-rose-50"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Тозалаш · Clear
@@ -649,7 +650,7 @@ function CalculationsInner() {
             )}
             <Button
               size="sm"
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              className="bg-success hover:bg-success/90 text-success-foreground"
               disabled={!canPlaceOrder || editOrder.isPending}
               onClick={() => setOrderOpen(true)}
               title={
@@ -713,7 +714,7 @@ function CalculationsInner() {
             </Button>
             <Button
               size="sm"
-              className="bg-rose-600 hover:bg-rose-700 text-white"
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
               onClick={confirmClear}
             >
               <Trash2 className="h-4 w-4 mr-2" />
