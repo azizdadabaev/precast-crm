@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { Bell, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useLanguageStore } from "@/store/language";
+import { useLang } from "@/lib/i18n";
 
 /**
  * Top breadcrumb / search / quick-actions bar.
@@ -56,6 +58,9 @@ export function TopBar() {
   useEffect(() => {
     setMac(/Mac|iPhone|iPad/i.test(navigator.platform));
   }, []);
+  const lang = useLang();
+  const toggleLang = useLanguageStore((s) => s.toggle);
+  const uzOnly = lang === "uz";
 
   return (
     <header className="hidden lg:flex h-[52px] items-center justify-between gap-4 px-6 border-b border-border bg-card shrink-0">
@@ -71,18 +76,20 @@ export function TopBar() {
         <span className="text-[13px] font-semibold text-foreground truncate">
           {uz}
         </span>
-        <span className="text-[10px] font-mono uppercase tracking-wider text-text-tertiary bg-muted border border-border rounded-full px-2 py-0.5 leading-none shrink-0">
-          {en}
-        </span>
+        {!uzOnly && (
+          <span className="text-[10px] font-mono uppercase tracking-wider text-text-tertiary bg-muted border border-border rounded-full px-2 py-0.5 leading-none shrink-0">
+            {en}
+          </span>
+        )}
       </div>
 
-      {/* Right cluster — search, notifications, theme toggle slot */}
+      {/* Right cluster — search, language toggle, notifications */}
       <div className="flex items-center gap-2 shrink-0">
         <div className="relative flex items-center">
           <Search className="absolute left-2.5 h-3.5 w-3.5 text-text-tertiary pointer-events-none" />
           <input
             type="text"
-            placeholder="Search…"
+            placeholder={uzOnly ? "Қидириш…" : "Search…"}
             aria-label="Search"
             className={cn(
               "h-8 w-56 rounded-md border border-border bg-background pl-8 pr-12 text-xs",
@@ -95,9 +102,30 @@ export function TopBar() {
           </kbd>
         </div>
 
+        {/* UZ toggle — single click switches the whole UI between
+            bilingual mode (default) and Cyrillic-only mode. Hidden when
+            uzOnly the button itself stays UZ-labeled so the operator
+            can switch back. */}
         <button
           type="button"
-          aria-label="Notifications"
+          onClick={toggleLang}
+          aria-label={uzOnly ? "Switch to bilingual" : "Faqat o'zbekcha"}
+          title={uzOnly ? "Switch to bilingual" : "Faqat o'zbekcha · Switch to Uzbek-only"}
+          className={cn(
+            "h-8 inline-flex items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-mono font-bold uppercase tracking-wider transition-all duration-150",
+            uzOnly
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-border bg-background text-text-tertiary hover:text-foreground hover:bg-accent hover:border-border-strong",
+          )}
+        >
+          <span>UZ</span>
+          {!uzOnly && <span className="text-text-tertiary normal-case font-medium">· EN</span>}
+        </button>
+
+        <button
+          type="button"
+          aria-label={uzOnly ? "Хабарномалар" : "Notifications"}
+          title={uzOnly ? "Хабарномалар" : "Notifications"}
           className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-border bg-background text-text-tertiary hover:text-foreground hover:bg-accent transition-colors"
         >
           <Bell className="h-3.5 w-3.5" />

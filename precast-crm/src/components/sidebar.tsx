@@ -29,6 +29,7 @@ import {
   roleDisplayLabel,
   type Action,
 } from "@/lib/permissions";
+import { useLang } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/auth";
 
 interface NavItem {
@@ -166,6 +167,8 @@ export function SidebarBody({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const lang = useLang();
+  const uzOnly = lang === "uz";
 
   const visibleNav = NAV.filter((item) => isVisible(user, item));
   const customized = isUserCustomized({
@@ -219,7 +222,7 @@ export function SidebarBody({
               EtalonSlabs
             </div>
             <div className="text-[10px] font-medium uppercase tracking-widest text-text-tertiary leading-none">
-              Manufacturing CRM
+              {uzOnly ? "Ишлаб чиқариш CRM" : "Manufacturing CRM"}
             </div>
           </div>
         )}
@@ -343,7 +346,7 @@ export function SidebarBody({
           <button
             type="button"
             onClick={logout}
-            title="Logout"
+            title={uzOnly ? "Чиқиш" : "Logout"}
             className={cn(
               "flex items-center justify-center gap-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors",
               collapsed
@@ -352,7 +355,7 @@ export function SidebarBody({
             )}
           >
             <LogOut className="h-4 w-4" />
-            {!collapsed && <span>Logout</span>}
+            {!collapsed && <span>{uzOnly ? "Чиқиш" : "Logout"}</span>}
           </button>
         </div>
       </div>

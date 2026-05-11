@@ -26,10 +26,12 @@ import { TaperedPrefillSchema } from "@/lib/validation";
 import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-bridge";
 import { useCalculatorStore } from "@/store/calculator";
 import { useHydrateCalculator } from "@/store/useHydrateCalculator";
+import { Bi, useT } from "@/lib/i18n";
 
 function CalculationsInner() {
   const router = useRouter();
   const search = useSearchParams();
+  const t = useT();
 
   // Hydrate the persisted calculator store from localStorage. Until this
   // resolves we render a skeleton so the operator never briefly sees an
@@ -540,15 +542,22 @@ function CalculationsInner() {
           totals so the user's eye lands on the numbers before the CTAs. */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          {isEditingOrder ? "Буюртмани таҳрирлаш" : "Калькулятор"}{" "}
-          <span className="text-muted-foreground font-normal text-base">
-            · {isEditingOrder ? "Edit Order" : "Calculator"}
-          </span>
+          <Bi
+            uz={isEditingOrder ? "Буюртмани таҳрирлаш" : "Калькулятор"}
+            en={isEditingOrder ? "Edit Order" : "Calculator"}
+            enClassName="text-muted-foreground font-normal text-base"
+          />
         </h1>
         <p className="text-sm text-muted-foreground">
           {isEditingOrder
-            ? "Editing in place — saving replaces the existing order; no new order is placed."
-            : "Quick calc during a phone call. Save as Project, or place an order directly."}
+            ? t(
+                "Жойида таҳрирлаш — сақлаш мавжуд буюртмани алмаштиради; янги буюртма яратилмайди.",
+                "Editing in place — saving replaces the existing order; no new order is placed.",
+              )
+            : t(
+                "Телефонда тез ҳисоб-китоб. Лойиҳа сифатида сақланг ёки буюртма беринг.",
+                "Quick calc during a phone call. Save as Project, or place an order directly.",
+              )}
         </p>
       </div>
 
@@ -558,22 +567,25 @@ function CalculationsInner() {
       {isEditingOrder && editingOrderInfo && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm text-foreground">
           <div>
-            Editing order{" "}
+            {t("Буюртма таҳрирланмоқда", "Editing order")}{" "}
             <Link
               href={`/orders/${editingOrderId}`}
               className="font-mono font-bold text-primary hover:underline"
             >
               {editingOrderInfo.orderNumber}
             </Link>
-            . Save replaces the existing snapshot. Existing payments are preserved;
-            the owner reconciles any over- or under-payment manually.
+            .{" "}
+            {t(
+              "Сақлаш мавжуд снепшотни алмаштиради. Тўловлар сақланиб қолади; ортиқча ёки кам тўлов эгаси томонидан қўлда созланади.",
+              "Save replaces the existing snapshot. Existing payments are preserved; the owner reconciles any over- or under-payment manually.",
+            )}
           </div>
           <button
             type="button"
             onClick={cancelEditMode}
             className="text-xs underline hover:no-underline shrink-0 text-text-tertiary hover:text-foreground"
           >
-            Cancel edits
+            {t("Таҳрирни бекор қилиш", "Cancel edits")}
           </button>
         </div>
       )}
@@ -592,7 +604,7 @@ function CalculationsInner() {
             className="text-xs underline hover:no-underline"
             onClick={() => setPrefillNotice(null)}
           >
-            Dismiss
+            {t("Ёпиш", "Dismiss")}
           </button>
         </div>
       )}
@@ -627,11 +639,14 @@ function CalculationsInner() {
               size="sm"
               disabled={!hasAnyContent}
               onClick={() => setClearConfirmOpen(true)}
-              title="Clear the calculator and start a new calculation"
+              title={t(
+                "Калькуляторни тозалаш ва янги ҳисоб-китобни бошлаш",
+                "Clear the calculator and start a new calculation",
+              )}
               className="text-destructive hover:text-destructive hover:bg-destructive/10"
             >
               <Trash2 className="h-4 w-4 mr-2" />
-              Тозалаш · Clear
+              <Bi uz="Тозалаш" en="Clear" />
             </Button>
             {/* Save Project hides in edit-mode — saving as a draft mid-edit
                 conflicts with the in-place semantics. The escape is "Cancel
@@ -642,10 +657,19 @@ function CalculationsInner() {
                 size="sm"
                 disabled={!canSaveDraft || saveDraft.isPending}
                 onClick={() => saveDraft.mutate()}
-                title={canSaveDraft ? "Save as draft (requires phone)" : "Phone is required"}
+                title={
+                  canSaveDraft
+                    ? t(
+                        "Лойиҳа сифатида сақлаш (телефон керак)",
+                        "Save as draft (requires phone)",
+                      )
+                    : t("Телефон рақами керак", "Phone is required")
+                }
               >
                 <Save className="h-4 w-4 mr-2" />
-                {saveDraft.isPending ? "Saving…" : "Save Project"}
+                {saveDraft.isPending
+                  ? t("Сақланмоқда…", "Saving…")
+                  : t("Лойиҳани сақлаш", "Save Project")}
               </Button>
             )}
             <Button
@@ -655,18 +679,28 @@ function CalculationsInner() {
               onClick={() => setOrderOpen(true)}
               title={
                 isEditingOrder
-                  ? "Save edits to this order — replaces the snapshot in place"
+                  ? t(
+                      "Бу буюртмага таҳрирларни сақлаш — жойида снепшотни алмаштиради",
+                      "Save edits to this order — replaces the snapshot in place",
+                    )
                   : canPlaceOrder
-                    ? "Place an order"
-                    : "Place Order needs Name + Phone + Address + at least 1 valid room"
+                    ? t("Буюртма бериш", "Place an order")
+                    : t(
+                        "Буюртма Бериш учун Исм + Телефон + Манзил + камида 1 та хона керак",
+                        "Place Order needs Name + Phone + Address + at least 1 valid room",
+                      )
               }
             >
               <PackageCheck className="h-4 w-4 mr-2" />
-              {isEditingOrder
-                ? editOrder.isPending
-                  ? "Saving…"
-                  : "Save edits"
-                : "Буюртма Бериш · Place Order"}
+              {isEditingOrder ? (
+                editOrder.isPending ? (
+                  t("Сақланмоқда…", "Saving…")
+                ) : (
+                  t("Таҳрирни сақлаш", "Save edits")
+                )
+              ) : (
+                <Bi uz="Буюртма Бериш" en="Place Order" enClassName="font-normal opacity-90" />
+              )}
             </Button>
           </>
         }
@@ -697,11 +731,17 @@ function CalculationsInner() {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Калькуляторни тозаламоқчимисиз? · Clear calculator?</DialogTitle>
+            <DialogTitle>
+              <Bi
+                uz="Калькуляторни тозаламоқчимисиз?"
+                en="Clear calculator?"
+              />
+            </DialogTitle>
             <DialogDescription>
-              Барча хоналар, мижоз маълумотлари ва ҳисоб-китоб йўқолади. Бу
-              амалли қайтариб бўлмайди. · All rooms, client info, and
-              calculations will be lost. This cannot be undone.
+              {t(
+                "Барча хоналар, мижоз маълумотлари ва ҳисоб-китоб йўқолади. Бу амалли қайтариб бўлмайди.",
+                "All rooms, client info, and calculations will be lost. This cannot be undone.",
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2 pt-2">
@@ -710,7 +750,7 @@ function CalculationsInner() {
               size="sm"
               onClick={() => setClearConfirmOpen(false)}
             >
-              Бекор қилиш · Cancel
+              <Bi uz="Бекор қилиш" en="Cancel" />
             </Button>
             <Button
               size="sm"
@@ -718,7 +758,7 @@ function CalculationsInner() {
               onClick={confirmClear}
             >
               <Trash2 className="h-4 w-4 mr-2" />
-              Тозалаш · Clear
+              <Bi uz="Тозалаш" en="Clear" enClassName="font-normal opacity-90" />
             </Button>
           </div>
         </DialogContent>

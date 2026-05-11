@@ -25,6 +25,7 @@ import { formatNumber, roundDownToGrid, roundUpToGrid } from "@/lib/utils";
 import { useCalculatorStore } from "@/store/calculator";
 import { RateOverrideDialog } from "@/components/calculation/RateOverrideDialog";
 import { NumberInput } from "@/components/calculation/NumberInput";
+import { Bi, useT } from "@/lib/i18n";
 
 export interface SlabRow {
   id: string;
@@ -311,6 +312,7 @@ export function MultiRoomCalculator({
   onDiscountAmountChange,
   actions,
 }: Props) {
+  const t = useT();
   // Workspace-level rounding granularity, persisted via the calculator
   // store. One setting applies to every row; survives in-app navigation
   // and is keyed per user (see src/store/calculator.ts).
@@ -872,7 +874,7 @@ export function MultiRoomCalculator({
               <tr className="bg-muted/40 font-bold">
                 {/* cols 1-5: label fills the input-group span. */}
                 <td colSpan={5} className="px-3 text-right uppercase text-[11px] tracking-wider text-muted-foreground">
-                  Жами · Totals
+                  <Bi uz="Жами" en="Totals" />
                 </td>
                 {/* col 6: Slab L total — sits in its new column position. */}
                 <td className="text-center px-2 tabular-nums text-xs">
@@ -925,7 +927,7 @@ export function MultiRoomCalculator({
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <div className="flex items-center flex-wrap gap-2 text-sm">
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Лабораторий ўлчам · Round to
+              <Bi uz="Лабораторий ўлчам" en="Round to" />
             </span>
             <div className="flex rounded-md border bg-background overflow-hidden text-xs">
               <button
@@ -995,7 +997,9 @@ export function MultiRoomCalculator({
               title="Shift+Enter also adds a new room and focuses its Width"
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
-              <span>Add room · Янги хона</span>
+              <span>
+                <Bi uz="Янги хона" en="Add room" enClassName="font-normal opacity-90" />
+              </span>
               <kbd className="ml-2 hidden sm:inline-flex items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
                 Shift + Enter
               </kbd>
@@ -1010,11 +1014,13 @@ export function MultiRoomCalculator({
           {/* Discount + grand total */}
           <div className="rounded-lg border bg-background p-4 shadow-sm">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-              Сўнгги нархи · Grand Total
+              <Bi uz="Сўнгги нархи" en="Grand Total" />
             </h3>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Жами хоналар · Rooms subtotal</span>
+                <span className="text-muted-foreground">
+                  <Bi uz="Жами хоналар" en="Rooms subtotal" />
+                </span>
                 <span className="font-semibold tabular-nums">
                   {formatNumber(totals.projTotal.rooms_subtotal, 0)}
                 </span>
@@ -1027,7 +1033,9 @@ export function MultiRoomCalculator({
                   Operators get exact control either way without a
                   toggle. */}
               <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Чегирма % · Discount %</span>
+                <span className="text-muted-foreground">
+                  <Bi uz="Чегирма %" en="Discount %" />
+                </span>
                 <div className="relative">
                   <NumberInput
                     step="1"
@@ -1048,7 +1056,9 @@ export function MultiRoomCalculator({
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Чегирма сумма · Discount UZS</span>
+                <span className="text-muted-foreground">
+                  <Bi uz="Чегирма сумма" en="Discount UZS" />
+                </span>
                 <div className="relative">
                   <NumberInput
                     step="1000"
@@ -1068,9 +1078,9 @@ export function MultiRoomCalculator({
                 </div>
               </div>
               {totals.projTotal.discount_amount > 0 && (
-                <div className="flex justify-between text-rose-700">
+                <div className="flex justify-between text-destructive">
                   <span className="text-muted-foreground">
-                    Чегирма · Applied
+                    <Bi uz="Чегирма" en="Applied" />
                     {discountAmount > 0
                       ? ` (${totals.projTotal.discount_percent}%)`
                       : ""}
@@ -1081,8 +1091,10 @@ export function MultiRoomCalculator({
                 </div>
               )}
               <div className="flex items-baseline justify-between border-t pt-2.5 mt-2">
-                <span className="font-bold">Сумма · Total</span>
-                <span className="font-black text-emerald-700 text-xl tabular-nums">
+                <span className="font-bold">
+                  <Bi uz="Сумма" en="Total" />
+                </span>
+                <span className="font-black text-success text-xl tabular-nums font-mono">
                   {formatNumber(totals.projTotal.total, 0)}
                   <span className="text-xs font-normal text-muted-foreground ml-1">UZS</span>
                 </span>
@@ -1093,7 +1105,7 @@ export function MultiRoomCalculator({
           {/* Production list — beams (by length) AND total blocks together */}
           <div className="rounded-lg border bg-background p-4 shadow-sm">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-              Балка + Ғишт · Production list
+              <Bi uz="Балка + Ғишт" en="Production list" />
             </h3>
             <div className="space-y-1.5">
               {schedule.map(([len, qty]) => (
@@ -1105,20 +1117,25 @@ export function MultiRoomCalculator({
                     Балка <span className="text-muted-foreground font-normal">·</span> {len} m
                   </span>
                   <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold tabular-nums">
-                    {qty} pcs
+                    {qty} {t("дона", "pcs")}
                   </span>
                 </div>
               ))}
               {schedule.length === 0 && (
-                <div className="text-xs text-muted-foreground italic">No beams yet.</div>
+                <div className="text-xs text-muted-foreground italic">
+                  {t("Ҳозирча балка йўқ.", "No beams yet.")}
+                </div>
               )}
               {totals.blocks > 0 && (
                 <div className="flex justify-between items-center bg-orange-50/60 rounded px-3 py-1.5 text-sm border-t-2 border-orange-200/60 mt-2">
                   <span className="font-semibold">
-                    Ғишт <span className="text-muted-foreground font-normal">· total blocks</span>
+                    Ғишт{" "}
+                    <span className="text-muted-foreground font-normal">
+                      {t("· жами ғишт", "· total blocks")}
+                    </span>
                   </span>
                   <span className="text-xs bg-orange-500/15 text-orange-800 px-2 py-0.5 rounded font-semibold tabular-nums">
-                    {totals.blocks} pcs
+                    {totals.blocks} {t("дона", "pcs")}
                   </span>
                 </div>
               )}
@@ -1128,17 +1145,21 @@ export function MultiRoomCalculator({
           {/* Materials — concrete + area only (counts moved into the production list) */}
           <div className="rounded-lg border bg-background p-4 shadow-sm">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-              Материаллар · Materials
+              <Bi uz="Материаллар" en="Materials" />
             </h3>
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Бетон қатлами · Concrete topping</span>
-                <span className="font-semibold tabular-nums text-emerald-700">
+                <span className="text-muted-foreground">
+                  <Bi uz="Бетон қатлами" en="Concrete topping" />
+                </span>
+                <span className="font-semibold tabular-nums text-success">
                   {totals.concrete.toFixed(2)} m³
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Йиғма майдон · Slab area</span>
+                <span className="text-muted-foreground">
+                  <Bi uz="Йиғма майдон" en="Slab area" />
+                </span>
                 <span className="font-semibold tabular-nums">
                   {formatNumber(totals.monolithArea, 2)} m²
                 </span>
