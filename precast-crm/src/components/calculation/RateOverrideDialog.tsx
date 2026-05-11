@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { formatNumber } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -41,42 +42,45 @@ export function RateOverrideDialog({
   initialReason,
   onConfirm,
 }: Props) {
+  const t = useT();
   const [reason, setReason] = useState("");
 
   useEffect(() => {
     if (open) setReason(initialReason ?? "");
   }, [open, initialReason]);
 
-  const direction = selectedRate > autoRate ? "↑ markup" : "↓ discount";
+  const direction = selectedRate > autoRate ? t("↑ устама", "↑ markup") : t("↓ чегирма", "↓ discount");
   const directionCls =
-    selectedRate > autoRate ? "text-rose-700" : "text-emerald-700";
+    selectedRate > autoRate ? "text-destructive" : "text-success";
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Pencil className="h-4 w-4 text-amber-600" />
-            Нархни ўзгартиришни тасдиқлаш · Confirm rate change
+            <Pencil className="h-4 w-4 text-warning" />
+            Нархни ўзгартиришни тасдиқлаш<span className="lang-en"> · Confirm rate change</span>
           </DialogTitle>
           <DialogDescription>
-            Per-row m² rate will be replaced for this room only. Reverting to
-            Auto restores the engine's tier value.
+            {t(
+              "Хоналар учун м² нархи фақат шу хонага алмаштирилади. Авто-га қайтариш қайтадан енг тарифи қийматини тиклайди.",
+              "Per-row m² rate will be replaced for this room only. Reverting to Auto restores the engine's tier value.",
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-3 text-sm pt-1">
-          <div className="rounded border bg-muted/30 px-3 py-2">
+          <div className="rounded border border-border bg-muted/30 px-3 py-2">
             <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Auto-pick
+              {t("Авто", "Auto-pick")}
             </div>
             <div className="font-semibold tabular-nums">
               {formatNumber(autoRate, 0)}
             </div>
           </div>
-          <div className="rounded border bg-amber-50 border-amber-200 px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-amber-800">
-              Selected
+          <div className="rounded border border-warning/30 bg-warning/10 px-3 py-2">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-warning">
+              {t("Танланган", "Selected")}
             </div>
             <div className={`font-semibold tabular-nums ${directionCls}`}>
               {formatNumber(selectedRate, 0)}{" "}
@@ -87,7 +91,7 @@ export function RateOverrideDialog({
 
         <div className="space-y-1.5 pt-1">
           <Label className="text-xs uppercase tracking-wider font-bold">
-            Сабаб (ихтиёрий) · Reason (optional)
+            Сабаб ({t("ихтиёрий", "optional")})<span className="lang-en"> · Reason</span>
           </Label>
           <textarea
             value={reason}
@@ -95,7 +99,10 @@ export function RateOverrideDialog({
             maxLength={200}
             rows={3}
             className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            placeholder="e.g. owner-approved discount; rush-job markup; competitor match"
+            placeholder={t(
+              "масалан: эга томонидан тасдиқланган чегирма; шошилинч иш устамаси; рақобатчига мослаштириш",
+              "e.g. owner-approved discount; rush-job markup; competitor match",
+            )}
           />
           <div className="text-[10px] text-muted-foreground text-right tabular-nums">
             {reason.length} / 200
@@ -104,15 +111,14 @@ export function RateOverrideDialog({
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Бекор қилиш · Cancel
+            Бекор қилиш<span className="lang-en"> · Cancel</span>
           </Button>
           <Button
             size="sm"
-            className="bg-amber-600 hover:bg-amber-700 text-white"
             onClick={() => onConfirm(reason.trim() || null)}
           >
             <Pencil className="h-3.5 w-3.5 mr-2" />
-            Тасдиқлаш · Confirm
+            Тасдиқлаш<span className="lang-en"> · Confirm</span>
           </Button>
         </div>
       </DialogContent>
