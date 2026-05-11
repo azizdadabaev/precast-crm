@@ -97,6 +97,18 @@
        network fetches the woff2. */
     font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
   }
+
+  /* Mono numerics — JetBrains Mono ships a dotted zero by default.
+     Enable character variant `cv14` ("Alternative zero — no dot") so
+     numbers render with a plain 0. Apply to every mono surface used
+     for digits: the .font-mono Tailwind utility, the dashboard KPI
+     value, and the calculator's tabular cells. */
+  .font-mono,
+  .dash-card-value,
+  .grid-input,
+  [class*="tabular-nums"] {
+    font-feature-settings: "cv14" 1, "tnum" 1;
+  }
 }
 
 /* Industrial / Excel-like tables */
