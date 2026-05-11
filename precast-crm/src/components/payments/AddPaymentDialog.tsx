@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { api } from "@/lib/fetcher";
 import { formatNumber } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CLICK" | "PAYME" | "OTHER";
 type PaymentSource = "IN_OFFICE_CASH" | "BANK_OR_ONLINE";
@@ -56,6 +57,7 @@ export function AddPaymentDialog({
   existingPendingTotal,
   onSaved,
 }: Props) {
+  const t = useT();
   const [amount, setAmount] = useState<number | "">(0);
   const [method, setMethod] = useState<PaymentMethod>("CASH");
   const [source, setSource] = useState<PaymentSource>("IN_OFFICE_CASH");
@@ -104,8 +106,11 @@ export function AddPaymentDialog({
     if (!validAmount) {
       setError(
         amt <= 0
-          ? "Amount must be greater than zero"
-          : `Amount cannot exceed remaining (${formatNumber(currentRemaining, 0)})`,
+          ? t("Сумма нолдан катта бўлиши керак", "Amount must be greater than zero")
+          : t(
+              `Сумма қолганидан ошмаслиги керак (${formatNumber(currentRemaining, 0)})`,
+              `Amount cannot exceed remaining (${formatNumber(currentRemaining, 0)})`,
+            ),
       );
       return;
     }
@@ -135,24 +140,30 @@ export function AddPaymentDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-emerald-600" />
-            Тўлов қўшиш · Add Payment
+            <Wallet className="h-5 w-5 text-success" />
+            Тўлов қўшиш<span className="lang-en"> · Add Payment</span>
           </DialogTitle>
           <DialogDescription>
-            Customer paying between placement and delivery. Goes to{" "}
-            <span className="font-semibold">PENDING</span> until the owner confirms it.
+            {t(
+              "Мижоз буюртма жойлаштириш ва етказиб бериш ўртасида тўлайди. Эга тасдиқлагунча",
+              "Customer paying between placement and delivery. Goes to",
+            )}{" "}
+            <span className="font-semibold">PENDING</span>
+            {t(" ҳолатида туради.", " until the owner confirms it.")}
           </DialogDescription>
         </DialogHeader>
 
         {existingPendingTotal > 0 && (
-          <div className="flex items-start gap-2 text-sm text-amber-900 bg-amber-50 border border-amber-200 px-3 py-2 rounded">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-700" />
+          <div className="flex items-start gap-2 text-sm text-warning bg-warning/10 border border-warning/30 px-3 py-2 rounded-md">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-warning" />
             <span>
               <span className="font-semibold tabular-nums">
                 {formatNumber(existingPendingTotal, 0)} UZS
               </span>{" "}
-              already pending confirmation on this order. Recommended to wait until the
-              owner confirms it before adding more.
+              {t(
+                "ушбу буюртма бўйича тасдиқлаш кутилмоқда. Янгисини қўшишдан олдин эга тасдиқлашини кутиш тавсия этилади.",
+                "already pending confirmation on this order. Recommended to wait until the owner confirms it before adding more.",
+              )}
             </span>
           </div>
         )}
@@ -161,7 +172,7 @@ export function AddPaymentDialog({
           {/* Source — radio group */}
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-wider font-bold">
-              Манба · Source
+              Манба<span className="lang-en"> · Source</span>
             </Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label
@@ -179,7 +190,7 @@ export function AddPaymentDialog({
                   onChange={() => setSource("IN_OFFICE_CASH")}
                 />
                 <div className="font-semibold">Офисда нақд</div>
-                <div className="text-xs text-muted-foreground">In office (cash)</div>
+                <div className="lang-en text-xs text-muted-foreground">In office (cash)</div>
               </label>
               <label
                 className={`cursor-pointer rounded-md border p-2.5 text-sm transition-colors ${
@@ -196,7 +207,7 @@ export function AddPaymentDialog({
                   onChange={() => setSource("BANK_OR_ONLINE")}
                 />
                 <div className="font-semibold">Банк / Онлайн</div>
-                <div className="text-xs text-muted-foreground">Bank or online transfer</div>
+                <div className="lang-en text-xs text-muted-foreground">Bank or online transfer</div>
               </label>
             </div>
           </div>
@@ -204,7 +215,7 @@ export function AddPaymentDialog({
           {/* Amount */}
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-wider font-bold">
-              Сумма · Amount (UZS)
+              Сумма<span className="lang-en"> · Amount</span> (UZS)
             </Label>
             <Input
               type="number"
@@ -219,14 +230,15 @@ export function AddPaymentDialog({
               className="tabular-nums text-right"
             />
             <div className="text-[11px] text-muted-foreground">
-              Қолди · Remaining (excluding pending):{" "}
+              Қолди<span className="lang-en"> · Remaining</span>{" "}
+              <span className="lang-en">(excluding pending)</span>:{" "}
               <span className="tabular-nums font-semibold">
                 {formatNumber(currentRemaining, 0)}
               </span>
             </div>
             {overLimit && (
-              <div className="text-xs text-rose-700">
-                Amount cannot exceed remaining ({formatNumber(currentRemaining, 0)} UZS).
+              <div className="text-xs text-destructive">
+                {t("Сумма қолганидан", "Amount cannot exceed remaining")} ({formatNumber(currentRemaining, 0)} UZS) {t("ошмаслиги керак.", ".")}
               </div>
             )}
           </div>
@@ -234,7 +246,7 @@ export function AddPaymentDialog({
           {/* Method */}
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-wider font-bold">
-              Усул · Method
+              Усул<span className="lang-en"> · Method</span>
             </Label>
             <Select value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
               {METHODS
@@ -260,9 +272,12 @@ export function AddPaymentDialog({
               />
               <div className="text-sm">
                 <span className="font-semibold">Тўловни ҳозир топширдим</span>
-                <span className="text-muted-foreground"> · I'm handing this cash to the owner now</span>
+                <span className="lang-en text-muted-foreground"> · I'm handing this cash to the owner now</span>
                 <div className="text-[11px] text-muted-foreground">
-                  Stamps the office hand-over step in the same record.
+                  {t(
+                    "Шу ёзувда офисга топшириш қадамини белгилайди.",
+                    "Stamps the office hand-over step in the same record.",
+                  )}
                 </div>
               </div>
             </label>
@@ -271,13 +286,13 @@ export function AddPaymentDialog({
           {/* Notes */}
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-wider font-bold">
-              Эслатма · Notes (optional)
+              Эслатма<span className="lang-en"> · Notes</span> ({t("ихтиёрий", "optional")})
             </Label>
             <Input
               value={notes}
               maxLength={500}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Eslatma · Optional note"
+              placeholder={t("Эслатма · Ихтиёрий", "Eslatma · Optional note")}
             />
           </div>
 
@@ -291,11 +306,11 @@ export function AddPaymentDialog({
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("Бекор қилиш", "Cancel")}
           </Button>
           <Button
             size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="bg-success hover:bg-success/90 text-success-foreground"
             onClick={save}
             disabled={submitting || !validAmount}
           >
@@ -304,7 +319,7 @@ export function AddPaymentDialog({
             ) : (
               <Wallet className="h-4 w-4 mr-2" />
             )}
-            Сақлаш · Save Payment
+            Сақлаш<span className="lang-en"> · Save Payment</span>
           </Button>
         </div>
       </DialogContent>
