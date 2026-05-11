@@ -44,12 +44,16 @@ export function Bi({
   sep?: string;
   enClassName?: string;
 }) {
-  const lang = useLang();
-  if (lang === "uz") return <>{uz}</>;
+  // The CSS rule `html[data-lang="uz"] .lang-en { display:none }`
+  // does the heavy lifting; the lang check here is a belt-and-suspenders
+  // for SSR (the data-lang attr lives on <html> after rehydrate).
   return (
     <>
       {uz}
-      <span className={enClassName}>{sep}{en}</span>
+      <span className={`lang-en ${enClassName}`}>
+        {sep}
+        {en}
+      </span>
     </>
   );
 }

@@ -11,6 +11,7 @@ import { ConfirmPaymentDialog, type PaymentForConfirm } from "@/components/payme
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface Me {
   permissions: string[];
@@ -54,7 +55,19 @@ const METHOD_LABEL: Record<string, string> = {
   OTHER: "Other",
 };
 
+function translatePaymentStatus(
+  s: PaymentForConfirm["status"],
+  t: (uz: string, en: string) => string,
+): string {
+  switch (s) {
+    case "PENDING_CONFIRMATION": return t("Кутилмоқда", "Pending");
+    case "CONFIRMED":            return t("Тасдиқланган", "Confirmed");
+    case "REJECTED":             return t("Рад этилган", "Rejected");
+  }
+}
+
 export default function PaymentsPage() {
+  const t = useT();
   const qc = useQueryClient();
   const [tab, setTab] = useState<"PENDING_CONFIRMATION" | "CONFIRMED" | "REJECTED">("PENDING_CONFIRMATION");
   const [confirmTarget, setConfirmTarget] = useState<PaymentForConfirm | null>(null);
@@ -74,13 +87,16 @@ export default function PaymentsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Тўловлар{" "}
-          <span className="text-muted-foreground font-normal text-base">
-            · Payments
+          Тўловлар
+          <span className="lang-en text-muted-foreground font-normal text-base">
+            {" "}· Payments
           </span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Maker-checker queue. Operators record cash; ADMIN or OWNER confirms or rejects.
+          {t(
+            "Тасдиқлаш навбати. Операторлар нақд пулни ёзади; АДМИН ёки ЭГА тасдиқлайди ёки рад этади.",
+            "Maker-checker queue. Operators record cash; ADMIN or OWNER confirms or rejects.",
+          )}
         </p>
       </div>
 
@@ -88,9 +104,9 @@ export default function PaymentsPage() {
       <div className="flex border-b border-border">
         {(
           [
-            ["PENDING_CONFIRMATION", "Pending"],
-            ["CONFIRMED", "Confirmed"],
-            ["REJECTED", "Rejected"],
+            ["PENDING_CONFIRMATION", t("Кутилмоқда", "Pending")],
+            ["CONFIRMED", t("Тасдиқланган", "Confirmed")],
+            ["REJECTED", t("Рад этилган", "Rejected")],
           ] as const
         ).map(([v, label]) => {
           const active = tab === v;
@@ -117,25 +133,25 @@ export default function PaymentsPage() {
 
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
-          <div className="p-6 text-muted-foreground">Loading…</div>
+          <div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
         ) : payments.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">
-            No {tab.toLowerCase().replace("_", " ")} payments.
+            {t("Тўлов йўқ.", "No payments.")}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="text-left px-3 py-2.5">Order</th>
-                  <th className="text-left px-3 py-2.5">Client</th>
-                  <th className="text-left px-3 py-2.5">Манзил · Address</th>
-                  <th className="text-right px-3 py-2.5">Amount</th>
-                  <th className="text-right px-3 py-2.5">Expected</th>
-                  <th className="text-left px-3 py-2.5">Method</th>
-                  <th className="text-left px-3 py-2.5">Driver</th>
-                  <th className="text-left px-3 py-2.5">Recorded</th>
-                  <th className="text-left px-3 py-2.5">Status</th>
+                  <th className="text-left px-3 py-2.5">{t("Буюртма", "Order")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Мижоз", "Client")}</th>
+                  <th className="text-left px-3 py-2.5">Манзил<span className="lang-en"> · Address</span></th>
+                  <th className="text-right px-3 py-2.5">{t("Сумма", "Amount")}</th>
+                  <th className="text-right px-3 py-2.5">{t("Кутилган", "Expected")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Усул", "Method")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Ҳайдовчи", "Driver")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Қайд", "Recorded")}</th>
+                  <th className="text-left px-3 py-2.5">{t("Ҳолат", "Status")}</th>
                   <th className="px-3 py-2.5 w-32"></th>
                 </tr>
               </thead>
@@ -194,7 +210,7 @@ export default function PaymentsPage() {
                             {formatNumber(expected, 0)}
                             {shortfall > 0 && (
                               <div className="text-[10px] text-destructive font-bold">
-                                short {formatNumber(shortfall, 0)}
+                                {t("кам", "short")} {formatNumber(shortfall, 0)}
                               </div>
                             )}
                           </>
@@ -212,7 +228,7 @@ export default function PaymentsPage() {
                       <td className="px-3 py-2.5">
                         <Chip variant={meta.variant}>
                           <span>{meta.leadingGlyph}</span>
-                          <span>{meta.label}</span>
+                          <span>{translatePaymentStatus(p.status, t)}</span>
                         </Chip>
                       </td>
                       <td className="px-3 py-2.5 text-right">
@@ -223,7 +239,7 @@ export default function PaymentsPage() {
                             onClick={() => setConfirmTarget(p)}
                           >
                             <Wallet className="h-3.5 w-3.5 mr-1.5" />
-                            Review
+                            {t("Кўриб чиқиш", "Review")}
                           </Button>
                         )}
                       </td>

@@ -109,6 +109,26 @@
   [class*="tabular-nums"] {
     font-feature-settings: "cv14" 1, "tnum" 1;
   }
+
+  /* ──────────────────────────────────────────────────────────────
+     UZ-only language mode — global hide rule.
+     When the operator flips the topbar UZ toggle, the language store
+     sets `<html data-lang="uz">`. Anything authored with class
+     `lang-en` (the English half of a bilingual pair) collapses out
+     of layout. English-only strings — like button labels or helper
+     copy — must use the `useT` helper to switch their text.
+
+     Use `lang-en-inline` instead of `lang-en` when the English half
+     sits inside a flex container where removing the node would shift
+     siblings unexpectedly; the visibility variant keeps the gap.
+     ────────────────────────────────────────────────────────────── */
+  html[data-lang="uz"] .lang-en {
+    display: none;
+  }
+  html[data-lang="uz"] .lang-en-inline {
+    visibility: hidden;
+    width: 0;
+  }
 }
 
 /* Industrial / Excel-like tables */

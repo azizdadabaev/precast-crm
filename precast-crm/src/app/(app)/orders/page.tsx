@@ -11,6 +11,7 @@ import { formatDate, formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { paidVariant } from "@/lib/order-display";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
+import { useT } from "@/lib/i18n";
 
 interface Order {
   id: string;
@@ -55,7 +56,26 @@ const PAYMENT_META: Record<
   FULLY_PAID:       { label: "Paid",     variant: "success" },
 };
 
+function translateStatus(s: Order["status"], t: (uz: string, en: string) => string): string {
+  switch (s) {
+    case "PLACED":        return t("Қабул қилинган", "Placed");
+    case "IN_PRODUCTION": return t("Ишлаб чиқилмоқда", "In production");
+    case "DISPATCHED":    return t("Жўнатилган", "Dispatched");
+    case "DELIVERED":     return t("Етказилган", "Delivered");
+    case "CANCELED":      return t("Бекор қилинган", "Canceled");
+  }
+}
+
+function translatePayment(s: Order["paymentState"], t: (uz: string, en: string) => string): string {
+  switch (s) {
+    case "AWAITING_PAYMENT": return t("Кутилмоқда", "Awaiting");
+    case "PARTIALLY_PAID":   return t("Қисман", "Partial");
+    case "FULLY_PAID":       return t("Тўлиқ", "Paid");
+  }
+}
+
 export default function OrdersPage() {
+  const t = useT();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | Order["status"]>("");
   const [calendarSelected, setCalendarSelected] = useState<Date | null>(null);
@@ -87,13 +107,16 @@ export default function OrdersPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Буюртмалар{" "}
-          <span className="text-muted-foreground font-normal text-base">
-            · Orders
+          Буюртмалар
+          <span className="lang-en text-muted-foreground font-normal text-base">
+            {" "}· Orders
           </span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Placed orders — search by order #, client, or address. Pick a day on the calendar to filter by schedule.
+          {t(
+            "Жойлаштирилган буюртмалар — буюртма №, мижоз ёки манзил бўйича қидиринг. Жадвал бўйича фильтрлаш учун кундан танланг.",
+            "Placed orders — search by order #, client, or address. Pick a day on the calendar to filter by schedule.",
+          )}
         </p>
       </div>
 
@@ -106,7 +129,7 @@ export default function OrdersPage() {
       {calendarSelected && (
         <div className="flex items-center justify-between bg-primary/5 border border-primary/30 text-foreground rounded-md px-3 py-2 text-sm">
           <span>
-            Filtered to{" "}
+            {t("Фильтр:", "Filtered to")}{" "}
             <span className="font-semibold font-mono">
               {calendarSelected.toLocaleDateString("en-GB", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
             </span>
@@ -116,7 +139,7 @@ export default function OrdersPage() {
             className="text-xs underline hover:no-underline text-text-tertiary hover:text-foreground"
             onClick={() => setCalendarSelected(null)}
           >
-            Clear
+            {t("Тозалаш", "Clear")}
           </button>
         </div>
       )}
@@ -127,7 +150,7 @@ export default function OrdersPage() {
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
           <Input
             className="pl-9"
-            placeholder="Order # · Client · Phone · Address"
+            placeholder={t("Буюртма № · Мижоз · Телефон · Манзил", "Order # · Client · Phone · Address")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -137,12 +160,12 @@ export default function OrdersPage() {
         <div className="flex border-b border-border">
           {(
             [
-              ["", "All"],
-              ["PLACED", "Placed"],
-              ["IN_PRODUCTION", "In prod"],
-              ["DISPATCHED", "Dispatched"],
-              ["DELIVERED", "Delivered"],
-              ["CANCELED", "Canceled"],
+              ["", t("Барчаси", "All")],
+              ["PLACED", t("Қабул қилинган", "Placed")],
+              ["IN_PRODUCTION", t("Ишлаб чиқилмоқда", "In prod")],
+              ["DISPATCHED", t("Жўнатилган", "Dispatched")],
+              ["DELIVERED", t("Етказилган", "Delivered")],
+              ["CANCELED", t("Бекор қилинган", "Canceled")],
             ] as const
           ).map(([v, label]) => {
             const active = status === v;
@@ -171,24 +194,24 @@ export default function OrdersPage() {
       {/* Table */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
-          <div className="p-6 text-muted-foreground">Loading…</div>
+          <div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
         ) : filtered.length === 0 ? (
-          <div className="p-12 text-center text-muted-foreground">No orders.</div>
+          <div className="p-12 text-center text-muted-foreground">{t("Буюртма йўқ.", "No orders.")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-max min-w-full text-sm">
               <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="text-left px-3 py-2.5 w-32 whitespace-nowrap">№</th>
-                  <th className="text-left px-3 py-2.5">Мижоз · Client</th>
-                  <th className="text-left px-3 py-2.5">Тел · Phone</th>
-                  <th className="text-left px-3 py-2.5">Манзил · Address</th>
-                  <th className="text-right px-3 py-2.5">Майдон · Area</th>
-                  <th className="text-right px-3 py-2.5">Жами · Total</th>
-                  <th className="text-right px-3 py-2.5">Тўланган · Paid</th>
-                  <th className="text-left px-3 py-2.5 w-36 whitespace-nowrap">Status</th>
-                  <th className="text-left px-3 py-2.5 w-28 whitespace-nowrap">Payment</th>
-                  <th className="text-left px-3 py-2.5 w-32 whitespace-nowrap">Scheduled</th>
+                  <th className="text-left px-3 py-2.5">Мижоз<span className="lang-en"> · Client</span></th>
+                  <th className="text-left px-3 py-2.5">Тел<span className="lang-en"> · Phone</span></th>
+                  <th className="text-left px-3 py-2.5">Манзил<span className="lang-en"> · Address</span></th>
+                  <th className="text-right px-3 py-2.5">Майдон<span className="lang-en"> · Area</span></th>
+                  <th className="text-right px-3 py-2.5">Жами<span className="lang-en"> · Total</span></th>
+                  <th className="text-right px-3 py-2.5">Тўланган<span className="lang-en"> · Paid</span></th>
+                  <th className="text-left px-3 py-2.5 w-36 whitespace-nowrap">{t("Ҳолат", "Status")}</th>
+                  <th className="text-left px-3 py-2.5 w-28 whitespace-nowrap">{t("Тўлов", "Payment")}</th>
+                  <th className="text-left px-3 py-2.5 w-32 whitespace-nowrap">{t("Жадвал", "Scheduled")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -252,11 +275,11 @@ export default function OrdersPage() {
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <Chip variant={meta.variant}>
                           <span>{meta.glyph}</span>
-                          <span>{meta.label}</span>
+                          <span>{translateStatus(o.status, t)}</span>
                         </Chip>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                        <Chip variant={pay.variant}>{pay.label}</Chip>
+                        <Chip variant={pay.variant}>{translatePayment(o.paymentState, t)}</Chip>
                       </td>
                       <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary whitespace-nowrap">
                         {formatDate(o.scheduledAt)}

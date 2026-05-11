@@ -23,14 +23,33 @@ interface LangState {
   toggle: () => void;
 }
 
+/** Mirror the current language to `<html data-lang="…">` so global CSS
+ *  rules (e.g. `[data-lang="uz"] .lang-en { display: none }`) can hide
+ *  English-only fragments without per-component plumbing. */
+function syncDom(lang: Lang) {
+  if (typeof document === "undefined") return;
+  document.documentElement.dataset.lang = lang;
+}
+
 export const useLanguageStore = create<LangState>()(
   persist(
     (set, get) => ({
       lang: "bilingual",
-      setLang: (lang) => set({ lang }),
-      toggle: () =>
-        set({ lang: get().lang === "uz" ? "bilingual" : "uz" }),
+      setLang: (lang) => {
+        syncDom(lang);
+        set({ lang });
+      },
+      toggle: () => {
+        const next = get().lang === "uz" ? "bilingual" : "uz";
+        syncDom(next);
+        set({ lang: next });
+      },
     }),
-    { name: "precast.language" },
+    {
+      name: "precast.language",
+      onRehydrateStorage: () => (state) => {
+        if (state) syncDom(state.lang);
+      },
+    },
   ),
 );
