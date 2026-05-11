@@ -6,11 +6,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import {
   DiscrepancyUpdateDialog,
   type DiscrepancyStatusValue,
 } from "@/components/discrepancies/DiscrepancyUpdateDialog";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { formatDate, formatNumber, cn } from "@/lib/utils";
 
 interface Discrepancy {
   id: string;
@@ -33,12 +34,20 @@ const TABS: Array<{ key: "OPEN" | "RESOLVED" | "DISPUTED"; label: string }> = [
   { key: "DISPUTED", label: "Disputed" },
 ];
 
-const STATUS_BADGE: Record<DiscrepancyStatusValue, string> = {
-  OPEN:                "bg-amber-100 text-amber-800",
-  RESOLVED_RECOVERED:  "bg-emerald-100 text-emerald-800",
-  RESOLVED_DISCOUNT:   "bg-sky-100 text-sky-800",
-  RESOLVED_WRITEOFF:   "bg-rose-100 text-rose-800",
-  DISPUTED:            "bg-purple-100 text-purple-800",
+// Per-status visual: chip variant + readable label + colored row left-edge.
+const STATUS_META: Record<
+  DiscrepancyStatusValue,
+  {
+    label: string;
+    variant: React.ComponentProps<typeof Chip>["variant"];
+    rowBorder: string;
+  }
+> = {
+  OPEN:               { label: "Open",       variant: "danger",  rowBorder: "border-l-destructive" },
+  RESOLVED_RECOVERED: { label: "Recovered",  variant: "success", rowBorder: "border-l-success" },
+  RESOLVED_DISCOUNT:  { label: "Discount",   variant: "default", rowBorder: "border-l-primary" },
+  RESOLVED_WRITEOFF:  { label: "Write-off",  variant: "neutral", rowBorder: "border-l-border-strong" },
+  DISPUTED:           { label: "Disputed",   variant: "warning", rowBorder: "border-l-warning" },
 };
 
 function inTab(status: DiscrepancyStatusValue, tab: "OPEN" | "RESOLVED" | "DISPUTED") {
@@ -63,29 +72,42 @@ export default function DiscrepanciesPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Тафовутлар <span className="text-muted-foreground font-normal text-base">· Discrepancies</span>
+          Тафовутлар{" "}
+          <span className="text-muted-foreground font-normal text-base">
+            · Discrepancies
+          </span>
         </h1>
         <p className="text-sm text-muted-foreground">
           Cash shortfalls flagged at confirmation time. ADMIN / OWNER only.
         </p>
       </div>
 
-      <div className="flex rounded-md border bg-background overflow-hidden text-xs w-fit">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            className={`px-3 h-9 font-semibold uppercase tracking-wider transition-colors ${
-              tab === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-            }`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Underline tabs (etalon pattern) */}
+      <div className="flex border-b border-border">
+        {TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              className={cn(
+                "relative h-10 px-4 text-[12px] font-bold uppercase tracking-wider transition-colors",
+                active
+                  ? "text-primary"
+                  : "text-text-tertiary hover:text-foreground",
+              )}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+              {active && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="rounded-lg border bg-background overflow-hidden">
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
           <div className="p-6 text-muted-foreground">Loading…</div>
         ) : visible.length === 0 ? (
@@ -95,64 +117,85 @@ export default function DiscrepanciesPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="text-left px-3 py-2">Order #</th>
-                <th className="text-left px-3 py-2">Client</th>
-                <th className="text-left px-3 py-2">Driver</th>
-                <th className="text-right px-3 py-2">Expected</th>
-                <th className="text-right px-3 py-2">Received</th>
-                <th className="text-right px-3 py-2">Short</th>
-                <th className="text-left px-3 py-2">Status</th>
-                <th className="text-left px-3 py-2">Reported</th>
-                <th className="text-left px-3 py-2">Resolved</th>
-                <th className="px-3 py-2 w-24"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {visible.map((d) => (
-                <tr key={d.id} className="hover:bg-muted/20">
-                  <td className="px-3 py-2 tabular-nums font-bold">
-                    <Link href={`/orders/${d.order.id}`} className="hover:underline">
-                      {d.order.orderNumber}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">{d.order.client.name}</td>
-                  <td className="px-3 py-2 text-xs">{d.driver?.name ?? "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(d.expectedAmount, 0)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatNumber(d.receivedAmount, 0)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-rose-700 font-semibold">
-                    {formatNumber(d.shortfall, 0)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${STATUS_BADGE[d.status]}`}>
-                      {d.status.replace(/_/g, " ")}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {formatDate(d.reportedAt)}
-                    {d.reportedBy && <div>{d.reportedBy.name}</div>}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {d.resolvedAt ? (
-                      <>
-                        {formatDate(d.resolvedAt)}
-                        {d.resolvedBy && <div>{d.resolvedBy.name}</div>}
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <Button variant="outline" size="sm" onClick={() => setTarget(d)}>
-                      Update
-                    </Button>
-                  </td>
+            <table className="w-full text-sm min-w-[900px]">
+              <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="text-left px-3 py-2.5">Order #</th>
+                  <th className="text-left px-3 py-2.5">Client</th>
+                  <th className="text-left px-3 py-2.5">Driver</th>
+                  <th className="text-right px-3 py-2.5">Expected</th>
+                  <th className="text-right px-3 py-2.5">Received</th>
+                  <th className="text-right px-3 py-2.5">Short</th>
+                  <th className="text-left px-3 py-2.5">Status</th>
+                  <th className="text-left px-3 py-2.5">Reported</th>
+                  <th className="text-left px-3 py-2.5">Resolved</th>
+                  <th className="px-3 py-2.5 w-24"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((d, i) => {
+                  const meta = STATUS_META[d.status];
+                  return (
+                    <tr
+                      key={d.id}
+                      className={cn(
+                        "border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors",
+                        "border-l-[3px]",
+                        meta.rowBorder,
+                        i % 2 === 1 && "bg-muted/30",
+                      )}
+                    >
+                      <td className="px-3 py-2.5 font-mono font-bold text-primary text-xs">
+                        <Link href={`/orders/${d.order.id}`} className="hover:underline">
+                          {d.order.orderNumber}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium">{d.order.client.name}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {d.driver?.name ?? <span className="text-text-tertiary">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {formatNumber(d.expectedAmount, 0)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {formatNumber(d.receivedAmount, 0)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-destructive">
+                        {formatNumber(d.shortfall, 0)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Chip variant={meta.variant}>{meta.label}</Chip>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
+                        {formatDate(d.reportedAt)}
+                        {d.reportedBy && (
+                          <div className="font-sans not-italic">{d.reportedBy.name}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
+                        {d.resolvedAt ? (
+                          <>
+                            {formatDate(d.resolvedAt)}
+                            {d.resolvedBy && (
+                              <div className="font-sans not-italic">{d.resolvedBy.name}</div>
+                            )}
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <Button variant="outline" size="sm" onClick={() => setTarget(d)}>
+                          Update
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
