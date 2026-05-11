@@ -19,16 +19,17 @@ import {
   type Action,
 } from "@/lib/permissions";
 import { PermissionsChecklist } from "./PermissionsChecklist";
+import { useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/auth";
 
-const ROLE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: "OWNER", label: "Эгаси · Owner" },
-  { value: "ADMIN", label: "Администратор · Admin" },
-  { value: "SALES", label: "Сотув · Sales" },
-  { value: "INVENTORY", label: "Омбор · Inventory" },
-  { value: "DRIVER", label: "Ҳайдовчи · Driver" },
-  { value: "ACCOUNTANT", label: "Бухгалтер · Accountant" },
-  { value: "CUSTOM", label: "Махсус · Custom (no defaults)" },
+const ROLE_OPTIONS: Array<{ value: string; uz: string; en: string }> = [
+  { value: "OWNER",      uz: "Эгаси",          en: "Owner" },
+  { value: "ADMIN",      uz: "Администратор",  en: "Admin" },
+  { value: "SALES",      uz: "Сотув",          en: "Sales" },
+  { value: "INVENTORY",  uz: "Омбор",          en: "Inventory" },
+  { value: "DRIVER",     uz: "Ҳайдовчи",       en: "Driver" },
+  { value: "ACCOUNTANT", uz: "Бухгалтер",      en: "Accountant" },
+  { value: "CUSTOM",     uz: "Махсус (стандартсиз)", en: "Custom (no defaults)" },
 ];
 
 // 12-char password from a clear character set (no l/I/0/O ambiguity).
@@ -52,6 +53,7 @@ export function AddUserDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState(() => generatePassword());
@@ -125,11 +127,11 @@ export function AddUserDialog({
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            Янги фойдаланувчи · New user
+            Янги фойдаланувчи<span className="lang-en"> · New user</span>
           </DialogTitle>
           <DialogDescription>
-            Шаблонни танлаб, рухсатларни мослаштиринг · Pick a template,
-            then customize permissions.
+            Шаблонни танлаб, рухсатларни мослаштиринг
+            <span className="lang-en"> · Pick a template, then customize permissions.</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -143,11 +145,11 @@ export function AddUserDialog({
           <div className="flex-1 overflow-y-auto space-y-5 pr-1">
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-foreground">
-                A. Маълумот · Basic info
+                A. Маълумот<span className="lang-en"> · Basic info</span>
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <Label htmlFor="user-name">Исм · Name</Label>
+                  <Label htmlFor="user-name">Исм<span className="lang-en"> · Name</span></Label>
                   <Input
                     id="user-name"
                     value={name}
@@ -167,7 +169,7 @@ export function AddUserDialog({
                 </div>
                 <div className="col-span-2 space-y-1">
                   <Label htmlFor="user-password">
-                    Дастлабки парол · Initial password
+                    Дастлабки парол<span className="lang-en"> · Initial password</span>
                   </Label>
                   <div className="flex gap-2">
                     <Input
@@ -182,12 +184,12 @@ export function AddUserDialog({
                       variant="outline"
                       onClick={() => setPassword(generatePassword())}
                     >
-                      Янгилаш · Regenerate
+                      Янгилаш<span className="lang-en"> · Regenerate</span>
                     </Button>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Фойдаланувчи биринчи киришда ўзгартиради · User will
-                    change this on first login.
+                    Фойдаланувчи биринчи киришда ўзгартиради
+                    <span className="lang-en"> · User will change this on first login.</span>
                   </div>
                 </div>
               </div>
@@ -195,7 +197,7 @@ export function AddUserDialog({
 
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-foreground">
-                B. Шаблон · Template
+                B. Шаблон<span className="lang-en"> · Template</span>
               </h3>
               <Select
                 value={role}
@@ -203,7 +205,7 @@ export function AddUserDialog({
               >
                 {ROLE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {opt.uz}{t("", ` · ${opt.en}`)}
                   </option>
                 ))}
               </Select>
@@ -211,7 +213,7 @@ export function AddUserDialog({
 
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-foreground">
-                C. Рухсатлар · Permissions
+                C. Рухсатлар<span className="lang-en"> · Permissions</span>
               </h3>
               <PermissionsChecklist
                 selected={perms}
@@ -229,14 +231,17 @@ export function AddUserDialog({
         )}
 
         {!created && (
-          <div className="flex justify-end gap-2 pt-3 border-t mt-3">
+          <div className="flex justify-end gap-2 pt-3 border-t border-border mt-3">
             <Button variant="outline" onClick={() => close(false)}>
-              Бекор қилиш · Cancel
+              Бекор қилиш<span className="lang-en"> · Cancel</span>
             </Button>
             <Button onClick={submit} disabled={busy || !name || !email || password.length < 8}>
               {busy
-                ? "Қўшилмоқда…"
-                : `${perms.size} та рухсат бериб қўшиш · Add with ${perms.size} permissions`}
+                ? t("Қўшилмоқда…", "Adding…")
+                : t(
+                    `${perms.size} та рухсат бериб қўшиш`,
+                    `Add with ${perms.size} permissions`,
+                  )}
             </Button>
           </div>
         )}
@@ -257,19 +262,19 @@ function CreatedScreen({
   const [copied, setCopied] = useState(false);
   return (
     <div className="space-y-4 py-2">
-      <div className="rounded-md border border-emerald-300 bg-emerald-50 p-4 text-emerald-900">
+      <div className="rounded-md border border-success/30 bg-success/10 p-4 text-success">
         <div className="font-medium">
-          ✅ Фойдаланувчи яратилди · User created
+          ✓ Фойдаланувчи яратилди<span className="lang-en"> · User created</span>
         </div>
         <div className="mt-2 text-sm">
           Email: <code className="text-xs">{email}</code>
         </div>
         <div className="mt-1 text-sm">
-          Парол: <code className="text-base font-mono bg-white px-2 py-0.5 rounded">{password}</code>
+          Парол: <code className="text-base font-mono bg-card px-2 py-0.5 rounded">{password}</code>
         </div>
-        <div className="mt-3 text-xs text-emerald-800/80">
-          Бу парол кейин кўрсатилмайди — ҳозир нусхалаб олинг ·
-          This password won&apos;t be shown again — copy it now.
+        <div className="mt-3 text-xs text-success/80">
+          Бу парол кейин кўрсатилмайди — ҳозир нусхалаб олинг
+          <span className="lang-en"> · This password won&apos;t be shown again — copy it now.</span>
         </div>
       </div>
 
@@ -284,9 +289,11 @@ function CreatedScreen({
             setTimeout(() => setCopied(false), 1500);
           }}
         >
-          {copied ? "Нусхаланди ✓ · Copied" : "Паролни нусхалаш · Copy password"}
+          {copied
+            ? <>Нусхаланди ✓<span className="lang-en"> · Copied</span></>
+            : <>Паролни нусхалаш<span className="lang-en"> · Copy password</span></>}
         </Button>
-        <Button onClick={onClose}>Ёпиш · Close</Button>
+        <Button onClick={onClose}>Ёпиш<span className="lang-en"> · Close</span></Button>
       </div>
     </div>
   );

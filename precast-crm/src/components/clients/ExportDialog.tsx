@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
 
 interface ExportResponse {
   text: string;
@@ -34,6 +35,7 @@ interface Props {
  * server even when the user edits client-side.
  */
 export function ExportDialog({ open, ids, onClose }: Props) {
+  const t = useT();
   const [data, setData] = useState<ExportResponse | null>(null);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +63,7 @@ export function ExportDialog({ open, ids, onClose }: Props) {
           | { ok: false; error: string };
         if (!alive) return;
         if (!res.ok || !json.ok) {
-          setError("error" in json ? json.error : "Export failed");
+          setError("error" in json ? json.error : t("Экспорт амалга ошмади", "Export failed"));
           return;
         }
         setData(json.data);
@@ -113,7 +115,7 @@ export function ExportDialog({ open, ids, onClose }: Props) {
       setJustCopied(true);
       setTimeout(() => setJustCopied(false), 2000);
     } catch (e) {
-      setError(`Couldn't copy: ${(e as Error).message}`);
+      setError(`${t("Нусхалаб бўлмади:", "Couldn't copy:")} ${(e as Error).message}`);
     }
   }
 
@@ -121,9 +123,12 @@ export function ExportDialog({ open, ids, onClose }: Props) {
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Контактларни экспорт қилиш · Export Contacts</DialogTitle>
+          <DialogTitle>Контактларни экспорт қилиш<span className="lang-en"> · Export Contacts</span></DialogTitle>
           <DialogDescription>
-            Paste the block below into WhatsApp, Telegram, or any messenger.
+            {t(
+              "Қуйидаги блокни WhatsApp, Telegram ёки бошқа мессенжерга жойлаштиринг.",
+              "Paste the block below into WhatsApp, Telegram, or any messenger.",
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -131,7 +136,7 @@ export function ExportDialog({ open, ids, onClose }: Props) {
         <div className="flex items-center justify-between text-sm">
           {loading ? (
             <div className="flex items-center text-muted-foreground">
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Preparing export…
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> {t("Экспорт тайёрланмоқда…", "Preparing export…")}
             </div>
           ) : error ? (
             <div className="flex items-start gap-2 text-destructive">
@@ -143,15 +148,14 @@ export function ExportDialog({ open, ids, onClose }: Props) {
               <span className="font-semibold text-foreground tabular-nums">
                 {data.exported}
               </span>{" "}
-              клиент · clients
+              {t("мижоз", "clients")}
             </div>
           ) : null}
           {data && data.excluded > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+            <div className="flex items-center gap-1.5 text-xs text-warning bg-warning/10 border border-warning/30 rounded px-2 py-1">
               <AlertCircle className="h-3 w-3" />
               <span>
-                {data.excluded} client{data.excluded === 1 ? "" : "s"} excluded
-                (no consent on file)
+                {data.excluded} {t("мижоз чиқарилди (розилик йўқ)", `client${data.excluded === 1 ? "" : "s"} excluded (no consent on file)`)}
               </span>
             </div>
           )}
@@ -162,27 +166,27 @@ export function ExportDialog({ open, ids, onClose }: Props) {
           className="w-full min-h-[220px] max-h-[60vh] resize-y rounded-md border border-input bg-background p-3 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/40"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={loading ? "Loading…" : "No contacts to export"}
+          placeholder={loading ? t("Юкланмоқда…", "Loading…") : t("Экспорт қилиш учун контакт йўқ", "No contacts to export")}
         />
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Close
+            {t("Ёпиш", "Close")}
           </Button>
           <Button
             size="sm"
             onClick={copyToClipboard}
             disabled={!text || loading}
-            className={justCopied ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+            className={justCopied ? "bg-success hover:bg-success/90 text-success-foreground" : ""}
           >
             {justCopied ? (
               <>
-                <Check className="h-4 w-4 mr-2" /> ✓ Copied
+                <Check className="h-4 w-4 mr-2" /> ✓ {t("Нусхаланди", "Copied")}
               </>
             ) : (
               <>
-                <Copy className="h-4 w-4 mr-2" /> Copy to clipboard
+                <Copy className="h-4 w-4 mr-2" /> {t("Буфер хотирага нусхалаш", "Copy to clipboard")}
               </>
             )}
           </Button>
