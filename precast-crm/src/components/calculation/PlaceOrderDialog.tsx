@@ -5,6 +5,7 @@ import { X, PackageCheck, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 import { formatNumber } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CLICK" | "PAYME" | "OTHER";
 
@@ -73,6 +74,7 @@ export function PlaceOrderDialog({
   editMode = false,
   defaultScheduledAt = null,
 }: Props) {
+  const t = useT();
   const [date, setDate] = useState<Date | null>(defaultScheduledAt ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +101,7 @@ export function PlaceOrderDialog({
   async function confirm() {
     if (!date) return;
     if (!editMode && overPaid) {
-      setError("Payment cannot exceed the total");
+      setError(t("Тўлов жами суммадан ошмаслиги керак", "Payment cannot exceed the total"));
       return;
     }
     setSubmitting(true);
@@ -121,19 +123,25 @@ export function PlaceOrderDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-background rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-card rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-border">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <div>
             <h2 className="text-lg font-bold">
               {editMode
-                ? "Таҳрирни сақлаш · Save edits"
-                : "Буюртма Бериш · Place Order"}
+                ? <>Таҳрирни сақлаш<span className="lang-en"> · Save edits</span></>
+                : <>Буюртма Бериш<span className="lang-en"> · Place Order</span></>}
             </h2>
             <p className="text-xs text-muted-foreground">
               {editMode
-                ? "Replaces the existing snapshot in place. Existing payments preserved."
-                : "Pick a delivery / production date. Calendar shows existing load."}
+                ? t(
+                    "Жойида мавжуд снепшотни алмаштиради. Тўловлар сақланиб қолади.",
+                    "Replaces the existing snapshot in place. Existing payments preserved.",
+                  )
+                : t(
+                    "Етказиб бериш / ишлаб чиқариш санасини танланг. Календарь жорий юкламани кўрсатади.",
+                    "Pick a delivery / production date. Calendar shows existing load.",
+                  )}
             </p>
           </div>
           <button
@@ -149,13 +157,19 @@ export function PlaceOrderDialog({
         <div className="p-5 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
           <div>
             {summary.undersizedRooms && summary.undersizedRooms.length > 0 && (
-              <div className="mb-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <div className="mb-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
                 <div className="flex items-start gap-2 font-semibold">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-700" />
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>
                     {summary.undersizedRooms.length === 1
-                      ? "1 room is smaller than the engineering-calculated width"
-                      : `${summary.undersizedRooms.length} rooms are smaller than the engineering-calculated width`}
+                      ? t(
+                          "1 та хона муҳандислик ҳисоб-китобидаги эни кичикроқ",
+                          "1 room is smaller than the engineering-calculated width",
+                        )
+                      : t(
+                          `${summary.undersizedRooms.length} та хона муҳандислик ҳисоб-китобидаги эни кичикроқ`,
+                          `${summary.undersizedRooms.length} rooms are smaller than the engineering-calculated width`,
+                        )}
                   </span>
                 </div>
                 <ul className="mt-1.5 space-y-0.5 text-xs pl-6 tabular-nums">
@@ -166,7 +180,7 @@ export function PlaceOrderDialog({
                       <span>
                         {formatNumber(r.innerWidth, 2)} × {formatNumber(r.innerLength, 2)} m
                       </span>
-                      <span className="text-amber-800">
+                      <span className="text-warning">
                         ⚠ ўлчам кичикроқ ({formatNumber(r.originalWidth, 3)} → {formatNumber(r.innerWidth, 3)})
                       </span>
                     </li>
@@ -181,22 +195,22 @@ export function PlaceOrderDialog({
               disablePast
             />
             {date && (
-              <div className="mt-3 text-sm bg-emerald-50/60 border border-emerald-200 text-emerald-900 rounded px-3 py-2">
-                Will be scheduled for{" "}
+              <div className="mt-3 text-sm bg-success/10 border border-success/30 text-success rounded-md px-3 py-2">
+                {t("Жадвалга қўйилади:", "Will be scheduled for")}{" "}
                 <span className="font-semibold">
                   {date.toLocaleDateString("en-GB", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
                 </span>
-                . The order's {formatNumber(summary.totalArea, 1)} m² is
-                previewed in the calendar above.
+                . {t("Буюртма", "The order's")} {formatNumber(summary.totalArea, 1)} m²{" "}
+                {t("юқоридаги календарьда олдиндан кўрсатилган.", "is previewed in the calendar above.")}
               </div>
             )}
           </div>
 
           {/* Summary panel */}
-          <aside className="rounded-lg border bg-muted/20 p-4 space-y-3 text-sm">
+          <aside className="rounded-lg border border-border bg-muted/20 p-4 space-y-3 text-sm">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">
-                Мижоз · Client
+                Мижоз<span className="lang-en"> · Client</span>
               </div>
               <div className="font-semibold">{summary.clientName}</div>
               <div className="text-xs tabular-nums">{summary.clientPhone}</div>
@@ -204,14 +218,14 @@ export function PlaceOrderDialog({
                 <div className="text-xs text-muted-foreground">{summary.clientAddress}</div>
               )}
             </div>
-            <div className="border-t pt-3">
-              <Row label="Хоналар · Rooms" value={summary.rooms} />
-              <Row label="Майдон · Slab area" value={`${formatNumber(summary.totalArea, 2)} m²`} />
-              <Row label="Балка · Beams" value={summary.totalBeams} />
-              <Row label="Ғишт · Blocks" value={summary.totalBlocks} />
+            <div className="border-t border-border pt-3">
+              <Row label={<>Хоналар<span className="lang-en"> · Rooms</span></>} value={summary.rooms} />
+              <Row label={<>Майдон<span className="lang-en"> · Slab area</span></>} value={`${formatNumber(summary.totalArea, 2)} m²`} />
+              <Row label={<>Балка<span className="lang-en"> · Beams</span></>} value={summary.totalBeams} />
+              <Row label={<>Ғишт<span className="lang-en"> · Blocks</span></>} value={summary.totalBlocks} />
             </div>
-            <div className="border-t pt-3">
-              <Row label="Сумма · Subtotal" value={formatNumber(summary.roomsSubtotal, 0)} />
+            <div className="border-t border-border pt-3">
+              <Row label={<>Сумма<span className="lang-en"> · Subtotal</span></>} value={formatNumber(summary.roomsSubtotal, 0)} />
               {summary.discountPercent > 0 && (
                 <Row
                   label={`Чегирма ${summary.discountPercent}%`}
@@ -220,11 +234,11 @@ export function PlaceOrderDialog({
                 />
               )}
               {summary.deliveryCost > 0 && (
-                <Row label="Етказиб бериш · Delivery" value={formatNumber(summary.deliveryCost, 0)} />
+                <Row label={<>Етказиб бериш<span className="lang-en"> · Delivery</span></>} value={formatNumber(summary.deliveryCost, 0)} />
               )}
-              <div className="flex items-baseline justify-between border-t pt-2 mt-2">
-                <span className="font-bold">Жами · Total</span>
-                <span className="font-black text-emerald-700 text-xl tabular-nums">
+              <div className="flex items-baseline justify-between border-t border-border pt-2 mt-2">
+                <span className="font-bold">Жами<span className="lang-en"> · Total</span></span>
+                <span className="font-black text-success text-xl tabular-nums font-mono">
                   {formatNumber(summary.totalPrice, 0)}{" "}
                   <span className="text-xs text-muted-foreground font-normal">UZS</span>
                 </span>
@@ -237,10 +251,10 @@ export function PlaceOrderDialog({
                 by the edit endpoint; new payments go through the order's
                 Add Payment flow afterward. */}
             {!editMode && (
-            <div className="border-t pt-3 space-y-2">
+            <div className="border-t border-border pt-3 space-y-2">
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Тўлов · Payment now
+                  Тўлов<span className="lang-en"> · Payment now</span>
                 </span>
                 <input
                   type="number"
@@ -258,7 +272,7 @@ export function PlaceOrderDialog({
               </label>
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Усул · Method
+                  Усул<span className="lang-en"> · Method</span>
                 </span>
                 <select
                   value={paymentMethod}
@@ -276,26 +290,36 @@ export function PlaceOrderDialog({
               <div
                 className={`flex items-baseline justify-between text-sm rounded px-2 py-1.5 ${
                   fullyPaid
-                    ? "bg-emerald-50 text-emerald-800"
+                    ? "bg-success/10 text-success"
                     : paidNum > 0
-                      ? "bg-amber-50 text-amber-900"
+                      ? "bg-warning/10 text-warning"
                       : "text-muted-foreground"
                 }`}
               >
                 <span className="font-semibold">
-                  {fullyPaid ? "Тўланган · Paid in full" : "Қолди · Remainder"}
+                  {fullyPaid
+                    ? <>Тўланган<span className="lang-en"> · Paid in full</span></>
+                    : <>Қолди<span className="lang-en"> · Remainder</span></>}
                 </span>
                 <span className="tabular-nums font-bold">
                   {formatNumber(remainder, 0)}
                 </span>
               </div>
               {overPaid && (
-                <div className="text-xs text-rose-700">
-                  Payment cannot exceed the total ({formatNumber(summary.totalPrice, 0)} UZS).
+                <div className="text-xs text-destructive">
+                  {t(
+                    `Тўлов жами суммадан ошмаслиги керак (${formatNumber(summary.totalPrice, 0)} UZS).`,
+                    `Payment cannot exceed the total (${formatNumber(summary.totalPrice, 0)} UZS).`,
+                  )}
                 </div>
               )}
               <p className="text-[10px] text-muted-foreground leading-snug">
-                Recorded as <span className="font-semibold">PENDING</span>. Owner confirms it on the Payments page; only then does the order's confirmedPaid update.
+                {t("Қайд этилади", "Recorded as")}{" "}
+                <span className="font-semibold">PENDING</span>.{" "}
+                {t(
+                  "Эга Тўловлар саҳифасида тасдиқлайди; шундан кейингина буюртманинг тасдиқланган тўлови янгиланади.",
+                  "Owner confirms it on the Payments page; only then does the order's confirmedPaid update.",
+                )}
               </p>
             </div>
             )}
@@ -303,28 +327,32 @@ export function PlaceOrderDialog({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t bg-muted/20 flex items-center justify-between">
+        <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
           {error ? (
             <div className="text-sm text-destructive">{error}</div>
           ) : (
             <div className="text-xs text-muted-foreground">
               {editMode
-                ? "Existing payments are preserved. Owner reconciles any over- or under-payment manually."
+                ? t(
+                    "Мавжуд тўловлар сақланиб қолади. Эга ортиқча ёки кам тўловларни қўлда созлайди.",
+                    "Existing payments are preserved. Owner reconciles any over- or under-payment manually.",
+                  )
                 : (
                   <>
-                    Prices freeze at this moment. The Project&apos;s status flips to{" "}
-                    <span className="font-semibold">ORDERED</span>.
+                    {t("Нархлар ҳозир музлайди. Лойиҳа ҳолати", "Prices freeze at this moment. The Project's status flips to")}{" "}
+                    <span className="font-semibold">ORDERED</span>
+                    {t(" га ўзгаради.", ".")}
                   </>
                 )}
             </div>
           )}
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onClose} disabled={submitting}>
-              Cancel
+              {t("Бекор қилиш", "Cancel")}
             </Button>
             <Button
               size="sm"
-              className="bg-orange-500 hover:bg-orange-600 text-white"
+              className="bg-success hover:bg-success/90 text-success-foreground"
               disabled={!canConfirm}
               onClick={confirm}
             >
@@ -334,8 +362,8 @@ export function PlaceOrderDialog({
                 <PackageCheck className="h-4 w-4 mr-2" />
               )}
               {editMode
-                ? "Таҳрирни сақлаш · Save edits"
-                : "Буюртма Бериш · Place Order"}
+                ? <>Таҳрирни сақлаш<span className="lang-en"> · Save edits</span></>
+                : <>Буюртма Бериш<span className="lang-en"> · Place Order</span></>}
             </Button>
           </div>
         </div>
@@ -349,14 +377,14 @@ function Row({
   value,
   rose,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: string | number;
   rose?: boolean;
 }) {
   return (
     <div className="flex justify-between text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <span className={`tabular-nums ${rose ? "text-rose-700" : ""}`}>{value}</span>
+      <span className={`tabular-nums ${rose ? "text-destructive" : ""}`}>{value}</span>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/lib/i18n";
 
 export type ConsentValue = "NOT_ASKED" | "GRANTED" | "DENIED";
 
@@ -23,43 +24,43 @@ interface Props {
   onSubmit: (next: { referenceConsent: ConsentValue; consentNote: string | null }) => Promise<void>;
 }
 
-const OPTIONS: Array<{
-  value: ConsentValue;
-  label: string;
-  hint: string;
-  icon: React.ComponentType<{ className?: string }>;
-  ringCls: string;
-}> = [
-  {
-    value: "GRANTED",
-    label: "GRANTED · Розилик берилган",
-    hint: "Client agreed to be contacted by prospects.",
-    icon: CheckCircle2,
-    ringCls: "border-emerald-300 bg-emerald-50 text-emerald-900 ring-emerald-300",
-  },
-  {
-    value: "DENIED",
-    label: "DENIED · Розилик берилмаган",
-    hint: "Client declined. Don't include in exports.",
-    icon: XCircle,
-    ringCls: "border-rose-300 bg-rose-50 text-rose-900 ring-rose-300",
-  },
-  {
-    value: "NOT_ASKED",
-    label: "NOT_ASKED · Сўралмаган",
-    hint: "Default — operator hasn't asked yet.",
-    icon: HelpCircle,
-    ringCls: "border-muted-foreground/30 bg-muted/30 text-foreground ring-muted-foreground/40",
-  },
-];
-
 export function ConsentDialog({ open, onClose, initialValue, initialNote, onSubmit }: Props) {
+  const t = useT();
   const [value, setValue] = useState<ConsentValue>(initialValue);
   const [note, setNote] = useState<string>(initialNote ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset state when reopened so the dialog reflects the latest server value.
+  const options: Array<{
+    value: ConsentValue;
+    label: React.ReactNode;
+    hint: string;
+    icon: React.ComponentType<{ className?: string }>;
+    ringCls: string;
+  }> = [
+    {
+      value: "GRANTED",
+      label: <>Розилик берилган<span className="lang-en"> · GRANTED</span></>,
+      hint: t("Мижоз потенциал мижозлар билан боғланишга розилик берди.", "Client agreed to be contacted by prospects."),
+      icon: CheckCircle2,
+      ringCls: "border-success/30 bg-success/10 text-success ring-success/30",
+    },
+    {
+      value: "DENIED",
+      label: <>Розилик берилмаган<span className="lang-en"> · DENIED</span></>,
+      hint: t("Мижоз рад этди. Экспортларга киритманг.", "Client declined. Don't include in exports."),
+      icon: XCircle,
+      ringCls: "border-destructive/30 bg-destructive/10 text-destructive ring-destructive/30",
+    },
+    {
+      value: "NOT_ASKED",
+      label: <>Сўралмаган<span className="lang-en"> · NOT_ASKED</span></>,
+      hint: t("Стандарт — оператор ҳали сўрамаган.", "Default — operator hasn't asked yet."),
+      icon: HelpCircle,
+      ringCls: "border-muted-foreground/30 bg-muted/30 text-foreground ring-muted-foreground/40",
+    },
+  ];
+
   useEffect(() => {
     if (open) {
       setValue(initialValue);
@@ -88,14 +89,17 @@ export function ConsentDialog({ open, onClose, initialValue, initialNote, onSubm
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reference consent</DialogTitle>
+          <DialogTitle>{t("Тавсиявий розилик", "Reference consent")}</DialogTitle>
           <DialogDescription>
-            Controls whether this client appears in contact-export results.
+            {t(
+              "Бу мижоз контактлар экспорти натижаларида кўринишини бошқаради.",
+              "Controls whether this client appears in contact-export results.",
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-2">
-          {OPTIONS.map((opt) => {
+          {options.map((opt) => {
             const Icon = opt.icon;
             const checked = value === opt.value;
             return (
@@ -124,12 +128,15 @@ export function ConsentDialog({ open, onClose, initialValue, initialNote, onSubm
 
         <div className="space-y-1.5">
           <Label className="text-xs uppercase tracking-wider font-bold">
-            Изоҳ · Note (optional)
+            Изоҳ<span className="lang-en"> · Note</span> ({t("ихтиёрий", "optional")})
           </Label>
           <Input
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. Confirmed by phone on Mon · Tashkent visit allowed"
+            placeholder={t(
+              "масалан: Душанба телефонда тасдиқланди · Тошкент ташрифи рухсат этилган",
+              "e.g. Confirmed by phone on Mon · Tashkent visit allowed",
+            )}
           />
         </div>
 
@@ -141,11 +148,11 @@ export function ConsentDialog({ open, onClose, initialValue, initialNote, onSubm
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
-            Cancel
+            {t("Бекор қилиш", "Cancel")}
           </Button>
           <Button size="sm" onClick={save} disabled={submitting}>
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Save
+            {t("Сақлаш", "Save")}
           </Button>
         </div>
       </DialogContent>
