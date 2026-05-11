@@ -22,7 +22,10 @@ export function TaperedCalculatorPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Қиялашган плита · Tapered Beam-and-Block
+          Қиялашган плита{" "}
+          <span className="text-muted-foreground font-normal text-base">
+            · Tapered Beam-and-Block
+          </span>
         </h1>
         <p className="text-sm text-muted-foreground">
           Trapezoidal and irregular-quadrilateral slab calculator. See SPEC.md
