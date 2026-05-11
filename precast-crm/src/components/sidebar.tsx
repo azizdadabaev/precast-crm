@@ -185,7 +185,7 @@ export function SidebarBody({
       {/* Logo block */}
       <div
         className={cn(
-          "h-14 flex items-center border-b border-sidebar-border shrink-0",
+          "h-14 flex items-center border-b border-border shrink-0",
           collapsed ? "justify-center" : "px-5 gap-3",
         )}
       >
@@ -215,10 +215,10 @@ export function SidebarBody({
         </div>
         {!collapsed && (
           <div className="min-w-0">
-            <div className="text-sm font-extrabold tracking-tight text-white leading-tight">
+            <div className="text-sm font-extrabold tracking-tight text-foreground leading-tight">
               EtalonSlabs
             </div>
-            <div className="text-[10px] font-medium uppercase tracking-widest text-sidebar-text leading-none">
+            <div className="text-[10px] font-medium uppercase tracking-widest text-text-tertiary leading-none">
               Manufacturing CRM
             </div>
           </div>
@@ -243,13 +243,14 @@ export function SidebarBody({
               onClick={onNavigate}
               title={collapsed ? `${item.label} · ${item.sub}` : undefined}
               className={cn(
-                "relative flex items-center rounded-lg transition-colors outline-none min-h-11 lg:min-h-0",
+                "group relative flex items-center rounded-lg outline-none min-h-11 lg:min-h-0",
+                "transition-all duration-150 ease-out",
                 collapsed
                   ? "justify-center p-2.5"
                   : "gap-3 px-3.5 py-2.5",
                 active
-                  ? "bg-primary/[0.14] text-sidebar-active"
-                  : "text-sidebar-text hover:bg-white/[0.04] hover:text-sidebar-hover",
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-0.5",
               )}
             >
               {active && (
@@ -257,8 +258,8 @@ export function SidebarBody({
               )}
               <Icon
                 className={cn(
-                  "h-[17px] w-[17px] shrink-0 transition-colors",
-                  active && "text-primary",
+                  "h-[17px] w-[17px] shrink-0 transition-transform duration-150 ease-out",
+                  active ? "text-primary" : "group-hover:scale-110",
                 )}
               />
               {!collapsed && (
@@ -282,22 +283,22 @@ export function SidebarBody({
       {/* Footer — user info + collapse toggle + logout */}
       <div
         className={cn(
-          "border-t border-sidebar-border shrink-0",
+          "border-t border-border shrink-0",
           collapsed ? "px-1.5 py-2.5" : "px-2 py-2.5",
         )}
       >
         {!collapsed ? (
           <div className="flex items-center gap-2.5 px-2.5 py-2">
-            <div className="h-[30px] w-[30px] rounded-full bg-primary/20 grid place-items-center shrink-0">
+            <div className="h-[30px] w-[30px] rounded-full bg-primary/15 grid place-items-center shrink-0">
               <span className="text-[11px] font-bold font-mono text-primary">
                 {userInitials}
               </span>
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-semibold leading-tight truncate text-[#c8cfe0]">
+              <div className="text-[13px] font-semibold leading-tight truncate text-foreground">
                 {user.name}
               </div>
-              <div className="text-[10px] font-mono uppercase tracking-wider text-sidebar-text flex items-center gap-1">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-text-tertiary flex items-center gap-1">
                 <span className="truncate">{roleDisplayLabel(user.role)}</span>
                 {customized ? (
                   <Pencil
@@ -313,7 +314,7 @@ export function SidebarBody({
             title={`${user.name} · ${roleDisplayLabel(user.role)}`}
             className="flex items-center justify-center py-2"
           >
-            <div className="h-[30px] w-[30px] rounded-full bg-primary/20 grid place-items-center">
+            <div className="h-[30px] w-[30px] rounded-full bg-primary/15 grid place-items-center">
               <span className="text-[11px] font-bold font-mono text-primary">
                 {userInitials}
               </span>
@@ -328,7 +329,7 @@ export function SidebarBody({
               onClick={onToggleCollapsed}
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               className={cn(
-                "flex items-center justify-center rounded-md text-sidebar-text hover:text-sidebar-hover hover:bg-white/[0.04] transition-colors",
+                "flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors",
                 collapsed ? "h-8 w-full" : "h-8 w-8",
               )}
             >
@@ -344,7 +345,7 @@ export function SidebarBody({
             onClick={logout}
             title="Logout"
             className={cn(
-              "flex items-center justify-center gap-2 rounded-md text-sidebar-text hover:text-sidebar-hover hover:bg-white/[0.04] transition-colors",
+              "flex items-center justify-center gap-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors",
               collapsed
                 ? "h-8 w-full"
                 : "h-8 flex-1 px-2 text-[12px] font-medium",
@@ -392,7 +393,7 @@ export function Sidebar({ user }: { user: AuthUser }) {
   return (
     <aside
       className={cn(
-        "hidden lg:flex shrink-0 sticky top-0 h-screen flex-col bg-sidebar border-r border-sidebar-border",
+        "hidden lg:flex shrink-0 sticky top-0 h-screen flex-col bg-card border-r border-border",
         "transition-[width] duration-200 ease-out overflow-hidden",
         collapsed ? "w-[60px]" : "w-[240px]",
       )}
