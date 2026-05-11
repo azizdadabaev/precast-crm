@@ -77,6 +77,14 @@ export default function ProjectDetailPage() {
   if (isLoading) return <div className="text-muted-foreground p-8">Loading project...</div>;
   if (!project) return <div className="p-8">Project not found</div>;
 
+  // Display label for an unnamed draft. The project.name column is
+  // optional (operator can save a draft without typing a name), so
+  // we fall back to "Saved Draft <shortid>" — clearer than the
+  // earlier "Project <shortid>" which read like a real product name.
+  const displayName = project.name || `Saved Draft ${project.id.slice(-6)}`;
+  const clientLabel =
+    project.client?.name ?? project.tentativeClientName ?? "";
+
   const totals = project.calculations.reduce(
     (acc, c) => ({
       blocks: acc.blocks + c.totalBlocks,
@@ -100,7 +108,14 @@ export default function ProjectDetailPage() {
         <div className="flex gap-2">
           <ShareCalculationButton
             targetRef={shareRef}
-            fileBase={`Project-${project.name || project.id.slice(-6)}`}
+            fileBase={`${displayName}${
+              clientLabel ? `-${clientLabel}` : ""
+            }`
+              // Strip Windows-forbidden filename chars and collapse
+              // whitespace, same sanitization the order page uses.
+              .replace(/[<>:"/\\|?*]+/g, "")
+              .replace(/\s+/g, " ")
+              .trim()}
             disabled={project.calculations.length === 0}
           />
           {project.status === "ORDERED" && project.orders[0] ? (
@@ -129,7 +144,7 @@ export default function ProjectDetailPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-primary">
-              {project.name || `Project ${project.id.slice(-6)}`}
+              {displayName}
             </h1>
             <p className="text-muted-foreground mt-1">
               Client:{" "}
