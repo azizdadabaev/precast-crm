@@ -105,9 +105,14 @@ export function DispatchDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            <Truck className="h-5 w-5 inline mr-2 text-amber-600" />
-            Жўнатиш · Dispatch
+          <DialogTitle className="flex items-center gap-2">
+            <Truck className="h-5 w-5 text-primary shrink-0" />
+            <span>
+              Жўнатиш{" "}
+              <span className="text-muted-foreground font-normal text-base">
+                · Dispatch
+              </span>
+            </span>
           </DialogTitle>
           <DialogDescription>
             Truck leaves the factory with materials. The driver collects cash from the customer at the delivery site.
@@ -171,32 +176,39 @@ export function DispatchDialog({
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+            <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/30 px-3 py-2 rounded-md">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-between pt-2">
-          <div className="text-xs text-muted-foreground">
+        <div className="flex flex-col gap-3 pt-2 border-t border-border -mx-6 px-6 -mb-2 pb-1">
+          <div className="text-xs text-text-tertiary">
             Will create a Dispatch + flip status to{" "}
-            <span className="font-semibold">DISPATCHED</span>.
+            <span className="font-mono font-bold text-foreground">DISPATCHED</span>.
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              disabled={submitting}
+            >
               Cancel
             </Button>
             <Button
               size="sm"
-              className="bg-amber-600 hover:bg-amber-700 text-white"
               onClick={submit}
               disabled={submitting || drivers.length === 0}
             >
-              {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Truck className="h-4 w-4 mr-2" />}
-              Жўнатиш ·{" "}
+              {submitting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Truck className="h-4 w-4 mr-2" />
+              )}
               {expected !== "" && Number(expected) > 0
-                ? `Dispatch with ${formatNumber(Number(expected), 0)} expected`
+                ? `Dispatch · ${formatNumber(Number(expected), 0)} expected`
                 : "Dispatch"}
             </Button>
           </div>
