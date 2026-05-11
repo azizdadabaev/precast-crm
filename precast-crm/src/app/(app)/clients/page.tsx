@@ -4,12 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { Chip } from "@/components/ui/chip";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +18,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Plus, Search, Send, X } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { ExportDialog } from "@/components/clients/ExportDialog";
 
@@ -116,139 +115,156 @@ export default function ClientsPage() {
         <NewClientDialog />
       </div>
 
-      <Card>
-        <CardContent className="p-4 space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Қидириш · name, phone (last 4 digits OK), or address…"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="sm:w-44"
-            >
-              <option value="">All languages</option>
-              <option value="UZ">Uzbek</option>
-              <option value="RU">Russian</option>
-            </Select>
-          </div>
-
-          {/* Sticky action bar — appears when at least one row is selected */}
-          {selectedCount > 0 && (
-            <div className="sticky top-0 z-10 -mx-4 px-4 py-2.5 bg-primary text-primary-foreground rounded-t-md flex items-center justify-between shadow-sm">
-              <div className="text-sm">
-                <span className="font-bold tabular-nums">Selected: {selectedCount}</span>{" "}
-                client{selectedCount === 1 ? "" : "s"}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setExportOpen(true)}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Export Contacts
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-primary-foreground hover:bg-primary-foreground/10"
-                  onClick={clearSelection}
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Clear
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {isLoading ? (
-            <div className="text-muted-foreground py-8 text-center">Loading…</div>
-          ) : clients.length === 0 ? (
-            <div className="text-muted-foreground py-8 text-center">No clients found</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="excel-table">
-                <thead>
-                  <tr>
-                    <th className="w-10 text-center">
-                      <input
-                        ref={headerCheckboxRef}
-                        type="checkbox"
-                        className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                        checked={allEligibleSelected}
-                        onChange={toggleAllVisibleEligible}
-                        disabled={eligibleIds.length === 0}
-                        title={
-                          eligibleIds.length === 0
-                            ? "No clients with consent on file in current view"
-                            : "Select all clients with consent on file"
-                        }
-                      />
-                    </th>
-                    <th>Исм · Name</th>
-                    <th>Тел · Phone</th>
-                    <th>Манзил · Address</th>
-                    <th>Lang</th>
-                    <th>Source</th>
-                    <th className="text-center">Orders</th>
-                    <th>Added</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clients.map((c) => {
-                    const eligible = c.referenceConsent === "GRANTED";
-                    const checked = selected.has(c.id);
-                    return (
-                      <tr key={c.id}>
-                        <td className="text-center">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-                            checked={checked}
-                            disabled={!eligible}
-                            onChange={() => toggleOne(c.id)}
-                            title={
-                              eligible
-                                ? "Toggle selection"
-                                : "Розилик берилмаган · No consent on file"
-                            }
-                          />
-                        </td>
-                        <td className="font-medium">
-                          <Link href={`/clients/${c.id}`} className="hover:underline">
-                            {c.name}
-                          </Link>
-                        </td>
-                        <td className="tabular-nums">{formatPhone(c.phone)}</td>
-                        <td>{c.address ?? "—"}</td>
-                        <td>
-                          <Badge variant="outline">{c.language}</Badge>
-                        </td>
-                        <td>{c.source ?? "—"}</td>
-                        <td className="text-center tabular-nums">{c._count.orders}</td>
-                        <td className="text-muted-foreground">{formatDate(c.createdAt)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <ExportDialog
-            open={exportOpen}
-            ids={selectedIds}
-            onClose={() => setExportOpen(false)}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
+          <Input
+            placeholder="Қидириш · name, phone (last 4 digits OK), or address…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="pl-9"
           />
-        </CardContent>
-      </Card>
+        </div>
+        <Select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          className="sm:w-44"
+        >
+          <option value="">All languages</option>
+          <option value="UZ">Uzbek</option>
+          <option value="RU">Russian</option>
+        </Select>
+      </div>
+
+      {/* Sticky action bar — appears when at least one row is selected */}
+      {selectedCount > 0 && (
+        <div className="sticky top-2 z-10 px-4 py-2.5 bg-primary text-primary-foreground rounded-md flex items-center justify-between shadow-sm">
+          <div className="text-sm">
+            <span className="font-bold font-mono">{selectedCount}</span>{" "}
+            client{selectedCount === 1 ? "" : "s"} selected
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setExportOpen(true)}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Export Contacts
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-primary-foreground hover:bg-primary-foreground/10"
+              onClick={clearSelection}
+            >
+              <X className="h-4 w-4 mr-1" />
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        {isLoading ? (
+          <div className="p-6 text-muted-foreground">Loading…</div>
+        ) : clients.length === 0 ? (
+          <div className="p-12 text-center text-muted-foreground">No clients found</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[900px]">
+              <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="w-10 text-center px-3 py-2.5">
+                    <input
+                      ref={headerCheckboxRef}
+                      type="checkbox"
+                      className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                      checked={allEligibleSelected}
+                      onChange={toggleAllVisibleEligible}
+                      disabled={eligibleIds.length === 0}
+                      title={
+                        eligibleIds.length === 0
+                          ? "No clients with consent on file in current view"
+                          : "Select all clients with consent on file"
+                      }
+                    />
+                  </th>
+                  <th className="text-left px-3 py-2.5">Исм · Name</th>
+                  <th className="text-left px-3 py-2.5">Тел · Phone</th>
+                  <th className="text-left px-3 py-2.5">Манзил · Address</th>
+                  <th className="text-left px-3 py-2.5">Lang</th>
+                  <th className="text-left px-3 py-2.5">Source</th>
+                  <th className="text-right px-3 py-2.5">Orders</th>
+                  <th className="text-left px-3 py-2.5">Added</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((c, i) => {
+                  const eligible = c.referenceConsent === "GRANTED";
+                  const checked = selected.has(c.id);
+                  return (
+                    <tr
+                      key={c.id}
+                      className={cn(
+                        "border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors",
+                        i % 2 === 1 && "bg-muted/30",
+                      )}
+                    >
+                      <td className="text-center px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                          checked={checked}
+                          disabled={!eligible}
+                          onChange={() => toggleOne(c.id)}
+                          title={
+                            eligible
+                              ? "Toggle selection"
+                              : "Розилик берилмаган · No consent on file"
+                          }
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 font-medium">
+                        <Link
+                          href={`/clients/${c.id}`}
+                          className="hover:underline hover:text-primary transition-colors"
+                        >
+                          {c.name}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-text-tertiary">
+                        {formatPhone(c.phone)}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-text-tertiary max-w-[14rem]">
+                        {c.address ? <span className="line-clamp-2">{c.address}</span> : "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Chip variant="neutral">{c.language}</Chip>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-text-tertiary">
+                        {c.source ?? "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {c._count.orders}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
+                        {formatDate(c.createdAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <ExportDialog
+        open={exportOpen}
+        ids={selectedIds}
+        onClose={() => setExportOpen(false)}
+      />
     </div>
   );
 }
