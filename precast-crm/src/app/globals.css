@@ -2,46 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────
+   Design tokens — Etalon light palette.
+   Source of truth: docs/design/etalon-ui.jsx → getTokens(false).
+   Per-hex → HSL conversions are documented in docs/design/REDESIGN.md.
+
+   Shadcn naming convention: each color is a space-separated HSL
+   triplet (no `hsl()` wrapper). Tailwind wraps it as `hsl(var(--x))`
+   so opacity modifiers like `bg-background/50` work.
+
+   Dark mode dropped in this PR (see Phase 1 of the Etalon redesign).
+   Re-add by reviving the `.dark` block from main's globals.css.
+   ────────────────────────────────────────────────────────────── */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 215 35% 22%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 215 35% 22%;
-    --radius: 0.5rem;
-  }
+    /* Surfaces */
+    --background: 225 50% 97%;        /* #f3f5fb — page surface */
+    --foreground: 225 38% 8%;         /* #0c0f1a — primary text */
+    --card: 0 0% 100%;                /* #ffffff — elevated card */
+    --card-foreground: 225 38% 8%;
+    --muted: 229 27% 94%;             /* #eaecf5 — subdued surface */
+    --muted-foreground: 225 21% 44%;  /* #5a6488 — secondary text */
+    --popover: 0 0% 100%;
+    --popover-foreground: 225 38% 8%;
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    /* Borders */
+    --border: 225 32% 90%;            /* #dde1f0 — hairline */
+    --input: 225 32% 90%;
+    --border-strong: 227 27% 82%;     /* #c4cadf — divider, focus */
+
+    /* Brand accent — electric blue (primary CTAs, links, active filter) */
+    --accent: 220 100% 65%;           /* #4e80ff */
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 223 85% 59%;      /* #3d6fef */
+    --accent-dim: 220 100% 65%;       /* used with /10 opacity for chips */
+    --ring: 220 100% 65%;
+
+    /* Primary (CTAs) — same as accent in this palette */
+    --primary: 220 100% 65%;          /* #4e80ff */
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary (subdued button) */
+    --secondary: 229 27% 94%;
+    --secondary-foreground: 225 38% 8%;
+
+    /* Semantic status — used for chips, attention borders, KPI deltas.
+       Light-mode hexes are deliberately darker than dark-mode for AA
+       contrast on white backgrounds. */
+    --destructive: 0 73% 51%;         /* #dc2626 — shortfall, OPEN */
+    --destructive-foreground: 0 0% 100%;
+    --warning: 29 92% 44%;            /* #d97706 — pending, drafts */
+    --warning-foreground: 0 0% 100%;
+    --success: 160 92% 30%;           /* #059669 — paid, confirmed */
+    --success-foreground: 0 0% 100%;
+    --gold: 28 92% 37%;               /* #b45309 — production milestones */
+    --gold-foreground: 0 0% 100%;
+
+    /* Hierarchical text */
+    --text-tertiary: 225 19% 67%;     /* #9aa3bf — third-level text */
+
+    /* Hover / active surface states */
+    --surface-hover: 228 50% 98%;     /* #f8f9fd */
+    --surface-active: 226 53% 96%;    /* #eef1fa */
+
+    /* Sidebar — always dark regardless of mode, per the Etalon design.
+       Quoted from etalon-ui.jsx so values match the prototype. */
+    --sidebar-bg: 225 45% 5%;          /* #060810 */
+    --sidebar-border: 228 36% 10%;     /* #0f1220 */
+    --sidebar-text: 225 22% 31%;       /* #3e4660 */
+    --sidebar-hover: 225 17% 43%;      /* #5a6580 */
+    --sidebar-active: 225 41% 93%;     /* #e4e8f4 */
+    --sidebar-active-bg: 220 100% 65%; /* used with /14 opacity */
+
+    /* Radii */
+    --radius: 0.625rem;               /* 10px — etalon `r` */
+    --radius-sm: 0.375rem;            /* 6px — etalon `rSm` */
+    --radius-xs: 0.25rem;             /* 4px — etalon `rXs` */
   }
 }
 
@@ -52,6 +89,10 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Body face = Manrope (loaded in app/layout.tsx via next/font).
+       Falls back to Tailwind's font-sans system stack while the
+       network fetches the woff2. */
+    font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
   }
 }
 
