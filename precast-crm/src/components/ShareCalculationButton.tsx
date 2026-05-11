@@ -20,6 +20,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { useT } from "@/lib/i18n";
 
 interface ShareCalculationButtonProps {
   /** Ref to the DOM node that will be rendered into the image. */
@@ -50,6 +51,7 @@ export function ShareCalculationButton({
   fileBase,
   disabled = false,
 }: ShareCalculationButtonProps) {
+  const t = useT();
   const [busy, setBusy] = useState<null | "png" | "jpeg" | "copy" | "share">(null);
   const [copied, setCopied] = useState(false);
 
@@ -184,18 +186,21 @@ export function ShareCalculationButton({
           variant="outline"
           size="sm"
           disabled={disabled || anyBusy}
-          title="Save or share the calculation summary as an image"
+          title={t(
+            "Ҳисоб-китоб хулосасини расм сифатида сақлаш ёки улашиш",
+            "Save or share the calculation summary as an image",
+          )}
         >
           {anyBusy ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
             <Send className="h-4 w-4 mr-2" />
           )}
-          Юбориш · Send
+          Юбориш<span className="lang-en"> · Send</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Save as image</DropdownMenuLabel>
+        <DropdownMenuLabel>{t("Расм сифатида сақлаш", "Save as image")}</DropdownMenuLabel>
         <DropdownMenuItem
           onSelect={(e) => {
             e.preventDefault();
@@ -204,8 +209,8 @@ export function ShareCalculationButton({
           disabled={anyBusy}
         >
           <Download className="h-4 w-4" />
-          <span className="flex-1">Download PNG</span>
-          <span className="text-[10px] text-muted-foreground">sharp</span>
+          <span className="flex-1">{t("PNG юклаб олиш", "Download PNG")}</span>
+          <span className="text-[10px] text-muted-foreground">{t("аниқ", "sharp")}</span>
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={(e) => {
@@ -215,8 +220,8 @@ export function ShareCalculationButton({
           disabled={anyBusy}
         >
           <ImageIcon className="h-4 w-4" />
-          <span className="flex-1">Download JPEG</span>
-          <span className="text-[10px] text-muted-foreground">smaller</span>
+          <span className="flex-1">{t("JPEG юклаб олиш", "Download JPEG")}</span>
+          <span className="text-[10px] text-muted-foreground">{t("кичикроқ", "smaller")}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -226,8 +231,10 @@ export function ShareCalculationButton({
           }}
           disabled={anyBusy}
         >
-          {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
-          <span className="flex-1">{copied ? "Copied!" : "Copy to clipboard"}</span>
+          {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+          <span className="flex-1">
+            {copied ? t("Нусхаланди!", "Copied!") : t("Буфер хотирага нусхалаш", "Copy to clipboard")}
+          </span>
         </DropdownMenuItem>
         {canShare && (
           <DropdownMenuItem
@@ -238,7 +245,7 @@ export function ShareCalculationButton({
             disabled={anyBusy}
           >
             <Share2 className="h-4 w-4" />
-            <span className="flex-1">Share…</span>
+            <span className="flex-1">{t("Улашиш…", "Share…")}</span>
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>

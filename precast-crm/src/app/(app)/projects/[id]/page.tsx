@@ -12,6 +12,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { formatDraftNumber } from "@/lib/draft-number";
+import { useT } from "@/lib/i18n";
 
 interface Project {
   id: string;
@@ -64,6 +65,7 @@ const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
 };
 
 export default function ProjectDetailPage() {
+  const t = useT();
   const params = useParams<{ id: string }>();
   /** Captured by ShareCalculationButton — wraps project header +
    *  calculation summary so operators can ship a one-shot image. */
@@ -76,8 +78,8 @@ export default function ProjectDetailPage() {
 
   const project = projects.find((p) => p.id === params.id);
 
-  if (isLoading) return <div className="text-muted-foreground p-8">Loading project...</div>;
-  if (!project) return <div className="p-8">Project not found</div>;
+  if (isLoading) return <div className="text-muted-foreground p-8">{t("Лойиҳа юкланмоқда…", "Loading project…")}</div>;
+  if (!project) return <div className="p-8">{t("Лойиҳа топилмади", "Project not found")}</div>;
 
   // Display label for an unnamed draft. The project.name column is
   // optional (operator can save a draft without typing a name), so
@@ -88,7 +90,7 @@ export default function ProjectDetailPage() {
   const draftLabel = project.draftNumber
     ? formatDraftNumber(project.draftNumber)
     : project.id.slice(-6);
-  const displayName = project.name || `Saved Draft ${draftLabel}`;
+  const displayName = project.name || `${t("Сақланган лойиҳа", "Saved Draft")} ${draftLabel}`;
   const clientLabel =
     project.client?.name ?? project.tentativeClientName ?? "";
 
@@ -110,7 +112,7 @@ export default function ProjectDetailPage() {
           href="/projects"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          <ArrowLeft className="h-4 w-4 mr-1" /> {t("Орқага", "Back")}
         </Link>
         <div className="flex gap-2">
           <ShareCalculationButton
@@ -128,13 +130,13 @@ export default function ProjectDetailPage() {
           {project.status === "ORDERED" && project.orders[0] ? (
             <Button variant="outline" asChild size="sm">
               <Link href={`/orders/${project.orders[0].id}`}>
-                <FileText className="h-4 w-4 mr-2" /> Order {project.orders[0].orderNumber}
+                <FileText className="h-4 w-4 mr-2" /> {t("Буюртма", "Order")} {project.orders[0].orderNumber}
               </Link>
             </Button>
           ) : (
             <Button variant="outline" asChild size="sm">
               <Link href={`/calculations?fromProject=${project.id}`}>
-                <FileText className="h-4 w-4 mr-2" /> Place Order · Буюртма Бериш
+                <FileText className="h-4 w-4 mr-2" /> Буюртма Бериш<span className="lang-en"> · Place Order</span>
               </Link>
             </Button>
           )}
@@ -154,7 +156,7 @@ export default function ProjectDetailPage() {
               {displayName}
             </h1>
             <p className="text-muted-foreground mt-1">
-              Client:{" "}
+              {t("Мижоз:", "Client:")}{" "}
               <span className="text-foreground font-medium">
                 {project.client?.name ?? project.tentativeClientName ?? "—"}
               </span>
@@ -168,17 +170,17 @@ export default function ProjectDetailPage() {
               )}
               <span className="ml-3 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
                 {project.status === "DRAFT"
-                  ? "Лойиҳа · Draft"
+                  ? <>Лойиҳа<span className="lang-en"> · Draft</span></>
                   : project.status === "ORDERED"
-                  ? "Буюртма берилди · Ordered"
-                  : "Архив · Archived"}
+                  ? <>Буюртма берилди<span className="lang-en"> · Ordered</span></>
+                  : <>Архив<span className="lang-en"> · Archived</span></>}
               </span>
             </p>
           </div>
           <div className="flex gap-6 text-sm">
             <div className="text-right">
-              <div className="text-muted-foreground uppercase text-[10px] font-bold">Total Sum</div>
-              <div className="text-2xl font-black text-green-600">{formatNumber(totals.sum, 0)}</div>
+              <div className="text-muted-foreground uppercase text-[10px] font-bold">{t("Жами сумма", "Total Sum")}</div>
+              <div className="text-2xl font-black text-success font-mono">{formatNumber(totals.sum, 0)}</div>
             </div>
           </div>
         </div>
@@ -186,37 +188,37 @@ export default function ProjectDetailPage() {
 
       <Card>
         <CardHeader className="pb-3 border-b">
-          <CardTitle className="text-lg">Calculation Summary (Rooms)</CardTitle>
+          <CardTitle className="text-lg">{t("Ҳисоб-китоб хулосаси (Хоналар)", "Calculation Summary (Rooms)")}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
                 <tr>
-                  <th className="px-3 py-2 border-b bg-yellow-50">Name</th>
-                  <th className="px-3 py-2 border-b text-center bg-yellow-50">W</th>
-                  <th className="px-3 py-2 border-b text-center bg-yellow-50">L</th>
-                  <th className="px-3 py-2 border-b text-center bg-blue-50">Pattern</th>
-                  <th className="px-3 py-2 border-b text-center bg-green-50">Beam Len</th>
-                  <th className="px-3 py-2 border-b text-center">Blks/Row</th>
-                  <th className="px-3 py-2 border-b text-center bg-orange-50">Total Blks</th>
-                  <th className="px-3 py-2 border-b text-center bg-gray-100">Beams</th>
-                  <th className="px-3 py-2 border-b text-center">Slab L</th>
-                  <th className="px-3 py-2 border-b text-center">Area</th>
-                  <th className="px-3 py-2 border-b text-center bg-green-50">m² Rate</th>
-                  <th className="px-3 py-2 border-b text-right">Subtotal</th>
+                  <th className="px-3 py-2 border-b bg-yellow-50">{t("Исм", "Name")}</th>
+                  <th className="px-3 py-2 border-b text-center bg-yellow-50">{t("Эни", "W")}</th>
+                  <th className="px-3 py-2 border-b text-center bg-yellow-50">{t("Бўйи", "L")}</th>
+                  <th className="px-3 py-2 border-b text-center bg-blue-50">{t("Шаблон", "Pattern")}</th>
+                  <th className="px-3 py-2 border-b text-center bg-green-50">{t("Балка узунлиги", "Beam Len")}</th>
+                  <th className="px-3 py-2 border-b text-center">{t("Ғ/Қатор", "Blks/Row")}</th>
+                  <th className="px-3 py-2 border-b text-center bg-orange-50">{t("Жами Ғ", "Total Blks")}</th>
+                  <th className="px-3 py-2 border-b text-center bg-gray-100">{t("Балка", "Beams")}</th>
+                  <th className="px-3 py-2 border-b text-center">{t("Плита Б", "Slab L")}</th>
+                  <th className="px-3 py-2 border-b text-center">{t("Майдон", "Area")}</th>
+                  <th className="px-3 py-2 border-b text-center bg-green-50">{t("м² нархи", "m² Rate")}</th>
+                  <th className="px-3 py-2 border-b text-right">{t("Сумма", "Subtotal")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {project.calculations.map((c) => (
                   <tr key={c.id} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-3 py-2 font-medium bg-yellow-50/20">{c.name || "Unnamed Room"}</td>
+                    <td className="px-3 py-2 font-medium bg-yellow-50/20">{c.name || t("Номсиз хона", "Unnamed Room")}</td>
                     <td className="px-3 py-2 text-center bg-yellow-50/20">{formatNumber(c.innerWidth, 2)}</td>
                     <td className="px-3 py-2 text-center bg-yellow-50/20">{formatNumber(c.innerLength, 2)}</td>
                     <td className="px-3 py-2 text-center text-xs font-medium bg-blue-50/30">
                       {PATTERN_LABEL[c.pattern]}
                       {c.pattern !== c.patternAuto && (
-                        <span className="text-muted-foreground"> (auto: {PATTERN_LABEL[c.patternAuto]})</span>
+                        <span className="text-muted-foreground"> ({t("авто", "auto")}: {PATTERN_LABEL[c.patternAuto]})</span>
                       )}
                     </td>
                     <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800">{formatNumber(c.beamLength, 2)}</td>
@@ -234,7 +236,7 @@ export default function ProjectDetailPage() {
               </tbody>
               <tfoot className="bg-muted/20 font-black border-t-2 border-primary/10">
                 <tr>
-                  <td className="px-3 py-3 text-right" colSpan={6}>TOTALS (ЖАМИ):</td>
+                  <td className="px-3 py-3 text-right" colSpan={6}>ЖАМИ<span className="lang-en"> (TOTALS)</span>:</td>
                   <td className="px-3 py-3 text-center text-orange-800 bg-orange-50/50">{totals.blocks}</td>
                   <td className="px-3 py-3 text-center bg-gray-100">{totals.beams}</td>
                   <td className="px-3 py-3" colSpan={1}></td>
@@ -252,23 +254,23 @@ export default function ProjectDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Logistics Summary</CardTitle>
+            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("Логистика хулосаси", "Logistics Summary")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
              <div className="flex justify-between border-b pb-2">
-               <span className="text-muted-foreground">Total Beam Pieces</span>
+               <span className="text-muted-foreground">{t("Жами балка дона", "Total Beam Pieces")}</span>
                <span className="font-bold">{totals.beams}</span>
              </div>
              <div className="flex justify-between border-b pb-2">
-               <span className="text-muted-foreground">Total Block Pieces</span>
+               <span className="text-muted-foreground">{t("Жами ғишт дона", "Total Block Pieces")}</span>
                <span className="font-bold">{totals.blocks}</span>
              </div>
              <div className="flex justify-between border-b pb-2">
-               <span className="text-muted-foreground">Slab Area (visual)</span>
+               <span className="text-muted-foreground">{t("Плита майдони", "Slab Area (visual)")}</span>
                <span className="font-bold">{formatNumber(totals.monolithArea, 2)} m²</span>
              </div>
              <div className="flex justify-between">
-               <span className="text-muted-foreground">Concrete Topping</span>
+               <span className="text-muted-foreground">{t("Бетон қатлами", "Concrete Topping")}</span>
                <span className="font-bold">{totals.concrete.toFixed(2)} m³</span>
              </div>
           </CardContent>
