@@ -694,7 +694,12 @@ export default function OrderDetailPage() {
               </Button>
               <ShareCalculationButton
                 targetRef={shareRef}
-                fileBase={`Order-${order.orderNumber}`}
+                fileBase={`${order.orderNumber}-${order.client.name
+                  // Strip Windows-forbidden filename chars and collapse
+                  // runs of whitespace so "Abror & Sons LLC" stays readable.
+                  .replace(/[<>:"/\\|?*]+/g, "")
+                  .replace(/\s+/g, " ")
+                  .trim()}`}
                 disabled={order.project.calculations.length === 0}
               />
               {/* Edit Order Details — opens the calculator pre-filled
