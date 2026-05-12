@@ -188,35 +188,36 @@
      hierarchy without screaming.
      ────────────────────────────────────────────────────────────── */
 
-  /* Zone-band header tints — very subtle, just enough to read the
-     bands when scanning the column titles. */
-  html[data-theme="dark"] .calc-grid thead [class*="bg-amber-50"],
-  html[data-theme="dark"] [class*="bg-amber-50/40"] {
-    background-color: rgba(226, 154, 77, 0.07) !important;
-  }
+  /* Strip the light-mode zone-band tints in dark mode. The light
+     palette uses amber / sky / emerald washes to color-band the
+     calculator columns into Inputs / Pattern / Computed / Pricing —
+     those raw light tints turn into stripes on dark surfaces, so we
+     collapse them to a single muted-elevated bg for the header row
+     and a transparent body. Structure carries the table; the column
+     titles already announce the zones. */
+  html[data-theme="dark"] .calc-grid thead th,
+  html[data-theme="dark"] [class*="bg-amber-50"],
+  html[data-theme="dark"] [class*="bg-amber-100"],
   html[data-theme="dark"] [class*="bg-sky-50"],
-  html[data-theme="dark"] [class*="bg-sky-50/40"] {
-    background-color: rgba(93, 133, 237, 0.08) !important;
-  }
   html[data-theme="dark"] [class*="bg-emerald-50"],
-  html[data-theme="dark"] [class*="bg-emerald-50/40"] {
-    background-color: rgba(69, 194, 160, 0.07) !important;
+  html[data-theme="dark"] [class*="dark:bg-amber-950"],
+  html[data-theme="dark"] [class*="dark:bg-amber-900"],
+  html[data-theme="dark"] [class*="dark:bg-sky-950"] {
+    background-color: hsl(var(--muted)) !important;
   }
-  /* The stronger amber-100 band marks the computed-blocks zone — give
-     it a touch more presence than the input band so it's still the
-     hottest column group when you scan the headers. */
-  html[data-theme="dark"] [class*="bg-amber-100"] {
-    background-color: rgba(226, 154, 77, 0.13) !important;
+  /* Body cell tints — completely transparent in dark mode so the row
+     reads as a single unbroken bar. */
+  html[data-theme="dark"] td[class*="bg-amber-50/20"],
+  html[data-theme="dark"] td[class*="bg-amber-50/60"],
+  html[data-theme="dark"] td[class*="bg-sky-50"],
+  html[data-theme="dark"] td[class*="bg-emerald-50"],
+  html[data-theme="dark"] td[class*="bg-amber-50"] {
+    background-color: transparent !important;
   }
-  /* Cell tints inside the input zone (Name / Width / Bearing / Corr.)
-     get the lightest possible warm tint so the body rows still echo
-     the band. */
-  html[data-theme="dark"] [class*="bg-amber-50/20"] {
-    background-color: rgba(226, 154, 77, 0.04) !important;
-  }
-  /* Sub-tinted backgrounds used in cells. */
-  html[data-theme="dark"] [class*="bg-amber-50/60"] {
-    background-color: rgba(226, 154, 77, 0.06) !important;
+  /* Sticky-pinned name + width columns in the calculator inherit
+     bg-amber-50 to mask the row below; in dark mode mask with card. */
+  html[data-theme="dark"] td[class*="lg:bg-amber-50"] {
+    background-color: hsl(var(--card)) !important;
   }
 
   /* Numeric value colors — calibrated to be three readable accents
@@ -276,16 +277,21 @@
   html[data-theme="dark"] [class*="bg-muted/30"] {
     background-color: rgba(255, 255, 255, 0.025) !important;
   }
-  /* The calculator totals row uses bg-muted/40 — give it stronger
-     elevation so "ЖАМИ" reads as a deliberate section header. */
+  /* The calculator totals row uses bg-muted/40 — promote to the same
+     muted layer as table headers so "ЖАМИ" reads as a deliberate
+     section header instead of blending into the body. */
   html[data-theme="dark"] [class*="bg-muted/40"] {
-    background-color: rgba(255, 255, 255, 0.05) !important;
+    background-color: hsl(var(--muted)) !important;
   }
-  /* Table thead uses bg-muted in light mode — at full strength on
-     dark it's the third elevation layer, so the column titles row
-     stands clearly above the body. */
+  /* Table thead uses bg-muted in light mode — keep it on dark too so
+     the column titles row stands clearly above the body. */
   html[data-theme="dark"] thead[class*="bg-muted"]:not([class*="bg-muted/"]) {
-    background-color: hsl(225 7% 19%);
+    background-color: hsl(var(--muted));
+  }
+  /* Column dividers inside the calc grid — barely-there hairlines so
+     the cells don't merge but don't shout either. */
+  html[data-theme="dark"] .grid-cell {
+    border-right-color: rgba(255, 255, 255, 0.04) !important;
   }
 
   /* Outline button visibility — the light-mode outline button is
