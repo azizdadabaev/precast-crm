@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, Sun, Moon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLanguageStore } from "@/store/language";
+import { useThemeStore } from "@/store/theme";
 import { useLang } from "@/lib/i18n";
 
 /**
@@ -61,6 +62,9 @@ export function TopBar() {
   const lang = useLang();
   const toggleLang = useLanguageStore((s) => s.toggle);
   const uzOnly = lang === "uz";
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggle);
+  const isDark = theme === "dark";
 
   return (
     <header className="hidden lg:flex h-[52px] items-center justify-between gap-4 px-6 border-b border-border bg-card shrink-0">
@@ -101,6 +105,18 @@ export function TopBar() {
             {mac ? "⌘K" : "Ctrl+K"}
           </kbd>
         </div>
+
+        {/* Theme toggle — flips dark mode. Sun shows in dark mode
+            (click to go light); moon shows in light mode. */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          title={isDark ? "Кундузги режим · Light mode" : "Тунги режим · Dark mode"}
+          className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-border bg-background text-text-tertiary hover:text-foreground hover:bg-accent transition-colors"
+        >
+          {isDark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+        </button>
 
         {/* UZ toggle — single click switches the whole UI between
             bilingual mode (default) and Cyrillic-only mode. Hidden when
