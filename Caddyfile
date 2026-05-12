@@ -22,14 +22,22 @@
 	# transparently handles the WebSocket upgrade so no extra config
 	# is needed beyond the reverse_proxy directive. The /ws* glob
 	# forwards query strings (?secret=…) correctly.
+	#
+	# IMPORTANT: both reverse_proxies must be inside `handle` blocks.
+	# A bare `reverse_proxy` directive at site level runs on every
+	# request, which catches /ws before the matcher can fire. With
+	# both wrapped in `handle`, exactly one block executes per
+	# request and /ws goes to ws-bridge as intended.
 	handle /ws* {
 		reverse_proxy ws-bridge:8765
 	}
 
-	reverse_proxy app:3000 {
-		header_up Host {host}
-		header_up X-Real-IP {remote_host}
-		header_up X-Forwarded-For {remote_host}
-		header_up X-Forwarded-Proto {scheme}
+	handle {
+		reverse_proxy app:3000 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
 	}
 }
