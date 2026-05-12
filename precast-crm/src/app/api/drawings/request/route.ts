@@ -135,7 +135,15 @@ export const POST = withPermission(
 
     // Best-effort kick to the bridge. Failures are silent — the
     // bridge's 2s polling tick will pick this row up regardless.
-    fetch("http://ws-bridge:8766/flush", { method: "POST" }).catch(() => {});
+    // The URL is env-configurable so the bridge can run outside
+    // docker for local dev (`WS_BRIDGE_INTERNAL_URL=http://localhost:8766`
+    // in .env.local). Default targets the docker service name.
+    const flushUrl =
+      (process.env.WS_BRIDGE_INTERNAL_URL ?? "http://ws-bridge:8766").replace(
+        /\/$/,
+        "",
+      ) + "/flush";
+    fetch(flushUrl, { method: "POST" }).catch(() => {});
 
     return NextResponse.json({
       id: drawingRequest.id,
