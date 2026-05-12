@@ -177,6 +177,21 @@ export function ShareCalculationButton({
     typeof navigator.share === "function" &&
     typeof navigator.canShare === "function";
 
+  // Async Clipboard image-write requires a secure context (HTTPS or
+  // localhost). On plain HTTP to a raw IP — the current production
+  // serve mode — `navigator.clipboard.write` throws
+  // "Clipboard image copy isn't supported in this browser." Hide the
+  // option so the operator doesn't get a dead-end click; the PNG /
+  // JPEG download options work everywhere.
+  const canCopy =
+    typeof window !== "undefined" &&
+    typeof window.isSecureContext === "boolean" &&
+    window.isSecureContext &&
+    typeof navigator !== "undefined" &&
+    typeof navigator.clipboard !== "undefined" &&
+    typeof navigator.clipboard.write === "function" &&
+    typeof window.ClipboardItem !== "undefined";
+
   const anyBusy = busy !== null;
 
   return (
@@ -223,19 +238,21 @@ export function ShareCalculationButton({
           <span className="flex-1">{t("JPEG юклаб олиш", "Download JPEG")}</span>
           <span className="text-[10px] text-muted-foreground">{t("кичикроқ", "smaller")}</span>
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={(e) => {
-            e.preventDefault();
-            handleCopy();
-          }}
-          disabled={anyBusy}
-        >
-          {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
-          <span className="flex-1">
-            {copied ? t("Нусхаланди!", "Copied!") : t("Буфер хотирага нусхалаш", "Copy to clipboard")}
-          </span>
-        </DropdownMenuItem>
+        {canCopy && <DropdownMenuSeparator />}
+        {canCopy && (
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              handleCopy();
+            }}
+            disabled={anyBusy}
+          >
+            {copied ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+            <span className="flex-1">
+              {copied ? t("Нусхаланди!", "Copied!") : t("Буфер хотирага нусхалаш", "Copy to clipboard")}
+            </span>
+          </DropdownMenuItem>
+        )}
         {canShare && (
           <DropdownMenuItem
             onSelect={(e) => {
