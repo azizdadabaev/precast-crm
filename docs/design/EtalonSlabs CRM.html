@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EtalonSlabs CRM</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous"/>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; overflow: hidden; }
+    input { font-family: inherit; }
+    button { font-family: inherit; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { border-radius: 4px; }
+    * { scrollbar-width: thin; scrollbar-color: #1c2133 transparent; }
+    input::placeholder { opacity: 0.45; }
+    button:focus-visible { outline: 2px solid #4e80ff; outline-offset: 2px; }
+  </style>
+</head>
+<body>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="etalon-ui.jsx"></script>
+<script type="text/babel" src="etalon-layout.jsx"></script>
+<script type="text/babel" src="etalon-screens.jsx"></script>
+<script type="text/babel" src="etalon-screens-2.jsx"></script>
+
+<div id="root"></div>
+
+<script type="text/babel">
+// ── Persisted defaults ────────────────────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "dark": true,
+  "page": "calculator",
+  "sidebarExpanded": false
+}/*EDITMODE-END*/;
+
+function load() {
+  try { return { ...TWEAK_DEFAULTS, ...JSON.parse(localStorage.getItem('es-tweaks') || '{}') }; }
+  catch { return TWEAK_DEFAULTS; }
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+function App() {
+  const [state, setState] = React.useState(load);
+
+  const set = React.useCallback((key, val) => {
+    setState(prev => {
+      const next = typeof key === 'object' ? { ...prev, ...key } : { ...prev, [key]: val };
+      localStorage.setItem('es-tweaks', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const { dark, page, sidebarExpanded } = state;
+  const t = React.useMemo(() => getTokens(dark), [dark]);
+
+  function Screen() {
+    switch (page) {
+      case 'dashboard':      return <DashboardScreen t={t}/>;
+      case 'orders':         return <OrdersScreen t={t}/>;
+      case 'clients':        return <ClientsScreen t={t}/>;
+      case 'calculator':     return <CalculatorScreen t={t}/>;
+      case 'projects':       return <ProjectsScreen t={t}/>;
+      case 'payments':       return <PaymentsScreen t={t}/>;
+      case 'discrepancies':  return <DiscrepanciesScreen t={t}/>;
+      case 'drivers':        return <DriversScreen t={t}/>;
+      case 'production':     return <ProductionScreen t={t}/>;
+      case 'warehouse':      return <WarehouseScreen t={t}/>;
+      case 'sandbox':        return <SandboxScreen t={t}/>;
+      case 'users':          return <UsersScreen t={t}/>;
+      default:               return <PlaceholderScreen page={page} t={t}/>;
+    }
+  }
+
+  return (
+    <ThemeCtx.Provider value={{ t, dark, set }}>
+      <style>{`
+        ::-webkit-scrollbar-thumb { background: ${t.border}; }
+        * { scrollbar-color: ${t.border} transparent; }
+        body { background: ${t.bg}; }
+      `}</style>
+
+      {page === 'login' ? <LoginScreen t={t}/> : (
+        <div style={{ display:'flex', height:'100vh', background:t.bg, overflow:'hidden', fontFamily:t.body }}>
+          <Sidebar page={page} onNavigate={p => set('page', p)} t={t} expanded={sidebarExpanded} onToggle={() => set('sidebarExpanded', !sidebarExpanded)}/>
+          <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
+            <TopBar page={page} t={t} dark={dark} onToggleDark={() => set('dark', !dark)}/>
+            <main style={{ flex:1, overflowY:'auto', overflowX:'hidden', background:t.bg }}><Screen/></main>
+          </div>
+          <AppTweaks state={state} set={set} t={t}/>
+        </div>
+      )}
+    </ThemeCtx.Provider>
+  );
+}
+
+// ── Tweaks panel ──────────────────────────────────────────────────────────────
+function AppTweaks({ state, set, t }) {
+  const { dark, page, sidebarExpanded } = state;
+
+  const panelStyle = {
+    '--tweak-bg': t.surface,
+    '--tweak-bg-hover': t.surfaceHover,
+    '--tweak-border': t.border,
+    '--tweak-text': t.text1,
+    '--tweak-text-2': t.text2,
+    '--tweak-accent': t.accent,
+    '--tweak-radius': t.rSm,
+    background: t.surface,
+    border: `1px solid ${t.border}`,
+    color: t.text1,
+    fontFamily: t.body,
+    boxShadow: dark ? '0 8px 32px rgba(0,0,0,0.5)' : '0 8px 32px rgba(0,0,0,0.12)',
+  };
+
+  return (
+    <TweaksPanel title="Tweaks" style={panelStyle}
+      onSetKeys={edits => Object.entries(edits).forEach(([k, v]) => set(k, v))}
+    >
+      <TweakSection label="Appearance">
+        <TweakToggle label="Dark mode" value={dark} onChange={v => set('dark', v)}/>
+        <TweakToggle label="Expand sidebar" value={sidebarExpanded} onChange={v => set('sidebarExpanded', v)}/>
+      </TweakSection>
+
+      <TweakSection label="Page">
+        <TweakSelect
+          value={page}
+          options={[
+            { value:'dashboard',     label:'Бошқарув · Dashboard' },
+            { value:'calculator',    label:'Калькулятор · Calculator' },
+            { value:'orders',        label:'Буюртмалар · Orders' },
+            { value:'projects',      label:'Лойиҳалар · Projects' },
+            { value:'payments',      label:'Тўловлар · Payments' },
+            { value:'discrepancies', label:'Тафовутлар · Discrepancies' },
+            { value:'clients',       label:'Мижозлар · Clients' },
+            { value:'drivers',       label:'Хайдовчилар · Drivers' },
+            { value:'production',    label:'Ишлаб чиқариш · Production' },
+            { value:'warehouse',     label:'Омбор · Warehouse' },
+            { value:'sandbox',       label:'Тажриба · Sandbox · Tapered' },
+            { value:'users',         label:'Фойдаланувчилар · Users' },
+            { value:'login',         label:'Sign in · Login' },
+          ]}
+          onChange={v => set('page', v)}
+        />
+      </TweakSection>
+    </TweaksPanel>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

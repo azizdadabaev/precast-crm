@@ -6,13 +6,15 @@ import { Sliders, Package, Layers } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Chip } from "@/components/ui/chip";
 import { AdjustStockDialog } from "@/components/inventory/AdjustStockDialog";
 import {
   formatInventoryLabel,
   stockTier,
   type InventoryKind,
 } from "@/lib/inventory";
-import { formatDate } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface Movement {
   id: string;
@@ -43,6 +45,7 @@ interface Me {
 }
 
 export default function InventoryPage() {
+  const t = useT();
   const qc = useQueryClient();
 
   const { data: me } = useQuery<Me>({
@@ -90,56 +93,69 @@ export default function InventoryPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Омбор <span className="text-muted-foreground font-normal text-base">· Warehouse</span>
+          Омбор
+          <span className="lang-en text-muted-foreground font-normal text-base">{" "}· Warehouse</span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          On-hand stock, low-stock thresholds, and recent movements per SKU.
+          {t(
+            "Мавжуд захира, кам захира остонаси ва ҳар бир маҳсулот бўйича сўнгги ҳаракатлар.",
+            "On-hand stock, low-stock thresholds, and recent movements per SKU.",
+          )}
         </p>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SummaryCard
-          icon={<Package className="h-5 w-5 text-emerald-600" />}
-          label="Балка · Beams in stock"
+          icon={<Package className="h-5 w-5 text-success" />}
+          label={t("Омбордаги балкалар", "Beams in stock")}
           value={totalBeams}
           rows={beams.length}
+          t={t}
         />
         <SummaryCard
-          icon={<Layers className="h-5 w-5 text-orange-600" />}
-          label="Ғишт · Blocks in stock"
+          icon={<Layers className="h-5 w-5 text-gold" />}
+          label={t("Омбордаги ғиштлар", "Blocks in stock")}
           value={totalBlocks}
           rows={blocks.length}
+          t={t}
         />
       </div>
 
       {/* Beams */}
-      <Section title="Балкалар · Beams" subtitle="One row per manufactured length">
+      <Section
+        title={t("Балкалар", "Beams")}
+        subtitle={t("Ҳар бир ишлаб чиқарилган узунлик учун битта қатор", "One row per manufactured length")}
+      >
         {isLoading ? (
-          <div className="text-muted-foreground p-4">Loading…</div>
+          <div className="text-muted-foreground p-4">{t("Юкланмоқда…", "Loading…")}</div>
         ) : beams.length === 0 ? (
           <div className="text-muted-foreground p-4 text-center">
-            No beam stock yet — log a production entry to populate.
+            {t(
+              "Балка захираси йўқ — тўлдириш учун ишлаб чиқариш ёзувини қайд этинг.",
+              "No beam stock yet — log a production entry to populate.",
+            )}
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+            <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left px-3 py-2">Length</th>
-                <th className="text-right px-3 py-2">Qty</th>
-                <th className="text-right px-3 py-2">Low-stock at</th>
-                <th className="text-left px-3 py-2">Recent movements</th>
+                <th className="text-left px-3 py-2">{t("Узунлик", "Length")}</th>
+                <th className="text-right px-3 py-2">{t("Сони", "Qty")}</th>
+                <th className="text-right px-3 py-2">{t("Кам захира остонаси", "Low-stock at")}</th>
+                <th className="text-left px-3 py-2">{t("Сўнгги ҳаракатлар", "Recent movements")}</th>
                 <th className="px-3 py-2 w-24"></th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {beams.map((it) => (
                 <Row
                   key={it.id}
                   item={it}
                   isAdmin={!!isAdmin}
                   onAdjust={() => setAdjustItem(it)}
-                  onSetThreshold={(t) => updateThreshold.mutate({ id: it.id, threshold: t })}
+                  onSetThreshold={(n) => updateThreshold.mutate({ id: it.id, threshold: n })}
+                  t={t}
                 />
               ))}
             </tbody>
@@ -148,30 +164,31 @@ export default function InventoryPage() {
       </Section>
 
       {/* Blocks */}
-      <Section title="Ғиштлар · Blocks" subtitle="Single SKU">
+      <Section title={t("Ғиштлар", "Blocks")} subtitle={t("Битта маҳсулот", "Single SKU")}>
         {blocks.length === 0 ? (
           <div className="text-muted-foreground p-4 text-center">
-            No block stock yet.
+            {t("Ғишт захираси йўқ.", "No block stock yet.")}
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+            <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left px-3 py-2">Item</th>
-                <th className="text-right px-3 py-2">Qty</th>
-                <th className="text-right px-3 py-2">Low-stock at</th>
-                <th className="text-left px-3 py-2">Recent movements</th>
+                <th className="text-left px-3 py-2">{t("Маҳсулот", "Item")}</th>
+                <th className="text-right px-3 py-2">{t("Сони", "Qty")}</th>
+                <th className="text-right px-3 py-2">{t("Кам захира остонаси", "Low-stock at")}</th>
+                <th className="text-left px-3 py-2">{t("Сўнгги ҳаракатлар", "Recent movements")}</th>
                 <th className="px-3 py-2 w-24"></th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {blocks.map((it) => (
                 <Row
                   key={it.id}
                   item={it}
                   isAdmin={!!isAdmin}
                   onAdjust={() => setAdjustItem(it)}
-                  onSetThreshold={(t) => updateThreshold.mutate({ id: it.id, threshold: t })}
+                  onSetThreshold={(n) => updateThreshold.mutate({ id: it.id, threshold: n })}
+                  t={t}
                 />
               ))}
             </tbody>
@@ -205,23 +222,27 @@ function SummaryCard({
   label,
   value,
   rows,
+  t,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   rows: number;
+  t: (uz: string, en: string) => string;
 }) {
   return (
-    <div className="rounded-lg border bg-background p-4 shadow-sm">
-      <div className="flex items-center gap-2">
-        {icon}
-        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </div>
+        {icon}
       </div>
-      <div className="text-3xl font-black tabular-nums mt-1">{value}</div>
-      <div className="text-xs text-muted-foreground">
-        {rows} SKU{rows === 1 ? "" : "s"}
+      <div className="text-2xl font-bold tabular-nums tracking-tight text-foreground leading-tight font-mono">
+        {value}
+      </div>
+      <div className="mt-2 text-xs text-text-tertiary">
+        {rows} {t("маҳсулот", rows === 1 ? "SKU" : "SKUs")}
       </div>
     </div>
   );
@@ -237,21 +258,24 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border bg-background overflow-hidden">
-      <div className="px-4 py-3 border-b bg-muted/20">
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <div className="px-4 py-3 border-b border-border bg-muted">
         <div className="text-sm font-bold">{title}</div>
-        {subtitle && <div className="text-xs text-muted-foreground">{subtitle}</div>}
+        {subtitle && <div className="text-xs text-text-tertiary">{subtitle}</div>}
       </div>
       {children}
     </div>
   );
 }
 
-const REASON_BADGE: Record<Movement["reason"], { label: string; cls: string }> = {
-  PRODUCTION:           { label: "+production",  cls: "bg-emerald-100 text-emerald-800" },
-  DELIVERY:             { label: "−delivery",    cls: "bg-rose-100 text-rose-800" },
-  MANUAL_ADJUSTMENT:    { label: "manual",       cls: "bg-amber-100 text-amber-800" },
-  CANCELLATION_RESTOCK: { label: "+restock",     cls: "bg-sky-100 text-sky-800" },
+const REASON_META: Record<
+  Movement["reason"],
+  { label: string; variant: React.ComponentProps<typeof Chip>["variant"] }
+> = {
+  PRODUCTION:           { label: "+production", variant: "success" },
+  DELIVERY:             { label: "−delivery",   variant: "danger" },
+  MANUAL_ADJUSTMENT:    { label: "manual",      variant: "warning" },
+  CANCELLATION_RESTOCK: { label: "+restock",    variant: "default" },
 };
 
 function Row({
@@ -259,19 +283,21 @@ function Row({
   isAdmin,
   onAdjust,
   onSetThreshold,
+  t,
 }: {
   item: InventoryItem;
   isAdmin: boolean;
   onAdjust: () => void;
-  onSetThreshold: (t: number) => void;
+  onSetThreshold: (n: number) => void;
+  t: (uz: string, en: string) => string;
 }) {
   const tier = stockTier(item.quantity, item.lowStockThreshold);
-  const tierCls =
+  const rowBorder =
     tier === "critical"
-      ? "bg-rose-50 text-rose-900"
+      ? "border-l-destructive"
       : tier === "low"
-        ? "bg-amber-50 text-amber-900"
-        : "";
+        ? "border-l-warning"
+        : "border-l-success";
 
   const length = item.beamLength ? Number(item.beamLength) : null;
   const label = formatInventoryLabel(item.kind, length);
@@ -279,22 +305,28 @@ function Row({
   const [draftThreshold, setDraftThreshold] = useEditableThreshold(item.lowStockThreshold);
 
   return (
-    <tr className={`hover:bg-muted/20 ${tierCls}`}>
-      <td className="px-3 py-2 font-semibold">{label}</td>
-      <td className="px-3 py-2 text-right tabular-nums font-bold">
+    <tr
+      className={cn(
+        "border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors",
+        "border-l-[3px]",
+        rowBorder,
+      )}
+    >
+      <td className="px-3 py-2.5 font-semibold">{label}</td>
+      <td className="px-3 py-2.5 text-right font-mono font-bold">
         {item.quantity}
         {item.quantity < 0 && (
-          <span className="ml-2 text-[10px] uppercase tracking-wider bg-rose-200 text-rose-900 px-1.5 py-0.5 rounded">
-            Negative
+          <span className="ml-2">
+            <Chip variant="danger">{t("Манфий", "Negative")}</Chip>
           </span>
         )}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums">
+      <td className="px-3 py-2.5 text-right font-mono">
         {isAdmin ? (
           <Input
             type="number"
             min="0"
-            className="h-7 w-20 text-right tabular-nums ml-auto"
+            className="h-7 w-20 text-right ml-auto font-mono"
             value={draftThreshold}
             onChange={(e) => setDraftThreshold(Number(e.target.value) || 0)}
             onBlur={() => {
@@ -302,31 +334,31 @@ function Row({
             }}
           />
         ) : (
-          <span className="text-muted-foreground">{item.lowStockThreshold}</span>
+          <span className="text-text-tertiary">{item.lowStockThreshold}</span>
         )}
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-2.5">
         <div className="flex flex-wrap gap-1">
           {item.movements.length === 0 ? (
-            <span className="text-xs text-muted-foreground">no movements yet</span>
+            <span className="text-xs text-text-tertiary">{t("ҳаракатлар йўқ", "no movements yet")}</span>
           ) : (
             item.movements.slice(0, 5).map((m) => {
-              const b = REASON_BADGE[m.reason];
+              const meta = REASON_META[m.reason];
               return (
-                <span
+                <Chip
                   key={m.id}
+                  variant={meta.variant}
                   title={`${formatDate(m.createdAt)} · ${m.note ?? ""}${m.order ? ` · ${m.order.orderNumber}` : ""}`}
-                  className={`inline-flex items-center gap-1 text-[10px] font-semibold rounded px-1.5 py-0.5 tabular-nums ${b.cls}`}
                 >
-                  {b.label} {m.change > 0 ? "+" : ""}
+                  {meta.label} {m.change > 0 ? "+" : ""}
                   {m.change}
-                </span>
+                </Chip>
               );
             })
           )}
         </div>
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-2.5">
         {isAdmin && (
           <Button
             variant="outline"
@@ -334,7 +366,7 @@ function Row({
             onClick={onAdjust}
             className="h-7 text-xs"
           >
-            <Sliders className="h-3 w-3 mr-1" /> Adjust
+            <Sliders className="h-3 w-3 mr-1" /> {t("Созлаш", "Adjust")}
           </Button>
         )}
       </td>

@@ -44,9 +44,9 @@ export function MobileTopbar({ user }: { user: AuthUser }) {
         >
           {/* Visually hidden title/description satisfies Radix's a11y
               requirements without showing duplicate branding. */}
-          <SheetTitle className="sr-only">Precast CRM navigation</SheetTitle>
+          <SheetTitle className="sr-only">EtalonSlabs CRM навигация</SheetTitle>
           <SheetDescription className="sr-only">
-            Permissioned navigation for the current user.
+            Жорий фойдаланувчи учун рухсатли навигация.
           </SheetDescription>
           <SidebarBody user={user} onNavigate={() => setOpen(false)} />
         </SheetContent>
@@ -57,7 +57,7 @@ export function MobileTopbar({ user }: { user: AuthUser }) {
         <div className="h-7 w-7 rounded-md bg-primary text-primary-foreground grid place-items-center">
           <Building2 className="h-4 w-4" />
         </div>
-        <div className="font-semibold text-sm leading-tight">Precast CRM</div>
+        <div className="font-semibold text-sm leading-tight">EtalonSlabs</div>
       </div>
     </header>
   );

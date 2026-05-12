@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Card } from "./Card";
 import { formatNumber } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import type { DashboardData } from "./types";
 
 export function TodayDeliveriesCard({
@@ -10,20 +11,22 @@ export function TodayDeliveriesCard({
 }: {
   data: DashboardData["todayDeliveries"];
 }) {
+  const t = useT();
   const router = useRouter();
+  const label = t("Бугунги етказиб беришлар", "Deliveries today");
   if (data.count === 0) {
     return (
       <Card
-        label="Deliveries today"
-        value={<span className="dash-card-empty">No deliveries</span>}
+        label={label}
+        value={<span className="dash-card-empty">{t("Етказиб бериш йўқ", "No deliveries")}</span>}
       />
     );
   }
   return (
     <Card
-      label="Deliveries today"
+      label={label}
       value={String(data.count)}
-      meta={`${formatNumber(data.totalArea, 1)} m² scheduled`}
+      meta={`${formatNumber(data.totalArea, 1)} m² ${t("режалаштирилган", "scheduled")}`}
       onClick={() => router.push("/orders")}
     />
   );

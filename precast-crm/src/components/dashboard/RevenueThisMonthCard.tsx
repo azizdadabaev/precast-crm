@@ -3,6 +3,7 @@
 import { Card } from "./Card";
 import { TrendIndicator } from "./TrendIndicator";
 import { formatNumber } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import type { DashboardData } from "./types";
 
 export function RevenueThisMonthCard({
@@ -10,18 +11,20 @@ export function RevenueThisMonthCard({
 }: {
   data: DashboardData["revenueThisMonth"];
 }) {
+  const t = useT();
+  const label = t("Бу ойдаги даромад", "Revenue this month");
   if (data.total === 0 && data.orderCount === 0) {
     return (
-      <Card label="Revenue this month" value={<span className="dash-card-empty">No revenue yet</span>} />
+      <Card label={label} value={<span className="dash-card-empty">{t("Ҳозирча даромад йўқ", "No revenue yet")}</span>} />
     );
   }
   return (
     <Card
-      label="Revenue this month"
+      label={label}
       headerRight={<TrendIndicator trend={data.trend} />}
       value={formatNumber(data.total, 0)}
       unit="UZS"
-      meta={`${data.orderCount} orders · vs. last month`}
+      meta={`${data.orderCount} ${t("буюртма · ўтган ойга нисбатан", "orders · vs. last month")}`}
     />
   );
 }

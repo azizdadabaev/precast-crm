@@ -7,11 +7,11 @@ import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, FileText } from "lucide-react";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { formatDraftNumber } from "@/lib/draft-number";
+import { useT } from "@/lib/i18n";
 
 interface Project {
   id: string;
@@ -64,6 +64,7 @@ const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
 };
 
 export default function ProjectDetailPage() {
+  const t = useT();
   const params = useParams<{ id: string }>();
   /** Captured by ShareCalculationButton — wraps project header +
    *  calculation summary so operators can ship a one-shot image. */
@@ -76,8 +77,8 @@ export default function ProjectDetailPage() {
 
   const project = projects.find((p) => p.id === params.id);
 
-  if (isLoading) return <div className="text-muted-foreground p-8">Loading project...</div>;
-  if (!project) return <div className="p-8">Project not found</div>;
+  if (isLoading) return <div className="text-muted-foreground p-8">{t("Лойиҳа юкланмоқда…", "Loading project…")}</div>;
+  if (!project) return <div className="p-8">{t("Лойиҳа топилмади", "Project not found")}</div>;
 
   // Display label for an unnamed draft. The project.name column is
   // optional (operator can save a draft without typing a name), so
@@ -88,7 +89,7 @@ export default function ProjectDetailPage() {
   const draftLabel = project.draftNumber
     ? formatDraftNumber(project.draftNumber)
     : project.id.slice(-6);
-  const displayName = project.name || `Saved Draft ${draftLabel}`;
+  const displayName = project.name || `${t("Сақланган лойиҳа", "Saved Draft")} ${draftLabel}`;
   const clientLabel =
     project.client?.name ?? project.tentativeClientName ?? "";
 
@@ -110,7 +111,7 @@ export default function ProjectDetailPage() {
           href="/projects"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          <ArrowLeft className="h-4 w-4 mr-1" /> {t("Орқага", "Back")}
         </Link>
         <div className="flex gap-2">
           <ShareCalculationButton
@@ -128,13 +129,13 @@ export default function ProjectDetailPage() {
           {project.status === "ORDERED" && project.orders[0] ? (
             <Button variant="outline" asChild size="sm">
               <Link href={`/orders/${project.orders[0].id}`}>
-                <FileText className="h-4 w-4 mr-2" /> Order {project.orders[0].orderNumber}
+                <FileText className="h-4 w-4 mr-2" /> {t("Буюртма", "Order")} {project.orders[0].orderNumber}
               </Link>
             </Button>
           ) : (
             <Button variant="outline" asChild size="sm">
               <Link href={`/calculations?fromProject=${project.id}`}>
-                <FileText className="h-4 w-4 mr-2" /> Place Order · Буюртма Бериш
+                <FileText className="h-4 w-4 mr-2" /> Буюртма Бериш<span className="lang-en"> · Place Order</span>
               </Link>
             </Button>
           )}
@@ -154,7 +155,7 @@ export default function ProjectDetailPage() {
               {displayName}
             </h1>
             <p className="text-muted-foreground mt-1">
-              Client:{" "}
+              {t("Мижоз:", "Client:")}{" "}
               <span className="text-foreground font-medium">
                 {project.client?.name ?? project.tentativeClientName ?? "—"}
               </span>
@@ -168,107 +169,182 @@ export default function ProjectDetailPage() {
               )}
               <span className="ml-3 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">
                 {project.status === "DRAFT"
-                  ? "Лойиҳа · Draft"
+                  ? <>Лойиҳа<span className="lang-en"> · Draft</span></>
                   : project.status === "ORDERED"
-                  ? "Буюртма берилди · Ordered"
-                  : "Архив · Archived"}
+                  ? <>Буюртма берилди<span className="lang-en"> · Ordered</span></>
+                  : <>Архив<span className="lang-en"> · Archived</span></>}
               </span>
             </p>
           </div>
           <div className="flex gap-6 text-sm">
             <div className="text-right">
-              <div className="text-muted-foreground uppercase text-[10px] font-bold">Total Sum</div>
-              <div className="text-2xl font-black text-green-600">{formatNumber(totals.sum, 0)}</div>
+              <div className="text-muted-foreground uppercase text-[10px] font-bold">{t("Жами сумма", "Total Sum")}</div>
+              <div className="text-2xl font-black text-success font-mono">{formatNumber(totals.sum, 0)}</div>
             </div>
           </div>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3 border-b">
-          <CardTitle className="text-lg">Calculation Summary (Rooms)</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
-                <tr>
-                  <th className="px-3 py-2 border-b bg-yellow-50">Name</th>
-                  <th className="px-3 py-2 border-b text-center bg-yellow-50">W</th>
-                  <th className="px-3 py-2 border-b text-center bg-yellow-50">L</th>
-                  <th className="px-3 py-2 border-b text-center bg-blue-50">Pattern</th>
-                  <th className="px-3 py-2 border-b text-center bg-green-50">Beam Len</th>
-                  <th className="px-3 py-2 border-b text-center">Blks/Row</th>
-                  <th className="px-3 py-2 border-b text-center bg-orange-50">Total Blks</th>
-                  <th className="px-3 py-2 border-b text-center bg-gray-100">Beams</th>
-                  <th className="px-3 py-2 border-b text-center">Slab L</th>
-                  <th className="px-3 py-2 border-b text-center">Area</th>
-                  <th className="px-3 py-2 border-b text-center bg-green-50">m² Rate</th>
-                  <th className="px-3 py-2 border-b text-right">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {project.calculations.map((c) => (
-                  <tr key={c.id} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-3 py-2 font-medium bg-yellow-50/20">{c.name || "Unnamed Room"}</td>
-                    <td className="px-3 py-2 text-center bg-yellow-50/20">{formatNumber(c.innerWidth, 2)}</td>
-                    <td className="px-3 py-2 text-center bg-yellow-50/20">{formatNumber(c.innerLength, 2)}</td>
-                    <td className="px-3 py-2 text-center text-xs font-medium bg-blue-50/30">
-                      {PATTERN_LABEL[c.pattern]}
-                      {c.pattern !== c.patternAuto && (
-                        <span className="text-muted-foreground"> (auto: {PATTERN_LABEL[c.patternAuto]})</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800">{formatNumber(c.beamLength, 2)}</td>
-                    <td className="px-3 py-2 text-center">{c.blockRows > 0 ? c.blocksPerRow : "—"}</td>
-                    <td className="px-3 py-2 text-center font-black bg-orange-50/20 text-orange-800">{c.totalBlocks}</td>
-                    <td className="px-3 py-2 text-center font-black bg-gray-100/50">{c.beamCount}</td>
-                    <td className="px-3 py-2 text-center text-xs">{formatNumber(c.monolithLength, 2)} m</td>
-                    <td className="px-3 py-2 text-center text-xs">{formatNumber(c.monolithArea, 2)} m²</td>
-                    <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800">{formatNumber(c.m2Price, 0)}</td>
-                    <td className="px-3 py-2 text-right font-black text-green-700">
-                      {formatNumber(c.subtotal, 0)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-muted/20 font-black border-t-2 border-primary/10">
-                <tr>
-                  <td className="px-3 py-3 text-right" colSpan={6}>TOTALS (ЖАМИ):</td>
-                  <td className="px-3 py-3 text-center text-orange-800 bg-orange-50/50">{totals.blocks}</td>
-                  <td className="px-3 py-3 text-center bg-gray-100">{totals.beams}</td>
-                  <td className="px-3 py-3" colSpan={1}></td>
-                  <td className="px-3 py-3 text-center text-xs">{formatNumber(totals.monolithArea, 2)} m²</td>
-                  <td className="px-3 py-3 text-right text-green-800 bg-green-50/50 text-lg" colSpan={2}>{formatNumber(totals.sum, 0)}</td>
-                </tr>
-              </tfoot>
-            </table>
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-baseline justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Ҳисоб-китоб хулосаси
+            <span className="lang-en font-normal">{" "}· Calculation Summary</span>
           </div>
-        </CardContent>
-      </Card>
+          <div className="text-[10px] font-mono uppercase tracking-wider text-text-tertiary">
+            {project.calculations.length}{" "}
+            {t("хона", project.calculations.length === 1 ? "room" : "rooms")}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted text-[10px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="text-left px-3 py-2.5 font-semibold">
+                  Исм<span className="lang-en font-normal"> · Name</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  Эни<span className="lang-en font-normal"> · W</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  Бўйи<span className="lang-en font-normal"> · L</span>
+                </th>
+                <th className="text-left px-3 py-2.5 font-semibold">
+                  Шаблон<span className="lang-en font-normal"> · Pattern</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  Балка<span className="lang-en font-normal"> · Beam</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  Ғ/қатор<span className="lang-en font-normal"> · Per row</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  Жами Ғ<span className="lang-en font-normal"> · Blocks</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  Балка<span className="lang-en font-normal"> · Beams</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  Майдон<span className="lang-en font-normal"> · Area</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  м² нархи<span className="lang-en font-normal"> · Rate</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
+                  Сумма<span className="lang-en font-normal"> · Subtotal</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {project.calculations.map((c, i) => (
+                <tr
+                  key={c.id}
+                  className={
+                    "border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors " +
+                    (i % 2 === 1 ? "bg-muted/30" : "")
+                  }
+                >
+                  <td className="px-3 py-2.5 font-medium">
+                    {c.name || (
+                      <span className="text-text-tertiary italic">
+                        {t("Номсиз хона", "Unnamed Room")}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono">
+                    {formatNumber(c.innerWidth, 2)}
+                    <span className="text-text-tertiary text-xs ml-0.5">m</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono">
+                    {formatNumber(c.innerLength, 2)}
+                    <span className="text-text-tertiary text-xs ml-0.5">m</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-xs">
+                      <span className="font-semibold">{PATTERN_LABEL[c.pattern]}</span>
+                      {c.pattern !== c.patternAuto && (
+                        <span className="text-text-tertiary normal-case">
+                          ({t("авто", "auto")}: {PATTERN_LABEL[c.patternAuto]})
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono">
+                    {formatNumber(c.beamLength, 2)}
+                    <span className="text-text-tertiary text-xs ml-0.5">m</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
+                    {c.blockRows > 0 ? c.blocksPerRow : "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono font-semibold">
+                    {c.totalBlocks}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono font-semibold">
+                    {c.beamCount}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
+                    {formatNumber(c.monolithArea, 2)}
+                    <span className="text-xs ml-0.5">m²</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono">
+                    {formatNumber(c.m2Price, 0)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono font-bold text-success">
+                    {formatNumber(c.subtotal, 0)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-muted border-t border-border-strong">
+                <td
+                  colSpan={6}
+                  className="px-3 py-3 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-bold"
+                >
+                  Жами<span className="lang-en font-normal">{" "}· Totals</span>
+                </td>
+                <td className="px-3 py-3 text-right font-mono font-bold">
+                  {totals.blocks}
+                </td>
+                <td className="px-3 py-3 text-right font-mono font-bold">
+                  {totals.beams}
+                </td>
+                <td className="px-3 py-3 text-right font-mono font-bold">
+                  {formatNumber(totals.monolithArea, 2)}
+                  <span className="text-xs ml-0.5 text-muted-foreground">m²</span>
+                </td>
+                <td className="px-3 py-3"></td>
+                <td className="px-3 py-3 text-right font-mono font-extrabold text-success text-base">
+                  {formatNumber(totals.sum, 0)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
       </div>
       {/* /shareRef */}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Logistics Summary</CardTitle>
+            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("Логистика хулосаси", "Logistics Summary")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
              <div className="flex justify-between border-b pb-2">
-               <span className="text-muted-foreground">Total Beam Pieces</span>
+               <span className="text-muted-foreground">{t("Жами балка дона", "Total Beam Pieces")}</span>
                <span className="font-bold">{totals.beams}</span>
              </div>
              <div className="flex justify-between border-b pb-2">
-               <span className="text-muted-foreground">Total Block Pieces</span>
+               <span className="text-muted-foreground">{t("Жами ғишт дона", "Total Block Pieces")}</span>
                <span className="font-bold">{totals.blocks}</span>
              </div>
              <div className="flex justify-between border-b pb-2">
-               <span className="text-muted-foreground">Slab Area (visual)</span>
+               <span className="text-muted-foreground">{t("Плита майдони", "Slab Area (visual)")}</span>
                <span className="font-bold">{formatNumber(totals.monolithArea, 2)} m²</span>
              </div>
              <div className="flex justify-between">
-               <span className="text-muted-foreground">Concrete Topping</span>
+               <span className="text-muted-foreground">{t("Бетон қатлами", "Concrete Topping")}</span>
                <span className="font-bold">{totals.concrete.toFixed(2)} m³</span>
              </div>
           </CardContent>

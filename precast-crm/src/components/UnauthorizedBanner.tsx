@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useT } from "@/lib/i18n";
 
 /**
  * Renders a dismissable banner when the URL has `?error=unauthorized`.
@@ -23,6 +24,7 @@ export function UnauthorizedBanner() {
 }
 
 function Inner() {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -49,27 +51,28 @@ function Inner() {
   return (
     <div
       role="alert"
-      className="mb-4 flex items-start justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      className="mb-4 flex items-start justify-between gap-3 rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning"
     >
       <div>
         <strong className="font-medium">
-          Сизда бу саҳифага рухсат йўқ · You don&apos;t have access to that page
+          Сизда бу саҳифага рухсат йўқ
+          <span className="lang-en"> · You don&apos;t have access to that page</span>
         </strong>
         {from ? (
-          <span className="ml-1 text-amber-800/80">
+          <span className="ml-1 text-warning/80">
             {" "}
             (<code className="text-xs">{from}</code>)
           </span>
         ) : null}
-        <span className="ml-1 text-amber-800/80">
-          — sent to <code className="text-xs">{pathname}</code> instead.
+        <span className="ml-1 text-warning/80">
+          — {t("ўрнига", "sent to")} <code className="text-xs">{pathname}</code> {t("га юборилди.", "instead.")}
         </span>
       </div>
       <button
         type="button"
         onClick={dismiss}
-        className="shrink-0 rounded px-2 py-0.5 text-amber-900/80 hover:bg-amber-100 hover:text-amber-900"
-        aria-label="Dismiss"
+        className="shrink-0 rounded px-2 py-0.5 text-warning/80 hover:bg-warning/20 hover:text-warning"
+        aria-label={t("Ёпиш", "Dismiss")}
       >
         ✕
       </button>

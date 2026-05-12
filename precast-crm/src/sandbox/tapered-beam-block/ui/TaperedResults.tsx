@@ -30,7 +30,7 @@ export function TaperedResults({ result }: { result: TaperResult | null }) {
     return (
       <Card className="bg-muted/30">
         <CardContent className="py-12 text-center text-muted-foreground text-sm">
-          Натижа бу ерда кўринади. · Results appear here once you press Calculate.
+          Натижа бу ерда кўринади.<span className="lang-en"> · Results appear here once you press Calculate.</span>
         </CardContent>
       </Card>
     );
@@ -63,7 +63,7 @@ function ErrorPanel({ errors }: { errors: string[] }) {
     <Card className="border-destructive/50 bg-destructive/5">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-bold uppercase tracking-wider text-destructive">
-          Хатолик · Errors
+          Хатолик<span className="lang-en"> · Errors</span>
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -84,7 +84,7 @@ function InputCard({ r }: { r: TaperResult }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-          1. Кириш · Input
+          1. Кириш<span className="lang-en"> · Input</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -108,7 +108,7 @@ function GeometryCard({ r }: { r: TaperResult }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-          2. Геометрия · Geometry
+          2. Геометрия<span className="lang-en"> · Geometry</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -197,7 +197,7 @@ function StrategyCard({
     <Card>
       <CardHeader className="pb-2 flex flex-row items-center justify-between">
         <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-          3. Стратегия · Beam strategy
+          3. Стратегия<span className="lang-en"> · Beam strategy</span>
         </CardTitle>
         <StrategyBadge tier={r.groupingStrategy} />
       </CardHeader>
@@ -205,7 +205,7 @@ function StrategyCard({
         {/* View mode toggle — segmented control */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Кўриниш · View mode
+            Кўриниш<span className="lang-en"> · View mode</span>
           </div>
           <div className="flex rounded-md border bg-background overflow-hidden text-xs">
             <button
@@ -217,7 +217,7 @@ function StrategyCard({
               }`}
               onClick={() => onChangeViewMode("per-row")}
             >
-              Қаторма-қатор · Per-row
+              Қаторма-қатор<span className="lang-en"> · Per-row</span>
             </button>
             <button
               type="button"
@@ -228,7 +228,7 @@ function StrategyCard({
               }`}
               onClick={() => onChangeViewMode("grouped")}
             >
-              Гурухланган · Grouped
+              Гурухланган<span className="lang-en"> · Grouped</span>
             </button>
           </div>
         </div>
@@ -254,7 +254,7 @@ function StrategyCard({
             }
           >
             <Send className="h-4 w-4 mr-1.5" />
-            Калькуляторга юбориш · Send to calculator
+            Калькуляторга юбориш<span className="lang-en"> · Send to calculator</span>
           </Button>
         </div>
       </CardContent>
@@ -394,7 +394,7 @@ function InstallationCard({ r }: { r: TaperResult }) {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-          4. Ўрнатиш · Installation notes
+          4. Ўрнатиш<span className="lang-en"> · Installation notes</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="text-sm space-y-2 text-muted-foreground">
@@ -440,7 +440,7 @@ function MaterialCard({
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-          5. Материал · Material summary{" "}
+          5. Материал<span className="lang-en"> · Material summary</span>{" "}
           <span className="text-[10px] tracking-widest text-muted-foreground/70">
             ({viewMode})
           </span>
@@ -481,7 +481,7 @@ function MaterialCard({
         {r.totalBlocksGroupedMode !== r.totalBlocksPerRowMode && (
           <div className="text-[11px] text-muted-foreground border-t pt-2">
             Per-row total <span className="tabular-nums font-semibold">{r.totalBlocksPerRowMode}</span>{" "}
-            · Grouped total <span className="tabular-nums font-semibold">{r.totalBlocksGroupedMode}</span>
+            <span className="lang-en">· Grouped total </span><span className="tabular-nums font-semibold">{r.totalBlocksGroupedMode}</span>
             {" "}— grouped over-supplies because each group rounds UP to its widest row; the surplus absorbs the taper at the edge.
           </div>
         )}
@@ -532,7 +532,7 @@ function DetailsExpander({ r }: { r: TaperResult }) {
           onClick={() => setOpen((o) => !o)}
         >
           <CardTitle className="text-sm uppercase tracking-wider text-muted-foreground">
-            Тафсилот · Show details
+            Тафсилот<span className="lang-en"> · Show details</span>
           </CardTitle>
           <span className="text-xs text-muted-foreground">{open ? "▾" : "▸"}</span>
         </button>

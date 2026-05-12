@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { api } from "@/lib/fetcher";
 import { formatNumber } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface Driver {
   id: string;
@@ -39,6 +40,7 @@ export function DispatchDialog({
   suggestedExpectedCollection,
   onDispatched,
 }: Props) {
+  const t = useT();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState("");
   const [truckIdentifier, setTruckIdentifier] = useState("");
@@ -74,11 +76,11 @@ export function DispatchDialog({
 
   async function submit() {
     if (!driverId) {
-      setError("Select a driver");
+      setError(t("Ҳайдовчини танланг", "Select a driver"));
       return;
     }
     if (expected === "" || Number(expected) < 0) {
-      setError("Expected collection cannot be negative");
+      setError(t("Кутилган сумма манфий бўлмаслиги керак", "Expected collection cannot be negative"));
       return;
     }
     setSubmitting(true);
@@ -105,20 +107,28 @@ export function DispatchDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            <Truck className="h-5 w-5 inline mr-2 text-amber-600" />
-            Жўнатиш · Dispatch
+          <DialogTitle className="flex items-center gap-2">
+            <Truck className="h-5 w-5 text-primary shrink-0" />
+            <span>
+              Жўнатиш
+              <span className="lang-en text-muted-foreground font-normal text-base">
+                {" "}· Dispatch
+              </span>
+            </span>
           </DialogTitle>
           <DialogDescription>
-            Truck leaves the factory with materials. The driver collects cash from the customer at the delivery site.
+            {t(
+              "Юк машина материаллар билан заводдан чиқади. Ҳайдовчи мижоздан етказиб бериш жойида нақд пул йиғади.",
+              "Truck leaves the factory with materials. The driver collects cash from the customer at the delivery site.",
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Хайдовчи · Driver *</Label>
+            <Label>Хайдовчи<span className="lang-en"> · Driver</span> *</Label>
             <Select value={driverId} onChange={(e) => setDriverId(e.target.value)}>
-              <option value="">— select driver —</option>
+              <option value="">{t("— ҳайдовчини танланг —", "— select driver —")}</option>
               {drivers.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -127,23 +137,26 @@ export function DispatchDialog({
             </Select>
             {drivers.length === 0 && (
               <div className="text-xs text-muted-foreground italic">
-                No active drivers. Add one in /drivers first.
+                {t(
+                  "Фаол ҳайдовчилар йўқ. Аввал /drivers бўлимида қўшинг.",
+                  "No active drivers. Add one in /drivers first.",
+                )}
               </div>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Машина рақами · Truck identifier</Label>
+            <Label>Машина рақами<span className="lang-en"> · Truck identifier</span></Label>
             <Input
               className="tabular-nums"
               value={truckIdentifier}
               onChange={(e) => setTruckIdentifier(e.target.value)}
-              placeholder="01 A 123 BC (optional)"
+              placeholder={t("01 A 123 BC (ихтиёрий)", "01 A 123 BC (optional)")}
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Кутилаётган сумма · Expected collection (UZS) *</Label>
+            <Label>Кутилаётган сумма<span className="lang-en"> · Expected collection</span> (UZS) *</Label>
             <Input
               type="number"
               min="0"
@@ -155,49 +168,61 @@ export function DispatchDialog({
               }
             />
             <div className="text-[11px] text-muted-foreground">
-              Pre-filled with order total − confirmed payments. Editable —
-              the owner adjudicates discrepancies later when confirming the
-              recorded payment.
+              {t(
+                "Буюртма жами − тасдиқланган тўловлар билан тўлдирилган. Таҳрирланиши мумкин — эга кейинроқ тасдиқлаш пайтида тафовутларни ҳал қилади.",
+                "Pre-filled with order total − confirmed payments. Editable — the owner adjudicates discrepancies later when confirming the recorded payment.",
+              )}
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label>Изоҳ · Notes</Label>
+            <Label>Изоҳ<span className="lang-en"> · Notes</span></Label>
             <Input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. customer asked for early-morning delivery"
+              placeholder={t(
+                "масалан: мижоз эрта тонгда етказиб беришни сўради",
+                "e.g. customer asked for early-morning delivery",
+              )}
             />
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+            <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/30 px-3 py-2 rounded-md">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center justify-between pt-2">
-          <div className="text-xs text-muted-foreground">
-            Will create a Dispatch + flip status to{" "}
-            <span className="font-semibold">DISPATCHED</span>.
+        <div className="flex flex-col gap-3 pt-2 border-t border-border -mx-6 px-6 -mb-2 pb-1">
+          <div className="text-xs text-text-tertiary">
+            {t("Жўнатиш яратилади ва ҳолат", "Will create a Dispatch + flip status to")}{" "}
+            <span className="font-mono font-bold text-foreground">DISPATCHED</span>
+            {t(" га ўзгаради.", ".")}
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
-              Cancel
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              {t("Бекор қилиш", "Cancel")}
             </Button>
             <Button
               size="sm"
-              className="bg-amber-600 hover:bg-amber-700 text-white"
               onClick={submit}
               disabled={submitting || drivers.length === 0}
             >
-              {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Truck className="h-4 w-4 mr-2" />}
-              Жўнатиш ·{" "}
+              {submitting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Truck className="h-4 w-4 mr-2" />
+              )}
               {expected !== "" && Number(expected) > 0
-                ? `Dispatch with ${formatNumber(Number(expected), 0)} expected`
-                : "Dispatch"}
+                ? `${t("Жўнатиш", "Dispatch")} · ${formatNumber(Number(expected), 0)} ${t("кутилмоқда", "expected")}`
+                : t("Жўнатиш", "Dispatch")}
             </Button>
           </div>
         </div>

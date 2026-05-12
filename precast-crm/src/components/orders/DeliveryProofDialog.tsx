@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Truck, Upload, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
 
 export interface DeliveryFormPayload {
   file: File;
@@ -36,6 +37,7 @@ const MAX_BYTES = 8 * 1024 * 1024;
  *   - Disabled confirm until a valid image is chosen
  */
 export function DeliveryProofDialog({ open, onClose, expectedCollection, onUpload }: Props) {
+  const t = useT();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,15 +89,15 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
   function pickFile(f: File | null) {
     if (!f) return;
     if (!ACCEPT.split(",").includes(f.type)) {
-      setError("Only JPG, PNG, or WEBP images are accepted.");
+      setError(t("Фақат JPG, PNG ёки WEBP расмлари қабул қилинади.", "Only JPG, PNG, or WEBP images are accepted."));
       return;
     }
     if (f.size > MAX_BYTES) {
-      setError("Image is too large (max 8 MB).");
+      setError(t("Расм жуда катта (мак. 8 МБ).", "Image is too large (max 8 MB)."));
       return;
     }
     if (f.size === 0) {
-      setError("Selected file is empty.");
+      setError(t("Танланган файл бўш.", "Selected file is empty."));
       return;
     }
     setError(null);
@@ -105,11 +107,11 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
   async function confirm() {
     if (!file) return;
     if (noCashCollected && noCashCollectedNote.trim().length < 3) {
-      setError("Please add a note explaining why no cash was collected.");
+      setError(t("Нима учун нақд пул йиғилмаганини изоҳлаб ёзинг.", "Please add a note explaining why no cash was collected."));
       return;
     }
     if (!noCashCollected && cashAmount !== "" && Number(cashAmount) < 0) {
-      setError("Cash amount cannot be negative.");
+      setError(t("Нақд сумма манфий бўлмаслиги керак.", "Cash amount cannot be negative."));
       return;
     }
     setSubmitting(true);
@@ -132,16 +134,18 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-background rounded-lg shadow-2xl w-full max-w-lg overflow-hidden">
+      <div className="bg-card rounded-lg shadow-2xl w-full max-w-lg overflow-hidden border border-border">
         {/* Header */}
-        <div className="flex items-start justify-between px-5 py-3 border-b">
+        <div className="flex items-start justify-between px-5 py-3 border-b border-border">
           <div className="flex items-center gap-2">
-            <Truck className="h-5 w-5 text-amber-600" />
+            <Truck className="h-5 w-5 text-primary" />
             <div>
-              <h2 className="text-lg font-bold">Delivery proof required</h2>
+              <h2 className="text-lg font-bold">{t("Етказиб бериш исботи талаб қилинади", "Delivery proof required")}</h2>
               <p className="text-xs text-muted-foreground">
-                Upload a photo of the loaded truck to mark this order as
-                delivered.
+                {t(
+                  "Буюртмани етказилди деб белгилаш учун юкланган машина расмини юкланг.",
+                  "Upload a photo of the loaded truck to mark this order as delivered.",
+                )}
               </p>
             </div>
           </div>
@@ -187,10 +191,10 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
             >
               <Upload className="h-10 w-10 mx-auto text-muted-foreground" />
               <div className="mt-3 text-sm font-medium">
-                Drop a photo here, or click to choose
+                {t("Расмни шу ерга ташланг ёки танлаш учун босинг", "Drop a photo here, or click to choose")}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                JPG, PNG, or WEBP · up to 8 MB
+                JPG, PNG, {t("ёки", "or")} WEBP · {t("8 МБ гача", "up to 8 MB")}
               </div>
             </div>
           ) : (
@@ -218,22 +222,22 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
                   className="underline hover:no-underline"
                   disabled={submitting}
                 >
-                  Choose a different file
+                  {t("Бошқа файлни танлаш", "Choose a different file")}
                 </button>
               </div>
             </div>
           )}
 
           {/* Cash collection */}
-          <div className="mt-5 space-y-3 border-t pt-4">
+          <div className="mt-5 space-y-3 border-t border-border pt-4">
             <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Нақд пул · Cash collected from customer
+              Нақд пул<span className="lang-en"> · Cash collected from customer</span>
             </div>
 
             {!noCashCollected && (
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider">
-                  Сумма · Amount (UZS)
+                  Сумма<span className="lang-en"> · Amount</span> (UZS)
                 </label>
                 <input
                   type="number"
@@ -246,7 +250,10 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
                   }
                 />
                 <div className="text-[11px] text-muted-foreground">
-                  Pre-filled with the dispatch's expected collection. Owner reconciles any shortfall later.
+                  {t(
+                    "Жўнатишда кутилган сумма билан тўлдирилган. Эга кейинроқ камомадни созлайди.",
+                    "Pre-filled with the dispatch's expected collection. Owner reconciles any shortfall later.",
+                  )}
                 </div>
               </div>
             )}
@@ -262,21 +269,30 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
                 }}
               />
               <div className="text-sm">
-                <span className="font-semibold">No cash collected</span>
-                <span className="text-muted-foreground"> · driver came back empty (e.g. customer will transfer later)</span>
+                <span className="font-semibold">{t("Нақд пул йиғилмади", "No cash collected")}</span>
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {t(
+                    "ҳайдовчи бўш қайтди (масалан, мижоз кейинроқ ўтказади)",
+                    "driver came back empty (e.g. customer will transfer later)",
+                  )}
+                </span>
               </div>
             </label>
 
             {noCashCollected && (
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider">
-                  Сабаб · Reason (required, min 3 chars)
+                  Сабаб<span className="lang-en"> · Reason</span> ({t("мажбурий, мин. 3 белги", "required, min 3 chars")})
                 </label>
                 <input
                   className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                   value={noCashCollectedNote}
                   onChange={(e) => setNoCashCollectedNote(e.target.value)}
-                  placeholder="e.g. Customer will pay by bank transfer tomorrow"
+                  placeholder={t(
+                    "масалан: Мижоз эртага банк ўтказмаси орқали тўлайди",
+                    "e.g. Customer will pay by bank transfer tomorrow",
+                  )}
                 />
               </div>
             )}
@@ -289,8 +305,11 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
                 onChange={(e) => setDriverReturned(e.target.checked)}
               />
               <div className="text-sm">
-                <span className="font-semibold">Driver returned to office</span>
-                <span className="text-muted-foreground"> · stamps the dispatch's return time</span>
+                <span className="font-semibold">{t("Ҳайдовчи офисга қайтди", "Driver returned to office")}</span>
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {t("жўнатишнинг қайтиш вақтини белгилайди", "stamps the dispatch's return time")}
+                </span>
               </div>
             </label>
           </div>
@@ -304,9 +323,12 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 border-t bg-muted/20 flex items-center justify-between">
+        <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-between">
           <div className="text-xs text-muted-foreground">
-            The photo will be saved with the order's audit trail.
+            {t(
+              "Расм буюртманинг текширув журналига сақланади.",
+              "The photo will be saved with the order's audit trail.",
+            )}
           </div>
           <div className="flex gap-2">
             <Button
@@ -315,11 +337,11 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
               onClick={onClose}
               disabled={submitting}
             >
-              Cancel
+              {t("Бекор қилиш", "Cancel")}
             </Button>
             <Button
               size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-success hover:bg-success/90 text-success-foreground"
               disabled={!file || submitting}
               onClick={confirm}
             >
@@ -328,7 +350,7 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
               ) : (
                 <Truck className="h-4 w-4 mr-2" />
               )}
-              Mark Delivered
+              {t("Етказилди деб белгилаш", "Mark Delivered")}
             </Button>
           </div>
         </div>

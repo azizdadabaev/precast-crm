@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "./Card";
+import { useT } from "@/lib/i18n";
 import type { DashboardData } from "./types";
 
 export function CustomersByCityCard({
@@ -8,10 +9,12 @@ export function CustomersByCityCard({
 }: {
   data: DashboardData["customersByCity"];
 }) {
+  const t = useT();
+  const label = t("Шаҳарлар бўйича мижозлар", "Customers by city");
   if (data.length === 0) {
     return (
-      <Card label="Customers by city" wide value={null}>
-        <div className="dash-card-empty">Not enough data</div>
+      <Card label={label} wide value={null}>
+        <div className="dash-card-empty">{t("Маълумот етарли эмас", "Not enough data")}</div>
       </Card>
     );
   }
@@ -26,9 +29,9 @@ export function CustomersByCityCard({
 
   return (
     <Card
-      label="Customers by city"
+      label={label}
       headerRight={
-        <span className="dash-card-meta-inline">Top {charted.length}</span>
+        <span className="dash-card-meta-inline">{t("Юқори", "Top")} {charted.length}</span>
       }
       wide
       value={null}
@@ -55,7 +58,7 @@ export function CustomersByCityCard({
             marginTop: "var(--dash-space-3)",
           }}
         >
-          + {tailCount} in other cities
+          + {tailCount} {t("бошқа шаҳарларда", "in other cities")}
         </p>
       )}
     </Card>

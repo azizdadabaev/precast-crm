@@ -18,6 +18,7 @@ import {
   type DiscrepancyAction,
 } from "@/components/payments/DiscrepancyChoice";
 import { formatNumber } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 export interface PaymentForConfirm {
   id: string;
@@ -56,6 +57,7 @@ interface Props {
  *   - separate "Reject" button that opens a tiny prompt-style flow
  */
 export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Props) {
+  const t = useT();
   const [amount, setAmount] = useState<number | "">("");
   const [adjustmentNote, setAdjustmentNote] = useState("");
   const [discrepancyAction, setDiscrepancyAction] = useState<DiscrepancyAction>(null);
@@ -101,15 +103,21 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
   async function confirm() {
     setError(null);
     if (amountChanged && adjustmentNote.trim().length < 5) {
-      setError("Adjustment note (min 5 chars) is required when changing the amount");
+      setError(t(
+        "Суммани ўзгартирганда созлаш изоҳи (мин. 5 белги) керак",
+        "Adjustment note (min 5 chars) is required when changing the amount",
+      ));
       return;
     }
     if (hasShortfall && !discrepancyAction) {
-      setError("Choose a discrepancy action (TRACK / DISCOUNT / WRITEOFF) to confirm");
+      setError(t(
+        "Тасдиқлаш учун тафовут амалини танланг (КУЗАТИШ / ЧЕГИРМА / ҲИСОБДАН ЧИҚАРИШ)",
+        "Choose a discrepancy action (TRACK / DISCOUNT / WRITEOFF) to confirm",
+      ));
       return;
     }
     if (hasShortfall && discrepancyNote.trim().length < 5) {
-      setError("Discrepancy note (min 5 chars) is required");
+      setError(t("Тафовут изоҳи (мин. 5 белги) керак", "Discrepancy note (min 5 chars) is required"));
       return;
     }
     setSubmitting(true);
@@ -138,7 +146,7 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
   async function reject() {
     setError(null);
     if (rejectReason.trim().length < 3) {
-      setError("Reason is required (min 3 chars)");
+      setError(t("Сабаб керак (мин. 3 белги)", "Reason is required (min 3 chars)"));
       return;
     }
     setSubmitting(true);
@@ -164,11 +172,13 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {rejectMode ? "Тўловни рад этиш · Reject payment" : "Тўловни тасдиқлаш · Confirm payment"}
+            {rejectMode
+              ? <>Тўловни рад этиш<span className="lang-en"> · Reject payment</span></>
+              : <>Тўловни тасдиқлаш<span className="lang-en"> · Confirm payment</span></>}
           </DialogTitle>
           <DialogDescription>
-            Order{" "}
-            <span className="font-mono font-semibold">{payment.order.orderNumber}</span> · method{" "}
+            {t("Буюртма", "Order")}{" "}
+            <span className="font-mono font-semibold">{payment.order.orderNumber}</span> · {t("усул", "method")}{" "}
             <span className="font-semibold">{payment.method}</span>
           </DialogDescription>
         </DialogHeader>
@@ -179,7 +189,7 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
           <>
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider font-bold">
-                Сумма · Amount (UZS)
+                Сумма<span className="lang-en"> · Amount</span> (UZS)
               </Label>
               <Input
                 type="number"
@@ -192,11 +202,11 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
                 }
               />
               <div className="text-[11px] text-muted-foreground">
-                Recorded: <span className="tabular-nums">{formatNumber(original, 0)}</span>
+                {t("Қайд этилди:", "Recorded:")} <span className="tabular-nums">{formatNumber(original, 0)}</span>
                 {expected > 0 && (
                   <>
                     {" · "}
-                    Dispatch expected: <span className="tabular-nums">{formatNumber(expected, 0)}</span>
+                    {t("Жўнатиш кутилгани:", "Dispatch expected:")} <span className="tabular-nums">{formatNumber(expected, 0)}</span>
                   </>
                 )}
               </div>
@@ -205,12 +215,15 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
             {amountChanged && (
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider font-bold">
-                  Adjustment note (required, min 5 chars)
+                  {t("Созлаш изоҳи (мажбурий, мин. 5 белги)", "Adjustment note (required, min 5 chars)")}
                 </Label>
                 <Input
                   value={adjustmentNote}
                   onChange={(e) => setAdjustmentNote(e.target.value)}
-                  placeholder="e.g. Operator typo — corrected from receipt"
+                  placeholder={t(
+                    "масалан: Оператор хатоси — квитанциядан тузатилди",
+                    "e.g. Operator typo — corrected from receipt",
+                  )}
                 />
               </div>
             )}
@@ -229,12 +242,15 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
         {rejectMode && (
           <div className="space-y-1.5">
             <Label className="text-xs uppercase tracking-wider font-bold">
-              Сабаб · Reason (required)
+              Сабаб<span className="lang-en"> · Reason</span> ({t("мажбурий", "required")})
             </Label>
             <Input
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="e.g. Driver said amount on receipt is different"
+              placeholder={t(
+                "масалан: Ҳайдовчи квитанциядаги сумма бошқача деди",
+                "e.g. Driver said amount on receipt is different",
+              )}
             />
           </div>
         )}
@@ -249,41 +265,41 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
         <div className="flex items-center justify-between">
           {rejectMode ? (
             <Button variant="ghost" size="sm" onClick={() => setRejectMode(false)}>
-              ← Back to confirm
+              ← {t("Тасдиқлашга қайтиш", "Back to confirm")}
             </Button>
           ) : (
             <Button
               variant="outline"
               size="sm"
-              className="text-rose-700 hover:bg-rose-50"
+              className="text-destructive hover:bg-destructive/10"
               onClick={() => setRejectMode(true)}
             >
-              <X className="h-4 w-4 mr-1.5" /> Reject
+              <X className="h-4 w-4 mr-1.5" /> {t("Рад этиш", "Reject")}
             </Button>
           )}
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
-              Cancel
+              {t("Бекор қилиш", "Cancel")}
             </Button>
             {rejectMode ? (
               <Button
                 size="sm"
-                className="bg-rose-600 hover:bg-rose-700 text-white"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                 onClick={reject}
                 disabled={submitting}
               >
                 {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Reject
+                {t("Рад этиш", "Reject")}
               </Button>
             ) : (
               <Button
                 size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="bg-success hover:bg-success/90 text-success-foreground"
                 onClick={confirm}
                 disabled={submitting}
               >
                 {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-                Тасдиқлаш · Confirm
+                Тасдиқлаш<span className="lang-en"> · Confirm</span>
               </Button>
             )}
           </div>

@@ -6,6 +6,7 @@ import { api } from "@/lib/fetcher";
 import { ProductionLogForm } from "@/components/production/ProductionLogForm";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatInventoryLabel } from "@/lib/inventory";
+import { useT } from "@/lib/i18n";
 
 interface ProductionLine {
   id: string;
@@ -24,6 +25,7 @@ interface ProductionEntry {
 }
 
 export default function ProductionPage() {
+  const t = useT();
   const qc = useQueryClient();
   const { data: entries = [], isLoading } = useQuery<ProductionEntry[]>({
     queryKey: ["production"],
@@ -62,11 +64,14 @@ export default function ProductionPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Ишлаб чиқариш{" "}
-          <span className="text-muted-foreground font-normal text-base">· Production</span>
+          Ишлаб чиқариш
+          <span className="lang-en text-muted-foreground font-normal text-base">{" "}· Production</span>
         </h1>
         <p className="text-sm text-muted-foreground">
-          Log today's factory output. Each entry increments stock in the warehouse.
+          {t(
+            "Бугунги завод маҳсулотини қайд этинг. Ҳар бир ёзув омбордаги захирани кўпайтиради.",
+            "Log today's factory output. Each entry increments stock in the warehouse.",
+          )}
         </p>
       </div>
 
@@ -79,13 +84,14 @@ export default function ProductionPage() {
       {/* Recent entries */}
       <div className="space-y-3">
         <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          Сўнгги 14 кун · Recent 14 days
+          Сўнгги 14 кун
+          <span className="lang-en font-normal">{" "}· Recent 14 days</span>
         </h2>
         {isLoading ? (
-          <div className="text-muted-foreground">Loading…</div>
+          <div className="text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
         ) : grouped.length === 0 ? (
-          <div className="rounded-lg border bg-background p-8 text-center text-muted-foreground">
-            No production entries yet.
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
+            {t("Ишлаб чиқариш ёзуви йўқ.", "No production entries yet.")}
           </div>
         ) : (
           grouped.map(([day, dayEntries]) => {
@@ -105,11 +111,14 @@ export default function ProductionPage() {
             const beamLines = Array.from(beamMap.entries()).sort((a, b) => a[0] - b[0]);
 
             return (
-              <div key={day} className="rounded-lg border bg-background overflow-hidden">
-                <div className="px-4 py-2 bg-muted/30 border-b flex items-baseline justify-between">
-                  <div className="text-sm font-semibold">{formatDate(day)}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {dayEntries.length} entr{dayEntries.length === 1 ? "y" : "ies"}
+              <div
+                key={day}
+                className="rounded-lg border border-border bg-card overflow-hidden border-l-[3px] border-l-success"
+              >
+                <div className="px-4 py-2 bg-muted border-b border-border flex items-baseline justify-between">
+                  <div className="text-sm font-semibold font-mono">{formatDate(day)}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-text-tertiary">
+                    {dayEntries.length} {t("ёзув", dayEntries.length === 1 ? "entry" : "entries")}
                   </div>
                 </div>
                 <div className="px-4 py-3">
@@ -117,25 +126,29 @@ export default function ProductionPage() {
                     {beamLines.map(([len, qty]) => (
                       <div
                         key={len}
-                        className="flex items-baseline justify-between bg-muted/20 rounded px-3 py-1.5"
+                        className="flex items-baseline justify-between bg-muted rounded-md px-3 py-1.5 border border-border"
                       >
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-text-tertiary">
                           {formatInventoryLabel("BEAM", len)}
                         </span>
-                        <span className="font-semibold tabular-nums">+{qty}</span>
+                        <span className="font-mono font-bold tabular-nums text-success">
+                          +{qty}
+                        </span>
                       </div>
                     ))}
                     {blocks > 0 && (
-                      <div className="flex items-baseline justify-between bg-orange-50/60 rounded px-3 py-1.5">
-                        <span className="text-xs text-orange-800">Ғишт · Blocks</span>
-                        <span className="font-semibold tabular-nums text-orange-800">
+                      <div className="flex items-baseline justify-between bg-gold/10 rounded-md px-3 py-1.5 border border-gold/30">
+                        <span className="text-xs text-gold font-medium">
+                          Ғишт<span className="lang-en"> · Blocks</span>
+                        </span>
+                        <span className="font-mono font-bold tabular-nums text-gold">
                           +{blocks}
                         </span>
                       </div>
                     )}
                   </div>
                   {dayEntries.some((e) => e.notes) && (
-                    <div className="text-xs text-muted-foreground mt-2 italic">
+                    <div className="text-xs text-text-tertiary mt-2 italic">
                       {dayEntries
                         .filter((e) => e.notes)
                         .map((e) => `"${e.notes}" — ${e.recordedBy?.name ?? "?"}`)

@@ -5,11 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Input } from "@/components/ui/input";
+import { Chip } from "@/components/ui/chip";
 import { Search } from "lucide-react";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { formatDate, formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { paidVariant } from "@/lib/order-display";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
+import { useT } from "@/lib/i18n";
 
 interface Order {
   id: string;
@@ -25,21 +27,55 @@ interface Order {
   project: { id: string; name: string | null };
 }
 
-const STATUS: Record<Order["status"], { label: string; cls: string }> = {
-  PLACED:        { label: "Placed",        cls: "bg-sky-100 text-sky-800" },
-  IN_PRODUCTION: { label: "In production", cls: "bg-amber-100 text-amber-800" },
-  DISPATCHED:    { label: "Dispatched",    cls: "bg-orange-100 text-orange-800" },
-  DELIVERED:     { label: "Delivered",     cls: "bg-emerald-100 text-emerald-800" },
-  CANCELED:      { label: "Canceled",      cls: "bg-rose-100 text-rose-800" },
+// Status → Chip variant + leading glyph + left-edge row border color.
+const STATUS_META: Record<
+  Order["status"],
+  {
+    label: string;
+    variant: React.ComponentProps<typeof Chip>["variant"];
+    glyph: string;
+    rowBorder: string;
+  }
+> = {
+  PLACED:        { label: "Placed",        variant: "default", glyph: "●", rowBorder: "border-l-primary" },
+  IN_PRODUCTION: { label: "In production", variant: "warning", glyph: "⚒", rowBorder: "border-l-warning" },
+  DISPATCHED:    { label: "Dispatched",    variant: "gold",    glyph: "🚚", rowBorder: "border-l-gold" },
+  DELIVERED:     { label: "Delivered",     variant: "success", glyph: "✓",  rowBorder: "border-l-success" },
+  CANCELED:      { label: "Canceled",      variant: "danger",  glyph: "✕",  rowBorder: "border-l-destructive" },
 };
 
-const PAYMENT_STATE_BADGE: Record<Order["paymentState"], { label: string; cls: string }> = {
-  AWAITING_PAYMENT: { label: "Awaiting", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
-  PARTIALLY_PAID:   { label: "Partial",  cls: "bg-sky-50 text-sky-700 border border-sky-200" },
-  FULLY_PAID:       { label: "Fully paid", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+const PAYMENT_META: Record<
+  Order["paymentState"],
+  {
+    label: string;
+    variant: React.ComponentProps<typeof Chip>["variant"];
+  }
+> = {
+  AWAITING_PAYMENT: { label: "Awaiting", variant: "warning" },
+  PARTIALLY_PAID:   { label: "Partial",  variant: "default" },
+  FULLY_PAID:       { label: "Paid",     variant: "success" },
 };
+
+function translateStatus(s: Order["status"], t: (uz: string, en: string) => string): string {
+  switch (s) {
+    case "PLACED":        return t("Қабул қилинган", "Placed");
+    case "IN_PRODUCTION": return t("Ишлаб чиқилмоқда", "In production");
+    case "DISPATCHED":    return t("Жўнатилган", "Dispatched");
+    case "DELIVERED":     return t("Етказилган", "Delivered");
+    case "CANCELED":      return t("Бекор қилинган", "Canceled");
+  }
+}
+
+function translatePayment(s: Order["paymentState"], t: (uz: string, en: string) => string): string {
+  switch (s) {
+    case "AWAITING_PAYMENT": return t("Кутилмоқда", "Awaiting");
+    case "PARTIALLY_PAID":   return t("Қисман", "Partial");
+    case "FULLY_PAID":       return t("Тўлиқ", "Paid");
+  }
+}
 
 export default function OrdersPage() {
+  const t = useT();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | Order["status"]>("");
   const [calendarSelected, setCalendarSelected] = useState<Date | null>(null);
@@ -67,17 +103,21 @@ export default function OrdersPage() {
     : orders;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Буюртмалар <span className="text-muted-foreground font-normal text-base">· Orders</span>
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Placed orders — search by order #, client, or address. Pick a day on the calendar to filter by schedule.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Буюртмалар
+          <span className="lang-en text-muted-foreground font-normal text-base">
+            {" "}· Orders
+          </span>
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {t(
+            "Жойлаштирилган буюртмалар — буюртма №, мижоз ёки манзил бўйича қидиринг. Жадвал бўйича фильтрлаш учун кундан танланг.",
+            "Placed orders — search by order #, client, or address. Pick a day on the calendar to filter by schedule.",
+          )}
+        </p>
       </div>
 
       {/* Capacity calendar */}
@@ -87,142 +127,169 @@ export default function OrdersPage() {
         disablePast={false}
       />
       {calendarSelected && (
-        <div className="flex items-center justify-between bg-sky-50 border border-sky-200 text-sky-900 rounded px-3 py-2 text-sm">
+        <div className="flex items-center justify-between bg-primary/5 border border-primary/30 text-foreground rounded-md px-3 py-2 text-sm">
           <span>
-            Filtered to{" "}
-            <span className="font-semibold tabular-nums">
+            {t("Фильтр:", "Filtered to")}{" "}
+            <span className="font-semibold font-mono">
               {calendarSelected.toLocaleDateString("en-GB", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
             </span>
           </span>
           <button
             type="button"
-            className="text-xs underline hover:no-underline"
+            className="text-xs underline hover:no-underline text-text-tertiary hover:text-foreground"
             onClick={() => setCalendarSelected(null)}
           >
-            Clear
+            {t("Тозалаш", "Clear")}
           </button>
         </div>
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[260px] max-w-md">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
           <Input
             className="pl-9"
-            placeholder="Order # · Client · Phone · Address"
+            placeholder={t("Буюртма № · Мижоз · Телефон · Манзил", "Order # · Client · Phone · Address")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        <div className="flex rounded-md border bg-background overflow-hidden text-xs">
+
+        {/* Underline-style status tabs (etalon pattern) */}
+        <div className="flex border-b border-border">
           {(
             [
-              ["", "All"],
-              ["PLACED", "Placed"],
-              ["IN_PRODUCTION", "In prod"],
-              ["DELIVERED", "Delivered"],
-              ["DISPATCHED", "Dispatched"],
-              ["CANCELED", "Canceled"],
+              ["", t("Барчаси", "All")],
+              ["PLACED", t("Қабул қилинган", "Placed")],
+              ["IN_PRODUCTION", t("Ишлаб чиқилмоқда", "In prod")],
+              ["DISPATCHED", t("Жўнатилган", "Dispatched")],
+              ["DELIVERED", t("Етказилган", "Delivered")],
+              ["CANCELED", t("Бекор қилинган", "Canceled")],
             ] as const
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              className={`px-3 h-9 font-semibold uppercase tracking-wider transition-colors ${
-                status === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              }`}
-              onClick={() => setStatus(v as typeof status)}
-            >
-              {label}
-            </button>
-          ))}
+          ).map(([v, label]) => {
+            const active = status === v;
+            return (
+              <button
+                key={v}
+                type="button"
+                className={cn(
+                  "relative h-10 px-3 text-[12px] font-bold uppercase tracking-wider transition-colors",
+                  active
+                    ? "text-primary"
+                    : "text-text-tertiary hover:text-foreground",
+                )}
+                onClick={() => setStatus(v as typeof status)}
+              >
+                {label}
+                {active && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Table */}
-      {/* overflow-x-auto so the wide orders table scrolls horizontally
-          on mobile instead of cramming every column into the viewport.
-          Inner table uses `w-max` (intrinsic content width) so column
-          widths stay honored regardless of viewport size. */}
-      <div className="rounded-lg border bg-background overflow-x-auto">
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
-          <div className="p-6 text-muted-foreground">Loading…</div>
+          <div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
         ) : filtered.length === 0 ? (
-          <div className="py-12 text-center text-muted-foreground">No orders.</div>
+          <div className="p-12 text-center text-muted-foreground">{t("Буюртма йўқ.", "No orders.")}</div>
         ) : (
-          <table className="w-max min-w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="text-left px-3 py-2 w-32 whitespace-nowrap">№</th>
-                <th className="text-left px-3 py-2">Мижоз · Client</th>
-                <th className="text-left px-3 py-2">Тел · Phone</th>
-                <th className="text-left px-3 py-2">Манзил · Address</th>
-                <th className="text-right px-3 py-2">Майдон · Area</th>
-                <th className="text-right px-3 py-2">Жами · Total</th>
-                <th className="text-right px-3 py-2">Тўланган · Paid</th>
-                <th className="text-left px-3 py-2 w-32 whitespace-nowrap">Status</th>
-                <th className="text-left px-3 py-2 w-28 whitespace-nowrap">Payment</th>
-                <th className="text-left px-3 py-2 w-32 whitespace-nowrap">Scheduled</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {filtered.map((o) => (
-                <tr key={o.id} className="hover:bg-muted/20 transition-colors">
-                  <td className="px-3 py-2 font-bold tabular-nums whitespace-nowrap">
-                    <Link href={`/orders/${o.id}`} className="hover:underline">
-                      {o.orderNumber}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-2">{o.client.name}</td>
-                  <td className="px-3 py-2 tabular-nums text-xs">{formatPhone(o.client.phone)}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
-                    {o.client.address ?? "—"}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {formatNumber(o.totalArea, 2)} m²
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                    {formatNumber(o.totalPrice, 0)}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">
-                    {(() => {
-                      const v = paidVariant(o.confirmedPaid, o.totalPrice);
-                      if (v === "zero") {
-                        return <span className="text-muted-foreground">—</span>;
-                      }
-                      return (
-                        <span
-                          className={
-                            v === "full"
-                              ? "text-emerald-600 font-semibold"
-                              : "text-foreground"
-                          }
-                        >
-                          {formatNumber(o.confirmedPaid, 0)}
-                        </span>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${STATUS[o.status].cls}`}
-                    >
-                      {STATUS[o.status].label}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATE_BADGE[o.paymentState].cls}`}
-                    >
-                      {PAYMENT_STATE_BADGE[o.paymentState].label}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-xs whitespace-nowrap">{formatDate(o.scheduledAt)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-max min-w-full text-sm">
+              <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="text-left px-3 py-2.5 w-32 whitespace-nowrap">№</th>
+                  <th className="text-left px-3 py-2.5">Мижоз<span className="lang-en"> · Client</span></th>
+                  <th className="text-left px-3 py-2.5">Тел<span className="lang-en"> · Phone</span></th>
+                  <th className="text-left px-3 py-2.5">Манзил<span className="lang-en"> · Address</span></th>
+                  <th className="text-right px-3 py-2.5">Майдон<span className="lang-en"> · Area</span></th>
+                  <th className="text-right px-3 py-2.5">Жами<span className="lang-en"> · Total</span></th>
+                  <th className="text-right px-3 py-2.5">Тўланган<span className="lang-en"> · Paid</span></th>
+                  <th className="text-left px-3 py-2.5 w-36 whitespace-nowrap">{t("Ҳолат", "Status")}</th>
+                  <th className="text-left px-3 py-2.5 w-28 whitespace-nowrap">{t("Тўлов", "Payment")}</th>
+                  <th className="text-left px-3 py-2.5 w-32 whitespace-nowrap">{t("Жадвал", "Scheduled")}</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((o, i) => {
+                  const meta = STATUS_META[o.status];
+                  const pay = PAYMENT_META[o.paymentState];
+                  return (
+                    <tr
+                      key={o.id}
+                      className={cn(
+                        "border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors",
+                        "border-l-[3px]",
+                        meta.rowBorder,
+                        i % 2 === 1 && "bg-muted/30",
+                      )}
+                    >
+                      <td className="px-3 py-2.5 font-mono font-bold text-primary text-xs whitespace-nowrap">
+                        <Link href={`/orders/${o.id}`} className="hover:underline">
+                          {o.orderNumber}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium">{o.client.name}</div>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-text-tertiary">
+                        {formatPhone(o.client.phone)}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-text-tertiary max-w-[14rem]">
+                        {o.client.address ? (
+                          <span className="line-clamp-2">{o.client.address}</span>
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {formatNumber(o.totalArea, 2)}{" "}
+                        <span className="text-text-tertiary">m²</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono font-bold">
+                        {formatNumber(o.totalPrice, 0)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono">
+                        {(() => {
+                          const v = paidVariant(o.confirmedPaid, o.totalPrice);
+                          if (v === "zero") {
+                            return <span className="text-text-tertiary">—</span>;
+                          }
+                          return (
+                            <span
+                              className={
+                                v === "full"
+                                  ? "text-success font-bold"
+                                  : "text-foreground"
+                              }
+                            >
+                              {formatNumber(o.confirmedPaid, 0)}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <Chip variant={meta.variant}>
+                          <span>{meta.glyph}</span>
+                          <span>{translateStatus(o.status, t)}</span>
+                        </Chip>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <Chip variant={pay.variant}>{translatePayment(o.paymentState, t)}</Chip>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary whitespace-nowrap">
+                        {formatDate(o.scheduledAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

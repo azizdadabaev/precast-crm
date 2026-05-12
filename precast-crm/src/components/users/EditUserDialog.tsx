@@ -18,6 +18,7 @@ import {
   type Action,
 } from "@/lib/permissions";
 import { PermissionsChecklist } from "./PermissionsChecklist";
+import { useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/auth";
 import type { ManagedUser } from "@/app/(app)/users/types";
 
@@ -43,6 +44,7 @@ export function EditUserDialog({
   onOpenChange: (open: boolean) => void;
   onUpdated: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState("");
   const [perms, setPerms] = useState<Set<Action>>(new Set());
   const [active, setActive] = useState(true);
@@ -116,7 +118,7 @@ export function EditUserDialog({
       <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            Фойдаланувчини таҳрирлаш · Edit user
+            Фойдаланувчини таҳрирлаш<span className="lang-en"> · Edit user</span>
           </DialogTitle>
           <DialogDescription>
             {target.email}
@@ -127,7 +129,7 @@ export function EditUserDialog({
           <section className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label htmlFor="edit-name">Исм · Name</Label>
+                <Label htmlFor="edit-name">Исм<span className="lang-en"> · Name</span></Label>
                 <Input
                   id="edit-name"
                   value={name}
@@ -135,15 +137,15 @@ export function EditUserDialog({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Шаблон · Template</Label>
+                <Label>Шаблон<span className="lang-en"> · Template</span></Label>
                 <Input
                   value={roleDisplayLabel(target.role)}
                   readOnly
                   className="bg-muted/30"
                 />
                 <div className="text-xs text-muted-foreground">
-                  Шаблон ўзгартирилмайди — рухсатларни қўлда мослаштиринг ·
-                  Template is read-only — adjust permissions manually.
+                  Шаблон ўзгартирилмайди — рухсатларни қўлда мослаштиринг
+                  <span className="lang-en"> · Template is read-only — adjust permissions manually.</span>
                 </div>
               </div>
             </div>
@@ -159,10 +161,10 @@ export function EditUserDialog({
                   className="h-4 w-4"
                 />
                 <span className="text-sm">
-                  Фаол · Active{" "}
+                  Фаол<span className="lang-en"> · Active</span>{" "}
                   <span className="text-muted-foreground">
-                    (Ўчирилган ҳисоблар кириш қилолмайди · Disabled accounts
-                    cannot log in)
+                    (Ўчирилган ҳисоблар кириш қилолмайди
+                    <span className="lang-en"> · Disabled accounts cannot log in</span>)
                   </span>
                 </span>
               </Label>
@@ -172,15 +174,15 @@ export function EditUserDialog({
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold">
-                Рухсатлар · Permissions
+                Рухсатлар<span className="lang-en"> · Permissions</span>
               </h3>
               {customized ? (
-                <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-900">
-                  ✏ Шаблондан фарқ қилади · Differs from {target.role} template
+                <span className="text-xs px-2 py-0.5 rounded bg-warning/10 text-warning border border-warning/30">
+                  ✏ Шаблондан фарқ қилади<span className="lang-en"> · Differs from {target.role} template</span>
                 </span>
               ) : (
-                <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-900">
-                  ✓ {target.role} шаблонига мос · Matches {target.role} template
+                <span className="text-xs px-2 py-0.5 rounded bg-success/10 text-success border border-success/30">
+                  ✓ {target.role} шаблонига мос<span className="lang-en"> · Matches {target.role} template</span>
                 </span>
               )}
             </div>
@@ -192,15 +194,15 @@ export function EditUserDialog({
             />
             {!canEditPermissions && (
               <div className="text-xs text-muted-foreground">
-                Сизга рухсатларни ўзгартириш мумкин эмас · You don&apos;t have
-                permission to edit permissions (requires user.editPermissions).
+                Сизга рухсатларни ўзгартириш мумкин эмас
+                <span className="lang-en"> · You don&apos;t have permission to edit permissions (requires user.editPermissions).</span>
               </div>
             )}
           </section>
 
-          <section className="space-y-2 rounded-md border bg-card p-3">
+          <section className="space-y-2 rounded-md border border-border bg-card p-3">
             <Label className="text-sm font-semibold">
-              Паролни тиклаш · Reset password
+              Паролни тиклаш<span className="lang-en"> · Reset password</span>
             </Label>
             {resetPwd ? (
               <div className="flex items-center gap-2">
@@ -219,7 +221,7 @@ export function EditUserDialog({
                     setTimeout(() => setResetCopied(false), 1500);
                   }}
                 >
-                  {resetCopied ? "✓ Copied" : "Copy"}
+                  {resetCopied ? t("✓ Нусхаланди", "✓ Copied") : t("Нусхалаш", "Copy")}
                 </Button>
                 <Button
                   type="button"
@@ -227,7 +229,7 @@ export function EditUserDialog({
                   size="sm"
                   onClick={() => setResetPwd(null)}
                 >
-                  Бекор · Clear
+                  Бекор<span className="lang-en"> · Clear</span>
                 </Button>
               </div>
             ) : (
@@ -237,13 +239,12 @@ export function EditUserDialog({
                 size="sm"
                 onClick={() => setResetPwd(generatePassword())}
               >
-                Янги парол яратиш · Generate new password
+                Янги парол яратиш<span className="lang-en"> · Generate new password</span>
               </Button>
             )}
             <div className="text-xs text-muted-foreground">
-              Янги паролни сақлаш фойдаланувчини биринчи киришда уни
-              ўзгартиришга мажбур қилади · Saving with a new password forces
-              the user to change it on next login.
+              Янги паролни сақлаш фойдаланувчини биринчи киришда уни ўзгартиришга мажбур қилади
+              <span className="lang-en"> · Saving with a new password forces the user to change it on next login.</span>
             </div>
           </section>
 
@@ -254,12 +255,14 @@ export function EditUserDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t mt-3">
+        <div className="flex justify-end gap-2 pt-3 border-t border-border mt-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Бекор қилиш · Cancel
+            Бекор қилиш<span className="lang-en"> · Cancel</span>
           </Button>
           <Button onClick={submit} disabled={busy}>
-            {busy ? "Сақланмоқда…" : "Сақлаш · Save"}
+            {busy
+              ? t("Сақланмоқда…", "Saving…")
+              : <>Сақлаш<span className="lang-en"> · Save</span></>}
           </Button>
         </div>
       </DialogContent>

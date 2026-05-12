@@ -25,6 +25,7 @@ import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orde
 import { DispatchDialog } from "@/components/dispatch/DispatchDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { useT } from "@/lib/i18n";
 
 interface OrderDetail {
   id: string;
@@ -114,11 +115,11 @@ interface OrderDetail {
   }>;
 }
 
-const STATUS_FLOW: Array<{ key: OrderDetail["status"]; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { key: "PLACED",        label: "Placed",        icon: CheckCircle2 },
-  { key: "IN_PRODUCTION", label: "In production", icon: Hammer },
-  { key: "DISPATCHED",    label: "Dispatched",    icon: CreditCard }, // truck icon used elsewhere; CreditCard placeholder
-  { key: "DELIVERED",     label: "Delivered",     icon: Truck },
+const STATUS_FLOW: Array<{ key: OrderDetail["status"]; uz: string; en: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: "PLACED",        uz: "Қабул қилинган",   en: "Placed",        icon: CheckCircle2 },
+  { key: "IN_PRODUCTION", uz: "Ишлаб чиқилмоқда", en: "In production", icon: Hammer },
+  { key: "DISPATCHED",    uz: "Жўнатилган",       en: "Dispatched",    icon: CreditCard },
+  { key: "DELIVERED",     uz: "Етказилган",       en: "Delivered",     icon: Truck },
 ];
 
 const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
@@ -139,7 +140,24 @@ const PAYMENT_STATUS_BADGE: Record<OrderDetail["payments"][number]["status"], { 
   REJECTED:             { label: "Rejected",  cls: "bg-rose-100 text-rose-800" },
 };
 
+function translatePaymentState(s: OrderDetail["paymentState"], t: (uz: string, en: string) => string): string {
+  switch (s) {
+    case "AWAITING_PAYMENT": return t("Тўлов кутилмоқда", "Awaiting payment");
+    case "PARTIALLY_PAID":   return t("Қисман тўланган", "Partially paid");
+    case "FULLY_PAID":       return t("Тўлиқ тўланган", "Fully paid");
+  }
+}
+
+function translatePaymentBadgeStatus(s: OrderDetail["payments"][number]["status"], t: (uz: string, en: string) => string): string {
+  switch (s) {
+    case "PENDING_CONFIRMATION": return t("Кутилмоқда", "Pending");
+    case "CONFIRMED":            return t("Тасдиқланган", "Confirmed");
+    case "REJECTED":             return t("Рад этилган", "Rejected");
+  }
+}
+
 export default function OrderDetailPage() {
+  const t = useT();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();
@@ -217,7 +235,7 @@ export default function OrderDetailPage() {
     onError: (e: Error) => setError(e.message),
   });
 
-  if (isLoading || !order) return <div className="p-4 text-muted-foreground">Loading…</div>;
+  if (isLoading || !order) return <div className="p-4 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>;
 
   const isCanceled = order.status === "CANCELED";
   const currentIdx = STATUS_FLOW.findIndex((s) => s.key === order.status);
@@ -244,7 +262,7 @@ export default function OrderDetailPage() {
         href="/orders"
         className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4 mr-1" /> Back to orders
+        <ArrowLeft className="h-4 w-4 mr-1" /> {t("Буюртмаларга қайтиш", "Back to orders")}
       </Link>
 
       {/* Shareable area — wraps the header card + calculation summary
@@ -259,13 +277,13 @@ export default function OrderDetailPage() {
         <div className="flex flex-wrap items-baseline justify-between gap-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-              Буюртма · Order
+              Буюртма<span className="lang-en"> · Order</span>
             </div>
             <h1 className="text-3xl font-black tabular-nums tracking-tight">
               {order.orderNumber}
             </h1>
             <div className="text-sm text-muted-foreground mt-1">
-              Client:{" "}
+              {t("Мижоз:", "Client:")}{" "}
               <Link href={`/clients/${order.client.id}`} className="text-foreground font-medium hover:underline">
                 {order.client.name}
               </Link>
@@ -275,7 +293,7 @@ export default function OrderDetailPage() {
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                Schedule
+                {t("Жадвал", "Schedule")}
               </div>
               <div className="inline-flex items-center gap-1.5 font-semibold">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -289,15 +307,15 @@ export default function OrderDetailPage() {
                 </span>
               </div>
               <span className="text-xs text-muted-foreground tabular-nums">
-                Placed {formatDate(order.placedAt)}
+                {t("Қабул қилинган", "Placed")} {formatDate(order.placedAt)}
               </span>
             </div>
           </div>
           <div className="text-right min-w-[16rem]">
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-              Жами · Total
+              Жами<span className="lang-en"> · Total</span>
             </div>
-            <div className="text-3xl font-black tabular-nums text-emerald-700">
+            <div className="text-3xl font-black tabular-nums text-success font-mono">
               {formatNumber(order.totalPrice, 0)}
               <span className="text-xs text-muted-foreground font-normal ml-1">UZS</span>
             </div>
@@ -313,31 +331,31 @@ export default function OrderDetailPage() {
                 <div className="mt-2 space-y-0.5 text-sm">
                   <div className="flex items-baseline justify-between gap-6">
                     <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
-                      Тўлов · Paid
+                      Тўлов<span className="lang-en"> · Paid</span>
                     </span>
-                    <span className={`tabular-nums font-semibold ${paid > 0 ? "text-emerald-700" : "text-muted-foreground"}`}>
+                    <span className={`tabular-nums font-semibold ${paid > 0 ? "text-success" : "text-muted-foreground"}`}>
                       {formatNumber(paid, 0)}
                     </span>
                   </div>
                   <div className="flex items-baseline justify-between gap-6">
                     <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
-                      Қолди · Remaining
+                      Қолди<span className="lang-en"> · Remaining</span>
                     </span>
                     <span
                       className={`tabular-nums font-semibold ${
                         fullyPaid
-                          ? "text-emerald-700"
+                          ? "text-success"
                           : remaining > 0
-                            ? "text-amber-700"
+                            ? "text-warning"
                             : "text-muted-foreground"
                       }`}
                     >
-                      {fullyPaid ? "Тўланган" : formatNumber(remaining, 0)}
+                      {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remaining, 0)}
                     </span>
                   </div>
                   {pendingAmount > 0 && (
                     <div className="text-[11px] text-muted-foreground italic text-right">
-                      + {formatNumber(pendingAmount, 0)} pending confirmation
+                      + {formatNumber(pendingAmount, 0)} {t("тасдиқлаш кутилмоқда", "pending confirmation")}
                     </div>
                   )}
                 </div>
@@ -346,7 +364,7 @@ export default function OrderDetailPage() {
             <span
               className={`inline-block mt-2 text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATE_BADGE[order.paymentState].cls}`}
             >
-              {PAYMENT_STATE_BADGE[order.paymentState].label}
+              {translatePaymentState(order.paymentState, t)}
             </span>
           </div>
         </div>
@@ -354,110 +372,147 @@ export default function OrderDetailPage() {
 
       {/* Calculation summary — per-room breakdown + financial recap */}
       {order.project.calculations.length > 0 && (
-        <div className="rounded-lg border bg-background overflow-hidden shadow-sm">
-          <div className="px-4 py-3 border-b">
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-baseline justify-between">
             <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Ҳисоб-китоб · Calculation Summary (Rooms)
+              Ҳисоб-китоб<span className="lang-en"> · Calculation Summary</span>
+            </div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-text-tertiary">
+              {order.project.calculations.length}{" "}
+              {t("хона", order.project.calculations.length === 1 ? "room" : "rooms")}
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead className="bg-muted/50 text-muted-foreground uppercase text-[10px] font-bold tracking-wider">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-[10px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 border-b text-left bg-yellow-50">Name</th>
-                  <th className="px-3 py-2 border-b text-center bg-yellow-50">W</th>
-                  <th className="px-3 py-2 border-b text-center bg-yellow-50">L</th>
-                  <th className="px-3 py-2 border-b text-center bg-blue-50">Pattern</th>
-                  <th className="px-3 py-2 border-b text-center bg-green-50">Beam Len</th>
-                  <th className="px-3 py-2 border-b text-center">Blks/Row</th>
-                  <th className="px-3 py-2 border-b text-center bg-orange-50">Total Blks</th>
-                  <th className="px-3 py-2 border-b text-center bg-gray-100">Beams</th>
-                  <th className="px-3 py-2 border-b text-center">Slab L</th>
-                  <th className="px-3 py-2 border-b text-center">Area</th>
-                  <th className="px-3 py-2 border-b text-center bg-green-50">m² Rate</th>
-                  <th className="px-3 py-2 border-b text-right">Subtotal</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">
+                    Исм<span className="lang-en font-normal"> · Name</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Эни<span className="lang-en font-normal"> · W</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Бўйи<span className="lang-en font-normal"> · L</span>
+                  </th>
+                  <th className="text-left px-3 py-2.5 font-semibold">
+                    Шаблон<span className="lang-en font-normal"> · Pattern</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Балка<span className="lang-en font-normal"> · Beam</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Ғ/қатор<span className="lang-en font-normal"> · Per row</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Жами Ғ<span className="lang-en font-normal"> · Blocks</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Балка<span className="lang-en font-normal"> · Beams</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Майдон<span className="lang-en font-normal"> · Area</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    м² нархи<span className="lang-en font-normal"> · Rate</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Сумма<span className="lang-en font-normal"> · Subtotal</span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
-                {order.project.calculations.map((c) => (
-                  <tr key={c.id} className="hover:bg-muted/10 transition-colors">
-                    <td className="px-3 py-2 font-medium bg-yellow-50/20">
-                      {c.name || "Unnamed Room"}
-                    </td>
-                    <td className="px-3 py-2 text-center bg-yellow-50/20 tabular-nums">
-                      {formatNumber(c.innerWidth, 2)}
-                    </td>
-                    <td className="px-3 py-2 text-center bg-yellow-50/20 tabular-nums">
-                      {formatNumber(c.innerLength, 2)}
-                    </td>
-                    <td className="px-3 py-2 text-center text-xs font-medium bg-blue-50/30">
-                      {PATTERN_LABEL[c.pattern]}
-                      {c.pattern !== c.patternAuto && (
-                        <span className="text-muted-foreground"> (auto: {PATTERN_LABEL[c.patternAuto]})</span>
+              <tbody>
+                {order.project.calculations.map((c, i) => (
+                  <tr
+                    key={c.id}
+                    className={
+                      "border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors " +
+                      (i % 2 === 1 ? "bg-muted/30" : "")
+                    }
+                  >
+                    <td className="px-3 py-2.5 font-medium">
+                      {c.name || (
+                        <span className="text-text-tertiary italic">
+                          {t("Номсиз хона", "Unnamed Room")}
+                        </span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-center font-bold bg-green-50/20 text-green-800 tabular-nums">
-                      {formatNumber(c.beamLength, 2)}
+                    <td className="px-3 py-2.5 text-right font-mono">
+                      {formatNumber(c.innerWidth, 2)}
+                      <span className="text-text-tertiary text-xs ml-0.5">m</span>
                     </td>
-                    <td className="px-3 py-2 text-center tabular-nums">{c.blockRows > 0 ? c.blocksPerRow : "—"}</td>
-                    <td className="px-3 py-2 text-center font-black bg-orange-50/20 text-orange-800 tabular-nums">
+                    <td className="px-3 py-2.5 text-right font-mono">
+                      {formatNumber(c.innerLength, 2)}
+                      <span className="text-text-tertiary text-xs ml-0.5">m</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="inline-flex items-center gap-1.5 font-mono text-xs">
+                        <span className="font-semibold">{PATTERN_LABEL[c.pattern]}</span>
+                        {c.pattern !== c.patternAuto && (
+                          <span className="text-text-tertiary normal-case">
+                            ({t("авто", "auto")}: {PATTERN_LABEL[c.patternAuto]})
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono">
+                      {formatNumber(c.beamLength, 2)}
+                      <span className="text-text-tertiary text-xs ml-0.5">m</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
+                      {c.blockRows > 0 ? c.blocksPerRow : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono font-semibold">
                       {c.totalBlocks}
                     </td>
-                    <td className="px-3 py-2 text-center font-black bg-gray-100/50 tabular-nums">
+                    <td className="px-3 py-2.5 text-right font-mono font-semibold">
                       {c.beamCount}
                     </td>
-                    <td className="px-3 py-2 text-center text-xs tabular-nums">
-                      {formatNumber(c.monolithLength, 2)} m
-                    </td>
-                    <td className="px-3 py-2 text-center text-xs tabular-nums">
-                      {formatNumber(c.monolithArea, 2)} m²
+                    <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
+                      {formatNumber(c.monolithArea, 2)}
+                      <span className="text-xs ml-0.5">m²</span>
                     </td>
                     <td
-                      className={`px-3 py-2 text-center font-bold tabular-nums ${
-                        c.m2PriceOverride
-                          ? "bg-amber-50/40 text-amber-800"
-                          : "bg-green-50/20 text-green-800"
-                      }`}
+                      className="px-3 py-2.5 text-right font-mono"
                       title={
                         c.m2PriceOverride
                           ? `Override · ${formatNumber(c.m2Price, 0)}${c.m2PriceReason ? `. Reason: ${c.m2PriceReason}` : ""}`
                           : undefined
                       }
                     >
-                      <span className="inline-flex items-center justify-center gap-1">
+                      <span className="inline-flex items-center justify-end gap-1">
                         {formatNumber(c.m2Price, 0)}
                         {c.m2PriceOverride && (
-                          <Pencil className="h-3 w-3 text-amber-600" />
+                          <Pencil className="h-3 w-3 text-warning" />
                         )}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right font-black text-green-700 tabular-nums">
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-success">
                       {formatNumber(c.subtotal, 0)}
                     </td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="bg-muted/20 font-black border-t-2 border-primary/10">
-                <tr>
-                  <td className="px-3 py-3 text-right" colSpan={6}>
-                    TOTALS (ЖАМИ):
+              <tfoot>
+                <tr className="bg-muted border-t border-border-strong">
+                  <td
+                    colSpan={6}
+                    className="px-3 py-3 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-bold"
+                  >
+                    Жами<span className="lang-en font-normal">{" "}· Totals</span>
                   </td>
-                  <td className="px-3 py-3 text-center text-orange-800 bg-orange-50/50 tabular-nums">
+                  <td className="px-3 py-3 text-right font-mono font-bold">
                     {calcTotals.blocks}
                   </td>
-                  <td className="px-3 py-3 text-center bg-gray-100 tabular-nums">
+                  <td className="px-3 py-3 text-right font-mono font-bold">
                     {calcTotals.beams}
                   </td>
-                  <td className="px-3 py-3 text-center text-xs tabular-nums">
-                    {formatNumber(calcTotals.monolithLength, 2)} m
+                  <td className="px-3 py-3 text-right font-mono font-bold">
+                    {formatNumber(calcTotals.monolithArea, 2)}
+                    <span className="text-xs ml-0.5 text-muted-foreground">m²</span>
                   </td>
-                  <td className="px-3 py-3 text-center text-xs tabular-nums">
-                    {formatNumber(calcTotals.monolithArea, 2)} m²
-                  </td>
-                  <td
-                    className="px-3 py-3 text-right text-green-800 bg-green-50/50 text-lg tabular-nums"
-                    colSpan={2}
-                  >
+                  <td className="px-3 py-3"></td>
+                  <td className="px-3 py-3 text-right font-mono font-extrabold text-success text-base">
                     {formatNumber(order.roomsSubtotal, 0)}
                   </td>
                 </tr>
@@ -470,20 +525,20 @@ export default function OrderDetailPage() {
             <div className="flex flex-wrap items-end justify-end gap-x-10 gap-y-3">
               <div className="text-right min-w-[7rem]">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                  Жами · Total Sum
+                  Жами<span className="lang-en"> · Total Sum</span>
                 </div>
-                <div className="text-xl font-black tabular-nums text-emerald-700">
+                <div className="text-xl font-black tabular-nums text-success font-mono">
                   {formatNumber(order.totalPrice, 0)}
                   <span className="text-[10px] text-muted-foreground font-normal ml-1">UZS</span>
                 </div>
               </div>
               <div className="text-right min-w-[7rem]">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                  Тўлов · Paid
+                  Тўлов<span className="lang-en"> · Paid</span>
                 </div>
                 <div
-                  className={`text-xl font-black tabular-nums ${
-                    paidNum > 0 ? "text-emerald-700" : "text-muted-foreground"
+                  className={`text-xl font-black tabular-nums font-mono ${
+                    paidNum > 0 ? "text-success" : "text-muted-foreground"
                   }`}
                 >
                   {formatNumber(paidNum, 0)}
@@ -491,18 +546,18 @@ export default function OrderDetailPage() {
               </div>
               <div className="text-right min-w-[7rem]">
                 <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                  Қолди · Remaining
+                  Қолди<span className="lang-en"> · Remaining</span>
                 </div>
                 <div
-                  className={`text-xl font-black tabular-nums ${
+                  className={`text-xl font-black tabular-nums font-mono ${
                     fullyPaid
-                      ? "text-emerald-700"
+                      ? "text-success"
                       : remainingNum > 0
-                        ? "text-amber-700"
+                        ? "text-warning"
                         : "text-muted-foreground"
                   }`}
                 >
-                  {fullyPaid ? "Тўланган" : formatNumber(remainingNum, 0)}
+                  {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
                 </div>
               </div>
             </div>
@@ -520,8 +575,10 @@ export default function OrderDetailPage() {
 
       {/* Stock-warning banner — surfaced when delivery decremented inventory below zero */}
       {order.events.some((e) => e.type === "STOCK_WARNING") && (
-        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <div className="font-bold mb-1">Stock went negative on delivery</div>
+        <div className="rounded-lg border-2 border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <div className="font-bold mb-1">
+            {t("Етказиб беришда захира манфийга тушди", "Stock went negative on delivery")}
+          </div>
           <ul className="list-disc list-inside space-y-0.5 text-xs">
             {order.events
               .filter((e) => e.type === "STOCK_WARNING")
@@ -530,8 +587,11 @@ export default function OrderDetailPage() {
                 <li key={e.id}>{e.message}</li>
               ))}
           </ul>
-          <div className="text-xs text-amber-800 mt-2 italic">
-            Reconcile via a production log entry or manual stock adjustment in Омбор.
+          <div className="text-xs text-warning/80 mt-2 italic">
+            {t(
+              "Ишлаб чиқариш ёзуви ёки Омбордаги қўлда созлаш орқали солиштиринг.",
+              "Reconcile via a production log entry or manual stock adjustment in Омбор.",
+            )}
           </div>
         </div>
       )}
@@ -540,7 +600,7 @@ export default function OrderDetailPage() {
       {!isCanceled ? (
         <div className="rounded-lg border bg-background p-4 shadow-sm">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-            Жараён · Status timeline
+            Жараён<span className="lang-en"> · Status timeline</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {STATUS_FLOW.map((s, i) => {
@@ -572,14 +632,14 @@ export default function OrderDetailPage() {
                   ].join(" ")}
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="font-medium">{s.label}</span>
+                  <span className="font-medium">{t(s.uz, s.en)}</span>
                   {canAdvance && (
                     <span className="text-xs">
                       {needsProof
-                        ? "→ requires photo + cash"
+                        ? t("→ расм + нақд керак", "→ requires photo + cash")
                         : needsDispatch
-                          ? "→ assign driver"
-                          : "→ click to advance"}
+                          ? t("→ ҳайдовчини тайинланг", "→ assign driver")
+                          : t("→ давом эттириш учун босинг", "→ click to advance")}
                     </span>
                   )}
                 </button>
@@ -588,10 +648,10 @@ export default function OrderDetailPage() {
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border bg-rose-50 border-rose-200 p-4 text-rose-900">
-          <div className="font-bold">Canceled · Бекор қилинди</div>
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+          <div className="font-bold">Бекор қилинди<span className="lang-en"> · Canceled</span></div>
           {order.cancelReason && (
-            <div className="text-sm mt-1">Reason: {order.cancelReason}</div>
+            <div className="text-sm mt-1">{t("Сабаб:", "Reason:")} {order.cancelReason}</div>
           )}
         </div>
       )}
@@ -601,16 +661,16 @@ export default function OrderDetailPage() {
         <div className="rounded-lg border bg-background p-4 shadow-sm space-y-3">
           <div className="flex items-baseline justify-between">
             <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Юбориш · Dispatch
+              Юбориш<span className="lang-en"> · Dispatch</span>
             </div>
             <div className="text-[10px] text-muted-foreground">
-              Dispatched {formatDate(order.dispatch.dispatchedAt)}
-              {order.dispatch.dispatchedBy && <> by {order.dispatch.dispatchedBy.name}</>}
+              {t("Жўнатилди", "Dispatched")} {formatDate(order.dispatch.dispatchedAt)}
+              {order.dispatch.dispatchedBy && <> {t("·", "by")} {order.dispatch.dispatchedBy.name}</>}
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Driver</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Ҳайдовчи", "Driver")}</div>
               <Link href={`/drivers/${order.dispatch.driver.id}`} className="font-semibold hover:underline">
                 {order.dispatch.driver.name}
               </Link>
@@ -619,21 +679,21 @@ export default function OrderDetailPage() {
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Truck</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Машина", "Truck")}</div>
               <div className="font-semibold tabular-nums">
                 {order.dispatch.truckIdentifier ?? "—"}
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Expected</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Кутилган", "Expected")}</div>
               <div className="font-semibold tabular-nums">
                 {formatNumber(order.dispatch.expectedCollection, 0)}
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Returned</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Қайтган", "Returned")}</div>
               {order.dispatch.returnedAt ? (
-                <div className="font-semibold text-emerald-700">
+                <div className="font-semibold text-success">
                   {formatDate(order.dispatch.returnedAt)}
                 </div>
               ) : (
@@ -648,14 +708,14 @@ export default function OrderDetailPage() {
                   ) : (
                     <Truck className="h-3 w-3 mr-2" />
                   )}
-                  Mark returned
+                  {t("Қайтди деб белгилаш", "Mark returned")}
                 </Button>
               )}
             </div>
           </div>
           {order.dispatch.notes && (
             <div className="text-xs text-muted-foreground border-t pt-2">
-              <span className="font-semibold">Notes:</span> {order.dispatch.notes}
+              <span className="font-semibold">{t("Изоҳ:", "Notes:")}</span> {order.dispatch.notes}
             </div>
           )}
         </div>
@@ -682,14 +742,14 @@ export default function OrderDetailPage() {
             <div className="text-sm">
               {canAdd ? (
                 <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Тўлов қабул қилиш · Record a payment
+                  Тўлов қабул қилиш<span className="lang-en"> · Record a payment</span>
                 </div>
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/orders/${order.id}/print`}>
-                  <Printer className="h-4 w-4 mr-2" /> Print
+                  <Printer className="h-4 w-4 mr-2" /> {t("Чоп этиш", "Print")}
                 </Link>
               </Button>
               <ShareCalculationButton
@@ -718,17 +778,23 @@ export default function OrderDetailPage() {
                     disabled={!editable}
                     title={
                       editable
-                        ? "Edit dimensions, pricing, schedule, or notes — saves in place, no new order placed."
-                        : `Editing locked once status reaches ${order.status}. Cancel + recreate to make changes.`
+                        ? t(
+                            "Ўлчам, нарх, жадвал ёки изоҳни таҳрирлаш — жойида сақланади, янги буюртма яратилмайди.",
+                            "Edit dimensions, pricing, schedule, or notes — saves in place, no new order placed.",
+                          )
+                        : t(
+                            `Ҳолат ${order.status} га етгач таҳрир блокланган. Ўзгартириш учун бекор қилиб қайта яратинг.`,
+                            `Editing locked once status reaches ${order.status}. Cancel + recreate to make changes.`,
+                          )
                     }
                   >
                     {editable ? (
                       <Link href={`/calculations?fromOrder=${order.id}`}>
-                        <Pencil className="h-4 w-4 mr-2" /> Edit Order Details
+                        <Pencil className="h-4 w-4 mr-2" /> {t("Буюртма таҳрирлаш", "Edit Order Details")}
                       </Link>
                     ) : (
                       <span>
-                        <Pencil className="h-4 w-4 mr-2" /> Edit Order Details
+                        <Pencil className="h-4 w-4 mr-2" /> {t("Буюртма таҳрирлаш", "Edit Order Details")}
                       </span>
                     )}
                   </Button>
@@ -738,20 +804,20 @@ export default function OrderDetailPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-rose-700 hover:bg-rose-50"
+                  className="text-destructive hover:bg-destructive/10"
                   onClick={() => setCancelOpen(true)}
                 >
-                  <Ban className="h-4 w-4 mr-2" /> Cancel order
+                  <Ban className="h-4 w-4 mr-2" /> {t("Буюртмани бекор қилиш", "Cancel order")}
                 </Button>
               )}
               {canAdd && (
                 <Button
                   size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="bg-success hover:bg-success/90 text-success-foreground"
                   onClick={() => setAddPaymentOpen(true)}
                 >
                   <Plus className="h-4 w-4 mr-1.5" />
-                  Тўлов қўшиш · Add Payment
+                  Тўлов қўшиш<span className="lang-en"> · Add Payment</span>
                 </Button>
               )}
             </div>
@@ -764,23 +830,23 @@ export default function OrderDetailPage() {
         <div className="rounded-lg border bg-background overflow-hidden">
           <div className="px-4 py-3 border-b flex items-baseline justify-between">
             <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Тўловлар · Payments
+              Тўловлар<span className="lang-en"> · Payments</span>
             </div>
             <div className="text-[10px] text-muted-foreground tabular-nums">
-              Confirmed: {formatNumber(order.confirmedPaid, 0)} / {formatNumber(order.totalPrice, 0)}
+              {t("Тасдиқланган:", "Confirmed:")} {formatNumber(order.confirmedPaid, 0)} / {formatNumber(order.totalPrice, 0)}
             </div>
           </div>
           <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="text-left px-3 py-2">Method</th>
-                <th className="text-right px-3 py-2">Amount</th>
-                <th className="text-left px-3 py-2">Status</th>
-                <th className="text-left px-3 py-2">Collected</th>
-                <th className="text-left px-3 py-2">Recorded</th>
-                <th className="text-left px-3 py-2">Handed over</th>
-                <th className="text-left px-3 py-2">Confirmed</th>
+                <th className="text-left px-3 py-2">{t("Усул", "Method")}</th>
+                <th className="text-right px-3 py-2">{t("Сумма", "Amount")}</th>
+                <th className="text-left px-3 py-2">{t("Ҳолат", "Status")}</th>
+                <th className="text-left px-3 py-2">{t("Йиғилди", "Collected")}</th>
+                <th className="text-left px-3 py-2">{t("Қайд этилди", "Recorded")}</th>
+                <th className="text-left px-3 py-2">{t("Топширилди", "Handed over")}</th>
+                <th className="text-left px-3 py-2">{t("Тасдиқланди", "Confirmed")}</th>
                 <th className="px-3 py-2 w-32"></th>
               </tr>
             </thead>
@@ -795,7 +861,7 @@ export default function OrderDetailPage() {
                     <span
                       className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATUS_BADGE[p.status].cls}`}
                     >
-                      {PAYMENT_STATUS_BADGE[p.status].label}
+                      {translatePaymentBadgeStatus(p.status, t)}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
@@ -824,7 +890,7 @@ export default function OrderDetailPage() {
                       </>
                     ) : p.rejectedAt ? (
                       <>
-                        <span className="text-rose-700">Rejected</span>
+                        <span className="text-destructive">{t("Рад этилган", "Rejected")}</span>
                         {p.rejectedBy && <div>{p.rejectedBy.name}</div>}
                         {p.rejectionReason && (
                           <div className="italic">{p.rejectionReason}</div>
@@ -845,7 +911,7 @@ export default function OrderDetailPage() {
                         {handoverPayment.isPending ? (
                           <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                         ) : null}
-                        Hand over
+                        {t("Топшириш", "Hand over")}
                       </Button>
                     )}
                     {p.status === "PENDING_CONFIRMATION" && p.handedOverToOfficeAt && (
@@ -853,7 +919,7 @@ export default function OrderDetailPage() {
                         href="/payments"
                         className="text-xs text-muted-foreground underline hover:no-underline"
                       >
-                        Awaiting confirm →
+                        {t("Тасдиқлаш кутилмоқда →", "Awaiting confirm →")}
                       </Link>
                     )}
                   </td>
@@ -870,11 +936,11 @@ export default function OrderDetailPage() {
         <div className="rounded-lg border bg-background p-4 shadow-sm">
           <div className="flex items-baseline justify-between mb-2">
             <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Етказиб бериш фотоси · Delivery proof
+              Етказиб бериш фотоси<span className="lang-en"> · Delivery proof</span>
             </div>
             {order.deliveryProofUploadedAt && (
               <div className="text-[10px] text-muted-foreground">
-                Uploaded {formatDate(order.deliveryProofUploadedAt)}
+                {t("Юкланди", "Uploaded")} {formatDate(order.deliveryProofUploadedAt)}
               </div>
             )}
           </div>
@@ -898,7 +964,7 @@ export default function OrderDetailPage() {
       <div className="rounded-lg border bg-background">
         <div className="px-4 py-3 border-b">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Activity
+            {t("Фаолият", "Activity")}
           </div>
         </div>
         <ul className="divide-y">
@@ -908,7 +974,7 @@ export default function OrderDetailPage() {
                 <span className="font-medium">{e.type.replace(/_/g, " ").toLowerCase()}</span>
                 {e.message && <span className="text-muted-foreground"> — {e.message}</span>}
                 {e.actor && (
-                  <span className="text-xs text-muted-foreground ml-2">by {e.actor.name}</span>
+                  <span className="text-xs text-muted-foreground ml-2">{t("·", "by")} {e.actor.name}</span>
                 )}
               </div>
               <span className="text-xs text-muted-foreground tabular-nums">
@@ -962,42 +1028,46 @@ export default function OrderDetailPage() {
       {/* Cancel modal */}
       {cancelOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-background rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3">
-            <h2 className="text-lg font-bold">Cancel order {order.orderNumber}?</h2>
+          <div className="bg-card rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3 border border-border">
+            <h2 className="text-lg font-bold">
+              {t(`${order.orderNumber} буюртмани бекор қилиш?`, `Cancel order ${order.orderNumber}?`)}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Cancellation requires <strong>ADMIN role</strong> or the company cancel password.
-              The Project will move back to Draft so it can be re-edited.
+              {t(
+                "Бекор қилиш АДМИН ролини ёки компания бекор қилиш паролини талаб қилади. Лойиҳа қайта таҳрирлаш учун Лойиҳага қайтарилади.",
+                "Cancellation requires ADMIN role or the company cancel password. The Project will move back to Draft so it can be re-edited.",
+              )}
             </p>
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider">
-                Cancel password
+                {t("Бекор қилиш пароли", "Cancel password")}
               </label>
               <input
                 type="password"
                 className="w-full h-9 rounded border px-2 text-sm tabular-nums"
-                placeholder="Leave empty if you're an Admin"
+                placeholder={t("Агар АДМИН бўлсангиз бўш қолдиринг", "Leave empty if you're an Admin")}
                 value={cancelPassword}
                 onChange={(e) => setCancelPassword(e.target.value)}
               />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider">
-                Reason (optional)
+                {t("Сабаб (ихтиёрий)", "Reason (optional)")}
               </label>
               <input
                 className="w-full h-9 rounded border px-2 text-sm"
-                placeholder="e.g. Client called to cancel"
+                placeholder={t("масалан: Мижоз бекор қилишни сўради", "e.g. Client called to cancel")}
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" size="sm" onClick={() => setCancelOpen(false)}>
-                Keep order
+                {t("Буюртмани сақлаш", "Keep order")}
               </Button>
               <Button
                 size="sm"
-                className="bg-rose-600 hover:bg-rose-700 text-white"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                 disabled={cancelOrder.isPending}
                 onClick={() => cancelOrder.mutate()}
               >
@@ -1006,7 +1076,7 @@ export default function OrderDetailPage() {
                 ) : (
                   <Ban className="h-4 w-4 mr-2" />
                 )}
-                Cancel order
+                {t("Буюртмани бекор қилиш", "Cancel order")}
               </Button>
             </div>
           </div>

@@ -15,14 +15,14 @@ export function RectangularNotice() {
     <Card className="border-sky-300 bg-sky-50">
       <CardHeader>
         <CardTitle className="text-sky-900 text-base">
-          Тўғри тўртбурчак · Rectangular room
+          Тўғри тўртбурчак<span className="lang-en"> · Rectangular room</span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm text-sky-900">
         <p>{ROUTING_MESSAGE_RECTANGULAR}</p>
         <Button asChild size="sm" className="bg-sky-700 hover:bg-sky-800 text-white">
           <Link href="/calculations">
-            Асосий калькулятор · Open main calculator
+            Асосий калькулятор<span className="lang-en"> · Open main calculator</span>
           </Link>
         </Button>
       </CardContent>

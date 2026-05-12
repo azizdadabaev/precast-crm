@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useT } from "@/lib/i18n";
 
 type Kind = "BEAM" | "BLOCK";
 
@@ -39,6 +40,7 @@ function newLine(kind: Kind = "BEAM"): FormLine {
 }
 
 export function ProductionLogForm({ onSubmit }: Props) {
+  const t = useT();
   const [producedAt, setProducedAt] = useState<string>(isoDateLocal(new Date()));
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<FormLine[]>([newLine("BEAM")]);
@@ -85,13 +87,13 @@ export function ProductionLogForm({ onSubmit }: Props) {
   }
 
   return (
-    <div className="rounded-lg border bg-background p-4 shadow-sm space-y-4">
+    <div className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-4">
       <div className="flex items-baseline justify-between">
         <h2 className="text-sm font-bold uppercase tracking-wider">
-          Янги маҳсулот · Log production
+          Янги маҳсулот<span className="lang-en"> · Log production</span>
         </h2>
         <div className="text-xs text-muted-foreground">
-          Each line increments stock.
+          {t("Ҳар бир қатор захирани кўпайтиради.", "Each line increments stock.")}
         </div>
       </div>
 
@@ -99,7 +101,7 @@ export function ProductionLogForm({ onSubmit }: Props) {
       <div className="flex flex-wrap gap-3">
         <div>
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
-            Сана · Date
+            Сана<span className="lang-en"> · Date</span>
           </label>
           <Input
             type="date"
@@ -111,11 +113,11 @@ export function ProductionLogForm({ onSubmit }: Props) {
         </div>
         <div className="flex-1 min-w-[200px]">
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
-            Изоҳ · Notes (optional)
+            Изоҳ<span className="lang-en"> · Notes</span> ({t("ихтиёрий", "optional")})
           </label>
           <Input
             className="h-9 mt-1"
-            placeholder="e.g. Shift A, lot #42"
+            placeholder={t("масалан: Смена А, парти №42", "e.g. Shift A, lot #42")}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -123,13 +125,13 @@ export function ProductionLogForm({ onSubmit }: Props) {
       </div>
 
       {/* Lines */}
-      <div className="rounded-md border overflow-hidden">
+      <div className="rounded-md border border-border overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
             <tr>
-              <th className="text-left px-2 py-2 w-32">Kind</th>
-              <th className="text-left px-2 py-2 w-32">Beam length</th>
-              <th className="text-left px-2 py-2 w-32">Qty</th>
+              <th className="text-left px-2 py-2 w-32">{t("Тури", "Kind")}</th>
+              <th className="text-left px-2 py-2 w-32">{t("Балка узунлиги", "Beam length")}</th>
+              <th className="text-left px-2 py-2 w-32">{t("Сони", "Qty")}</th>
               <th className="px-2 py-2 w-12"></th>
             </tr>
           </thead>
@@ -148,8 +150,8 @@ export function ProductionLogForm({ onSubmit }: Props) {
                       });
                     }}
                   >
-                    <option value="BEAM">Балка · Beam</option>
-                    <option value="BLOCK">Ғишт · Block</option>
+                    <option value="BEAM">{t("Балка", "Beam")}</option>
+                    <option value="BLOCK">{t("Ғишт", "Block")}</option>
                   </select>
                 </td>
                 <td className="px-2 py-2">
@@ -168,7 +170,7 @@ export function ProductionLogForm({ onSubmit }: Props) {
                       placeholder="4.30"
                     />
                   ) : (
-                    <span className="text-xs text-muted-foreground">— (single SKU)</span>
+                    <span className="text-xs text-muted-foreground">— ({t("битта маҳсулот", "single SKU")})</span>
                   )}
                 </td>
                 <td className="px-2 py-2">
@@ -192,7 +194,7 @@ export function ProductionLogForm({ onSubmit }: Props) {
                     className="h-7 w-7 inline-flex items-center justify-center rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
                     onClick={() => remove(l.id)}
                     disabled={lines.length === 1}
-                    aria-label="Remove line"
+                    aria-label={t("Қаторни ўчириш", "Remove line")}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -209,7 +211,7 @@ export function ProductionLogForm({ onSubmit }: Props) {
           size="sm"
           onClick={() => setLines((rs) => [...rs, newLine("BEAM")])}
         >
-          <Plus className="h-3.5 w-3.5 mr-1.5" /> Add line
+          <Plus className="h-3.5 w-3.5 mr-1.5" /> {t("Қатор қўшиш", "Add line")}
         </Button>
 
         <div className="flex items-center gap-3">
@@ -222,7 +224,7 @@ export function ProductionLogForm({ onSubmit }: Props) {
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            Save Production Log
+            {t("Ишлаб чиқариш ёзувини сақлаш", "Save Production Log")}
           </Button>
         </div>
       </div>

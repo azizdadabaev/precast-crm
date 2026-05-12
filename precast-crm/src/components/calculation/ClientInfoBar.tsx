@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { formatPhone } from "@/lib/phone";
+import { useT } from "@/lib/i18n";
 
 export interface ClientDraft {
   name: string;
@@ -51,6 +52,7 @@ interface Props {
  * operator can pick an existing client instead of creating a duplicate.
  */
 export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Props) {
+  const t = useT();
   const [suggestions, setSuggestions] = useState<MatchedClient[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -142,7 +144,7 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
   return (
     <div
       ref={cardRef}
-      className="rounded-lg border bg-background shadow-sm"
+      className="rounded-lg border border-border bg-card shadow-sm"
     >
       {showCollapsed && (
         <CollapsedSummary
@@ -164,7 +166,7 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
         >
           <input
             className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            placeholder="Mижоз исми"
+            placeholder={t("Мижоз исми", "Client name")}
             value={value.name}
             onChange={(e) => onChange({ ...value, name: e.target.value })}
           />
@@ -232,7 +234,7 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
         >
           <input
             className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            placeholder="Tashkent · Yunusobod 12-7"
+            placeholder="Тошкент · Юнусобод 12-7"
             value={value.address}
             onChange={(e) => onChange({ ...value, address: e.target.value })}
           />
@@ -256,20 +258,23 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
         />
         <span className="text-[12px]">
           <span className="font-semibold">Розилик берди</span>
-          <span className="text-muted-foreground"> · Client agrees to share contact with future prospects</span>
+          <span className="lang-en text-muted-foreground"> · Client agrees to share contact with future prospects</span>
         </span>
       </label>
 
       {matchedClientId && (
-        <div className="text-[11px] text-emerald-700 mt-2 flex items-center gap-1.5">
+        <div className="text-[11px] text-success mt-2 flex items-center gap-1.5">
           <CheckCircle2 className="h-3 w-3" />
-          Existing client linked — name + address auto-filled.
+          {t(
+            "Мавжуд мижоз боғланди — исм + манзил автоматик тўлдирилди.",
+            "Existing client linked — name + address auto-filled.",
+          )}
           <button
             type="button"
             onClick={clearMatch}
             className="underline ml-1 hover:no-underline"
           >
-            unlink
+            {t("узиш", "unlink")}
           </button>
         </div>
       )}
@@ -314,7 +319,7 @@ function CollapsedSummary({
       </div>
       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0 min-h-11 min-w-11 justify-center">
         <Pencil className="h-3.5 w-3.5" />
-        <span>Edit</span>
+        <span>Таҳрирлаш<span className="lang-en"> · Edit</span></span>
       </span>
     </button>
   );
@@ -341,7 +346,7 @@ function Field({
           {primary}
           {required && <span className="text-destructive ml-0.5">*</span>}
         </span>
-        <span className="text-[10px] text-muted-foreground">· {secondary}</span>
+        <span className="lang-en text-[10px] text-muted-foreground">· {secondary}</span>
       </div>
       {children}
     </div>

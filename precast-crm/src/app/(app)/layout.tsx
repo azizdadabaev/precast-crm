@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { Sidebar } from "@/components/sidebar";
+import { TopBar } from "@/components/TopBar";
 import { MobileTopbar } from "@/components/MobileTopbar";
 import { UnauthorizedBanner } from "@/components/UnauthorizedBanner";
 import { requirePermissionForPath } from "@/lib/page-auth";
@@ -20,6 +21,13 @@ import { requirePermissionForPath } from "@/lib/page-auth";
  * The pathname comes from a header set by middleware
  * (src/middleware.ts → x-pathname). We don't trust the request URL
  * directly because Next.js doesn't expose it to layouts otherwise.
+ *
+ * Visual shell (etalon redesign):
+ *   - Sidebar: dark, collapsible, lg+ only.
+ *   - TopBar: breadcrumb + search + bell, lg+ only.
+ *   - MobileTopbar: hamburger that opens a drawer with SidebarBody.
+ *   - Main: light page background (--background), the page content
+ *           sits in a centered max-w-[1400px] column.
  */
 export default async function AppShellLayout({
   children,
@@ -30,15 +38,18 @@ export default async function AppShellLayout({
   const user = await requirePermissionForPath(pathname);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-background">
       <Sidebar user={user} />
-      <main className="flex-1 overflow-auto flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <TopBar />
         <MobileTopbar user={user} />
-        <div className="px-4 py-4 lg:px-6 lg:py-6 max-w-[1400px] w-full">
-          <UnauthorizedBanner />
-          {children}
-        </div>
-      </main>
+        <main className="flex-1 overflow-auto">
+          <div className="px-4 py-4 lg:px-6 lg:py-6 max-w-[1400px] w-full mx-auto">
+            <UnauthorizedBanner />
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

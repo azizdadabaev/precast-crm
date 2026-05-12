@@ -2,46 +2,304 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────────
+   Design tokens — Etalon light palette.
+   Source of truth: docs/design/etalon-ui.jsx → getTokens(false).
+   Per-hex → HSL conversions are documented in docs/design/REDESIGN.md.
+
+   Shadcn naming convention: each color is a space-separated HSL
+   triplet (no `hsl()` wrapper). Tailwind wraps it as `hsl(var(--x))`
+   so opacity modifiers like `bg-background/50` work.
+
+   Dark mode dropped in this PR (see Phase 1 of the Etalon redesign).
+   Re-add by reviving the `.dark` block from main's globals.css.
+   ────────────────────────────────────────────────────────────── */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 215 35% 22%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 215 35% 22%;
-    --radius: 0.5rem;
+    /* Surfaces */
+    --background: 225 50% 97%;        /* #f3f5fb — page surface */
+    --foreground: 225 38% 8%;         /* #0c0f1a — primary text */
+    --card: 0 0% 100%;                /* #ffffff — elevated card */
+    --card-foreground: 225 38% 8%;
+    --muted: 229 27% 94%;             /* #eaecf5 — subdued surface */
+    --muted-foreground: 225 21% 44%;  /* #5a6488 — secondary text */
+    --popover: 0 0% 100%;
+    --popover-foreground: 225 38% 8%;
+
+    /* Borders */
+    --border: 225 32% 90%;            /* #dde1f0 — hairline */
+    --input: 225 32% 90%;
+    --border-strong: 227 27% 82%;     /* #c4cadf — divider, focus */
+
+    /* Primary CTAs / brand → etalon electric blue (#4e80ff).
+       This is the only "brand color" in the system; chips and active
+       state indicators reuse it via `bg-primary/10` / `text-primary`. */
+    --primary: 220 100% 65%;          /* #4e80ff */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 223 85% 59%;     /* #3d6fef */
+    --ring: 220 100% 65%;
+
+    /* Accent → SUBTLE hover surface (shadcn convention).
+       Used by Button outline/ghost variants, dropdown items, sidebar
+       hovers, etc. NOT the brand color — see `--primary` for that. */
+    --accent: 226 53% 96%;            /* #eef1fa (etalon surfaceActive) */
+    --accent-foreground: 225 38% 8%;  /* same as --foreground for AA */
+
+    /* Secondary (subdued button) */
+    --secondary: 229 27% 94%;
+    --secondary-foreground: 225 38% 8%;
+
+    /* Semantic status — used for chips, attention borders, KPI deltas.
+       Light-mode hexes are deliberately darker than dark-mode for AA
+       contrast on white backgrounds. */
+    --destructive: 0 73% 51%;         /* #dc2626 — shortfall, OPEN */
+    --destructive-foreground: 0 0% 100%;
+    --warning: 29 92% 44%;            /* #d97706 — pending, drafts */
+    --warning-foreground: 0 0% 100%;
+    --success: 160 92% 30%;           /* #059669 — paid, confirmed */
+    --success-foreground: 0 0% 100%;
+    --gold: 28 92% 37%;               /* #b45309 — production milestones */
+    --gold-foreground: 0 0% 100%;
+
+    /* Hierarchical text */
+    --text-tertiary: 225 19% 67%;     /* #9aa3bf — third-level text */
+
+    /* Hover / active surface states */
+    --surface-hover: 228 50% 98%;     /* #f8f9fd */
+    --surface-active: 226 53% 96%;    /* #eef1fa */
+
+    /* Sidebar — always dark regardless of mode, per the Etalon design.
+       Quoted from etalon-ui.jsx so values match the prototype. */
+    --sidebar-bg: 225 45% 5%;          /* #060810 */
+    --sidebar-border: 228 36% 10%;     /* #0f1220 */
+    --sidebar-text: 225 22% 31%;       /* #3e4660 */
+    --sidebar-hover: 225 17% 43%;      /* #5a6580 */
+    --sidebar-active: 225 41% 93%;     /* #e4e8f4 */
+    --sidebar-active-bg: 220 100% 65%; /* used with /14 opacity */
+
+    /* Radii */
+    --radius: 0.625rem;               /* 10px — etalon `r` */
+    --radius-sm: 0.375rem;            /* 6px — etalon `rSm` */
+    --radius-xs: 0.25rem;             /* 4px — etalon `rXs` */
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+  /* ──────────────────────────────────────────────────────────────
+     Dark theme — Phase 1 prototype.
+     Activates via `html[data-theme="dark"]` (also gets `.dark` class
+     so any future Tailwind dark: variants compose). All UI components
+     consume semantic tokens (--background, --card, --foreground, …)
+     so the dark palette substitutes in without per-component edits.
+
+     Inspired by the Cofeed reference: nearly-black page with a hint
+     of cool blue, slightly lighter cards, soft hairlines, light-gray
+     text on near-black. Primary stays etalon electric blue; status
+     colors lift to brighter shades that pop on dark surfaces.
+     ────────────────────────────────────────────────────────────── */
+  html[data-theme="dark"] {
+    /* Surfaces — muted neutral grey with deliberate elevation. Page is
+       the darkest layer; cards lift one step; muted (headers, totals)
+       lifts another. This creates the structural hierarchy that makes
+       tables read as tables rather than flat color fields. */
+    --background: 225 7% 11%;          /* #1a1c21 — page (deepest) */
+    --foreground: 225 9% 89%;           /* #e0e1e6 */
+    --card: 225 7% 16%;                 /* #262830 — elevated card */
+    --card-foreground: 225 9% 89%;
+    --muted: 225 7% 22%;                /* #353842 — header / totals */
+    --muted-foreground: 225 6% 64%;     /* #989ba4 */
+    --popover: 225 7% 16%;
+    --popover-foreground: 225 9% 89%;
+
+    /* Borders — two steps so we can layer (rows / sections / cards). */
+    --border: 225 7% 27%;               /* #41444f */
+    --input: 225 7% 27%;
+    --border-strong: 225 7% 36%;        /* #565a66 */
+
+    /* Primary — etalon blue, slightly desaturated for dark surface. */
+    --primary: 218 85% 67%;             /* #5d85ed */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 218 80% 62%;
+    --ring: 218 85% 67%;
+
+    /* Accent — hover surface one step above card. */
+    --accent: 225 7% 20%;               /* #2f3139 */
+    --accent-foreground: 225 9% 89%;
+
+    /* Secondary */
+    --secondary: 225 7% 19%;
+    --secondary-foreground: 225 9% 89%;
+
+    /* Semantic status — calibrated for legibility on dark grey, NOT
+       neon. Lower saturation than the light-mode hexes so the dark UI
+       reads as a single visual world. */
+    --destructive: 358 70% 62%;         /* #d65d63 */
+    --destructive-foreground: 0 0% 100%;
+    --warning: 32 75% 60%;              /* #e29a4d */
+    --warning-foreground: 0 0% 100%;
+    --success: 160 55% 52%;             /* #45c2a0 */
+    --success-foreground: 0 0% 100%;
+    --gold: 38 65% 58%;                 /* #d4a258 */
+    --gold-foreground: 0 0% 0%;
+
+    /* Hierarchical text */
+    --text-tertiary: 225 6% 48%;        /* #757983 */
+
+    /* Hover / active surface states */
+    --surface-hover: 225 7% 19%;        /* #2c2e36 */
+    --surface-active: 225 7% 23%;       /* #373a44 */
+
+    /* Sidebar — darkest layer so it reads as the persistent rail. */
+    --sidebar-bg: 225 7% 9%;            /* #15171b */
+    --sidebar-border: 225 7% 18%;
+    --sidebar-text: 225 6% 55%;
+    --sidebar-hover: 225 9% 78%;
+    --sidebar-active: 225 9% 89%;
+    --sidebar-active-bg: 218 85% 67%;
+  }
+
+  /* Dashboard scoped tokens — mirror the dark palette. */
+  html[data-theme="dark"] .dashboard {
+    --dash-bg: #1a1c21;
+    --dash-card-bg: #262830;
+    --dash-border: #41444f;
+    --dash-border-strong: #565a66;
+    --dash-text-primary: #e0e1e6;
+    --dash-text-secondary: #989ba4;
+    --dash-text-tertiary: #757983;
+    --dash-accent: #5d85ed;
+    --dash-accent-hover: #7898f0;
+    --dash-success: #45c2a0;
+    --dash-success-bg: rgba(69, 194, 160, 0.12);
+    --dash-warning: #e29a4d;
+    --dash-warning-bg: rgba(226, 154, 77, 0.12);
+    --dash-danger: #d65d63;
+    --dash-danger-bg: rgba(214, 93, 99, 0.12);
+    --dash-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+    --dash-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.40);
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Calculator dark-mode refinements.
+     The light-mode design uses amber / sky / emerald wash colors to
+     band the calculator columns into INPUT / PATTERN / COMPUTED /
+     PRICING zones. On dark surfaces those raw light tints turn into
+     bright orange / cyan / lime patches and look chaotic — so we
+     replace them with tinted dark surfaces that preserve the
+     hierarchy without screaming.
+     ────────────────────────────────────────────────────────────── */
+
+  /* Strip the light-mode zone-band tints in dark mode. The light
+     palette uses amber / sky / emerald washes to color-band the
+     calculator columns into Inputs / Pattern / Computed / Pricing —
+     those raw light tints turn into stripes on dark surfaces, so we
+     collapse them to a single muted-elevated bg for the header row
+     and a transparent body. Structure carries the table; the column
+     titles already announce the zones. */
+  html[data-theme="dark"] .calc-grid thead th,
+  html[data-theme="dark"] [class*="bg-amber-50"],
+  html[data-theme="dark"] [class*="bg-amber-100"],
+  html[data-theme="dark"] [class*="bg-sky-50"],
+  html[data-theme="dark"] [class*="bg-emerald-50"],
+  html[data-theme="dark"] [class*="dark:bg-amber-950"],
+  html[data-theme="dark"] [class*="dark:bg-amber-900"],
+  html[data-theme="dark"] [class*="dark:bg-sky-950"] {
+    background-color: hsl(var(--muted)) !important;
+  }
+  /* Body cell tints — completely transparent in dark mode so the row
+     reads as a single unbroken bar. */
+  html[data-theme="dark"] td[class*="bg-amber-50/20"],
+  html[data-theme="dark"] td[class*="bg-amber-50/60"],
+  html[data-theme="dark"] td[class*="bg-sky-50"],
+  html[data-theme="dark"] td[class*="bg-emerald-50"],
+  html[data-theme="dark"] td[class*="bg-amber-50"] {
+    background-color: transparent !important;
+  }
+  /* Sticky-pinned name + width columns in the calculator inherit
+     bg-amber-50 to mask the row below; in dark mode mask with card. */
+  html[data-theme="dark"] td[class*="lg:bg-amber-50"] {
+    background-color: hsl(var(--card)) !important;
+  }
+
+  /* Numeric value colors — calibrated to be three readable accents
+     against the muted grey, not a rainbow:
+       blue-700  → slab L / area / row-derived metrics (information)
+       amber-800 → blocks total / production counts (warning warmth)
+       emerald  → money (rate / subtotal / totals) (positive value) */
+  html[data-theme="dark"] .text-blue-700,
+  html[data-theme="dark"] [class*="text-blue-7"] {
+    color: #8aa6f2 !important;
+  }
+  html[data-theme="dark"] .text-amber-700,
+  html[data-theme="dark"] .text-amber-800,
+  html[data-theme="dark"] [class*="text-amber-7"],
+  html[data-theme="dark"] [class*="text-amber-8"],
+  html[data-theme="dark"] [class*="text-amber-9"] {
+    color: #e29a4d !important;
+  }
+  html[data-theme="dark"] .text-emerald-600,
+  html[data-theme="dark"] .text-emerald-700,
+  html[data-theme="dark"] .text-emerald-800,
+  html[data-theme="dark"] [class*="text-emerald-6"],
+  html[data-theme="dark"] [class*="text-emerald-7"],
+  html[data-theme="dark"] [class*="text-emerald-8"] {
+    color: #45c2a0 !important;
+  }
+  /* Pattern-cell text (sky) — the dropdown that says "Б-Г-Б · auto".
+     Keep it the brand blue so it doubles as a row hint. */
+  html[data-theme="dark"] .text-sky-900,
+  html[data-theme="dark"] [class*="text-sky-"] {
+    color: #8aa6f2 !important;
+  }
+  /* Rose text (used for "shortfall" warnings, discount breakdown). */
+  html[data-theme="dark"] .text-rose-700,
+  html[data-theme="dark"] .text-rose-800,
+  html[data-theme="dark"] [class*="text-rose-"] {
+    color: #d65d63 !important;
+  }
+
+  /* Pricing-zone tinted cells in body rows. */
+  html[data-theme="dark"] .grid-tint-pricing {
+    background-color: rgba(69, 194, 160, 0.06) !important;
+  }
+
+  /* The calculator grid input — light focus uses amber-50/60. Use a
+     subtle primary-tinted ring on dark instead. */
+  html[data-theme="dark"] .grid-input:focus,
+  html[data-theme="dark"] .grid-select:focus {
+    background-color: rgba(93, 133, 237, 0.10) !important;
+  }
+
+  /* Tables — alternating row striping. Most pages already have
+     `bg-muted/30` on odd rows; in dark mode that lands too close to
+     card. Strengthen the second-row tint via a foreground-tinted
+     overlay so the zebra reads. */
+  html[data-theme="dark"] tr.bg-muted\/30,
+  html[data-theme="dark"] [class*="bg-muted/30"] {
+    background-color: rgba(255, 255, 255, 0.025) !important;
+  }
+  /* The calculator totals row uses bg-muted/40 — promote to the same
+     muted layer as table headers so "ЖАМИ" reads as a deliberate
+     section header instead of blending into the body. */
+  html[data-theme="dark"] [class*="bg-muted/40"] {
+    background-color: hsl(var(--muted)) !important;
+  }
+  /* Table thead uses bg-muted in light mode — keep it on dark too so
+     the column titles row stands clearly above the body. */
+  html[data-theme="dark"] thead[class*="bg-muted"]:not([class*="bg-muted/"]) {
+    background-color: hsl(var(--muted));
+  }
+  /* Column dividers inside the calc grid — barely-there hairlines so
+     the cells don't merge but don't shout either. */
+  html[data-theme="dark"] .grid-cell {
+    border-right-color: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  /* Outline button visibility — the light-mode outline button is
+     `bg-background` (white-ish). On dark, that lands as the page bg
+     which kills the affordance. Boost contrast by lifting outlines
+     to a tinted surface. */
+  html[data-theme="dark"] button[class*="border-input"] {
+    background-color: hsl(225 7% 17%);
   }
 }
 
@@ -52,6 +310,42 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Body face = Manrope (loaded in app/layout.tsx via next/font).
+       Falls back to Tailwind's font-sans system stack while the
+       network fetches the woff2. */
+    font-family: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Mono numerics — JetBrains Mono ships a dotted zero by default.
+     Enable character variant `cv14` ("Alternative zero — no dot") so
+     numbers render with a plain 0. Apply to every mono surface used
+     for digits: the .font-mono Tailwind utility, the dashboard KPI
+     value, and the calculator's tabular cells. */
+  .font-mono,
+  .dash-card-value,
+  .grid-input,
+  [class*="tabular-nums"] {
+    font-feature-settings: "cv14" 1, "tnum" 1;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     UZ-only language mode — global hide rule.
+     When the operator flips the topbar UZ toggle, the language store
+     sets `<html data-lang="uz">`. Anything authored with class
+     `lang-en` (the English half of a bilingual pair) collapses out
+     of layout. English-only strings — like button labels or helper
+     copy — must use the `useT` helper to switch their text.
+
+     Use `lang-en-inline` instead of `lang-en` when the English half
+     sits inside a flex container where removing the node would shift
+     siblings unexpectedly; the visibility variant keeps the gap.
+     ────────────────────────────────────────────────────────────── */
+  html[data-lang="uz"] .lang-en {
+    display: none;
+  }
+  html[data-lang="uz"] .lang-en-inline {
+    visibility: hidden;
+    width: 0;
   }
 }
 
@@ -172,20 +466,20 @@
    ────────────────────────────────────────────────────────────── */
 
 .dashboard {
-  /* Page surface — almost white but not pure (avoids monitor-glow harshness). */
-  --dash-bg: #fafafa;
-  /* Card surface — actual white, sits on the slightly off-white page. */
+  /* Etalon page surface (#f3f5fb) — soft blue-gray. */
+  --dash-bg: #f3f5fb;
+  /* Card surface — actual white, sits on the soft page. */
   --dash-card-bg: #ffffff;
-  /* Borders — barely there, just enough to separate adjacent cards. */
-  --dash-border: #e5e7eb;
-  --dash-border-strong: #d1d5db;
-  /* Text hierarchy */
-  --dash-text-primary: #111827;
-  --dash-text-secondary: #6b7280;
-  --dash-text-tertiary: #9ca3af;
-  /* Single accent — used sparingly, links + hover only. */
-  --dash-accent: #2563eb;
-  --dash-accent-hover: #1d4ed8;
+  /* Borders — etalon hairlines. */
+  --dash-border: #dde1f0;
+  --dash-border-strong: #c4cadf;
+  /* Text hierarchy — etalon trio. */
+  --dash-text-primary: #0c0f1a;
+  --dash-text-secondary: #5a6488;
+  --dash-text-tertiary: #9aa3bf;
+  /* Single accent — etalon electric blue. */
+  --dash-accent: #4e80ff;
+  --dash-accent-hover: #3d6fef;
   /* Semantic — used ONLY for status signals (trend pills, attention
      borders, heavy/overbooked bars). Never decoratively. */
   --dash-success: #059669;
@@ -212,22 +506,17 @@
   --dash-space-6: 1.5rem;
   --dash-space-8: 2rem;
   --dash-space-10: 2.5rem;
-  /* Radius */
+  /* Radius — etalon r=10px throughout. */
   --dash-radius-sm: 0.375rem;
-  --dash-radius-md: 0.5rem;
+  --dash-radius-md: 0.625rem;
   --dash-radius-lg: 0.75rem;
   /* Shadow — barely perceptible hairline */
   --dash-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --dash-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.06);
 
-  /* Page surface itself */
-  background: var(--dash-bg);
-  padding: var(--dash-space-8);
+  /* Page surface — the (app)/layout already wraps content in padding;
+     the dashboard tokens still scope to .dashboard so they don't leak. */
   min-height: 100%;
-}
-
-@media (max-width: 640px) {
-  .dashboard { padding: var(--dash-space-4); }
 }
 
 /* Header — clean, no gradient text. */
@@ -321,10 +610,11 @@
   font-variant-numeric: tabular-nums;
 }
 .dash-card-value {
+  font-family: var(--font-mono);
   font-size: var(--dash-text-2xl);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--dash-text-primary);
-  line-height: 1.2;
+  line-height: 1.15;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   display: flex;
