@@ -40,7 +40,10 @@ export const useThemeStore = create<ThemeState>()(
       },
     }),
     {
-      name: "precast.theme",
+      // Bumped from `precast.theme` so any cached `dark` value from
+      // the Phase 1 prototype testing is dropped and users restart at
+      // the day-mode default.
+      name: "precast.theme.v2",
       onRehydrateStorage: () => (state) => {
         if (state) syncDom(state.theme);
       },
