@@ -30,6 +30,7 @@ import {
   type Action,
 } from "@/lib/permissions";
 import { useLang } from "@/lib/i18n";
+import { BlenderStatusIndicator } from "@/components/blender-bridge/BlenderStatusIndicator";
 import type { AuthUser } from "@/lib/auth";
 
 interface NavItem {
@@ -324,6 +325,10 @@ export function SidebarBody({
             </div>
           </div>
         )}
+
+        {/* Blender Bridge indicator — auto-hides for non-owners
+            via the component's own permission check. */}
+        <BlenderStatusIndicator user={user} collapsed={collapsed} />
 
         <div className={cn("flex gap-1 mt-1", collapsed && "flex-col")}>
           {onToggleCollapsed && (

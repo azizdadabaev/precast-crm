@@ -37,11 +37,39 @@ services:
     expose:
       - "3000"
 
+  # Blender Bridge — owner-only WebSocket service that forwards
+  # DrawingRequest rows from Postgres to a locally-running Blender
+  # via wss://<host>/ws (Caddy proxies that path here). The internal
+  # HTTP port 8766 is reachable only over the compose network and
+  # exposes /flush + /status for the Next.js app to consult.
+  ws-bridge:
+    build:
+      context: ./ws-bridge
+      dockerfile: Dockerfile
+    container_name: etalon-ws-bridge
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-precast}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-precast}?schema=public
+      WS_BRIDGE_PORT: "8765"
+      WS_BRIDGE_HTTP_PORT: "8766"
+      BRIDGE_SECRET: ${BRIDGE_SECRET:?set BRIDGE_SECRET in .env (use openssl rand -hex 32)}
+    expose:
+      # Both ports stay inside the compose network. Caddy proxies the
+      # public 8765 WebSocket port via the /ws path. 8766 is internal-
+      # only — no Caddy route — so the unauthenticated /flush + /status
+      # endpoints are never reachable from the public internet.
+      - "8765"
+      - "8766"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
       - app
+      - ws-bridge
     ports:
       - "80:80"
       - "443:443"

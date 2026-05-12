@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileText } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { formatDraftNumber } from "@/lib/draft-number";
 import { useT } from "@/lib/i18n";
 
@@ -66,6 +67,12 @@ const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
 export default function ProjectDetailPage() {
   const t = useT();
   const params = useParams<{ id: string }>();
+  // Owner-only Blender bridge gate.
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canUseBlender = me?.permissions?.includes("blender.bridge") ?? false;
   /** Captured by ShareCalculationButton — wraps project header +
    *  calculation summary so operators can ship a one-shot image. */
   const shareRef = useRef<HTMLDivElement>(null);
@@ -126,6 +133,11 @@ export default function ProjectDetailPage() {
               .trim()}
             disabled={project.calculations.length === 0}
           />
+          {/* Owner-only Blender bridge — pushes this project's saved
+              rooms to a locally-running Blender. */}
+          {canUseBlender && project.calculations.length > 0 && (
+            <SendToBlenderButton projectId={project.id} />
+          )}
           {project.status === "ORDERED" && project.orders[0] ? (
             <Button variant="outline" asChild size="sm">
               <Link href={`/orders/${project.orders[0].id}`}>

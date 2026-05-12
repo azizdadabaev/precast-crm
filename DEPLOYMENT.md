@@ -116,6 +116,7 @@ All from `/opt/precast-crm` on the VPS:
 docker compose ps                    # show what's running
 docker compose logs -f app           # tail app logs (Ctrl-C to stop)
 docker compose logs -f caddy         # tail proxy logs
+docker compose logs -f ws-bridge     # tail Blender bridge logs (owner-only feature)
 docker compose down                  # stop everything (data is preserved)
 docker compose up -d                 # start again
 docker compose up -d --build         # rebuild after pulling new code
@@ -125,9 +126,43 @@ git pull && docker compose up -d --build
 
 # Restart a single service:
 docker compose restart app
+docker compose restart ws-bridge
 
 # DB shell:
 docker compose exec db psql -U precast -d precast
+```
+
+### Blender Bridge (owner-only)
+
+The `ws-bridge` service forwards saved-room data from the CRM to a
+locally-running Blender. It runs as a fourth Docker container
+alongside `db`, `app`, and `caddy`.
+
+Setup:
+
+1. **Generate a shared secret** and add it to `/opt/precast-crm/.env`:
+   ```bash
+   echo "BRIDGE_SECRET=$(openssl rand -hex 32)" >> .env
+   ```
+2. **Restart** the stack so the new env reaches the container:
+   ```bash
+   docker compose up -d
+   ```
+3. **In Blender**, install the precast addon and paste the same
+   secret into the addon's preferences. The addon connects to
+   `wss://<your-host>/ws?secret=<BRIDGE_SECRET>` (or `ws://…` if no
+   TLS yet).
+
+The `/ws` route is proxied by Caddy automatically (see `Caddyfile`).
+Port 8765 is **not** published — it's only reachable via the `/ws`
+HTTP path. The internal HTTP port 8766 (`/flush` + `/status` for the
+Next.js app to consult) stays on the compose network only.
+
+**Schema migration**: this feature adds a `drawing_requests` table.
+The schema is synced by `prisma db push` inside the app container on
+boot. If you want to verify:
+```bash
+docker compose exec app npx prisma db push
 ```
 
 ---

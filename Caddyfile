@@ -17,6 +17,15 @@
 		max_size 16MB
 	}
 
+	# Blender Bridge — WebSocket route. The owner's local Blender
+	# connects to wss://<host>/ws?secret=<BRIDGE_SECRET>. Caddy
+	# transparently handles the WebSocket upgrade so no extra config
+	# is needed beyond the reverse_proxy directive. The /ws* glob
+	# forwards query strings (?secret=…) correctly.
+	handle /ws* {
+		reverse_proxy ws-bridge:8765
+	}
+
 	reverse_proxy app:3000 {
 		header_up Host {host}
 		header_up X-Real-IP {remote_host}

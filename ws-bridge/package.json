@@ -1,0 +1,15 @@
+{
+  "name": "etalon-ws-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "server.js",
+  "description": "Self-hosted WebSocket bridge — pushes DrawingRequest rows to the owner's locally-running Blender.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "pg": "^8.13.0"
+  }
+}
