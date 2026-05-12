@@ -97,20 +97,22 @@
      colors lift to brighter shades that pop on dark surfaces.
      ────────────────────────────────────────────────────────────── */
   html[data-theme="dark"] {
-    /* Surfaces */
-    --background: 228 14% 7%;          /* #0f1015 — page */
-    --foreground: 225 12% 92%;         /* #e7e9ee — primary text */
-    --card: 228 14% 11%;               /* #181a21 — elevated card */
-    --card-foreground: 225 12% 92%;
-    --muted: 228 14% 13%;              /* #1d1f27 */
-    --muted-foreground: 225 9% 62%;    /* #969aa6 */
-    --popover: 228 14% 11%;
-    --popover-foreground: 225 12% 92%;
+    /* Surfaces — muted neutral grey (Cofeed-inspired), not near-black.
+       Background is a soft warm-grey; cards sit one step lighter to
+       create gentle elevation without high contrast. */
+    --background: 230 6% 14%;          /* #21222a — page (soft muted) */
+    --foreground: 225 10% 90%;         /* #e2e3e8 — primary text */
+    --card: 228 6% 18%;                /* #2b2c33 — elevated card */
+    --card-foreground: 225 10% 90%;
+    --muted: 228 6% 21%;               /* #33343c — zebra / table head */
+    --muted-foreground: 225 7% 65%;    /* #9ea0aa */
+    --popover: 228 6% 18%;
+    --popover-foreground: 225 10% 90%;
 
-    /* Borders */
-    --border: 228 12% 19%;             /* #2b2d36 */
-    --input: 228 12% 19%;
-    --border-strong: 228 11% 28%;      /* #41444f */
+    /* Borders — soft hairlines that read on the muted surfaces. */
+    --border: 228 6% 26%;              /* #3d3f47 */
+    --input: 228 6% 26%;
+    --border-strong: 228 6% 34%;       /* #50525a */
 
     /* Primary stays the etalon brand — slightly brighter for dark. */
     --primary: 222 100% 70%;           /* #5e8aff */
@@ -118,64 +120,60 @@
     --primary-hover: 222 95% 65%;
     --ring: 222 100% 70%;
 
-    /* Accent — subtle hover surface on dark cards. */
-    --accent: 228 13% 16%;             /* #232530 */
-    --accent-foreground: 225 12% 92%;
+    /* Accent — subtle hover surface a touch above card. */
+    --accent: 228 6% 24%;              /* #393b43 */
+    --accent-foreground: 225 10% 90%;
 
     /* Secondary */
-    --secondary: 228 13% 14%;
-    --secondary-foreground: 225 12% 92%;
+    --secondary: 228 6% 22%;
+    --secondary-foreground: 225 10% 90%;
 
-    /* Semantic status — brighter for AA on dark. */
-    --destructive: 0 80% 62%;          /* #eb5258 */
+    /* Semantic status — brighter for AA on muted grey. */
+    --destructive: 0 80% 64%;          /* #ec5e63 */
     --destructive-foreground: 0 0% 100%;
-    --warning: 29 95% 58%;             /* #f08431 */
+    --warning: 29 95% 60%;             /* #f29040 */
     --warning-foreground: 0 0% 100%;
-    --success: 160 70% 48%;            /* #25c997 */
+    --success: 160 65% 50%;            /* #2dccaf */
     --success-foreground: 0 0% 100%;
-    --gold: 38 85% 58%;                /* #ecae3e */
+    --gold: 38 85% 60%;                /* #eeb44a */
     --gold-foreground: 0 0% 0%;
 
     /* Hierarchical text */
-    --text-tertiary: 225 9% 45%;       /* #686d7a */
+    --text-tertiary: 225 6% 50%;       /* #7c7e87 */
 
     /* Hover / active surface states */
-    --surface-hover: 228 13% 14%;      /* #1f2129 */
-    --surface-active: 228 13% 17%;     /* #262833 */
+    --surface-hover: 228 6% 22%;       /* #353740 */
+    --surface-active: 228 6% 25%;      /* #3c3e46 */
 
-    /* Sidebar — derived from card so it visually belongs to the
-       same dark surface (the etalon "dark sidebar over light page"
-       trick doesn't apply when the page itself is dark). */
-    --sidebar-bg: 228 14% 9%;          /* #14161c */
-    --sidebar-border: 228 12% 16%;
-    --sidebar-text: 225 9% 55%;
-    --sidebar-hover: 225 12% 75%;
-    --sidebar-active: 225 12% 92%;
+    /* Sidebar — slightly darker than the page so it reads as the
+       persistent nav column without being heavy. */
+    --sidebar-bg: 228 6% 12%;          /* #1c1d23 */
+    --sidebar-border: 228 6% 20%;
+    --sidebar-text: 225 7% 58%;
+    --sidebar-hover: 225 10% 78%;
+    --sidebar-active: 225 10% 90%;
     --sidebar-active-bg: 222 100% 70%;
   }
 
-  /* Dashboard's scoped CSS — override to dark variants. The dashboard
-     uses --dash-* tokens internally; mirror them so the KPI cards,
-     bar charts, and capacity strip pick up the dark palette without
-     touching the component code. */
+  /* Dashboard's scoped CSS — override to muted-dark variants. */
   html[data-theme="dark"] .dashboard {
-    --dash-bg: #0f1015;
-    --dash-card-bg: #181a21;
-    --dash-border: #2b2d36;
-    --dash-border-strong: #41444f;
-    --dash-text-primary: #e7e9ee;
-    --dash-text-secondary: #969aa6;
-    --dash-text-tertiary: #686d7a;
+    --dash-bg: #21222a;
+    --dash-card-bg: #2b2c33;
+    --dash-border: #3d3f47;
+    --dash-border-strong: #50525a;
+    --dash-text-primary: #e2e3e8;
+    --dash-text-secondary: #9ea0aa;
+    --dash-text-tertiary: #7c7e87;
     --dash-accent: #5e8aff;
     --dash-accent-hover: #7f9fff;
-    --dash-success: #25c997;
-    --dash-success-bg: rgba(37, 201, 151, 0.12);
-    --dash-warning: #f08431;
-    --dash-warning-bg: rgba(240, 132, 49, 0.12);
-    --dash-danger: #eb5258;
-    --dash-danger-bg: rgba(235, 82, 88, 0.12);
-    --dash-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
-    --dash-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.5);
+    --dash-success: #2dccaf;
+    --dash-success-bg: rgba(45, 204, 175, 0.14);
+    --dash-warning: #f29040;
+    --dash-warning-bg: rgba(242, 144, 64, 0.14);
+    --dash-danger: #ec5e63;
+    --dash-danger-bg: rgba(236, 94, 99, 0.14);
+    --dash-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+    --dash-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.35);
   }
 
   /* Calculator zone-band tints — the amber / sky / emerald headers
