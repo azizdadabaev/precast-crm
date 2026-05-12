@@ -97,108 +97,203 @@
      colors lift to brighter shades that pop on dark surfaces.
      ────────────────────────────────────────────────────────────── */
   html[data-theme="dark"] {
-    /* Surfaces — muted neutral grey (Cofeed-inspired), not near-black.
-       Background is a soft warm-grey; cards sit one step lighter to
-       create gentle elevation without high contrast. */
-    --background: 230 6% 14%;          /* #21222a — page (soft muted) */
-    --foreground: 225 10% 90%;         /* #e2e3e8 — primary text */
-    --card: 228 6% 18%;                /* #2b2c33 — elevated card */
-    --card-foreground: 225 10% 90%;
-    --muted: 228 6% 21%;               /* #33343c — zebra / table head */
-    --muted-foreground: 225 7% 65%;    /* #9ea0aa */
-    --popover: 228 6% 18%;
-    --popover-foreground: 225 10% 90%;
+    /* Surfaces — muted neutral grey with deliberate elevation. Page is
+       the darkest layer; cards lift one step; muted (headers, totals)
+       lifts another. This creates the structural hierarchy that makes
+       tables read as tables rather than flat color fields. */
+    --background: 225 7% 11%;          /* #1a1c21 — page (deepest) */
+    --foreground: 225 9% 89%;           /* #e0e1e6 */
+    --card: 225 7% 16%;                 /* #262830 — elevated card */
+    --card-foreground: 225 9% 89%;
+    --muted: 225 7% 22%;                /* #353842 — header / totals */
+    --muted-foreground: 225 6% 64%;     /* #989ba4 */
+    --popover: 225 7% 16%;
+    --popover-foreground: 225 9% 89%;
 
-    /* Borders — soft hairlines that read on the muted surfaces. */
-    --border: 228 6% 26%;              /* #3d3f47 */
-    --input: 228 6% 26%;
-    --border-strong: 228 6% 34%;       /* #50525a */
+    /* Borders — two steps so we can layer (rows / sections / cards). */
+    --border: 225 7% 27%;               /* #41444f */
+    --input: 225 7% 27%;
+    --border-strong: 225 7% 36%;        /* #565a66 */
 
-    /* Primary stays the etalon brand — slightly brighter for dark. */
-    --primary: 222 100% 70%;           /* #5e8aff */
+    /* Primary — etalon blue, slightly desaturated for dark surface. */
+    --primary: 218 85% 67%;             /* #5d85ed */
     --primary-foreground: 0 0% 100%;
-    --primary-hover: 222 95% 65%;
-    --ring: 222 100% 70%;
+    --primary-hover: 218 80% 62%;
+    --ring: 218 85% 67%;
 
-    /* Accent — subtle hover surface a touch above card. */
-    --accent: 228 6% 24%;              /* #393b43 */
-    --accent-foreground: 225 10% 90%;
+    /* Accent — hover surface one step above card. */
+    --accent: 225 7% 20%;               /* #2f3139 */
+    --accent-foreground: 225 9% 89%;
 
     /* Secondary */
-    --secondary: 228 6% 22%;
-    --secondary-foreground: 225 10% 90%;
+    --secondary: 225 7% 19%;
+    --secondary-foreground: 225 9% 89%;
 
-    /* Semantic status — brighter for AA on muted grey. */
-    --destructive: 0 80% 64%;          /* #ec5e63 */
+    /* Semantic status — calibrated for legibility on dark grey, NOT
+       neon. Lower saturation than the light-mode hexes so the dark UI
+       reads as a single visual world. */
+    --destructive: 358 70% 62%;         /* #d65d63 */
     --destructive-foreground: 0 0% 100%;
-    --warning: 29 95% 60%;             /* #f29040 */
+    --warning: 32 75% 60%;              /* #e29a4d */
     --warning-foreground: 0 0% 100%;
-    --success: 160 65% 50%;            /* #2dccaf */
+    --success: 160 55% 52%;             /* #45c2a0 */
     --success-foreground: 0 0% 100%;
-    --gold: 38 85% 60%;                /* #eeb44a */
+    --gold: 38 65% 58%;                 /* #d4a258 */
     --gold-foreground: 0 0% 0%;
 
     /* Hierarchical text */
-    --text-tertiary: 225 6% 50%;       /* #7c7e87 */
+    --text-tertiary: 225 6% 48%;        /* #757983 */
 
     /* Hover / active surface states */
-    --surface-hover: 228 6% 22%;       /* #353740 */
-    --surface-active: 228 6% 25%;      /* #3c3e46 */
+    --surface-hover: 225 7% 19%;        /* #2c2e36 */
+    --surface-active: 225 7% 23%;       /* #373a44 */
 
-    /* Sidebar — slightly darker than the page so it reads as the
-       persistent nav column without being heavy. */
-    --sidebar-bg: 228 6% 12%;          /* #1c1d23 */
-    --sidebar-border: 228 6% 20%;
-    --sidebar-text: 225 7% 58%;
-    --sidebar-hover: 225 10% 78%;
-    --sidebar-active: 225 10% 90%;
-    --sidebar-active-bg: 222 100% 70%;
+    /* Sidebar — darkest layer so it reads as the persistent rail. */
+    --sidebar-bg: 225 7% 9%;            /* #15171b */
+    --sidebar-border: 225 7% 18%;
+    --sidebar-text: 225 6% 55%;
+    --sidebar-hover: 225 9% 78%;
+    --sidebar-active: 225 9% 89%;
+    --sidebar-active-bg: 218 85% 67%;
   }
 
-  /* Dashboard's scoped CSS — override to muted-dark variants. */
+  /* Dashboard scoped tokens — mirror the dark palette. */
   html[data-theme="dark"] .dashboard {
-    --dash-bg: #21222a;
-    --dash-card-bg: #2b2c33;
-    --dash-border: #3d3f47;
-    --dash-border-strong: #50525a;
-    --dash-text-primary: #e2e3e8;
-    --dash-text-secondary: #9ea0aa;
-    --dash-text-tertiary: #7c7e87;
-    --dash-accent: #5e8aff;
-    --dash-accent-hover: #7f9fff;
-    --dash-success: #2dccaf;
-    --dash-success-bg: rgba(45, 204, 175, 0.14);
-    --dash-warning: #f29040;
-    --dash-warning-bg: rgba(242, 144, 64, 0.14);
-    --dash-danger: #ec5e63;
-    --dash-danger-bg: rgba(236, 94, 99, 0.14);
-    --dash-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.25);
-    --dash-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.35);
+    --dash-bg: #1a1c21;
+    --dash-card-bg: #262830;
+    --dash-border: #41444f;
+    --dash-border-strong: #565a66;
+    --dash-text-primary: #e0e1e6;
+    --dash-text-secondary: #989ba4;
+    --dash-text-tertiary: #757983;
+    --dash-accent: #5d85ed;
+    --dash-accent-hover: #7898f0;
+    --dash-success: #45c2a0;
+    --dash-success-bg: rgba(69, 194, 160, 0.12);
+    --dash-warning: #e29a4d;
+    --dash-warning-bg: rgba(226, 154, 77, 0.12);
+    --dash-danger: #d65d63;
+    --dash-danger-bg: rgba(214, 93, 99, 0.12);
+    --dash-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+    --dash-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.40);
   }
 
-  /* Calculator zone-band tints — the amber / sky / emerald headers
-     are designed for light backgrounds. In dark mode replace them
-     with subtle tinted surfaces so the banding stays legible. */
-  html[data-theme="dark"] [class*="bg-amber-50"],
+  /* ──────────────────────────────────────────────────────────────
+     Calculator dark-mode refinements.
+     The light-mode design uses amber / sky / emerald wash colors to
+     band the calculator columns into INPUT / PATTERN / COMPUTED /
+     PRICING zones. On dark surfaces those raw light tints turn into
+     bright orange / cyan / lime patches and look chaotic — so we
+     replace them with tinted dark surfaces that preserve the
+     hierarchy without screaming.
+     ────────────────────────────────────────────────────────────── */
+
+  /* Zone-band header tints — very subtle, just enough to read the
+     bands when scanning the column titles. */
+  html[data-theme="dark"] .calc-grid thead [class*="bg-amber-50"],
+  html[data-theme="dark"] [class*="bg-amber-50/40"] {
+    background-color: rgba(226, 154, 77, 0.07) !important;
+  }
+  html[data-theme="dark"] [class*="bg-sky-50"],
+  html[data-theme="dark"] [class*="bg-sky-50/40"] {
+    background-color: rgba(93, 133, 237, 0.08) !important;
+  }
+  html[data-theme="dark"] [class*="bg-emerald-50"],
+  html[data-theme="dark"] [class*="bg-emerald-50/40"] {
+    background-color: rgba(69, 194, 160, 0.07) !important;
+  }
+  /* The stronger amber-100 band marks the computed-blocks zone — give
+     it a touch more presence than the input band so it's still the
+     hottest column group when you scan the headers. */
   html[data-theme="dark"] [class*="bg-amber-100"] {
-    background-color: rgba(240, 132, 49, 0.08) !important;
+    background-color: rgba(226, 154, 77, 0.13) !important;
   }
-  html[data-theme="dark"] [class*="bg-sky-50"] {
-    background-color: rgba(94, 138, 255, 0.08) !important;
+  /* Cell tints inside the input zone (Name / Width / Bearing / Corr.)
+     get the lightest possible warm tint so the body rows still echo
+     the band. */
+  html[data-theme="dark"] [class*="bg-amber-50/20"] {
+    background-color: rgba(226, 154, 77, 0.04) !important;
   }
-  html[data-theme="dark"] [class*="bg-emerald-50"] {
-    background-color: rgba(37, 201, 151, 0.08) !important;
+  /* Sub-tinted backgrounds used in cells. */
+  html[data-theme="dark"] [class*="bg-amber-50/60"] {
+    background-color: rgba(226, 154, 77, 0.06) !important;
   }
+
+  /* Numeric value colors — calibrated to be three readable accents
+     against the muted grey, not a rainbow:
+       blue-700  → slab L / area / row-derived metrics (information)
+       amber-800 → blocks total / production counts (warning warmth)
+       emerald  → money (rate / subtotal / totals) (positive value) */
+  html[data-theme="dark"] .text-blue-700,
+  html[data-theme="dark"] [class*="text-blue-7"] {
+    color: #8aa6f2 !important;
+  }
+  html[data-theme="dark"] .text-amber-700,
+  html[data-theme="dark"] .text-amber-800,
+  html[data-theme="dark"] [class*="text-amber-7"],
   html[data-theme="dark"] [class*="text-amber-8"],
   html[data-theme="dark"] [class*="text-amber-9"] {
-    color: #f08431 !important;
+    color: #e29a4d !important;
   }
+  html[data-theme="dark"] .text-emerald-600,
+  html[data-theme="dark"] .text-emerald-700,
+  html[data-theme="dark"] .text-emerald-800,
+  html[data-theme="dark"] [class*="text-emerald-6"],
   html[data-theme="dark"] [class*="text-emerald-7"],
   html[data-theme="dark"] [class*="text-emerald-8"] {
-    color: #25c997 !important;
+    color: #45c2a0 !important;
   }
-  html[data-theme="dark"] [class*="text-blue-7"] {
-    color: #5e8aff !important;
+  /* Pattern-cell text (sky) — the dropdown that says "Б-Г-Б · auto".
+     Keep it the brand blue so it doubles as a row hint. */
+  html[data-theme="dark"] .text-sky-900,
+  html[data-theme="dark"] [class*="text-sky-"] {
+    color: #8aa6f2 !important;
+  }
+  /* Rose text (used for "shortfall" warnings, discount breakdown). */
+  html[data-theme="dark"] .text-rose-700,
+  html[data-theme="dark"] .text-rose-800,
+  html[data-theme="dark"] [class*="text-rose-"] {
+    color: #d65d63 !important;
+  }
+
+  /* Pricing-zone tinted cells in body rows. */
+  html[data-theme="dark"] .grid-tint-pricing {
+    background-color: rgba(69, 194, 160, 0.06) !important;
+  }
+
+  /* The calculator grid input — light focus uses amber-50/60. Use a
+     subtle primary-tinted ring on dark instead. */
+  html[data-theme="dark"] .grid-input:focus,
+  html[data-theme="dark"] .grid-select:focus {
+    background-color: rgba(93, 133, 237, 0.10) !important;
+  }
+
+  /* Tables — alternating row striping. Most pages already have
+     `bg-muted/30` on odd rows; in dark mode that lands too close to
+     card. Strengthen the second-row tint via a foreground-tinted
+     overlay so the zebra reads. */
+  html[data-theme="dark"] tr.bg-muted\/30,
+  html[data-theme="dark"] [class*="bg-muted/30"] {
+    background-color: rgba(255, 255, 255, 0.025) !important;
+  }
+  /* The calculator totals row uses bg-muted/40 — give it stronger
+     elevation so "ЖАМИ" reads as a deliberate section header. */
+  html[data-theme="dark"] [class*="bg-muted/40"] {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+  /* Table thead uses bg-muted in light mode — at full strength on
+     dark it's the third elevation layer, so the column titles row
+     stands clearly above the body. */
+  html[data-theme="dark"] thead[class*="bg-muted"]:not([class*="bg-muted/"]) {
+    background-color: hsl(225 7% 19%);
+  }
+
+  /* Outline button visibility — the light-mode outline button is
+     `bg-background` (white-ish). On dark, that lands as the page bg
+     which kills the affordance. Boost contrast by lifting outlines
+     to a tinted surface. */
+  html[data-theme="dark"] button[class*="border-input"] {
+    background-color: hsl(225 7% 17%);
   }
 }
 
