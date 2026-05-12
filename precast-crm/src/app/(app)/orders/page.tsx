@@ -236,14 +236,14 @@ export default function OrdersPage() {
                       <td className="px-3 py-2.5">
                         <div className="font-medium">{o.client.name}</div>
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-xs text-text-tertiary">
+                      <td className="px-3 py-2.5 font-mono font-medium text-foreground">
                         {formatPhone(o.client.phone)}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-text-tertiary max-w-[14rem]">
+                      <td className="px-3 py-2.5 font-medium text-foreground max-w-[14rem]">
                         {o.client.address ? (
                           <span className="line-clamp-2">{o.client.address}</span>
                         ) : (
-                          <span>—</span>
+                          <span className="text-text-tertiary">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono">

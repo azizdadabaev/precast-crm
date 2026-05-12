@@ -56,14 +56,15 @@ function addYears(d: Date, n: number) {
   return new Date(d.getFullYear() + n, d.getMonth(), 1);
 }
 
-/** Tier label + bg/text classes for a given totalArea. Routed through
- *  semantic tokens (success / warning / gold / destructive) so the heat
- *  scale works in both light and dark themes. */
+/** Tier label + accent classes for a given totalArea. The cell stays
+ *  neutral; the tier shows only as a colored left-edge stripe + dot in
+ *  the corner, so the calendar reads as a calendar (dates first) and
+ *  the heatmap signal is a quiet hint, not a flood-fill. */
 function tierFor(total: number, t: { low: number; moderate: number; heavy: number }) {
-  if (total <= t.low)        return { label: "Available",  cell: "bg-success/10 text-success hover:bg-success/15",         chip: "bg-success" };
-  if (total <= t.moderate)   return { label: "Moderate",   cell: "bg-warning/10 text-warning hover:bg-warning/15",         chip: "bg-warning" };
-  if (total <= t.heavy)      return { label: "Heavy",      cell: "bg-gold/10 text-gold hover:bg-gold/15",                  chip: "bg-gold" };
-  return                          { label: "Overbooked", cell: "bg-destructive/10 text-destructive hover:bg-destructive/15", chip: "bg-destructive" };
+  if (total <= t.low)        return { label: "Available",  stripe: "before:bg-success",    dot: "bg-success",     chip: "bg-success" };
+  if (total <= t.moderate)   return { label: "Moderate",   stripe: "before:bg-warning",    dot: "bg-warning",     chip: "bg-warning" };
+  if (total <= t.heavy)      return { label: "Heavy",      stripe: "before:bg-gold",       dot: "bg-gold",        chip: "bg-gold" };
+  return                          { label: "Overbooked", stripe: "before:bg-destructive", dot: "bg-destructive", chip: "bg-destructive" };
 }
 
 export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast = true }: Props) {
@@ -149,13 +150,13 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
   }
 
   return (
-    <div className="rounded-lg border bg-background shadow-sm">
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
       {/* Header — title is clickable to drill up to month/year picker */}
-      <div className="flex items-center justify-between px-3 py-2 border-b">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border bg-muted/20">
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-muted"
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Previous"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -165,10 +166,10 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
           onClick={drillUp}
           disabled={view === "years"}
           className={[
-            "text-sm font-semibold inline-flex items-center gap-1 rounded px-2 py-0.5 transition-colors",
+            "text-sm font-semibold inline-flex items-center gap-1 rounded-md px-3 py-1 transition-colors",
             view === "years"
               ? "cursor-default text-foreground"
-              : "hover:bg-muted cursor-pointer",
+              : "hover:bg-accent cursor-pointer",
           ].join(" ")}
           title={
             view === "days"
@@ -184,7 +185,7 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
         <button
           type="button"
           onClick={() => navigate(1)}
-          className="h-7 w-7 inline-flex items-center justify-center rounded hover:bg-muted"
+          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Next"
         >
           <ChevronRight className="h-4 w-4" />
@@ -194,9 +195,9 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
       {/* ── Days view ───────────────────────────────────────────── */}
       {view === "days" && (
         <>
-          <div className="grid grid-cols-7 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b bg-muted/30">
+          <div className="grid grid-cols-7 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/40">
             {DOW_LABELS.map((d) => (
-              <div key={d} className="px-1 py-1.5 text-center">
+              <div key={d} className="px-1 py-2 text-center">
                 {d}
               </div>
             ))}
@@ -208,12 +209,14 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
               const key = fmtKey(d);
               const inMonth = d.getMonth() === cursor.getMonth();
               const cap = lookup.get(key);
+              const hasBookings = (cap?.totalArea ?? 0) > 0;
               const isPast = disablePast && d < today;
               const isSelected = key === selectedKey;
               const isToday = key === todayKey;
               const showPendingPreview = isSelected && pendingArea > 0;
               const totalForTier = (cap?.totalArea ?? 0) + (showPendingPreview ? pendingArea : 0);
               const tier = tierFor(totalForTier, thresholds);
+              const showTier = hasBookings || showPendingPreview;
 
               return (
                 <button
@@ -222,11 +225,17 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
                   disabled={isPast}
                   onClick={() => onChange(new Date(d))}
                   className={[
-                    "h-16 px-1.5 py-1 border-b border-r border-border/40 text-left transition-colors",
-                    inMonth ? "" : "opacity-40",
-                    isPast ? "cursor-not-allowed bg-muted/20 text-muted-foreground/60" : tier.cell,
-                    isSelected ? "ring-2 ring-primary ring-inset" : "",
-                    !isSelected && isToday ? "ring-1 ring-primary/40 ring-inset" : "",
+                    // Base cell: neutral surface with hairline dividers; the
+                    // ::before pseudo (left edge stripe) carries the tier
+                    // accent only when the day has actual bookings.
+                    "relative h-20 px-2 py-1.5 border-b border-r border-border/60 text-left transition-colors group",
+                    "before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r",
+                    showTier && !isPast ? `${tier.stripe} before:opacity-100` : "before:opacity-0",
+                    isPast
+                      ? "cursor-not-allowed bg-muted/20"
+                      : "hover:bg-surface-hover",
+                    inMonth ? "" : "bg-muted/10",
+                    isSelected ? "bg-primary/8 ring-1 ring-primary ring-inset" : "",
                   ].join(" ")}
                   title={
                     isPast
@@ -235,16 +244,35 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
                   }
                 >
                   <div className="flex items-start justify-between">
-                    <span className="text-sm font-semibold tabular-nums">{d.getDate()}</span>
-                    {cap && cap.totalOrders > 0 && (
-                      <span className="text-[9px] bg-background/60 rounded px-1 tabular-nums font-medium">
+                    <span
+                      className={[
+                        "text-sm font-semibold tabular-nums",
+                        isPast
+                          ? "text-text-tertiary"
+                          : !inMonth
+                            ? "text-text-tertiary"
+                            : isToday
+                              ? "text-primary"
+                              : "text-foreground",
+                      ].join(" ")}
+                    >
+                      {d.getDate()}
+                    </span>
+                    {isToday && (
+                      <span className="text-[8px] uppercase tracking-wider font-bold text-primary">
+                        ●
+                      </span>
+                    )}
+                    {!isToday && cap && cap.totalOrders > 0 && (
+                      <span className="text-[10px] font-mono font-medium text-text-tertiary tabular-nums">
                         {cap.totalOrders}
                       </span>
                     )}
                   </div>
-                  {(cap || showPendingPreview) && !isPast && (
-                    <div className="mt-1 text-[10px] tabular-nums leading-tight">
-                      {totalForTier.toFixed(0)} m²
+                  {showTier && !isPast && (
+                    <div className="mt-1 text-[10px] tabular-nums font-mono leading-tight text-muted-foreground">
+                      {totalForTier.toFixed(0)}
+                      <span className="text-text-tertiary"> m²</span>
                     </div>
                   )}
                 </button>
@@ -252,15 +280,15 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
             })}
           </div>
           {/* Legend */}
-          <div className="flex flex-wrap items-center gap-3 px-3 py-2 border-t text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2.5 border-t border-border bg-muted/20 text-[10px] text-muted-foreground">
             {(["Available", "Moderate", "Heavy", "Overbooked"] as const).map((label, i) => {
               const sample = [0, thresholds.low + 1, thresholds.moderate + 1, thresholds.heavy + 1][i];
               const t = tierFor(sample, thresholds);
               return (
-                <div key={label} className="flex items-center gap-1">
-                  <span className={`inline-block h-2 w-2 rounded-full ${t.chip}`} />
-                  <span>{label}</span>
-                  <span className="opacity-70">
+                <div key={label} className="inline-flex items-center gap-1.5">
+                  <span className={`inline-block h-1 w-3 rounded-sm ${t.chip}`} />
+                  <span className="font-medium uppercase tracking-wider">{label}</span>
+                  <span className="font-mono opacity-70">
                     {label === "Available" && `≤${thresholds.low}`}
                     {label === "Moderate" && `≤${thresholds.moderate}`}
                     {label === "Heavy" && `≤${thresholds.heavy}`}
