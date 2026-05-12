@@ -25,6 +25,7 @@ import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orde
 import { DispatchDialog } from "@/components/dispatch/DispatchDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { useT } from "@/lib/i18n";
 
 interface OrderDetail {
@@ -177,6 +178,14 @@ export default function OrderDetailPage() {
     queryKey: ["order", params.id],
     queryFn: () => api(`/api/orders/${params.id}`),
   });
+
+  // Permission check for the owner-only Blender bridge button. Light
+  // shape — we only care whether `blender.bridge` is in the array.
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canUseBlender = me?.permissions?.includes("blender.bridge") ?? false;
 
   const updateStatus = useMutation({
     mutationFn: (status: OrderDetail["status"]) =>
@@ -762,6 +771,11 @@ export default function OrderDetailPage() {
                   .trim()}`}
                 disabled={order.project.calculations.length === 0}
               />
+              {/* Owner-only Blender bridge — pushes this order's rooms
+                  to a locally-running Blender via the ws-bridge service. */}
+              {canUseBlender && order.project.calculations.length > 0 && (
+                <SendToBlenderButton orderId={order.id} />
+              )}
               {/* Edit Order Details — opens the calculator pre-filled
                   from this order's snapshot (?fromOrder=<id>). Save in
                   edit-mode PATCHes /api/orders/<id>/edit; no new order

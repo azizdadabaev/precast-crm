@@ -856,6 +856,127 @@ Key choices baked in:
 To preview locally: `git checkout testui && npm run dev`. Merge into
 `main` once verified.
 
+## Blender Bridge (branch `drawingModule`)
+
+Owner-only personal feature that pushes saved rooms from the CRM
+to a locally-running Blender (precast addon) via a self-hosted
+WebSocket service. One-direction only — CRM → Blender — and gated
+strictly behind the new `blender.bridge` permission, which only
+the OWNER role template gets.
+
+### Architecture
+
+```
+┌────────────┐         POST /api/drawings/request       ┌──────────────┐
+│  Browser   │ ─────────────────────────────────────►   │  Next.js app │
+│  (owner)   │                                          │   (Docker)   │
+└────────────┘                                          └──────┬───────┘
+       │                                                       │
+       │ GET status / poll request                             │ insert PENDING row +
+       │                                                       │ POST /flush
+       ▼                                                       ▼
+┌────────────┐                                          ┌──────────────┐
+│  Postgres  │ ◄──────── SQL (UPDATE → DELIVERED) ──────│   ws-bridge  │
+│  (Docker)  │                                          │   (Docker)   │
+└────────────┘                                          └──────┬───────┘
+                                                               │ wss://host/ws
+                                                               │   ?secret=…
+                                                               ▼
+                                                       ┌──────────────┐
+                                                       │   Blender    │
+                                                       │  + addon     │
+                                                       └──────────────┘
+```
+
+### Files added
+
+- `ws-bridge/server.js` — single-Blender WebSocket server + 2s
+  poll fallback + internal HTTP `/flush` + `/status`
+- `ws-bridge/Dockerfile`, `package.json`, `.dockerignore`
+- `src/lib/blender-bridge/normalize-rooms.ts` — camelCase Calculation
+  rows → snake_case Blender shape + validator (≤50 rooms, dims > 0)
+- `src/app/api/drawings/request/route.ts` — POST (creates row,
+  rate-limited to 10/min/user, snapshots rooms, kicks the bridge)
+- `src/app/api/drawings/request/[id]/route.ts` — GET (single-request
+  poll, scoped to `createdById`)
+- `src/app/api/drawings/status/route.ts` — GET (bridge connection
+  state + 10 most recent requests for the user)
+- `src/components/blender-bridge/SendToBlenderButton.tsx` — UI button
+  with idle → sending → polling → delivered|failed lifecycle
+- `src/components/blender-bridge/BlenderStatusIndicator.tsx` —
+  sidebar-footer dot showing whether Blender is connected
+
+### Files modified
+
+- `prisma/schema.prisma` — `DrawingRequest` model + `DrawingRequestStatus`
+  enum + reverse relations on `Order`, `Project`, `User`
+- `src/lib/permissions.ts` — `blender.bridge` action + label, granted
+  only to OWNER template
+- `docker-compose.yml` — new `ws-bridge` service (exposes 8765/8766
+  on the compose network; neither port is published)
+- `Caddyfile` — `/ws` path matcher routes to `ws-bridge:8765`
+- `.env.example` / `.env.production.example` — `BRIDGE_SECRET` slot
+- `src/app/(app)/orders/[id]/page.tsx` — SendToBlenderButton (owner)
+- `src/app/(app)/projects/[id]/page.tsx` — SendToBlenderButton (owner)
+- `src/components/sidebar.tsx` — BlenderStatusIndicator in footer
+- `DEPLOYMENT.md` — Blender Bridge section
+
+### Lifecycle
+
+`DrawingRequest.status`:
+- `PENDING` — created by the POST route, awaiting bridge push
+- `DELIVERED` — bridge received `{ type: "ACK", requestId }` from Blender
+- `FAILED` — bridge received `{ type: "ERROR", requestId, error }`,
+  OR the row's `roomsJson` failed to parse on the bridge side, OR
+  the UI polled past the 30s timeout (button-side state only)
+
+The bridge polls Postgres every 2s as a fallback for the
+fire-and-forget `/flush` kick from the API route — neither hop is
+load-bearing alone.
+
+### Rooms snapshot
+
+The room shape sent to Blender is the **normalized** snake_case
+shape, frozen into `DrawingRequest.roomsJson` at creation time.
+So if the owner later edits the order or project, the snapshot
+the Blender addon already received doesn't drift. Conversion
+from Prisma's camelCase Decimal-typed Calculation rows happens
+in `normalizeRoomsForBlender()`. `patternOverride` (operator's
+pick) is preferred over `pattern` (engine's frozen pick); AUTO
+emits `null` to let the addon re-derive.
+
+### Security model
+
+The bridge service accepts exactly one WebSocket client at a time,
+gated by `BRIDGE_SECRET` (a 32-byte hex from `openssl rand -hex 32`)
+passed as `?secret=…` in the URL. A second authenticated client
+boots the first — assumed scenario is the owner restarting Blender
+on the same laptop, not two devices.
+
+Internal HTTP (`:8766`) is **never** published — only the compose
+network reaches it. Without that boundary the `/flush` endpoint
+would be an unauthenticated push trigger.
+
+The `blender.bridge` permission gates:
+- POST / GET routes via `withPermission()`
+- The SendToBlenderButton (UI hides for non-owners)
+- The BlenderStatusIndicator (UI hides for non-owners)
+
+### Local testing without a real Blender
+
+Use `wscat` or any WS client:
+
+```bash
+wscat -c "ws://localhost:8765/?secret=YOUR_SECRET"
+# On connect, you'll see PENDING requests flushed as JSON.
+# To ACK one:
+> {"type":"ACK","requestId":"<id-from-the-DRAWING_REQUEST-payload>"}
+```
+
+The bridge service must be reachable at `:8765` (compose maps it
+internally). For local dev outside Docker, set `WS_BRIDGE_PORT=8765`
+and `DATABASE_URL` and run `node ws-bridge/server.js` directly.
+
 ## Verified local state at handoff
 
 - `npx tsc --noEmit` — 0 errors

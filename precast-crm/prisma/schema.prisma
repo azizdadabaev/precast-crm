@@ -139,6 +139,15 @@ enum StockMovementReason {
   CANCELLATION_RESTOCK
 }
 
+// Blender Bridge — owner-only feature that pushes saved rooms to a
+// locally-running Blender instance via a self-hosted WebSocket
+// service. PENDING → DELIVERED|FAILED is the only lifecycle.
+enum DrawingRequestStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
 // Privacy gate for the contact-export feature: a client can only be
 // included in an export if their consent state is GRANTED. NOT_ASKED is
 // the default for existing rows and any new client until the operator
@@ -194,6 +203,9 @@ model User {
   // Audit-log back-relations
   auditEntriesAsActor   UserAuditLog[] @relation("UserAuditActor")
   auditEntriesAsTarget  UserAuditLog[] @relation("UserAuditTarget")
+
+  // Blender Bridge — drawing requests this user created.
+  drawingRequests       DrawingRequest[]
 
   @@map("users")
 }
@@ -305,6 +317,7 @@ model Project {
   client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   calculations Calculation[]
   orders       Order[]
+  drawingRequests DrawingRequest[]
 
   @@index([status])
   @@index([dealId])
@@ -432,6 +445,7 @@ model Order {
   dispatch      Dispatch?      // 0-or-1 active dispatch (orderId is @unique on Dispatch)
   payments      Payment[]
   discrepancies Discrepancy[]
+  drawingRequests DrawingRequest[]
 
   @@index([status])
   @@index([paymentState])
@@ -712,4 +726,53 @@ model StockMovement {
   @@index([productionEntryId])
   @@index([createdAt])
   @@map("stock_movements")
+}
+
+// ─────────────────────────────────────────────
+// Blender Bridge — owner-only feature.
+//
+// A DrawingRequest is a queue entry created when the owner clicks
+// "Send to Blender" on a saved Project or an Order detail page.
+// The self-hosted ws-bridge service (see ws-bridge/server.js) picks
+// up PENDING rows, pushes them over WebSocket to a connected Blender
+// instance, and on ACK marks them DELIVERED.
+//
+// `roomsJson` is a snapshot of the rooms array at the moment the
+// request was created — so if the operator later edits the project
+// or order, the snapshot the Blender plug-in received is preserved.
+// The shape inside roomsJson is the normalized snake_case Blender
+// shape (see src/lib/blender-bridge/normalize-rooms.ts).
+// ─────────────────────────────────────────────
+
+model DrawingRequest {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Source: exactly one of orderId or projectId is non-null. The API
+  // layer enforces this (no DB-level check; one nullable FK each is
+  // enough for Postgres + simpler than a CHECK constraint).
+  orderId      String?
+  order        Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  projectId    String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  // Snapshot of the rooms array sent to Blender. Stored as a JSON
+  // string (not Postgres jsonb) because the ws-bridge service reads
+  // it via raw SQL and forwards it verbatim — keeping the field as
+  // a plain string avoids serialization round-trips on the bridge.
+  roomsJson    String
+
+  status       DrawingRequestStatus @default(PENDING)
+  deliveredAt  DateTime?
+  errorMessage String?
+
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
+
+  @@index([status, createdAt])
+  @@index([createdById, createdAt])
+  @@index([orderId])
+  @@index([projectId])
+  @@map("drawing_requests")
 }
