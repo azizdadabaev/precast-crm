@@ -56,12 +56,14 @@ function addYears(d: Date, n: number) {
   return new Date(d.getFullYear() + n, d.getMonth(), 1);
 }
 
-/** Tier label + bg/text classes for a given totalArea. */
+/** Tier label + bg/text classes for a given totalArea. Routed through
+ *  semantic tokens (success / warning / gold / destructive) so the heat
+ *  scale works in both light and dark themes. */
 function tierFor(total: number, t: { low: number; moderate: number; heavy: number }) {
-  if (total <= t.low)        return { label: "Available",    cell: "bg-emerald-50 text-emerald-800 hover:bg-emerald-100", chip: "bg-emerald-500" };
-  if (total <= t.moderate)   return { label: "Moderate",     cell: "bg-yellow-50 text-yellow-800 hover:bg-yellow-100",     chip: "bg-yellow-500" };
-  if (total <= t.heavy)      return { label: "Heavy",        cell: "bg-orange-50 text-orange-800 hover:bg-orange-100",     chip: "bg-orange-500" };
-  return                          { label: "Overbooked",   cell: "bg-rose-100 text-rose-800 hover:bg-rose-200",          chip: "bg-rose-600" };
+  if (total <= t.low)        return { label: "Available",  cell: "bg-success/10 text-success hover:bg-success/15",         chip: "bg-success" };
+  if (total <= t.moderate)   return { label: "Moderate",   cell: "bg-warning/10 text-warning hover:bg-warning/15",         chip: "bg-warning" };
+  if (total <= t.heavy)      return { label: "Heavy",      cell: "bg-gold/10 text-gold hover:bg-gold/15",                  chip: "bg-gold" };
+  return                          { label: "Overbooked", cell: "bg-destructive/10 text-destructive hover:bg-destructive/15", chip: "bg-destructive" };
 }
 
 export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast = true }: Props) {
