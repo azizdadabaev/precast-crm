@@ -415,11 +415,15 @@
   background-position: right 6px center;
 }
 
-/* Group-tinted cell backgrounds — gentle, not shouty */
-.grid-tint-input    { @apply bg-amber-50/40; }
-.grid-tint-pattern  { @apply bg-sky-50/40; }
-.grid-tint-computed { @apply bg-transparent; }
-.grid-tint-pricing  { @apply bg-emerald-50/40; }
+/* Zone-band tints retired. The calculator body now reads as a single
+ * clean table — same restrained look as orders/payments/projects:
+ * one muted header, hairline column dividers, zebra striping on
+ * alternate rows, and accent color only on money values. Classes
+ * kept as no-ops so existing JSX compiles. */
+.grid-tint-input,
+.grid-tint-pattern,
+.grid-tint-computed,
+.grid-tint-pricing { @apply bg-transparent; }
 
 /* The grid table itself — fixed layout so colgroup widths are honored exactly.
  *

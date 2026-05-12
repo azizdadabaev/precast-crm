@@ -132,25 +132,28 @@ interface ColumnDef {
 }
 
 const COLUMN_DEFS: Record<ColumnId, ColumnDef> = {
-  name: { defaultWidth: 86, primary: "Хона", secondary: "Name", headerCls: "bg-amber-50/40 dark:bg-amber-950/30 text-left" },
+  // Zone-band tints retired — header is a single muted bar like the
+  // orders / payments / projects tables. Group dividers (the small
+  // vertical separators) survive on the bands' rightmost columns.
+  name: { defaultWidth: 86, primary: "Хона", secondary: "Name", headerCls: "text-left" },
   width: { defaultWidth: 104, primary: "Эни", secondary: "Width", tip: "Inner width — clear inside-wall to inside-wall (m)" },
   length: { defaultWidth: 56, primary: "Бўйи", secondary: "Length", tip: "Inner length (m)" },
-  bearing: { defaultWidth: 62, primary: "Миниш", secondary: "Bearing", tip: "Beam bearing onto each wall (m). Default 0.15", headerCls: "bg-amber-50/40 dark:bg-amber-950/30" },
-  correction: { defaultWidth: 62, primary: "Корр.", secondary: "Correction", tip: "Correction added to L before pitch math (m). Use to nudge auto-pattern.", headerCls: "bg-amber-50/40 dark:bg-amber-950/30 grid-group-divider" },
+  bearing: { defaultWidth: 62, primary: "Миниш", secondary: "Bearing", tip: "Beam bearing onto each wall (m). Default 0.15" },
+  correction: { defaultWidth: 62, primary: "Корр.", secondary: "Correction", tip: "Correction added to L before pitch math (m). Use to nudge auto-pattern.", headerCls: "grid-group-divider" },
   slabL: { defaultWidth: 70, primary: "Йиғма Б.", secondary: "Slab L" },
-  pattern: { defaultWidth: 104, primary: "Шаблон", secondary: "Pattern", headerCls: "bg-sky-50/40 dark:bg-sky-950/30" },
-  extras: { defaultWidth: 48, primary: "+Б", secondary: "Extra", tip: "Manual extra beams. First one absorbs into pattern when Г-Б-Г.", headerCls: "bg-sky-50/40 dark:bg-sky-950/30" },
-  startBeam: { defaultWidth: 56, primary: "Бош Б.", secondary: "Start", tip: "Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op", headerCls: "bg-sky-50/40 dark:bg-sky-950/30 grid-group-divider" },
+  pattern: { defaultWidth: 104, primary: "Шаблон", secondary: "Pattern" },
+  extras: { defaultWidth: 48, primary: "+Б", secondary: "Extra", tip: "Manual extra beams. First one absorbs into pattern when Г-Б-Г." },
+  startBeam: { defaultWidth: 56, primary: "Бош Б.", secondary: "Start", tip: "Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op", headerCls: "grid-group-divider" },
   beamL: { defaultWidth: 62, primary: "Б.уз.", secondary: "Beam L" },
   pitches: { defaultWidth: 56, primary: "Қадам", secondary: "Pitches" },
-  blockRows: { defaultWidth: 56, primary: "Қатор", secondary: "Rows", headerCls: "bg-amber-100 dark:bg-amber-900/40" },
-  blocksPerRow: { defaultWidth: 56, primary: "1 қат.", secondary: "Per row", headerCls: "bg-amber-100 dark:bg-amber-900/40" },
-  totalBlocks: { defaultWidth: 64, primary: "Жами", secondary: "Blocks", headerCls: "bg-amber-100 dark:bg-amber-900/40" },
+  blockRows: { defaultWidth: 56, primary: "Қатор", secondary: "Rows" },
+  blocksPerRow: { defaultWidth: 56, primary: "1 қат.", secondary: "Per row" },
+  totalBlocks: { defaultWidth: 64, primary: "Жами", secondary: "Blocks" },
   beams: { defaultWidth: 56, primary: "Балка", secondary: "Beams" },
   slabArea: { defaultWidth: 78, primary: "Майдон", secondary: "Slab area", headerCls: "grid-group-divider" },
-  rate: { defaultWidth: 108, primary: "м² нархи", secondary: "Rate", tip: "UZS per m² of billed area, by beam length tier", headerCls: "bg-emerald-50/40" },
-  subtotal: { defaultWidth: 80, primary: "Сумма", secondary: "Subtotal", headerCls: "bg-emerald-50/40" },
-  deleteCol: { defaultWidth: 36, primary: "", secondary: "", headerCls: "bg-emerald-50/40", pinned: true },
+  rate: { defaultWidth: 108, primary: "м² нархи", secondary: "Rate", tip: "UZS per m² of billed area, by beam length tier" },
+  subtotal: { defaultWidth: 80, primary: "Сумма", secondary: "Subtotal" },
+  deleteCol: { defaultWidth: 36, primary: "", secondary: "", pinned: true },
 };
 
 const DEFAULT_COLUMN_ORDER: readonly ColumnId[] = [
@@ -606,42 +609,42 @@ export function MultiRoomCalculator({
 
           <thead>
             <tr>
-              {/* ── Inputs ── */}
-              <H primary="Хона" secondary="Name" align="left" className="bg-amber-50/40" />
+              {/* Single muted header bar across all zones — matches the
+                  orders / payments / projects tables. Group dividers
+                  preserve the visual zone breaks without per-column
+                  background tints. */}
+              <H primary="Хона" secondary="Name" align="left" />
               <H
                 primary="Эни"
                 secondary="Width"
                 tip="Inner width — clear inside-wall to inside-wall (m)"
-                className="sticky lg:static left-0 z-20 !bg-muted lg:!bg-amber-50/40"
+                className="sticky lg:static left-0 z-20 !bg-muted"
               />
               <H
                 primary="Бўйи"
                 secondary="Length"
                 tip="Inner length (m)"
-                className="sticky lg:static left-11 lg:left-[104px] z-20 !bg-muted lg:!bg-amber-50/40 lg:shadow-none shadow-[inset_-2px_0_0_0_rgba(0,0,0,0.06)]"
+                className="sticky lg:static left-11 lg:left-[104px] z-20 !bg-muted lg:shadow-none shadow-[inset_-2px_0_0_0_rgba(0,0,0,0.06)]"
               />
-              <H primary="Миниш" secondary="Bearing" tip="Beam bearing onto each wall (m). Default 0.15" className="bg-amber-50/40" />
-              <H primary="Корр." secondary="Correction" tip="Correction added to L before pitch math (m). Use to nudge auto-pattern." className="bg-amber-50/40 grid-group-divider" />
+              <H primary="Миниш" secondary="Bearing" tip="Beam bearing onto each wall (m). Default 0.15" />
+              <H primary="Корр." secondary="Correction" tip="Correction added to L before pitch math (m). Use to nudge auto-pattern." className="grid-group-divider" />
               <H primary="Йиғма Б." secondary="Slab L" />
 
-              {/* ── Pattern ── */}
-              <H primary="Шаблон" secondary="Pattern" className="bg-sky-50/40" />
-              <H primary="+Б" secondary="Extra" tip="Manual extra beams. First one absorbs into pattern when Г-Б-Г." className="bg-sky-50/40" />
-              <H primary="Бош Б." secondary="Start" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="bg-sky-50/40 grid-group-divider" />
+              <H primary="Шаблон" secondary="Pattern" />
+              <H primary="+Б" secondary="Extra" tip="Manual extra beams. First one absorbs into pattern when Г-Б-Г." />
+              <H primary="Бош Б." secondary="Start" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="grid-group-divider" />
 
-              {/* ── Computed ── */}
               <H primary="Б.уз." secondary="Beam L" />
               <H primary="Қадам" secondary="Pitches" />
-              <H primary="Қатор" secondary="Rows" className="bg-amber-100" />
-              <H primary="1 қат." secondary="Per row" className="bg-amber-100" />
-              <H primary="Жами" secondary="Blocks" className="bg-amber-100" />
+              <H primary="Қатор" secondary="Rows" />
+              <H primary="1 қат." secondary="Per row" />
+              <H primary="Жами" secondary="Blocks" />
               <H primary="Балка" secondary="Beams" />
               <H primary="Майдон" secondary="Slab area" className="grid-group-divider" />
 
-              {/* ── Pricing ── */}
-              <H primary="м² нархи" secondary="Rate" tip="UZS per m² of billed area, by beam length tier" className="bg-emerald-50/40" />
-              <H primary="Сумма" secondary="Subtotal" className="bg-emerald-50/40" />
-              <th className="bg-emerald-50/40"></th>
+              <H primary="м² нархи" secondary="Rate" tip="UZS per m² of billed area, by beam length tier" />
+              <H primary="Сумма" secondary="Subtotal" />
+              <th></th>
             </tr>
           </thead>
 
@@ -677,11 +680,12 @@ export function MultiRoomCalculator({
                       </div>
                     </div>
                   </td>
-                  {/* Width: sticky on <lg so it pins as the user scrolls
-                      the rest of the row sideways. Bg is opaque on
-                      mobile, transparent-amber on desktop (matches the
-                      surrounding grid-tint-input column). */}
-                  <td className="grid-cell sticky lg:static left-0 z-10 bg-amber-50 lg:bg-amber-50/40">
+                  {/* Width: sticky on <lg so it pins as the user
+                      scrolls the rest of the row sideways. The pinned
+                      column wears bg-card on every breakpoint so it
+                      sits flush with the rest of the body — no
+                      backdrop tint. */}
+                  <td className="grid-cell sticky lg:static left-0 z-10 bg-card">
                     <WidthCell
                       row={row}
                       onWidthChange={(w) => updateRow(row.id, { innerWidth: w })}
@@ -694,7 +698,7 @@ export function MultiRoomCalculator({
                   {/* Length: second sticky col, offset by Width's 104 px.
                       Right-edge inset shadow on mobile draws the
                       "frozen boundary" line. */}
-                  <td className="grid-cell sticky lg:static left-11 lg:left-[104px] z-10 bg-amber-50 lg:bg-amber-50/40 lg:shadow-none shadow-[inset_-2px_0_0_0_rgba(0,0,0,0.06)]">
+                  <td className="grid-cell sticky lg:static left-11 lg:left-[104px] z-10 bg-card lg:shadow-none shadow-[inset_-2px_0_0_0_rgba(0,0,0,0.06)]">
                     <NumberInput
                       step="0.01"
                       className="grid-input is-numeric"
@@ -883,21 +887,21 @@ export function MultiRoomCalculator({
                 {/* cols 7-13: Pattern through Per Row — no totals. */}
                 <td colSpan={7}></td>
                 {/* col 14: Total blocks — material total */}
-                <td className="text-center px-2 tabular-nums bg-amber-100 text-amber-800 font-bold">
+                <td className="text-center px-2 tabular-nums font-bold">
                   {totals.blocks}
                 </td>
                 {/* col 15: Beams — material total */}
-                <td className="text-center px-2 tabular-nums bg-emerald-50 text-emerald-700 font-bold">
+                <td className="text-center px-2 tabular-nums font-bold">
                   {totals.beams}
                 </td>
                 {/* col 16: Slab area */}
-                <td className="text-center px-2 tabular-nums text-xs text-blue-700">
+                <td className="text-center px-2 tabular-nums text-xs text-muted-foreground">
                   {formatNumber(totals.monolithArea, 2)} m²
                 </td>
                 {/* col 17: m² rate */}
                 <td></td>
-                {/* col 18: Subtotal */}
-                <td className="text-center px-2 tabular-nums text-emerald-800">
+                {/* col 18: Subtotal — money value, accent in success. */}
+                <td className="text-center px-2 tabular-nums font-bold text-success">
                   {formatNumber(totals.projTotal.rooms_subtotal, 0)}
                 </td>
                 {/* col 19: delete */}
@@ -1012,7 +1016,7 @@ export function MultiRoomCalculator({
       {rows.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Discount + grand total */}
-          <div className="rounded-lg border bg-background p-4 shadow-sm">
+          <div className="rounded-lg border border-border bg-card p-4">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
               <Bi uz="Сўнгги нархи" en="Grand Total" />
             </h3>
@@ -1103,7 +1107,7 @@ export function MultiRoomCalculator({
           </div>
 
           {/* Production list — beams (by length) AND total blocks together */}
-          <div className="rounded-lg border bg-background p-4 shadow-sm">
+          <div className="rounded-lg border border-border bg-card p-4">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
               <Bi uz="Балка + Ғишт" en="Production list" />
             </h3>
@@ -1127,14 +1131,14 @@ export function MultiRoomCalculator({
                 </div>
               )}
               {totals.blocks > 0 && (
-                <div className="flex justify-between items-center bg-orange-50/60 rounded px-3 py-1.5 text-sm border-t-2 border-orange-200/60 mt-2">
+                <div className="flex justify-between items-center bg-muted/30 rounded px-3 py-1.5 text-sm">
                   <span className="font-semibold">
                     Ғишт{" "}
                     <span className="text-muted-foreground font-normal">
                       {t("· жами ғишт", "· total blocks")}
                     </span>
                   </span>
-                  <span className="text-xs bg-orange-500/15 text-orange-800 px-2 py-0.5 rounded font-semibold tabular-nums">
+                  <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold tabular-nums">
                     {totals.blocks} {t("дона", "pcs")}
                   </span>
                 </div>
@@ -1143,7 +1147,7 @@ export function MultiRoomCalculator({
           </div>
 
           {/* Materials — concrete + area only (counts moved into the production list) */}
-          <div className="rounded-lg border bg-background p-4 shadow-sm">
+          <div className="rounded-lg border border-border bg-card p-4">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
               <Bi uz="Материаллар" en="Materials" />
             </h3>
