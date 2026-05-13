@@ -64,13 +64,22 @@ export function normalizeRoomForBlender(raw: Record<string, unknown>): BlenderRo
     (typeof raw.roomName === "string" && raw.roomName) ||
     "Room";
 
-  // Pattern source: prefer the operator's override (`patternOverride`
-  // on Calculation rows). When the override is null the operator chose
-  // AUTO — emit null to Blender so the addon re-derives.
+  // Pattern source: `patternOverride` on Calculation rows is the
+  // operator's explicit choice; null means AUTO. When the column
+  // exists on the row, honor its value EXACTLY — including null,
+  // which is the signal that the addon should auto-pick (and
+  // therefore apply the same remainder-bump rule the CRM does).
+  //
+  // Falling back to `raw.pattern` here would be a bug: that field
+  // holds the RESOLVED pattern after CRM auto-pick (e.g. "GB" after
+  // a remainder-bump from 8 → 9 pitches), and forwarding it makes
+  // the addon treat an auto-picked row as an explicit override,
+  // skipping the bump and under-counting beams by one row.
+  //
+  // Only fall back to `raw.pattern` for legacy / non-Prisma shapes
+  // where `patternOverride` is `undefined` (column not present).
   const patternRaw =
-    raw.patternOverride !== undefined && raw.patternOverride !== null
-      ? raw.patternOverride
-      : raw.pattern;
+    "patternOverride" in raw ? raw.patternOverride : raw.pattern;
 
   return {
     name,
