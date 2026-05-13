@@ -81,9 +81,17 @@ wss.on("connection", (ws, req) => {
   );
 
   ws.on("message", async (data) => {
+    // Diagnostic: log every inbound frame's size + type so we can tell
+    // whether DRAWING_RESULT messages are arriving but being misrouted,
+    // or never reaching the bridge at all.
+    const frameSize = data.length ?? data.byteLength ?? 0;
     let msg;
     try { msg = JSON.parse(data.toString()); }
-    catch (err) { console.error("[bridge] Failed to parse message:", err); return; }
+    catch (err) {
+      console.error(`[bridge] Failed to parse message (${frameSize} B):`, err);
+      return;
+    }
+    console.log(`[bridge] RX ${msg.type ?? "<no-type>"} ${frameSize} B${msg.requestId ? ` requestId=${msg.requestId}` : ""}`);
 
     try {
       // ── DRAWING_RESULT ─────────────────────────────────────────────────
