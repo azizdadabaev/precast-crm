@@ -2,18 +2,29 @@
 //
 // The CRM stores rooms on `Calculation` rows with camelCase columns
 // and Prisma Decimal types. The Blender precast addon's
-// `calculate_slab()` expects snake_case fields with plain numbers
-// and `pattern` either "GB" / "BGB" / "GBG" or null (= auto).
+// `calculate_slab()` expects snake_case fields with plain numbers.
 //
 // This helper is the single source of truth for that conversion.
 // Used by:
 //   - POST /api/drawings/request → snapshot rooms into roomsJson
 //   - validation (validateRoomsForBlender) → 400 reject if shape is wrong
 //
+// PROTOCOL v2: pattern is always resolved (never null), and we also
+// emit `pitches` — the post-auto-pick, post-remainder-bump pitch count
+// the CRM committed to. The addon should trust both values verbatim
+// and skip its own auto-pick / bump math, so the PDF totals match the
+// invoice byte-for-byte.
+//
+// Why v2 exists: in v1 we sent pattern=null to mean AUTO, expecting
+// the addon to re-derive. But the addon's auto-pick disagreed with the
+// CRM's (different correction handling), causing per-room totals to
+// drift up to ~5% on rows with correction > 0. Rather than keep two
+// auto-pick implementations in lock-step forever, we send the CRM's
+// authoritative result and have the addon render exactly what's billed.
+//
 // The input is intentionally typed as `unknown[]` so we can accept
-// either Prisma-shaped rows OR pre-normalized payloads (e.g. when the
-// calculator hands us its in-memory rows). The shape is sniffed via
-// fallback keys.
+// either Prisma-shaped rows OR pre-normalized payloads. The shape is
+// sniffed via fallback keys.
 
 import type { LayoutPattern } from "@prisma/client";
 
@@ -22,10 +33,15 @@ export type BlenderRoom = {
   inner_width: number;
   inner_length: number;
   bearing: number;
-  pattern: "GB" | "BGB" | "GBG" | null;
+  /** Resolved pattern — what the CRM committed to after auto-pick and
+   *  force_start_beam handling. Never null on outbound payloads. */
+  pattern: "GB" | "BGB" | "GBG";
   correction: number;
   extra_beams: number;
   force_start_beam: boolean;
+  /** Resolved pitch count, post-bump. Trust this verbatim; do NOT
+   *  re-derive from effective_length. */
+  pitches: number;
 };
 
 /** Maximum rooms accepted in one DrawingRequest. Generous for a real
@@ -42,18 +58,24 @@ function toNumber(v: unknown): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
-/** Snap an arbitrary pattern value (Prisma enum or string) to one of
- *  the four supported values, returning null for AUTO / unknown. */
-function pickPattern(v: unknown): BlenderRoom["pattern"] {
+/** Snap a pattern value (Prisma enum or string) to the three supported
+ *  resolved patterns, or undefined for any other input. The caller
+ *  decides whether undefined is an error or a missing-data signal. */
+function resolvePattern(v: unknown): BlenderRoom["pattern"] | undefined {
   if (v === "GB" || v === "BGB" || v === "GBG") return v;
-  // "AUTO", null, undefined, etc. all map to null (= let the addon
-  // re-derive the pattern on its side).
-  return null;
+  return undefined;
 }
 
 /** Normalize one raw room (Prisma Calculation row OR calculator
  *  in-memory shape OR a previously-normalized payload) to the
- *  Blender shape. Coerces Decimals, snake_cases keys. */
+ *  Blender shape. Coerces Decimals, snake_cases keys.
+ *
+ *  Note: this function trusts the caller's resolved `pattern` and
+ *  `pitches` — both are the CRM's committed values from the
+ *  Calculation row. We do NOT re-run autoPickPattern() here. If those
+ *  fields are missing or invalid, the room is forwarded with the best
+ *  available data and the validator (validateRoomsForBlender) will
+ *  surface the error. */
 export function normalizeRoomForBlender(raw: Record<string, unknown>): BlenderRoom {
   // Accept both camelCase (Prisma) and snake_case (already normalized).
   const get = (camel: string, snake?: string): unknown =>
@@ -64,29 +86,22 @@ export function normalizeRoomForBlender(raw: Record<string, unknown>): BlenderRo
     (typeof raw.roomName === "string" && raw.roomName) ||
     "Room";
 
-  // Pattern source: `patternOverride` on Calculation rows is the
-  // operator's explicit choice; null means AUTO. When the column
-  // exists on the row, honor its value EXACTLY — including null,
-  // which is the signal that the addon should auto-pick (and
-  // therefore apply the same remainder-bump rule the CRM does).
-  //
-  // Falling back to `raw.pattern` here would be a bug: that field
-  // holds the RESOLVED pattern after CRM auto-pick (e.g. "GB" after
-  // a remainder-bump from 8 → 9 pitches), and forwarding it makes
-  // the addon treat an auto-picked row as an explicit override,
-  // skipping the bump and under-counting beams by one row.
-  //
-  // Only fall back to `raw.pattern` for legacy / non-Prisma shapes
-  // where `patternOverride` is `undefined` (column not present).
-  const patternRaw =
-    "patternOverride" in raw ? raw.patternOverride : raw.pattern;
+  // Resolved pattern — Prisma's `pattern` column holds it post-auto-pick.
+  // Fallback to snake-case `pattern` for already-normalized payloads.
+  const patternResolved =
+    resolvePattern(raw.pattern) ?? resolvePattern((raw as { pattern?: unknown }).pattern);
+
+  // Resolved pitch count from the calculator. Required by the protocol
+  // so the addon doesn't have to re-derive. NaN here will be caught by
+  // the validator and surface a clear 400.
+  const pitches = toNumber(get("pitches", "pitches"));
 
   return {
     name,
     inner_width: toNumber(get("innerWidth", "inner_width") ?? raw.width),
     inner_length: toNumber(get("innerLength", "inner_length") ?? raw.length),
     bearing: toNumber(raw.bearing) || 0.15,
-    pattern: pickPattern(patternRaw),
+    pattern: patternResolved ?? "GB", // validator will reject if upstream missed it
     correction: toNumber(raw.correction) || 0,
     extra_beams: Number(
       raw.extraBeams ?? raw.extra_beams ?? 0,
@@ -94,6 +109,7 @@ export function normalizeRoomForBlender(raw: Record<string, unknown>): BlenderRo
     force_start_beam: Boolean(
       raw.forceStartBeam ?? raw.force_start_beam ?? false,
     ),
+    pitches: Number.isFinite(pitches) ? Math.trunc(pitches) : NaN,
   };
 }
 
@@ -127,16 +143,14 @@ export function validateRoomsForBlender(
     if (!Number.isFinite(r.bearing) || r.bearing < 0) {
       return `${tag}: bearing must be ≥ 0`;
     }
-    if (
-      r.pattern !== null &&
-      r.pattern !== "GB" &&
-      r.pattern !== "BGB" &&
-      r.pattern !== "GBG"
-    ) {
-      return `${tag}: pattern must be one of "GB" | "BGB" | "GBG" | null`;
+    if (r.pattern !== "GB" && r.pattern !== "BGB" && r.pattern !== "GBG") {
+      return `${tag}: pattern must be one of "GB" | "BGB" | "GBG"`;
     }
     if (!Number.isInteger(r.extra_beams) || r.extra_beams < 0) {
       return `${tag}: extra_beams must be a non-negative integer`;
+    }
+    if (!Number.isInteger(r.pitches) || r.pitches < 1) {
+      return `${tag}: pitches must be a positive integer`;
     }
   }
   return null;

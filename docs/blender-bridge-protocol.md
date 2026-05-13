@@ -110,7 +110,7 @@ ping — the WebSocket protocol has its own keepalive — but if you
 do, the server will respond. Useful only if you want a
 "connection healthy" cue in the addon UI.
 
-## 5. Room data shape
+## 5. Room data shape (protocol v2 — Nov 2026)
 
 The rooms array contains zero or more rooms in the
 **snake_case Blender shape** (already normalized server-side by
@@ -122,23 +122,51 @@ type BlenderRoom = {
   inner_width: number;     // metres, always > 0
   inner_length: number;    // metres, always > 0
   bearing: number;         // metres, ≥ 0, default 0.15
-  pattern: "GB" | "BGB" | "GBG" | null;
-                           // null = AUTO — derive in your code
-  correction: number;      // metres, default 0
+  pattern: "GB" | "BGB" | "GBG";
+                           // RESOLVED — CRM has already auto-picked
+                           // and applied force_start_beam. Trust it.
+  correction: number;      // metres, default 0 (informational only)
   extra_beams: number;     // non-negative integer
-  force_start_beam: boolean;
+  force_start_beam: boolean; // informational only (already applied)
+  pitches: number;         // RESOLVED — post-bump pitch count.
+                           // Trust verbatim; do NOT recompute from
+                           // effective_length / PITCH.
 };
 ```
 
 Guarantees you can rely on:
-- `inner_width > 0` and `inner_length > 0` (validator rejects 0/null)
-- `name` is non-empty (defaults to `"Room N"` when the CRM had no label)
-- `pattern` is exactly one of those four values
+- `inner_width > 0` and `inner_length > 0`
+- `name` is non-empty
+- `pattern` is exactly "GB" | "BGB" | "GBG" — never null in v2
+- `pitches` is a positive integer
 - `rooms.length ≥ 1` and `rooms.length ≤ 50`
 
-Map this onto your existing `calculate_slab()` arguments. The
-field names already match what the standalone calculator addon
-accepts.
+### Migration note from v1
+
+Older versions of this protocol sent `pattern: "GB" | "BGB" | "GBG" | null`
+where `null` meant "addon picks." That contract led to drift between the
+CRM's billing calculator and the addon's geometry calculator when
+`correction > 0` (different remainder-bump behavior). v2 removes the
+ambiguity: the CRM commits to a `pattern` and a `pitches` count, and the
+addon renders exactly what the invoice charges. There is no auto-pick on
+the addon side anymore.
+
+If you previously wrote auto-pick code in the addon, you can delete it —
+the CRM owns that decision now. `correction` and `force_start_beam` are
+still in the payload for context (e.g. you might want to show them in
+the addon UI), but they don't affect the count.
+
+Map `pattern + pitches` directly onto your scene-builder. Each pattern
+implies the count and arrangement:
+
+| pattern | beams placed                | block rows placed                |
+|---------|-----------------------------|----------------------------------|
+| `GB`    | `pitches`                   | `pitches`                         |
+| `BGB`   | `pitches + 1` (closing beam) | `pitches`                         |
+| `GBG`   | `pitches`                   | `pitches + 1` (closing block row) |
+
+`extra_beams` adds that many additional beams along the length axis (per
+existing v1 behavior — unchanged).
 
 Example payload (2 rooms):
 
