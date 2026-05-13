@@ -763,9 +763,17 @@ model DrawingRequest {
   // a plain string avoids serialization round-trips on the bridge.
   roomsJson    String
 
-  status       DrawingRequestStatus @default(PENDING)
-  deliveredAt  DateTime?
-  errorMessage String?
+  status        DrawingRequestStatus @default(PENDING)
+  deliveredAt   DateTime?
+  errorMessage  String?
+
+  // Populated by ws-bridge when DRAWING_RESULT arrives from the addon.
+  // pdfStorageKey is a relative path ("drawings/<id>.pdf") under the
+  // DRAWINGS_DIR mount shared between ws-bridge and app containers.
+  pdfStorageKey String?
+  pdfSizeBytes  Int?
+  pageCount     Int?
+  renderMs      Int?
 
   createdById  String
   createdBy    User     @relation(fields: [createdById], references: [id])

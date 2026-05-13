@@ -122,6 +122,38 @@ export const POST = withPermission(
       );
     }
 
+    // Fast-fail: if Blender is not connected right now, refuse immediately
+    // rather than creating a PENDING row that will never be dispatched
+    // until Blender comes back online. The client shows a helpful message.
+    const bridgeStatusUrl =
+      (process.env.WS_BRIDGE_INTERNAL_URL ?? "http://ws-bridge:8766").replace(/\/$/, "") +
+      "/status";
+    try {
+      const bridgeRes  = await fetch(bridgeStatusUrl, { signal: AbortSignal.timeout(5000) });
+      const bridgeJson = await bridgeRes.json().catch(() => ({}));
+      if (!bridgeJson.connected) {
+        return NextResponse.json(
+          {
+            ok:    false,
+            error: "Blender ulanmagan — eganing kompyuterida Blender ochiq va addon yoqilgan bo'lishi kerak · Blender is not connected — make sure Blender is open on the owner's PC with the addon enabled",
+            code:  "BLENDER_OFFLINE",
+          },
+          { status: 503 },
+        );
+      }
+    } catch {
+      // Bridge unreachable (e.g. ws-bridge container restarting) — treat
+      // as offline so we don't queue a request with no one to dispatch it.
+      return NextResponse.json(
+        {
+          ok:    false,
+          error: "Ko'prik xizmatiga ulanib bo'lmadi · Could not reach the bridge service",
+          code:  "BLENDER_OFFLINE",
+        },
+        { status: 503 },
+      );
+    }
+
     const drawingRequest = await prisma.drawingRequest.create({
       data: {
         orderId: body.orderId ?? null,

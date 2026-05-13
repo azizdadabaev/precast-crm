@@ -32,8 +32,10 @@ services:
       ORDER_CANCEL_PASSWORD: ${ORDER_CANCEL_PASSWORD:?set ORDER_CANCEL_PASSWORD in .env}
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       NODE_ENV: production
+      DRAWINGS_DIR: /data/drawings
     volumes:
       - uploads:/app/public/uploads
+      - drawings_data:/data:ro
     expose:
       - "3000"
 
@@ -56,6 +58,9 @@ services:
       WS_BRIDGE_PORT: "8765"
       WS_BRIDGE_HTTP_PORT: "8766"
       BRIDGE_SECRET: ${BRIDGE_SECRET:?set BRIDGE_SECRET in .env (use openssl rand -hex 32)}
+      DRAWINGS_DIR: /data/drawings
+    volumes:
+      - drawings_data:/data
     expose:
       # Both ports stay inside the compose network. Caddy proxies the
       # public 8765 WebSocket port via the /ws path. 8766 is internal-
@@ -81,5 +86,6 @@ services:
 volumes:
   pgdata:
   uploads:
+  drawings_data:
   caddy_data:
   caddy_config:

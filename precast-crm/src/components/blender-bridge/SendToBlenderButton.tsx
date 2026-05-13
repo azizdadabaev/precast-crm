@@ -6,19 +6,21 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
 
 /**
- * SendToBlenderButton — owner-only action button rendered on the
+ * SendToBlenderButton — fire-and-forget action button rendered on the
  * order detail and saved-project detail pages.
  *
  * Lifecycle:
  *   idle      → click → sending (POST /api/drawings/request)
- *   sending   → got id → polling (GET /api/drawings/request/[id])
- *   polling   → status=DELIVERED → delivered (auto-resets after 3s)
- *              → status=FAILED   → failed (clears error after click)
- *              → 30s timeout     → failed with "Blender offline"
+ *   sending   → 200 ok  → submitted (auto-resets to idle after 3s)
+ *              → 503 BLENDER_OFFLINE → failed with specific message
+ *              → other error        → failed with generic message
+ *
+ * There is no polling. The PDF appears in the Drawings section of the
+ * order/project page once Blender delivers it. The user refreshes or
+ * navigates away and back.
  *
  * Visibility is the caller's responsibility — guard with
- * `can(user, "blender.bridge")` before rendering so non-owners
- * never see the button.
+ * `can(user, "blender.bridge")` before rendering.
  */
 
 type Props = {
@@ -28,10 +30,7 @@ type Props = {
   className?: string;
 };
 
-type State = "idle" | "sending" | "polling" | "delivered" | "failed";
-
-const POLL_INTERVAL_MS = 1000;
-const POLL_MAX_TICKS = 30; // 30s total — Blender ack should arrive in seconds
+type State = "idle" | "sending" | "submitted" | "failed";
 
 export function SendToBlenderButton({
   orderId,
@@ -42,17 +41,14 @@ export function SendToBlenderButton({
   const t = useT();
   const [state, setState] = useState<State>("idle");
   const [error, setError] = useState<string | null>(null);
-
-  // Track active intervals/timeouts so unmount + state transitions
-  // cancel cleanly. Without this, switching pages mid-poll leaks the
-  // timer + can call setState on an unmounted component.
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    if (resetRef.current) clearTimeout(resetRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (resetRef.current) clearTimeout(resetRef.current);
+    },
+    [],
+  );
 
   async function send() {
     setError(null);
@@ -66,93 +62,36 @@ export function SendToBlenderButton({
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(
-          err.error ??
-            t("Юбориб бўлмади", "Failed to send to Blender"),
-        );
+        const body = await res.json().catch(() => ({})) as {
+          error?: string;
+          code?: string;
+        };
+
+        if (body.code === "BLENDER_OFFLINE") {
+          setError(
+            t(
+              "Blender ulanmagan — eganing kompyuterida Blender ochiq va addon yoqilgan bo'lishi kerak",
+              "Blender is not connected — make sure Blender is open on the owner's PC with the addon enabled",
+            ),
+          );
+        } else {
+          setError(
+            body.error ?? t("Yuborib bo'lmadi", "Failed to send to Blender"),
+          );
+        }
+        setState("failed");
+        return;
       }
 
-      const { id } = (await res.json()) as { id: string };
-      setState("polling");
-
-      // Poll the single-request endpoint until terminal status or
-      // timeout. Each tick is a GET; on network blip we just keep
-      // polling — the timeout is the upper bound.
-      let ticks = 0;
-      pollRef.current = setInterval(async () => {
-        ticks++;
-        try {
-          const r = await fetch(`/api/drawings/request/${id}`, {
-            cache: "no-store",
-          });
-          if (!r.ok) {
-            // 404 = row vanished (unlikely); other = network — keep going
-            if (ticks >= POLL_MAX_TICKS) {
-              stopPoll();
-              setError(
-                t(
-                  "Жавоб йўқ — Blender очиқми ва аддон ишлаяптими?",
-                  "Timed out — is Blender open with the addon connected?",
-                ),
-              );
-              setState("failed");
-            }
-            return;
-          }
-          const data = (await r.json()) as {
-            status: "PENDING" | "DELIVERED" | "FAILED";
-            errorMessage: string | null;
-          };
-          if (data.status === "DELIVERED") {
-            stopPoll();
-            setState("delivered");
-            resetRef.current = setTimeout(() => setState("idle"), 3000);
-          } else if (data.status === "FAILED") {
-            stopPoll();
-            setError(
-              data.errorMessage ||
-                t(
-                  "Blender хатолик қайтарди",
-                  "Blender returned an error",
-                ),
-            );
-            setState("failed");
-          } else if (ticks >= POLL_MAX_TICKS) {
-            stopPoll();
-            setError(
-              t(
-                "Жавоб йўқ — Blender очиқми ва аддон ишлаяптими?",
-                "Timed out — is Blender open with the addon connected?",
-              ),
-            );
-            setState("failed");
-          }
-        } catch {
-          if (ticks >= POLL_MAX_TICKS) {
-            stopPoll();
-            setError(
-              t("Тармоқ хатоси · Network error", "Network error"),
-            );
-            setState("failed");
-          }
-        }
-      }, POLL_INTERVAL_MS);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setState("submitted");
+      resetRef.current = setTimeout(() => setState("idle"), 3000);
+    } catch {
+      setError(t("Tarmoq xatosi · Network error", "Network error"));
       setState("failed");
     }
   }
 
-  function stopPoll() {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }
-
   function reset() {
-    stopPoll();
     if (resetRef.current) {
       clearTimeout(resetRef.current);
       resetRef.current = null;
@@ -161,64 +100,47 @@ export function SendToBlenderButton({
     setState("idle");
   }
 
-  const busy = state === "sending" || state === "polling";
+  const busy = state === "sending";
   const fallbackLabel = orderId
-    ? t("Blender'га юбориш", "Send to Blender")
-    : t("Blender'га юбориш", "Send project to Blender");
+    ? t("Blender'ga yuborish", "Send to Blender")
+    : t("Blender'ga yuborish", "Send project to Blender");
 
   return (
     <div className={"flex flex-col items-end gap-1 " + (className ?? "")}>
       <Button
         variant="outline"
         size="sm"
-        disabled={busy || state === "delivered"}
+        disabled={busy || state === "submitted"}
         onClick={state === "failed" ? reset : send}
-        title={
-          state === "failed" && error
-            ? error
-            : state === "polling"
-              ? t(
-                  "Blender очиқ бўлсин — қабул кутилмоқда",
-                  "Make sure Blender is open with the precast addon",
-                )
-              : undefined
-        }
         className="gap-2"
       >
         {state === "idle" && <Boxes className="h-4 w-4" />}
-        {state === "sending" && (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        )}
-        {state === "polling" && (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        )}
-        {state === "delivered" && (
+        {state === "sending" && <Loader2 className="h-4 w-4 animate-spin" />}
+        {state === "submitted" && (
           <CheckCircle2 className="h-4 w-4 text-success" />
         )}
-        {state === "failed" && (
-          <XCircle className="h-4 w-4 text-destructive" />
-        )}
+        {state === "failed" && <XCircle className="h-4 w-4 text-destructive" />}
 
         <span>
           {state === "idle" && (label || fallbackLabel)}
-          {state === "sending" && t("Юборилмоқда…", "Sending…")}
-          {state === "polling" && t("Кутилмоқда…", "Waiting for Blender…")}
-          {state === "delivered" && t("Юборилди ✓", "Sent ✓")}
-          {state === "failed" && t("Қайта уриниш", "Retry")}
+          {state === "sending" && t("Yuborilmoqda…", "Sending…")}
+          {state === "submitted" && t("Yuborildi ✓", "Submitted ✓")}
+          {state === "failed" && t("Qayta urinish", "Retry")}
         </span>
       </Button>
+
+      {state === "submitted" && (
+        <p className="text-[11px] text-muted-foreground max-w-xs text-right leading-snug">
+          {t(
+            "PDF buyurtma sahifasida tayyor bo'lganda paydo bo'ladi",
+            "PDF will appear on the order page when ready",
+          )}
+        </p>
+      )}
 
       {state === "failed" && error && (
         <p className="text-[11px] text-destructive max-w-xs text-right leading-snug">
           {error}
-        </p>
-      )}
-      {state === "polling" && (
-        <p className="text-[11px] text-muted-foreground max-w-xs text-right leading-snug">
-          {t(
-            "Blender'нинг очиқ ва аддон уланганлигини текшириб кўринг…",
-            "Make sure Blender is open with the precast addon connected…",
-          )}
         </p>
       )}
     </div>

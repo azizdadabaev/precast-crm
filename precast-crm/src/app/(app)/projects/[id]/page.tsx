@@ -11,6 +11,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
+import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { formatDraftNumber } from "@/lib/draft-number";
 import { useT } from "@/lib/i18n";
 
@@ -336,6 +337,9 @@ export default function ProjectDetailPage() {
       </div>
       </div>
       {/* /shareRef */}
+
+      {/* Drawings — Blender-generated PDFs attached to this project */}
+      {canUseBlender && <DrawingsSection projectId={project.id} />}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>

@@ -26,6 +26,7 @@ import { DispatchDialog } from "@/components/dispatch/DispatchDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
+import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { useT } from "@/lib/i18n";
 
 interface OrderDetail {
@@ -838,6 +839,9 @@ export default function OrderDetailPage() {
           </div>
         );
       })()}
+
+      {/* Drawings — Blender-generated PDFs attached to this order */}
+      {canUseBlender && <DrawingsSection orderId={order.id} />}
 
       {/* Payments — chain of custody view */}
       {order.payments.length > 0 && (

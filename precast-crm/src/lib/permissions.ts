@@ -60,8 +60,8 @@ export const ACTIONS = [
 
   // Sandbox / experimental
   "sandbox.access",
-  // Owner-only — sends rooms to a locally-running Blender via the
-  // self-hosted ws-bridge service. Personal power-user feature.
+  // Sends rooms to the owner's Blender PC via the ws-bridge service.
+  // Generates a PDF drawing attached to the order/project.
   "blender.bridge",
 
   // Reports
@@ -183,7 +183,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "dashboard.view": "Молиявий бошқарув · Financial dashboard",
   "dashboard.viewBasic": "Оддий бошқарув · Basic dashboard",
   "sandbox.access": "Тажриба зонаси · Sandbox access",
-  "blender.bridge": "Blender кўприги · Blender Bridge (owner-only)",
+  "blender.bridge": "Blender чизмаси · Generate Blender drawing",
   "report.view": "Ҳисоботларни кўриш · View reports",
   "report.export": "Ҳисоботларни экспорт · Export reports",
 };
@@ -258,6 +258,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "dashboard.view",
     "dashboard.viewBasic",
     "sandbox.access",
+    "blender.bridge",
     "report.view",
     "report.export",
   ],
@@ -278,6 +279,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     // NOT payment.confirm
     "dashboard.viewBasic",
     // NOT dashboard.view (financial)
+    "blender.bridge",
   ],
 
   INVENTORY: [
@@ -301,6 +303,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "payment.view",
     "discrepancy.view",
     "dashboard.view",
+    "blender.bridge",
     "report.view",
     "report.export",
   ],
