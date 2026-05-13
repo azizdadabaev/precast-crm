@@ -11,14 +11,31 @@ import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { nextOrderNumber, orderNumberMonthPrefix } from "@/lib/order-number";
 
-/** GET /api/orders — order.view */
+/** GET /api/orders — order.view. Paginated. Search/status/day filters
+ * run server-side so `q` matches the full DB even when only one page
+ * of rows is rendered. Response: { items, total, page, pageSize, totalPages }. */
 export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status") ?? undefined;
+  const day = searchParams.get("day") ?? undefined;
+
+  const pageRaw = Number(searchParams.get("page") ?? "1");
+  const sizeRaw = Number(searchParams.get("pageSize") ?? "20");
+  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1;
+  const pageSize = Number.isFinite(sizeRaw)
+    ? Math.min(100, Math.max(1, Math.floor(sizeRaw)))
+    : 20;
 
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
+  if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    const start = new Date(`${day}T00:00:00.000Z`);
+    if (!Number.isNaN(start.getTime())) {
+      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      where.scheduledAt = { gte: start, lt: end };
+    }
+  }
   if (q) {
     const phoneForms = phoneMatchForms(q);
     const filters: unknown[] = [
@@ -34,15 +51,27 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     where.OR = filters;
   }
 
-  const orders = await prisma.order.findMany({
-    where,
-    orderBy: [{ scheduledAt: "asc" }, { placedAt: "desc" }],
-    include: {
-      client: true,
-      project: { select: { id: true, name: true } },
-    },
+  const [total, items] = await Promise.all([
+    prisma.order.count({ where }),
+    prisma.order.findMany({
+      where,
+      orderBy: [{ scheduledAt: "asc" }, { placedAt: "desc" }],
+      include: {
+        client: true,
+        project: { select: { id: true, name: true } },
+      },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+  ]);
+
+  return ok({
+    items,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
   });
-  return ok(orders);
 });
 
 /**

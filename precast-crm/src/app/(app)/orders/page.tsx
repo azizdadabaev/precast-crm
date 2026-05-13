@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { paidVariant } from "@/lib/order-display";
@@ -74,33 +75,56 @@ function translatePayment(s: Order["paymentState"], t: (uz: string, en: string) 
   }
 }
 
+const PAGE_SIZE = 20;
+
+interface OrdersResponse {
+  items: Order[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+// Format a Date as YYYY-MM-DD in the user's local timezone, so the day the
+// operator picks on the calendar matches the day stored on the row.
+function toLocalDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function OrdersPage() {
   const t = useT();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | Order["status"]>("");
   const [calendarSelected, setCalendarSelected] = useState<Date | null>(null);
+  const [page, setPage] = useState(1);
 
-  const { data: orders = [], isLoading } = useQuery<Order[]>({
-    queryKey: ["orders", q, status],
+  // Any change to filters must rewind to page 1, otherwise a search done
+  // while on page 4 could request a non-existent page of a smaller result.
+  useEffect(() => {
+    setPage(1);
+  }, [q, status, calendarSelected]);
+
+  const dayKey = calendarSelected ? toLocalDateKey(calendarSelected) : null;
+
+  const { data, isLoading } = useQuery<OrdersResponse>({
+    queryKey: ["orders", q, status, dayKey, page],
     queryFn: () => {
       const p = new URLSearchParams();
       if (q.trim()) p.set("q", q.trim());
       if (status) p.set("status", status);
+      if (dayKey) p.set("day", dayKey);
+      p.set("page", String(page));
+      p.set("pageSize", String(PAGE_SIZE));
       return api(`/api/orders?${p.toString()}`);
     },
   });
 
-  // Filter by calendar-selected day, if any
-  const filtered = calendarSelected
-    ? orders.filter((o) => {
-        const d = new Date(o.scheduledAt);
-        return (
-          d.getFullYear() === calendarSelected.getFullYear() &&
-          d.getMonth() === calendarSelected.getMonth() &&
-          d.getDate() === calendarSelected.getDate()
-        );
-      })
-    : orders;
+  const orders = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   return (
     <div className="space-y-5">
@@ -195,7 +219,7 @@ export default function OrdersPage() {
       <div className="rounded-lg border border-border bg-card overflow-hidden">
         {isLoading ? (
           <div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
-        ) : filtered.length === 0 ? (
+        ) : orders.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">{t("Буюртма йўқ.", "No orders.")}</div>
         ) : (
           <div className="overflow-x-auto">
@@ -215,7 +239,7 @@ export default function OrdersPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((o, i) => {
+                {orders.map((o, i) => {
                   const meta = STATUS_META[o.status];
                   const pay = PAYMENT_META[o.paymentState];
                   return (
@@ -289,6 +313,39 @@ export default function OrdersPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {!isLoading && total > PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+            <div>
+              {t("Саҳифа", "Page")}{" "}
+              <span className="font-mono font-semibold text-foreground">{page}</span>{" "}
+              {t("дан", "of")}{" "}
+              <span className="font-mono font-semibold text-foreground">{totalPages}</span>
+              <span className="mx-2 text-text-tertiary">·</span>
+              <span className="font-mono font-semibold text-foreground">{total}</span>{" "}
+              {t("жами", "total")}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span>{t("Олдинги", "Prev")}</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                <span>{t("Кейинги", "Next")}</span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
       </div>
