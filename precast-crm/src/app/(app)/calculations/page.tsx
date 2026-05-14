@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Save, PackageCheck, Trash2, Loader2 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import { Bi, useT } from "@/lib/i18n";
 
 function CalculationsInner() {
   const router = useRouter();
+  const qc = useQueryClient();
   const search = useSearchParams();
   const t = useT();
 
@@ -415,6 +416,13 @@ function CalculationsInner() {
       // continue editing; the next edits will start fresh in the auto-save
       // and Save Project will UPDATE this same draft id.
       clearAll();
+      // Invalidate the lists used by /projects (`["projects", ...]`) and
+      // the detail page (`["projects-all"]`) so the destination route
+      // sees the just-saved row instead of stale cache from before the
+      // POST. Without this, /projects/[id] shows "Лойиҳа топилмади"
+      // because React Query serves the pre-save snapshot.
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["projects-all"] });
       router.push(`/projects/${project.id}`);
     },
     onError: (e: Error) => setError(e.message),

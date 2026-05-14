@@ -32,9 +32,22 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
   if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
-    const start = new Date(`${day}T00:00:00.000Z`);
-    if (!Number.isNaN(start.getTime())) {
-      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    // Bucket by the server's local timezone so the day window matches
+    // the capacity calendar (which uses Date#getDate() — also local).
+    // The orders list page sends `day=YYYY-MM-DD` formatted from the
+    // operator's local date; resolving it as UTC midnight here would
+    // skew the window by the operator's offset (e.g. a Tashkent +05
+    // operator picking May 29 would miss any order whose scheduledAt
+    // is between 19:00 May 28 UTC and 00:00 May 29 UTC, even though
+    // that order shows in the May 29 calendar cell).
+    const [y, m, d] = day.split("-").map((n) => Number(n));
+    if (
+      Number.isFinite(y) &&
+      Number.isFinite(m) &&
+      Number.isFinite(d)
+    ) {
+      const start = new Date(y, m - 1, d, 0, 0, 0, 0);
+      const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0);
       where.scheduledAt = { gte: start, lt: end };
     }
   }

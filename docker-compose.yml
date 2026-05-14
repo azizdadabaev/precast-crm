@@ -33,6 +33,16 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       NODE_ENV: production
       DRAWINGS_DIR: /data/drawings
+      # The orders capacity calendar buckets rows by Date#getDate() in
+      # the server's local timezone, and the day-filter on the orders
+      # list computes its window the same way. Without TZ set, the
+      # container defaults to UTC and an operator in Tashkent picking
+      # "May 29" on the calendar would see "No orders" for a row whose
+      # scheduledAt is between 19:00 May 28 UTC and midnight, even
+      # though that row paints the May 29 cell. Pinning to
+      # Asia/Tashkent (no DST, fixed +05) keeps both views in sync
+      # with what the operator sees.
+      TZ: ${TZ:-Asia/Tashkent}
     volumes:
       - uploads:/app/public/uploads
       - drawings_data:/data:ro
