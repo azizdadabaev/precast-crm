@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Download } from "lucide-react";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { paidVariant } from "@/lib/order-display";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 import { useT } from "@/lib/i18n";
+import { playNewOrderChime } from "@/lib/new-order-chime";
 
 interface Order {
   id: string;
@@ -120,28 +121,74 @@ export default function OrdersPage() {
       p.set("pageSize", String(PAGE_SIZE));
       return api(`/api/orders?${p.toString()}`);
     },
+    // Poll so every CRM user with this page open sees new orders show
+    // up automatically — paired with the chime below this becomes a
+    // soft "ding! someone placed an order" notification across the team.
+    refetchInterval: 20_000,
   });
 
   const orders = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
 
+  // Permissions — used for the owner-only Excel backup button.
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canExportBackup = me?.permissions?.includes("order.exportBackup") ?? false;
+
+  // New-order chime. We ring it only when an orderId appears that wasn't
+  // in the previous successful fetch — the very first load is treated as
+  // the baseline (no chime), so opening the page doesn't bombard the user
+  // with notifications for every already-placed order.
+  const seenIdsRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const currentIds = new Set(data.items.map((o) => o.id));
+    if (seenIdsRef.current === null) {
+      // First fetch — establish baseline silently.
+      seenIdsRef.current = currentIds;
+      return;
+    }
+    // Compare against the previous set; chime once if anything new appeared.
+    let hasNew = false;
+    for (const id of currentIds) {
+      if (!seenIdsRef.current.has(id)) {
+        hasNew = true;
+        break;
+      }
+    }
+    seenIdsRef.current = currentIds;
+    if (hasNew) playNewOrderChime();
+  }, [data]);
+
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Буюртмалар
-          <span className="lang-en text-muted-foreground font-normal text-base">
-            {" "}· Orders
-          </span>
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {t(
-            "Жойлаштирилган буюртмалар — буюртма №, мижоз ёки манзил бўйича қидиринг. Жадвал бўйича фильтрлаш учун кундан танланг.",
-            "Placed orders — search by order #, client, or address. Pick a day on the calendar to filter by schedule.",
-          )}
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Буюртмалар
+            <span className="lang-en text-muted-foreground font-normal text-base">
+              {" "}· Orders
+            </span>
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Жойлаштирилган буюртмалар — буюртма №, мижоз ёки манзил бўйича қидиринг. Жадвал бўйича фильтрлаш учун кундан танланг.",
+              "Placed orders — search by order #, client, or address. Pick a day on the calendar to filter by schedule.",
+            )}
+          </p>
+        </div>
+        {canExportBackup && (
+          <Button variant="outline" size="sm" asChild>
+            <a href="/api/orders/export" download>
+              <Download className="h-4 w-4 mr-2" />
+              {t("Excel захираси", "Excel backup")}
+            </a>
+          </Button>
+        )}
       </div>
 
       {/* Capacity calendar */}
