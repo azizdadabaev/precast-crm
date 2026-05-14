@@ -1,22 +1,25 @@
 "use client";
 
 // Address composer used wherever an operator types a customer address.
-// Two linked Comboboxes (Province / City) on top, free-text street
-// detail below. Calls `onChange` with the fully-composed string —
-// `${city}, ${streetDetail}` — so the storage shape stays a plain
-// string and no API or schema change is needed.
+// Two linked Comboboxes on top — Viloyat (14) → Tuman (203) — followed
+// by a free-text street/building/apartment row. Calls `onChange` with
+// the fully-composed string `${viloyat}, ${tuman}, ${street}` (or
+// fewer parts if the operator skipped a dropdown).
 //
-// Linking rules (see uzbekistan-cities.ts for the catalog):
-//   - Selecting a province filters the city list to that province.
-//     If the province has exactly one city → auto-select it.
-//     If multiple → user picks (currently never the case; future-proof).
-//   - Selecting a city auto-snaps the province dropdown.
-//   - Clearing the province resets the city dropdown to "all cities".
-//   - Clearing the city does NOT clear the province.
+// Mahallas / MFY / QFY are NOT in a dropdown — they're typed directly
+// into the street field. The kenjebaev dataset has ~10K of them which
+// would tank both the bundle and the operator's workflow.
 //
-// Search is type-to-filter on both Latin and Cyrillic via cmdk's
-// built-in matcher. Each item has a `value` that concatenates both
-// names so a search for "Sam" or "Сам" both hit Самарқанд.
+// Linking rules (driven by helpers in @/lib/regions):
+//   - Selecting a viloyat filters the tuman list to that viloyat;
+//     if the current tuman no longer matches, it clears.
+//   - Selecting a tuman auto-snaps the viloyat dropdown.
+//   - Clearing the viloyat resets the tuman.
+//   - Clearing the tuman keeps the viloyat.
+//
+// Search is type-to-filter on both Latin and Cyrillic via cmdk. Each
+// item's `value` concatenates both spellings so a search for "Yun"
+// or "Юн" both hit Yunusobod / Юнусобод.
 
 import * as React from "react";
 import { Check, ChevronsUpDown, X } from "lucide-react";
@@ -37,15 +40,18 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   composeAddress,
-  getCitiesForProvince,
-  getProvinceForCity,
-  getProvinces,
+  findTumanByName,
+  findViloyatByName,
+  getTumans,
+  getViloyatForTuman,
+  getViloyats,
   parseAddress,
-  provinceHasMultipleCities,
-} from "@/lib/uzbekistan-cities";
+  type Tuman,
+  type Viloyat,
+} from "@/lib/regions";
 
 interface AddressInputProps {
-  /** The composed address string (city + ", " + street detail). */
+  /** The composed address string. */
   value: string;
   /** Called whenever the composed address changes. */
   onChange: (next: string) => void;
@@ -60,133 +66,137 @@ export function AddressInput({
   className,
   idPrefix,
 }: AddressInputProps) {
-  // Parse the incoming value once, then own city/street locally so the
+  // Parse the incoming value once, then own each field locally so the
   // user can type into the street field without round-tripping every
-  // keystroke through the parent's onChange (the parent still gets the
-  // composed string on every change — just not via re-parsing).
+  // keystroke through the parent's onChange.
   const initial = React.useMemo(() => parseAddress(value), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only initial seed
 
-  const [city, setCity] = React.useState<string>(initial.city);
-  const [province, setProvince] = React.useState<string>(
-    initial.city ? getProvinceForCity(initial.city) ?? "" : "",
-  );
+  const [viloyat, setViloyat] = React.useState<string>(initial.viloyat);
+  const [tuman, setTuman] = React.useState<string>(initial.tuman);
   const [streetDetail, setStreetDetail] = React.useState<string>(initial.streetDetail);
 
   // If the parent swaps the value out from under us (e.g. operator
-  // selects a different matched client whose address loads), re-parse.
-  // We compare against the composed shape to avoid stomping local
-  // edits that haven't yet bubbled up.
+  // selects a different matched client), re-parse. We compare against
+  // the composed shape to avoid clobbering local edits.
   React.useEffect(() => {
-    const composed = composeAddress(city, streetDetail);
+    const composed = composeAddress(viloyat, tuman, streetDetail);
     if (composed === value) return;
     const next = parseAddress(value);
-    setCity(next.city);
-    setProvince(next.city ? getProvinceForCity(next.city) ?? "" : "");
+    setViloyat(next.viloyat);
+    setTuman(next.tuman);
     setStreetDetail(next.streetDetail);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- depends only on value
   }, [value]);
 
-  const emit = (
-    nextCity: string,
-    nextStreet: string,
-  ) => {
-    onChange(composeAddress(nextCity, nextStreet));
+  const emit = (nextViloyat: string, nextTuman: string, nextStreet: string) => {
+    onChange(composeAddress(nextViloyat, nextTuman, nextStreet));
   };
 
-  const provinces = React.useMemo(() => getProvinces(), []);
-  const cities = React.useMemo(
-    () => getCitiesForProvince(province || null),
-    [province],
+  const viloyats = React.useMemo(() => getViloyats(), []);
+  const selectedViloyat = React.useMemo(
+    () => (viloyat ? findViloyatByName(viloyat) : null),
+    [viloyat],
+  );
+  const tumans = React.useMemo(
+    () => getTumans(selectedViloyat?.id ?? null),
+    [selectedViloyat],
   );
 
-  function pickProvince(nextProvince: string) {
-    setProvince(nextProvince);
-    if (!nextProvince) {
-      // Cleared the province → city dropdown reopens to "all cities".
-      // We leave `city` as-is so the user doesn't lose their existing
-      // pick if they're just exploring.
+  function pickViloyat(nextViloyat: string) {
+    setViloyat(nextViloyat);
+    if (!nextViloyat) {
+      // Cleared → drop the tuman too (it's filtered against viloyat).
+      setTuman("");
+      emit("", "", streetDetail);
       return;
     }
-    // Auto-select when there's exactly one city in this province.
-    const list = getCitiesForProvince(nextProvince);
-    if (!provinceHasMultipleCities(nextProvince) && list.length === 1) {
-      const only = list[0].city;
-      setCity(only);
-      emit(only, streetDetail);
+    // If the current tuman doesn't belong to the new viloyat, clear it.
+    const nextViloyatRow = findViloyatByName(nextViloyat);
+    const currentTuman = tuman ? findTumanByName(tuman) : null;
+    if (
+      currentTuman &&
+      nextViloyatRow &&
+      currentTuman.viloyatId !== nextViloyatRow.id
+    ) {
+      setTuman("");
+      emit(nextViloyat, "", streetDetail);
       return;
     }
-    // Multiple cities in province → if the current city is no longer
-    // in the filtered list, clear it so the user re-picks.
-    if (city && !list.some((c) => c.city === city)) {
-      setCity("");
-      emit("", streetDetail);
-    }
+    emit(nextViloyat, tuman, streetDetail);
   }
 
-  function pickCity(nextCity: string) {
-    setCity(nextCity);
-    if (nextCity) {
-      const snapped = getProvinceForCity(nextCity);
-      if (snapped) setProvince(snapped);
+  function pickTuman(nextTuman: string) {
+    setTuman(nextTuman);
+    if (nextTuman) {
+      const row = findTumanByName(nextTuman);
+      if (row) {
+        const parent = getViloyatForTuman(row.id);
+        if (parent) {
+          setViloyat(parent.name);
+          emit(parent.name, nextTuman, streetDetail);
+          return;
+        }
+      }
     }
-    emit(nextCity, streetDetail);
+    emit(viloyat, nextTuman, streetDetail);
   }
 
   function changeStreet(nextStreet: string) {
     setStreetDetail(nextStreet);
-    emit(city, nextStreet);
+    emit(viloyat, tuman, nextStreet);
   }
 
   return (
     <div className={cn("space-y-2", className)}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <ProvinceCombobox
+        <ViloyatCombobox
           idPrefix={idPrefix}
-          value={province}
-          provinces={provinces}
-          onChange={pickProvince}
+          value={viloyat}
+          viloyats={viloyats}
+          onChange={pickViloyat}
         />
-        <CityCombobox
+        <TumanCombobox
           idPrefix={idPrefix}
-          value={city}
-          cities={cities}
-          onChange={pickCity}
+          value={tuman}
+          tumans={tumans}
+          disabled={false}
+          onChange={pickTuman}
         />
       </div>
       <Input
-        placeholder="Кўча, бино, хонадон · Street, building, apartment"
+        placeholder="Кўча, маҳалла, бино, хонадон · Street, mahalla, building, apartment"
         value={streetDetail}
         onChange={(e) => changeStreet(e.target.value)}
-        aria-label="Street, building, apartment"
+        aria-label="Street, mahalla, building, apartment"
       />
     </div>
   );
 }
 
-// ── Subcomponents ───────────────────────────────────────────────
+// ── Subcomponents ──────────────────────────────────────────────
 
-interface ProvinceComboboxProps {
+interface ViloyatComboboxProps {
   idPrefix?: string;
   value: string;
-  provinces: ReturnType<typeof getProvinces>;
+  viloyats: Viloyat[];
   onChange: (next: string) => void;
 }
 
-function ProvinceCombobox({
+function ViloyatCombobox({
   idPrefix,
   value,
-  provinces,
+  viloyats,
   onChange,
-}: ProvinceComboboxProps) {
+}: ViloyatComboboxProps) {
   const [open, setOpen] = React.useState(false);
-  const selected = provinces.find((p) => p.province === value);
+  const selected = viloyats.find((v) => v.name === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          id={idPrefix ? `${idPrefix}-province` : undefined}
+          id={idPrefix ? `${idPrefix}-viloyat` : undefined}
           type="button"
           role="combobox"
           aria-expanded={open}
@@ -197,17 +207,17 @@ function ProvinceCombobox({
         >
           {selected ? (
             <span className="truncate">
-              {selected.provinceUz} · {selected.province}
+              {selected.nameUz} · {selected.name}
             </span>
           ) : (
-            <span className="text-muted-foreground">Вилоят · Province</span>
+            <span className="text-muted-foreground">Вилоят · Region</span>
           )}
           <span className="flex items-center gap-1 shrink-0 text-muted-foreground">
             {selected && (
               <span
                 role="button"
                 tabIndex={0}
-                aria-label="Clear province"
+                aria-label="Clear viloyat"
                 onClick={(e) => {
                   e.stopPropagation();
                   onChange("");
@@ -231,37 +241,31 @@ function ProvinceCombobox({
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
         <Command
           filter={(itemValue, search) => {
-            // cmdk lowercases both sides; we also need to treat
-            // Cyrillic and Latin spellings as equal-class matches.
-            // The Item's `value` already concatenates both names, so
-            // a simple substring test does the right thing.
             if (!search) return 1;
-            return itemValue.toLowerCase().includes(search.toLowerCase())
-              ? 1
-              : 0;
+            return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
           }}
         >
           <CommandInput placeholder="Қидириш · Search" />
           <CommandList>
             <CommandEmpty>Топилмади · No match</CommandEmpty>
             <CommandGroup>
-              {provinces.map((p) => (
+              {viloyats.map((v) => (
                 <CommandItem
-                  key={p.province}
-                  value={`${p.provinceUz} ${p.province}`}
+                  key={v.id}
+                  value={`${v.nameUz} ${v.name}`}
                   onSelect={() => {
-                    onChange(p.province);
+                    onChange(v.name);
                     setOpen(false);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value === p.province ? "opacity-100" : "opacity-0",
+                      value === v.name ? "opacity-100" : "opacity-0",
                     )}
                   />
                   <span>
-                    {p.provinceUz} · {p.province}
+                    {v.nameUz} · {v.name}
                   </span>
                 </CommandItem>
               ))}
@@ -273,48 +277,52 @@ function ProvinceCombobox({
   );
 }
 
-interface CityComboboxProps {
+interface TumanComboboxProps {
   idPrefix?: string;
   value: string;
-  cities: ReturnType<typeof getCitiesForProvince>;
+  tumans: Tuman[];
+  disabled: boolean;
   onChange: (next: string) => void;
 }
 
-function CityCombobox({
+function TumanCombobox({
   idPrefix,
   value,
-  cities,
+  tumans,
+  disabled,
   onChange,
-}: CityComboboxProps) {
+}: TumanComboboxProps) {
   const [open, setOpen] = React.useState(false);
-  const selected = cities.find((c) => c.city === value);
+  const selected = tumans.find((t) => t.name === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          id={idPrefix ? `${idPrefix}-city` : undefined}
+          id={idPrefix ? `${idPrefix}-tuman` : undefined}
           type="button"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className={cn(
             "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm",
             "focus:outline-none focus:ring-2 focus:ring-primary/40",
+            "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         >
           {selected ? (
             <span className="truncate">
-              {selected.cityUz} · {selected.city}
+              {selected.nameUz} · {selected.name}
             </span>
           ) : (
-            <span className="text-muted-foreground">Шаҳар · City</span>
+            <span className="text-muted-foreground">Туман · District</span>
           )}
           <span className="flex items-center gap-1 shrink-0 text-muted-foreground">
             {selected && (
               <span
                 role="button"
                 tabIndex={0}
-                aria-label="Clear city"
+                aria-label="Clear tuman"
                 onClick={(e) => {
                   e.stopPropagation();
                   onChange("");
@@ -339,32 +347,30 @@ function CityCombobox({
         <Command
           filter={(itemValue, search) => {
             if (!search) return 1;
-            return itemValue.toLowerCase().includes(search.toLowerCase())
-              ? 1
-              : 0;
+            return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
           }}
         >
           <CommandInput placeholder="Қидириш · Search" />
           <CommandList>
             <CommandEmpty>Топилмади · No match</CommandEmpty>
             <CommandGroup>
-              {cities.map((c) => (
+              {tumans.map((t) => (
                 <CommandItem
-                  key={c.city}
-                  value={`${c.cityUz} ${c.city}`}
+                  key={t.id}
+                  value={`${t.nameUz} ${t.name}`}
                   onSelect={() => {
-                    onChange(c.city);
+                    onChange(t.name);
                     setOpen(false);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value === c.city ? "opacity-100" : "opacity-0",
+                      value === t.name ? "opacity-100" : "opacity-0",
                     )}
                   />
                   <span>
-                    {c.cityUz} · {c.city}
+                    {t.nameUz} · {t.name}
                   </span>
                 </CommandItem>
               ))}

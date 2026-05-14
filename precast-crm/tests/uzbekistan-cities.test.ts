@@ -12,18 +12,30 @@ import {
 } from "../src/lib/uzbekistan-cities";
 
 describe("uzbekistan-cities catalog", () => {
-  it("has exactly 12 entries", () => {
-    expect(UZBEKISTAN_CITIES).toHaveLength(12);
+  it("has exactly 14 entries (matches kenjebaev/regions admin divisions)", () => {
+    expect(UZBEKISTAN_CITIES).toHaveLength(14);
   });
 
   it("has unique cities", () => {
     const cities = UZBEKISTAN_CITIES.map((c) => c.city);
-    expect(new Set(cities).size).toBe(12);
+    expect(new Set(cities).size).toBe(14);
   });
 
   it("has unique provinces today (future-proof rule still honored)", () => {
     const provinces = UZBEKISTAN_CITIES.map((c) => c.province);
-    expect(new Set(provinces).size).toBe(12);
+    expect(new Set(provinces).size).toBe(14);
+  });
+
+  it("uses canonical 'viloyati' / 'Respublikasi' / 'shahri' suffixes", () => {
+    // Regression guard for the kenjebaev-alignment fix: each province
+    // string carries the administrative suffix appropriate to its rank.
+    for (const c of UZBEKISTAN_CITIES) {
+      const valid =
+        c.province.endsWith(" viloyati") ||
+        c.province.endsWith(" Respublikasi") ||
+        c.province.endsWith(" shahri");
+      expect(valid, `Province "${c.province}" missing admin suffix`).toBe(true);
+    }
   });
 });
 
@@ -34,9 +46,10 @@ describe("getProvinces", () => {
     expect(list).toEqual(sorted);
   });
 
-  it("includes the Toshkent shahri special case", () => {
+  it("includes Toshkent shahri AND Toshkent viloyati as separate entries", () => {
     const list = getProvinces().map((p) => p.province);
     expect(list).toContain("Toshkent shahri");
+    expect(list).toContain("Toshkent viloyati");
   });
 
   it("attaches the Uzbek label to every entry", () => {
@@ -47,19 +60,28 @@ describe("getProvinces", () => {
 
 describe("getCitiesForProvince", () => {
   it("returns every city when called with null", () => {
-    expect(getCitiesForProvince(null)).toHaveLength(12);
+    expect(getCitiesForProvince(null)).toHaveLength(14);
   });
 
   it("returns every city when called with empty string", () => {
-    expect(getCitiesForProvince("")).toHaveLength(12);
+    expect(getCitiesForProvince("")).toHaveLength(14);
   });
 
   it("filters to one city for each current province", () => {
     expect(getCitiesForProvince("Toshkent shahri").map((c) => c.city)).toEqual([
       "Toshkent",
     ]);
-    expect(getCitiesForProvince("Qashqadaryo").map((c) => c.city)).toEqual([
+    expect(getCitiesForProvince("Toshkent viloyati").map((c) => c.city)).toEqual([
+      "Nurafshon",
+    ]);
+    expect(getCitiesForProvince("Qashqadaryo viloyati").map((c) => c.city)).toEqual([
       "Qarshi",
+    ]);
+    expect(getCitiesForProvince("Sirdaryo viloyati").map((c) => c.city)).toEqual([
+      "Guliston",
+    ]);
+    expect(getCitiesForProvince("Surxondaryo viloyati").map((c) => c.city)).toEqual([
+      "Termiz",
     ]);
   });
 
@@ -75,12 +97,28 @@ describe("getCitiesForProvince", () => {
 });
 
 describe("getProvinceForCity", () => {
-  it("maps Toshkent → Toshkent shahri (the special case)", () => {
+  it("maps Toshkent → Toshkent shahri (the capital city special case)", () => {
     expect(getProvinceForCity("Toshkent")).toBe("Toshkent shahri");
   });
 
-  it("maps Qarshi → Qashqadaryo", () => {
-    expect(getProvinceForCity("Qarshi")).toBe("Qashqadaryo");
+  it("maps Nurafshon → Toshkent viloyati (the regional center, distinct)", () => {
+    expect(getProvinceForCity("Nurafshon")).toBe("Toshkent viloyati");
+  });
+
+  it("maps Qarshi → Qashqadaryo viloyati", () => {
+    expect(getProvinceForCity("Qarshi")).toBe("Qashqadaryo viloyati");
+  });
+
+  it("maps Nukus → Qoraqalpog'iston Respublikasi (autonomous republic)", () => {
+    expect(getProvinceForCity("Nukus")).toBe("Qoraqalpog'iston Respublikasi");
+  });
+
+  it("maps Guliston → Sirdaryo viloyati", () => {
+    expect(getProvinceForCity("Guliston")).toBe("Sirdaryo viloyati");
+  });
+
+  it("maps Termiz → Surxondaryo viloyati (keeping local Latin spelling)", () => {
+    expect(getProvinceForCity("Termiz")).toBe("Surxondaryo viloyati");
   });
 
   it("returns null for an unknown city", () => {
@@ -118,6 +156,11 @@ describe("parseAddress", () => {
   it("returns city only when the address has no street", () => {
     expect(parseAddress("Buxoro")).toEqual({ city: "Buxoro", streetDetail: "" });
     expect(parseAddress("Бухоро")).toEqual({ city: "Buxoro", streetDetail: "" });
+  });
+
+  it("matches new entries Guliston and Nurafshon as bare-city addresses", () => {
+    expect(parseAddress("Guliston")).toEqual({ city: "Guliston", streetDetail: "" });
+    expect(parseAddress("Нурафшон")).toEqual({ city: "Nurafshon", streetDetail: "" });
   });
 
   it("trims whitespace around the comma split", () => {
@@ -162,6 +205,8 @@ describe("composeAddress", () => {
       "Toshkent, Yunusobod 12-7",
       "Samarqand, Registon 5",
       "Buxoro",
+      "Guliston, Markaz 1",
+      "Nurafshon",
       "",
     ]) {
       const parsed = parseAddress(original);
@@ -179,8 +224,16 @@ describe("label helpers", () => {
     expect(cityLabel("Atlantis")).toBe("Atlantis");
   });
 
-  it("produces 'Cyrillic · Latin' for a known province", () => {
-    expect(provinceLabel("Toshkent shahri")).toBe("Тошкент шаҳри · Toshkent shahri");
+  it("produces 'Cyrillic · Latin' with admin suffix for a known province", () => {
+    expect(provinceLabel("Samarqand viloyati")).toBe(
+      "Самарқанд вилояти · Samarqand viloyati",
+    );
+    expect(provinceLabel("Toshkent shahri")).toBe(
+      "Тошкент шаҳри · Toshkent shahri",
+    );
+    expect(provinceLabel("Qoraqalpog'iston Respublikasi")).toBe(
+      "Қорақалпоғистон Республикаси · Qoraqalpog'iston Respublikasi",
+    );
   });
 
   it("falls back to the input for an unknown province", () => {
