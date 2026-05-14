@@ -1,10 +1,12 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { SaveProjectDraftSchema, ProjectStatusEnum } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { recordAudit } from "@/lib/audit";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
@@ -50,7 +52,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
 });
 
 /** POST /api/projects — order.create. Save Project (draft). Phone-only required. */
-export const POST = withPermission("order.create", async (req: NextRequest) => {
+export const POST = withPermission("order.create", async (req: NextRequest, { user }) => {
   const body = SaveProjectDraftSchema.parse(await req.json());
 
   const phoneNorm = normalizePhone(body.clientPhone);
@@ -154,5 +156,63 @@ export const POST = withPermission("order.create", async (req: NextRequest) => {
     });
   });
 
+  recordAudit({
+    userId: user.id,
+    action: body.projectId ? "project.update" : "project.create",
+    targetType: "project",
+    targetId: project.id,
+    message: project.name ?? `Draft #${project.draftNumber ?? ""}`.trim(),
+    metadata: { roomCount: project.calculations.length },
+  });
+
   return created(project);
 });
+
+/**
+ * DELETE /api/projects — owner-only bulk delete of saved drafts.
+ *
+ * Body: { ids: string[] }
+ *
+ * Rules:
+ *   - Only DRAFT projects can be deleted. ORDERED rows are refused so an
+ *     order-placed project (and its order/payment trail) is never orphaned.
+ *   - The delete is transactional and cascades to Calculations via Prisma's
+ *     onDelete: Cascade (defined on the FK).
+ *   - DrawingRequests with projectId set will have their FK nulled
+ *     (onDelete: SET NULL) so their history survives the project deletion.
+ */
+const DeleteBody = z.object({
+  ids: z.array(z.string()).min(1).max(200),
+});
+
+export const DELETE = withPermission(
+  "project.delete",
+  async (req: NextRequest, { user }) => {
+    const body = DeleteBody.parse(await req.json());
+
+    const ordered = await prisma.project.findMany({
+      where: { id: { in: body.ids }, status: "ORDERED" },
+      select: { id: true, name: true, draftNumber: true },
+    });
+    if (ordered.length > 0) {
+      return fail(
+        `Cannot delete ${ordered.length} project(s) that already have orders. Cancel the order first.`,
+        409,
+      );
+    }
+
+    const result = await prisma.project.deleteMany({
+      where: { id: { in: body.ids }, status: "DRAFT" },
+    });
+
+    recordAudit({
+      userId: user.id,
+      action: "project.delete",
+      targetType: "project",
+      message: `Deleted ${result.count} draft project(s)`,
+      metadata: { ids: body.ids, deletedCount: result.count },
+    });
+
+    return ok({ deleted: result.count });
+  },
+);

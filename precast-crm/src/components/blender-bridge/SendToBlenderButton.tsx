@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Boxes, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
@@ -39,6 +40,7 @@ export function SendToBlenderButton({
   className,
 }: Props) {
   const t = useT();
+  const qc = useQueryClient();
   const [state, setState] = useState<State>("idle");
   const [error, setError] = useState<string | null>(null);
   const resetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -82,6 +84,15 @@ export function SendToBlenderButton({
         setState("failed");
         return;
       }
+
+      // Kick the Drawings section to refetch immediately — without this,
+      // the section's refetchInterval only wakes up when its cached data
+      // already shows a PENDING row, so the new request would be invisible
+      // until the next page reload. Invalidating the matching query key
+      // makes the freshly-created PENDING row appear, which then triggers
+      // the section's 3s poll until DELIVERED.
+      const queryParam = orderId ? `orderId=${orderId}` : `projectId=${projectId}`;
+      qc.invalidateQueries({ queryKey: ["drawings", queryParam] });
 
       setState("submitted");
       resetRef.current = setTimeout(() => setState("idle"), 3000);

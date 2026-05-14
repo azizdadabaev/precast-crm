@@ -907,6 +907,24 @@ export function MultiRoomCalculator({
                 {/* col 19: delete */}
                 <td></td>
               </tr>
+              {/* Total slab weight — m² × 180 kg/m² (factory rule of thumb
+                  for finished beam-and-block flooring). Helps operators
+                  size delivery trucks and crane lifts at a glance. */}
+              <tr className="bg-muted/20 text-xs">
+                <td colSpan={15} className="px-3 py-1.5 text-right uppercase tracking-wider text-muted-foreground font-bold">
+                  Жами маҳсулот оғирлиги
+                  <span className="lang-en font-normal"> · Total slab weight</span>
+                </td>
+                <td colSpan={3} className="px-2 py-1.5 text-center tabular-nums">
+                  <span className="text-muted-foreground">
+                    {formatNumber(totals.monolithArea, 2)} m² × 180
+                  </span>
+                  <span className="ml-2 font-bold text-foreground">
+                    = {formatNumber(totals.monolithArea * 180, 0)} кг
+                  </span>
+                </td>
+                <td></td>
+              </tr>
             </tfoot>
           )}
         </table>

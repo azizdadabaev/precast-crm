@@ -257,6 +257,87 @@ setInterval(() => {
   );
 }, 2000);
 
+// ── PDF auto-cleanup ──────────────────────────────────────────────────────
+//
+// Drawings older than 30 days are silently deleted from disk and their
+// pdfStorageKey nulled in the DB. Operators don't get a notification —
+// PDFs are produced fresh on-demand, so nothing the customer sees is
+// affected. The retention window is generous enough that an order page
+// will keep its drawing for the whole production+delivery cycle but the
+// directory won't grow unbounded over years of use.
+//
+// Sweep runs once an hour. Picking 1h (not 24h) so a restart on the day
+// of the sweep doesn't push it forward by a full day; cheap enough at
+// our row volume to run hourly.
+const PDF_RETENTION_DAYS = 30;
+const PDF_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
+async function cleanupOldPdfs() {
+  const cutoff = new Date(Date.now() - PDF_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+
+  let stale;
+  try {
+    stale = await pool.query(
+      `SELECT id, "pdfStorageKey"
+       FROM "drawing_requests"
+       WHERE status = 'DELIVERED'
+         AND "pdfStorageKey" IS NOT NULL
+         AND "deliveredAt" < $1`,
+      [cutoff.toISOString()],
+    );
+  } catch (err) {
+    console.error("[bridge] PDF cleanup query failed:", err);
+    return;
+  }
+
+  if (stale.rows.length === 0) return;
+
+  let deletedFiles = 0;
+  let nulledRows = 0;
+  for (const row of stale.rows) {
+    const filename = path.basename(row.pdfStorageKey || "");
+    if (!filename) continue;
+    const filePath = path.join(DRAWINGS_DIR, filename);
+    try {
+      await fs.promises.unlink(filePath);
+      deletedFiles++;
+    } catch (err) {
+      // ENOENT is fine — file already gone. Anything else is logged
+      // but we still null out the DB pointer so the UI stops linking
+      // to a dead file.
+      if (err.code !== "ENOENT") {
+        console.error(`[bridge] failed to unlink ${filePath}:`, err);
+      }
+    }
+    try {
+      await pool.query(
+        `UPDATE "drawing_requests"
+         SET "pdfStorageKey" = NULL, "updatedAt" = NOW()
+         WHERE id = $1`,
+        [row.id],
+      );
+      nulledRows++;
+    } catch (err) {
+      console.error(`[bridge] failed to null pdfStorageKey for ${row.id}:`, err);
+    }
+  }
+  if (nulledRows > 0) {
+    console.log(
+      `[bridge] PDF cleanup: removed ${deletedFiles} file(s), nulled ${nulledRows} row(s) older than ${PDF_RETENTION_DAYS}d`,
+    );
+  }
+}
+
+// Run once at startup (catches anything missed during downtime), then hourly.
+cleanupOldPdfs().catch((err) =>
+  console.error("[bridge] initial PDF cleanup failed:", err),
+);
+setInterval(() => {
+  cleanupOldPdfs().catch((err) =>
+    console.error("[bridge] scheduled PDF cleanup failed:", err),
+  );
+}, PDF_CLEANUP_INTERVAL_MS);
+
 // ── Internal HTTP server ───────────────────────────────────────────────────
 const internalServer = http.createServer((req, res) => {
   if (req.method === "POST" && req.url === "/flush") {

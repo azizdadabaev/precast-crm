@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Trash2, Loader2 } from "lucide-react";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { useT } from "@/lib/i18n";
@@ -35,8 +35,12 @@ interface Project {
 
 export default function ProjectsPage() {
   const t = useT();
+  const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"DRAFT" | "ALL">("DRAFT");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["projects", status, q],
@@ -46,6 +50,69 @@ export default function ProjectsPage() {
       if (q.trim()) params.set("q", q.trim());
       return api(`/api/projects?${params.toString()}`);
     },
+  });
+
+  // Permission check — only show selection UI to users with project.delete.
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canDelete = me?.permissions?.includes("project.delete") ?? false;
+
+  // Project→Order conversion tracker. Counted client-side from the
+  // current filtered list so it reflects whatever the operator is
+  // looking at; switching the DRAFT/ALL toggle re-counts.
+  const tracker = useMemo(() => {
+    const total = projects.length;
+    const ordered = projects.filter((p) => p.status === "ORDERED").length;
+    const draft = projects.filter((p) => p.status === "DRAFT").length;
+    const pct = total > 0 ? Math.round((ordered / total) * 100) : 0;
+    return { total, ordered, draft, pct };
+  }, [projects]);
+
+  const deletableSelected = useMemo(() => {
+    return projects.filter(
+      (p) => selected.has(p.id) && p.status === "DRAFT",
+    );
+  }, [projects, selected]);
+
+  function toggleOne(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  }
+
+  function toggleAllDraftsOnPage() {
+    const draftIds = projects
+      .filter((p) => p.status === "DRAFT")
+      .map((p) => p.id);
+    const allChecked = draftIds.every((id) => selected.has(id));
+    if (allChecked) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(draftIds));
+    }
+  }
+
+  const deleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await fetch("/api/projects", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      return json as { deleted: number };
+    },
+    onSuccess: () => {
+      setSelected(new Set());
+      setConfirmOpen(false);
+      setErrorMsg(null);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (e: Error) => setErrorMsg(e.message),
   });
 
   return (
@@ -70,6 +137,38 @@ export default function ProjectsPage() {
           </Link>
         </Button>
       </div>
+
+      {/* Tracker — projects → orders conversion. Reflects the current
+          DRAFT/ALL filter so operators can see e.g. "of all my saved
+          projects, X became orders". Hidden when there are no rows. */}
+      {projects.length > 0 && (
+        <div className="rounded-lg border border-border bg-card px-4 py-3 flex flex-wrap items-baseline justify-between gap-3 text-sm">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Лойиҳа → Буюртма
+            <span className="lang-en font-normal"> · Project → Order tracker</span>
+          </div>
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 tabular-nums">
+            <span>
+              <span className="text-muted-foreground text-xs">{t("Жами:", "Total:")} </span>
+              <span className="font-bold">{tracker.total}</span>
+            </span>
+            <span>
+              <span className="text-muted-foreground text-xs">{t("Лойиҳа:", "Drafts:")} </span>
+              <span className="font-bold text-warning">{tracker.draft}</span>
+            </span>
+            <span>
+              <span className="text-muted-foreground text-xs">{t("Буюртма:", "Ordered:")} </span>
+              <span className="font-bold text-success">{tracker.ordered}</span>
+            </span>
+            <span className="font-bold">
+              {tracker.pct}%
+              <span className="text-muted-foreground text-xs font-normal ml-1">
+                {t("буюртмага айлантирилган", "converted")}
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -101,6 +200,23 @@ export default function ProjectsPage() {
             </button>
           ))}
         </div>
+        {/* Bulk-delete trigger. Renders only for users with project.delete
+            permission AND when at least one DRAFT row is selected. The
+            confirmation dialog handles the actual call. */}
+        {canDelete && deletableSelected.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto text-destructive hover:bg-destructive/10"
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            {t(
+              `${deletableSelected.length} та лойиҳани ўчириш`,
+              `Delete ${deletableSelected.length} project${deletableSelected.length === 1 ? "" : "s"}`,
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -120,6 +236,21 @@ export default function ProjectsPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
+                {canDelete && (
+                  <th className="px-3 py-2 w-8">
+                    <input
+                      type="checkbox"
+                      title={t("Лойиҳаларни танлаш", "Select drafts")}
+                      checked={
+                        projects.filter((p) => p.status === "DRAFT").length > 0 &&
+                        projects
+                          .filter((p) => p.status === "DRAFT")
+                          .every((p) => selected.has(p.id))
+                      }
+                      onChange={toggleAllDraftsOnPage}
+                    />
+                  </th>
+                )}
                 <th className="text-left px-3 py-2">Мижоз<span className="lang-en"> · Client</span></th>
                 <th className="text-left px-3 py-2">Тел<span className="lang-en"> · Phone</span></th>
                 <th className="text-left px-3 py-2">Манзил<span className="lang-en"> · Address</span></th>
@@ -144,8 +275,34 @@ export default function ProjectsPage() {
                 const clientPhone = p.client?.phone ?? p.tentativeClientPhone ?? "";
                 const clientAddress = p.client?.address ?? p.tentativeClientAddress ?? "";
                 const order = p.orders[0];
+                const isChecked = selected.has(p.id);
+                const isDeletable = p.status === "DRAFT";
                 return (
-                  <tr key={p.id} className="hover:bg-muted/20 transition-colors">
+                  <tr
+                    key={p.id}
+                    className={
+                      "hover:bg-muted/20 transition-colors " +
+                      (isChecked ? "bg-destructive/5" : "")
+                    }
+                  >
+                    {canDelete && (
+                      <td className="px-3 py-2 w-8">
+                        <input
+                          type="checkbox"
+                          disabled={!isDeletable}
+                          title={
+                            isDeletable
+                              ? t("Ўчириш учун танлаш", "Select to delete")
+                              : t(
+                                  "Буюртма берилган — ўчириб бўлмайди",
+                                  "Has an order — cannot delete",
+                                )
+                          }
+                          checked={isChecked}
+                          onChange={() => toggleOne(p.id)}
+                        />
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       <Link href={`/projects/${p.id}`} className="font-medium hover:underline">
                         {clientName}
@@ -180,6 +337,56 @@ export default function ProjectsPage() {
           </table>
         )}
       </div>
+
+      {/* Bulk delete confirmation modal */}
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3 border border-border">
+            <h2 className="text-lg font-bold">
+              {t(
+                `${deletableSelected.length} та лойиҳани ўчириш?`,
+                `Delete ${deletableSelected.length} project${deletableSelected.length === 1 ? "" : "s"}?`,
+              )}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                "Бу амални орқага қайтариб бўлмайди. Фақат буюртма берилмаган сақланган ҳисоб-китоблар ўчирилади.",
+                "This action cannot be undone. Only draft (un-ordered) saved calculations will be removed.",
+              )}
+            </p>
+            {errorMsg && (
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+                {errorMsg}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmOpen(false)}
+                disabled={deleteMutation.isPending}
+              >
+                {t("Бекор қилиш", "Cancel")}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                disabled={deleteMutation.isPending}
+                onClick={() =>
+                  deleteMutation.mutate(deletableSelected.map((p) => p.id))
+                }
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                {t("Ўчириш", "Delete")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

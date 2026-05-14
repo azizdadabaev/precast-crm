@@ -27,6 +27,9 @@ export const ACTIONS = [
   "order.create",
   "order.edit",
   "order.cancel",
+  "order.exportBackup", // owner-only · download Excel snapshot of all orders
+  "project.delete", // owner-only · bulk-delete draft projects
+  "audit.view", // owner-only · view system-wide audit log
 
   // Clients
   "client.view",
@@ -97,6 +100,9 @@ export const PERMISSION_GROUPS: Array<{
       "order.create",
       "order.edit",
       "order.cancel",
+      "order.exportBackup",
+      "project.delete",
+      "audit.view",
     ],
   },
   {
@@ -164,6 +170,9 @@ export const ACTION_LABELS: Record<Action, string> = {
   "order.create": "Янги буюртма яратиш · Create orders",
   "order.edit": "Буюртмаларни таҳрирлаш · Edit orders",
   "order.cancel": "Буюртмани бекор қилиш · Cancel orders",
+  "order.exportBackup": "Буюртмалар захираси (Excel) · Export orders backup (Excel)",
+  "project.delete": "Сақланган лойиҳаларни ўчириш · Delete saved projects",
+  "audit.view": "Журнал · View audit log",
   "client.view": "Мижозларни кўриш · View clients",
   "client.viewAll": "Барча мижозларни кўриш · View all clients",
   "client.create": "Янги мижоз қўшиш · Add clients",
@@ -204,6 +213,9 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "order.create",
     "order.edit",
     "order.cancel",
+    "order.exportBackup",
+    "project.delete",
+    "audit.view",
     "client.view",
     "client.viewAll",
     "client.create",
