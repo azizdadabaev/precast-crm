@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "@/lib/api-auth";
+import { recordAudit } from "@/lib/audit";
 import {
   normalizeRoomsForBlender,
   validateRoomsForBlender,
@@ -176,6 +177,15 @@ export const POST = withPermission(
         "",
       ) + "/flush";
     fetch(flushUrl, { method: "POST" }).catch(() => {});
+
+    recordAudit({
+      userId: user.id,
+      action: "drawing.request",
+      targetType: body.orderId ? "order" : "project",
+      targetId: body.orderId ?? body.projectId ?? null,
+      message: `Sent ${rooms.length} room${rooms.length === 1 ? "" : "s"} to Blender`,
+      metadata: { drawingRequestId: drawingRequest.id, roomCount: rooms.length },
+    });
 
     return NextResponse.json({
       id: drawingRequest.id,

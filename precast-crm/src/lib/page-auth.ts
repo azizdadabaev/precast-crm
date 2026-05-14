@@ -48,6 +48,7 @@ export const ROUTE_PERMISSIONS: Record<
   "/production": "inventory.view",
   "/sandbox": "sandbox.access",
   "/users": "user.view",
+  "/audit": "audit.view",
   // Self-service: every authenticated user can change their own password
   // and see their own profile, regardless of permission set.
   "/profile": "any-auth",

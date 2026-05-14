@@ -6,6 +6,7 @@ import { PlaceOrderSchema } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { can } from "@/lib/permissions";
+import { recordAudit } from "@/lib/audit";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
@@ -341,6 +342,19 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
     }
 
     return createdOrder;
+  });
+
+  recordAudit({
+    userId: user.id,
+    action: "order.place",
+    targetType: "order",
+    targetId: order.id,
+    message: `Placed order ${order.orderNumber}`,
+    metadata: {
+      orderNumber: order.orderNumber,
+      totalPrice: order.totalPrice,
+      roomCount: body.rooms.length,
+    },
   });
 
   return created(order);

@@ -20,6 +20,7 @@ import {
   Pencil,
   ChevronLeft,
   ChevronRight,
+  ScrollText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -129,6 +130,13 @@ export const NAV: NavItem[] = [
     sub: "Users",
     icon: UserCog,
     permission: "user.view",
+  },
+  {
+    href: "/audit",
+    label: "Журнал",
+    sub: "Audit log",
+    icon: ScrollText,
+    permission: "audit.view",
   },
 ];
 

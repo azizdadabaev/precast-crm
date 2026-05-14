@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CancelOrderSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { recordAudit } from "@/lib/audit";
 import {
   calcSnapshotToInventoryLines,
   restockForCancellation,
@@ -108,6 +109,19 @@ export const POST = withPermission<{ id: string }>(
         );
       }
       return u;
+    });
+
+    recordAudit({
+      userId: user.id,
+      action: "order.cancel",
+      targetType: "order",
+      targetId: existing.id,
+      message: `Canceled ${existing.orderNumber}${body.reason ? `: ${body.reason}` : ""}`,
+      metadata: {
+        orderNumber: existing.orderNumber,
+        previousStatus: existing.status,
+        reason: body.reason ?? null,
+      },
     });
 
     return ok(updated);

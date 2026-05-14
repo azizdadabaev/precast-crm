@@ -204,6 +204,11 @@ model User {
   auditEntriesAsActor   UserAuditLog[] @relation("UserAuditActor")
   auditEntriesAsTarget  UserAuditLog[] @relation("UserAuditTarget")
 
+  // System-wide audit log (AuditLog table) — entries this user is the
+  // actor of. Distinct from UserAuditLog above which is user-account
+  // changes only.
+  systemAuditEntries    AuditLog[] @relation("AuditLogActor")
+
   // Blender Bridge — drawing requests this user created.
   drawingRequests       DrawingRequest[]
 
@@ -230,6 +235,35 @@ model UserAuditLog {
   @@index([userId, createdAt])
   @@index([actorId, createdAt])
   @@map("user_audit_log")
+}
+
+// System-wide audit log. Records who-did-what-when across the whole CRM
+// (project saves, order placements, status changes, dispatches, payments,
+// drawings, etc.). Distinct from UserAuditLog (which is scoped to user-
+// account changes) and OrderEvent (which is scoped to one order's
+// lifecycle) — this is the global owner-only feed.
+//
+// Writes are best-effort fire-and-forget from route handlers via
+// `recordAudit()` in src/lib/audit.ts; failures are logged but never
+// surface as a 5xx to the user. The log is append-only by convention;
+// there is no UPDATE/DELETE path in the helper.
+model AuditLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  userId     String?  // nullable for system-triggered events (cron, bridge writeback)
+  action     String   // e.g. "project.create", "order.place", "order.status.change"
+  targetType String?  // e.g. "project", "order", "payment", "user"
+  targetId   String?  // affected entity id (no FK — survives target deletion)
+  message    String?  // short human-readable summary
+  metadata   Json?    // structured extras (oldValue, newValue, etc.)
+
+  user User? @relation("AuditLogActor", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_log")
 }
 
 model Client {

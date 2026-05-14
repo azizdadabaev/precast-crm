@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { DispatchCreateSchema } from "@/lib/validation";
 import { fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { recordAudit } from "@/lib/audit";
 
 /**
  * POST /api/orders/[id]/dispatch — dispatch.create
@@ -77,6 +78,20 @@ export const POST = withPermission<{ id: string }>(
         },
       });
       return dispatch;
+    });
+
+    recordAudit({
+      userId: user.id,
+      action: "dispatch.create",
+      targetType: "order",
+      targetId: order.id,
+      message: `Dispatched ${order.orderNumber} with driver ${driver.name}`,
+      metadata: {
+        orderNumber: order.orderNumber,
+        driverId: driver.id,
+        driverName: driver.name,
+        truckIdentifier: body.truckIdentifier ?? null,
+      },
     });
 
     return created(result);

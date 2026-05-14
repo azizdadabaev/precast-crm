@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { OrderUpdateSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { recordAudit } from "@/lib/audit";
 import {
   calcSnapshotToInventoryLines,
   decrementForDelivery,
@@ -48,7 +49,7 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
 });
 
 /** PATCH /api/orders/[id] — order.edit. Updates status, scheduledAt, notes (with timeline event). */
-export const PATCH = withPermission<Params>("order.edit", async (req: NextRequest, { params }) => {
+export const PATCH = withPermission<Params>("order.edit", async (req: NextRequest, { params, user }) => {
   const body = OrderUpdateSchema.parse(await req.json());
 
   const existing = await prisma.order.findUnique({ where: { id: params.id } });
@@ -131,6 +132,17 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
     }
     return u;
   });
+
+  if (body.status && body.status !== existing.status) {
+    recordAudit({
+      userId: user.id,
+      action: "order.status.change",
+      targetType: "order",
+      targetId: existing.id,
+      message: `${existing.orderNumber}: ${existing.status} → ${body.status}`,
+      metadata: { from: existing.status, to: body.status, orderNumber: existing.orderNumber },
+    });
+  }
 
   return ok(updated);
 });
