@@ -64,7 +64,7 @@ If port 3000 is taken, Next will pick the next free port. The terminal output pr
 ## Quick walkthrough of the app
 
 1. Open **http://localhost:3000/calculations** (the operator's home).
-2. Type a client's **Name + Phone + Address** in the strip at the top. Phone has live autocomplete from the existing clients table.
+2. Type a client's **Name + Phone + Address** in the strip at the top. Phone has live autocomplete from the existing clients table. The address field is two linked Comboboxes (**Province → City**) followed by a free street/building/apartment input — searchable on Latin and Cyrillic. The stored string is `"<City>, <street>"` (e.g. `"Toshkent, Yunusobod 12-7"`), backward-compatible with rows typed before this widget existed. See `src/lib/uzbekistan-cities.ts` for the 12-city catalog and `src/components/address/AddressInput.tsx` for the widget.
 3. Add rooms — each row computes live (Beam length, pitches, blocks/row, beams, slab area, subtotal).
 4. **Save Project** (gray) — only phone is required. Stores a draft under `/projects`. Reopen any draft → opens the calculator pre-filled with the saved data.
 5. **Буюртма Бериш · Place Order** (orange) — requires Name + Phone + Address + at least one valid room. Opens a modal with a capacity calendar:

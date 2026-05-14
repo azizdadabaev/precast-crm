@@ -21,6 +21,7 @@ import { Plus, Search, Send, X } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { formatPhone } from "@/lib/phone";
+import { AddressInput } from "@/components/address/AddressInput";
 import { ExportDialog } from "@/components/clients/ExportDialog";
 
 interface Client {
@@ -339,24 +340,27 @@ function NewClientDialog() {
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Манзил<span className="lang-en"> · Address</span></Label>
-              <Input
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t("Тил", "Language")}</Label>
-              <Select
-                value={form.language}
-                onChange={(e) => setForm({ ...form, language: e.target.value })}
-              >
-                <option value="UZ">{t("Ўзбекча", "Uzbek")}</option>
-                <option value="RU">{t("Русча", "Russian")}</option>
-              </Select>
-            </div>
+          {/* Address: two linked dropdowns (Province → City) + a free
+              street row. Composed string goes back to form.address in
+              the same shape the dialog used to write directly. Full
+              width so the desktop dropdowns sit side by side; Language
+              moves to its own row below. */}
+          <div className="space-y-1.5">
+            <Label>Манзил<span className="lang-en"> · Address</span></Label>
+            <AddressInput
+              value={form.address}
+              onChange={(addr) => setForm({ ...form, address: addr })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t("Тил", "Language")}</Label>
+            <Select
+              value={form.language}
+              onChange={(e) => setForm({ ...form, language: e.target.value })}
+            >
+              <option value="UZ">{t("Ўзбекча", "Uzbek")}</option>
+              <option value="RU">{t("Русча", "Russian")}</option>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label>{t("Манба", "Source")}</Label>

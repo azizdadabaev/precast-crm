@@ -12,6 +12,7 @@ import {
 import { api } from "@/lib/fetcher";
 import { formatPhone } from "@/lib/phone";
 import { useT } from "@/lib/i18n";
+import { AddressInput } from "@/components/address/AddressInput";
 
 export interface ClientDraft {
   name: string;
@@ -225,18 +226,19 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
           </div>
         </Field>
 
-        {/* Address (Манзил) — required for Place Order. */}
+        {/* Address (Манзил) — required for Place Order. Two linked
+            Comboboxes (Province → City) compose the prefix; the street
+            input below holds the rest. Bubbles up the same flat string
+            ("City, street") this row used to write directly. */}
         <Field
           icon={<MapPin className="h-4 w-4 text-muted-foreground" />}
           primary="Манзил"
           secondary="Address"
           required
         >
-          <input
-            className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            placeholder="Тошкент · Юнусобод 12-7"
+          <AddressInput
             value={value.address}
-            onChange={(e) => onChange({ ...value, address: e.target.value })}
+            onChange={(addr) => onChange({ ...value, address: addr })}
           />
         </Field>
         </div>{/* close mobile Phone+Address wrapper (lg:contents on desktop) */}
