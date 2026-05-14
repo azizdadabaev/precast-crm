@@ -24,6 +24,7 @@
 import { prisma } from "../src/lib/prisma";
 
 const TABLES_TO_WIPE = [
+  "audit_log",
   "drawing_requests",
   "stock_movements",
   "production_entries",
