@@ -69,8 +69,8 @@ export const VILOYATS: readonly Viloyat[] = [
   },
   {
     "id": 9,
-    "name": "Surxandaryo viloyati",
-    "nameUz": "Сурхандарё вилояти"
+    "name": "Surxondaryo viloyati",
+    "nameUz": "Сурхондарё вилояти"
   },
   {
     "id": 10,
@@ -115,14 +115,14 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 17,
     "viloyatId": 1,
-    "name": "Kegayli tumani",
-    "nameUz": "Кегайли тумани"
+    "name": "Kegeyli tumani",
+    "nameUz": "Кегейли тумани"
   },
   {
     "id": 18,
     "viloyatId": 1,
-    "name": "Qonliko‘l tumani",
-    "nameUz": "Қонликўл тумани"
+    "name": "Qanliko‘l tumani",
+    "nameUz": "Қанликўл тумани"
   },
   {
     "id": 19,
@@ -175,20 +175,20 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 27,
     "viloyatId": 1,
-    "name": "CHimboy tumani",
+    "name": "Chimboy tumani",
     "nameUz": "Чимбой тумани"
   },
   {
     "id": 28,
     "viloyatId": 1,
-    "name": "SHumanay tumani",
+    "name": "Shumanay tumani",
     "nameUz": "Шуманай тумани"
   },
   {
     "id": 29,
     "viloyatId": 1,
     "name": "Ellikqal‘a tumani",
-    "nameUz": "Елликқал‘а тумани"
+    "nameUz": "Элликқалъа тумани"
   },
   {
     "id": 30,
@@ -235,8 +235,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 37,
     "viloyatId": 2,
-    "name": "Izbosgan tumani",
-    "nameUz": "Избосган тумани"
+    "name": "Izboskan tumani",
+    "nameUz": "Избоскан тумани"
   },
   {
     "id": 38,
@@ -397,8 +397,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 64,
     "viloyatId": 4,
-    "name": "Sh.Rashidov tumani",
-    "nameUz": "Ш.Рашидов тумани"
+    "name": "Sharof Rashidov tumani",
+    "nameUz": "Шароф Рашидов тумани"
   },
   {
     "id": 65,
@@ -709,8 +709,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 116,
     "viloyatId": 8,
-    "name": "Nurabod tumani",
-    "nameUz": "Нурабод тумани"
+    "name": "Nurobod tumani",
+    "nameUz": "Нуробод тумани"
   },
   {
     "id": 117,
@@ -727,8 +727,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 119,
     "viloyatId": 8,
-    "name": "Pastarg‘om tumani",
-    "nameUz": "Пастарғом тумани"
+    "name": "Pastdarg‘om tumani",
+    "nameUz": "Пастдарғом тумани"
   },
   {
     "id": 120,
@@ -793,8 +793,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 130,
     "viloyatId": 9,
-    "name": "Qo‘mqo‘rg‘on tumani",
-    "nameUz": "Қўмқўрғон тумани"
+    "name": "Qumqo‘rg‘on tumani",
+    "nameUz": "Қумқўрғон тумани"
   },
   {
     "id": 131,
@@ -811,8 +811,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 133,
     "viloyatId": 9,
-    "name": "Sariosiy tumani",
-    "nameUz": "Сариосий тумани"
+    "name": "Sariosiyo tumani",
+    "nameUz": "Сариосиё тумани"
   },
   {
     "id": 134,
@@ -895,8 +895,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 147,
     "viloyatId": 10,
-    "name": "Xavos tumani",
-    "nameUz": "Хавос тумани"
+    "name": "Xovos tumani",
+    "nameUz": "Ховос тумани"
   },
   {
     "id": 148,
@@ -913,20 +913,20 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 150,
     "viloyatId": 11,
-    "name": "Angiren shahri",
-    "nameUz": "Ангирен шаҳри"
+    "name": "Angren shahri",
+    "nameUz": "Ангрен шаҳри"
   },
   {
     "id": 151,
     "viloyatId": 11,
-    "name": "Bekabod tumani",
-    "nameUz": "Бекабод тумани"
+    "name": "Bekobod tumani",
+    "nameUz": "Бекобод тумани"
   },
   {
     "id": 152,
     "viloyatId": 11,
-    "name": "Bekabod shahri",
-    "nameUz": "Бекабод шаҳри"
+    "name": "Bekobod shahri",
+    "nameUz": "Бекобод шаҳри"
   },
   {
     "id": 153,
@@ -955,8 +955,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 157,
     "viloyatId": 11,
-    "name": "Quyichirchiq tumani",
-    "nameUz": "Қуйичирчиқ тумани"
+    "name": "Quyi Chirchiq tumani",
+    "nameUz": "Қуйи Чирчиқ тумани"
   },
   {
     "id": 158,
@@ -991,8 +991,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 163,
     "viloyatId": 11,
-    "name": "O‘rtachirchiq tumani",
-    "nameUz": "Ўртачирчиқ тумани"
+    "name": "O‘rta Chirchiq tumani",
+    "nameUz": "Ўрта Чирчиқ тумани"
   },
   {
     "id": 164,
@@ -1009,8 +1009,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 166,
     "viloyatId": 11,
-    "name": "Yuqorichirchiq tumani",
-    "nameUz": "Юқоричирчиқ тумани"
+    "name": "Yuqori Chirchiq tumani",
+    "nameUz": "Юқори Чирчиқ тумани"
   },
   {
     "id": 167,
@@ -1027,8 +1027,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 169,
     "viloyatId": 12,
-    "name": "Bog‘dod tumani",
-    "nameUz": "Боғдод тумани"
+    "name": "Bag‘dod tumani",
+    "nameUz": "Бағдод тумани"
   },
   {
     "id": 170,
@@ -1171,8 +1171,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 193,
     "viloyatId": 13,
-    "name": "Xazarasp tumani",
-    "nameUz": "Хазарасп тумани"
+    "name": "Hazorasp tumani",
+    "nameUz": "Ҳазорасп тумани"
   },
   {
     "id": 194,
@@ -1183,8 +1183,8 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 195,
     "viloyatId": 13,
-    "name": "Shavot tumani",
-    "nameUz": "Шавот тумани"
+    "name": "Shovot tumani",
+    "nameUz": "Шовот тумани"
   },
   {
     "id": 196,
@@ -1201,14 +1201,14 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 198,
     "viloyatId": 14,
-    "name": "Bektimer tumani",
-    "nameUz": "Бектимер тумани"
+    "name": "Bektemir tumani",
+    "nameUz": "Бектемир тумани"
   },
   {
     "id": 199,
     "viloyatId": 14,
-    "name": "M.Ulug‘bek tumani",
-    "nameUz": "М.Улуғбек тумани"
+    "name": "Mirzo Ulug‘bek tumani",
+    "nameUz": "Мирзо Улуғбек тумани"
   },
   {
     "id": 200,
@@ -1309,13 +1309,31 @@ export const TUMANS: readonly Tuman[] = [
   {
     "id": 217,
     "viloyatId": 13,
-    "name": "Tuproqqala tumani",
-    "nameUz": "Тупроққала тумани"
+    "name": "Tuproqqal‘a tumani",
+    "nameUz": "Тупроққалъа тумани"
   },
   {
     "id": 218,
     "viloyatId": 5,
     "name": "Ko'kdala tumani",
     "nameUz": "Кўкдала тумани"
+  },
+  {
+    "id": 1001,
+    "viloyatId": 2,
+    "name": "Bo‘ston tumani",
+    "nameUz": "Бўстон тумани"
+  },
+  {
+    "id": 1002,
+    "viloyatId": 2,
+    "name": "Xo‘jaobod tumani",
+    "nameUz": "Хўжаобод тумани"
+  },
+  {
+    "id": 1003,
+    "viloyatId": 14,
+    "name": "Yangihayot tumani",
+    "nameUz": "Янгиҳаёт тумани"
   }
 ] as const;

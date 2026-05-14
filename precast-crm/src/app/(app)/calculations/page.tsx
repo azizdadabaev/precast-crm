@@ -642,8 +642,12 @@ function CalculationsInner() {
         onDiscountAmountChange={setDiscountAmount}
         actions={
           <>
+            {/* Clear — Tier 4 "destructive" action. Outline + destructive
+                border + destructive text says "this wipes everything" so
+                the operator's eye separates it cleanly from the Add Room
+                button next door. */}
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               disabled={!hasAnyContent}
               onClick={() => setClearConfirmOpen(true)}
@@ -651,7 +655,7 @@ function CalculationsInner() {
                 "Калькуляторни тозалаш ва янги ҳисоб-китобни бошлаш",
                 "Clear the calculator and start a new calculation",
               )}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              className="text-destructive border-destructive/40 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/60"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               <Bi uz="Тозалаш" en="Clear" />

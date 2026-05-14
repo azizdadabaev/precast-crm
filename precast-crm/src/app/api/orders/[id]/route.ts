@@ -143,6 +143,39 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
       metadata: { from: existing.status, to: body.status, orderNumber: existing.orderNumber },
     });
   }
+  // Schedule / notes changes also get their own audit row so the
+  // journal shows every operator touch — not just status flips.
+  if (
+    body.scheduledAt &&
+    body.scheduledAt.getTime() !== existing.scheduledAt.getTime()
+  ) {
+    recordAudit({
+      userId: user.id,
+      action: "order.schedule.change",
+      targetType: "order",
+      targetId: existing.id,
+      message: `${existing.orderNumber} rescheduled`,
+      metadata: {
+        orderNumber: existing.orderNumber,
+        from: existing.scheduledAt,
+        to: body.scheduledAt,
+      },
+    });
+  }
+  if (body.notes !== undefined && body.notes !== existing.notes) {
+    recordAudit({
+      userId: user.id,
+      action: "order.notes.change",
+      targetType: "order",
+      targetId: existing.id,
+      message: `${existing.orderNumber} notes updated`,
+      metadata: {
+        orderNumber: existing.orderNumber,
+        previous: existing.notes,
+        next: body.notes,
+      },
+    });
+  }
 
   return ok(updated);
 });

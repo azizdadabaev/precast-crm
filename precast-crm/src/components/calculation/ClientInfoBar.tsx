@@ -157,7 +157,12 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
       <div
         className={`p-3 ${showCollapsed ? "hidden lg:!block" : "block"}`}
       >
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(180px,1fr)_minmax(200px,260px)_minmax(180px,1fr)] gap-3">
+      {/* Three-column grid on lg+. Name and Phone shrunk ~35% from the
+          prior layout so Address gets the freed width — operators
+          spend more time picking viloyat/tuman than typing client
+          names, and the dropdowns were running out of horizontal room.
+          Below lg the row breaks into a vertical stack. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(120px,0.65fr)_minmax(130px,170px)_minmax(700px,2.5fr)] gap-3">
         {/* Name (Исм) */}
         <Field
           icon={<User className="h-4 w-4 text-muted-foreground" />}

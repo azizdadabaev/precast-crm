@@ -148,14 +148,31 @@ export function AddressInput({
   }
 
   return (
-    <div className={cn("space-y-2", className)}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+    // Single horizontal row on md+ so the address Field aligns visually
+    // with the single-line Name and Phone fields next to it. Each
+    // dropdown gets a tight min/max; street fills the rest with flex-1.
+    // On mobile we collapse to stacked rows (flex-col) so 320px screens
+    // don't squeeze three controls onto one line.
+    <div
+      className={cn(
+        "flex flex-col md:flex-row gap-2 md:items-center",
+        className,
+      )}
+    >
+      {/* Viloyat / Tuman widths bumped ~35% (160→216, 180→244) so the
+          long Cyrillic names ("Қорақалпоғистон Республикаси",
+          "Мирзо Улуғбек тумани") stop truncating. Street's min-width
+          dropped ~20% (160→128); it still grows via flex to fill the
+          remaining column. */}
+      <div className="md:w-[216px] md:shrink-0">
         <ViloyatCombobox
           idPrefix={idPrefix}
           value={viloyat}
           viloyats={viloyats}
           onChange={pickViloyat}
         />
+      </div>
+      <div className="md:w-[244px] md:shrink-0">
         <TumanCombobox
           idPrefix={idPrefix}
           value={tuman}
@@ -165,10 +182,14 @@ export function AddressInput({
         />
       </div>
       <Input
-        placeholder="Кўча, маҳалла, бино, хонадон · Street, mahalla, building, apartment"
+        // Placeholder is Cyrillic only to stay neat alongside the
+        // two short dropdown triggers; aria-label keeps the English
+        // for screen readers and search-engine indexing.
+        placeholder="Кўча, маҳалла, бино, хонадон"
         value={streetDetail}
         onChange={(e) => changeStreet(e.target.value)}
         aria-label="Street, mahalla, building, apartment"
+        className="md:flex-1 md:min-w-[128px]"
       />
     </div>
   );
@@ -206,11 +227,13 @@ function ViloyatCombobox({
           )}
         >
           {selected ? (
-            <span className="truncate">
-              {selected.nameUz} · {selected.name}
-            </span>
+            // Display Cyrillic only — the cmdk `value` on each item still
+            // carries both Cyrillic and Latin so a search for either
+            // alphabet still matches. Drops Latin from the trigger so
+            // the pill doesn't truncate at small widths.
+            <span className="truncate">{selected.nameUz}</span>
           ) : (
-            <span className="text-muted-foreground">Вилоят · Region</span>
+            <span className="text-muted-foreground">Вилоят</span>
           )}
           <span className="flex items-center gap-1 shrink-0 text-muted-foreground">
             {selected && (
@@ -245,13 +268,17 @@ function ViloyatCombobox({
             return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
           }}
         >
-          <CommandInput placeholder="Қидириш · Search" />
+          <CommandInput placeholder="Қидириш" />
           <CommandList>
-            <CommandEmpty>Топилмади · No match</CommandEmpty>
+            <CommandEmpty>Топилмади</CommandEmpty>
             <CommandGroup>
               {viloyats.map((v) => (
                 <CommandItem
                   key={v.id}
+                  // value still carries both spellings so cmdk's filter
+                  // matches a Latin query like "Toshkent" or a Cyrillic
+                  // one like "Тошкент" — search is unaffected by the
+                  // display-only Cyrillic shown below.
                   value={`${v.nameUz} ${v.name}`}
                   onSelect={() => {
                     onChange(v.name);
@@ -264,9 +291,7 @@ function ViloyatCombobox({
                       value === v.name ? "opacity-100" : "opacity-0",
                     )}
                   />
-                  <span>
-                    {v.nameUz} · {v.name}
-                  </span>
+                  <span>{v.nameUz}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -311,11 +336,9 @@ function TumanCombobox({
           )}
         >
           {selected ? (
-            <span className="truncate">
-              {selected.nameUz} · {selected.name}
-            </span>
+            <span className="truncate">{selected.nameUz}</span>
           ) : (
-            <span className="text-muted-foreground">Туман · District</span>
+            <span className="text-muted-foreground">Туман</span>
           )}
           <span className="flex items-center gap-1 shrink-0 text-muted-foreground">
             {selected && (
@@ -350,13 +373,16 @@ function TumanCombobox({
             return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
           }}
         >
-          <CommandInput placeholder="Қидириш · Search" />
+          <CommandInput placeholder="Қидириш" />
           <CommandList>
-            <CommandEmpty>Топилмади · No match</CommandEmpty>
+            <CommandEmpty>Топилмади</CommandEmpty>
             <CommandGroup>
               {tumans.map((t) => (
                 <CommandItem
                   key={t.id}
+                  // value still carries both spellings — search hits on
+                  // either Latin or Cyrillic. Display drops the Latin
+                  // so the row stays compact in the narrow grid cell.
                   value={`${t.nameUz} ${t.name}`}
                   onSelect={() => {
                     onChange(t.name);
@@ -369,9 +395,7 @@ function TumanCombobox({
                       value === t.name ? "opacity-100" : "opacity-0",
                     )}
                   />
-                  <span>
-                    {t.nameUz} · {t.name}
-                  </span>
+                  <span>{t.nameUz}</span>
                 </CommandItem>
               ))}
             </CommandGroup>

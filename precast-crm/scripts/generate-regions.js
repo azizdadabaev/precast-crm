@@ -22,22 +22,75 @@ const RAW_PATH = "C:/Users/aziz/AppData/Local/Temp/uz-regions.json";
 
 const raw = JSON.parse(fs.readFileSync(RAW_PATH, "utf8"));
 
-// ── Hand-curated viloyat Cyrillic (overrides the transliterator) ──
-const VILOYAT_CYRILLIC = {
-  "Qoraqalpog‘iston Respublikasi": "Қорақалпоғистон Республикаси",
-  "Andijon viloyati":             "Андижон вилояти",
-  "Buxoro viloyati":              "Бухоро вилояти",
-  "Jizzax viloyati":              "Жиззах вилояти",
-  "Qashqadaryo viloyati":         "Қашқадарё вилояти",
-  "Navoiy viloyati":              "Навоий вилояти",
-  "Namangan viloyati":            "Наманган вилояти",
-  "Samarqand viloyati":           "Самарқанд вилояти",
-  "Surxandaryo viloyati":         "Сурхандарё вилояти",
-  "Sirdaryo viloyati":            "Сирдарё вилояти",
-  "Toshkent viloyati":            "Тошкент вилояти",
-  "Farg‘ona viloyati":            "Фарғона вилояти",
-  "Xorazm viloyati":              "Хоразм вилояти",
-  "Toshkent shahri":              "Тошкент шаҳри",
+// ── Viloyat overrides (both Latin and Cyrillic, like districts) ──
+//
+// Keyed by the ORIGINAL kenjebaev `name` so future regenerations are
+// stable. Each entry supplies the displayed `name` and `nameUz`.
+// Currently the only Latin rename is `Surxandaryo viloyati` →
+// `Surxondaryo viloyati` (the spelling the rest of the CRM uses) —
+// every other viloyat keeps its kenjebaev Latin form.
+const VILOYAT_OVERRIDES = {
+  "Qoraqalpog‘iston Respublikasi": { name: "Qoraqalpog‘iston Respublikasi", nameUz: "Қорақалпоғистон Республикаси" },
+  "Andijon viloyati":              { name: "Andijon viloyati",              nameUz: "Андижон вилояти"               },
+  "Buxoro viloyati":               { name: "Buxoro viloyati",               nameUz: "Бухоро вилояти"                },
+  "Jizzax viloyati":               { name: "Jizzax viloyati",               nameUz: "Жиззах вилояти"                },
+  "Qashqadaryo viloyati":          { name: "Qashqadaryo viloyati",          nameUz: "Қашқадарё вилояти"             },
+  "Navoiy viloyati":               { name: "Navoiy viloyati",               nameUz: "Навоий вилояти"                },
+  "Namangan viloyati":             { name: "Namangan viloyati",             nameUz: "Наманган вилояти"              },
+  "Samarqand viloyati":            { name: "Samarqand viloyati",            nameUz: "Самарқанд вилояти"             },
+  "Surxandaryo viloyati":          { name: "Surxondaryo viloyati",          nameUz: "Сурхондарё вилояти"            },
+  "Sirdaryo viloyati":             { name: "Sirdaryo viloyati",             nameUz: "Сирдарё вилояти"               },
+  "Toshkent viloyati":             { name: "Toshkent viloyati",             nameUz: "Тошкент вилояти"               },
+  "Farg‘ona viloyati":             { name: "Farg‘ona viloyati",             nameUz: "Фарғона вилояти"               },
+  "Xorazm viloyati":               { name: "Xorazm viloyati",               nameUz: "Хоразм вилояти"                },
+  "Toshkent shahri":               { name: "Toshkent shahri",               nameUz: "Тошкент шаҳри"                 },
+};
+
+// ── District (tuman / shahri) overrides ──
+//
+// Two purposes:
+//   1. Fix Latin typos in the kenjebaev source (e.g. "Angiren" → "Angren",
+//      "Bekabod" → "Bekobod", abbreviated "M.Ulug‘bek" → full "Mirzo
+//      Ulug‘bek") so what we show operators matches the canonical names
+//      from Wikipedia / lex.uz / official viloyat sites.
+//   2. Override the rule-based Cyrillic when the rules don't produce the
+//      standard Uzbek-Cyrillic spelling — most often word-initial Э (vs.
+//      Е), or a glottal-stop apostrophe `‘` that should be `ъ` in
+//      Cyrillic.
+//
+// Keyed by the ORIGINAL kenjebaev name so future regenerations stay
+// stable even if the override's Latin replacement changes the displayed
+// form. Both `name` and `nameUz` are emitted into the typed constant.
+const DISTRICT_OVERRIDES = {
+  // ── Glottal-stop / spelling fixes inside an otherwise-correct name
+  "Ellikqal‘a tumani":   { name: "Ellikqal‘a tumani",   nameUz: "Элликқалъа тумани"     },
+  "Tuproqqala tumani":   { name: "Tuproqqal‘a tumani",  nameUz: "Тупроққалъа тумани"   },
+
+  // ── Latin typos in kenjebaev — fixed to Wikipedia/lex.uz canonical
+  "Angiren shahri":        { name: "Angren shahri",         nameUz: "Ангрен шаҳри"          },
+  "Bekabod shahri":        { name: "Bekobod shahri",        nameUz: "Бекобод шаҳри"         },
+  "Bekabod tumani":        { name: "Bekobod tumani",        nameUz: "Бекобод тумани"        },
+  "Kegayli tumani":        { name: "Kegeyli tumani",        nameUz: "Кегейли тумани"        },
+  "Qonliko‘l tumani":      { name: "Qanliko‘l tumani",      nameUz: "Қанликўл тумани"       },
+  "CHimboy tumani":        { name: "Chimboy tumani",        nameUz: "Чимбой тумани"         },
+  "SHumanay tumani":       { name: "Shumanay tumani",       nameUz: "Шуманай тумани"        },
+  "Izbosgan tumani":       { name: "Izboskan tumani",       nameUz: "Избоскан тумани"       },
+  "Nurabod tumani":        { name: "Nurobod tumani",        nameUz: "Нуробод тумани"        },
+  "Pastarg‘om tumani":     { name: "Pastdarg‘om tumani",    nameUz: "Пастдарғом тумани"     },
+  "Qo‘mqo‘rg‘on tumani":   { name: "Qumqo‘rg‘on tumani",    nameUz: "Қумқўрғон тумани"      },
+  "Sariosiy tumani":       { name: "Sariosiyo tumani",      nameUz: "Сариосиё тумани"       },
+  "Xavos tumani":          { name: "Xovos tumani",          nameUz: "Ховос тумани"          },
+  "Quyichirchiq tumani":   { name: "Quyi Chirchiq tumani",  nameUz: "Қуйи Чирчиқ тумани"    },
+  "O‘rtachirchiq tumani":  { name: "O‘rta Chirchiq tumani", nameUz: "Ўрта Чирчиқ тумани"    },
+  "Yuqorichirchiq tumani": { name: "Yuqori Chirchiq tumani",nameUz: "Юқори Чирчиқ тумани"   },
+  "Bog‘dod tumani":        { name: "Bag‘dod tumani",        nameUz: "Бағдод тумани"         },
+  "Xazarasp tumani":       { name: "Hazorasp tumani",       nameUz: "Ҳазорасп тумани"       },
+  "Shavot tumani":         { name: "Shovot tumani",         nameUz: "Шовот тумани"          },
+  "Bektimer tumani":       { name: "Bektemir tumani",       nameUz: "Бектемир тумани"       },
+
+  // ── Abbreviated → full personal-name tumans (per Wikipedia / lex.uz)
+  "M.Ulug‘bek tumani":     { name: "Mirzo Ulug‘bek tumani", nameUz: "Мирзо Улуғбек тумани"  },
+  "Sh.Rashidov tumani":    { name: "Sharof Rashidov tumani",nameUz: "Шароф Рашидов тумани"  },
 };
 
 // ── Latin → Cyrillic transliterator ───────────────────────────────
@@ -88,19 +141,44 @@ function latinToCyrillic(input) {
 }
 
 // ── Build VILOYATS ────────────────────────────────────────────────
-const viloyats = raw.regions.map((r) => ({
-  id: r.id,
-  name: r.name,
-  nameUz: VILOYAT_CYRILLIC[r.name] ?? latinToCyrillic(r.name),
-}));
+const viloyats = raw.regions.map((r) => {
+  const override = VILOYAT_OVERRIDES[r.name];
+  return {
+    id: r.id,
+    name: override?.name ?? r.name,
+    nameUz: override?.nameUz ?? latinToCyrillic(r.name),
+  };
+});
 
 // ── Build TUMANS ─────────────────────────────────────────────────
-const tumans = raw.districts.map((d) => ({
-  id: d.id,
-  viloyatId: d.region_id,
-  name: d.name,
-  nameUz: latinToCyrillic(d.name),
-}));
+const tumans = raw.districts.map((d) => {
+  const override = DISTRICT_OVERRIDES[d.name];
+  return {
+    id: d.id,
+    viloyatId: d.region_id,
+    name: override?.name ?? d.name,
+    nameUz: override?.nameUz ?? latinToCyrillic(d.name),
+  };
+});
+
+// ── Tumans missing from the kenjebaev snapshot ──────────────────
+//
+// Appended after the kenjebaev rows so the original IDs stay
+// untouched. IDs start at 1001 (well above kenjebaev's district id
+// range, 15..218) so adding rows in the future won't collide.
+// Verified against Wikipedia + lex.uz for spelling and viloyatId.
+const EXTRA_TUMANS = [
+  // Andijon viloyati (region id = 2). kenjebaev has "Bo‘z tumani"
+  // and "Xonabod tumani" (both real, post-2018 splits) but is
+  // missing these two long-standing ones.
+  { id: 1001, viloyatId: 2,  name: "Bo‘ston tumani",   nameUz: "Бўстон тумани"   },
+  { id: 1002, viloyatId: 2,  name: "Xo‘jaobod tumani", nameUz: "Хўжаобод тумани" },
+  // Toshkent shahri (region id = 14). Created in 2020 by splitting
+  // off from Sergeli + Yashnobod, so it's absent in the kenjebaev
+  // snapshot.
+  { id: 1003, viloyatId: 14, name: "Yangihayot tumani", nameUz: "Янгиҳаёт тумани" },
+];
+tumans.push(...EXTRA_TUMANS);
 
 // ── Emit TypeScript ──────────────────────────────────────────────
 const ts = `// AUTO-GENERATED by scripts/generate-regions.js — do not edit by

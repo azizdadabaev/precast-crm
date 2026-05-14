@@ -1001,18 +1001,18 @@ export function MultiRoomCalculator({
                 5 см
               </button>
             </div>
-            {/* Round all up — same visual weight as the 5cm/10cm
-                toggles above (h-7 with a colored backdrop) so it
-                doesn't read as a tiny utility icon. Always wears
-                the "active" look since it's an action button, not a
-                radio toggle. */}
+            {/* Round all up — niche utility action: gets a quiet
+                ghost treatment (no fill, muted text) so it doesn't
+                compete with the high-frequency Add Room button or
+                the terminal Place Order. Hover lights it up enough
+                to feel pressable. */}
             <button
               type="button"
               disabled={!anyRowEligibleForSweep}
               onClick={onRoundAllUp}
               title="Барча хоналарни юқорилаштириш · Round all up — apply to every row's Width using the current grid"
               aria-label="Барча хоналарни юқорилаштириш · Round all up"
-              className="h-7 px-3 inline-flex items-center gap-1.5 rounded-md border bg-primary text-primary-foreground font-semibold uppercase tracking-wider text-xs hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted font-semibold uppercase tracking-wider text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               <ArrowUpToLine className="h-3.5 w-3.5" />
               All
@@ -1037,18 +1037,22 @@ export function MultiRoomCalculator({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Add Room — Tier 3 "repeat/additive" action. Soft-primary
+                tint signals "do this often" without competing with the
+                terminal green Place Order or muddling with the
+                destructive Clear next to it. */}
             <Button
               variant="outline"
               size="sm"
               onClick={addRow}
-              className="border-dashed"
+              className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
               title="Shift+Enter also adds a new room and focuses its Width"
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
               <span>
                 <Bi uz="Янги хона" en="Add room" enClassName="font-normal opacity-90" />
               </span>
-              <kbd className="ml-2 hidden sm:inline-flex items-center gap-1 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+              <kbd className="ml-2 hidden sm:inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[10px] font-mono text-primary/80">
                 Shift + Enter
               </kbd>
             </Button>

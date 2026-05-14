@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { EditOrderSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { recordAudit } from "@/lib/audit";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
@@ -212,6 +213,22 @@ export const PATCH = withPermission<{ id: string }>(
       }
 
       return o;
+    });
+
+    recordAudit({
+      userId: user.id,
+      action: "order.edit",
+      targetType: "order",
+      targetId: existing.id,
+      message: `Edited ${existing.orderNumber}`,
+      metadata: {
+        orderNumber: existing.orderNumber,
+        previousTotal: existing.totalPrice,
+        nextTotal: updated.totalPrice,
+        previousScheduledAt: existing.scheduledAt,
+        nextScheduledAt: updated.scheduledAt,
+        roomCount: body.rooms.length,
+      },
     });
 
     return ok(updated);

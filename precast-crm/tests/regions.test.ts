@@ -18,8 +18,11 @@ describe("regions catalog", () => {
     expect(VILOYATS).toHaveLength(14);
   });
 
-  it("has 203 tumans (kenjebaev/regions)", () => {
-    expect(TUMANS).toHaveLength(203);
+  it("has 206 tumans (kenjebaev/regions + 3 manually-added missing ones)", () => {
+    // 203 from the kenjebaev snapshot + 3 we mint at the bottom of
+    // the generator (Bo‘ston / Xo‘jaobod in Andijon, Yangihayot in
+    // Toshkent shahri) because the upstream JSON is missing them.
+    expect(TUMANS).toHaveLength(206);
   });
 
   it("every tuman has a viloyatId pointing at a real viloyat", () => {

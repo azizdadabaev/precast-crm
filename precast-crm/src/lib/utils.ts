@@ -24,13 +24,53 @@ export function formatNumber(value: number | string, digits = 2): string {
   }).format(n);
 }
 
+// Uzbek (Cyrillic) short month names. Hand-rolled instead of relying
+// on Intl.DateTimeFormat("uz-Cyrl-UZ", …) because the Node ICU build
+// in our prod container has incomplete uz-Cyrl tables and falls back
+// to Russian ("мая", "сентября"); rolling our own gives stable Uzbek
+// output regardless of the runtime's locale data.
+const UZ_MONTHS_SHORT = [
+  "янв",
+  "фев",
+  "мар",
+  "апр",
+  "май",
+  "июн",
+  "июл",
+  "авг",
+  "сен",
+  "окт",
+  "ноя",
+  "дек",
+];
+
+function pad2(n: number): string {
+  return n < 10 ? "0" + n : String(n);
+}
+
 export function formatDate(d: Date | string): string {
   const date = typeof d === "string" ? new Date(d) : d;
-  return new Intl.DateTimeFormat("ru-RU", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  }).format(date);
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "—";
+  const day = date.getDate();
+  const mon = UZ_MONTHS_SHORT[date.getMonth()];
+  const year = date.getFullYear();
+  return `${day} ${mon} ${year}`;
+}
+
+/**
+ * Same date as formatDate plus HH:MM — used in the audit log where the
+ * operator needs to see WHEN something happened, not just on what day.
+ * Time uses 24-hour clock (Tashkent operators don't read AM/PM).
+ */
+export function formatDateTime(d: Date | string): string {
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "—";
+  const day = date.getDate();
+  const mon = UZ_MONTHS_SHORT[date.getMonth()];
+  const year = date.getFullYear();
+  const hh = pad2(date.getHours());
+  const mm = pad2(date.getMinutes());
+  return `${day} ${mon} ${year}, ${hh}:${mm}`;
 }
 
 // ── Grid rounding helpers (used by the calculator's snap-up/down buttons) ──
