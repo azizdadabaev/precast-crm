@@ -8,6 +8,7 @@ import { withPermission } from "@/lib/api-auth";
 import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
+import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { nextOrderNumber, orderNumberMonthPrefix } from "@/lib/order-number";
@@ -106,18 +107,25 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
     );
   }
 
-  // Compute every room up-front so we have totals for the snapshot
+  // Compute every room up-front so we have totals for the snapshot.
+  // The current pricing config is read once here and threaded into
+  // calculateSlab so the placement price reflects whatever the owner
+  // configured most recently on /pricing.
+  const pricing = await loadPricingConfig();
   const computed = body.rooms.map((room) => ({
     input: room,
-    result: calculateSlab({
-      inner_width: room.innerWidth,
-      inner_length: room.innerLength,
-      bearing: room.bearing,
-      correction: room.correction,
-      extra_beams: room.extraBeams,
-      force_start_beam: room.forceStartBeam,
-      pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
-    }),
+    result: calculateSlab(
+      {
+        inner_width: room.innerWidth,
+        inner_length: room.innerLength,
+        bearing: room.bearing,
+        correction: room.correction,
+        extra_beams: room.extraBeams,
+        force_start_beam: room.forceStartBeam,
+        pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
+      },
+      pricing,
+    ),
   }));
 
   const roomsSubtotal = computed.reduce((s, c) => s + c.result.subtotal, 0);

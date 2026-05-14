@@ -6,6 +6,7 @@ import { EditOrderSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
+import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 
 /**
@@ -55,17 +56,25 @@ export const PATCH = withPermission<{ id: string }>(
     }
 
     // Compute every room up-front (mirrors POST /api/orders).
+    // Edits re-price against the CURRENT pricing config — the user
+    // chose to edit the order, so the new totals reflect the latest
+    // tier table. The pre-edit snapshot stays in the Activity log
+    // via the ORDER_EDITED event payload below.
+    const pricing = await loadPricingConfig();
     const computed = body.rooms.map((room) => ({
       input: room,
-      result: calculateSlab({
-        inner_width: room.innerWidth,
-        inner_length: room.innerLength,
-        bearing: room.bearing,
-        correction: room.correction,
-        extra_beams: room.extraBeams,
-        force_start_beam: room.forceStartBeam,
-        pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
-      }),
+      result: calculateSlab(
+        {
+          inner_width: room.innerWidth,
+          inner_length: room.innerLength,
+          bearing: room.bearing,
+          correction: room.correction,
+          extra_beams: room.extraBeams,
+          force_start_beam: room.forceStartBeam,
+          pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
+        },
+        pricing,
+      ),
     }));
 
     const roomsSubtotal = computed.reduce((s, c) => s + c.result.subtotal, 0);

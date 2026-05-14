@@ -137,12 +137,18 @@ at same pitches; **GBG → GB at pitches+1** (the extra block row is balanced
 by the new beam, so the slab is now alternating N+1 ↔ N+1).
 
 Pricing tiers keyed by manufactured beam length (m² rate 140k–230k, per-m
-extra beam 60k–120k, blocks 6k each). m² billed on `pitches × PITCH × beam_length`
-ONLY — pattern extras (Б-Г-Б's extra beam, Г-Б-Г's extra blocks) and manual
-extras are separate per-line items. **Pricing is frozen at Place Order time.**
+extra beam 60k–120k, blocks 6k each). m² billed on `billed_length × beam_length`
+where `billed_length = pitches × PITCH` for GB/BGB, and
+`pitches × PITCH + BLOCK_VISIBLE (0.45)` for Г-Б-Г — the GBG closing
+block row is folded into the m²-billed slab area rather than charged as
+a separate per-block line item. Б-Г-Б's closing beam still bills at the
+per-meter extra-beam tier; GB has no pattern extras. Manual `+B` extras
+stay per-line at the extra-beam tier. **Pricing is frozen at Place
+Order time.**
 
-42 vitest cases cover every pattern × extras combo. Phone helpers and order-number
-allocator have their own tests (60 total).
+52 vitest cases cover every pattern × extras combo, including 10
+dedicated GBG-billing cases. Phone helpers and order-number allocator
+have their own tests.
 
 ## Inventory module
 

@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ScrollText,
+  Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -137,6 +138,13 @@ export const NAV: NavItem[] = [
     sub: "Audit log",
     icon: ScrollText,
     permission: "audit.view",
+  },
+  {
+    href: "/pricing",
+    label: "Нархлар",
+    sub: "Pricing",
+    icon: Coins,
+    permission: "pricing.edit",
   },
 ];
 

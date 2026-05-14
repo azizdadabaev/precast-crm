@@ -76,15 +76,17 @@ describe("calculateSlab — auto-picked patterns from real examples", () => {
   });
 
   it("4 × 4.3 → GBG at 7 pitches (R = 0.24 → extra block row)", () => {
-    // 4.3 / 0.58 = 7.41 → N=7, R=0.24 → auto GBG
+    // 4.3 / 0.58 = 7.41 → N=7, R=0.24 → auto GBG.
+    // GBG billing rule: the closing block row is m²-billed, so
+    // billed_length == monolith_length == 7×PITCH + BLOCK_VISIBLE.
     const r = calculateSlab({ inner_width: 4, inner_length: 4.3 });
     expect(r.pitches).toBe(7);
     expect(r.pattern).toBe("GBG");
     expect(r.beam_count).toBe(7);            // GBG: no extra beam
     expect(r.block_rows).toBe(8);            // pitches + 1
     expect(r.total_blocks).toBe(160);        // 20 × 8
-    expect(r.billed_length).toBeCloseTo(4.06, 3);
-    expect(r.monolith_length).toBeCloseTo(4.51, 3); // 4.06 + 0.45
+    expect(r.billed_length).toBeCloseTo(4.51, 3); // 7×0.58 + 0.45
+    expect(r.monolith_length).toBeCloseTo(4.51, 3);
   });
 
   it("4 × 3.5 → BGB at 6 pitches (R ≈ 0.02 → extra beam)", () => {
@@ -97,6 +99,108 @@ describe("calculateSlab — auto-picked patterns from real examples", () => {
     expect(r.total_blocks).toBe(120);        // 20 × 6
     expect(r.billed_length).toBeCloseTo(3.48, 3);
     expect(r.monolith_length).toBeCloseTo(3.60, 3); // 3.48 + 0.12
+  });
+});
+
+// ── GBG billing-rule cases — closing block row m²-billed ─────────
+//
+// New rule (per construction-pricing convention): the Г-Б-Г pattern's
+// closing block row is physically part of the slab the customer is
+// buying, so the m² tier rate must cover it. billed_length expands by
+// BLOCK_VISIBLE (0.45 m) and pattern_extra_cost is 0 for GBG.
+// BGB's closing beam is unaffected — still billed at the per-meter
+// extra-beam tier.
+
+describe("calculateSlab — GBG closing block row is m²-billed (not per-block)", () => {
+  it("user's 4.5 × 6 explicit GBG: billed_area 30 m² × 160k tier = 4,800,000", () => {
+    // 4.5 × 6, bearing 0.15, pattern GBG explicit.
+    // beam_length = 4.5 + 2×0.15 = 4.80 m  → 160k tier (≤ 5.30)
+    // pitches     = floor(6 / 0.58) = 10
+    // blocks_per_row = ceil(4.5 / 0.20) = 23
+    // block_rows  = 10 + 1 = 11
+    // total_blocks = 11 × 23 = 253
+    // beams        = 10
+    // billed_length = 10×0.58 + 0.45 = 6.25 m
+    // billed_area   = 4.80 × 6.25 = 30.000 m²
+    // m2_cost       = 30 × 160,000 = 4,800,000
+    // pattern_extra_cost = 0  (was 23 × 6,000 = 138,000 before the change)
+    // subtotal      = 4,800,000
+    const r = calculateSlab({
+      inner_width: 4.5,
+      inner_length: 6,
+      bearing: 0.15,
+      pattern: "GBG",
+    });
+    expect(r.pattern).toBe("GBG");
+    expect(r.pitches).toBe(10);
+    expect(r.blocks_per_row).toBe(23);
+    expect(r.block_rows).toBe(11);
+    expect(r.total_blocks).toBe(253);
+    expect(r.beam_count).toBe(10);
+    expect(r.beam_length).toBeCloseTo(4.80, 3);
+    expect(r.billed_length).toBeCloseTo(6.25, 3);
+    expect(r.billed_area).toBeCloseTo(30.0, 3);
+    expect(r.m2_price).toBe(160_000);
+    expect(r.m2_cost).toBe(4_800_000);
+    expect(r.pattern_extra_cost).toBe(0);
+    expect(r.manual_extra_beams_cost).toBe(0);
+    expect(r.subtotal).toBe(4_800_000);
+  });
+
+  it("auto-picked GBG (4 × 3.20 → R=0.30): closing row folded into m²", () => {
+    // 4 × 3.20, bearing 0.15. effective_length = 3.20.
+    // pitches=5 (5×0.58=2.90), R=0.30 → auto GBG.
+    // beam_length=4.30 → 140k tier.
+    // billed_length = 2.90 + 0.45 = 3.35 m
+    // billed_area   = 4.30 × 3.35 = 14.405 m²
+    // m2_cost       = 14.405 × 140k = 2,016,700
+    // pattern_extra_cost = 0
+    const r = calculateSlab({ inner_width: 4, inner_length: 3.20 });
+    expect(r.pattern).toBe("GBG");
+    expect(r.pitches).toBe(5);
+    expect(r.block_rows).toBe(6);
+    expect(r.beam_count).toBe(5);
+    expect(r.billed_length).toBeCloseTo(3.35, 3);
+    expect(r.billed_area).toBeCloseTo(14.405, 3);
+    expect(r.m2_cost).toBe(2_016_700);
+    expect(r.pattern_extra_cost).toBe(0);
+    expect(r.subtotal).toBe(2_016_700);
+  });
+
+  it("billed_length == monolith_length for plain GBG (no manual extras)", () => {
+    // When there are no manual extras, the billed slab and the visible
+    // slab are exactly the same — the closing block row counts the
+    // same way for both purposes.
+    const r = calculateSlab({ inner_width: 4, inner_length: 6, pattern: "GBG" });
+    expect(r.pattern).toBe("GBG");
+    expect(r.billed_length).toBeCloseTo(r.monolith_length, 3);
+  });
+
+  it("BGB pricing unchanged — closing beam still bills at extra-beam tier", () => {
+    // Regression guard: only GBG changed. BGB stays as-is so existing
+    // BGB orders keep their pricing.
+    const r = calculateSlab({ inner_width: 4, inner_length: 6 }); // auto BGB at R=0.20
+    expect(r.pattern).toBe("BGB");
+    expect(r.billed_length).toBeCloseTo(5.80, 3);                 // NOT 5.92
+    expect(r.billed_area).toBeCloseTo(24.94, 2);
+    expect(r.pattern_extra_cost).toBe(4.30 * 60_000);             // 258,000
+  });
+
+  it("GBG with manual extras: closing row m²-billed, conversion still applies", () => {
+    // 4 × 4.3 auto GBG + 2 manual extras: the first extra triggers the
+    // GBG→GB-at-pitches+1 conversion (cancelling the GBG extension),
+    // the second extra remains as a per-meter line item. The result
+    // is pure GB pricing — no GBG bonus, no per-block charge.
+    const r = calculateSlab({
+      inner_width: 4,
+      inner_length: 4.3,
+      extra_beams: 2,
+    });
+    expect(r.pattern).toBe("GB");                  // converted from GBG
+    expect(r.pitches).toBe(8);
+    expect(r.billed_length).toBeCloseTo(8 * 0.58, 3); // GB → no extension
+    expect(r.pattern_extra_cost).toBe(0);
+    expect(r.manual_extra_beams_cost).toBe(1 * 4.30 * 60_000); // 258,000
   });
 });
 
@@ -113,12 +217,18 @@ describe("calculateSlab — pricing matches user's reference examples", () => {
     expect(r.subtotal).toBe(24.94 * 140_000 + 4.30 * 60_000);       // 3,749,600
   });
 
-  it("4 × 6 GBG option: m² at 4.30×5.80 + blocks_per_row × 6,000", () => {
+  it("4 × 6 GBG option: m² billed on slab including closing block row (4.30 × 6.25)", () => {
+    // billed_length = 10×PITCH + BLOCK_VISIBLE = 5.80 + 0.45 = 6.25
+    // billed_area   = 4.30 × 6.25 = 26.875
+    // m2_cost       = 26.875 × 140,000 = 3,762,500
+    // pattern_extra_cost = 0 (no more separate per-block charge for GBG)
     const r = calculateSlab({ inner_width: 4, inner_length: 6, pattern: "GBG" });
     expect(r.pattern).toBe("GBG");
-    expect(r.m2_cost).toBe(24.94 * 140_000);
-    expect(r.pattern_extra_cost).toBe(20 * BLOCK_UNIT_PRICE);       // 120,000
-    expect(r.subtotal).toBe(24.94 * 140_000 + 20 * BLOCK_UNIT_PRICE);
+    expect(r.billed_length).toBeCloseTo(6.25, 3);
+    expect(r.billed_area).toBeCloseTo(26.875, 3);
+    expect(r.m2_cost).toBe(26.875 * 140_000);
+    expect(r.pattern_extra_cost).toBe(0);
+    expect(r.subtotal).toBe(26.875 * 140_000);
   });
 
   it("4 × 6 extra-pair option (correction +0.30): m² at 4.30×6.38, no extras", () => {
@@ -128,6 +238,86 @@ describe("calculateSlab — pricing matches user's reference examples", () => {
     expect(r.pattern_extra_cost).toBe(0);
     expect(r.manual_extra_beams_cost).toBe(0);
     expect(r.subtotal).toBeCloseTo(27.434 * 140_000, 0);
+  });
+
+  // ── New GBG billing rule (closing block row folded into m²-billed area) ─────
+  // Reported by the user on 2026-05-14: the visual closing block row of
+  // a Г-Б-Г slab is physically part of what's poured for the customer,
+  // so it should be charged at the m² tier — NOT split out as a
+  // per-block line item the way it used to be. BGB's extra closing
+  // beam continues to bill at the per-meter extra-beam tier (unchanged).
+  describe("GBG billing rule · closing block row m²-billed via expanded billed_length", () => {
+    it("4.5 × 6 explicit GBG → 6.25 m billed length, 30 m² billed area, 4,800,000 so'm", () => {
+      // User's exact reproduction case from the screenshot:
+      //   pitches = floor(6 / 0.58) = 10
+      //   billed_length = 10×0.58 + 0.45 = 6.25 m
+      //   beam_length = 4.5 + 2×0.15 = 4.80 m → m² tier price 160,000
+      //   billed_area = 4.80 × 6.25 = 30.000 m²
+      //   subtotal = 30 × 160,000 = 4,800,000 so'm
+      const r = calculateSlab({ inner_width: 4.5, inner_length: 6, pattern: "GBG" });
+      expect(r.pattern).toBe("GBG");
+      expect(r.pitches).toBe(10);
+      expect(r.beam_count).toBe(10);            // GBG: no extra beam
+      expect(r.block_rows).toBe(11);            // pitches + 1
+      expect(r.total_blocks).toBe(23 * 11);     // 23 blocks/row × 11 rows = 253
+      expect(r.beam_length).toBeCloseTo(4.80, 3);
+      expect(r.m2_price).toBe(160_000);
+      expect(r.billed_length).toBeCloseTo(6.25, 3);
+      expect(r.billed_area).toBeCloseTo(30.0, 3);
+      expect(r.m2_cost).toBe(4_800_000);
+      expect(r.pattern_extra_cost).toBe(0);
+      expect(r.manual_extra_beams_cost).toBe(0);
+      expect(r.subtotal).toBe(4_800_000);
+    });
+
+    it("Auto-picked GBG (4 × 3.20) at 5 pitches: billed includes the extra block row", () => {
+      // 3.20 / 0.58 = 5.51 → N=5, R=0.30 → auto GBG
+      // billed_length = 5×0.58 + 0.45 = 3.35 m
+      // beam_length   = 4 + 0.30 = 4.30 → m² tier 140,000
+      // billed_area   = 4.30 × 3.35 = 14.405 m²
+      // subtotal      = 14.405 × 140,000 = 2,016,700 so'm
+      const r = calculateSlab({ inner_width: 4, inner_length: 3.20 });
+      expect(r.pattern).toBe("GBG");
+      expect(r.pitches).toBe(5);
+      expect(r.beam_count).toBe(5);
+      expect(r.block_rows).toBe(6);
+      expect(r.total_blocks).toBe(20 * 6);
+      expect(r.billed_length).toBeCloseTo(3.35, 3);
+      expect(r.billed_area).toBeCloseTo(14.405, 3);
+      expect(r.m2_cost).toBeCloseTo(14.405 * 140_000, 0);
+      expect(r.pattern_extra_cost).toBe(0);
+      expect(r.subtotal).toBeCloseTo(14.405 * 140_000, 0);
+    });
+
+    it("GBG and monolith report identical lengths (no separate per-block line)", () => {
+      // monolith_length == billed_length when there are no manual extras,
+      // because the only extension is BLOCK_VISIBLE which now lives in
+      // BOTH lengths.
+      const r = calculateSlab({ inner_width: 4, inner_length: 4.3 });
+      expect(r.pattern).toBe("GBG");
+      expect(r.billed_length).toBeCloseTo(r.monolith_length, 3);
+      expect(r.pattern_extra_cost).toBe(0);
+    });
+
+    it("BGB closing beam still bills at the extra-beam tier (unchanged)", () => {
+      // Regression: this rule applies to GBG only. BGB's pattern_extra_cost
+      // is still `beam_length × extra_beam_tier`.
+      const r = calculateSlab({ inner_width: 4, inner_length: 3.5 });
+      expect(r.pattern).toBe("BGB");
+      expect(r.billed_length).toBeCloseTo(6 * 0.58, 3); // 3.48 — no extension
+      expect(r.pattern_extra_cost).toBe(4.30 * 60_000);
+    });
+
+    it("Manual extra-beam absorbing the GBG closing block (conversion to GB) zeroes pattern_extra_cost", () => {
+      // Regression: the GBG→GB conversion path used to set
+      // pattern_extra_cost=0 because GB has no pattern extras. Same
+      // outcome under the new rule, just for a different reason —
+      // the resulting pattern is GB, so the GBG-only extension is moot.
+      const r = calculateSlab({ inner_width: 4, inner_length: 4.3, pattern: "GBG", extra_beams: 1 });
+      expect(r.pattern).toBe("GB");
+      expect(r.billed_length).toBeCloseTo(8 * 0.58, 3); // 4.64, no GBG extension
+      expect(r.pattern_extra_cost).toBe(0);
+    });
   });
 
   it("manual extra_beams charged on full beam_length (incl. bearings)", () => {
@@ -266,6 +456,9 @@ describe("calculateSlab — manual extras extend monolith visually but not bille
   });
 
   it("GBG + 0 extras stays GBG (no conversion without an added beam)", () => {
+    // GBG billing rule: closing block row is m²-billed via the
+    // expanded billed_length (= monolith_length), and pattern_extra_cost
+    // is 0 — the per-block charge that used to exist is gone.
     const r = calculateSlab({ inner_width: 4, inner_length: 4.3 });
     expect(r.pattern_auto).toBe("GBG");
     expect(r.pattern).toBe("GBG");
@@ -274,8 +467,8 @@ describe("calculateSlab — manual extras extend monolith visually but not bille
     expect(r.block_rows).toBe(8);
     expect(r.total_blocks).toBe(160);
     expect(r.monolith_length).toBeCloseTo(7 * 0.58 + 0.45, 3); // 4.51
-    expect(r.billed_length).toBeCloseTo(7 * 0.58, 3);          // 4.06
-    expect(r.pattern_extra_cost).toBe(20 * 6_000);             // GBG block extras
+    expect(r.billed_length).toBeCloseTo(7 * 0.58 + 0.45, 3);   // 4.51
+    expect(r.pattern_extra_cost).toBe(0);                       // no separate block extras
     expect(r.manual_extra_beams_cost).toBe(0);
   });
 

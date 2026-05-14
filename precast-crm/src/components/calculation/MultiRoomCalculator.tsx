@@ -15,8 +15,10 @@ import {
   calculateSlab,
   projectTotal,
   tierPrice,
+  DEFAULT_PRICE_CONFIG,
   M2_PRICE_TIERS,
   round2,
+  type PriceConfig,
   type SlabResult,
   type Pattern,
 } from "@/services/calculation-engine";
@@ -26,6 +28,7 @@ import { useCalculatorStore } from "@/store/calculator";
 import { RateOverrideDialog } from "@/components/calculation/RateOverrideDialog";
 import { NumberInput } from "@/components/calculation/NumberInput";
 import { Bi, useT } from "@/lib/i18n";
+import { useLivePricing } from "@/hooks/useLivePricing";
 
 export interface SlabRow {
   id: string;
@@ -209,7 +212,10 @@ function makeRow(seq: number): SlabRow {
  *  or `result: null` if the inputs aren't valid yet. Exported so callers
  *  (e.g. the Calculations page when re-opening a saved draft) can fill in
  *  results without having to wait for the user to "wake up" each row. */
-export function recomputeRow(row: SlabRow): SlabRow {
+export function recomputeRow(
+  row: SlabRow,
+  priceConfig: PriceConfig = DEFAULT_PRICE_CONFIG,
+): SlabRow {
   // Accept either a real slab (length>0) OR extras-only (length=0 + extras>=1).
   // Width and bearing always required; bearing of 0 is valid for "no bearing".
   const hasSlab = row.innerLength > 0;
@@ -218,15 +224,18 @@ export function recomputeRow(row: SlabRow): SlabRow {
     return { ...row, result: null };
   }
   try {
-    const result = calculateSlab({
-      inner_width: row.innerWidth,
-      inner_length: row.innerLength,
-      bearing: row.bearing,
-      correction: row.correction,
-      extra_beams: row.extraBeams,
-      force_start_beam: row.forceStartBeam,
-      pattern: row.patternOverride === "AUTO" ? undefined : row.patternOverride,
-    });
+    const result = calculateSlab(
+      {
+        inner_width: row.innerWidth,
+        inner_length: row.innerLength,
+        bearing: row.bearing,
+        correction: row.correction,
+        extra_beams: row.extraBeams,
+        force_start_beam: row.forceStartBeam,
+        pattern: row.patternOverride === "AUTO" ? undefined : row.patternOverride,
+      },
+      priceConfig,
+    );
     return { ...row, result: applyRateOverride(result, row) };
   } catch {
     return { ...row, result: null };
@@ -316,11 +325,25 @@ export function MultiRoomCalculator({
   actions,
 }: Props) {
   const t = useT();
+  // Live pricing — fetched once from /api/pricing and reused by every
+  // recomputeRow call below. When the owner edits prices on /pricing,
+  // the next React Query refresh updates this and the rows re-bill
+  // against the new tiers (via the effect a few lines down).
+  const pricing = useLivePricing();
   // Workspace-level rounding granularity, persisted via the calculator
   // store. One setting applies to every row; survives in-app navigation
   // and is keyed per user (see src/store/calculator.ts).
   const roundingGrid = useCalculatorStore((s) => s.roundingGrid);
   const changeGrid = useCalculatorStore((s) => s.setRoundingGrid);
+
+  // Rebill every row when the live pricing config changes. Without this
+  // the table sticks with the old tier values until the operator edits
+  // something. We key the effect on the pricing object's identity so it
+  // only re-runs when /api/pricing actually returns a new payload.
+  useEffect(() => {
+    onChange(rows.map((r) => recomputeRow(r, pricing)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pricing]);
 
   // Customize-layout: per-user column WIDTH overrides (order is fixed).
   // `isCustomizingLayout` is a transient toggle for the panel. Gated
@@ -363,7 +386,7 @@ export function MultiRoomCalculator({
   };
   const removeRow = (id: string) => onChange(rows.filter((r) => r.id !== id));
   const updateRow = (id: string, updates: Partial<SlabRow>) =>
-    onChange(rows.map((r) => (r.id === id ? recomputeRow({ ...r, ...updates }) : r)));
+    onChange(rows.map((r) => (r.id === id ? recomputeRow({ ...r, ...updates }, pricing) : r)));
 
   // ── Auto-create a blank Room 1 whenever rows is empty. ──
   // Triggers on:
@@ -462,10 +485,13 @@ export function MultiRoomCalculator({
     onChange(
       rows.map((r) => {
         if (r.innerWidth <= 0) return r;
-        return recomputeRow({
-          ...r,
-          innerWidth: roundUpToGrid(r.innerWidth, roundingGrid),
-        });
+        return recomputeRow(
+          {
+            ...r,
+            innerWidth: roundUpToGrid(r.innerWidth, roundingGrid),
+          },
+          pricing,
+        );
       }),
     );
   };

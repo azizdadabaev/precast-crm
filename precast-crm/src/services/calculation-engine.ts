@@ -35,9 +35,14 @@
  *  any additional manual extras remain as per-meter line items on top.
  *
  *  Length concepts (three of them, each with a clear job):
- *    billed_length   = pitches × PITCH                                  ← m²-rate base
- *    slab_length     = billed_length + pattern_extension                ← physical slab
+ *    billed_length   = pitches × PITCH (+ BLOCK_VISIBLE for GBG)        ← m²-rate base
+ *    slab_length     = pitches × PITCH + pattern_extension              ← physical slab
  *    monolith_length = slab_length + effective_extras × BEAM_WIDTH      ← what UI shows
+ *
+ *  GBG-specific billing rule: the closing block row is m²-billed (folded
+ *  into billed_length) rather than charged as a separate line item. BGB's
+ *  closing beam still bills at the per-meter extra-beam tier — that hasn't
+ *  changed. GB has no extension and no pattern extra.
  *
  *  `effective_extras` may be lower than the user-input `extra_beams` when one
  *  was absorbed by the GBG→GB conversion. Pricing fields (m2_cost,
@@ -83,6 +88,28 @@ export const EXTRA_BEAM_PRICE_TIERS: readonly PriceTier[] = [
 ] as const;
 
 export const BLOCK_UNIT_PRICE = 6_000;
+
+/**
+ * Live, editable pricing config. Bracket boundaries (max_beam_length)
+ * are physical factory constants — fixed. Only the prices inside the
+ * brackets are owner-editable via the /pricing page. block_unit_price
+ * is no longer used by GBG after the m²-billing change, but the field
+ * remains so a future pattern can opt back into per-block pricing.
+ */
+export interface PriceConfig {
+  m2_price_tiers: readonly PriceTier[];
+  extra_beam_price_tiers: readonly PriceTier[];
+  block_unit_price: number;
+}
+
+/** The default config the engine falls back to when no override is
+ *  passed (preserves backward compatibility with existing call sites
+ *  and tests, and acts as the seed when AppConfig is empty). */
+export const DEFAULT_PRICE_CONFIG: PriceConfig = {
+  m2_price_tiers: M2_PRICE_TIERS,
+  extra_beam_price_tiers: EXTRA_BEAM_PRICE_TIERS,
+  block_unit_price: BLOCK_UNIT_PRICE,
+};
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -133,7 +160,12 @@ export interface SlabResult {
 
   // Lengths (m)
   monolith_length: number;      // physical span actually built
-  billed_length: number;        // pitches × PITCH — the length used for m² billing
+  billed_length: number;        // length used for m² billing.
+                                // GB / BGB: pitches × PITCH.
+                                // GBG: pitches × PITCH + BLOCK_VISIBLE
+                                //      (the closing block row is folded
+                                //       into the billed area, not charged
+                                //       per-block).
 
   // Areas (m²)
   monolith_area: number;        // beam_length × monolith_length
@@ -146,7 +178,9 @@ export interface SlabResult {
   m2_price: number;             // UZS / m²  (0 in extras-only mode — no m² billing)
   extra_beam_price_per_m: number;
   m2_cost: number;              // billed_area × m2_price (0 in extras-only mode)
-  pattern_extra_cost: number;   // 0 | 1 extra beam | blocks_per_row × BLOCK_UNIT_PRICE
+  pattern_extra_cost: number;   // BGB: beam_length × extra-beam tier (1 closing beam).
+                                // GB & GBG: 0. (GBG's closing block row is
+                                //              m²-billed via billed_length.)
   manual_extra_beams_cost: number;
   subtotal: number;             // m2_cost + pattern_extra_cost + manual_extra_beams_cost
 
@@ -230,7 +264,10 @@ function validate(input: SlabInput, bearing: number): void {
 
 // ── Main calculation ────────────────────────────────────────────
 
-export function calculateSlab(input: SlabInput): SlabResult {
+export function calculateSlab(
+  input: SlabInput,
+  priceConfig: PriceConfig = DEFAULT_PRICE_CONFIG,
+): SlabResult {
   const bearing = input.bearing ?? DEFAULT_BEARING;
   const correction = input.correction ?? 0;
   const extra_beams = input.extra_beams ?? 0;
@@ -242,7 +279,7 @@ export function calculateSlab(input: SlabInput): SlabResult {
   // the rest of calculateSlab assumes a real slab. See SlabResult's
   // is_extras_only doc for what UI / persistence should do.
   if (input.inner_length === 0 && extra_beams >= 1) {
-    return calculateExtrasOnly(input, bearing, extra_beams);
+    return calculateExtrasOnly(input, bearing, extra_beams, priceConfig);
   }
 
   // Geometry that doesn't depend on pattern
@@ -312,8 +349,17 @@ export function calculateSlab(input: SlabInput): SlabResult {
   const beam_count = beam_count_base + effective_extra_beams;
   const total_blocks = blocks_per_row * block_rows;
 
-  // Lengths — three concepts, see file header
-  const billed_length = round3(pitches * PITCH);
+  // Lengths — three concepts, see file header.
+  //
+  // GBG billing rule (changed): the pattern's closing block row is folded
+  // into the billed slab length so it is m²-billed at the tier rate,
+  // rather than being a separate per-block line item. Per the user's
+  // construction-pricing convention: a Г-Б-Г closing block row is
+  // physically part of the slab the customer is buying, so the m² rate
+  // should cover it. BGB still bills its closing beam separately at the
+  // per-meter extra-beam tier — that hasn't changed.
+  const pattern_billed_extension = pattern === "GBG" ? extension : 0;
+  const billed_length = round3(pitches * PITCH + pattern_billed_extension);
   const slab_length = round3(pitches * PITCH + extension);
   const monolith_length = round3(slab_length + effective_extra_beams * BEAM_WIDTH);
 
@@ -325,16 +371,21 @@ export function calculateSlab(input: SlabInput): SlabResult {
   // (does NOT include the visual extension from manual extra beams).
   const concrete_volume = round3(beam_length * slab_length * TOPPING_THICKNESS);
 
-  // Pricing
-  const m2_price = tierPrice(beam_length, M2_PRICE_TIERS);
-  const extra_beam_price_per_m = tierPrice(beam_length, EXTRA_BEAM_PRICE_TIERS);
+  // Pricing — sourced from the caller's config so AppConfig overrides
+  // (set via the owner-only /pricing page) take effect on every new
+  // calculation. Defaults back to the module constants when no override
+  // is passed (preserves tests + any legacy call site that hasn't been
+  // wired to the live config yet).
+  const m2_price = tierPrice(beam_length, priceConfig.m2_price_tiers);
+  const extra_beam_price_per_m = tierPrice(beam_length, priceConfig.extra_beam_price_tiers);
   const m2_cost = round2(billed_area * m2_price);
+  // GBG's pattern_extra_cost is now 0 — the closing block row is m²-billed
+  // via the expanded billed_length above. BGB's extra closing beam still
+  // bills separately at the per-meter extra-beam tier.
   const pattern_extra_cost =
     pattern === "BGB"
       ? round2(beam_length * extra_beam_price_per_m)
-      : pattern === "GBG"
-        ? round2(blocks_per_row * BLOCK_UNIT_PRICE)
-        : 0;
+      : 0;
   const manual_extra_beams_cost = round2(effective_extra_beams * beam_length * extra_beam_price_per_m);
   const subtotal = round2(m2_cost + pattern_extra_cost + manual_extra_beams_cost);
 
@@ -383,12 +434,13 @@ function calculateExtrasOnly(
   input: SlabInput,
   bearing: number,
   extra_beams: number,
+  priceConfig: PriceConfig,
 ): SlabResult {
   const beam_length = round3(input.inner_width + 2 * bearing);
   const slab_length = round3(extra_beams * BEAM_WIDTH);
   const slab_area = round3(input.inner_width * slab_length);
 
-  const extra_beam_price_per_m = tierPrice(beam_length, EXTRA_BEAM_PRICE_TIERS);
+  const extra_beam_price_per_m = tierPrice(beam_length, priceConfig.extra_beam_price_tiers);
   const extras_subtotal = round2(extra_beams * beam_length * extra_beam_price_per_m);
 
   return {

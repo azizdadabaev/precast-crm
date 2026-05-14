@@ -8,6 +8,7 @@ import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
+import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { nextDraftNumber } from "@/lib/draft-number";
@@ -58,17 +59,21 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   const phoneNorm = normalizePhone(body.clientPhone);
   if (!phoneNorm) return fail("phone is required to save a draft", 422);
 
+  const pricing = await loadPricingConfig();
   const computed = body.rooms.map((room) => ({
     input: room,
-    result: calculateSlab({
-      inner_width: room.innerWidth,
-      inner_length: room.innerLength,
-      bearing: room.bearing,
-      correction: room.correction,
-      extra_beams: room.extraBeams,
-      force_start_beam: room.forceStartBeam,
-      pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
-    }),
+    result: calculateSlab(
+      {
+        inner_width: room.innerWidth,
+        inner_length: room.innerLength,
+        bearing: room.bearing,
+        correction: room.correction,
+        extra_beams: room.extraBeams,
+        force_start_beam: room.forceStartBeam,
+        pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
+      },
+      pricing,
+    ),
   }));
 
   // If the phone matches an existing Client, attach to the Client up front;

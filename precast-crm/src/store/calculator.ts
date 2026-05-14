@@ -256,10 +256,13 @@ export const useCalculatorStore = create<CalculatorState>()(
       // a calculation rule changing between sessions (rare in production
       // but worth it for the next time we touch the engine). Mirrors the
       // pre-store autosave's `setRows(parsed.rows.map(recomputeRow))`.
+      // Rehydrate uses engine-default pricing; MultiRoomCalculator's
+      // useLivePricing effect re-bills the rows once the /api/pricing
+      // payload lands so the first render's tier values don't stick.
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         if (Array.isArray(state.rows) && state.rows.length > 0) {
-          state.rows = state.rows.map(recomputeRow);
+          state.rows = state.rows.map((r) => recomputeRow(r));
         }
       },
     },
