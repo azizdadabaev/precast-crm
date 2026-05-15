@@ -817,3 +817,178 @@
   0%, 100% { opacity: 0.6; }
   50%      { opacity: 1; }
 }
+
+/* ── Monthly Revenue Chart — editorial financial-publication style ──
+ *
+ * This card is deliberately taller and quieter than the other dash
+ * cards so it reads as the dashboard's anchor visual. The headline
+ * number uses Manrope at a heavy display weight with JetBrains Mono
+ * digits for that "tabular precision" the rest of the app reaches for.
+ * One single emerald hue carries the whole piece — line, gradient,
+ * trend pill, hover ring — so there's no chromatic noise.
+ */
+.rev-chart {
+  position: relative;
+  background: var(--dash-card-bg);
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius);
+  padding: var(--dash-space-6) var(--dash-space-6) var(--dash-space-4);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* A subtle top edge wash. Adds depth without resorting to a drop
+ * shadow that would clash with the flat dashboard. */
+.rev-chart::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 120px;
+  background: linear-gradient(180deg, rgba(5, 150, 105, 0.035) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.rev-chart > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rev-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dash-space-4);
+  margin-bottom: var(--dash-space-5);
+}
+
+.rev-chart-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dash-text-tertiary);
+}
+
+.rev-chart-number {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rev-chart-number-value {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  color: var(--dash-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.rev-chart-number-suffix {
+  font-family: var(--font-manrope), sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--dash-text-secondary);
+  letter-spacing: -0.01em;
+}
+
+.rev-chart-number-unit {
+  font-family: var(--font-manrope), sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dash-text-tertiary);
+  padding-left: 2px;
+}
+
+.rev-chart-sub {
+  font-size: 11.5px;
+  color: var(--dash-text-secondary);
+  margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The trend pill — pulse-on-hover for delight without being noisy. */
+.rev-chart-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid;
+  transition: transform 220ms ease-out, box-shadow 220ms ease-out;
+}
+
+.rev-chart-trend:hover {
+  transform: translateY(-1px);
+}
+
+.rev-chart-trend-up {
+  background: var(--dash-success-bg);
+  color: var(--dash-success);
+  border-color: rgba(5, 150, 105, 0.22);
+}
+
+.rev-chart-trend-up:hover {
+  box-shadow: 0 6px 18px -8px rgba(5, 150, 105, 0.4);
+}
+
+.rev-chart-trend-down {
+  background: var(--dash-danger-bg);
+  color: var(--dash-danger);
+  border-color: rgba(220, 38, 38, 0.22);
+}
+
+.rev-chart-trend-down:hover {
+  box-shadow: 0 6px 18px -8px rgba(220, 38, 38, 0.4);
+}
+
+.rev-chart-trend-tail {
+  font-weight: 500;
+  color: inherit;
+  opacity: 0.62;
+  margin-left: 4px;
+  font-size: 10.5px;
+}
+
+.rev-chart-canvas {
+  width: 100%;
+  height: 240px;
+  margin-top: var(--dash-space-2);
+}
+
+/* Recharts overrides: the library's default focus outline + cursor
+ * rectangle don't match this card's quiet aesthetic. */
+.rev-chart-canvas .recharts-surface { outline: none; }
+.rev-chart-canvas .recharts-tooltip-cursor { display: none; }
+.rev-chart-canvas .recharts-active-dot { transition: r 180ms ease-out; }
+
+/* Loading state — same dimensions so nothing jumps when data arrives. */
+.rev-chart-loading {
+  min-height: 360px;
+}
+
+.rev-chart-skeleton-head {
+  height: 72px;
+  width: 60%;
+  background: var(--dash-bg);
+  border-radius: var(--dash-radius-sm);
+  animation: dash-shimmer 1.5s ease-in-out infinite;
+}
+
+.rev-chart-skeleton-area {
+  margin-top: var(--dash-space-5);
+  height: 240px;
+  background: var(--dash-bg);
+  border-radius: var(--dash-radius-sm);
+  animation: dash-shimmer 1.5s ease-in-out infinite;
+}

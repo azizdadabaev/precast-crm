@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
 import { useT } from "@/lib/i18n";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
+import { MonthlyRevenueChart } from "@/components/dashboard/MonthlyRevenueChart";
 import { RevenueThisMonthCard } from "@/components/dashboard/RevenueThisMonthCard";
 import { RevenueAllTimeCard } from "@/components/dashboard/RevenueAllTimeCard";
 import { AverageOrderValueCard } from "@/components/dashboard/AverageOrderValueCard";
@@ -78,6 +79,8 @@ export default function DashboardPage() {
           )}
         </p>
       </div>
+
+      <MonthlyRevenueChart />
 
       <section className="dashboard-section">
         <h2>{t("Молиявий ҳолат", "Financial health")}</h2>
