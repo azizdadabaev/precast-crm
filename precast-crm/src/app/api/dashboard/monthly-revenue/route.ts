@@ -56,15 +56,43 @@ export const GET = withPermission("dashboard.view", async () => {
     });
   }
 
-  // Accumulate. The first bucket is the windowStart month, so
-  // index = (year - startYear) * 12 + (month - startMonth + 11).
+  // Accumulate monthly and daily in a single pass.
+  const dayBuckets = new Map<string, {
+    date: number; dayLabel: string; monthKey: string; revenue: number; orderCount: number;
+  }>();
+
   for (const o of orders) {
     const pd = new Date(o.placedAt);
-    const idx = (pd.getFullYear() - startYear) * 12 + (pd.getMonth() - startMonth + 11);
-    if (idx < 0 || idx >= 12) continue;
-    buckets[idx]!.revenue += Number(o.totalPrice);
-    buckets[idx]!.orderCount += 1;
+    const y = pd.getFullYear();
+    const m = pd.getMonth();
+    const d = pd.getDate();
+
+    // Monthly
+    const idx = (y - startYear) * 12 + (m - startMonth + 11);
+    if (idx >= 0 && idx < 12) {
+      buckets[idx]!.revenue += Number(o.totalPrice);
+      buckets[idx]!.orderCount += 1;
+    }
+
+    // Daily
+    const dayKey = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    if (!dayBuckets.has(dayKey)) {
+      dayBuckets.set(dayKey, {
+        date: new Date(y, m, d).getTime(),
+        dayLabel: `${d} ${MONTH_UZ_SHORT[m]}`,
+        monthKey: `${y}-${String(m + 1).padStart(2, "0")}`,
+        revenue: 0,
+        orderCount: 0,
+      });
+    }
+    const db = dayBuckets.get(dayKey)!;
+    db.revenue += Number(o.totalPrice);
+    db.orderCount += 1;
   }
+
+  const days = Array.from(dayBuckets.values())
+    .sort((a, b) => a.date - b.date)
+    .map((d) => ({ ...d, revenue: Math.round(d.revenue) }));
 
   const total = buckets.reduce((s, b) => s + b.revenue, 0);
   const totalOrders = buckets.reduce((s, b) => s + b.orderCount, 0);
@@ -84,6 +112,7 @@ export const GET = withPermission("dashboard.view", async () => {
       revenue: Math.round(b.revenue),
       orderCount: b.orderCount,
     })),
+    days,
     total: Math.round(total),
     totalOrders,
     trendPct: trendPct === null ? null : Math.round(trendPct * 10) / 10,
