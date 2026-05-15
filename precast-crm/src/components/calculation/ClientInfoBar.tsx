@@ -75,9 +75,23 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
       if (!isExpanded || !canCollapse) return;
       const node = cardRef.current;
       if (!node) return;
-      if (!node.contains(e.target as Node)) {
-        setIsExpanded(false);
+      const target = e.target as Element | null;
+      if (!target) return;
+      if (node.contains(target)) return;
+      // The Address Combobox uses Radix Popover, which renders the
+      // dropdown list in a portal attached to document.body. That
+      // portal sits outside `cardRef`, so without this guard a tap on
+      // any province/tuman option counts as "outside the card" — the
+      // collapse fires, the popover unmounts mid-tap, and the click
+      // never registers on the option. The user described the exact
+      // symptom: "press city dropdown, list appears, can't pick, card
+      // auto-collapses." Treat any tap whose target sits inside a
+      // Radix popper or cmdk listbox as still "inside" the editing
+      // surface and let it through.
+      if (target.closest("[data-radix-popper-content-wrapper], [cmdk-list], [role=listbox]")) {
+        return;
       }
+      setIsExpanded(false);
     }
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("touchstart", onPointerDown);
