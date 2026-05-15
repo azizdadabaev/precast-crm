@@ -133,8 +133,8 @@ export function AddressInput({
       if (row) {
         const parent = getViloyatForTuman(row.id);
         if (parent) {
-          setViloyat(parent.name);
-          emit(parent.name, nextTuman, streetDetail);
+          setViloyat(parent.nameUz);
+          emit(parent.nameUz, nextTuman, streetDetail);
           return;
         }
       }
@@ -211,7 +211,7 @@ function ViloyatCombobox({
   onChange,
 }: ViloyatComboboxProps) {
   const [open, setOpen] = React.useState(false);
-  const selected = viloyats.find((v) => v.name === value);
+  const selected = viloyats.find((v) => v.name === value || v.nameUz === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -281,14 +281,14 @@ function ViloyatCombobox({
                   // display-only Cyrillic shown below.
                   value={`${v.nameUz} ${v.name}`}
                   onSelect={() => {
-                    onChange(v.name);
+                    onChange(v.nameUz);
                     setOpen(false);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value === v.name ? "opacity-100" : "opacity-0",
+                      value === v.name || value === v.nameUz ? "opacity-100" : "opacity-0",
                     )}
                   />
                   <span>{v.nameUz}</span>
@@ -318,7 +318,7 @@ function TumanCombobox({
   onChange,
 }: TumanComboboxProps) {
   const [open, setOpen] = React.useState(false);
-  const selected = tumans.find((t) => t.name === value);
+  const selected = tumans.find((t) => t.name === value || t.nameUz === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -385,14 +385,14 @@ function TumanCombobox({
                   // so the row stays compact in the narrow grid cell.
                   value={`${t.nameUz} ${t.name}`}
                   onSelect={() => {
-                    onChange(t.name);
+                    onChange(t.nameUz);
                     setOpen(false);
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value === t.name ? "opacity-100" : "opacity-0",
+                      value === t.name || value === t.nameUz ? "opacity-100" : "opacity-0",
                     )}
                   />
                   <span>{t.nameUz}</span>

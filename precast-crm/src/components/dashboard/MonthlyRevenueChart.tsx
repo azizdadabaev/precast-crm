@@ -309,7 +309,7 @@ export function MonthlyRevenueChart() {
               dy={6}
             />
 
-            <YAxis hide domain={["dataMin", "dataMax + 1"]} />
+            <YAxis hide domain={[0, (max: number) => Math.max(Math.ceil(max * 1.25), 1)]} />
 
             {activeTs !== null && !hoveredDay && (
               <ReferenceLine

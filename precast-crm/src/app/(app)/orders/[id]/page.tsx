@@ -28,6 +28,19 @@ import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { useT } from "@/lib/i18n";
+import { addressToCyrillic } from "@/lib/regions";
+
+const WEEKDAY_UZ = ["Якшанба", "Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба"];
+
+function displayRoomName(name: string | null): string {
+  if (!name) return "";
+  return name.replace(/^Room\s+(\d+)$/i, "Хона $1");
+}
+
+function displayBearing(bearing: string): string {
+  const cm = Math.round(Number(bearing) * 100);
+  return `${cm} см`;
+}
 
 interface OrderDetail {
   id: string;
@@ -65,6 +78,7 @@ interface OrderDetail {
       innerLength: string;
       pattern: "GB" | "BGB" | "GBG";
       patternAuto: "GB" | "BGB" | "GBG";
+      bearing: string;
       beamLength: string;
       blocksPerRow: number;
       beamCount: number;
@@ -299,7 +313,7 @@ export default function OrderDetailPage() {
               </Link>
               {" · "}
               <span className="tabular-nums">{formatPhone(order.client.phone)}</span>
-              {order.client.address && <> · {order.client.address}</>}
+              {order.client.address && <> · {addressToCyrillic(order.client.address)}</>}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
@@ -308,12 +322,8 @@ export default function OrderDetailPage() {
               <div className="inline-flex items-center gap-1.5 font-semibold">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <span className="tabular-nums">
-                  {new Date(order.scheduledAt).toLocaleDateString("en-GB", {
-                    weekday: "short",
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
+                  {WEEKDAY_UZ[new Date(order.scheduledAt).getDay()]},{" "}
+                  {formatDate(order.scheduledAt)}
                 </span>
               </div>
               <span className="text-xs text-muted-foreground tabular-nums">
@@ -397,7 +407,7 @@ export default function OrderDetailPage() {
               <thead className="bg-muted text-[10px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="text-left px-3 py-2.5 font-semibold">
-                    Исм<span className="lang-en font-normal"> · Name</span>
+                    Хона<span className="lang-en font-normal"> · Room</span>
                   </th>
                   <th className="text-right px-3 py-2.5 font-semibold">
                     Эни<span className="lang-en font-normal"> · W</span>
@@ -407,6 +417,9 @@ export default function OrderDetailPage() {
                   </th>
                   <th className="text-left px-3 py-2.5 font-semibold">
                     Шаблон<span className="lang-en font-normal"> · Pattern</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
+                    Таяниш<span className="lang-en font-normal"> · Bearing</span>
                   </th>
                   <th className="text-right px-3 py-2.5 font-semibold">
                     Балка<span className="lang-en font-normal"> · Beam</span>
@@ -441,7 +454,7 @@ export default function OrderDetailPage() {
                     }
                   >
                     <td className="px-3 py-2.5 font-medium">
-                      {c.name || (
+                      {c.name ? displayRoomName(c.name) : (
                         <span className="text-text-tertiary italic">
                           {t("Номсиз хона", "Unnamed Room")}
                         </span>
@@ -464,6 +477,9 @@ export default function OrderDetailPage() {
                           </span>
                         )}
                       </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
+                      {displayBearing(c.bearing)}
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono">
                       {formatNumber(c.beamLength, 2)}
@@ -506,7 +522,7 @@ export default function OrderDetailPage() {
               <tfoot>
                 <tr className="bg-muted border-t border-border-strong">
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-3 py-3 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-bold"
                   >
                     Жами<span className="lang-en font-normal">{" "}· Totals</span>

@@ -141,16 +141,16 @@ const COLUMN_DEFS: Record<ColumnId, ColumnDef> = {
   name: { defaultWidth: 86, primary: "Хона", secondary: "Name", headerCls: "text-left" },
   width: { defaultWidth: 104, primary: "Эни", secondary: "Width", tip: "Inner width — clear inside-wall to inside-wall (m)" },
   length: { defaultWidth: 56, primary: "Бўйи", secondary: "Length", tip: "Inner length (m)" },
-  bearing: { defaultWidth: 62, primary: "Миниш", secondary: "Bearing", tip: "Beam bearing onto each wall (m). Default 0.15" },
+  bearing: { defaultWidth: 62, primary: "Таяниш", secondary: "Bearing", tip: "Beam bearing onto each wall (m). Default 0.15" },
   correction: { defaultWidth: 62, primary: "Корр.", secondary: "Correction", tip: "Correction added to L before pitch math (m). Use to nudge auto-pattern.", headerCls: "grid-group-divider" },
-  slabL: { defaultWidth: 70, primary: "Йиғма Б.", secondary: "Slab L" },
+  slabL: { defaultWidth: 78, primary: "Монолит Узунлиги", secondary: "Slab L" },
   pattern: { defaultWidth: 104, primary: "Шаблон", secondary: "Pattern" },
   extras: { defaultWidth: 48, primary: "+Б", secondary: "Extra", tip: "Manual extra beams. First one absorbs into pattern when Г-Б-Г." },
   startBeam: { defaultWidth: 56, primary: "Бош Б.", secondary: "Start", tip: "Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op", headerCls: "grid-group-divider" },
-  beamL: { defaultWidth: 62, primary: "Б.уз.", secondary: "Beam L" },
+  beamL: { defaultWidth: 78, primary: "Балка Узунлиги", secondary: "Beam L" },
   pitches: { defaultWidth: 56, primary: "Қадам", secondary: "Pitches" },
   blockRows: { defaultWidth: 56, primary: "Қатор", secondary: "Rows" },
-  blocksPerRow: { defaultWidth: 56, primary: "1 қат.", secondary: "Per row" },
+  blocksPerRow: { defaultWidth: 56, primary: "Гишт/Қатор", secondary: "Per row" },
   totalBlocks: { defaultWidth: 64, primary: "Жами", secondary: "Blocks" },
   beams: { defaultWidth: 56, primary: "Балка", secondary: "Beams" },
   slabArea: { defaultWidth: 78, primary: "Майдон", secondary: "Slab area", headerCls: "grid-group-divider" },
@@ -189,7 +189,7 @@ const PATTERN_LABEL: Record<Pattern, string> = {
 function makeRow(seq: number): SlabRow {
   return {
     id: Math.random().toString(36).slice(2, 9),
-    name: `Room ${seq}`,
+    name: `Хона ${seq}`,
     innerWidth: 0,
     innerLength: 0,
     bearing: 0.15,
@@ -293,11 +293,15 @@ function H({
   align?: "left" | "center" | "right";
 }) {
   const alignCls = align === "left" ? "text-left" : align === "right" ? "text-right" : "text-center";
+  const lines = primary.split("\n");
   return (
     <th title={tip} className={`${alignCls} ${className ?? ""}`}>
-      <div className="flex items-center justify-center gap-1 leading-tight">
-        <span>{primary}</span>
-        {tip && <Info className="h-3 w-3 text-muted-foreground/60" />}
+      <div className="flex flex-col items-center justify-center gap-0 leading-tight">
+        <div className="flex items-center gap-1">
+          <span>{lines[0]}</span>
+          {tip && <Info className="h-3 w-3 text-muted-foreground/60" />}
+        </div>
+        {lines[1] && <span>{lines[1]}</span>}
       </div>
       {secondary && (
         <div className="text-[9px] font-normal normal-case text-muted-foreground/70 mt-0.5">
@@ -652,18 +656,18 @@ export function MultiRoomCalculator({
                 tip="Inner length (m)"
                 className="sticky lg:static left-11 lg:left-[104px] z-20 !bg-muted lg:shadow-none shadow-[inset_-2px_0_0_0_rgba(0,0,0,0.06)]"
               />
-              <H primary="Миниш" secondary="Bearing" tip="Beam bearing onto each wall (m). Default 0.15" />
+              <H primary="Таяниш" secondary="Bearing" tip="Beam bearing onto each wall (m). Default 0.15" />
               <H primary="Корр." secondary="Correction" tip="Correction added to L before pitch math (m). Use to nudge auto-pattern." className="grid-group-divider" />
-              <H primary="Йиғма Б." secondary="Slab L" />
+              <H primary={"Монолит\nУзунлиги"} secondary="Slab L" />
 
               <H primary="Шаблон" secondary="Pattern" />
               <H primary="+Б" secondary="Extra" tip="Manual extra beams. First one absorbs into pattern when Г-Б-Г." />
               <H primary="Бош Б." secondary="Start" tip="Force a starting beam: Г-Б→Б-Г-Б, Г-Б-Г→Г-Б at N+1, Б-Г-Б no-op" className="grid-group-divider" />
 
-              <H primary="Б.уз." secondary="Beam L" />
+              <H primary={"Балка\nУзунлиги"} secondary="Beam L" />
               <H primary="Қадам" secondary="Pitches" />
               <H primary="Қатор" secondary="Rows" />
-              <H primary="1 қат." secondary="Per row" />
+              <H primary="Гишт/Қатор" secondary="Per row" />
               <H primary="Жами" secondary="Blocks" />
               <H primary="Балка" secondary="Beams" />
               <H primary="Майдон" secondary="Slab area" className="grid-group-divider" />
@@ -695,7 +699,7 @@ export function MultiRoomCalculator({
                         className="grid-input is-text flex-1 min-w-0"
                         value={row.name}
                         onChange={(e) => updateRow(row.id, { name: e.target.value })}
-                        placeholder="Room name"
+                        placeholder="Хона номи"
                       />
                       <div className="lg:hidden flex-shrink-0">
                         <RowRoundArrows

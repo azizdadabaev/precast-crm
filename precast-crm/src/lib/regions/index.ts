@@ -158,6 +158,19 @@ export function composeAddress(
   return parts.join(", ");
 }
 
+/**
+ * Convert a stored address string to Cyrillic for display.
+ * Handles both Latin (legacy storage) and already-Cyrillic strings —
+ * safe to call on any address regardless of how it was written.
+ */
+export function addressToCyrillic(address: string): string {
+  if (!address) return address;
+  const { viloyat, tuman, streetDetail } = parseAddress(address);
+  const v = viloyat ? findViloyatByName(viloyat) : null;
+  const t = tuman ? findTumanByName(tuman) : null;
+  return composeAddress(v?.nameUz ?? viloyat, t?.nameUz ?? tuman, streetDetail);
+}
+
 /** Bilingual label "Cyrillic · Latin" for a viloyat. */
 export function viloyatLabel(name: string): string {
   const v = VILOYATS.find((x) => x.name === name);

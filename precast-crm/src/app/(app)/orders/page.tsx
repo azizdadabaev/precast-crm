@@ -13,6 +13,7 @@ import { formatPhone } from "@/lib/phone";
 import { paidVariant } from "@/lib/order-display";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 import { useT } from "@/lib/i18n";
+import { addressToCyrillic } from "@/lib/regions";
 import { playNewOrderChime } from "@/lib/new-order-chime";
 
 interface Order {
@@ -312,7 +313,7 @@ export default function OrdersPage() {
                       </td>
                       <td className="px-3 py-2.5 font-medium text-foreground max-w-[14rem]">
                         {o.client.address ? (
-                          <span className="line-clamp-2">{o.client.address}</span>
+                          <span className="line-clamp-2">{addressToCyrillic(o.client.address)}</span>
                         ) : (
                           <span className="text-text-tertiary">—</span>
                         )}
