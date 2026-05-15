@@ -140,6 +140,33 @@ function CalculationsInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
 
+  // Self-heal stale draftProjectId. The calculator persists the loaded
+  // draft's id in localStorage so a refresh keeps the in-progress state.
+  // But if the operator placed the order in another tab — or hit back
+  // after placing — the persisted id can point at a project that has
+  // since transitioned out of DRAFT. The next "Place Order" click would
+  // then POST a projectId the server rejects with a 409 ("an order is
+  // already placed for this project"). Detect that here on mount and
+  // clear the calculator so the operator starts fresh instead of
+  // hitting the dead-end submit. Fail open on network errors — don't
+  // yank the calculator just because a status check blipped.
+  useEffect(() => {
+    if (!hydrated || !draftProjectId) return;
+    let cancelled = false;
+    api<{ status: "DRAFT" | "ORDERED" | "ARCHIVED" } | null>(
+      `/api/projects/${draftProjectId}/status`,
+    )
+      .then((res) => {
+        if (cancelled) return;
+        if (!res || res.status !== "DRAFT") clearAll();
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, draftProjectId]);
+
   /** Lightweight refetch used only to repopulate the banner + dialog
    *  default after a refresh while editingOrderId is already in the
    *  store. Does NOT replace the row data — the autosaved version

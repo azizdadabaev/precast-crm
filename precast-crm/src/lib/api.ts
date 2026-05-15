@@ -35,6 +35,18 @@ export function handler<T extends unknown[]>(
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         if (err.code === "P2002") {
           const target = (err.meta?.target as string[] | undefined)?.join(", ") ?? "field";
+          // Safety net for the rare race where two simultaneous place-
+          // order submits both pass the pre-flight check in
+          // api/orders/route.ts. The Order.projectId @unique catches
+          // the second one here; emit the same bilingual message the
+          // pre-flight returns so the operator never sees the raw
+          // database column name.
+          if (target === "projectId") {
+            return fail(
+              "Бу лойиҳа учун буюртма аллақачон жойлаштирилган · An order has already been placed for this project",
+              409,
+            );
+          }
           return fail(`Unique constraint violation: ${target}`, 409);
         }
         if (err.code === "P2025") {

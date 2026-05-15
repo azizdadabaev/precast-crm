@@ -178,6 +178,42 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   const month = placedAt.getMonth() + 1;
   const monthPrefix = orderNumberMonthPrefix(year, month);
 
+  // Friendly guard before opening a transaction: if the caller is trying
+  // to place an order against a project that ALREADY has one, the
+  // @unique on Order.projectId would otherwise throw a bare P2002 in
+  // the transaction and surface as "Unique constraint violation:
+  // projectId" — which is database-speak and confusing for the
+  // operator. We mirror the posture of the save-project route
+  // (api/projects/route.ts) which already blocks reusing an ORDERED
+  // project. The check stays cheap (one indexed lookup) and the
+  // @unique remains as the true safety net for the race window.
+  if (body.projectId) {
+    const existingProject = await prisma.project.findUnique({
+      where: { id: body.projectId },
+      select: { id: true, status: true },
+    });
+    if (!existingProject) {
+      return fail(
+        "Лойиҳа топилмади · Project not found",
+        404,
+      );
+    }
+    if (existingProject.status === "ORDERED") {
+      const existingOrder = await prisma.order.findUnique({
+        where: { projectId: body.projectId },
+        select: { id: true, orderNumber: true },
+      });
+      return fail(
+        `Бу лойиҳа учун буюртма аллақачон жойлаштирилган (№${existingOrder?.orderNumber ?? "?"}) · An order has already been placed for this project (#${existingOrder?.orderNumber ?? "?"})`,
+        409,
+        {
+          existingOrderId: existingOrder?.id ?? null,
+          existingOrderNumber: existingOrder?.orderNumber ?? null,
+        },
+      );
+    }
+  }
+
   const order = await prisma.$transaction(async (tx) => {
     // 1. Resolve or create Client
     let client = await tx.client.findUnique({ where: { phone: phoneNorm } });
