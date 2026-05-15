@@ -195,14 +195,23 @@ export const DELETE = withPermission(
   async (req: NextRequest, { user }) => {
     const body = DeleteBody.parse(await req.json());
 
-    const ordered = await prisma.project.findMany({
-      where: { id: { in: body.ids }, status: "ORDERED" },
-      select: { id: true, name: true, draftNumber: true },
+    // Refuse to delete any project that has an Order row pointing at it,
+    // regardless of the project's own `status`. Filtering on status alone
+    // isn't enough: we've seen rows in the wild where status=DRAFT but an
+    // Order still exists (legacy from a partial transition path), and the
+    // deleteMany then crashes on the FK constraint and surfaces to the
+    // operator as "Internal server error". Checking the order side
+    // directly catches every variant.
+    const withOrders = await prisma.project.findMany({
+      where: { id: { in: body.ids }, orders: { some: {} } },
+      select: { id: true, draftNumber: true, orders: { select: { orderNumber: true }, take: 1 } },
     });
-    if (ordered.length > 0) {
+    if (withOrders.length > 0) {
+      const sample = withOrders[0]?.orders[0]?.orderNumber ?? "?";
       return fail(
-        `Cannot delete ${ordered.length} project(s) that already have orders. Cancel the order first.`,
+        `Бу лойиҳалар учун буюртма мавжуд (масалан №${sample}) — олдин буюртмани бекор қилинг · ${withOrders.length} project(s) already have orders (e.g. #${sample}) — cancel the order first`,
         409,
+        { projectIds: withOrders.map((p) => p.id) },
       );
     }
 
