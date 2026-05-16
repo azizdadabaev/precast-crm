@@ -316,7 +316,7 @@ export default function OrderDetailPage() {
     }),
     { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0 },
   );
-  const totalNum = Number(order.totalPrice);
+  const totalNum = Number(order.totalPrice) || Number(order.roomsSubtotal);
   const paidNum = Number(order.confirmedPaid);
   const remainingNum = Math.max(0, totalNum - paidNum);
   const fullyPaid = paidNum > 0 && remainingNum === 0;
