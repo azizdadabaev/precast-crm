@@ -42,6 +42,13 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
         orderBy: { createdAt: "desc" },
         include: { actor: { select: { id: true, name: true, email: true } } },
       },
+      shipments: {
+        orderBy: { number: "asc" },
+        include: {
+          driver: { select: { id: true, name: true, phone: true } },
+          dispatchedBy: { select: { id: true, name: true } },
+        },
+      },
     },
   });
   if (!order) return fail("Order not found", 404);
@@ -88,6 +95,32 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
   }
 
   if (!Object.keys(updates).length) return ok(existing);
+
+  // Gate DELIVERED: balance must be zero and no pending/loaded shipments.
+  if (body.status === "DELIVERED" && existing.status !== "DELIVERED") {
+    const orderWithShipments = await prisma.order.findUnique({
+      where: { id: params.id },
+      select: { totalPrice: true, confirmedPaid: true, shipments: { select: { status: true } } },
+    });
+    if (orderWithShipments) {
+      const remaining = Number(orderWithShipments.totalPrice) - Number(orderWithShipments.confirmedPaid);
+      if (remaining > 0) {
+        return fail(
+          `Тўлов тўлиқ эмас — қолди: ${Math.round(remaining).toLocaleString("ru-RU")} UZS · Payment incomplete`,
+          422,
+        );
+      }
+      const pendingShipments = orderWithShipments.shipments.filter(
+        (s) => s.status === "PENDING" || s.status === "LOADED",
+      );
+      if (pendingShipments.length > 0) {
+        return fail(
+          `${pendingShipments.length} та жўнатма ҳали жўнатилмаган · ${pendingShipments.length} shipment(s) not yet dispatched`,
+          422,
+        );
+      }
+    }
+  }
 
   // If this PATCH is what flips the order to DELIVERED, also decrement
   // inventory atomically. The canonical UI path is the delivery-proof

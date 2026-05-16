@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/fetcher";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { ChevronLeft, ChevronRight, Search, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X, Download } from "lucide-react";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { paidVariant } from "@/lib/order-display";
@@ -19,7 +20,7 @@ import { playNewOrderChime } from "@/lib/new-order-chime";
 interface Order {
   id: string;
   orderNumber: string;
-  status: "PLACED" | "IN_PRODUCTION" | "DISPATCHED" | "DELIVERED" | "CANCELED";
+  status: "PLACED" | "IN_PRODUCTION" | "LOADED" | "DISPATCHED" | "DELIVERED" | "CANCELED";
   paymentState: "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
   confirmedPaid: string;
   totalPrice: string;
@@ -40,8 +41,9 @@ const STATUS_META: Record<
     rowBorder: string;
   }
 > = {
-  PLACED:        { label: "Placed",        variant: "default", glyph: "●", rowBorder: "border-l-primary" },
+  PLACED:        { label: "Placed",        variant: "default", glyph: "●",  rowBorder: "border-l-primary" },
   IN_PRODUCTION: { label: "In production", variant: "warning", glyph: "⚒", rowBorder: "border-l-warning" },
+  LOADED:        { label: "Loaded",        variant: "warning", glyph: "📦", rowBorder: "border-l-amber-400" },
   DISPATCHED:    { label: "Dispatched",    variant: "gold",    glyph: "🚚", rowBorder: "border-l-gold" },
   DELIVERED:     { label: "Delivered",     variant: "success", glyph: "✓",  rowBorder: "border-l-success" },
   CANCELED:      { label: "Canceled",      variant: "danger",  glyph: "✕",  rowBorder: "border-l-destructive" },
@@ -63,6 +65,7 @@ function translateStatus(s: Order["status"], t: (uz: string, en: string) => stri
   switch (s) {
     case "PLACED":        return t("Қабул қилинган", "Placed");
     case "IN_PRODUCTION": return t("Ишлаб чиқилмоқда", "In production");
+    case "LOADED":        return t("Юкланган", "Loaded");
     case "DISPATCHED":    return t("Жўнатилган", "Dispatched");
     case "DELIVERED":     return t("Етказилган", "Delivered");
     case "CANCELED":      return t("Бекор қилинган", "Canceled");
@@ -97,19 +100,42 @@ function toLocalDateKey(d: Date): string {
 }
 
 export default function OrdersPage() {
+  return (
+    <Suspense>
+      <OrdersList />
+    </Suspense>
+  );
+}
+
+function OrdersList() {
   const t = useT();
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"" | Order["status"]>("");
-  const [calendarSelected, setCalendarSelected] = useState<Date | null>(null);
-  const [page, setPage] = useState(1);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  // Any change to filters must rewind to page 1, otherwise a search done
-  // while on page 4 could request a non-existent page of a smaller result.
-  useEffect(() => {
-    setPage(1);
-  }, [q, status, calendarSelected]);
+  // All filter state lives in the URL so pressing Back restores it exactly.
+  const q      = searchParams.get("q") ?? "";
+  const status = (searchParams.get("status") ?? "") as "" | Order["status"];
+  const page   = Math.max(1, Number(searchParams.get("page") ?? "1"));
+  const dayKey = searchParams.get("day") ?? null;
 
-  const dayKey = calendarSelected ? toLocalDateKey(calendarSelected) : null;
+  // Local input value mirrors URL's q but updates on every keystroke;
+  // URL is updated via replace (no history entry) so Back still works.
+  const [inputValue, setInputValue] = useState(q);
+
+  // Keep local input in sync if the URL changes externally (e.g. browser back).
+  useEffect(() => { setInputValue(q); }, [q]);
+
+  function setParam(key: string, value: string | null) {
+    const p = new URLSearchParams(searchParams.toString());
+    if (value === null || value === "") p.delete(key);
+    else p.set(key, value);
+    // Any filter change rewinds to page 1.
+    if (key !== "page") p.delete("page");
+    router.replace(`${pathname}${p.size ? `?${p.toString()}` : ""}`);
+  }
+
+  const calendarSelected = dayKey ? new Date(`${dayKey}T00:00:00`) : null;
 
   const { data, isLoading } = useQuery<OrdersResponse>({
     queryKey: ["orders", q, status, dayKey, page],
@@ -195,7 +221,7 @@ export default function OrdersPage() {
       {/* Capacity calendar */}
       <CapacityCalendar
         value={calendarSelected}
-        onChange={setCalendarSelected}
+        onChange={(d) => setParam("day", d ? toLocalDateKey(d) : null)}
         disablePast={false}
       />
       {calendarSelected && (
@@ -209,7 +235,7 @@ export default function OrdersPage() {
           <button
             type="button"
             className="text-xs underline hover:no-underline text-text-tertiary hover:text-foreground"
-            onClick={() => setCalendarSelected(null)}
+            onClick={() => setParam("day", null)}
           >
             {t("Тозалаш", "Clear")}
           </button>
@@ -221,11 +247,26 @@ export default function OrdersPage() {
         <div className="relative flex-1 min-w-[260px] max-w-md">
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
           <Input
-            className="pl-9"
+            className="pl-9 pr-8"
             placeholder={t("Буюртма № · Мижоз · Телефон · Манзил", "Order # · Client · Phone · Address")}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            value={inputValue}
+            onChange={(e) => {
+              setInputValue(e.target.value);
+              setParam("q", e.target.value);
+            }}
           />
+          {inputValue && (
+            <button
+              type="button"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-foreground transition-colors"
+              onClick={() => {
+                setInputValue("");
+                setParam("q", null);
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Underline-style status tabs (etalon pattern) */}
@@ -251,7 +292,7 @@ export default function OrdersPage() {
                     ? "text-primary"
                     : "text-text-tertiary hover:text-foreground",
                 )}
-                onClick={() => setStatus(v as typeof status)}
+                onClick={() => setParam("status", v)}
               >
                 {label}
                 {active && (
@@ -379,7 +420,7 @@ export default function OrdersPage() {
                 variant="outline"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => setParam("page", String(page - 1))}
               >
                 <ChevronLeft className="h-4 w-4" />
                 <span>{t("Олдинги", "Prev")}</span>
@@ -388,7 +429,7 @@ export default function OrdersPage() {
                 variant="outline"
                 size="sm"
                 disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => setParam("page", String(page + 1))}
               >
                 <span>{t("Кейинги", "Next")}</span>
                 <ChevronRight className="h-4 w-4" />

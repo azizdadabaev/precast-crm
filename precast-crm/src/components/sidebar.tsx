@@ -15,13 +15,16 @@ import {
   Wallet,
   AlertTriangle,
   LogOut,
-  FlaskConical,
+  Shapes,
   UserCog,
   Pencil,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ScrollText,
   Coins,
+  Settings2,
+  Factory,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -98,12 +101,16 @@ export const NAV: NavItem[] = [
     permission: "discrepancy.view",
   },
   {
-    href: "/drivers",
-    label: "Ҳайдовчилар",
-    sub: "Drivers",
-    icon: Truck,
-    permission: "driver.view",
+    href: "/sandbox/tapered",
+    label: "Мураккаб шакллар",
+    sub: "Complex shapes",
+    icon: Shapes,
+    permission: "sandbox.access",
   },
+];
+
+/** Items grouped under the "Операциялар · Operations" collapsible section. */
+export const OPERATIONS_NAV: NavItem[] = [
   {
     href: "/production",
     label: "Ишлаб чиқариш",
@@ -119,12 +126,16 @@ export const NAV: NavItem[] = [
     permission: "inventory.view",
   },
   {
-    href: "/sandbox/tapered",
-    label: "Тажриба",
-    sub: "Sandbox · Tapered",
-    icon: FlaskConical,
-    permission: "sandbox.access",
+    href: "/drivers",
+    label: "Ҳайдовчилар",
+    sub: "Drivers",
+    icon: Truck,
+    permission: "driver.view",
   },
+];
+
+/** Items grouped under the "Созламалар · Settings" collapsible section. */
+export const SETTINGS_NAV: NavItem[] = [
   {
     href: "/users",
     label: "Фойдаланувчилар",
@@ -151,6 +162,56 @@ export const NAV: NavItem[] = [
 export function isVisible(user: AuthUser, item: NavItem): boolean {
   const list = Array.isArray(item.permission) ? item.permission : [item.permission];
   return canAny(user, list);
+}
+
+function NavLink({
+  item,
+  pathname,
+  collapsed,
+  onNavigate,
+  indent = false,
+}: {
+  item: NavItem;
+  pathname: string;
+  collapsed: boolean;
+  onNavigate?: () => void;
+  indent?: boolean;
+}) {
+  const Icon = item.icon;
+  const active = pathname === item.href || pathname.startsWith(item.href + "/");
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      title={collapsed ? `${item.label} · ${item.sub}` : undefined}
+      className={cn(
+        "group relative flex items-center rounded-lg outline-none min-h-11 lg:min-h-0",
+        "transition-all duration-150 ease-out",
+        collapsed ? "justify-center p-2.5" : cn("gap-3 py-2.5", indent ? "pl-8 pr-3.5" : "px-3.5"),
+        active
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-0.5",
+      )}
+    >
+      {active && (
+        <span className="absolute left-0 top-[20%] bottom-[20%] w-[3px] rounded-r bg-primary" />
+      )}
+      <Icon
+        className={cn(
+          "h-[17px] w-[17px] shrink-0 transition-transform duration-150 ease-out",
+          active ? "text-primary" : "group-hover:scale-110",
+        )}
+      />
+      {!collapsed && (
+        <span className={cn("flex-1 text-[13px] leading-none", active ? "font-semibold" : "font-medium")}>
+          {item.label}
+        </span>
+      )}
+      {!collapsed && active && (
+        <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+      )}
+    </Link>
+  );
 }
 
 function initials(name: string): string {
@@ -188,6 +249,20 @@ export function SidebarBody({
   const uzOnly = lang === "uz";
 
   const visibleNav = NAV.filter((item) => isVisible(user, item));
+  const visibleOps = OPERATIONS_NAV.filter((item) => isVisible(user, item));
+  const visibleSettings = SETTINGS_NAV.filter((item) => isVisible(user, item));
+
+  const inOps = visibleOps.some(
+    (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
+  );
+  const [opsOpen, setOpsOpen] = useState(inOps);
+
+  // Auto-open the settings group if the current page is one of the settings routes.
+  const inSettings = visibleSettings.some(
+    (item) => pathname === item.href || pathname.startsWith(item.href + "/"),
+  );
+  const [settingsOpen, setSettingsOpen] = useState(inSettings);
+
   const customized = isUserCustomized({
     role: user.role,
     permissions: user.permissions,
@@ -252,52 +327,82 @@ export function SidebarBody({
           collapsed ? "px-1.5 py-2.5" : "px-2 py-2.5",
         )}
       >
-        {visibleNav.map((item) => {
-          const Icon = item.icon;
-          const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              title={collapsed ? `${item.label} · ${item.sub}` : undefined}
-              className={cn(
-                "group relative flex items-center rounded-lg outline-none min-h-11 lg:min-h-0",
-                "transition-all duration-150 ease-out",
-                collapsed
-                  ? "justify-center p-2.5"
-                  : "gap-3 px-3.5 py-2.5",
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-0.5",
-              )}
-            >
-              {active && (
-                <span className="absolute left-0 top-[20%] bottom-[20%] w-[3px] rounded-r bg-primary" />
-              )}
-              <Icon
-                className={cn(
-                  "h-[17px] w-[17px] shrink-0 transition-transform duration-150 ease-out",
-                  active ? "text-primary" : "group-hover:scale-110",
-                )}
-              />
-              {!collapsed && (
-                <span
+        {visibleNav.map((item) => (
+          <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} onNavigate={onNavigate} />
+        ))}
+
+        {/* Operations group */}
+        {visibleOps.length > 0 && (
+          <div className={cn("mt-1", !collapsed && "border-t border-border/50 pt-1")}>
+            {collapsed ? (
+              visibleOps.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} onNavigate={onNavigate} />
+              ))
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setOpsOpen((o) => !o)}
                   className={cn(
-                    "flex-1 text-[13px] leading-none",
-                    active ? "font-semibold" : "font-medium",
+                    "w-full flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-[11px] font-bold uppercase tracking-widest transition-colors",
+                    inOps
+                      ? "text-primary"
+                      : "text-text-tertiary hover:text-foreground hover:bg-accent",
                   )}
                 >
-                  {item.label}
-                </span>
-              )}
-              {!collapsed && active && (
-                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-              )}
-            </Link>
-          );
-        })}
+                  <Factory className="h-[15px] w-[15px] shrink-0" />
+                  <span className="flex-1 text-left">Операциялар</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+                      opsOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {opsOpen && visibleOps.map((item) => (
+                  <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} onNavigate={onNavigate} indent />
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Settings group */}
+        {visibleSettings.length > 0 && (
+          <div className={cn("mt-1", !collapsed && "border-t border-border/50 pt-1")}>
+            {collapsed ? (
+              // In collapsed mode render icons directly — no group header
+              visibleSettings.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} onNavigate={onNavigate} />
+              ))
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen((o) => !o)}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-[11px] font-bold uppercase tracking-widest transition-colors",
+                    inSettings
+                      ? "text-primary"
+                      : "text-text-tertiary hover:text-foreground hover:bg-accent",
+                  )}
+                >
+                  <Settings2 className="h-[15px] w-[15px] shrink-0" />
+                  <span className="flex-1 text-left">Созламалар</span>
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0 transition-transform duration-150",
+                      settingsOpen && "rotate-180",
+                    )}
+                  />
+                </button>
+                {settingsOpen && visibleSettings.map((item) => (
+                  <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} onNavigate={onNavigate} indent />
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </nav>
 
       {/* Footer — user info + collapse toggle + logout */}

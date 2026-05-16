@@ -29,9 +29,9 @@ export const POST = withPermission<{ id: string }>(
       include: { dispatch: true },
     });
     if (!order) return fail("Order not found", 404);
-    if (order.status !== "IN_PRODUCTION") {
+    if (order.status !== "IN_PRODUCTION" && order.status !== "LOADED") {
       return fail(
-        `Dispatch is only allowed from IN_PRODUCTION (current: ${order.status})`,
+        `Dispatch is only allowed from IN_PRODUCTION or LOADED (current: ${order.status})`,
         422,
       );
     }
@@ -39,10 +39,10 @@ export const POST = withPermission<{ id: string }>(
       return fail("This order already has a dispatch", 409);
     }
 
-    const driver = await prisma.driver.findUnique({
-      where: { id: body.driverId },
-    });
-    if (!driver || !driver.active) {
+    const driver = body.driverId
+      ? await prisma.driver.findUnique({ where: { id: body.driverId } })
+      : null;
+    if (body.driverId && (!driver || !driver.active)) {
       return fail("Driver not found or inactive", 422);
     }
 
@@ -50,7 +50,7 @@ export const POST = withPermission<{ id: string }>(
       const dispatch = await tx.dispatch.create({
         data: {
           orderId: order.id,
-          driverId: body.driverId,
+          driverId: body.driverId ?? null,
           truckIdentifier: body.truckIdentifier ?? null,
           expectedCollection: body.expectedCollection,
           notes: body.notes ?? null,
@@ -67,11 +67,13 @@ export const POST = withPermission<{ id: string }>(
           orderId: order.id,
           type: "ORDER_DISPATCHED",
           actorId: user.id,
-          message: `Dispatched: driver ${driver.name}, expected collection ${body.expectedCollection}`,
+          message: driver
+            ? `Dispatched: driver ${driver.name}, expected collection ${body.expectedCollection}`
+            : `Dispatched: client's own transport, expected collection ${body.expectedCollection}`,
           payload: {
             dispatchId: dispatch.id,
-            driverId: driver.id,
-            driverName: driver.name,
+            driverId: driver?.id ?? null,
+            driverName: driver?.name ?? null,
             truckIdentifier: body.truckIdentifier ?? null,
             expectedCollection: body.expectedCollection,
           },
@@ -85,11 +87,13 @@ export const POST = withPermission<{ id: string }>(
       action: "dispatch.create",
       targetType: "order",
       targetId: order.id,
-      message: `Dispatched ${order.orderNumber} with driver ${driver.name}`,
+      message: driver
+        ? `Dispatched ${order.orderNumber} with driver ${driver.name}`
+        : `Dispatched ${order.orderNumber} with client's own transport`,
       metadata: {
         orderNumber: order.orderNumber,
-        driverId: driver.id,
-        driverName: driver.name,
+        driverId: driver?.id ?? null,
+        driverName: driver?.name ?? null,
         truckIdentifier: body.truckIdentifier ?? null,
       },
     });

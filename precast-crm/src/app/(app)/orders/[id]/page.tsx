@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,23 +12,26 @@ import {
   Calendar,
   CheckCircle2,
   Truck,
-  CreditCard,
-  Hammer,
   Plus,
   Pencil,
+  Package,
+  Split,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
-import { DispatchDialog } from "@/components/dispatch/DispatchDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { useT } from "@/lib/i18n";
+import { useThemeStore } from "@/store/theme";
 import { addressToCyrillic } from "@/lib/regions";
+import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
+import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
+import type { BeamGroup } from "@/lib/weight-distributor";
 
 const WEEKDAY_UZ = ["Якшанба", "Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба"];
 
@@ -45,7 +48,7 @@ function displayBearing(bearing: string): string {
 interface OrderDetail {
   id: string;
   orderNumber: string;
-  status: "PLACED" | "IN_PRODUCTION" | "DISPATCHED" | "DELIVERED" | "CANCELED";
+  status: "PLACED" | "IN_PRODUCTION" | "LOADED" | "DISPATCHED" | "DELIVERED" | "CANCELED";
   paymentState: "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
   confirmedPaid: string;
   roomsSubtotal: string;
@@ -66,7 +69,26 @@ interface OrderDetail {
   cancelReason: string | null;
   deliveryProofUrl: string | null;
   deliveryProofUploadedAt: string | null;
+  loadedPhotoUrl: string | null;
+  loadedAt: string | null;
   notes: string | null;
+  shipments: Array<{
+    id: string;
+    number: number;
+    status: "PENDING" | "LOADED" | "DISPATCHED" | "DELIVERED";
+    loadedBeams: Record<string, number> | null;
+    loadedBlocks: number | null;
+    loadedPhotoUrl: string | null;
+    loadedAt: string | null;
+    driverWillCollectCash: boolean;
+    cashToCollect: string | null;
+    truckIdentifier: string | null;
+    dispatchedAt: string | null;
+    deliveredAt: string | null;
+    notes: string | null;
+    driver: { id: string; name: string; phone: string } | null;
+    dispatchedBy: { id: string; name: string } | null;
+  }>;
   client: { id: string; name: string; phone: string; address: string | null };
   project: {
     id: string;
@@ -107,7 +129,7 @@ interface OrderDetail {
     notes: string | null;
     dispatchedAt: string;
     returnedAt: string | null;
-    driver: { id: string; name: string; phone: string };
+    driver: { id: string; name: string; phone: string } | null;
     dispatchedBy: { id: string; name: string } | null;
   } | null;
   payments: Array<{
@@ -132,10 +154,9 @@ interface OrderDetail {
 }
 
 const STATUS_FLOW: Array<{ key: OrderDetail["status"]; uz: string; en: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { key: "PLACED",        uz: "Қабул қилинган",   en: "Placed",        icon: CheckCircle2 },
-  { key: "IN_PRODUCTION", uz: "Ишлаб чиқилмоқда", en: "In production", icon: Hammer },
-  { key: "DISPATCHED",    uz: "Жўнатилган",       en: "Dispatched",    icon: CreditCard },
-  { key: "DELIVERED",     uz: "Етказилган",       en: "Delivered",     icon: Truck },
+  { key: "PLACED",    uz: "Қабул қилинди", en: "Accepted", icon: CheckCircle2 },
+  { key: "LOADED",    uz: "Юкланди",       en: "Loaded",   icon: Package },
+  { key: "DELIVERED", uz: "Етказилди",     en: "Delivered", icon: Truck },
 ];
 
 const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
@@ -181,13 +202,32 @@ export default function OrderDetailPage() {
   const [cancelPassword, setCancelPassword] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [proofOpen, setProofOpen] = useState(false);
-  const [dispatchOpen, setDispatchOpen] = useState(false);
   const [addPaymentOpen, setAddPaymentOpen] = useState(false);
+  const [loadTruckOpen, setLoadTruckOpen] = useState(false);
+  const [splitLoading, setSplitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isDark = useThemeStore((s) => s.theme) === "dark";
+  const [mobileCalcOpen, setMobileCalcOpen] = useState(false);
   /** Captured by ShareCalculationButton — wraps the header card +
    *  calculation summary card so the operator can ship a one-shot
    *  image of the order to the customer. */
   const shareRef = useRef<HTMLDivElement>(null);
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const mirrorScrollRef = useRef<HTMLDivElement>(null);
+  const mirrorSpacerRef = useRef<HTMLDivElement>(null);
+  const syncingRef = useRef(false);
+
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const sync = () => {
+      if (mirrorSpacerRef.current) mirrorSpacerRef.current.style.width = `${el.scrollWidth}px`;
+    };
+    sync();
+    const obs = new ResizeObserver(sync);
+    obs.observe(el);
+    return () => obs.disconnect();
+  });
 
   const { data: order, isLoading } = useQuery<OrderDetail>({
     queryKey: ["order", params.id],
@@ -239,13 +279,6 @@ export default function OrderDetailPage() {
     onError: (e: Error) => setError(e.message),
   });
 
-  const markDriverReturned = useMutation({
-    mutationFn: (dispatchId: string) =>
-      api(`/api/dispatches/${dispatchId}/return`, { method: "PATCH" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["order", params.id] }),
-    onError: (e: Error) => setError(e.message),
-  });
-
   const cancelOrder = useMutation({
     mutationFn: () =>
       api(`/api/orders/${params.id}/cancel`, {
@@ -259,10 +292,20 @@ export default function OrderDetailPage() {
     onError: (e: Error) => setError(e.message),
   });
 
+  // Must be before the early return — hooks cannot be called conditionally.
+  const beamGroups: BeamGroup[] = useMemo(() => {
+    if (!order) return [];
+    const map = new Map<string, number>();
+    for (const c of order.project.calculations) {
+      const key = Number(c.beamLength).toFixed(1);
+      map.set(key, (map.get(key) ?? 0) + c.beamCount);
+    }
+    return Array.from(map.entries()).map(([beamLength, totalCount]) => ({ beamLength, totalCount }));
+  }, [order]);
+
   if (isLoading || !order) return <div className="p-4 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>;
 
   const isCanceled = order.status === "CANCELED";
-  const currentIdx = STATUS_FLOW.findIndex((s) => s.key === order.status);
 
   const calcTotals = order.project.calculations.reduce(
     (acc, c) => ({
@@ -277,6 +320,22 @@ export default function OrderDetailPage() {
   const paidNum = Number(order.confirmedPaid);
   const remainingNum = Math.max(0, totalNum - paidNum);
   const fullyPaid = paidNum > 0 && remainingNum === 0;
+
+  async function createFirstShipment() {
+    if (!order) return;
+    setSplitLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/shipments`, { method: "POST" });
+      const json = await res.json() as { ok: boolean; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed");
+      qc.invalidateQueries({ queryKey: ["order", params.id] });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setSplitLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -297,8 +356,68 @@ export default function OrderDetailPage() {
           cut at the edge" feel on the bottom recap row). */}
       <div ref={shareRef} className="flex flex-col gap-5 p-4 bg-background">
       {/* Header card */}
-      <div className="rounded-lg border bg-background p-5 shadow-sm">
-        <div className="flex flex-wrap items-baseline justify-between gap-4">
+      <div className="rounded-lg border bg-background p-3 sm:p-5 shadow-sm">
+        {/* Mobile: single-column compact layout */}
+        <div className="flex items-start justify-between gap-2 sm:hidden">
+          <div className="min-w-0">
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold">
+              Буюртма
+            </div>
+            <h1 className="text-xl font-black tabular-nums tracking-tight leading-tight">
+              {order.orderNumber}
+            </h1>
+            <div className="text-xs text-muted-foreground mt-0.5 truncate">
+              <Link href={`/clients/${order.client.id}`} className="text-foreground font-medium">
+                {order.client.name}
+              </Link>
+              {" · "}
+              <span className="tabular-nums">{formatPhone(order.client.phone)}</span>
+            </div>
+            {order.client.address && (
+              <div className="text-xs text-muted-foreground truncate">{addressToCyrillic(order.client.address)}</div>
+            )}
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs">
+              <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="font-semibold tabular-nums">
+                {WEEKDAY_UZ[new Date(order.scheduledAt).getDay()]}, {formatDate(order.scheduledAt)}
+              </span>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-[9px] uppercase tracking-widest text-muted-foreground font-bold">Жами</div>
+            <div className="text-lg font-black tabular-nums text-success font-mono leading-tight">
+              {formatNumber(order.totalPrice, 0)}
+              <span className="text-[10px] text-muted-foreground font-normal ml-0.5">UZS</span>
+            </div>
+            {(() => {
+              const paid = Number(order.confirmedPaid);
+              const remaining = Math.max(0, Number(order.totalPrice) - paid);
+              const fullyPaid = paid > 0 && remaining === 0;
+              return (
+                <div className="mt-0.5 space-y-px text-xs">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold">Тўлов</span>
+                    <span className={`tabular-nums font-semibold ${paid > 0 ? "text-success" : "text-muted-foreground"}`}>
+                      {formatNumber(paid, 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold">Қолди</span>
+                    <span className={`tabular-nums font-semibold ${fullyPaid ? "text-success" : remaining > 0 ? "text-warning" : "text-muted-foreground"}`}>
+                      {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remaining, 0)}
+                    </span>
+                  </div>
+                  <span className={`inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 ${PAYMENT_STATE_BADGE[order.paymentState].cls}`}>
+                    {translatePaymentState(order.paymentState, t)}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        {/* Desktop: original spacious layout */}
+        <div className="hidden sm:flex flex-wrap items-baseline justify-between gap-4">
           <div>
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
               Буюртма<span className="lang-en"> · Order</span>
@@ -387,22 +506,70 @@ export default function OrderDetailPage() {
               {translatePaymentState(order.paymentState, t)}
             </span>
           </div>
-        </div>
+        </div>{/* end desktop flex */}
       </div>
 
       {/* Calculation summary — per-room breakdown + financial recap */}
       {order.project.calculations.length > 0 && (
         <div className="rounded-lg border border-border bg-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-baseline justify-between">
+          {/* Card header — with mobile toggle */}
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
             <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               Ҳисоб-китоб<span className="lang-en"> · Calculation Summary</span>
             </div>
-            <div className="text-[10px] font-mono uppercase tracking-wider text-text-tertiary">
-              {order.project.calculations.length}{" "}
-              {t("хона", order.project.calculations.length === 1 ? "room" : "rooms")}
+            <div className="flex items-center gap-3">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-text-tertiary">
+                {order.project.calculations.length}{" "}
+                {t("хона", order.project.calculations.length === 1 ? "room" : "rooms")}
+              </div>
+              {/* Toggle — mobile only */}
+              <button
+                type="button"
+                onClick={() => setMobileCalcOpen(v => !v)}
+                className="sm:hidden inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 rounded px-2 py-1 transition-colors"
+              >
+                {mobileCalcOpen ? t("Яшириш", "Hide") : t("Кўриш", "Show")}
+                <span className={`transition-transform duration-200 ${mobileCalcOpen ? "rotate-180" : ""}`}>▾</span>
+              </button>
             </div>
           </div>
-          <div className="overflow-x-auto">
+
+          {/* Load list — always visible, for loading operators */}
+          {beamGroups.length > 0 && (
+            <div className="border-b border-border bg-muted/10">
+              <div className="px-4 pt-3 pb-1 text-[9px] font-bold uppercase tracking-widest text-muted-foreground">
+                Юклаш рўйхати<span className="lang-en"> · Load list</span>
+              </div>
+              <div className="px-4 pb-3 flex flex-wrap gap-2">
+                {beamGroups.map(({ beamLength, totalCount }) => (
+                  <div key={beamLength} className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm">
+                    <span className="font-semibold">{Number(beamLength).toFixed(1)}<span className="text-xs text-muted-foreground ml-0.5">m</span></span>
+                    <span className="text-muted-foreground text-xs">=</span>
+                    <span className="font-mono font-bold tabular-nums text-foreground">{totalCount}</span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2 text-sm">
+                  <span className="font-semibold text-amber-900 dark:text-amber-300">{t("Ғишт", "Block")}</span>
+                  <span className="text-amber-600 dark:text-amber-500 text-xs">=</span>
+                  <span className="font-mono font-bold tabular-nums text-amber-900 dark:text-amber-300">{calcTotals.blocks}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Detailed table — hidden on mobile by default, toggled */}
+          <div className={`${mobileCalcOpen ? "block" : "hidden"} sm:block`}>
+          <div
+            ref={tableScrollRef}
+            className="overflow-x-auto [&::-webkit-scrollbar]:hidden"
+            style={{ scrollbarWidth: "none" } as React.CSSProperties}
+            onScroll={() => {
+              if (syncingRef.current || !mirrorScrollRef.current || !tableScrollRef.current) return;
+              syncingRef.current = true;
+              mirrorScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+              syncingRef.current = false;
+            }}
+          >
             <table className="w-full text-sm">
               <thead className="bg-muted text-[10px] uppercase tracking-wider text-muted-foreground">
                 <tr>
@@ -519,75 +686,113 @@ export default function OrderDetailPage() {
                   </tr>
                 ))}
               </tbody>
-              <tfoot>
-                <tr className="bg-muted border-t border-border-strong">
-                  <td
-                    colSpan={7}
-                    className="px-3 py-3 text-right text-[10px] uppercase tracking-wider text-muted-foreground font-bold"
-                  >
-                    Жами<span className="lang-en font-normal">{" "}· Totals</span>
-                  </td>
-                  <td className="px-3 py-3 text-right font-mono font-bold">
-                    {calcTotals.blocks}
-                  </td>
-                  <td className="px-3 py-3 text-right font-mono font-bold">
-                    {calcTotals.beams}
-                  </td>
-                  <td className="px-3 py-3 text-right font-mono font-bold">
-                    {formatNumber(calcTotals.monolithArea, 2)}
-                    <span className="text-xs ml-0.5 text-muted-foreground">m²</span>
-                  </td>
-                  <td className="px-3 py-3"></td>
-                  <td className="px-3 py-3 text-right font-mono font-extrabold text-success text-base">
-                    {formatNumber(order.roomsSubtotal, 0)}
-                  </td>
-                </tr>
-              </tfoot>
             </table>
           </div>
 
-          {/* Financial recap — Total Sum / Paid / Remaining */}
-          <div className="border-t bg-muted/10 px-4 py-3">
-            <div className="flex flex-wrap items-end justify-end gap-x-10 gap-y-3">
-              <div className="text-right min-w-[7rem]">
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                  Жами<span className="lang-en"> · Total Sum</span>
+          {/* Totals strip — outside overflow-x-auto so it never scrolls and
+              is always visible. The scrollbar now sits below all table rows,
+              above this strip. Column alignment is replaced by explicit labels. */}
+          <div className="border-t-2 border-border-strong bg-muted/40 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Жами<span className="lang-en font-normal"> · Totals</span>
+            </span>
+            <div className="flex items-center gap-5 font-mono font-bold text-sm ml-auto">
+              <span>
+                {calcTotals.blocks}
+                <span className="text-[10px] text-muted-foreground font-normal ml-0.5">Ғ</span>
+              </span>
+              <span>
+                {calcTotals.beams}
+                <span className="text-[10px] text-muted-foreground font-normal ml-0.5">Б</span>
+              </span>
+              <span>
+                {formatNumber(calcTotals.monolithArea, 2)}
+                <span className="text-[10px] text-muted-foreground font-normal ml-0.5">m²</span>
+              </span>
+              <span className="text-success font-extrabold text-base">
+                {formatNumber(order.roomsSubtotal, 0)}
+              </span>
+            </div>
+          </div>
+
+          {/* Financial recap — Weight / Total / Paid / Remaining */}
+          <div className="border-t border-border">
+            {/* Payment progress bar */}
+            {totalNum > 0 && (
+              <div className="h-1 bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-success transition-all duration-500"
+                  style={{ width: `${Math.min(100, (paidNum / totalNum) * 100)}%` }}
+                />
+              </div>
+            )}
+            <div className="flex items-stretch justify-end">
+              {/* Weight — logistics stat */}
+              <div className="flex flex-col justify-center text-right px-6 py-4 bg-muted/20">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
+                  Оғирлик<span className="lang-en"> · Weight</span>
                 </div>
-                <div className="text-xl font-black tabular-nums text-success font-mono">
-                  {formatNumber(order.totalPrice, 0)}
-                  <span className="text-[10px] text-muted-foreground font-normal ml-1">UZS</span>
+                <div className="text-lg font-black tabular-nums font-mono text-foreground leading-none">
+                  {formatNumber(Number(order.totalArea) * 180, 0)}
+                  <span className="text-xs font-normal text-muted-foreground ml-1">кг</span>
                 </div>
               </div>
-              <div className="text-right min-w-[7rem]">
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+
+              <div className="w-px bg-border my-3" />
+
+              {/* Total */}
+              <div className="flex flex-col justify-center text-right px-6 py-4">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
+                  Жами<span className="lang-en"> · Total</span>
+                </div>
+                <div className="text-xl font-black tabular-nums font-mono text-foreground leading-none">
+                  {formatNumber(order.totalPrice, 0)}
+                  <span className="text-[10px] font-normal text-muted-foreground ml-1">UZS</span>
+                </div>
+              </div>
+
+              <div className="w-px bg-border my-3" />
+
+              {/* Paid */}
+              <div className="flex flex-col justify-center text-right px-6 py-4">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
                   Тўлов<span className="lang-en"> · Paid</span>
                 </div>
-                <div
-                  className={`text-xl font-black tabular-nums font-mono ${
-                    paidNum > 0 ? "text-success" : "text-muted-foreground"
-                  }`}
-                >
+                <div className={`text-xl font-black tabular-nums font-mono leading-none ${paidNum > 0 ? "text-success" : "text-muted-foreground"}`}>
                   {formatNumber(paidNum, 0)}
                 </div>
               </div>
-              <div className="text-right min-w-[7rem]">
-                <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+
+              <div className="w-px bg-border my-3" />
+
+              {/* Remaining */}
+              <div className={`flex flex-col justify-center text-right px-6 py-4 ${fullyPaid ? "bg-success/5" : remainingNum > 0 ? "bg-warning/5" : ""}`}>
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
                   Қолди<span className="lang-en"> · Remaining</span>
                 </div>
-                <div
-                  className={`text-xl font-black tabular-nums font-mono ${
-                    fullyPaid
-                      ? "text-success"
-                      : remainingNum > 0
-                        ? "text-warning"
-                        : "text-muted-foreground"
-                  }`}
-                >
+                <div className={`text-xl font-black tabular-nums font-mono leading-none ${
+                  fullyPaid ? "text-success" : remainingNum > 0 ? "text-warning" : "text-muted-foreground"
+                }`}>
                   {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Mirror scrollbar — synced with the table above */}
+          <div
+            ref={mirrorScrollRef}
+            className="overflow-x-auto border-t border-border/40"
+            onScroll={() => {
+              if (syncingRef.current || !tableScrollRef.current || !mirrorScrollRef.current) return;
+              syncingRef.current = true;
+              tableScrollRef.current.scrollLeft = mirrorScrollRef.current.scrollLeft;
+              syncingRef.current = false;
+            }}
+          >
+            <div ref={mirrorSpacerRef} className="h-[1px]" />
+          </div>
+          </div>{/* end detailed table wrapper */}
         </div>
       )}
       </div>
@@ -622,136 +827,7 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Status timeline */}
-      {!isCanceled ? (
-        <div className="rounded-lg border bg-background p-4 shadow-sm">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-            Жараён<span className="lang-en"> · Status timeline</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {STATUS_FLOW.map((s, i) => {
-              const Icon = s.icon;
-              const reached = i <= currentIdx;
-              const isCurrent = i === currentIdx;
-              const canAdvance = i === currentIdx + 1;
-              const needsProof = canAdvance && s.key === "DELIVERED";
-              const needsDispatch = canAdvance && s.key === "DISPATCHED";
-              const onClick = () => {
-                if (needsProof) setProofOpen(true);
-                else if (needsDispatch) setDispatchOpen(true);
-                else updateStatus.mutate(s.key);
-              };
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  disabled={!canAdvance || updateStatus.isPending}
-                  onClick={onClick}
-                  className={[
-                    "flex items-center gap-2 px-3 py-2 rounded-md text-sm border transition-colors",
-                    reached
-                      ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                      : canAdvance
-                        ? "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100 cursor-pointer"
-                        : "bg-muted/30 border-border text-muted-foreground cursor-not-allowed",
-                    isCurrent ? "ring-2 ring-emerald-400" : "",
-                  ].join(" ")}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="font-medium">{t(s.uz, s.en)}</span>
-                  {canAdvance && (
-                    <span className="text-xs">
-                      {needsProof
-                        ? t("→ расм + нақд керак", "→ requires photo + cash")
-                        : needsDispatch
-                          ? t("→ ҳайдовчини тайинланг", "→ assign driver")
-                          : t("→ давом эттириш учун босинг", "→ click to advance")}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
-          <div className="font-bold">Бекор қилинди<span className="lang-en"> · Canceled</span></div>
-          {order.cancelReason && (
-            <div className="text-sm mt-1">{t("Сабаб:", "Reason:")} {order.cancelReason}</div>
-          )}
-        </div>
-      )}
-
-      {/* Dispatch — visible once a driver has been assigned */}
-      {order.dispatch && (
-        <div className="rounded-lg border bg-background p-4 shadow-sm space-y-3">
-          <div className="flex items-baseline justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Юбориш<span className="lang-en"> · Dispatch</span>
-            </div>
-            <div className="text-[10px] text-muted-foreground">
-              {t("Жўнатилди", "Dispatched")} {formatDate(order.dispatch.dispatchedAt)}
-              {order.dispatch.dispatchedBy && <> {t("·", "by")} {order.dispatch.dispatchedBy.name}</>}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Ҳайдовчи", "Driver")}</div>
-              <Link href={`/drivers/${order.dispatch.driver.id}`} className="font-semibold hover:underline">
-                {order.dispatch.driver.name}
-              </Link>
-              <div className="text-xs text-muted-foreground tabular-nums">
-                {formatPhone(order.dispatch.driver.phone)}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Машина", "Truck")}</div>
-              <div className="font-semibold tabular-nums">
-                {order.dispatch.truckIdentifier ?? "—"}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Кутилган", "Expected")}</div>
-              <div className="font-semibold tabular-nums">
-                {formatNumber(order.dispatch.expectedCollection, 0)}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">{t("Қайтган", "Returned")}</div>
-              {order.dispatch.returnedAt ? (
-                <div className="font-semibold text-success">
-                  {formatDate(order.dispatch.returnedAt)}
-                </div>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={markDriverReturned.isPending}
-                  onClick={() => markDriverReturned.mutate(order.dispatch!.id)}
-                >
-                  {markDriverReturned.isPending ? (
-                    <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                  ) : (
-                    <Truck className="h-3 w-3 mr-2" />
-                  )}
-                  {t("Қайтди деб белгилаш", "Mark returned")}
-                </Button>
-              )}
-            </div>
-          </div>
-          {order.dispatch.notes && (
-            <div className="text-xs text-muted-foreground border-t pt-2">
-              <span className="font-semibold">{t("Изоҳ:", "Notes:")}</span> {order.dispatch.notes}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Order action bar — Print + Cancel + Add Payment grouped.
-          Print is always available; Cancel hides on canceled orders;
-          Add Payment shows only when there's outstanding balance and
-          the order isn't terminal-paid. The label "Тўлов қабул қилиш"
-          shows only when Add Payment is available. */}
+      {/* Order action bar */}
       {(() => {
         const total = Number(order.totalPrice);
         const confirmed = Number(order.confirmedPaid);
@@ -764,97 +840,257 @@ export default function OrderDetailPage() {
           !(order.status === "DELIVERED" && order.paymentState === "FULLY_PAID") &&
           remaining > 0;
         return (
-          <div className="rounded-lg border bg-background px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-sm">
-              {canAdd ? (
-                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  Тўлов қабул қилиш<span className="lang-en"> · Record a payment</span>
-                </div>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/orders/${order.id}/print`}>
-                  <Printer className="h-4 w-4 mr-2" /> {t("Чоп этиш", "Print")}
-                </Link>
-              </Button>
-              <ShareCalculationButton
-                targetRef={shareRef}
-                fileBase={`${order.orderNumber}-${order.client.name
-                  // Strip Windows-forbidden filename chars and collapse
-                  // runs of whitespace so "Abror & Sons LLC" stays readable.
-                  .replace(/[<>:"/\\|?*]+/g, "")
-                  .replace(/\s+/g, " ")
-                  .trim()}`}
-                disabled={order.project.calculations.length === 0}
-              />
-              {/* Owner-only Blender bridge — pushes this order's rooms
-                  to a locally-running Blender via the ws-bridge service. */}
-              {canUseBlender && order.project.calculations.length > 0 && (
-                <SendToBlenderButton orderId={order.id} />
-              )}
-              {/* Edit Order Details — opens the calculator pre-filled
-                  from this order's snapshot (?fromOrder=<id>). Save in
-                  edit-mode PATCHes /api/orders/<id>/edit; no new order
-                  is placed. Disabled past IN_PRODUCTION (cancel-and-
-                  recreate is the only safe path once the truck rolls). */}
-              {(() => {
-                const editable =
-                  order.status === "PLACED" || order.status === "IN_PRODUCTION";
-                return (
+          <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+
+              {/* Left — utility / export actions */}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/orders/${order.id}/print`}>
+                    <Printer className="h-3.5 w-3.5 mr-1.5" />
+                    {t("Чоп этиш", "Print")}
+                  </Link>
+                </Button>
+                <ShareCalculationButton
+                  targetRef={shareRef}
+                  fileBase={`${order.orderNumber}-${order.client.name
+                    .replace(/[<>:"/\\|?*]+/g, "")
+                    .replace(/\s+/g, " ")
+                    .trim()}`}
+                  disabled={order.project.calculations.length === 0}
+                />
+                {canUseBlender && order.project.calculations.length > 0 && (
+                  <SendToBlenderButton orderId={order.id} />
+                )}
+              </div>
+
+              {/* Right — management actions + primary CTA */}
+              <div className="flex items-center gap-2">
+                {/* Edit */}
+                {(() => {
+                  const editable =
+                    order.status === "PLACED" || order.status === "IN_PRODUCTION";
+                  return (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={!editable ? "opacity-40 cursor-not-allowed" : ""}
+                      asChild={editable}
+                      disabled={!editable}
+                      title={
+                        editable
+                          ? t(
+                              "Ўлчам, нарх, жадвал ёки изоҳни таҳрирлаш",
+                              "Edit dimensions, pricing, schedule or notes",
+                            )
+                          : t(
+                              `Ҳолат ${order.status} да таҳрир блокланган`,
+                              `Editing locked at status ${order.status}`,
+                            )
+                      }
+                    >
+                      {editable ? (
+                        <Link href={`/calculations?fromOrder=${order.id}`}>
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                          {t("Таҳрирлаш", "Edit")}
+                        </Link>
+                      ) : (
+                        <span className="flex items-center">
+                          <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                          {t("Таҳрирлаш", "Edit")}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                })()}
+
+                {/* Cancel — loud destructive button */}
+                {!isCanceled && (
                   <Button
                     variant="outline"
                     size="sm"
-                    asChild={editable}
-                    disabled={!editable}
-                    title={
-                      editable
-                        ? t(
-                            "Ўлчам, нарх, жадвал ёки изоҳни таҳрирлаш — жойида сақланади, янги буюртма яратилмайди.",
-                            "Edit dimensions, pricing, schedule, or notes — saves in place, no new order placed.",
-                          )
-                        : t(
-                            `Ҳолат ${order.status} га етгач таҳрир блокланган. Ўзгартириш учун бекор қилиб қайта яратинг.`,
-                            `Editing locked once status reaches ${order.status}. Cancel + recreate to make changes.`,
-                          )
-                    }
+                    className="border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive hover:text-white hover:border-destructive transition-colors"
+                    onClick={() => setCancelOpen(true)}
                   >
-                    {editable ? (
-                      <Link href={`/calculations?fromOrder=${order.id}`}>
-                        <Pencil className="h-4 w-4 mr-2" /> {t("Буюртма таҳрирлаш", "Edit Order Details")}
-                      </Link>
-                    ) : (
-                      <span>
-                        <Pencil className="h-4 w-4 mr-2" /> {t("Буюртма таҳрирлаш", "Edit Order Details")}
-                      </span>
-                    )}
+                    <Ban className="h-3.5 w-3.5 mr-1.5" />
+                    {t("Буюртмани бекор қилиш", "Cancel order")}
                   </Button>
-                );
-              })()}
-              {!isCanceled && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:bg-destructive/10"
-                  onClick={() => setCancelOpen(true)}
-                >
-                  <Ban className="h-4 w-4 mr-2" /> {t("Буюртмани бекор қилиш", "Cancel order")}
-                </Button>
-              )}
-              {canAdd && (
-                <Button
-                  size="sm"
-                  className="bg-success hover:bg-success/90 text-success-foreground"
-                  onClick={() => setAddPaymentOpen(true)}
-                >
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  Тўлов қўшиш<span className="lang-en"> · Add Payment</span>
-                </Button>
-              )}
+                )}
+
+                {/* Add Payment — primary CTA */}
+                {canAdd && (
+                  <Button
+                    size="sm"
+                    className="bg-success hover:bg-success/90 text-success-foreground"
+                    onClick={() => setAddPaymentOpen(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                    Тўлов қўшиш<span className="lang-en"> · Add Payment</span>
+                  </Button>
+                )}
+              </div>
+
             </div>
           </div>
         );
       })()}
+
+      {/* Status timeline */}
+      {!isCanceled ? (
+        <div className="rounded-lg border bg-background p-4 shadow-sm">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
+            Жараён<span className="lang-en"> · Status timeline</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {STATUS_FLOW
+              .filter((s) => !(s.key === "LOADED" && order.shipments.length > 0))
+              .map((s) => {
+                const flowIdx = STATUS_FLOW.findIndex((f) => f.key === s.key);
+                // Map removed statuses to the nearest visible step so existing
+                // orders continue to render correctly.
+                // IN_PRODUCTION → PLACED (LOADED is the next action)
+                // DISPATCHED    → LOADED  (DELIVERED is the next action)
+                const effectiveStatus =
+                  order.status === "IN_PRODUCTION" ? "PLACED" :
+                  order.status === "DISPATCHED"    ? "LOADED" :
+                  order.status;
+                const currentFlowIdx = STATUS_FLOW.findIndex((f) => f.key === effectiveStatus);
+                const Icon = s.icon;
+                const reached = flowIdx <= currentFlowIdx;
+                const isCurrent = flowIdx === currentFlowIdx;
+                const canAdvance = flowIdx === currentFlowIdx + 1;
+
+                // Compute partial-fill fraction for DISPATCHED / DELIVERED when split shipments exist
+                const n = order.shipments.length;
+                const shipmentFraction: number | null =
+                  n > 0 && (s.key === "DISPATCHED" || s.key === "DELIVERED")
+                    ? s.key === "DISPATCHED"
+                      ? order.shipments.filter((sh) => sh.status === "DISPATCHED" || sh.status === "DELIVERED").length / n
+                      : order.shipments.filter((sh) => sh.status === "DELIVERED").length / n
+                    : null;
+                const isPartialFill = shipmentFraction !== null && shipmentFraction > 0 && shipmentFraction < 1;
+                const pct = shipmentFraction !== null ? Math.round(shipmentFraction * 100) : 0;
+
+                const pendingShipments = order.shipments.filter(
+                  (sh) => sh.status === "PENDING" || sh.status === "LOADED",
+                );
+                const deliveredBlocked =
+                  s.key === "DELIVERED" && (remainingNum > 0 || pendingShipments.length > 0);
+
+                const tooltip = isPartialFill
+                  ? t(
+                      `${Math.round(shipmentFraction! * n)} / ${n} жўнатма`,
+                      `${Math.round(shipmentFraction! * n)} of ${n} shipments`,
+                    )
+                  : deliveredBlocked
+                    ? remainingNum > 0
+                      ? t(
+                          `Тўлов тўлиқ эмас — қолди: ${formatNumber(remainingNum, 0)} UZS`,
+                          `Payment incomplete — remaining: ${formatNumber(remainingNum, 0)} UZS`,
+                        )
+                      : t(
+                          `${pendingShipments.length} та жўнатма ҳали жўнатилмаган`,
+                          `${pendingShipments.length} shipment(s) not yet dispatched`,
+                        )
+                    : undefined;
+
+                const onClick = () => {
+                  if (!canAdvance || deliveredBlocked) return;
+                  if (s.key === "LOADED") setLoadTruckOpen(true);
+                  else if (s.key === "DELIVERED") updateStatus.mutate("DELIVERED");
+                  else updateStatus.mutate(s.key);
+                };
+
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    disabled={isPartialFill || !canAdvance || updateStatus.isPending || deliveredBlocked}
+                    onClick={onClick}
+                    title={tooltip}
+                    style={isPartialFill
+                      ? { background: isDark
+                          ? `linear-gradient(to right, #064e3b ${pct}%, #1c1917 ${pct}%)`
+                          : `linear-gradient(to right, #ecfdf5 ${pct}%, #f8fafc ${pct}%)` }
+                      : undefined}
+                    className={[
+                      "flex items-center gap-2 px-3 py-2 rounded-md text-sm border transition-all",
+                      isPartialFill
+                        ? "border-emerald-600 text-emerald-300 dark:border-emerald-700 dark:text-emerald-300"
+                        : reached
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300"
+                          : canAdvance && !deliveredBlocked
+                            ? "bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-100 cursor-pointer dark:bg-amber-950/50 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-950/80"
+                            : "bg-muted/30 border-border text-muted-foreground cursor-not-allowed",
+                      isCurrent || isPartialFill ? "ring-2 ring-emerald-400 dark:ring-emerald-700" : "",
+                    ].join(" ")}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="font-medium">{t(s.uz, s.en)}</span>
+                    {isPartialFill && (
+                      <span className="text-xs font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+                        {Math.round(shipmentFraction! * n)}/{n}
+                      </span>
+                    )}
+                    {!isPartialFill && canAdvance && !deliveredBlocked && (
+                      <span className="text-xs">
+                        {s.key === "LOADED"
+                          ? t("→ расм юкланг", "→ upload photo")
+                          : s.key === "DELIVERED"
+                            ? t("→ тасдиқлаш", "→ confirm")
+                            : t("→ давом эттириш учун босинг", "→ click to advance")}
+                      </span>
+                    )}
+                    {!isPartialFill && deliveredBlocked && (
+                      <span className="text-xs text-muted-foreground/70">{t("· блокланган", "· blocked")}</span>
+                    )}
+                  </button>
+                );
+              })}
+
+            {/* Split Shipment button — shown when PLACED/IN_PRODUCTION and no shipments yet */}
+            {(order.status === "PLACED" || order.status === "IN_PRODUCTION") && order.shipments.length === 0 && (
+              <>
+                <div className="w-px self-stretch bg-border/60 mx-1" />
+                <button
+                  type="button"
+                  disabled={splitLoading}
+                  onClick={createFirstShipment}
+                  className="flex items-center gap-2.5 px-3.5 py-2 rounded-md text-sm border-2 border-dashed border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100 hover:border-violet-400 dark:border-violet-700 dark:bg-violet-950/50 dark:text-violet-300 dark:hover:bg-violet-950/80 dark:hover:border-violet-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {splitLoading
+                    ? <Loader2 className="h-4 w-4 animate-spin shrink-0 text-violet-600" />
+                    : <Split className="h-4 w-4 shrink-0" />}
+                  <span className="flex flex-col items-start leading-tight">
+                    <span className="font-semibold">{t("Бўлиб юклаш", "Split shipment")}</span>
+                    <span className="text-[10px] font-normal text-violet-500 dark:text-violet-400">{t("Бир нечта машинага бўлиш", "Multiple trucks")}</span>
+                  </span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
+          <div className="font-bold">Бекор қилинди<span className="lang-en"> · Canceled</span></div>
+          {order.cancelReason && (
+            <div className="text-sm mt-1">{t("Сабаб:", "Reason:")} {order.cancelReason}</div>
+          )}
+        </div>
+      )}
+
+      {/* Split-shipment tracking */}
+      {order.shipments.length > 0 && (
+        <ShipmentsSection
+          orderId={order.id}
+          shipments={order.shipments}
+          beamGroups={beamGroups}
+          totalBlocks={calcTotals.blocks}
+          orderStatus={order.status}
+          onRefresh={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
+        />
+      )}
+
 
       {/* Drawings — Blender-generated PDFs attached to this order */}
       {canUseBlender && <DrawingsSection orderId={order.id} />}
@@ -965,6 +1201,24 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {/* Loaded truck photo (single-truck flow) */}
+      {order.loadedPhotoUrl && (
+        <div className="rounded-lg border bg-background overflow-hidden">
+          <div className="px-4 py-3 border-b text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Юкланган машина<span className="lang-en"> · Loaded truck</span>
+          </div>
+          <div className="p-4">
+            <a href={order.loadedPhotoUrl} target="_blank" rel="noreferrer">
+              <img
+                src={order.loadedPhotoUrl}
+                alt="Loaded truck"
+                className="max-h-48 rounded border object-cover hover:opacity-90 transition-opacity"
+              />
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Delivery proof — visible once uploaded */}
       {order.deliveryProofUrl && (
         <div className="rounded-lg border bg-background p-4 shadow-sm">
@@ -1030,15 +1284,14 @@ export default function OrderDetailPage() {
         }
         onUpload={uploadDeliveryProof}
       />
-      <DispatchDialog
-        open={dispatchOpen}
-        onClose={() => setDispatchOpen(false)}
+      <LoadTruckDialog
         orderId={order.id}
-        suggestedExpectedCollection={Math.max(
-          0,
-          Number(order.totalPrice) - Number(order.confirmedPaid),
-        )}
-        onDispatched={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
+        open={loadTruckOpen}
+        onClose={() => setLoadTruckOpen(false)}
+        onSuccess={() => {
+          setLoadTruckOpen(false);
+          qc.invalidateQueries({ queryKey: ["order", params.id] });
+        }}
       />
 
       <AddPaymentDialog

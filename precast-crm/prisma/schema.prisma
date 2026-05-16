@@ -70,6 +70,7 @@ enum OrderStatus {
   DRAFT           // reserved (drafts currently live on Project.status; included for future workflow flexibility)
   PLACED          // Буюртма Берилди — newly placed
   IN_PRODUCTION   // Ишлаб чиқарилмоқда
+  LOADED          // truck photo taken, awaiting dispatch (single-truck path)
   DISPATCHED      // Жўнатилди — truck en route with driver
   DELIVERED       // Етказиб берилди
   CANCELED        // Бекор қилинди
@@ -125,6 +126,18 @@ enum OrderEventType {
   PAYMENT_ADJUSTED          // confirmer changed the amount (originalAmount kept)
   DISCREPANCY_OPENED        // confirmer flagged a shortfall to track
   DISCREPANCY_RESOLVED      // owner resolved it (recovered/discount/writeoff/disputed)
+  ORDER_LOADED              // single-truck: photo taken, status → LOADED
+  SHIPMENT_CREATED          // split: new Shipment row added
+  SHIPMENT_LOADED           // split: shipment photo + counts saved
+  SHIPMENT_DISPATCHED       // split: shipment truck left the yard
+  SHIPMENT_DELIVERED        // split: shipment confirmed delivered
+}
+
+enum ShipmentStatus {
+  PENDING     // created, not yet loaded
+  LOADED      // photo + counts saved
+  DISPATCHED  // truck left the yard
+  DELIVERED   // confirmed delivered to client
 }
 
 enum InventoryKind {
@@ -211,6 +224,8 @@ model User {
 
   // Blender Bridge — drawing requests this user created.
   drawingRequests       DrawingRequest[]
+
+  shipmentsDispatched   Shipment[] @relation("ShipmentDispatcher")
 
   @@map("users")
 }
@@ -468,6 +483,10 @@ model Order {
   deliveryProofUrl        String?
   deliveryProofUploadedAt DateTime?
 
+  // Single-truck loading (new flow)
+  loadedPhotoUrl  String?
+  loadedAt        DateTime?
+
   notes           String?
 
   project       Project       @relation(fields: [projectId], references: [id])
@@ -480,6 +499,7 @@ model Order {
   payments      Payment[]
   discrepancies Discrepancy[]
   drawingRequests DrawingRequest[]
+  shipments     Shipment[]
 
   @@index([status])
   @@index([paymentState])
@@ -540,6 +560,7 @@ model Driver {
   dispatches    Dispatch[]
   payments      Payment[]     @relation("PaymentCollector")
   discrepancies Discrepancy[]
+  shipments     Shipment[]    @relation("ShipmentDriver")
 
   @@index([active, name])
   @@map("drivers")
@@ -548,7 +569,7 @@ model Driver {
 model Dispatch {
   id                  String    @id @default(cuid())
   orderId             String    @unique  // one active dispatch per order in v1
-  driverId            String
+  driverId            String?   // nullable — client may bring their own truck
   truckIdentifier     String?
   expectedCollection  Decimal   @db.Decimal(14, 2)
   notes               String?
@@ -557,12 +578,55 @@ model Dispatch {
   // Set when the driver returns to the office. Null while on the road.
   returnedAt          DateTime?
 
-  order        Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  driver       Driver @relation(fields: [driverId], references: [id])
-  dispatchedBy User   @relation("DispatchDispatcher", fields: [dispatchedById], references: [id])
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver       Driver? @relation(fields: [driverId], references: [id])
+  dispatchedBy User    @relation("DispatchDispatcher", fields: [dispatchedById], references: [id])
 
   @@index([driverId, dispatchedAt])
   @@map("dispatches")
+}
+
+// Split-shipment: one row per truck when an order is divided across
+// multiple vehicles. Created on-demand via the "Бўлиб юклаш" flow.
+// Single-truck orders skip this model entirely and use Order.loadedPhotoUrl
+// + the existing Dispatch model instead.
+model Shipment {
+  id              String         @id @default(cuid())
+  orderId         String
+  number          Int            // 1-based sequence within the order
+
+  status          ShipmentStatus @default(PENDING)
+
+  // Counts — null until operator fills the loading form.
+  // JSON shape: Record<string, number>  e.g. { "3.3": 5, "4.3": 10 }
+  loadedBeams     Json?
+  loadedBlocks    Int?
+
+  // Loaded truck photo
+  loadedPhotoUrl  String?
+  loadedAt        DateTime?
+
+  // Optional driver assignment per shipment
+  driverId             String?
+  truckIdentifier      String?
+  driverWillCollectCash Boolean  @default(false)
+  cashToCollect        Decimal?  @db.Decimal(14, 2)
+  dispatchedById       String?
+  dispatchedAt         DateTime?
+
+  deliveredAt     DateTime?
+  notes           String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver       Driver? @relation("ShipmentDriver",     fields: [driverId],       references: [id])
+  dispatchedBy User?   @relation("ShipmentDispatcher", fields: [dispatchedById], references: [id])
+
+  @@unique([orderId, number])
+  @@index([orderId])
+  @@map("shipments")
 }
 
 model Payment {

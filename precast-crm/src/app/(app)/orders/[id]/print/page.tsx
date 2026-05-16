@@ -51,7 +51,7 @@ interface OrderDetail {
   };
   dispatch: {
     truckIdentifier: string | null;
-    driver: { name: string; phone: string };
+    driver: { name: string; phone: string } | null;
   } | null;
 }
 
@@ -219,9 +219,11 @@ export default function OrderPrintPage() {
             </div>
             {order.dispatch && (
               <>
-                <div className="text-[10pt] mt-1">
-                  Driver: <span className="font-medium">{order.dispatch.driver.name}</span>
-                </div>
+                {order.dispatch.driver && (
+                  <div className="text-[10pt] mt-1">
+                    Driver: <span className="font-medium">{order.dispatch.driver.name}</span>
+                  </div>
+                )}
                 {order.dispatch.truckIdentifier && (
                   <div className="text-[10pt] text-gray-600">
                     Truck: <span className="tabular-nums">{order.dispatch.truckIdentifier}</span>

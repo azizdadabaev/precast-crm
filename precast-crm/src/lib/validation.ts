@@ -318,7 +318,7 @@ export const DriverUpdateSchema = DriverCreateSchema.partial();
 // actually collect — discounts at this point are not enforced; the
 // owner adjudicates discrepancies later when confirming payment.
 export const DispatchCreateSchema = z.object({
-  driverId: z.string().min(1, "driver is required"),
+  driverId: z.string().cuid().optional().nullable(),
   truckIdentifier: z.string().max(40).optional().nullable(),
   expectedCollection: z.coerce.number().min(0, "cannot be negative"),
   notes: z.string().max(500).optional().nullable(),

@@ -113,8 +113,8 @@ export function SendToBlenderButton({
 
   const busy = state === "sending";
   const fallbackLabel = orderId
-    ? t("Blender'ga yuborish", "Send to Blender")
-    : t("Blender'ga yuborish", "Send project to Blender");
+    ? t("Blender га юбориш", "Send to Blender")
+    : t("Blender га юбориш", "Send project to Blender");
 
   return (
     <div className={"flex flex-col items-end gap-1 " + (className ?? "")}>
