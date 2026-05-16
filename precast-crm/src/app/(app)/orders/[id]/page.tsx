@@ -686,13 +686,36 @@ export default function OrderDetailPage() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="hidden sm:table-footer-group">
+                <tr className="bg-muted/60 border-t-2 border-border-strong">
+                  <td className="px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    Жами<span className="lang-en font-normal"> · Totals</span>
+                  </td>
+                  <td colSpan={6} />
+                  <td className="px-3 py-3 text-right font-mono font-bold text-sm">
+                    {calcTotals.blocks}
+                    <span className="text-[10px] text-muted-foreground font-normal ml-0.5">Ғ</span>
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono font-bold text-sm">
+                    {calcTotals.beams}
+                    <span className="text-[10px] text-muted-foreground font-normal ml-0.5">Б</span>
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono font-bold text-sm">
+                    {formatNumber(calcTotals.monolithArea, 2)}
+                    <span className="text-[10px] text-muted-foreground font-normal ml-0.5">m²</span>
+                  </td>
+                  <td />
+                  <td className="px-3 py-3 text-right font-mono font-extrabold text-success text-base">
+                    {formatNumber(order.roomsSubtotal, 0)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
 
-          {/* Totals strip — outside overflow-x-auto so it never scrolls and
-              is always visible. The scrollbar now sits below all table rows,
-              above this strip. Column alignment is replaced by explicit labels. */}
-          <div className="border-t-2 border-border-strong bg-muted/40 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+          {/* Totals strip — mobile only (sm:hidden). On desktop the <tfoot>
+              above handles column-aligned totals inside the table itself. */}
+          <div className="sm:hidden border-t-2 border-border-strong bg-muted/40 px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap">
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
               Жами<span className="lang-en font-normal"> · Totals</span>
             </span>
