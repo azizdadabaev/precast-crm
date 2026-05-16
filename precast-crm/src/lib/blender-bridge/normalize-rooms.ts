@@ -101,11 +101,13 @@ export function normalizeRoomForBlender(raw: Record<string, unknown>): BlenderRo
   const get = (camel: string, snake?: string): unknown =>
     raw[camel] ?? (snake ? raw[snake] : undefined);
 
-  const name = latinize(
+  const rawName =
     (typeof raw.name === "string" && raw.name) ||
     (typeof raw.roomName === "string" && raw.roomName) ||
-    "Room",
-  );
+    "Room";
+  // Normalize English default "Room N" → "Xona N" so rooms created before
+  // the Uzbek-default change produce the same output as Cyrillic "Хона N".
+  const name = latinize(rawName.replace(/^Room\s+(\d+)$/i, "Xona $1"));
 
   // Resolved pattern — Prisma's `pattern` column holds it post-auto-pick.
   // Fallback to snake-case `pattern` for already-normalized payloads.
