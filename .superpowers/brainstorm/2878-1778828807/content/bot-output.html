@@ -1,0 +1,96 @@
+<style>
+.tg-window {
+  background: #0d1117;
+  border-radius: 12px;
+  padding: 16px;
+  font-family: -apple-system, sans-serif;
+  font-size: 13px;
+  color: #e1e4e8;
+  max-width: 320px;
+  margin: 0 auto;
+}
+.tg-msg {
+  margin: 6px 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.tg-msg.user { justify-content: flex-end; }
+.tg-bubble {
+  padding: 8px 12px;
+  border-radius: 12px;
+  max-width: 85%;
+  line-height: 1.4;
+}
+.tg-bubble.user { background: #2b5278; border-bottom-right-radius: 4px; }
+.tg-bubble.bot { background: #1e2d3d; border-bottom-left-radius: 4px; }
+.tg-bubble.bot.drawing { background: #1a2e1a; border: 1px solid #2d5a2d; }
+.tg-drawing-placeholder {
+  width: 100%;
+  height: 90px;
+  background: #0f1f0f;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4caf50;
+  font-size: 11px;
+  margin-bottom: 6px;
+  border: 1px dashed #2d5a2d;
+}
+.tg-label {
+  font-size: 10px;
+  color: #8b949e;
+  text-align: center;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+</style>
+
+<h2>What should the bot return?</h2>
+<p class="subtitle">There's a key constraint: Blender currently sends drawings <em>one-way only</em> (to the CRM). There's no return path yet. Choose the scope that fits this reality.</p>
+
+<div class="options">
+  <div class="option" data-choice="text-only" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Calculation results as text</h3>
+      <p>Bot returns a formatted summary: beam count, block count, area, cost estimate. Fast. Works today with zero extra infrastructure.</p>
+      <div class="tg-window" style="margin-top:10px">
+        <div class="tg-label">Telegram preview</div>
+        <div class="tg-msg user"><div class="tg-bubble user">Xona: 4.2 × 5.6 m</div></div>
+        <div class="tg-msg"><div class="tg-bubble bot">✅ <b>Hisob-kitob tayyor</b><br>Pattern: GB · 8 qator<br>Balka: 9 ta · 4.5 m<br>Blok: 104 ta<br>Maydon: 23.5 m²<br>Narx: ~$420</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="text-plus-trigger" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Text results + triggers Blender drawing</h3>
+      <p>Bot calculates and saves the project in CRM, then fires a drawing request to Blender. The operator gets a CAD drawing on their PC within seconds. The salesperson gets the text result immediately and can share the drawing separately when Blender finishes.</p>
+      <div class="tg-window" style="margin-top:10px">
+        <div class="tg-label">Telegram preview</div>
+        <div class="tg-msg user"><div class="tg-bubble user">Xona: 4.2 × 5.6 m</div></div>
+        <div class="tg-msg"><div class="tg-bubble bot">✅ <b>Loyiha saqlandi</b><br>Pattern: GB · 8 qator<br>Balka: 9 ta · 4.5 m<br>Maydon: 23.5 m²<br>Narx: ~$420<br><br>🎨 Blender'ga yuborildi…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="text-plus-drawing-returned" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Text + drawing comes back to Telegram</h3>
+      <p>Full loop: bot triggers Blender, waits for it to finish, then sends the CAD drawing image back to the salesperson in Telegram. Needs Phase 2 of the Blender bridge (return path) to be built first — adds scope.</p>
+      <div class="tg-window" style="margin-top:10px">
+        <div class="tg-label">Telegram preview</div>
+        <div class="tg-msg user"><div class="tg-bubble user">Xona: 4.2 × 5.6 m</div></div>
+        <div class="tg-msg"><div class="tg-bubble bot">⏳ Hisoblandi, rasm tayyorlanmoqda…</div></div>
+        <div class="tg-msg"><div class="tg-bubble bot drawing"><div class="tg-drawing-placeholder">🖼 CAD drawing (PDF/PNG)</div>Pattern: GB · Maydon: 23.5 m²</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:20px; font-size:12px">⚠️ Option C requires building the Blender → CRM return path first (currently one-way only). Options A and B can ship without it.</p>

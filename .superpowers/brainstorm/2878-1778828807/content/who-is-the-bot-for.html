@@ -1,0 +1,40 @@
+<h2>Who is the Telegram bot for?</h2>
+<p class="subtitle">This shapes the entire design — authentication, language, what the bot collects, and what it returns.</p>
+
+<div class="options">
+  <div class="option" data-choice="clients" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Clients / Customers</h3>
+      <p>External people (homeowners, contractors) who want a quick quote. They send room dimensions via Telegram, get a calculation result and a CAD drawing back — without ever touching the CRM web app.</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>Good for</h4><ul><li>Lead generation</li><li>Self-service quotes</li><li>No login needed</li></ul></div>
+        <div class="cons"><h4>Needs</h4><ul><li>Public-facing bot</li><li>No CRM account required</li><li>Safe sandboxing from CRM data</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="staff" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Internal Staff / Salespeople</h3>
+      <p>Your own team (salespeople in the field, on the go) who use Telegram as a mobile-friendly alternative to the web app. Bot creates real projects in the CRM on their behalf.</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>Good for</h4><ul><li>Field sales speed</li><li>Real CRM data</li><li>Proper audit trail</li></ul></div>
+        <div class="cons"><h4>Needs</h4><ul><li>CRM user linked to Telegram</li><li>Permission checks</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="both" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Both — but start with one</h3>
+      <p>Ultimately both, but they're architecturally different flows. Pick which to build first; the other can be added later without rework.</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>Good for</h4><ul><li>Full vision</li></ul></div>
+        <div class="cons"><h4>Risk</h4><ul><li>Scope creep</li><li>Two auth systems</li><li>More surface area</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
