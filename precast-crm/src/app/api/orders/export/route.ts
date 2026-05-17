@@ -31,6 +31,7 @@ export const GET = withPermission(
   "order.exportBackup",
   async (_req: NextRequest) => {
     const orders = await prisma.order.findMany({
+      take: 10_000,
       orderBy: [{ status: "asc" }, { orderNumber: "asc" }],
       include: {
         client: { select: { name: true, phone: true, address: true } },

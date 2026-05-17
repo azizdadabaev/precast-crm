@@ -40,6 +40,7 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
       },
       events: {
         orderBy: { createdAt: "desc" },
+        take: 100,
         include: { actor: { select: { id: true, name: true, email: true } } },
       },
       shipments: {

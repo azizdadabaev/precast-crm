@@ -85,16 +85,21 @@ describe("DriverCreateSchema", () => {
 });
 
 describe("DispatchCreateSchema", () => {
+  // The upstream split-shipment refactor changed driverId to
+  // z.string().cuid().optional().nullable() so tests must use a
+  // valid CUID or omit the field entirely. "d1" is no longer valid.
+  const VALID_CUID = "clh3aaerz0000qhogfhgchj2p";
+
   it("requires driverId and a non-negative expectedCollection", () => {
     expect(
       DispatchCreateSchema.safeParse({
-        driverId: "d1",
+        driverId: VALID_CUID,
         expectedCollection: 0,
       }).success,
     ).toBe(true);
     expect(
       DispatchCreateSchema.safeParse({
-        driverId: "d1",
+        driverId: VALID_CUID,
         expectedCollection: -1,
       }).success,
     ).toBe(false);
@@ -108,7 +113,7 @@ describe("DispatchCreateSchema", () => {
 
   it("coerces a numeric string for expectedCollection", () => {
     const r = DispatchCreateSchema.safeParse({
-      driverId: "d1",
+      driverId: VALID_CUID,
       expectedCollection: "1500000",
     });
     expect(r.success).toBe(true);

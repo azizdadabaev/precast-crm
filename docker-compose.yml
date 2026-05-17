@@ -48,6 +48,16 @@ services:
       - drawings_data:/data:ro
     expose:
       - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   # Blender Bridge — owner-only WebSocket service that forwards
   # DrawingRequest rows from Postgres to a locally-running Blender
@@ -78,6 +88,10 @@ services:
       # endpoints are never reachable from the public internet.
       - "8765"
       - "8766"
+    deploy:
+      resources:
+        limits:
+          memory: 128m
 
   caddy:
     image: caddy:2-alpine

@@ -10,7 +10,6 @@ import {
   Loader2,
   Check,
 } from "lucide-react";
-import { toPng, toJpeg, toBlob } from "html-to-image";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -92,6 +91,7 @@ export function ShareCalculationButton({
   async function handleDownload(format: "png" | "jpeg") {
     setBusy(format);
     try {
+      const { toPng, toJpeg } = await import("html-to-image");
       const dataUrl = await withNode((node, dims) =>
         format === "png"
           ? toPng(node, { ...baseOpts, ...dims })
@@ -115,6 +115,7 @@ export function ShareCalculationButton({
   async function handleCopy() {
     setBusy("copy");
     try {
+      const { toBlob } = await import("html-to-image");
       const blob = await withNode((node, dims) =>
         toBlob(node, { ...baseOpts, ...dims }),
       );
@@ -139,6 +140,7 @@ export function ShareCalculationButton({
   async function handleShare() {
     setBusy("share");
     try {
+      const { toBlob } = await import("html-to-image");
       const blob = await withNode((node, dims) =>
         toBlob(node, { ...baseOpts, ...dims }),
       );

@@ -4,7 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
 import { useT } from "@/lib/i18n";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
-import { MonthlyRevenueChart } from "@/components/dashboard/MonthlyRevenueChart";
+import dynamic from "next/dynamic";
+const MonthlyRevenueChart = dynamic(
+  () => import("@/components/dashboard/MonthlyRevenueChart").then((m) => m.MonthlyRevenueChart),
+  { ssr: false, loading: () => <div className="h-72 rounded-xl bg-muted animate-pulse" /> },
+);
 import { RevenueThisMonthCard } from "@/components/dashboard/RevenueThisMonthCard";
 import { RevenueAllTimeCard } from "@/components/dashboard/RevenueAllTimeCard";
 import { AverageOrderValueCard } from "@/components/dashboard/AverageOrderValueCard";

@@ -503,6 +503,7 @@ model Order {
 
   @@index([status])
   @@index([paymentState])
+  @@index([status, paymentState])
   @@index([clientId])
   @@index([scheduledAt])
   @@index([placedAt])

@@ -281,6 +281,7 @@ export const GET = withPermissionAny(
     // the city normalization happens in JS, not SQL.
     prisma.order.findMany({
       where: { status: { not: "CANCELED" } },
+      take: 10_000,
       select: {
         clientId: true,
         confirmedPaid: true,
