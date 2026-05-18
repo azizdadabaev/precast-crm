@@ -44,9 +44,16 @@ export const POST = withPermission<{ id: string }>(
   });
   if (!order) return fail("Order not found", 404);
   if (order.status === "CANCELED") return fail("Cannot modify a canceled order", 422);
-  if (order.status !== "IN_PRODUCTION" && order.status !== "DISPATCHED") {
+  // Accept LOADED (3-step UI: PLACED → LOADED → DELIVERED, no dispatch),
+  // DISPATCHED (driver-assigned flow), and IN_PRODUCTION (legacy /
+  // direct-to-delivery without going through load).
+  if (
+    order.status !== "LOADED" &&
+    order.status !== "IN_PRODUCTION" &&
+    order.status !== "DISPATCHED"
+  ) {
     return fail(
-      `Delivery proof can only be uploaded from IN_PRODUCTION or DISPATCHED (current: ${order.status})`,
+      `Delivery proof can only be uploaded from LOADED, IN_PRODUCTION, or DISPATCHED (current: ${order.status})`,
       422,
     );
   }
