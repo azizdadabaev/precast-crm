@@ -867,7 +867,7 @@ export default function OrderDetailPage() {
             <div className="px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
 
               {/* Left — utility / export actions */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/orders/${order.id}/print`}>
                     <Printer className="h-3.5 w-3.5 mr-1.5" />
@@ -888,7 +888,7 @@ export default function OrderDetailPage() {
               </div>
 
               {/* Right — management actions + primary CTA */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 {/* Edit */}
                 {(() => {
                   const editable =
