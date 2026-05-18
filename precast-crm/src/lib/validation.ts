@@ -482,6 +482,12 @@ export const GalleryListSchema = z.object({
   clientId: z.string().cuid().optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  // Free-text search across order number, client name/phone/address.
+  q: z
+    .string()
+    .max(120)
+    .optional()
+    .transform((s) => s?.trim() || undefined),
 });
 
 // ── Notifications ───────────────────────────────────────────────

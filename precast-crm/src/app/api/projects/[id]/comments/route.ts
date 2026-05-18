@@ -6,6 +6,7 @@ import { ok, created, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { CommentCreateSchema } from "@/lib/validation";
 import { extractMentions } from "@/lib/comments";
+import { emitNotifications } from "@/lib/notifications";
 
 type Params = { id: string };
 
@@ -56,6 +57,24 @@ export const POST = withPermission<Params>(
       },
       include: { author: { select: authorSelect } },
     });
+
+    const recipients = mentionedUserIds.filter((id) => id !== user.id);
+    if (recipients.length) {
+      const p = await prisma.project.findUnique({
+        where: { id: params.id },
+        select: { id: true, draftNumber: true, name: true },
+      });
+      const label = p?.draftNumber ? `${p.draftNumber}D` : (p?.name ?? "draft");
+      void emitNotifications({
+        type: "COMMENT_MENTION",
+        userIds: recipients,
+        title: `${user.name} сизни лойиҳа ${label} да эслади · ${user.name} mentioned you on draft ${label}`,
+        body: body.body.slice(0, 160),
+        projectId: params.id,
+        commentId: comment.id,
+      });
+    }
+
     return created(comment);
   },
 );

@@ -183,6 +183,10 @@ function NotificationRow({
     unread && "bg-primary/5",
   );
 
+  // Industry-default: navigate in the current tab. Cmd/Ctrl+Click
+  // automatically opens in a new tab (browser-native behavior on
+  // <Link>, no extra code). The lost-work concern is addressed by
+  // per-user/per-thread draft autosave in CommentThread.
   return url ? (
     <Link href={url} onClick={onClick} className={className}>
       {inner}

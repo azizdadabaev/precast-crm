@@ -51,15 +51,20 @@ function relativeTime(iso: string, t: (uz: string, en: string) => string): strin
 // resolved them into mentionedUserIds at write time.
 function renderBody(body: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  const re = /@([\w.+-]+)/g;
+  // Match email-form first (greedy), then plain username — same ordering
+  // as the server-side extractMentions() in src/lib/comments.ts so the
+  // highlight covers the whole `@sales@precast.local` token, not just
+  // the local part.
+  const re = /@([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})|@([\w.+-]+)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let key = 0;
   while ((m = re.exec(body)) !== null) {
     if (m.index > last) parts.push(<span key={key++}>{body.slice(last, m.index)}</span>);
+    const tok = m[1] ?? m[2];
     parts.push(
       <span key={key++} className="text-primary font-medium">
-        @{m[1]}
+        @{tok}
       </span>,
     );
     last = m.index + m[0].length;
@@ -89,9 +94,45 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
     enabled: Boolean(orderId || projectId),
   });
 
+  // Per-user, per-thread draft autosave. Survives in-app navigation,
+  // refresh, accidental tab close. Scoped by userId so factory PCs
+  // shared between operators don't leak drafts across users.
+  // Scoped by (order|project)+id so opening a different thread shows
+  // its own draft, not the previous one.
+  const draftKey = me
+    ? `comment-draft:${me.id}:${orderId ? `o:${orderId}` : `p:${projectId}`}`
+    : null;
+
   const [draft, setDraft] = React.useState("");
+  const [draftHydrated, setDraftHydrated] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editDraft, setEditDraft] = React.useState("");
+
+  // Hydrate the draft from localStorage exactly once after we know
+  // the user. Without the `hydrated` guard, re-renders would
+  // overwrite an in-flight edit with the stored value.
+  React.useEffect(() => {
+    if (!draftKey || draftHydrated) return;
+    try {
+      const stored = localStorage.getItem(draftKey);
+      if (stored) setDraft(stored);
+    } catch {
+      /* localStorage blocked / quota — silently ignore */
+    }
+    setDraftHydrated(true);
+  }, [draftKey, draftHydrated]);
+
+  // Persist on every change, but only after hydration so the initial
+  // empty-string state doesn't clobber a saved draft.
+  React.useEffect(() => {
+    if (!draftKey || !draftHydrated) return;
+    try {
+      if (draft) localStorage.setItem(draftKey, draft);
+      else localStorage.removeItem(draftKey);
+    } catch {
+      /* ignore */
+    }
+  }, [draft, draftKey, draftHydrated]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey });
 
@@ -99,6 +140,16 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
     mutationFn: (body: string) => api(baseUrl, { method: "POST", json: { body } }),
     onSuccess: () => {
       setDraft("");
+      // setDraft + the persist effect will remove the entry, but
+      // we also clear it eagerly so a race in the effect can't
+      // re-save the empty string.
+      if (draftKey) {
+        try {
+          localStorage.removeItem(draftKey);
+        } catch {
+          /* ignore */
+        }
+      }
       invalidate();
     },
   });

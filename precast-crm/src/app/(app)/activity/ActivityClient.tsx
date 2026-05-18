@@ -52,15 +52,16 @@ function relativeTime(iso: string, t: (uz: string, en: string) => string): strin
 
 function renderBody(body: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  const re = /@([\w.+-]+)/g;
+  const re = /@([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})|@([\w.+-]+)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let key = 0;
   while ((m = re.exec(body)) !== null) {
     if (m.index > last) parts.push(<span key={key++}>{body.slice(last, m.index)}</span>);
+    const tok = m[1] ?? m[2];
     parts.push(
       <span key={key++} className="text-primary font-medium">
-        @{m[1]}
+        @{tok}
       </span>,
     );
     last = m.index + m[0].length;

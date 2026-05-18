@@ -182,3 +182,48 @@ export function tumanLabel(name: string): string {
   const t = TUMANS.find((x) => x.name === name);
   return t ? `${t.nameUz} · ${t.name}` : name;
 }
+
+/**
+ * Expand a free-text search query into Latin + Cyrillic candidates so
+ * an address search matches regardless of which alphabet the operator
+ * typed vs. which one is stored. Returns the original query plus any
+ * alternate-alphabet forms whose viloyat/tuman name contains the query
+ * (case-insensitive). Empty/short queries return [q] unchanged.
+ *
+ * Examples:
+ *   "Toshkent" → ["Toshkent", "Тошкент"]
+ *   "Тошкент"  → ["Тошкент", "Toshkent"]
+ *   "yunus"    → ["yunus", "Yunusobod", "Юнусобод"]
+ *
+ * Used by API search routes (orders, projects, clients) to widen the
+ * `contains` filter so cross-alphabet stored addresses still match.
+ */
+export function addressSearchForms(q: string): string[] {
+  const trimmed = q.trim();
+  if (trimmed.length < 2) return trimmed ? [trimmed] : [];
+
+  const lower = trimmed.toLowerCase();
+  const out = new Set<string>([trimmed]);
+
+  for (const v of VILOYATS) {
+    if (v.name.toLowerCase().includes(lower)) {
+      out.add(v.name);
+      out.add(v.nameUz);
+    }
+    if (v.nameUz.toLowerCase().includes(lower)) {
+      out.add(v.name);
+      out.add(v.nameUz);
+    }
+  }
+  for (const t of TUMANS) {
+    if (t.name.toLowerCase().includes(lower)) {
+      out.add(t.name);
+      out.add(t.nameUz);
+    }
+    if (t.nameUz.toLowerCase().includes(lower)) {
+      out.add(t.name);
+      out.add(t.nameUz);
+    }
+  }
+  return [...out];
+}

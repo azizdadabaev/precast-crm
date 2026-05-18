@@ -32,6 +32,7 @@ import { addressToCyrillic } from "@/lib/regions";
 import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
 import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
 import { CommentThread } from "@/components/comments/CommentThread";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import type { BeamGroup } from "@/lib/weight-distributor";
 
 const WEEKDAY_UZ = ["Якшанба", "Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба"];
@@ -209,6 +210,12 @@ export default function OrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const isDark = useThemeStore((s) => s.theme) === "dark";
   const [mobileCalcOpen, setMobileCalcOpen] = useState(false);
+  // In-page photo preview (loaded truck + delivery proof). Open with
+  // the URL of the photo to show; null = closed.
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<{
+    url: string;
+    caption: string;
+  } | null>(null);
   /** Captured by ShareCalculationButton — wraps the header card +
    *  calculation summary card so the operator can ship a one-shot
    *  image of the order to the customer. */
@@ -1232,13 +1239,24 @@ export default function OrderDetailPage() {
             Юкланган машина<span className="lang-en"> · Loaded truck</span>
           </div>
           <div className="p-4">
-            <a href={order.loadedPhotoUrl} target="_blank" rel="noreferrer">
+            <button
+              type="button"
+              onClick={() =>
+                setPhotoPreviewUrl({
+                  url: order.loadedPhotoUrl!,
+                  caption: `${t("Юкланган машина", "Loaded truck")} · ${order.orderNumber}`,
+                })
+              }
+              className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              aria-label={t("Расмни кенгайтириш", "Expand photo")}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={order.loadedPhotoUrl}
                 alt="Loaded truck"
-                className="max-h-48 rounded border object-cover hover:opacity-90 transition-opacity"
+                className="max-h-48 rounded border object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
               />
-            </a>
+            </button>
           </div>
         </div>
       )}
@@ -1256,21 +1274,30 @@ export default function OrderDetailPage() {
               </div>
             )}
           </div>
-          <a
-            href={order.deliveryProofUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block rounded-md overflow-hidden border bg-black/5 hover:opacity-95 transition-opacity"
+          <button
+            type="button"
+            onClick={() =>
+              setPhotoPreviewUrl({
+                url: order.deliveryProofUrl!,
+                caption: `${t("Етказиб бериш фотоси", "Delivery proof")} · ${order.orderNumber}`,
+              })
+            }
+            className="block w-full rounded-md overflow-hidden border bg-black/5 hover:opacity-95 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={t("Расмни кенгайтириш", "Expand photo")}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={order.deliveryProofUrl}
               alt="Truck loaded with order"
-              className="block w-full max-h-96 object-contain"
+              className="block w-full max-h-96 object-contain cursor-zoom-in"
             />
-          </a>
+          </button>
         </div>
       )}
+
+      {/* Comments thread — human conversation goes first; the system
+          audit log below is reference material consulted less often. */}
+      <CommentThread orderId={order.id} />
 
       {/* Activity log */}
       <div className="rounded-lg border bg-background">
@@ -1297,9 +1324,6 @@ export default function OrderDetailPage() {
         </ul>
       </div>
 
-      {/* Comments thread */}
-      <CommentThread orderId={order.id} />
-
       {/* Delivery proof modal — gates the IN_PRODUCTION → DELIVERED step */}
       <DeliveryProofDialog
         open={proofOpen}
@@ -1320,6 +1344,14 @@ export default function OrderDetailPage() {
           qc.invalidateQueries({ queryKey: ["order", params.id] });
         }}
       />
+
+      {photoPreviewUrl && (
+        <ImageLightbox
+          url={photoPreviewUrl.url}
+          caption={photoPreviewUrl.caption}
+          onClose={() => setPhotoPreviewUrl(null)}
+        />
+      )}
 
       <AddPaymentDialog
         open={addPaymentOpen}

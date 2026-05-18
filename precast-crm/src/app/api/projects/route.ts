@@ -11,6 +11,7 @@ import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
+import { addressSearchForms } from "@/lib/regions";
 import { nextDraftNumber } from "@/lib/draft-number";
 
 /** GET /api/projects — order.view. List projects with optional status + search. */
@@ -26,13 +27,16 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
 
   if (q) {
     const phoneForms = phoneMatchForms(q);
+    const addrForms = addressSearchForms(q);
     const filters: unknown[] = [
       { name: { contains: q, mode: "insensitive" } },
       { tentativeClientName: { contains: q, mode: "insensitive" } },
-      { tentativeClientAddress: { contains: q, mode: "insensitive" } },
       { client: { name: { contains: q, mode: "insensitive" } } },
-      { client: { address: { contains: q, mode: "insensitive" } } },
     ];
+    for (const a of addrForms) {
+      filters.push({ tentativeClientAddress: { contains: a, mode: "insensitive" } });
+      filters.push({ client: { address: { contains: a, mode: "insensitive" } } });
+    }
     for (const f of phoneForms) {
       filters.push({ tentativeClientPhone: { contains: f } });
       filters.push({ client: { phone: { contains: f } } });

@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { GalleryCard } from "@/components/gallery/GalleryCard";
 import { GalleryLightbox } from "@/components/gallery/GalleryLightbox";
@@ -16,6 +16,8 @@ interface GalleryPhoto {
   orderNumber: string;
   clientId: string;
   clientName: string;
+  clientPhone: string | null;
+  clientAddress: string | null;
   kind: "LOADED" | "DELIVERY_PROOF" | "SHIPMENT_LOADED";
   url: string;
   uploadedAt: string;
@@ -39,14 +41,24 @@ export default function GalleryClient() {
   const [kind, setKind] = useState<"" | GalleryPhoto["kind"]>("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  // We don't expose a clientId filter in the UI yet; reserve the slot
-  // for a future client-picker (the key is in the queryKey already).
+  // Search input (raw) + debounced value (drives the query). 250 ms
+  // matches the orders/clients search elsewhere — fast enough for
+  // typeahead, slow enough to avoid one request per keystroke.
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
   const clientId = "";
 
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery<GalleryResponse>({
-    queryKey: ["gallery", page, kind, clientId, fromDate, toDate],
+    queryKey: ["gallery", page, kind, clientId, fromDate, toDate, search],
     queryFn: () => {
       const p = new URLSearchParams();
       p.set("page", String(page));
@@ -55,6 +67,7 @@ export default function GalleryClient() {
       if (clientId) p.set("clientId", clientId);
       if (fromDate) p.set("from", fromDate);
       if (toDate) p.set("to", toDate);
+      if (search) p.set("q", search);
       return api(`/api/gallery?${p.toString()}`);
     },
   });
@@ -67,6 +80,8 @@ export default function GalleryClient() {
     setKind("");
     setFromDate("");
     setToDate("");
+    setSearchInput("");
+    setSearch("");
     setPage(1);
   }
 
@@ -86,7 +101,7 @@ export default function GalleryClient() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
           Галерея
           <span className="lang-en text-muted-foreground font-normal text-base">
             {" "}· Gallery
@@ -101,8 +116,47 @@ export default function GalleryClient() {
       </div>
 
       {/* Filter bar */}
-      <div className="flex items-end gap-3 flex-wrap rounded-lg border border-border bg-card p-3">
-        <div className="flex flex-col gap-1">
+      <div className="space-y-2.5 sm:space-y-3 rounded-lg border border-border bg-card p-2.5 sm:p-3">
+        {/* Search row — order ID, name, phone, address all in one box.
+            On sm+ the photo count moves inline to the right of the input
+            to save vertical space; on phones it stays under the input. */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={t(
+                "Қидириш: буюртма №, исм, телефон…",
+                "Search: order #, name, phone…",
+              )}
+              className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded-md text-text-tertiary hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="hidden sm:block text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+            {!isLoading && (
+              <span>
+                <span className="font-mono font-semibold text-foreground">
+                  {total}
+                </span>{" "}
+                {t("фото", "photos")}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-end gap-2 sm:gap-3 flex-wrap">
+        <div className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-[140px]">
           <label className="text-[11px] font-mono uppercase tracking-wider text-text-tertiary">
             {t("Дан", "From")}
           </label>
@@ -110,10 +164,10 @@ export default function GalleryClient() {
             type="date"
             value={fromDate}
             onChange={(e) => onParamChange(setFromDate)(e.target.value)}
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-[140px]">
           <label className="text-[11px] font-mono uppercase tracking-wider text-text-tertiary">
             {t("Гача", "To")}
           </label>
@@ -121,10 +175,10 @@ export default function GalleryClient() {
             type="date"
             value={toDate}
             onChange={(e) => onParamChange(setToDate)(e.target.value)}
-            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           />
         </div>
-        <div className="flex flex-col gap-1 min-w-[180px]">
+        <div className="flex flex-col gap-1 w-full sm:w-auto sm:min-w-[180px]">
           <label className="text-[11px] font-mono uppercase tracking-wider text-text-tertiary">
             {t("Тури", "Kind")}
           </label>
@@ -133,6 +187,7 @@ export default function GalleryClient() {
             onChange={(e) =>
               onParamChange(setKind)(e.target.value as typeof kind)
             }
+            className="h-9"
           >
             <option value="">{t("Барчаси", "All")}</option>
             <option value="LOADED">{t("Юкланди", "Loaded")}</option>
@@ -147,7 +202,7 @@ export default function GalleryClient() {
         <Button variant="outline" size="sm" onClick={resetFilters}>
           {t("Тозалаш", "Reset")}
         </Button>
-        <div className="ml-auto text-xs text-muted-foreground">
+        <div className="ml-auto text-xs text-muted-foreground sm:hidden">
           {!isLoading && (
             <span>
               <span className="font-mono font-semibold text-foreground">
@@ -157,15 +212,18 @@ export default function GalleryClient() {
             </span>
           )}
         </div>
+        </div>
       </div>
 
       {/* Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
-          {Array.from({ length: 24 }).map((_, i) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-4">
+          {/* Eight skeletons: 4 rows × 2 cols on mobile, 2 rows × 4 cols
+              on desktop — enough to signal "loading" on either layout. */}
+          {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="rounded-lg border border-border bg-card overflow-hidden"
+              className="rounded-xl border border-border bg-card overflow-hidden"
             >
               <div className="aspect-[4/3] w-full bg-muted animate-pulse" />
               <div className="p-3 space-y-2">
@@ -176,14 +234,15 @@ export default function GalleryClient() {
           ))}
         </div>
       ) : photos.length === 0 ? (
-        <div className="rounded-lg border border-border bg-card p-12 text-center text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border p-8 sm:p-12 text-center text-muted-foreground">
+          <Camera className="h-8 w-8 mx-auto mb-3 opacity-50" />
           {t(
             "Ҳали фото йўқ · No delivery photos yet",
             "Ҳали фото йўқ · No delivery photos yet",
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-4">
           {photos.map((p, idx) => (
             <GalleryCard
               key={p.id}
@@ -196,8 +255,8 @@ export default function GalleryClient() {
 
       {/* Pagination */}
       {!isLoading && total > PAGE_SIZE && (
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground">
-          <div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground">
+          <div className="text-center sm:text-left">
             {t("Саҳифа", "Page")}{" "}
             <span className="font-mono font-semibold text-foreground">
               {page}
@@ -207,7 +266,7 @@ export default function GalleryClient() {
               {pageCount}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between sm:justify-end gap-2">
             <Button
               variant="outline"
               size="sm"

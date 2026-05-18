@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { ok } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { GalleryListSchema } from "@/lib/validation";
+import { phoneMatchForms } from "@/lib/phone";
+import { addressSearchForms } from "@/lib/regions";
 
 /**
  * GET /api/gallery
@@ -17,6 +19,29 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
   const sp = Object.fromEntries(req.nextUrl.searchParams);
   const params = GalleryListSchema.parse(sp);
 
+  // Free-text search across order number + client fields. Phone gets
+  // normalized to all digit-only forms via phoneMatchForms so the user
+  // can type "+998 90 111 22 33", "998901112233" or just the last 4
+  // digits and still hit the row.
+  const searchAnd: Record<string, unknown>[] = [];
+  if (params.q) {
+    const phoneForms = phoneMatchForms(params.q);
+    const addrForms = addressSearchForms(params.q);
+    const orFilters: Record<string, unknown>[] = [
+      { order: { orderNumber: { contains: params.q, mode: "insensitive" } } },
+      { order: { client: { name: { contains: params.q, mode: "insensitive" } } } },
+    ];
+    for (const a of addrForms) {
+      orFilters.push({
+        order: { client: { address: { contains: a, mode: "insensitive" } } },
+      });
+    }
+    for (const f of phoneForms) {
+      orFilters.push({ order: { client: { phone: { contains: f } } } });
+    }
+    searchAnd.push({ OR: orFilters });
+  }
+
   const where = {
     ...(params.kind ? { kind: params.kind } : {}),
     ...(params.clientId ? { order: { clientId: params.clientId } } : {}),
@@ -28,6 +53,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
           },
         }
       : {}),
+    ...(searchAnd.length ? { AND: searchAnd } : {}),
   };
 
   const [total, photos] = await prisma.$transaction([
@@ -43,7 +69,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
             id: true,
             orderNumber: true,
             status: true,
-            client: { select: { id: true, name: true } },
+            client: { select: { id: true, name: true, phone: true, address: true } },
           },
         },
         uploadedBy: { select: { id: true, name: true } },
@@ -58,6 +84,8 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       orderNumber: p.order.orderNumber,
       clientId: p.order.client.id,
       clientName: p.order.client.name,
+      clientPhone: p.order.client.phone,
+      clientAddress: p.order.client.address,
       kind: p.kind,
       url: p.url,
       uploadedAt: p.uploadedAt.toISOString(),

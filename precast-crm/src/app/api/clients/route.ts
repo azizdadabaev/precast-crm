@@ -7,6 +7,7 @@ import { ClientCreateSchema } from "@/lib/validation";
 import { ok, created, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
+import { addressSearchForms } from "@/lib/regions";
 
 /**
  * GET /api/clients
@@ -25,10 +26,13 @@ export const GET = withPermission("client.view", async (req: NextRequest) => {
 
   if (q) {
     const phoneForms = phoneMatchForms(q);
+    const addrForms = addressSearchForms(q);
     const orFilters: Prisma.ClientWhereInput[] = [
       { name: { contains: q, mode: "insensitive" } },
-      { address: { contains: q, mode: "insensitive" } },
     ];
+    for (const a of addrForms) {
+      orFilters.push({ address: { contains: a, mode: "insensitive" } });
+    }
     for (const f of phoneForms) {
       orFilters.push({ phone: { contains: f } });
     }

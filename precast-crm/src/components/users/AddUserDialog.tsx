@@ -164,8 +164,15 @@ export function AddUserDialog({
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tursunboy@precast.local"
                     required
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    {t(
+                      "Тўлиқ email: фойдаланувчи@precast.local",
+                      "Full email: username@precast.local",
+                    )}
+                  </p>
                 </div>
                 <div className="col-span-2 space-y-1">
                   <Label htmlFor="user-password">

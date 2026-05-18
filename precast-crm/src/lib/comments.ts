@@ -10,10 +10,16 @@ export async function extractMentions(body: string): Promise<string[]> {
   if (!body) return [];
 
   const tokens = new Set<string>();
-  const re = /@([\w.+-]+)/g;
+  // Two shapes supported:
+  //   @username       — local-part-only (matches name OR email local-part)
+  //   @user@host.tld  — full email (operators log in by email, so this
+  //                     is the natural way to mention someone exactly)
+  // We capture both shapes greedily — the email form is tried first so
+  // `@sales@precast.local` becomes ONE token, not two.
+  const re = /@([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})|@([\w.+-]+)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(body)) !== null) {
-    const tok = m[1].trim();
+    const tok = (m[1] ?? m[2] ?? "").trim();
     if (tok) tokens.add(tok.toLowerCase());
   }
   if (tokens.size === 0) return [];

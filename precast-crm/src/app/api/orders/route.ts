@@ -12,6 +12,7 @@ import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
+import { addressSearchForms } from "@/lib/regions";
 import { nextOrderNumber, orderNumberMonthPrefix } from "@/lib/order-number";
 
 /** GET /api/orders — order.view. Paginated. Search/status/day filters
@@ -54,11 +55,17 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
   }
   if (q) {
     const phoneForms = phoneMatchForms(q);
+    // Latin↔Cyrillic widening: if the operator typed a region name in
+    // one alphabet but the stored address is in the other, this folds
+    // the alternate alphabet into the OR set so the row still matches.
+    const addrForms = addressSearchForms(q);
     const filters: unknown[] = [
       { orderNumber: { contains: q, mode: "insensitive" } },
       { client: { name: { contains: q, mode: "insensitive" } } },
-      { client: { address: { contains: q, mode: "insensitive" } } },
     ];
+    for (const a of addrForms) {
+      filters.push({ client: { address: { contains: a, mode: "insensitive" } } });
+    }
     if (phoneForms.length) {
       for (const f of phoneForms) {
         filters.push({ client: { phone: { contains: f } } });

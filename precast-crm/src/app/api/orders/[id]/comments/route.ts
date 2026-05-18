@@ -6,6 +6,7 @@ import { ok, created, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { CommentCreateSchema } from "@/lib/validation";
 import { extractMentions } from "@/lib/comments";
+import { emitNotifications } from "@/lib/notifications";
 
 type Params = { id: string };
 
@@ -56,6 +57,26 @@ export const POST = withPermission<Params>(
       },
       include: { author: { select: authorSelect } },
     });
+
+    // Fire @mention notifications (excluding self-mentions). The order's
+    // orderNumber goes into the title so the recipient can locate the
+    // thread without opening the bell panel first.
+    const recipients = mentionedUserIds.filter((id) => id !== user.id);
+    if (recipients.length) {
+      const o = await prisma.order.findUnique({
+        where: { id: params.id },
+        select: { id: true, orderNumber: true },
+      });
+      void emitNotifications({
+        type: "COMMENT_MENTION",
+        userIds: recipients,
+        title: `${user.name} сизни буюртма #${o?.orderNumber ?? ""} да эслади · ${user.name} mentioned you on order #${o?.orderNumber ?? ""}`,
+        body: body.body.slice(0, 160),
+        orderId: params.id,
+        commentId: comment.id,
+      });
+    }
+
     return created(comment);
   },
 );

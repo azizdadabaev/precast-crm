@@ -191,6 +191,15 @@ export default function ProjectDetailPage() {
             </p>
           </div>
           <div className="flex gap-6 text-sm">
+            {/* Total slab weight — same 180 kg/m² factory rule used by
+                the calculator and order detail pages. */}
+            <div className="text-right">
+              <div className="text-muted-foreground uppercase text-[10px] font-bold">{t("Оғирлик", "Weight")}</div>
+              <div className="text-2xl font-black text-foreground font-mono">
+                {formatNumber(totals.monolithArea * 180, 0)}
+                <span className="text-xs font-normal text-muted-foreground ml-1">кг</span>
+              </div>
+            </div>
             <div className="text-right">
               <div className="text-muted-foreground uppercase text-[10px] font-bold">{t("Жами сумма", "Total Sum")}</div>
               <div className="text-2xl font-black text-success font-mono">{formatNumber(totals.sum, 0)}</div>
@@ -342,6 +351,10 @@ export default function ProjectDetailPage() {
       {/* Drawings — Blender-generated PDFs attached to this project */}
       {canUseBlender && <DrawingsSection projectId={project.id} />}
 
+      {/* Comments thread — human conversation goes first, reference
+          totals (Logistics Summary) below. */}
+      <CommentThread projectId={project.id} />
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
@@ -360,16 +373,17 @@ export default function ProjectDetailPage() {
                <span className="text-muted-foreground">{t("Плита майдони", "Slab Area (visual)")}</span>
                <span className="font-bold">{formatNumber(totals.monolithArea, 2)} m²</span>
              </div>
-             <div className="flex justify-between">
+             <div className="flex justify-between border-b pb-2">
                <span className="text-muted-foreground">{t("Бетон қатлами", "Concrete Topping")}</span>
                <span className="font-bold">{totals.concrete.toFixed(2)} m³</span>
+             </div>
+             <div className="flex justify-between">
+               <span className="text-muted-foreground">{t("Жами оғирлик", "Total Weight")}</span>
+               <span className="font-bold">{formatNumber(totals.monolithArea * 180, 0)} кг</span>
              </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* Comments thread */}
-      <CommentThread projectId={project.id} />
     </div>
   );
 }

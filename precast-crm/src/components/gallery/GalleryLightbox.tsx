@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { ChevronLeft, ChevronRight, X, ExternalLink } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, ExternalLink, Phone } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { formatPhone } from "@/lib/phone";
 
 interface GalleryPhoto {
   id: string;
   orderId: string;
   orderNumber: string;
   clientName: string;
+  clientPhone: string | null;
   kind: string;
   url: string;
   uploadedAt: string;
@@ -55,7 +57,17 @@ export function GalleryLightbox({
         <div className="flex items-center gap-3 min-w-0">
           <span className="font-mono font-bold text-sm">{photo.orderNumber}</span>
           <span className="text-sm truncate">{photo.clientName}</span>
-          <span className="text-xs font-mono text-white/60 hidden md:inline">
+          {photo.clientPhone && (
+            <a
+              href={`tel:+${photo.clientPhone}`}
+              title="Қўнғироқ қилиш · Call"
+              className="inline-flex items-center gap-1 text-xs font-mono text-white/80 hover:text-white border border-white/30 hover:border-white/60 rounded-md px-2 py-1 transition-colors"
+            >
+              <Phone className="h-3 w-3" />
+              {formatPhone(photo.clientPhone)}
+            </a>
+          )}
+          <span className="text-xs sm:text-sm font-mono text-white/60 hidden md:inline">
             {formatDate(photo.uploadedAt)}
           </span>
         </div>
@@ -71,7 +83,7 @@ export function GalleryLightbox({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="h-8 w-8 inline-flex items-center justify-center rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            className="h-10 w-10 sm:h-8 sm:w-8 inline-flex items-center justify-center rounded-md text-white/80 hover:text-white hover:bg-white/10 active:bg-white/20 transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -87,7 +99,7 @@ export function GalleryLightbox({
             onPrev();
           }}
           aria-label="Previous"
-          className="absolute left-4 h-12 w-12 inline-flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          className="absolute left-2 sm:left-4 h-12 w-12 sm:h-10 sm:w-10 inline-flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-white transition-colors"
         >
           <ChevronLeft className="h-7 w-7" />
         </button>
@@ -111,7 +123,7 @@ export function GalleryLightbox({
             onNext();
           }}
           aria-label="Next"
-          className="absolute right-4 h-12 w-12 inline-flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          className="absolute right-2 sm:right-4 h-12 w-12 sm:h-10 sm:w-10 inline-flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:bg-white/30 text-white transition-colors"
         >
           <ChevronRight className="h-7 w-7" />
         </button>
