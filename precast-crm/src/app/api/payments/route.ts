@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { PaymentRecordSchema } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 
 /**
  * GET /api/payments
@@ -152,6 +153,18 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
     });
     return p;
   });
+
+  void (async () => {
+    const userIds = await usersWithPermission("payment.confirm");
+    void emitNotifications({
+      type: "PAYMENT_RECORDED",
+      userIds,
+      title: `Тўлов ${Math.round(body.amount).toLocaleString("ru-RU")} UZS · буюртма #${order.orderNumber}`,
+      body: `${body.method} · ${body.source}`,
+      paymentId: payment.id,
+      orderId: order.id,
+    });
+  })();
 
   return created(payment);
 });

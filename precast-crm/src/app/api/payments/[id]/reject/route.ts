@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { PaymentRejectSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { emitNotifications } from "@/lib/notifications";
 
 /**
  * POST /api/payments/[id]/reject — payment.confirm
@@ -49,6 +50,15 @@ export const POST = withPermission<{ id: string }>(
         },
       });
       return p;
+    });
+
+    void emitNotifications({
+      type: "PAYMENT_REJECTED",
+      userIds: [payment.recordedById],
+      title: `Тўлов рад этилди · Payment rejected: ${Math.round(Number(payment.amount)).toLocaleString("ru-RU")} UZS`,
+      body: body.reason.trim(),
+      paymentId: payment.id,
+      orderId: payment.orderId,
     });
 
     return ok(updated);

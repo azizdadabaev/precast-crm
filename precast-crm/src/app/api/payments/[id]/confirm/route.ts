@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { PaymentConfirmSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { emitNotifications } from "@/lib/notifications";
 
 /**
  * POST /api/payments/[id]/confirm   (ADMIN | OWNER only)
@@ -191,6 +192,15 @@ export const POST = withPermission<{ id: string }>(
     });
 
     return p;
+  });
+
+  void emitNotifications({
+    type: "PAYMENT_CONFIRMED",
+    userIds: [payment.recordedById],
+    title: `Тўловингиз тасдиқланди · Payment confirmed: ${Math.round(finalAmount).toLocaleString("ru-RU")} UZS`,
+    body: `Буюртма #${payment.order.orderNumber}`,
+    paymentId: payment.id,
+    orderId: payment.orderId,
   });
 
   return ok(updated);

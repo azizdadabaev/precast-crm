@@ -31,6 +31,7 @@ import { useThemeStore } from "@/store/theme";
 import { addressToCyrillic } from "@/lib/regions";
 import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
 import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
+import { CommentThread } from "@/components/comments/CommentThread";
 import type { BeamGroup } from "@/lib/weight-distributor";
 
 const WEEKDAY_UZ = ["Якшанба", "Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба"];
@@ -1295,6 +1296,9 @@ export default function OrderDetailPage() {
           ))}
         </ul>
       </div>
+
+      {/* Comments thread */}
+      <CommentThread orderId={order.id} />
 
       {/* Delivery proof modal — gates the IN_PRODUCTION → DELIVERED step */}
       <DeliveryProofDialog

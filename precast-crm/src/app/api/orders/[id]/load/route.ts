@@ -66,6 +66,14 @@ export const POST = withPermission<{ id: string }>(
           payload: { from: "IN_PRODUCTION", to: "LOADED", photoUrl: uploadUrl },
         },
       });
+      await tx.galleryPhoto.create({
+        data: {
+          orderId: params.id,
+          kind: "LOADED",
+          url: uploadUrl,
+          uploadedById: user.id,
+        },
+      });
     });
 
     recordAudit({

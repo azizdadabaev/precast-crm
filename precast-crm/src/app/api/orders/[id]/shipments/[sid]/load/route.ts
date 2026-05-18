@@ -79,6 +79,15 @@ export const POST = withPermission<{ id: string; sid: string }>(
           payload: { shipmentId: params.sid, number: shipment.number, loadedBeams, loadedBlocks },
         },
       });
+      await tx.galleryPhoto.create({
+        data: {
+          orderId: params.id,
+          shipmentId: params.sid,
+          kind: "SHIPMENT_LOADED",
+          url: uploadUrl,
+          uploadedById: user.id,
+        },
+      });
       return s;
     });
 

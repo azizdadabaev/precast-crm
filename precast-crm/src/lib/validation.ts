@@ -444,3 +444,52 @@ export const InventoryAdjustmentSchema = z.object({
   delta: z.coerce.number().int().refine((n) => n !== 0, "delta cannot be zero"),
   note: z.string().min(3, "note is required").max(500),
 });
+
+// ── Comments ────────────────────────────────────────────────────
+// Threaded notes attached to orders or saved drafts. Body is plain
+// text; @mentions are resolved at write time on the server and stored
+// as a separate ID list for fast notification fan-out.
+export const CommentCreateSchema = z.object({
+  body: z
+    .string()
+    .min(1, "Comment cannot be empty")
+    .max(4000, "Comment is too long (max 4000 characters)")
+    .transform((s) => s.trim())
+    .refine((s) => s.length > 0, "Comment cannot be empty"),
+});
+
+export const CommentEditSchema = CommentCreateSchema;
+
+// Unified inbox query params. Cursor-based pagination over the
+// non-deleted comment stream, optionally filtered by entity type.
+export const CommentInboxSchema = z.object({
+  cursor: z.string().cuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  entityType: z.enum(["order", "project"]).optional(),
+});
+
+// ── Gallery ─────────────────────────────────────────────────────
+export const GalleryPhotoKindEnum = z.enum([
+  "LOADED",
+  "DELIVERY_PROOF",
+  "SHIPMENT_LOADED",
+]);
+
+export const GalleryListSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(48).default(24),
+  kind: GalleryPhotoKindEnum.optional(),
+  clientId: z.string().cuid().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+});
+
+// ── Notifications ───────────────────────────────────────────────
+// Query params for the GET /api/notifications feed.
+export const NotificationListSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  unreadOnly: z
+    .union([z.literal("true"), z.literal("false"), z.boolean()])
+    .optional()
+    .transform((v) => v === true || v === "true"),
+});

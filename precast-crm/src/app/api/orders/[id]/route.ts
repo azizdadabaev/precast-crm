@@ -6,6 +6,7 @@ import { OrderUpdateSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
+import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 import {
   calcSnapshotToInventoryLines,
   decrementForDelivery,
@@ -209,6 +210,26 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
         next: body.notes,
       },
     });
+  }
+
+  if (body.status && body.status !== existing.status) {
+    const statusText =
+      body.status === "IN_PRODUCTION"
+        ? "ишлаб чиқаришда · in production"
+        : body.status === "DISPATCHED"
+          ? "жўнатилди · dispatched"
+          : body.status === "DELIVERED"
+            ? "етказиб берилди · delivered"
+            : body.status.toLowerCase();
+    void (async () => {
+      const userIds = await usersWithPermission("payment.confirm");
+      void emitNotifications({
+        type: "ORDER_STATUS_CHANGED",
+        userIds,
+        title: `Буюртма #${existing.orderNumber} ${statusText}`,
+        orderId: existing.id,
+      });
+    })();
   }
 
   return ok(updated);

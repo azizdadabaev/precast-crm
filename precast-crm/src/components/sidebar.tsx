@@ -25,6 +25,8 @@ import {
   Coins,
   Settings2,
   Factory,
+  Images,
+  Activity as ActivityIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -73,10 +75,24 @@ export const NAV: NavItem[] = [
     permission: "order.view",
   },
   {
+    href: "/gallery",
+    label: "Галерея",
+    sub: "Gallery",
+    icon: Images,
+    permission: "order.view",
+  },
+  {
     href: "/projects",
     label: "Лойиҳалар",
     sub: "Projects",
     icon: FolderKanban,
+    permission: "order.view",
+  },
+  {
+    href: "/activity",
+    label: "Фаоллик",
+    sub: "Activity",
+    icon: ActivityIcon,
     permission: "order.view",
   },
   {

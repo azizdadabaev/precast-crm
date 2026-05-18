@@ -40,6 +40,8 @@ export const ROUTE_PERMISSIONS: Record<
   "/projects": "order.view",
   "/pipeline": "order.view",
   "/orders": "order.view",
+  "/gallery": "order.view",
+  "/activity": "order.view",
   "/payments": "payment.view",
   "/discrepancies": "discrepancy.view",
   "/clients": "client.view",

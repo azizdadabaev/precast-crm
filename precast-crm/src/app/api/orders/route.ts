@@ -7,6 +7,7 @@ import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
+import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
@@ -413,6 +414,17 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
       roomCount: body.rooms.length,
     },
   });
+
+  void (async () => {
+    const userIds = await usersWithPermission("payment.confirm");
+    void emitNotifications({
+      type: "ORDER_PLACED",
+      userIds,
+      title: `Янги буюртма №${order.orderNumber} · New order #${order.orderNumber}`,
+      body: order.client?.name ?? null,
+      orderId: order.id,
+    });
+  })();
 
   return created(order);
 });

@@ -31,6 +31,7 @@ export const ACTIONS = [
   "project.delete", // owner-only · bulk-delete draft projects
   "audit.view", // owner-only · view system-wide audit log
   "pricing.edit", // owner-only · edit m² + extra-beam tier prices
+  "comment.moderate", // ADMIN/OWNER · delete any user's comment on orders/drafts
 
   // Clients
   "client.view",
@@ -105,6 +106,7 @@ export const PERMISSION_GROUPS: Array<{
       "project.delete",
       "audit.view",
       "pricing.edit",
+      "comment.moderate",
     ],
   },
   {
@@ -176,6 +178,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "project.delete": "Сақланган лойиҳаларни ўчириш · Delete saved projects",
   "audit.view": "Журнал · View audit log",
   "pricing.edit": "Нархларни таҳрирлаш · Edit pricing tiers",
+  "comment.moderate": "Бошқалар изоҳини ўчириш · Moderate others' comments",
   "client.view": "Мижозларни кўриш · View clients",
   "client.viewAll": "Барча мижозларни кўриш · View all clients",
   "client.create": "Янги мижоз қўшиш · Add clients",
@@ -220,6 +223,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "project.delete",
     "audit.view",
     "pricing.edit",
+    "comment.moderate",
     "client.view",
     "client.viewAll",
     "client.create",
@@ -255,6 +259,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "order.create",
     "order.edit",
     "order.cancel",
+    "comment.moderate",
     "client.view",
     "client.viewAll",
     "client.create",

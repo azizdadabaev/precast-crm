@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { CalculationError } from "@/services/calculation-engine";
+import { UploadError } from "@/lib/uploads";
 
 export function ok<T>(data: T, init?: number) {
   return NextResponse.json({ ok: true, data }, { status: init ?? 200 });
@@ -26,6 +27,9 @@ export function handler<T extends unknown[]>(
     try {
       return await fn(...args);
     } catch (err) {
+      if (err instanceof UploadError) {
+        return fail(err.message, err.status);
+      }
       if (err instanceof ZodError) {
         return fail("Validation failed", 422, err.flatten());
       }

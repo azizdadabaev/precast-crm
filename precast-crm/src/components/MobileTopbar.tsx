@@ -9,6 +9,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { SidebarBody } from "@/components/sidebar";
+import { NotificationBell } from "@/components/NotificationBell";
 import type { AuthUser } from "@/lib/auth";
 import { useLanguageStore } from "@/store/language";
 import { useThemeStore } from "@/store/theme";
@@ -68,8 +69,9 @@ export function MobileTopbar({ user }: { user: AuthUser }) {
         <div className="font-semibold text-sm leading-tight">EtalonSlabs</div>
       </div>
 
-      {/* Right — theme + language toggles */}
+      {/* Right — theme + language toggles + notifications */}
       <div className="ml-auto flex items-center gap-1.5">
+        <NotificationBell />
         <button
           type="button"
           onClick={toggleTheme}

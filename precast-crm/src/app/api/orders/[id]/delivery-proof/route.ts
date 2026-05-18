@@ -10,6 +10,7 @@ import {
   decrementForDelivery,
   formatInventoryLabel,
 } from "@/lib/inventory";
+import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 
 /**
  * POST /api/orders/[id]/delivery-proof
@@ -118,6 +119,15 @@ export const POST = withPermission<{ id: string }>(
       },
     });
 
+    await tx.galleryPhoto.create({
+      data: {
+        orderId: order.id,
+        kind: "DELIVERY_PROOF",
+        url: saved.url,
+        uploadedById: user.id,
+      },
+    });
+
     // Cash recording: only when amount > 0. (noCashCollected → no row,
     // event-only audit; the spec wants the operator's note in the
     // OrderEvent payload.)
@@ -192,6 +202,16 @@ export const POST = withPermission<{ id: string }>(
 
     return u;
   });
+
+  void (async () => {
+    const userIds = await usersWithPermission("payment.confirm");
+    void emitNotifications({
+      type: "DELIVERY_PROOF_UPLOADED",
+      userIds,
+      title: `Буюртма #${order.orderNumber} - фото юкланди · Delivery photo uploaded`,
+      orderId: order.id,
+    });
+  })();
 
   return ok(updated);
 });

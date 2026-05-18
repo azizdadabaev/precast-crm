@@ -14,6 +14,7 @@ import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderBu
 import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { formatDraftNumber } from "@/lib/draft-number";
 import { useT } from "@/lib/i18n";
+import { CommentThread } from "@/components/comments/CommentThread";
 
 interface Project {
   id: string;
@@ -366,6 +367,9 @@ export default function ProjectDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Comments thread */}
+      <CommentThread projectId={project.id} />
     </div>
   );
 }

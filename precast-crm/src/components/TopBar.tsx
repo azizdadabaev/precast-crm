@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Search, Sun, Moon } from "lucide-react";
+import { Search, Sun, Moon } from "lucide-react";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLanguageStore } from "@/store/language";
@@ -33,7 +34,9 @@ const BREADCRUMB: Record<string, { uz: string; en: string }> = {
   dashboard: { uz: "Бошқарув", en: "Dashboard" },
   calculations: { uz: "Калькулятор", en: "Calculator" },
   orders: { uz: "Буюртмалар", en: "Orders" },
+  gallery: { uz: "Галерея", en: "Gallery" },
   projects: { uz: "Лойиҳалар", en: "Projects" },
+  activity: { uz: "Фаоллик", en: "Activity" },
   clients: { uz: "Мижозлар", en: "Clients" },
   payments: { uz: "Тўловлар", en: "Payments" },
   discrepancies: { uz: "Тафовутлар", en: "Discrepancies" },
@@ -138,14 +141,7 @@ export function TopBar() {
           {!uzOnly && <span className="text-text-tertiary normal-case font-medium">· EN</span>}
         </button>
 
-        <button
-          type="button"
-          aria-label={uzOnly ? "Хабарномалар" : "Notifications"}
-          title={uzOnly ? "Хабарномалар" : "Notifications"}
-          className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-border bg-background text-text-tertiary hover:text-foreground hover:bg-accent transition-colors"
-        >
-          <Bell className="h-3.5 w-3.5" />
-        </button>
+        <NotificationBell />
       </div>
     </header>
   );

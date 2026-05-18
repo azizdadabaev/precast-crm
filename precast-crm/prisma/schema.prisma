@@ -227,6 +227,16 @@ model User {
 
   shipmentsDispatched   Shipment[] @relation("ShipmentDispatcher")
 
+  // Comments authored / moderated by this user
+  authoredComments   Comment[] @relation("CommentAuthor")
+  deletedComments    Comment[] @relation("CommentDeleter")
+
+  // In-app notifications targeted at this user
+  notifications      Notification[]
+
+  // Gallery — photos this user uploaded
+  uploadedPhotos     GalleryPhoto[]
+
   @@map("users")
 }
 
@@ -367,6 +377,7 @@ model Project {
   calculations Calculation[]
   orders       Order[]
   drawingRequests DrawingRequest[]
+  comments     Comment[]
 
   @@index([status])
   @@index([dealId])
@@ -500,6 +511,8 @@ model Order {
   discrepancies Discrepancy[]
   drawingRequests DrawingRequest[]
   shipments     Shipment[]
+  comments      Comment[]
+  galleryPhotos GalleryPhoto[]
 
   @@index([status])
   @@index([paymentState])
@@ -882,4 +895,131 @@ model DrawingRequest {
   @@index([orderId])
   @@index([projectId])
   @@map("drawing_requests")
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Comments — freeform threaded notes attached to Orders OR Projects.
+//
+// Polymorphic: exactly one of orderId / projectId is non-null. The
+// API layer enforces mutual exclusivity (same pattern as
+// DrawingRequest). Soft-delete via deletedAt; rows are never hard
+// removed. Edits prepend the old body to editHistory for audit.
+// ──────────────────────────────────────────────────────────────────
+model Comment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Source: exactly one non-null.
+  orderId   String?
+  order     Order?   @relation(fields: [orderId],   references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  authorId  String
+  author    User     @relation("CommentAuthor", fields: [authorId], references: [id])
+
+  // Raw text; frontend resolves @mentions to links at display time.
+  body      String   @db.Text
+
+  // User IDs extracted from @mentions in body at write time. Used for
+  // notification fan-out without re-parsing the body on every read.
+  mentionedUserIds String[] @default([])
+
+  // Append-only edit history. Each element: { body: string, editedAt: ISO }
+  editHistory Json[] @default([])
+
+  // Soft delete. When set, the row is hidden from queries but kept
+  // for audit. Hard deletes are forbidden by convention.
+  deletedAt   DateTime?
+  deletedById String?
+  deletedBy   User?    @relation("CommentDeleter", fields: [deletedById], references: [id])
+
+  @@index([orderId,   createdAt])
+  @@index([projectId, createdAt])
+  @@index([authorId,  createdAt])
+  @@index([deletedAt, createdAt])
+  @@map("comments")
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Notifications — per-user in-app notification feed.
+//
+// One row per recipient. Pre-rendered bilingual title/body for fast
+// display. Polymorphic reference: at most one of orderId/paymentId
+// is set. No FK on those — notifications survive their target's
+// deletion so the audit trail is preserved.
+// ──────────────────────────────────────────────────────────────────
+enum NotificationType {
+  ORDER_PLACED
+  ORDER_STATUS_CHANGED
+  DELIVERY_PROOF_UPLOADED
+  PAYMENT_RECORDED
+  PAYMENT_CONFIRMED
+  PAYMENT_REJECTED
+  COMMENT_MENTION
+  NEW_COMMENT
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  createdAt DateTime         @default(now())
+
+  type      NotificationType
+
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Pre-rendered bilingual title (e.g. "Янги буюртма #2026-05-0042 · New order #2026-05-0042")
+  title     String
+  body      String?
+
+  // Polymorphic target — no FK constraints (intentional, see comment above)
+  orderId   String?
+  paymentId String?
+  projectId String?
+  commentId String?
+
+  // Unread state per-user.
+  readAt    DateTime?
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, createdAt])
+  @@index([orderId])
+  @@map("notifications")
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Gallery photos — append-only index of every photo uploaded to any
+// order. Mirrors the canonical fields on Order/Shipment so the
+// gallery feed is one indexed table scan instead of a UNION across
+// three columns.
+//
+// Populated by each upload route (delivery-proof, load, shipment
+// load) inside the same transaction that writes the URL to the
+// canonical field. The original String? fields on Order/Shipment
+// stay as the source of truth for the invoice + delivery flow.
+// ──────────────────────────────────────────────────────────────────
+enum GalleryPhotoKind {
+  LOADED          // Order.loadedPhotoUrl — single-truck loaded photo
+  DELIVERY_PROOF  // Order.deliveryProofUrl — proof of delivery
+  SHIPMENT_LOADED // Shipment.loadedPhotoUrl — split-shipment truck photo
+}
+
+model GalleryPhoto {
+  id           String           @id @default(cuid())
+  orderId      String
+  shipmentId   String?
+  kind         GalleryPhotoKind
+  url          String
+  uploadedAt   DateTime         @default(now())
+  uploadedById String?
+
+  order        Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  uploadedBy   User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([uploadedAt(sort: Desc)])
+  @@index([orderId])
+  @@index([kind])
+  @@map("gallery_photos")
 }
