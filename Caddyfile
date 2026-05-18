@@ -32,6 +32,16 @@
 		reverse_proxy ws-bridge:8765
 	}
 
+	# Uploaded photos (truck load photos, etc.) are written into the
+	# `uploads` Docker volume at /app/public/uploads inside the app
+	# container. The Next.js standalone server.js does not serve public/
+	# files at runtime, so Caddy serves this path directly from the
+	# shared volume (mounted read-only at /srv/uploads).
+	handle /uploads/* {
+		root * /srv
+		file_server
+	}
+
 	handle {
 		reverse_proxy app:3000 {
 			header_up Host {host}
