@@ -46,6 +46,7 @@ export default function GalleryClient() {
   // typeahead, slow enough to avoid one request per keystroke.
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [searchExpanded, setSearchExpanded] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => {
       setSearch(searchInput);
@@ -83,6 +84,7 @@ export default function GalleryClient() {
     setSearchInput("");
     setSearch("");
     setPage(1);
+    setSearchExpanded(false);
   }
 
   function onParamChange<T>(setter: (v: T) => void) {
@@ -117,33 +119,46 @@ export default function GalleryClient() {
 
       {/* Filter bar */}
       <div className="space-y-2.5 sm:space-y-3 rounded-lg border border-border bg-card p-2.5 sm:p-3">
-        {/* Search row — order ID, name, phone, address all in one box.
-            On sm+ the photo count moves inline to the right of the input
-            to save vertical space; on phones it stays under the input. */}
+        {/* Search row — collapses to icon+label by default, expands on click */}
         <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder={t(
-                "Қидириш: буюртма №, исм, телефон…",
-                "Search: order #, name, phone…",
+          {searchExpanded ? (
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
+              <input
+                type="text"
+                autoFocus
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onBlur={() => { if (!searchInput) setSearchExpanded(false); }}
+                onKeyDown={(e) => { if (e.key === "Escape") { setSearchInput(""); setSearchExpanded(false); } }}
+                placeholder={t(
+                  "Қидириш: буюртма №, исм, телефон…",
+                  "Search: order #, name, phone…",
+                )}
+                className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded-md text-text-tertiary hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               )}
-              className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                onClick={() => setSearchInput("")}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded-md text-text-tertiary hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSearchExpanded(true)}
+              aria-label={t("Қидиришни очиш", "Open search")}
+              className="h-10 inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-text-tertiary hover:text-foreground hover:border-ring transition-colors"
+            >
+              <Search className="h-4 w-4" />
+              <span className="text-xs">{t("Қидириш…", "Search…")}</span>
+            </button>
+          )}
           <div className="hidden sm:block text-xs text-muted-foreground shrink-0 whitespace-nowrap">
             {!isLoading && (
               <span>
