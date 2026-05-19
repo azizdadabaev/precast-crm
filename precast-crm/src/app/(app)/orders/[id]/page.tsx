@@ -747,70 +747,6 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* Financial recap — Weight / Total / Paid / Remaining */}
-          <div className="border-t border-border">
-            {/* Payment progress bar */}
-            {totalNum > 0 && (
-              <div className="h-1 bg-muted overflow-hidden">
-                <div
-                  className="h-full bg-success transition-all duration-500"
-                  style={{ width: `${Math.min(100, (paidNum / totalNum) * 100)}%` }}
-                />
-              </div>
-            )}
-            <div className="flex items-stretch justify-end">
-              {/* Weight — logistics stat */}
-              <div className="flex flex-col justify-center text-right px-6 py-4 bg-muted/20">
-                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
-                  Оғирлик<span className="lang-en"> · Weight</span>
-                </div>
-                <div className="text-lg font-black tabular-nums font-mono text-foreground leading-none">
-                  {formatNumber(Number(order.totalArea) * 180, 0)}
-                  <span className="text-xs font-normal text-muted-foreground ml-1">кг</span>
-                </div>
-              </div>
-
-              <div className="w-px bg-border my-3" />
-
-              {/* Total */}
-              <div className="flex flex-col justify-center text-right px-6 py-4">
-                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
-                  Жами<span className="lang-en"> · Total</span>
-                </div>
-                <div className="text-xl font-black tabular-nums font-mono text-foreground leading-none">
-                  {formatNumber(order.totalPrice, 0)}
-                  <span className="text-[10px] font-normal text-muted-foreground ml-1">UZS</span>
-                </div>
-              </div>
-
-              <div className="w-px bg-border my-3" />
-
-              {/* Paid */}
-              <div className="flex flex-col justify-center text-right px-6 py-4">
-                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
-                  Тўлов<span className="lang-en"> · Paid</span>
-                </div>
-                <div className={`text-xl font-black tabular-nums font-mono leading-none ${paidNum > 0 ? "text-success" : "text-muted-foreground"}`}>
-                  {formatNumber(paidNum, 0)}
-                </div>
-              </div>
-
-              <div className="w-px bg-border my-3" />
-
-              {/* Remaining */}
-              <div className={`flex flex-col justify-center text-right px-6 py-4 ${fullyPaid ? "bg-success/5" : remainingNum > 0 ? "bg-warning/5" : ""}`}>
-                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
-                  Қолди<span className="lang-en"> · Remaining</span>
-                </div>
-                <div className={`text-xl font-black tabular-nums font-mono leading-none ${
-                  fullyPaid ? "text-success" : remainingNum > 0 ? "text-warning" : "text-muted-foreground"
-                }`}>
-                  {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Mirror scrollbar — synced with the table above */}
           <div
             ref={mirrorScrollRef}
@@ -825,6 +761,99 @@ export default function OrderDetailPage() {
             <div ref={mirrorSpacerRef} className="h-[1px]" />
           </div>
           </div>{/* end detailed table wrapper */}
+
+          {/* Financial recap — always visible (outside mobileCalcOpen toggle) */}
+          <div className="border-t border-border">
+            {totalNum > 0 && (
+              <div className="h-1 bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-success transition-all duration-500"
+                  style={{ width: `${Math.min(100, (paidNum / totalNum) * 100)}%` }}
+                />
+              </div>
+            )}
+            {/* Mobile: 2×2 grid so all four stats fit without overflow */}
+            <div className="sm:hidden grid grid-cols-2 divide-border" style={{ borderTop: 0 }}>
+              <div className="flex flex-col text-right px-4 py-3 bg-muted/20 border-b border-r border-border">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-0.5">
+                  Оғирлик<span className="lang-en"> · Weight</span>
+                </div>
+                <div className="text-base font-black tabular-nums font-mono text-foreground leading-none">
+                  {formatNumber(Number(order.totalArea) * 180, 0)}
+                  <span className="text-[10px] font-normal text-muted-foreground ml-1">кг</span>
+                </div>
+              </div>
+              <div className="flex flex-col text-right px-4 py-3 border-b border-border">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-0.5">
+                  Жами<span className="lang-en"> · Total</span>
+                </div>
+                <div className="text-base font-black tabular-nums font-mono text-foreground leading-none">
+                  {formatNumber(order.totalPrice, 0)}
+                  <span className="text-[10px] font-normal text-muted-foreground ml-1">UZS</span>
+                </div>
+              </div>
+              <div className="flex flex-col text-right px-4 py-3 border-r border-border">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-0.5">
+                  Тўлов<span className="lang-en"> · Paid</span>
+                </div>
+                <div className={`text-base font-black tabular-nums font-mono leading-none ${paidNum > 0 ? "text-success" : "text-muted-foreground"}`}>
+                  {formatNumber(paidNum, 0)}
+                </div>
+              </div>
+              <div className={`flex flex-col text-right px-4 py-3 ${fullyPaid ? "bg-success/5" : remainingNum > 0 ? "bg-warning/5" : ""}`}>
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-0.5">
+                  Қолди<span className="lang-en"> · Remaining</span>
+                </div>
+                <div className={`text-base font-black tabular-nums font-mono leading-none ${
+                  fullyPaid ? "text-success" : remainingNum > 0 ? "text-warning" : "text-muted-foreground"
+                }`}>
+                  {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
+                </div>
+              </div>
+            </div>
+            {/* Desktop: original horizontal row */}
+            <div className="hidden sm:flex items-stretch justify-end">
+              <div className="flex flex-col justify-center text-right px-6 py-4 bg-muted/20">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
+                  Оғирлик<span className="lang-en"> · Weight</span>
+                </div>
+                <div className="text-lg font-black tabular-nums font-mono text-foreground leading-none">
+                  {formatNumber(Number(order.totalArea) * 180, 0)}
+                  <span className="text-xs font-normal text-muted-foreground ml-1">кг</span>
+                </div>
+              </div>
+              <div className="w-px bg-border my-3" />
+              <div className="flex flex-col justify-center text-right px-6 py-4">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
+                  Жами<span className="lang-en"> · Total</span>
+                </div>
+                <div className="text-xl font-black tabular-nums font-mono text-foreground leading-none">
+                  {formatNumber(order.totalPrice, 0)}
+                  <span className="text-[10px] font-normal text-muted-foreground ml-1">UZS</span>
+                </div>
+              </div>
+              <div className="w-px bg-border my-3" />
+              <div className="flex flex-col justify-center text-right px-6 py-4">
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
+                  Тўлов<span className="lang-en"> · Paid</span>
+                </div>
+                <div className={`text-xl font-black tabular-nums font-mono leading-none ${paidNum > 0 ? "text-success" : "text-muted-foreground"}`}>
+                  {formatNumber(paidNum, 0)}
+                </div>
+              </div>
+              <div className="w-px bg-border my-3" />
+              <div className={`flex flex-col justify-center text-right px-6 py-4 ${fullyPaid ? "bg-success/5" : remainingNum > 0 ? "bg-warning/5" : ""}`}>
+                <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
+                  Қолди<span className="lang-en"> · Remaining</span>
+                </div>
+                <div className={`text-xl font-black tabular-nums font-mono leading-none ${
+                  fullyPaid ? "text-success" : remainingNum > 0 ? "text-warning" : "text-muted-foreground"
+                }`}>
+                  {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
       </div>
