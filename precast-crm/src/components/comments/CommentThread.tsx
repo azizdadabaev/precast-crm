@@ -32,6 +32,13 @@ interface MeDTO {
   permissions: string[];
 }
 
+interface MentionUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 const EDIT_WINDOW_MS = 30 * 60_000;
 
 function relativeTime(iso: string, t: (uz: string, en: string) => string): string {
@@ -47,14 +54,8 @@ function relativeTime(iso: string, t: (uz: string, en: string) => string): strin
   return new Date(iso).toLocaleDateString();
 }
 
-// Highlight @tokens inline. Mentions are a UI affordance — server already
-// resolved them into mentionedUserIds at write time.
 function renderBody(body: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
-  // Match email-form first (greedy), then plain username — same ordering
-  // as the server-side extractMentions() in src/lib/comments.ts so the
-  // highlight covers the whole `@sales@precast.local` token, not just
-  // the local part.
   const re = /@([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})|@([\w.+-]+)/g;
   let last = 0;
   let m: RegExpExecArray | null;
@@ -71,6 +72,23 @@ function renderBody(body: string): React.ReactNode {
   }
   if (last < body.length) parts.push(<span key={key++}>{body.slice(last)}</span>);
   return parts.length ? parts : body;
+}
+
+/** Returns initials (up to 2 chars) from a display name. */
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+// Stable hue per user id so the avatar color is consistent across renders.
+function avatarHue(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffffff;
+  return h % 360;
 }
 
 export function CommentThread({ orderId, projectId }: CommentThreadProps) {
@@ -94,11 +112,13 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
     enabled: Boolean(orderId || projectId),
   });
 
-  // Per-user, per-thread draft autosave. Survives in-app navigation,
-  // refresh, accidental tab close. Scoped by userId so factory PCs
-  // shared between operators don't leak drafts across users.
-  // Scoped by (order|project)+id so opening a different thread shows
-  // its own draft, not the previous one.
+  // Mentionable users — lightweight list for the @picker
+  const { data: mentionUsers = [] } = useQuery<MentionUser[]>({
+    queryKey: ["users", "mentionable"],
+    queryFn: () => api<MentionUser[]>("/api/users/mentionable"),
+    staleTime: 5 * 60_000,
+  });
+
   const draftKey = me
     ? `comment-draft:${me.id}:${orderId ? `o:${orderId}` : `p:${projectId}`}`
     : null;
@@ -108,22 +128,107 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editDraft, setEditDraft] = React.useState("");
 
-  // Hydrate the draft from localStorage exactly once after we know
-  // the user. Without the `hydrated` guard, re-renders would
-  // overwrite an in-flight edit with the stored value.
+  // Mention picker state
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const mentionAtPos = React.useRef(-1);
+  const [mentionQuery, setMentionQuery] = React.useState<string | null>(null);
+  const [mentionIdx, setMentionIdx] = React.useState(0);
+
+  const mentionSuggestions = React.useMemo<MentionUser[]>(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return mentionUsers
+      .filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q),
+      )
+      .slice(0, 6);
+  }, [mentionQuery, mentionUsers]);
+
+  // Detect @query immediately before the cursor
+  function detectMention(value: string, cursor: number) {
+    const before = value.slice(0, cursor);
+    const m = /@([\w.]*)$/.exec(before);
+    if (m) {
+      mentionAtPos.current = m.index;
+      setMentionQuery(m[1]);
+      setMentionIdx(0);
+    } else {
+      mentionAtPos.current = -1;
+      setMentionQuery(null);
+    }
+  }
+
+  function insertMention(user: MentionUser) {
+    const token = `@${user.email}`;
+    const el = textareaRef.current;
+    const cursor = el?.selectionStart ?? draft.length;
+    const atPos = mentionAtPos.current;
+    if (atPos < 0) return;
+    const newValue = draft.slice(0, atPos) + token + " " + draft.slice(cursor);
+    setDraft(newValue);
+    setMentionQuery(null);
+    mentionAtPos.current = -1;
+    const newCursor = atPos + token.length + 1;
+    requestAnimationFrame(() => {
+      if (el) {
+        el.setSelectionRange(newCursor, newCursor);
+        el.focus();
+      }
+    });
+  }
+
+  function handleDraftChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const v = e.target.value;
+    setDraft(v);
+    detectMention(v, e.target.selectionStart ?? v.length);
+  }
+
+  function handleDraftKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (mentionSuggestions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIdx((i) => Math.min(i + 1, mentionSuggestions.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIdx((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(mentionSuggestions[mentionIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        setMentionQuery(null);
+        return;
+      }
+    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      submit();
+    }
+  }
+
+  function handleDraftBlur() {
+    // Short delay so onMouseDown on a suggestion fires before we close
+    setTimeout(() => setMentionQuery(null), 120);
+  }
+
   React.useEffect(() => {
     if (!draftKey || draftHydrated) return;
     try {
       const stored = localStorage.getItem(draftKey);
       if (stored) setDraft(stored);
     } catch {
-      /* localStorage blocked / quota — silently ignore */
+      /* localStorage blocked / quota */
     }
     setDraftHydrated(true);
   }, [draftKey, draftHydrated]);
 
-  // Persist on every change, but only after hydration so the initial
-  // empty-string state doesn't clobber a saved draft.
   React.useEffect(() => {
     if (!draftKey || !draftHydrated) return;
     try {
@@ -140,15 +245,8 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
     mutationFn: (body: string) => api(baseUrl, { method: "POST", json: { body } }),
     onSuccess: () => {
       setDraft("");
-      // setDraft + the persist effect will remove the entry, but
-      // we also clear it eagerly so a race in the effect can't
-      // re-save the empty string.
       if (draftKey) {
-        try {
-          localStorage.removeItem(draftKey);
-        } catch {
-          /* ignore */
-        }
+        try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
       }
       invalidate();
     },
@@ -302,13 +400,9 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
                           {t("Таҳрирлаш", "Edit")}
                         </Button>
                       )}
-                      {/* Author past 30 min — show greyed Edit hint */}
                       {!canEdit(c) && c.authorId === me?.id && (
                         <span className="text-[10px] text-muted-foreground italic px-2 py-1">
-                          {t(
-                            "30 дақ. таҳрир ойнаси тугаган",
-                            "edit window closed",
-                          )}
+                          {t("30 дақ. таҳрир ойнаси тугаган", "edit window closed")}
                         </span>
                       )}
                       {canDelete(c) && (
@@ -317,14 +411,7 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
                           variant="ghost"
                           className="h-7 px-2 text-xs text-destructive hover:text-destructive"
                           onClick={() => {
-                            if (
-                              confirm(
-                                t(
-                                  "Шарҳ ўчирилсинми?",
-                                  "Delete this comment?",
-                                ),
-                              )
-                            ) {
+                            if (confirm(t("Шарҳ ўчирилсинми?", "Delete this comment?"))) {
                               deleteMut.mutate(c.id);
                             }
                           }}
@@ -343,24 +430,64 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
         })}
       </div>
 
+      {/* Compose area */}
       <div className="space-y-2 pt-2 border-t border-border">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={3}
-          maxLength={4000}
-          placeholder={t(
-            "Шарҳ ёзинг… @ ёрдамида одам белгилаш",
-            "Write a comment… use @name to mention",
+        {/* Relative wrapper so the dropdown is anchored to this block */}
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={handleDraftChange}
+            onKeyDown={handleDraftKeyDown}
+            onBlur={handleDraftBlur}
+            rows={3}
+            maxLength={4000}
+            placeholder={t(
+              "Шарҳ ёзинг… @ билан одам белгилаш",
+              "Write a comment… type @ to mention someone",
+            )}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+
+          {/* @mention dropdown — floats above the textarea */}
+          {mentionSuggestions.length > 0 && (
+            <div className="absolute bottom-full mb-1 left-0 right-0 z-50 rounded-md border border-border bg-card shadow-lg overflow-hidden">
+              {mentionSuggestions.map((u, i) => {
+                const hue = avatarHue(u.id);
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors text-left ${
+                      i === mentionIdx ? "bg-accent" : "hover:bg-accent/60"
+                    }`}
+                    onMouseDown={(e) => {
+                      // Prevent textarea blur before the click registers
+                      e.preventDefault();
+                      insertMention(u);
+                    }}
+                  >
+                    {/* Avatar */}
+                    <span
+                      className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                      style={{ background: `hsl(${hue} 55% 50%)` }}
+                    >
+                      {initials(u.name)}
+                    </span>
+                    <span className="font-medium truncate">{u.name}</span>
+                    <span className="text-[10px] bg-muted rounded px-1.5 py-0.5 font-mono uppercase tracking-wide text-muted-foreground shrink-0">
+                      {u.role}
+                    </span>
+                    <span className="ml-auto text-xs text-muted-foreground font-mono truncate hidden sm:block">
+                      {u.email}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           )}
-          className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-        />
+        </div>
+
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">
             {t("Ctrl/⌘ + Enter — юбориш", "Ctrl/⌘ + Enter to submit")}

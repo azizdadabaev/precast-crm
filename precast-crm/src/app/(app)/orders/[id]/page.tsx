@@ -210,6 +210,7 @@ export default function OrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const isDark = useThemeStore((s) => s.theme) === "dark";
   const [mobileCalcOpen, setMobileCalcOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
   // In-page photo preview (loaded truck + delivery proof). Open with
   // the URL of the photo to show; null = closed.
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<{
@@ -1299,29 +1300,43 @@ export default function OrderDetailPage() {
           audit log below is reference material consulted less often. */}
       <CommentThread orderId={order.id} />
 
-      {/* Activity log */}
-      <div className="rounded-lg border bg-background">
-        <div className="px-4 py-3 border-b">
+      {/* Activity log — collapsed by default */}
+      <div className="rounded-lg border bg-background overflow-hidden">
+        <button
+          type="button"
+          className="w-full px-4 py-3 flex items-center justify-between gap-2 hover:bg-muted/40 transition-colors"
+          onClick={() => setActivityOpen((v) => !v)}
+        >
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            {t("Фаолият", "Activity")}
+            {t("Фаолият журнали", "Activity log")}
+            <span className="ml-2 font-normal tabular-nums">({order.events.length})</span>
           </div>
-        </div>
-        <ul className="divide-y">
-          {order.events.map((e) => (
-            <li key={e.id} className="px-4 py-2.5 text-sm flex items-baseline justify-between gap-4">
-              <div>
-                <span className="font-medium">{e.type.replace(/_/g, " ").toLowerCase()}</span>
-                {e.message && <span className="text-muted-foreground"> — {e.message}</span>}
-                {e.actor && (
-                  <span className="text-xs text-muted-foreground ml-2">{t("·", "by")} {e.actor.name}</span>
-                )}
-              </div>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {formatDate(e.createdAt)}
-              </span>
-            </li>
-          ))}
-        </ul>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${activityOpen ? "rotate-180" : ""}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {activityOpen && (
+          <ul className="divide-y border-t">
+            {order.events.map((e) => (
+              <li key={e.id} className="px-4 py-2.5 text-sm flex items-baseline justify-between gap-4">
+                <div>
+                  <span className="font-medium">{e.type.replace(/_/g, " ").toLowerCase()}</span>
+                  {e.message && <span className="text-muted-foreground"> — {e.message}</span>}
+                  {e.actor && (
+                    <span className="text-xs text-muted-foreground ml-2">{t("·", "by")} {e.actor.name}</span>
+                  )}
+                </div>
+                <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                  {formatDate(e.createdAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Delivery proof modal — gates the IN_PRODUCTION → DELIVERED step */}
