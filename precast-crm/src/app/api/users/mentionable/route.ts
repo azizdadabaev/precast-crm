@@ -8,14 +8,13 @@ import { withPermission } from "@/lib/api-auth";
  * GET /api/users/mentionable
  *
  * Returns the minimal user list needed for the @mention picker in
- * CommentThread. Gated on comment.create (any authenticated user who
- * can write comments) rather than user.view (admin-only) so all
- * operators see the full mention list.
+ * CommentThread. Gated on order.view — every role that can see orders
+ * (and therefore write comments) gets the full active-user list.
  *
  * Only active users are returned; omits sensitive fields like
  * permissions, passwordHash, and mustChangePassword.
  */
-export const GET = withPermission("comment.create", async () => {
+export const GET = withPermission("order.view", async () => {
   const users = await prisma.user.findMany({
     where: { isActive: true },
     orderBy: [{ role: "asc" }, { name: "asc" }],
