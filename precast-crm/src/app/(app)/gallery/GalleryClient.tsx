@@ -117,38 +117,11 @@ export default function GalleryClient() {
         </p>
       </div>
 
-      {/* Filter bar */}
-      <div className="space-y-2.5 sm:space-y-3 rounded-lg border border-border bg-card p-2.5 sm:p-3">
-        {/* Search row — collapses to icon+label by default, expands on click */}
-        <div className="flex items-center gap-3">
-          {searchExpanded ? (
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
-              <input
-                type="text"
-                autoFocus
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                onBlur={() => { if (!searchInput) setSearchExpanded(false); }}
-                onKeyDown={(e) => { if (e.key === "Escape") { setSearchInput(""); setSearchExpanded(false); } }}
-                placeholder={t(
-                  "Қидириш: буюртма №, исм, телефон…",
-                  "Search: order #, name, phone…",
-                )}
-                className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              {searchInput && (
-                <button
-                  type="button"
-                  onClick={() => setSearchInput("")}
-                  aria-label="Clear search"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded-md text-text-tertiary hover:text-foreground hover:bg-muted transition-colors"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          ) : (
+      {/* Filter bar — collapsed to a search pill by default */}
+      <div className="rounded-lg border border-border bg-card">
+        {!searchExpanded ? (
+          /* Collapsed: just the search pill + photo count */
+          <div className="flex items-center gap-3 p-2.5 sm:p-3">
             <button
               type="button"
               onClick={() => setSearchExpanded(true)}
@@ -158,18 +131,53 @@ export default function GalleryClient() {
               <Search className="h-4 w-4" />
               <span className="text-xs">{t("Қидириш…", "Search…")}</span>
             </button>
-          )}
-          <div className="hidden sm:block text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-            {!isLoading && (
-              <span>
-                <span className="font-mono font-semibold text-foreground">
-                  {total}
-                </span>{" "}
-                {t("фото", "photos")}
-              </span>
-            )}
+            <div className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+              {!isLoading && (
+                <span>
+                  <span className="font-mono font-semibold text-foreground">{total}</span>{" "}
+                  {t("фото", "photos")}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Expanded: full filter bar */
+          <div className="space-y-2.5 sm:space-y-3 p-2.5 sm:p-3">
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary pointer-events-none" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Escape") { setSearchInput(""); setSearchExpanded(false); } }}
+                  placeholder={t(
+                    "Қидириш: буюртма №, исм, телефон…",
+                    "Search: order #, name, phone…",
+                  )}
+                  className="h-10 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchInput("")}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded-md text-text-tertiary hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="hidden sm:block text-xs text-muted-foreground shrink-0 whitespace-nowrap">
+                {!isLoading && (
+                  <span>
+                    <span className="font-mono font-semibold text-foreground">{total}</span>{" "}
+                    {t("фото", "photos")}
+                  </span>
+                )}
+              </div>
+            </div>
         <div className="flex items-end gap-2 sm:gap-3 flex-wrap">
         <div className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-[140px]">
           <label className="text-[11px] font-mono uppercase tracking-wider text-text-tertiary">
@@ -228,6 +236,8 @@ export default function GalleryClient() {
           )}
         </div>
         </div>
+          </div>
+        )}
       </div>
 
       {/* Grid */}
