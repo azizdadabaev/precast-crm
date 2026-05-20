@@ -71,9 +71,9 @@ const PAYMENT_STATE: Record<
 };
 
 // Brand constants — TODO: move to AppConfig once an admin-config UI exists.
-const BRAND_NAME = "PRECAST CRM";
-const BRAND_TAGLINE = "Beam-and-block manufacturing";
-const BRAND_PHONE = "+998 XX XXX XX XX";
+const BRAND_NAME = "EtalonSlabs";
+const BRAND_TAGLINE = "Yig'ma monolit";
+const BRAND_PHONE = "+998 93 481 33 30";
 
 export default function OrderPrintPage() {
   const params = useParams<{ id: string }>();
