@@ -103,6 +103,23 @@ wss.on("connection", (ws, req) => {
         let pdfSizeBytes = 0;
         let storageKey   = null;
 
+        // Guard: only accept a result for the request we believe is in-flight.
+        // The addon sometimes reconnects mid-render and sends back the result
+        // after a new connection has already started. Without this guard,
+        // the duplicate result resets inFlight and causes the active request
+        // to be dispatched a second time, multiplying the problem.
+        // We still write the PDF if it arrives (idempotent) but we only
+        // advance the queue for the first delivery.
+        const isDuplicate = await pool.query(
+          `SELECT 1 FROM "drawing_requests" WHERE id = $1 AND status = 'PENDING'`,
+          [requestId],
+        ).then(r => r.rowCount === 0).catch(() => false);
+
+        if (isDuplicate) {
+          console.log(`[bridge] Ignoring duplicate DRAWING_RESULT for ${requestId} (already resolved)`);
+          return;
+        }
+
         try {
           await fs.promises.mkdir(DRAWINGS_DIR, { recursive: true });
           const buf    = Buffer.from(msg.pdfBase64 ?? "", "base64");
@@ -142,15 +159,19 @@ wss.on("connection", (ws, req) => {
 
       // ── ACK (legacy back-compat) ────────────────────────────────────────
       } else if (msg.type === "ACK" && msg.requestId) {
-        await pool.query(
+        const ack = await pool.query(
           `UPDATE "drawing_requests"
            SET status = 'DELIVERED', "deliveredAt" = NOW(), "updatedAt" = NOW()
            WHERE id = $1 AND status = 'PENDING'`,
           [msg.requestId],
         );
-        console.log(`[bridge] Request ${msg.requestId} delivered (ACK — no PDF)`);
-        inFlight = false;
-        flushPendingRequests().catch(console.error);
+        if (ack.rowCount === 0) {
+          console.log(`[bridge] Ignoring duplicate ACK for ${msg.requestId}`);
+        } else {
+          console.log(`[bridge] Request ${msg.requestId} delivered (ACK — no PDF)`);
+          inFlight = false;
+          flushPendingRequests().catch(console.error);
+        }
 
       // ── ERROR ──────────────────────────────────────────────────────────
       } else if (msg.type === "ERROR" && msg.requestId) {
