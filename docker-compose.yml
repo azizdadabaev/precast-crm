@@ -45,7 +45,7 @@ services:
       TZ: ${TZ:-Asia/Tashkent}
     volumes:
       - uploads:/app/public/uploads
-      - drawings_data:/data:ro
+      - drawings_data:/data
     expose:
       - "3000"
     healthcheck:

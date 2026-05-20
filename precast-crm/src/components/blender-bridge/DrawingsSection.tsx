@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Download, Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, Loader2, CheckCircle2, XCircle, Clock, Trash2 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
@@ -33,8 +33,22 @@ function formatBytes(bytes: number): string {
 
 export function DrawingsSection({ orderId, projectId }: Props) {
   const t = useT();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const queryParam = orderId ? `orderId=${orderId}` : `projectId=${projectId}`;
+
+  async function handleDelete(id: string) {
+    setDeleting(id);
+    try {
+      await fetch(`/api/drawings/request/${id}/delete`, { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["drawings", queryParam] });
+    } finally {
+      setDeleting(null);
+      setConfirmDelete(null);
+    }
+  }
 
   const { data: drawings = [], isLoading } = useQuery<DrawingRow[]>({
     queryKey: ["drawings", queryParam],
@@ -140,17 +154,51 @@ export function DrawingsSection({ orderId, projectId }: Props) {
                 </div>
               </div>
 
-              {d.status === "DELIVERED" && d.pdfStorageKey && (
-                <Button variant="outline" size="sm" asChild className="gap-1.5 shrink-0">
-                  <a
-                    href={`/api/drawings/request/${d.id}/pdf`}
-                    download
+              <div className="flex items-center gap-1.5 shrink-0">
+                {confirmDelete === d.id ? (
+                  <>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={deleting === d.id}
+                      onClick={() => handleDelete(d.id)}
+                      className="gap-1.5"
+                    >
+                      {deleting === d.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5" />}
+                      {t("Ўчириш", "Delete")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={deleting === d.id}
+                      onClick={() => setConfirmDelete(null)}
+                    >
+                      {t("Бекор", "Cancel")}
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmDelete(d.id)}
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                    title={t("Ўчириш", "Delete")}
                   >
-                    <Download className="h-3.5 w-3.5" />
-                    PDF
-                  </a>
-                </Button>
-              )}
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+
+                {d.status === "DELIVERED" && d.pdfStorageKey && (
+                  <Button variant="outline" size="sm" asChild className="gap-1.5">
+                    <a href={`/api/drawings/request/${d.id}/pdf`} download>
+                      <Download className="h-3.5 w-3.5" />
+                      PDF
+                    </a>
+                  </Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
