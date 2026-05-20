@@ -610,6 +610,9 @@ export default function OrderDetailPage() {
                     Балка<span className="lang-en font-normal"> · Beams</span>
                   </th>
                   <th className="text-right px-3 py-2.5 font-semibold">
+                    Монолит Б<span className="lang-en font-normal"> · Slab L</span>
+                  </th>
+                  <th className="text-right px-3 py-2.5 font-semibold">
                     Майдон<span className="lang-en font-normal"> · Area</span>
                   </th>
                   <th className="text-right px-3 py-2.5 font-semibold">
@@ -671,6 +674,10 @@ export default function OrderDetailPage() {
                       {c.beamCount}
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
+                      {formatNumber(c.monolithLength, 2)}
+                      <span className="text-xs ml-0.5">m</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
                       {formatNumber(c.monolithArea, 2)}
                       <span className="text-xs ml-0.5">m²</span>
                     </td>
@@ -708,6 +715,10 @@ export default function OrderDetailPage() {
                   <td className="px-3 py-3 text-right font-mono font-bold text-sm">
                     {calcTotals.beams}
                     <span className="text-[10px] text-muted-foreground font-normal ml-0.5">Б</span>
+                  </td>
+                  <td className="px-3 py-3 text-right font-mono font-bold text-sm">
+                    {formatNumber(calcTotals.monolithLength, 2)}
+                    <span className="text-[10px] text-muted-foreground font-normal ml-0.5">m</span>
                   </td>
                   <td className="px-3 py-3 text-right font-mono font-bold text-sm">
                     {formatNumber(calcTotals.monolithArea, 2)}

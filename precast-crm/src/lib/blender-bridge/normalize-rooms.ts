@@ -62,6 +62,9 @@ export type BlenderRoom = {
   /** Resolved pitch count, post-bump. Trust this verbatim; do NOT
    *  re-derive from effective_length. */
   pitches: number;
+  /** CRM-computed monolith length (Slab L) in metres. Informational —
+   *  the addon should render this verbatim rather than re-derive. */
+  slab_length: number;
 };
 
 /** Maximum rooms accepted in one DrawingRequest. Generous for a real
@@ -133,6 +136,7 @@ export function normalizeRoomForBlender(raw: Record<string, unknown>): BlenderRo
       raw.forceStartBeam ?? raw.force_start_beam ?? false,
     ),
     pitches: Number.isFinite(pitches) ? Math.trunc(pitches) : NaN,
+    slab_length: toNumber(get("monolithLength", "slab_length")),
   };
 }
 
