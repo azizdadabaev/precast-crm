@@ -4,6 +4,7 @@ import { TopBar } from "@/components/TopBar";
 import { MobileTopbar } from "@/components/MobileTopbar";
 import { UnauthorizedBanner } from "@/components/UnauthorizedBanner";
 import { AudioUnlocker } from "@/components/AudioUnlocker";
+import { NotificationListener } from "@/components/notifications/NotificationListener";
 import { requirePermissionForPath } from "@/lib/page-auth";
 
 /**
@@ -41,6 +42,7 @@ export default async function AppShellLayout({
   return (
     <div className="flex min-h-screen bg-background">
       <AudioUnlocker />
+      <NotificationListener />
       <Sidebar user={user} />
       <div className="flex-1 min-w-0 flex flex-col">
         <TopBar />

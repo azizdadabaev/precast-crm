@@ -2,55 +2,20 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import {
-  Bell,
-  ShoppingCart,
-  RefreshCw,
-  Camera,
-  Banknote,
-  CheckCircle,
-  XCircle,
-  AtSign,
-  MessageSquare,
-  type LucideIcon,
-} from "lucide-react";
+import { Bell, BellRing } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLang } from "@/lib/i18n";
 import { useNotifications, type NotificationItem } from "@/hooks/useNotifications";
-
-const TYPE_META: Record<
-  string,
-  { icon: LucideIcon; color: string; bg: string }
-> = {
-  ORDER_PLACED:           { icon: ShoppingCart,   color: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-950/40" },
-  ORDER_STATUS_CHANGED:   { icon: RefreshCw,      color: "text-indigo-600",  bg: "bg-indigo-50 dark:bg-indigo-950/40" },
-  DELIVERY_PROOF_UPLOADED:{ icon: Camera,         color: "text-teal-600",    bg: "bg-teal-50 dark:bg-teal-950/40" },
-  PAYMENT_RECORDED:       { icon: Banknote,       color: "text-amber-600",   bg: "bg-amber-50 dark:bg-amber-950/40" },
-  PAYMENT_CONFIRMED:      { icon: CheckCircle,    color: "text-green-600",   bg: "bg-green-50 dark:bg-green-950/40" },
-  PAYMENT_REJECTED:       { icon: XCircle,        color: "text-red-600",     bg: "bg-red-50 dark:bg-red-950/40" },
-  COMMENT_MENTION:        { icon: AtSign,         color: "text-purple-600",  bg: "bg-purple-50 dark:bg-purple-950/40" },
-  NEW_COMMENT:            { icon: MessageSquare,  color: "text-gray-600",    bg: "bg-gray-50 dark:bg-gray-900/40" },
-};
-
-function relativeTime(iso: string, uzOnly: boolean): string {
-  const then = new Date(iso).getTime();
-  const diff = Math.max(0, Date.now() - then);
-  const sec = Math.floor(diff / 1000);
-  if (sec < 60) return uzOnly ? "ҳозир" : "now";
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} ${uzOnly ? "дақ" : "min"}`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} ${uzOnly ? "соат" : "h"}`;
-  const d = Math.floor(hr / 24);
-  return `${d} ${uzOnly ? "кун" : "d"}`;
-}
-
-function targetUrl(n: NotificationItem): string | null {
-  if (n.orderId) return `/orders/${n.orderId}`;
-  if (n.paymentId) return `/payments`;
-  if (n.projectId) return `/projects/${n.projectId}`;
-  return null;
-}
+import {
+  TYPE_META,
+  targetUrl,
+  relativeTime,
+} from "@/components/notifications/notification-meta";
+import {
+  getNotificationPermission,
+  requestNotificationPermission,
+  type NotificationPermission,
+} from "@/lib/web-notifications";
 
 export function NotificationBell() {
   const { notifications, unreadCount, connected, markAllRead, markRead } =
@@ -59,6 +24,16 @@ export function NotificationBell() {
   const rootRef = useRef<HTMLDivElement>(null);
   const lang = useLang();
   const uzOnly = lang === "uz";
+
+  // Track Web Notifications permission so we can offer the CTA only
+  // while the user hasn't decided yet ("default"). Granted/denied both
+  // hide the row — no nagging, no re-prompt loops.
+  const [permission, setPermission] =
+    useState<NotificationPermission>("unsupported");
+
+  useEffect(() => {
+    setPermission(getNotificationPermission());
+  }, []);
 
   // Click-outside closes the panel.
   useEffect(() => {
@@ -69,6 +44,11 @@ export function NotificationBell() {
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
+
+  async function handleEnableNotifications() {
+    const result = await requestNotificationPermission();
+    setPermission(result);
+  }
 
   return (
     <div className="relative" ref={rootRef}>
@@ -103,6 +83,24 @@ export function NotificationBell() {
               {uzOnly ? "Барчасини ўқидим" : "Барчасини ўқидим · Mark all read"}
             </button>
           </div>
+
+          {/* Optional CTA: ask for OS-level notification permission. Only
+              shows while the choice is still "default" — once granted or
+              denied we hide the row to avoid being annoying. */}
+          {permission === "default" && (
+            <button
+              type="button"
+              onClick={handleEnableNotifications}
+              className="w-full flex items-center gap-2 px-3 py-2 border-b border-border bg-primary/5 hover:bg-primary/10 transition-colors text-left"
+            >
+              <BellRing className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span className="text-[11px] text-primary">
+                {uzOnly
+                  ? "Браузер хабарномаларини ёқиш"
+                  : "Браузер хабарномаларини ёқиш · Enable browser notifications"}
+              </span>
+            </button>
+          )}
 
           {/* List */}
           <div className="max-h-96 overflow-y-auto">
