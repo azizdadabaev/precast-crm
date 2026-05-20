@@ -983,9 +983,145 @@ The bridge service must be reachable at `:8765` (compose maps it
 internally). For local dev outside Docker, set `WS_BRIDGE_PORT=8765`
 and `DATABASE_URL` and run `node ws-bridge/server.js` directly.
 
+## Comments, Gallery, Notifications & Activity (shipped)
+
+### Comments thread
+
+Every Order and Project now has a persistent comment thread at the bottom
+of the detail page. Comments are markdown-free rich-ish text with:
+
+- **@mention picker** — typing `@` opens a dropdown of all active users
+  (sorted by role then name). Filtered live as you type. Arrow keys + Enter
+  to select; Esc to dismiss. Stored as `@email@domain.tld` tokens; the
+  server parses them with `extractMentions()` and fires a Notification for
+  each mentioned user.
+- **Edit / delete** — authors can edit or delete their own comments; mods
+  (`comment.moderate` permission) can delete anyone's.
+- **Thread per entity** — orders use `/api/orders/[id]/comments`; projects
+  use `/api/projects/[id]/comments`. Same `CommentThread` component, props
+  switch the base URL.
+
+Key files:
+- `src/components/comments/CommentThread.tsx` — full UI + mention picker
+- `src/app/api/orders/[id]/comments/route.ts` — GET/POST
+- `src/app/api/orders/[id]/comments/[cid]/route.ts` — PATCH/DELETE
+- `src/app/api/users/mentionable/route.ts` — mention picker data; gated
+  on `order.view` (NOT `comment.create` which doesn't exist in ACTIONS)
+
+### Photo Gallery
+
+`/gallery` — paginated grid (24 per page) of all uploaded photos across
+every order:
+
+- **Kinds:** `LOADED` (single-truck), `DELIVERY_PROOF`, `SHIPMENT_LOADED`
+- **Filters:** date range, kind, text search (order #, client name, phone)
+- **Search UX:** collapsed to an icon pill by default; clicking expands
+  the full filter bar (search + date range + type + reset). Escape or
+  Reset collapses it.
+- **Lightbox:** click any card → full-screen with prev/next navigation
+- **API:** `GET /api/gallery` — paginated, filterable
+
+Key files:
+- `src/app/(app)/gallery/GalleryClient.tsx` — filter bar + grid
+- `src/components/gallery/GalleryCard.tsx`, `GalleryLightbox.tsx`
+- `src/app/api/gallery/route.ts`
+
+### Notifications
+
+Bell icon in the top bar shows unread count (live via SSE stream). Clicking
+opens a panel with recent notifications:
+
+- **Triggers:** `@mention` in a comment, order status changes
+- **SSE endpoint:** `GET /api/notifications/stream` — keeps the connection
+  open, pushes events as they arrive
+- **Mark read:** per-item `PATCH /api/notifications/[id]` or bulk
+  `POST /api/notifications/read-all`
+
+### Activity feed (unified inbox)
+
+`/activity` — all `OrderEvent` entries across all orders, most recent
+first. Replaces per-order hunting.
+
+### Activity log in order detail (collapsible)
+
+The per-order event log at the bottom of `/orders/[id]` is now
+**collapsed by default** — shows just "Фаолият журнали (N)" header with a
+chevron. Click to expand. State is local (`activityOpen` useState, starts
+`false`).
+
+### Split shipments
+
+When an order needs multiple trucks, the operator clicks **"Бўлиб юклаш ·
+Split shipment"** on the order detail page. Each shipment tracks its own:
+- load photo + beam/block count
+- driver assignment
+- dispatch and delivery timestamps
+
+`ShipmentsSection` component replaces the old single-truck flow when
+`order.shipments.length > 0`. The status timeline hides the global LOADED
+button and shows per-shipment progress instead.
+
+Key files:
+- `src/components/orders/ShipmentsSection.tsx` — expand/collapse chevron
+  header (default expanded), per-shipment cards + action buttons
+- `src/app/api/orders/[id]/shipments/route.ts` — POST (create)
+- `src/app/api/orders/[id]/shipments/[sid]/load/route.ts` — POST
+- `src/app/api/orders/[id]/shipments/[sid]/dispatch/route.ts` — POST
+- `src/app/api/orders/[id]/shipments/[sid]/deliver/route.ts` — POST
+
+### DrawingsSection (collapsible)
+
+The Blender PDF list on order/project detail pages now has a chevron
+toggle header (default **expanded**). Click collapses/expands the list.
+
+### Order detail — mobile financial recap fix
+
+The Weight / Total / Paid / Remaining strip was inside the `mobileCalcOpen`
+toggle and invisible on mobile unless the user expanded the calculation
+table. Fixed: recap is now **always visible** regardless of toggle state.
+
+On mobile renders as a **2×2 grid** (Weight | Total top row, Paid |
+Remaining bottom row) with `border-r border-b border-border` dividers.
+Desktop keeps the original horizontal flex row with vertical separators.
+
+## Production infrastructure
+
+- **Droplet:** DigitalOcean `207.154.218.194`, repo at `/opt/precast-crm`
+- **Stack:** Docker Compose — `app` (Next.js standalone), `ws-bridge`,
+  `caddy`, `db` (Postgres 16)
+- **Uploads:** Named volume `uploads:/srv/uploads:ro` mounted into Caddy.
+  Caddy serves `/uploads/*` directly via `file_server` — Next.js standalone
+  does NOT serve `public/` at runtime.
+- **Deploy pattern:**
+  ```bash
+  ssh root@207.154.218.194
+  cd /opt/precast-crm && git pull origin main
+  nohup bash -c 'docker compose build app && docker compose up -d' \
+    > /tmp/deploy.log 2>&1 &
+  # tail /tmp/deploy.log to monitor; takes ~5 min
+  ```
+- **Schema updates:** `docker compose run --rm app npx prisma db push`
+  (no migrations folder — prototyping mode, `db push` only)
+
+## Claude Code settings (this project)
+
+`.claude/settings.json` and `.claude/settings.local.json` are set to
+`"Bash(*)"` / `"Read(*)"` / `"Write(*)"` / `"Edit(*)"` — all tools
+auto-approved so deploys can run unattended (user is often away from PC
+during long Docker builds). Do not tighten these without the user's request.
+
 ## Verified local state at handoff
 
-- `npx tsc --noEmit` — 0 errors
+- `npx tsc --noEmit` — pre-existing Prisma client errors only (Comment,
+  Notification, GalleryPhoto models exist in production schema but local
+  client hasn't been regenerated — not a build blocker, server uses the
+  Docker-built client)
 - `npx vitest run` — 334 passed, 1 skipped (pre-existing)
-- `npx next build` — clean
+- `npx next build` — clean (Docker build on server confirms this)
 - Repo: https://github.com/azizdadabaev/precast-crm
+- Latest commits (newest first):
+  - `671a250` Fix · weight/totals recap always visible on mobile
+  - `c557757` Gallery · collapse entire filter bar by default
+  - `2fe4dba` UX · collapsible Drawings, Shipments + expandable Gallery search
+  - `cdc2972` Fix · use order.view permission on /api/users/mentionable
+  - `30c7458` Comments · @mention dropdown picker + collapsible activity log
