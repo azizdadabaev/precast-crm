@@ -27,6 +27,7 @@ import { formatNumber, roundDownToGrid, roundUpToGrid } from "@/lib/utils";
 import { useCalculatorStore } from "@/store/calculator";
 import { RateOverrideDialog } from "@/components/calculation/RateOverrideDialog";
 import { NumberInput } from "@/components/calculation/NumberInput";
+import { handleCellNavKeyDown } from "@/lib/cell-nav";
 import { Bi, useT } from "@/lib/i18n";
 import { useLivePricing } from "@/hooks/useLivePricing";
 
@@ -615,7 +616,12 @@ export function MultiRoomCalculator({
           on desktop (overflow-x-auto already existed). */}
       <div className="relative">
       <div className="rounded-lg border border-border overflow-x-auto bg-background shadow-sm">
-        <table className="calc-grid">
+        <table
+          className="calc-grid"
+          onKeyDown={(e) => {
+            handleCellNavKeyDown(e.nativeEvent, e.currentTarget);
+          }}
+        >
           {/* Colgroup — order is fixed (DEFAULT_COLUMN_ORDER), widths
               come from `columnWidths` in the store with sensible
               defaults. Width and Length keep their `w-11` mobile
@@ -679,7 +685,7 @@ export function MultiRoomCalculator({
           </thead>
 
           <tbody>
-            {rows.map((row) => {
+            {rows.map((row, rowIdx) => {
               const r = row.result;
               const fmt = (v: number, d = 2) => formatNumber(v, d);
               return (
@@ -700,6 +706,8 @@ export function MultiRoomCalculator({
                         value={row.name}
                         onChange={(e) => updateRow(row.id, { name: e.target.value })}
                         placeholder="Хона номи"
+                        data-cell-row={rowIdx}
+                        data-cell-col={0}
                       />
                       <div className="lg:hidden flex-shrink-0">
                         <RowRoundArrows
@@ -718,6 +726,7 @@ export function MultiRoomCalculator({
                   <td className="grid-cell sticky lg:static left-0 z-10 bg-card">
                     <WidthCell
                       row={row}
+                      rowIdx={rowIdx}
                       onWidthChange={(w) => updateRow(row.id, { innerWidth: w })}
                       onRoundUp={() => onRoundUp(row.id)}
                       onRoundDown={() => onRoundDown(row.id)}
@@ -736,6 +745,8 @@ export function MultiRoomCalculator({
                       onChange={(n) => updateRow(row.id, { innerLength: n })}
                       placeholder="0.00"
                       showZeroAsEmpty
+                      data-cell-row={rowIdx}
+                      data-cell-col={2}
                     />
                   </td>
                   <td className="grid-cell grid-tint-input">
@@ -744,6 +755,8 @@ export function MultiRoomCalculator({
                       className="grid-input is-numeric"
                       value={row.bearing}
                       onChange={(n) => updateRow(row.id, { bearing: n })}
+                      data-cell-row={rowIdx}
+                      data-cell-col={3}
                     />
                   </td>
                   <td className="grid-cell grid-tint-input grid-group-divider">
@@ -752,6 +765,8 @@ export function MultiRoomCalculator({
                       className="grid-input is-numeric"
                       value={row.correction}
                       onChange={(n) => updateRow(row.id, { correction: n })}
+                      data-cell-row={rowIdx}
+                      data-cell-col={4}
                     />
                   </td>
 
@@ -771,6 +786,8 @@ export function MultiRoomCalculator({
                       onChange={(e) =>
                         updateRow(row.id, { patternOverride: e.target.value as Pattern | "AUTO" })
                       }
+                      data-cell-row={rowIdx}
+                      data-cell-col={5}
                     >
                       <option value="AUTO">
                         {r ? `${PATTERN_LABEL[r.pattern]} · auto` : "Auto"}
@@ -796,6 +813,8 @@ export function MultiRoomCalculator({
                       value={row.extraBeams}
                       onChange={(n) => updateRow(row.id, { extraBeams: n })}
                       integer
+                      data-cell-row={rowIdx}
+                      data-cell-col={6}
                     />
                   </td>
                   <td className="grid-cell grid-tint-pattern grid-group-divider text-center">
@@ -805,6 +824,8 @@ export function MultiRoomCalculator({
                         className="h-4 w-4 accent-primary cursor-pointer"
                         checked={row.forceStartBeam}
                         onChange={(e) => updateRow(row.id, { forceStartBeam: e.target.checked })}
+                        data-cell-row={rowIdx}
+                        data-cell-col={7}
                       />
                     </label>
                   </td>
@@ -856,6 +877,7 @@ export function MultiRoomCalculator({
                     {r && !r.is_extras_only ? (
                       <RateCell
                         row={row}
+                        rowIdx={rowIdx}
                         onPick={(picked) => handleRatePick(row.id, picked)}
                       />
                     ) : (
@@ -869,6 +891,8 @@ export function MultiRoomCalculator({
                     <button
                       type="button"
                       className="h-7 w-7 inline-flex items-center justify-center rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      data-cell-row={rowIdx}
+                      data-cell-col={9}
                       onClick={() => removeRow(row.id)}
                       aria-label="Remove room"
                     >
@@ -1248,9 +1272,11 @@ export function MultiRoomCalculator({
 // no subtitle, no extra rows.
 function RateCell({
   row,
+  rowIdx,
   onPick,
 }: {
   row: SlabRow;
+  rowIdx: number;
   onPick: (picked: "auto" | number) => void;
 }) {
   const r = row.result;
@@ -1280,6 +1306,8 @@ function RateCell({
           const v = e.target.value;
           onPick(v === "auto" ? "auto" : Number(v));
         }}
+        data-cell-row={rowIdx}
+        data-cell-col={8}
       >
         <option value="auto">{formatNumber(auto, 0)}</option>
         {M2_PRICE_TIERS.map((t) => (
@@ -1368,6 +1396,7 @@ function RowRoundArrows({
 // to host both the input and the arrows without crowding.
 function WidthCell({
   row,
+  rowIdx,
   onWidthChange,
   onRoundUp,
   onRoundDown,
@@ -1375,6 +1404,7 @@ function WidthCell({
   onFocused,
 }: {
   row: SlabRow;
+  rowIdx: number;
   onWidthChange: (w: number) => void;
   onRoundUp: () => void;
   onRoundDown: () => void;
@@ -1416,6 +1446,8 @@ function WidthCell({
         placeholder="0.00"
         title={inputTitle}
         showZeroAsEmpty
+        data-cell-row={rowIdx}
+        data-cell-col={1}
       />
       {/* Arrows are visible on desktop only — the mobile copy lives
           inside the row's Name cell to free the narrow sticky Width

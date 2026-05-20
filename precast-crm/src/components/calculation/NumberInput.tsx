@@ -33,6 +33,10 @@ import { forwardRef, useEffect, useRef, useState } from "react";
 interface NumberInputProps {
   value: number;
   onChange: (n: number) => void;
+  /** Row index for the calculator's Excel-style arrow-key navigation. */
+  "data-cell-row"?: number;
+  /** Column index for the calculator's Excel-style arrow-key navigation. */
+  "data-cell-col"?: number;
   /**
    * What value to snap back to when the user blurs an empty field.
    * Defaults to 0; pass `null` to leave the field blank on blur
@@ -79,6 +83,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
       title,
       integer = false,
       disabled = false,
+      ...rest
     },
     ref,
   ) {
@@ -135,6 +140,7 @@ export const NumberInput = forwardRef<HTMLInputElement, NumberInputProps>(
         placeholder={placeholder}
         title={title ?? "Inline math: try 4*0.58 or 1+1.5"}
         value={display}
+        {...rest}
         onFocus={(e) => {
           focused.current = true;
           // Select-all when the field is at its default zero — typing
