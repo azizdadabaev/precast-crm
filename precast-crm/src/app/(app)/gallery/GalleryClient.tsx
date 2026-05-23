@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { Camera, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { Camera, ChevronLeft, ChevronRight, ChevronUp, Search, X } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { GalleryCard } from "@/components/gallery/GalleryCard";
 import { GalleryLightbox } from "@/components/gallery/GalleryLightbox";
@@ -177,6 +177,18 @@ export default function GalleryClient() {
                   </span>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput("");
+                  setSearchExpanded(false);
+                }}
+                title={t("Йиғиш (Esc)", "Collapse (Esc)")}
+                aria-label={t("Йиғиш", "Collapse")}
+                className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-md border border-input bg-background text-text-tertiary hover:text-foreground hover:bg-accent hover:border-ring transition-colors"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
             </div>
         <div className="flex items-end gap-2 sm:gap-3 flex-wrap">
         <div className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-[140px]">
