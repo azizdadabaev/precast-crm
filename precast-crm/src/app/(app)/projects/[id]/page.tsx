@@ -224,7 +224,7 @@ export default function ProjectDetailPage() {
             <thead className="bg-muted text-[10px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2.5 font-semibold">
-                  Исм<span className="lang-en font-normal"> · Name</span>
+                  Хона<span className="lang-en font-normal"> · Room</span>
                 </th>
                 <th className="text-right px-3 py-2.5 font-semibold">
                   Эни<span className="lang-en font-normal"> · W</span>

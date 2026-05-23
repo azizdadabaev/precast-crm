@@ -417,17 +417,64 @@ export function MultiRoomCalculator({
   rowsRef.current = rows;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // Pricing ref — Ctrl+Enter's recomputeRow call needs the current
+  // catalog without re-binding the listener on every pricing change.
+  const pricingRef = useRef(pricing);
+  pricingRef.current = pricing;
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" || !e.shiftKey) return;
+      if (e.key !== "Enter") return;
+
       // Don't fire while typing inside a textarea (none today, but
       // be defensive — Shift+Enter inserts a newline there).
       const target = e.target as HTMLElement | null;
       if (target?.tagName === "TEXTAREA") return;
-      e.preventDefault();
-      const newRow = makeRow(rowsRef.current.length + 1);
-      onChangeRef.current([...rowsRef.current, newRow]);
-      setFocusPendingId(newRow.id);
+
+      // Shift+Enter — append a blank row.
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        const newRow = makeRow(rowsRef.current.length + 1);
+        onChangeRef.current([...rowsRef.current, newRow]);
+        setFocusPendingId(newRow.id);
+        return;
+      }
+
+      // Ctrl/Cmd+Enter — duplicate the currently focused row and
+      // insert the copy immediately below it. Name is freshly
+      // auto-numbered (not copied verbatim) so the new row reads as
+      // a brand-new room. No-op when no calculator cell is focused.
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        const cellRow = (target?.closest?.("[data-cell-row]") as HTMLElement | null)
+          ?.getAttribute("data-cell-row");
+        const idx = cellRow == null ? -1 : Number(cellRow);
+        if (!Number.isFinite(idx) || idx < 0) return;
+        const src = rowsRef.current[idx];
+        if (!src) return;
+
+        e.preventDefault();
+        const fresh = makeRow(rowsRef.current.length + 1);
+        const duplicate: SlabRow = recomputeRow(
+          {
+            ...src,
+            id: fresh.id,
+            name: fresh.name,
+            // Manual duplicates aren't a sandbox prefill — drop the
+            // engineering-truth snapshot so the undersize warning
+            // doesn't carry over from the source row.
+            originalWidth: 0,
+          },
+          pricingRef.current,
+        );
+
+        const next = [
+          ...rowsRef.current.slice(0, idx + 1),
+          duplicate,
+          ...rowsRef.current.slice(idx + 1),
+        ];
+        onChangeRef.current(next);
+        setFocusPendingId(duplicate.id);
+        return;
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -1074,7 +1121,7 @@ export function MultiRoomCalculator({
               size="sm"
               onClick={addRow}
               className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
-              title="Shift+Enter also adds a new room and focuses its Width"
+              title="Shift+Enter adds a blank room · Ctrl+Enter (Cmd on Mac) duplicates the focused row"
             >
               <Plus className="h-3.5 w-3.5 mr-1.5" />
               <span>
