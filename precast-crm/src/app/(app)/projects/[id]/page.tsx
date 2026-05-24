@@ -106,11 +106,12 @@ export default function ProjectDetailPage() {
     (acc, c) => ({
       blocks: acc.blocks + c.totalBlocks,
       beams: acc.beams + c.beamCount,
+      monolithLength: acc.monolithLength + Number(c.monolithLength),
       monolithArea: acc.monolithArea + Number(c.monolithArea),
       concrete: acc.concrete + Number(c.concreteVolume),
       sum: acc.sum + Number(c.subtotal),
     }),
-    { blocks: 0, beams: 0, monolithArea: 0, concrete: 0, sum: 0 }
+    { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0, concrete: 0, sum: 0 }
   );
 
   return (
@@ -248,6 +249,9 @@ export default function ProjectDetailPage() {
                   Балка<span className="lang-en font-normal"> · Beams</span>
                 </th>
                 <th className="text-right px-3 py-2.5 font-semibold">
+                  Монолит Б<span className="lang-en font-normal"> · Slab L</span>
+                </th>
+                <th className="text-right px-3 py-2.5 font-semibold">
                   Майдон<span className="lang-en font-normal"> · Area</span>
                 </th>
                 <th className="text-right px-3 py-2.5 font-semibold">
@@ -305,6 +309,10 @@ export default function ProjectDetailPage() {
                   <td className="px-3 py-2.5 text-right font-mono font-semibold">
                     {c.beamCount}
                   </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-primary">
+                    {formatNumber(c.monolithLength, 2)}
+                    <span className="text-text-tertiary text-xs ml-0.5">m</span>
+                  </td>
                   <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
                     {formatNumber(c.monolithArea, 2)}
                     <span className="text-xs ml-0.5">m²</span>
@@ -331,6 +339,10 @@ export default function ProjectDetailPage() {
                 </td>
                 <td className="px-3 py-3 text-right font-mono font-bold">
                   {totals.beams}
+                </td>
+                <td className="px-3 py-3 text-right font-mono font-bold text-primary">
+                  {formatNumber(totals.monolithLength, 2)}
+                  <span className="text-xs ml-0.5 text-muted-foreground">m</span>
                 </td>
                 <td className="px-3 py-3 text-right font-mono font-bold">
                   {formatNumber(totals.monolithArea, 2)}

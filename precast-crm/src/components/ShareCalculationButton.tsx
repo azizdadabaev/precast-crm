@@ -88,11 +88,21 @@ export function ShareCalculationButton({
     return fn(node, dims);
   }
 
+  // html-to-image internally fetches fonts/CSS on the first call and caches
+  // them. That first fetch can fail (timing, dev-server quirks), while the
+  // second call succeeds from cache. Calling twice is the standard fix.
+  async function capture<T>(
+    fn: (node: HTMLElement, dims: { width: number; height: number }) => Promise<T>,
+  ): Promise<T | null> {
+    await withNode(fn).catch(() => {}); // warm the internal resource cache
+    return withNode(fn);
+  }
+
   async function handleDownload(format: "png" | "jpeg") {
     setBusy(format);
     try {
       const { toPng, toJpeg } = await import("html-to-image");
-      const dataUrl = await withNode((node, dims) =>
+      const dataUrl = await capture((node, dims) =>
         format === "png"
           ? toPng(node, { ...baseOpts, ...dims })
           : toJpeg(node, { ...baseOpts, ...dims, quality: 0.92 }),
@@ -106,7 +116,7 @@ export function ShareCalculationButton({
       document.body.removeChild(a);
     } catch (err) {
       console.error("Image generation failed", err);
-      alert("Image generation failed. See console for details.");
+      alert(`Image generation failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(null);
     }
@@ -116,7 +126,7 @@ export function ShareCalculationButton({
     setBusy("copy");
     try {
       const { toBlob } = await import("html-to-image");
-      const blob = await withNode((node, dims) =>
+      const blob = await capture((node, dims) =>
         toBlob(node, { ...baseOpts, ...dims }),
       );
       if (!blob) return;
@@ -131,7 +141,7 @@ export function ShareCalculationButton({
       setTimeout(() => setCopied(false), 1800);
     } catch (err) {
       console.error("Copy failed", err);
-      alert("Couldn't copy image. See console for details.");
+      alert(`Couldn't copy image: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(null);
     }
@@ -141,7 +151,7 @@ export function ShareCalculationButton({
     setBusy("share");
     try {
       const { toBlob } = await import("html-to-image");
-      const blob = await withNode((node, dims) =>
+      const blob = await capture((node, dims) =>
         toBlob(node, { ...baseOpts, ...dims }),
       );
       if (!blob) return;
@@ -165,7 +175,7 @@ export function ShareCalculationButton({
       // User-cancelled share rejects with AbortError — ignore.
       if (err instanceof Error && err.name === "AbortError") return;
       console.error("Share failed", err);
-      alert("Share failed. See console for details.");
+      alert(`Share failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(null);
     }
