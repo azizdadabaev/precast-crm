@@ -78,7 +78,10 @@ export const PATCH = withPermission<{ id: string }>(
       ),
     }));
 
-    const roomsSubtotal = computed.reduce((s, c) => s + c.result.subtotal, 0);
+    const roomsSubtotal = computed.reduce(
+      (s, c) => s + Number(calcResultToCreatePayload(c.input, c.result).subtotal),
+      0,
+    );
     const totalArea = computed.reduce((s, c) => s + c.result.monolith_area, 0);
     const totalBlocks = computed.reduce((s, c) => s + c.result.total_blocks, 0);
     const totalBeams = computed.reduce((s, c) => s + c.result.beam_count, 0);
