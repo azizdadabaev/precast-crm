@@ -149,7 +149,15 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
     ),
   }));
 
-  const roomsSubtotal = computed.reduce((s, c) => s + c.result.subtotal, 0);
+  // Use calcResultToCreatePayload so the roomsSubtotal reflects any per-room
+  // rate overrides the operator set in the calculator — the same logic that
+  // determines the per-row Calculation.subtotal stored in the DB.
+  // Previously this used c.result.subtotal (engine auto-rate, no overrides)
+  // which caused order.totalPrice to differ from what the calculator showed.
+  const roomsSubtotal = computed.reduce(
+    (s, c) => s + Number(calcResultToCreatePayload(c.input, c.result).subtotal),
+    0,
+  );
   const totalArea = computed.reduce((s, c) => s + c.result.monolith_area, 0);
   const totalBlocks = computed.reduce((s, c) => s + c.result.total_blocks, 0);
   const totalBeams = computed.reduce((s, c) => s + c.result.beam_count, 0);
