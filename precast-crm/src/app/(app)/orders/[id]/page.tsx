@@ -306,7 +306,7 @@ export default function OrderDetailPage() {
     if (!order) return [];
     const map = new Map<string, number>();
     for (const c of order.project.calculations) {
-      const key = Number(c.beamLength).toFixed(1);
+      const key = Number(c.beamLength).toFixed(2);
       map.set(key, (map.get(key) ?? 0) + c.beamCount);
     }
     return Array.from(map.entries()).map(([beamLength, totalCount]) => ({ beamLength, totalCount }));
@@ -552,7 +552,7 @@ export default function OrderDetailPage() {
               <div className="px-4 pb-3 flex flex-wrap gap-2">
                 {beamGroups.map(({ beamLength, totalCount }) => (
                   <div key={beamLength} className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm">
-                    <span className="font-semibold">{Number(beamLength).toFixed(1)}<span className="text-xs text-muted-foreground ml-0.5">m</span></span>
+                    <span className="font-semibold">{Number(beamLength).toFixed(2)}<span className="text-xs text-muted-foreground ml-0.5">m</span></span>
                     <span className="text-muted-foreground text-xs">=</span>
                     <span className="font-mono font-bold tabular-nums text-foreground">{totalCount}</span>
                   </div>
