@@ -538,6 +538,9 @@ function CalculationsInner() {
     onSuccess: (order) => {
       // Edit committed — drop edit-mode AND the autosave snapshot so
       // the next /calculations visit starts clean.
+      // Bust the order cache so the detail page shows updated data
+      // immediately (not stale pre-edit totals from React Query cache).
+      qc.invalidateQueries({ queryKey: ["order", order.id] });
       clearAll();
       router.push(`/orders/${order.id}`);
     },
@@ -714,7 +717,7 @@ function CalculationsInner() {
             <Button
               size="sm"
               className="bg-success hover:bg-success/90 text-success-foreground"
-              disabled={!canPlaceOrder || editOrder.isPending}
+              disabled={!canPlaceOrder || editOrder.isPending || (isEditingOrder && !editingOrderInfo)}
               onClick={() => setOrderOpen(true)}
               title={
                 isEditingOrder
