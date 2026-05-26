@@ -158,7 +158,7 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
               {data.scheduledLabel && (
                 <div className="text-slate-600 mt-1">
                   <span className="text-slate-400 uppercase text-[10px] font-bold tracking-wider mr-2">
-                    Етказиб бериш · Delivery
+                    Етказиб бериш
                   </span>
                   <span className="font-semibold tabular-nums">
                     {data.scheduledLabel}
@@ -172,7 +172,7 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
           {data.payment && (
             <div className="text-right shrink-0 min-w-[260px]">
               <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
-                Жами · Total
+                Жами
               </div>
               <div className="text-3xl font-black tabular-nums text-emerald-700 leading-tight">
                 {formatNumber(data.payment.totalPrice, 0)}
@@ -180,7 +180,7 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
               </div>
               <div className="mt-2 flex items-baseline justify-between gap-4 text-xs">
                 <span className="text-slate-500 uppercase tracking-wider font-bold">
-                  Тўлов · Paid
+                  Тўлов
                 </span>
                 <span className="tabular-nums font-semibold text-slate-700">
                   {formatNumber(data.payment.paid, 0)}
@@ -188,7 +188,7 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
               </div>
               <div className="flex items-baseline justify-between gap-4 text-xs">
                 <span className="text-slate-500 uppercase tracking-wider font-bold">
-                  Қолди · Remaining
+                  Қолди
                 </span>
                 <span
                   className={`tabular-nums font-semibold ${
@@ -215,26 +215,26 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
         <div className="mt-6 rounded-lg border border-slate-200 overflow-hidden">
           <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-baseline justify-between">
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
-              Ҳисоб-китоб хулосаси · Calculation summary
+              Ҳисоб-китоб хулосаси
             </div>
             <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-              {data.rows.length} {data.rows.length === 1 ? "хона · room" : "хона · rooms"}
+              {data.rows.length} хона
             </div>
           </div>
           <table className="w-full text-xs">
             <thead className="bg-slate-100 text-[10px] uppercase tracking-wider text-slate-600">
               <tr>
-                <th className="text-left px-3 py-2.5 font-semibold">Хона · Room</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Эни · W</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Бўйи · L</th>
-                <th className="text-left px-3 py-2.5 font-semibold">Шаблон · Pattern</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Балка · Beam</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Ғ/қатор · Per row</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Жами Ғ · Blocks</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Балка · Beams</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Майдон · Area</th>
-                <th className="text-right px-3 py-2.5 font-semibold">м² нархи · Rate</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Сумма · Subtotal</th>
+                <th className="text-left px-3 py-2.5 font-semibold">Хона</th>
+                <th className="text-right px-3 py-2.5 font-semibold">Эни</th>
+                <th className="text-right px-3 py-2.5 font-semibold">Бўйи</th>
+                <th className="text-left px-3 py-2.5 font-semibold">Шаблон</th>
+                <th className="text-right px-3 py-2.5 font-semibold">Балка</th>
+                <th className="text-right px-3 py-2.5 font-semibold">Ғ/қатор</th>
+                <th className="text-right px-3 py-2.5 font-semibold">Жами Ғ</th>
+                <th className="text-right px-3 py-2.5 font-semibold">Балка</th>
+                <th className="text-right px-3 py-2.5 font-semibold">Майдон</th>
+                <th className="text-right px-3 py-2.5 font-semibold">м² нархи</th>
+                <th className="text-right px-3 py-2.5 font-semibold">Сумма</th>
               </tr>
             </thead>
             <tbody>
@@ -248,7 +248,7 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
                 >
                   <td className="px-3 py-2.5 font-medium text-slate-800">
                     {r.name || (
-                      <span className="text-slate-400 italic">Номсиз хона · Unnamed</span>
+                      <span className="text-slate-400 italic">Номсиз хона</span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">
@@ -301,7 +301,7 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
                   colSpan={6}
                   className="px-3 py-3 text-right text-[10px] uppercase tracking-wider text-slate-600 font-bold"
                 >
-                  Жами · Totals
+                  Жами
                 </td>
                 <td className="px-3 py-3 text-right tabular-nums font-bold">
                   {data.totals.blocks}
@@ -326,7 +326,8 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
         <div className="mt-6 pt-3 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-400">
           <div>{BRAND_NAME} · {BRAND_TAGLINE}</div>
           <div className="tabular-nums">
-            Generated · {generatedAt.toLocaleDateString("en-GB")}{" "}
+            Чиқарилди ·{" "}
+            {generatedAt.toLocaleDateString("en-GB")}{" "}
             {generatedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>

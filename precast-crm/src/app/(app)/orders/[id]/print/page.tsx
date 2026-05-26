@@ -61,6 +61,18 @@ const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
   GBG: "Г-Б-Г",
 };
 
+// Uzbek translations for OrderStatus — used in the customer-facing
+// print page. Anything not in this map falls back to a humanized
+// version of the raw enum (defensive against new statuses added on
+// the server before this map is updated).
+const STATUS_UZ: Record<OrderDetail["status"], string> = {
+  PLACED: "Қабул қилинди",
+  IN_PRODUCTION: "Ишлаб чиқарилмоқда",
+  DISPATCHED: "Жўнатилди",
+  DELIVERED: "Етказилди",
+  CANCELED: "Бекор қилинди",
+};
+
 const PAYMENT_STATE: Record<
   OrderDetail["paymentState"],
   { uz: string; en: string; cls: string }
@@ -107,6 +119,7 @@ export default function OrderPrintPage() {
   const isFullyPaid = order.paymentState === "FULLY_PAID";
 
   // Delivery row: prefer the actual delivery date if it's been delivered.
+  // Uzbek-only labels — this is customer-facing printed content.
   const deliveryLabel = (() => {
     const fmt = (iso: string) =>
       new Date(iso).toLocaleDateString("en-GB", {
@@ -116,12 +129,12 @@ export default function OrderPrintPage() {
         day: "numeric",
       });
     if (order.status === "DELIVERED" && order.deliveredAt) {
-      return { tag: "Delivered", value: fmt(order.deliveredAt) };
+      return { tag: "Етказилди", value: fmt(order.deliveredAt) };
     }
     if (order.status === "DISPATCHED") {
-      return { tag: "Dispatching", value: fmt(order.scheduledAt) };
+      return { tag: "Жўнатилмоқда", value: fmt(order.scheduledAt) };
     }
-    return { tag: "Scheduled", value: fmt(order.scheduledAt) };
+    return { tag: "Режалаштирилган", value: fmt(order.scheduledAt) };
   })();
 
   return (
@@ -181,13 +194,13 @@ export default function OrderPrintPage() {
           </div>
           <div className="text-right">
             <div className="text-[9pt] uppercase tracking-widest text-gray-500">
-              Буюртма · Order
+              Буюртма
             </div>
             <div className="text-[16pt] font-black tabular-nums leading-tight">
               {order.orderNumber}
             </div>
             <div className="text-[9pt] text-gray-600">
-              Placed {formatDate(order.placedAt)}
+              Қабул қилинди {formatDate(order.placedAt)}
             </div>
           </div>
         </div>
@@ -196,7 +209,7 @@ export default function OrderPrintPage() {
         <div className="grid grid-cols-2 gap-6 mt-5 pb-4 border-b border-gray-300">
           <div>
             <div className="text-[9pt] uppercase tracking-widest text-gray-500 mb-1">
-              Мижоз · Client
+              Мижоз
             </div>
             <div className="text-[12pt] font-bold leading-tight">{order.client.name}</div>
             <div className="text-[10pt] tabular-nums">{formatPhone(order.client.phone)}</div>
@@ -206,27 +219,27 @@ export default function OrderPrintPage() {
           </div>
           <div>
             <div className="text-[9pt] uppercase tracking-widest text-gray-500 mb-1">
-              Етказиб бериш · Delivery
+              Етказиб бериш
             </div>
             <div className="text-[12pt] font-bold leading-tight">
               {deliveryLabel.tag}: {deliveryLabel.value}
             </div>
             <div className="text-[10pt]">
-              Status:{" "}
+              Ҳолат:{" "}
               <span className="font-semibold uppercase tracking-wider">
-                {order.status.replace(/_/g, " ")}
+                {STATUS_UZ[order.status] ?? order.status.replace(/_/g, " ")}
               </span>
             </div>
             {order.dispatch && (
               <>
                 {order.dispatch.driver && (
                   <div className="text-[10pt] mt-1">
-                    Driver: <span className="font-medium">{order.dispatch.driver.name}</span>
+                    Ҳайдовчи: <span className="font-medium">{order.dispatch.driver.name}</span>
                   </div>
                 )}
                 {order.dispatch.truckIdentifier && (
                   <div className="text-[10pt] text-gray-600">
-                    Truck: <span className="tabular-nums">{order.dispatch.truckIdentifier}</span>
+                    Машина: <span className="tabular-nums">{order.dispatch.truckIdentifier}</span>
                   </div>
                 )}
               </>
@@ -238,23 +251,23 @@ export default function OrderPrintPage() {
                  tightened to one row per room with tinted column groups ─── */}
         <div className="mt-5">
           <div className="text-[9pt] uppercase tracking-widest text-gray-500 mb-2">
-            Хоналар · Rooms
+            Хоналар
           </div>
           <table className="w-full text-[9pt] border-collapse">
             <thead>
               <tr className="border-b-2 border-black uppercase text-[8pt] font-semibold tracking-wider text-gray-600">
-                <th className="px-1.5 py-1.5 text-left bg-yellow-50">Name</th>
-                <th className="px-1.5 py-1.5 text-center bg-yellow-50">W</th>
-                <th className="px-1.5 py-1.5 text-center bg-yellow-50">L</th>
-                <th className="px-1.5 py-1.5 text-center bg-blue-50">Pattern</th>
-                <th className="px-1.5 py-1.5 text-center bg-green-50">Beam Len</th>
-                <th className="px-1.5 py-1.5 text-center">Blks/Row</th>
-                <th className="px-1.5 py-1.5 text-center bg-orange-50">Total Blks</th>
-                <th className="px-1.5 py-1.5 text-center bg-gray-100">Beams</th>
-                <th className="px-1.5 py-1.5 text-center">Slab L</th>
-                <th className="px-1.5 py-1.5 text-center">Area</th>
-                <th className="px-1.5 py-1.5 text-center bg-green-50">m² Rate</th>
-                <th className="px-1.5 py-1.5 text-right">Subtotal</th>
+                <th className="px-1.5 py-1.5 text-left bg-yellow-50">Хона</th>
+                <th className="px-1.5 py-1.5 text-center bg-yellow-50">Эни</th>
+                <th className="px-1.5 py-1.5 text-center bg-yellow-50">Бўйи</th>
+                <th className="px-1.5 py-1.5 text-center bg-blue-50">Шаблон</th>
+                <th className="px-1.5 py-1.5 text-center bg-green-50">Балка узунлиги</th>
+                <th className="px-1.5 py-1.5 text-center">Ғ/қатор</th>
+                <th className="px-1.5 py-1.5 text-center bg-orange-50">Жами Ғ</th>
+                <th className="px-1.5 py-1.5 text-center bg-gray-100">Балка</th>
+                <th className="px-1.5 py-1.5 text-center">Плита узунлиги</th>
+                <th className="px-1.5 py-1.5 text-center">Майдон</th>
+                <th className="px-1.5 py-1.5 text-center bg-green-50">м² нархи</th>
+                <th className="px-1.5 py-1.5 text-right">Сумма</th>
               </tr>
             </thead>
             <tbody>
@@ -300,7 +313,7 @@ export default function OrderPrintPage() {
                     {formatNumber(c.m2Price, 0)}
                     {c.m2PriceOverride && (
                       <div className="text-[8px] font-normal text-amber-800 leading-tight mt-0.5">
-                        ↑ Special rate
+                        ↑ Махсус нарх
                         {c.m2PriceReason && (
                           <div className="text-[7px] text-amber-700 italic leading-tight">
                             {c.m2PriceReason}
@@ -322,19 +335,19 @@ export default function OrderPrintPage() {
         <div className="grid grid-cols-3 gap-4 py-3 border-y mt-2 text-[10pt]">
           <div>
             <div className="text-gray-500 text-[8pt] uppercase tracking-wider">
-              Total beams
+              Жами балка
             </div>
-            <div className="font-bold tabular-nums">{order.totalBeams} pcs</div>
+            <div className="font-bold tabular-nums">{order.totalBeams} дона</div>
           </div>
           <div>
             <div className="text-gray-500 text-[8pt] uppercase tracking-wider">
-              Total blocks
+              Жами ғишт
             </div>
-            <div className="font-bold tabular-nums">{order.totalBlocks} pcs</div>
+            <div className="font-bold tabular-nums">{order.totalBlocks} дона</div>
           </div>
           <div>
             <div className="text-gray-500 text-[8pt] uppercase tracking-wider">
-              Slab area
+              Плита майдони
             </div>
             <div className="font-bold tabular-nums">
               {formatNumber(order.totalArea, 2)} m²
@@ -344,24 +357,24 @@ export default function OrderPrintPage() {
 
         {/* ─── 5. Pricing breakdown ─── */}
         <div className="mt-5 ml-auto w-72 text-[11pt]">
-          <Row label="Сумма · Subtotal" value={formatNumber(order.roomsSubtotal, 0)} />
+          <Row label="Сумма" value={formatNumber(order.roomsSubtotal, 0)} />
           {Number(order.discountPercent) > 0 && (
             <Row
-              label={`Чегирма · Discount ${formatNumber(order.discountPercent, 1)}%`}
+              label={`Чегирма ${formatNumber(order.discountPercent, 1)}%`}
               value={`− ${formatNumber(order.discountAmount, 0)}`}
             />
           )}
           {Number(order.deliveryCost) > 0 && (
             <Row
-              label="Етказиб бериш · Delivery"
+              label="Етказиб бериш"
               value={formatNumber(order.deliveryCost, 0)}
             />
           )}
           {Number(order.otherCost) > 0 && (
-            <Row label="Бошқа · Other" value={formatNumber(order.otherCost, 0)} />
+            <Row label="Бошқа" value={formatNumber(order.otherCost, 0)} />
           )}
           <div className="flex justify-between border-t-2 border-black pt-2 mt-2">
-            <span className="font-bold">ЖАМИ · TOTAL</span>
+            <span className="font-bold">ЖАМИ</span>
             <span className="font-black tabular-nums text-[12pt]">
               {formatNumber(order.totalPrice, 0)}
               <span className="text-[9pt] text-gray-500 font-normal ml-1">UZS</span>
@@ -372,16 +385,16 @@ export default function OrderPrintPage() {
         {/* ─── 6. Payment status ─── */}
         <div className="mt-4 ml-auto w-72 text-[11pt]">
           <div className="text-[9pt] uppercase tracking-widest text-gray-500 mb-1">
-            Тўлов · Payment
+            Тўлов
           </div>
-          <Row label="Тўланган · Paid" value={formatNumber(paid, 0)} />
-          <Row label="Қолди · Remaining" value={formatNumber(remaining, 0)} />
+          <Row label="Тўланган" value={formatNumber(paid, 0)} />
+          <Row label="Қолди" value={formatNumber(remaining, 0)} />
           <div className="flex justify-between pt-2 mt-1 border-t border-gray-300">
             <span className="text-[9pt] uppercase tracking-wider text-gray-500">
-              Status
+              Ҳолат
             </span>
             <span className={`tabular-nums uppercase tracking-wider ${paymentMeta.cls}`}>
-              {paymentMeta.uz} · {paymentMeta.en}
+              {paymentMeta.uz}
             </span>
           </div>
         </div>
@@ -390,19 +403,19 @@ export default function OrderPrintPage() {
         <div className="mt-16 grid grid-cols-2 gap-12 text-[10pt]">
           <div>
             <div className="text-[9pt] uppercase tracking-widest text-gray-500 mb-10">
-              Operator signature · Имзо
+              Оператор имзоси
             </div>
             <div className="border-b border-black mb-4 h-6"></div>
-            <div className="text-gray-600">Name: ___________________________</div>
-            <div className="text-gray-600 mt-2">Date: ___________________________</div>
+            <div className="text-gray-600">Исм: ___________________________</div>
+            <div className="text-gray-600 mt-2">Сана: ___________________________</div>
           </div>
           <div>
             <div className="text-[9pt] uppercase tracking-widest text-gray-500 mb-10">
-              Client signature · Мижоз имзоси
+              Мижоз имзоси
             </div>
             <div className="border-b border-black mb-4 h-6"></div>
-            <div className="text-gray-600">Name: ___________________________</div>
-            <div className="text-gray-600 mt-2">Date: ___________________________</div>
+            <div className="text-gray-600">Исм: ___________________________</div>
+            <div className="text-gray-600 mt-2">Сана: ___________________________</div>
           </div>
         </div>
 
@@ -415,7 +428,7 @@ export default function OrderPrintPage() {
               </div>
             )}
             <div className="text-[8pt] text-gray-500 max-w-[60mm] leading-tight">
-              Scan to open this order on the operator dashboard.
+              Бу буюртмани оператор саҳифасида очиш учун QR-кодни сканерланг.
             </div>
           </div>
           <div className="text-right">
@@ -428,7 +441,7 @@ export default function OrderPrintPage() {
         {order.deliveryProofUrl && (
           <div className="mt-8 print:break-before-page">
             <div className="text-[9pt] uppercase tracking-widest text-gray-500 mb-2">
-              Етказиб бериш фотоси · Delivery proof
+              Етказиб бериш фотоси
             </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img

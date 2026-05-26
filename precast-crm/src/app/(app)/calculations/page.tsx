@@ -417,8 +417,11 @@ function CalculationsInner() {
   const shareData: ShareData = useMemo(() => {
     const withResult = rows.filter((r): r is SlabRow & { result: NonNullable<SlabRow["result"]> } => !!r.result);
     return {
-      title: t("Ҳисоб-китоб · Calculation", "Ҳисоб-китоб · Calculation"),
-      clientName: client.name || t("Номсиз мижоз", "Unnamed client"),
+      // Share card is customer-facing; pin labels to Uzbek so the
+      // exported image is consistent regardless of the operator's
+      // current UI language.
+      title: "Ҳисоб-китоб",
+      clientName: client.name || "Номсиз мижоз",
       clientPhone: client.phone || null,
       clientAddress: client.address || null,
       rows: withResult.map((r) => ({
@@ -446,7 +449,9 @@ function CalculationsInner() {
   }, [rows, client, t]);
 
   const canShare = shareData.rows.length > 0;
-  const shareFileBase = `${t("Ҳисоб-китоб", "Calculation")}${
+  // Filename for the downloaded image — hardcoded Uzbek to match the
+  // share card's locked-language strategy.
+  const shareFileBase = `Hisob-kitob${
     client.name ? `-${client.name}` : ""
   }`
     .replace(/[<>:"/\\|?*]+/g, "")

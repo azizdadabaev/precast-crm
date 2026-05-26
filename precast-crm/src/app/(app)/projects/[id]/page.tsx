@@ -119,8 +119,8 @@ export default function ProjectDetailPage() {
   // so the exported image is identical on phones + desktops).
   const shareData: ShareData = {
     title: displayName,
-    subtitle: t("Лойиҳа · Draft", "Лойиҳа · Draft"),
-    clientName: clientLabel || t("Номсиз мижоз", "Unnamed client"),
+    subtitle: "Лойиҳа",
+    clientName: clientLabel || "Номсиз мижоз",
     clientPhone: project.client?.phone ?? project.tentativeClientPhone ?? null,
     clientAddress: project.client?.address ?? project.tentativeClientAddress ?? null,
     rows: project.calculations.map((c) => ({

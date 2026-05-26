@@ -335,8 +335,17 @@ export default function OrderDetailPage() {
   // <ShareTarget> below renders this at 1100 px regardless of
   // viewport, so the exported image looks the same on phones and
   // desktops. See src/components/share/CalculationShareCard.tsx.
+  // Uzbek-only label for the payment-state badge — the share card
+  // is a customer-facing artifact, so we hardcode Uzbek regardless of
+  // the operator's UI language preference.
+  const sharePaymentLabel: Record<OrderDetail["paymentState"], string> = {
+    AWAITING_PAYMENT: "Тўлов кутилмоқда",
+    PARTIALLY_PAID: "Қисман тўланган",
+    FULLY_PAID: "Тўлиқ тўланган",
+  };
+
   const shareData: ShareData = {
-    title: `Буюртма №${order.orderNumber} · Order`,
+    title: `Буюртма №${order.orderNumber}`,
     subtitle: undefined,
     clientName: order.client.name,
     clientPhone: order.client.phone,
@@ -345,7 +354,7 @@ export default function OrderDetailPage() {
       totalPrice: totalNum,
       paid: paidNum,
       remaining: remainingNum,
-      badgeLabel: translatePaymentState(order.paymentState, t),
+      badgeLabel: sharePaymentLabel[order.paymentState],
       badgeColorCls: PAYMENT_STATE_BADGE[order.paymentState].cls,
     },
     scheduledLabel: `${WEEKDAY_UZ[new Date(order.scheduledAt).getDay()]}, ${formatDate(order.scheduledAt)}`,
