@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -27,6 +27,8 @@ import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-brid
 import { useCalculatorStore } from "@/store/calculator";
 import { useHydrateCalculator } from "@/store/useHydrateCalculator";
 import { Bi, useT } from "@/lib/i18n";
+import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
 
 function CalculationsInner() {
   const router = useRouter();
@@ -62,6 +64,8 @@ function CalculationsInner() {
   const [orderOpen, setOrderOpen] = useState(false);
   const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  /** Ref to the offscreen <ShareTarget> — see render block below. */
+  const shareRef = useRef<HTMLDivElement>(null);
   /** Order number + scheduled date for the edit-mode banner and dialog
    *  default. Re-fetched on mount when editingOrderId is in the store
    *  (so a refresh during edit mode keeps showing the right banner).
@@ -407,6 +411,48 @@ function CalculationsInner() {
     };
   }, [validRooms, discountPercent, discountAmount, client]);
 
+  // Build the offscreen share-card payload. Only rooms with a
+  // computed result appear — partial rows the operator is still
+  // typing shouldn't show up in the customer-facing image.
+  const shareData: ShareData = useMemo(() => {
+    const withResult = rows.filter((r): r is SlabRow & { result: NonNullable<SlabRow["result"]> } => !!r.result);
+    return {
+      title: t("Ҳисоб-китоб · Calculation", "Ҳисоб-китоб · Calculation"),
+      clientName: client.name || t("Номсиз мижоз", "Unnamed client"),
+      clientPhone: client.phone || null,
+      clientAddress: client.address || null,
+      rows: withResult.map((r) => ({
+        name: r.name,
+        innerWidth: r.innerWidth,
+        innerLength: r.innerLength,
+        bearing: r.bearing,
+        pattern: r.result.pattern,
+        patternAuto: r.result.pattern,
+        beamLength: r.result.beam_length,
+        blocksPerRow: r.result.block_rows > 0 ? r.result.blocks_per_row : null,
+        totalBlocks: r.result.total_blocks,
+        beamCount: r.result.beam_count,
+        monolithArea: r.result.monolith_area,
+        m2Price: r.result.m2_price,
+        subtotal: r.result.subtotal,
+      })),
+      totals: {
+        blocks: withResult.reduce((s, r) => s + r.result.total_blocks, 0),
+        beams: withResult.reduce((s, r) => s + r.result.beam_count, 0),
+        monolithArea: withResult.reduce((s, r) => s + r.result.monolith_area, 0),
+        sum: withResult.reduce((s, r) => s + r.result.subtotal, 0),
+      },
+    };
+  }, [rows, client, t]);
+
+  const canShare = shareData.rows.length > 0;
+  const shareFileBase = `${t("Ҳисоб-китоб", "Calculation")}${
+    client.name ? `-${client.name}` : ""
+  }`
+    .replace(/[<>:"/\\|?*]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
   // ── Mutations ──
   const saveDraft = useMutation({
     mutationFn: () =>
@@ -658,6 +704,11 @@ function CalculationsInner() {
         onMatch={setMatchedClientId}
       />
 
+      {/* Offscreen share card — capture target for the Send button.
+          Rendered at fixed 1100 px regardless of viewport so the
+          exported image is identical on phones + desktops. */}
+      <ShareTarget ref={shareRef} data={shareData} />
+
       {/* Calculator. The Clear / Save Project / Place Order buttons
           render INSIDE the calculator's bottom toolbar via the
           `actions` slot so they sit on the same row as Add room and
@@ -690,6 +741,13 @@ function CalculationsInner() {
               <Trash2 className="h-4 w-4 mr-2" />
               <Bi uz="Тозалаш" en="Clear" />
             </Button>
+            {/* Send · Юбориш — export the calculation as a desktop-quality
+                image regardless of which device the operator is on. */}
+            <ShareCalculationButton
+              targetRef={shareRef}
+              fileBase={shareFileBase}
+              disabled={!canShare}
+            />
             {/* Save Project hides in edit-mode — saving as a draft mid-edit
                 conflicts with the in-place semantics. The escape is "Cancel
                 edits" in the banner. */}

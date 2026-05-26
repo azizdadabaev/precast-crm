@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileText } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { formatDraftNumber } from "@/lib/draft-number";
@@ -114,6 +115,37 @@ export default function ProjectDetailPage() {
     { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0, concrete: 0, sum: 0 }
   );
 
+  // Build the offscreen share-card payload (rendered at fixed 1100 px
+  // so the exported image is identical on phones + desktops).
+  const shareData: ShareData = {
+    title: displayName,
+    subtitle: t("Лойиҳа · Draft", "Лойиҳа · Draft"),
+    clientName: clientLabel || t("Номсиз мижоз", "Unnamed client"),
+    clientPhone: project.client?.phone ?? project.tentativeClientPhone ?? null,
+    clientAddress: project.client?.address ?? project.tentativeClientAddress ?? null,
+    rows: project.calculations.map((c) => ({
+      name: c.name ?? "",
+      innerWidth: Number(c.innerWidth),
+      innerLength: Number(c.innerLength),
+      bearing: Number(c.bearing),
+      pattern: c.pattern,
+      patternAuto: c.patternAuto,
+      beamLength: Number(c.beamLength),
+      blocksPerRow: c.blockRows > 0 ? c.blocksPerRow : null,
+      totalBlocks: c.totalBlocks,
+      beamCount: c.beamCount,
+      monolithArea: Number(c.monolithArea),
+      m2Price: Number(c.m2Price),
+      subtotal: Number(c.subtotal),
+    })),
+    totals: {
+      blocks: totals.blocks,
+      beams: totals.beams,
+      monolithArea: totals.monolithArea,
+      sum: totals.sum,
+    },
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -157,12 +189,14 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Shareable area — wraps project header + calculation summary so
-          ShareCalculationButton captures both as a single image.
-          flex+gap (not space-y-*) so html-to-image doesn't include any
-          phantom margin from the parent's space-y rule. p-4 gives the
-          captured image symmetric breathing room around all edges. */}
-      <div ref={shareRef} className="flex flex-col gap-6 p-4 bg-background">
+      {/* Offscreen, fixed-width share card — the actual capture target
+          for the "Send" button. Rendering this in addition to the
+          visible card means the exported image is consistent across
+          phone + desktop. See src/components/share/CalculationShareCard.tsx. */}
+      <ShareTarget ref={shareRef} data={shareData} />
+
+      {/* On-screen layout — stays responsive for viewing. */}
+      <div className="flex flex-col gap-6 p-4 bg-background">
       <div className="bg-card rounded-lg border p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>

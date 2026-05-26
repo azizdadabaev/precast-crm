@@ -24,6 +24,7 @@ import { formatPhone } from "@/lib/phone";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { useT } from "@/lib/i18n";
@@ -330,6 +331,47 @@ export default function OrderDetailPage() {
   const remainingNum = Math.max(0, totalNum - paidNum);
   const fullyPaid = paidNum > 0 && remainingNum === 0;
 
+  // Build the share-card payload from the order. The offscreen
+  // <ShareTarget> below renders this at 1100 px regardless of
+  // viewport, so the exported image looks the same on phones and
+  // desktops. See src/components/share/CalculationShareCard.tsx.
+  const shareData: ShareData = {
+    title: `Буюртма №${order.orderNumber} · Order`,
+    subtitle: undefined,
+    clientName: order.client.name,
+    clientPhone: order.client.phone,
+    clientAddress: order.client.address,
+    payment: {
+      totalPrice: totalNum,
+      paid: paidNum,
+      remaining: remainingNum,
+      badgeLabel: translatePaymentState(order.paymentState, t),
+      badgeColorCls: PAYMENT_STATE_BADGE[order.paymentState].cls,
+    },
+    scheduledLabel: `${WEEKDAY_UZ[new Date(order.scheduledAt).getDay()]}, ${formatDate(order.scheduledAt)}`,
+    rows: order.project.calculations.map((c) => ({
+      name: c.name ?? "",
+      innerWidth: Number(c.innerWidth),
+      innerLength: Number(c.innerLength),
+      bearing: Number(c.bearing),
+      pattern: c.pattern,
+      patternAuto: c.patternAuto,
+      beamLength: Number(c.beamLength),
+      blocksPerRow: c.blockRows > 0 ? c.blocksPerRow : null,
+      totalBlocks: c.totalBlocks,
+      beamCount: c.beamCount,
+      monolithArea: Number(c.monolithArea),
+      m2Price: Number(c.m2Price),
+      subtotal: Number(c.subtotal),
+    })),
+    totals: {
+      blocks: calcTotals.blocks,
+      beams: calcTotals.beams,
+      monolithArea: calcTotals.monolithArea,
+      sum: order.project.calculations.reduce((s, c) => s + Number(c.subtotal), 0),
+    },
+  };
+
   async function createFirstShipment() {
     if (!order) return;
     setSplitLoading(true);
@@ -357,13 +399,16 @@ export default function OrderDetailPage() {
         <ArrowLeft className="h-4 w-4 mr-1" /> {t("Буюртмаларга қайтиш", "Back to orders")}
       </Link>
 
-      {/* Shareable area — wraps the header card + calculation summary
-          so ShareCalculationButton captures both together as one image.
-          flex+gap (not space-y-*) so html-to-image doesn't include any
-          phantom margin from the parent's space-y rule. p-4 gives the
-          captured image symmetric breathing room (avoids the "values
-          cut at the edge" feel on the bottom recap row). */}
-      <div ref={shareRef} className="flex flex-col gap-5 p-4 bg-background">
+      {/* Offscreen, fixed-width share card — the actual capture target
+          for the "Send" button. Rendering this in addition to the
+          visible card means the exported image is consistent across
+          phone + desktop, with brand header + full table layout.
+          See src/components/share/CalculationShareCard.tsx. */}
+      <ShareTarget ref={shareRef} data={shareData} />
+
+      {/* On-screen header + calc summary. No longer the capture target —
+          stays responsive for actual viewing. */}
+      <div className="flex flex-col gap-5 p-4 bg-background">
       {/* Header card */}
       <div className="rounded-lg border bg-background p-3 sm:p-5 shadow-sm">
         {/* Mobile: single-column compact layout */}
