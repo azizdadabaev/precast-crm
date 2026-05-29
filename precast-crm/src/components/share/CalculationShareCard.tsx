@@ -221,20 +221,20 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
               {data.rows.length} хона
             </div>
           </div>
-          <table className="w-full text-xs">
-            <thead className="bg-slate-100 text-[10px] uppercase tracking-wider text-slate-600">
+          <table className="w-full text-[8px]">
+            <thead className="bg-slate-100 text-[7px] uppercase tracking-wider text-slate-600">
               <tr>
-                <th className="text-left px-3 py-2.5 font-semibold">Хона</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Эни</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Бўйи</th>
-                <th className="text-left px-3 py-2.5 font-semibold">Шаблон</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Балка</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Ғ/қатор</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Жами Ғ</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Балка</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Майдон</th>
-                <th className="text-right px-3 py-2.5 font-semibold">м² нархи</th>
-                <th className="text-right px-3 py-2.5 font-semibold">Сумма</th>
+                <th className="text-left px-3 py-[5px] font-semibold">Хона</th>
+                <th className="text-right px-3 py-[5px] font-semibold">Эни</th>
+                <th className="text-right px-3 py-[5px] font-semibold">Бўйи</th>
+                <th className="text-left px-3 py-[5px] font-semibold">Шаблон</th>
+                <th className="text-right px-3 py-[5px] font-semibold">Балка</th>
+                <th className="text-right px-3 py-[5px] font-semibold">Ғ/қатор</th>
+                <th className="text-right px-3 py-[5px] font-semibold">Жами Ғ</th>
+                <th className="text-right px-3 py-[5px] font-semibold">Балка</th>
+                <th className="text-right px-3 py-[5px] font-semibold">Майдон</th>
+                <th className="text-right px-3 py-[5px] font-semibold">м² нархи</th>
+                <th className="text-right px-3 py-[5px] font-semibold">Сумма</th>
               </tr>
             </thead>
             <tbody>
@@ -246,50 +246,50 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
                     (i % 2 === 1 ? "bg-slate-50/60" : "")
                   }
                 >
-                  <td className="px-3 py-2.5 font-medium text-slate-800">
+                  <td className="px-3 py-[5px] font-medium text-slate-800">
                     {r.name || (
                       <span className="text-slate-400 italic">Номсиз хона</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
+                  <td className="px-3 py-[5px] text-right tabular-nums">
                     {formatNumber(r.innerWidth, 2)}
-                    <span className="text-slate-400 text-[10px] ml-0.5">m</span>
+                    <span className="text-slate-400 text-[7px] ml-0.5">m</span>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
+                  <td className="px-3 py-[5px] text-right tabular-nums">
                     {formatNumber(r.innerLength, 2)}
-                    <span className="text-slate-400 text-[10px] ml-0.5">m</span>
+                    <span className="text-slate-400 text-[7px] ml-0.5">m</span>
                   </td>
-                  <td className="px-3 py-2.5">
-                    <span className="inline-flex items-center gap-1.5 font-mono text-[11px]">
+                  <td className="px-3 py-[5px]">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-[8px]">
                       <span className="font-semibold">{PATTERN_LABEL[r.pattern]}</span>
                       {r.patternAuto && r.patternAuto !== r.pattern && (
-                        <span className="text-slate-400 normal-case text-[10px]">
+                        <span className="text-slate-400 normal-case text-[7px]">
                           (auto: {PATTERN_LABEL[r.patternAuto]})
                         </span>
                       )}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 font-semibold">
+                  <td className="px-3 py-[5px] text-right tabular-nums text-emerald-700 font-semibold">
                     {formatNumber(r.beamLength, 2)}
-                    <span className="text-slate-400 text-[10px] ml-0.5">m</span>
+                    <span className="text-slate-400 text-[7px] ml-0.5">m</span>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">
+                  <td className="px-3 py-[5px] text-right tabular-nums text-slate-500">
                     {r.blocksPerRow ?? "—"}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold">
+                  <td className="px-3 py-[5px] text-right tabular-nums font-semibold">
                     {r.totalBlocks}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-semibold">
+                  <td className="px-3 py-[5px] text-right tabular-nums font-semibold">
                     {r.beamCount}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">
+                  <td className="px-3 py-[5px] text-right tabular-nums text-slate-500">
                     {formatNumber(r.monolithArea, 2)}
-                    <span className="text-[10px] ml-0.5">m²</span>
+                    <span className="text-[7px] ml-0.5">m²</span>
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
+                  <td className="px-3 py-[5px] text-right tabular-nums">
                     {formatNumber(r.m2Price, 0)}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums font-bold text-emerald-700">
+                  <td className="px-3 py-[5px] text-right tabular-nums font-bold text-emerald-700">
                     {formatNumber(r.subtotal, 0)}
                   </td>
                 </tr>
@@ -299,22 +299,22 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
               <tr className="bg-slate-100 border-t-2 border-slate-300">
                 <td
                   colSpan={6}
-                  className="px-3 py-3 text-right text-[10px] uppercase tracking-wider text-slate-600 font-bold"
+                  className="px-3 py-[6px] text-right text-[7px] uppercase tracking-wider text-slate-600 font-bold"
                 >
                   Жами
                 </td>
-                <td className="px-3 py-3 text-right tabular-nums font-bold">
+                <td className="px-3 py-[6px] text-right tabular-nums font-bold">
                   {data.totals.blocks}
                 </td>
-                <td className="px-3 py-3 text-right tabular-nums font-bold">
+                <td className="px-3 py-[6px] text-right tabular-nums font-bold">
                   {data.totals.beams}
                 </td>
-                <td className="px-3 py-3 text-right tabular-nums font-bold">
+                <td className="px-3 py-[6px] text-right tabular-nums font-bold">
                   {formatNumber(data.totals.monolithArea, 2)}
-                  <span className="text-[10px] ml-0.5 text-slate-500">m²</span>
+                  <span className="text-[7px] ml-0.5 text-slate-500">m²</span>
                 </td>
-                <td className="px-3 py-3"></td>
-                <td className="px-3 py-3 text-right tabular-nums font-extrabold text-emerald-700 text-sm">
+                <td className="px-3 py-[6px]"></td>
+                <td className="px-3 py-[6px] text-right tabular-nums font-extrabold text-emerald-700 text-[10px]">
                   {formatNumber(data.totals.sum, 0)}
                 </td>
               </tr>
