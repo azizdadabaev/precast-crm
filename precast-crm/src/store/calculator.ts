@@ -262,7 +262,10 @@ export const useCalculatorStore = create<CalculatorState>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         if (Array.isArray(state.rows) && state.rows.length > 0) {
-          state.rows = state.rows.map((r) => recomputeRow(r));
+          state.rows = state.rows.map((r) => ({
+            ...recomputeRow(r),
+            name: r.name.replace(/^Row\s+(\d+)$/i, "Хона $1"),
+          }));
         }
       },
     },
