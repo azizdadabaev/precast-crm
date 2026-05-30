@@ -1,49 +1,23 @@
 "use client";
 
 /**
- * Self-contained, fixed-width (1100 px) shareable card used as the
- * capture target for the "Send" image-export flow on:
+ * Self-contained shareable card for the image-export flow.
+ * Width is controlled by config.cardWidth (default 1100 px).
  *
- *   - the calculator page
- *   - the saved-project detail page
- *   - the order detail page
+ * All visual properties come from TableDesignConfig — edited live on
+ * the /table-design settings page. Falls back to DEFAULT_TABLE_DESIGN
+ * when no config is passed, producing the original look.
  *
- * Why a separate component instead of capturing the visible card:
- *
- * The visible summary uses Tailwind's `sm:` / `lg:` responsive
- * classes. On a phone, html-to-image captures the mobile layout —
- * cramped, sticky-column shadows, two-line stacks. The exported
- * image then looks unprofessional when the operator sends it to a
- * customer via WhatsApp / Telegram.
- *
- * This component has NO responsive classes. It always renders at
- * desktop width with the full multi-column table layout. Each
- * surface mounts it inside an offscreen wrapper:
- *
- *   <div aria-hidden className="pointer-events-none fixed left-[-9999px] top-0">
- *     <CalculationShareCard ref={shareRef} ... />
- *   </div>
- *
- * The existing <ShareCalculationButton> targets `shareRef` and
- * captures this card. The visible on-screen summary is unchanged
- * and remains responsive for actual viewing.
- *
- * Width chosen as 1100 px: wide enough for the 12-column table
- * without crowding, narrow enough that a customer opening the
- * exported image on a phone screen still gets a readable result
- * (~92 % of typical phone viewport at 1× zoom).
+ * Why inline styles: html-to-image captures inline styles reliably
+ * across all browsers; Tailwind utility classes are purged in production
+ * builds and may not serialize correctly through foreignObject.
  */
 
 import * as React from "react";
 import { formatNumber } from "@/lib/utils";
 import { addressToCyrillic } from "@/lib/regions";
 import { formatPhone } from "@/lib/phone";
-
-// Brand constants — same source as the print page. TODO when
-// AppConfig admin UI lands: read these from the DB instead.
-const BRAND_NAME = "EtalonSlabs";
-const BRAND_TAGLINE = "Yig'ma monolit";
-const BRAND_PHONE = "+998 93 481 33 30";
+import { DEFAULT_TABLE_DESIGN, type TableDesignConfig } from "@/lib/table-design-config";
 
 const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
   GB: "Г-Б",
@@ -51,16 +25,20 @@ const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
   GBG: "Г-Б-Г",
 };
 
+const COL_LABELS = [
+  "Хона", "Эни", "Бўйи", "Шаблон",
+  "Балка", "Ғ/қатор", "Жами Ғ", "Балка",
+  "Майдон", "м² нархи", "Сумма",
+] as const;
+
 export interface ShareRow {
   name: string;
   innerWidth: number;
   innerLength: number;
   bearing: number;
   pattern: "GB" | "BGB" | "GBG";
-  /** Engine's auto-picked pattern; shown when it differs from the operator pick. */
   patternAuto?: "GB" | "BGB" | "GBG" | null;
   beamLength: number;
-  /** null when block_rows === 0 (edge-beam-only row) so we render "—" */
   blocksPerRow: number | null;
   totalBlocks: number;
   beamCount: number;
@@ -70,24 +48,18 @@ export interface ShareRow {
 }
 
 export interface ShareData {
-  /** Big title — "Буюртма №2026-05-0010" / "Сақланган лойиҳа 0001D" / etc. */
   title: string;
-  /** Subtitle line — e.g. order date or "Лойиҳа · Draft". */
   subtitle?: string;
-  /** Client info row. */
   clientName: string;
   clientPhone?: string | null;
   clientAddress?: string | null;
-  /** Optional payment recap — orders only. */
   payment?: {
     totalPrice: number;
     paid: number;
     remaining: number;
-    /** Pre-translated bilingual label e.g. "ТЎЛАНГАН · FULLY PAID". */
     badgeLabel: string;
     badgeColorCls: string;
   };
-  /** Optional scheduled-at date for orders. Formatted as a string. */
   scheduledLabel?: string;
   rows: ShareRow[];
   totals: {
@@ -98,101 +70,157 @@ export interface ShareData {
   };
 }
 
-export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: ShareData }>(
-  function CalculationShareCard({ data }, ref) {
+interface Props {
+  data: ShareData;
+  config?: TableDesignConfig;
+}
+
+export const CalculationShareCard = React.forwardRef<HTMLDivElement, Props>(
+  function CalculationShareCard({ data, config: configProp }, ref) {
+    const cfg = { ...DEFAULT_TABLE_DESIGN, ...configProp };
     const generatedAt = new Date();
+
+    // ── Style helpers ───────────────────────────────────────
+    const px = (n: number) => `${n}px`;
+
+    const thCell = (align: "left" | "right"): React.CSSProperties => ({
+      textAlign: align,
+      paddingTop: px(cfg.headerRowPaddingY),
+      paddingBottom: px(cfg.headerRowPaddingY),
+      paddingLeft: px(cfg.cellPaddingX),
+      paddingRight: px(cfg.cellPaddingX),
+      fontSize: px(cfg.headerFontSize),
+      fontWeight: cfg.headerFontWeight,
+      color: cfg.headerText,
+      letterSpacing: "0.07em",
+      textTransform: "uppercase",
+      whiteSpace: "nowrap",
+    });
+
+    const tdBase = (extras: React.CSSProperties = {}): React.CSSProperties => ({
+      paddingTop: px(cfg.bodyRowPaddingY),
+      paddingBottom: px(cfg.bodyRowPaddingY),
+      paddingLeft: px(cfg.cellPaddingX),
+      paddingRight: px(cfg.cellPaddingX),
+      fontSize: px(cfg.bodyFontSize),
+      fontWeight: cfg.bodyFontWeight,
+      color: cfg.bodyText,
+      borderBottom: `1px solid ${cfg.rowDividerColor}`,
+      ...extras,
+    });
+
+    const tfCell = (extras: React.CSSProperties = {}): React.CSSProperties => ({
+      paddingTop: px(cfg.bodyRowPaddingY + 1),
+      paddingBottom: px(cfg.bodyRowPaddingY + 1),
+      paddingLeft: px(cfg.cellPaddingX),
+      paddingRight: px(cfg.cellPaddingX),
+      fontSize: px(cfg.footerFontSize),
+      fontWeight: cfg.footerFontWeight,
+      color: cfg.footerText,
+      ...extras,
+    });
+
+    const tabular: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
+
     return (
       <div
         ref={ref}
-        // Plain white card with high-contrast text; no oklch CSS vars
-        // (some browsers don't serialize those reliably through
-        // html-to-image's foreignObject pass).
-        style={{ width: "1100px", backgroundColor: "#ffffff", color: "#111827" }}
-        className="font-sans p-8"
+        style={{
+          width: px(cfg.cardWidth),
+          backgroundColor: cfg.cardBg,
+          color: cfg.bodyText,
+          fontFamily: cfg.fontFamily,
+          paddingLeft: px(cfg.cardPaddingX),
+          paddingRight: px(cfg.cardPaddingX),
+          paddingTop: px(cfg.cardPaddingY),
+          paddingBottom: px(cfg.cardPaddingY),
+          boxSizing: "border-box",
+        }}
       >
-        {/* ── Brand header bar ───────────────────────────────────── */}
-        <div className="flex items-end justify-between gap-4 pb-4 border-b-2 border-slate-800">
+        {/* ── Brand header ─────────────────────────────────── */}
+        <div style={{
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+          gap: 16,
+          paddingBottom: 16,
+          borderBottom: `2px solid ${cfg.brandDividerColor}`,
+        }}>
           <div>
-            <div className="text-3xl font-black tracking-tight leading-none text-slate-900">
-              {BRAND_NAME}
+            <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: "-0.025em", lineHeight: 1, color: "#0f172a" }}>
+              {cfg.brandName}
             </div>
-            <div className="text-xs uppercase tracking-widest text-slate-500 mt-1">
-              {BRAND_TAGLINE}
+            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: cfg.dimText, marginTop: 4 }}>
+              {cfg.brandTagline}
             </div>
           </div>
-          <div className="text-right text-xs text-slate-600">
-            <div className="font-semibold text-sm text-slate-800 tabular-nums">
-              {BRAND_PHONE}
+          <div style={{ textAlign: "right", fontSize: 10, color: cfg.dimText }}>
+            <div style={{ fontWeight: 600, fontSize: 13, color: "#1e293b", ...tabular }}>
+              {cfg.brandPhone}
             </div>
-            <div className="mt-0.5 tabular-nums">
+            <div style={{ marginTop: 2, ...tabular }}>
               {generatedAt.toLocaleDateString("en-GB")} ·{" "}
-              {generatedAt.toLocaleTimeString("en-GB", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+              {generatedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
             </div>
           </div>
         </div>
 
-        {/* ── Title + client + (optional) payment block — 2-line strip ── */}
-        <div className="mt-3 space-y-[3px]">
-          {/* Line 1: title left · total right */}
-          <div className="flex items-baseline justify-between gap-4">
-            <div className="flex items-baseline gap-3 min-w-0">
-              <span className="text-base font-black tracking-tight text-slate-900 leading-none whitespace-nowrap">
+        {/* ── Title + client + payment — 2-line strip ──────── */}
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 3 }}>
+          {/* Line 1: title · total */}
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+              <span style={{ fontSize: 14, fontWeight: 900, letterSpacing: "-0.015em", color: "#0f172a", whiteSpace: "nowrap" }}>
                 {data.title}
               </span>
               {data.subtitle && (
-                <span className="text-[10px] text-slate-400">{data.subtitle}</span>
-              )}
-            </div>
-            {data.payment ? (
-              <div className="flex items-baseline gap-2 shrink-0">
-                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Жами</span>
-                <span className="text-lg font-black tabular-nums text-emerald-700 leading-none">
-                  {formatNumber(data.payment.totalPrice, 0)}
-                </span>
-                <span className="text-[10px] text-slate-400">UZS</span>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Line 2: client details left · payment breakdown right */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-[11px] text-slate-600 min-w-0 flex-wrap">
-              <span className="font-semibold text-slate-800">{data.clientName}</span>
-              {data.clientPhone && (
-                <>
-                  <span className="text-slate-300">·</span>
-                  <span className="tabular-nums">{formatPhone(data.clientPhone)}</span>
-                </>
-              )}
-              {data.clientAddress && (
-                <>
-                  <span className="text-slate-300">·</span>
-                  <span>{addressToCyrillic(data.clientAddress)}</span>
-                </>
-              )}
-              {data.scheduledLabel && (
-                <>
-                  <span className="text-slate-300">·</span>
-                  <span>
-                    <span className="uppercase text-[9px] font-bold tracking-wider text-slate-400 mr-1">Ет:</span>
-                    <span className="font-semibold tabular-nums">{data.scheduledLabel}</span>
-                  </span>
-                </>
+                <span style={{ fontSize: 10, color: cfg.dimText }}>{data.subtitle}</span>
               )}
             </div>
             {data.payment && (
-              <div className="flex items-center gap-3 shrink-0 text-[11px]">
-                <span className="text-slate-400 uppercase text-[9px] font-bold tracking-wider">Тўлов</span>
-                <span className="tabular-nums font-semibold text-slate-700">{formatNumber(data.payment.paid, 0)}</span>
-                <span className="text-slate-300">·</span>
-                <span className="text-slate-400 uppercase text-[9px] font-bold tracking-wider">Қолди</span>
-                <span className={`tabular-nums font-semibold ${data.payment.remaining === 0 ? "text-emerald-700" : "text-amber-700"}`}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexShrink: 0 }}>
+                <span style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", color: cfg.dimText, fontWeight: 700 }}>Жами</span>
+                <span style={{ fontSize: 17, fontWeight: 900, ...tabular, color: cfg.subtotalColor, lineHeight: 1 }}>
+                  {formatNumber(data.payment.totalPrice, 0)}
+                </span>
+                <span style={{ fontSize: 9, color: cfg.dimText }}>UZS</span>
+              </div>
+            )}
+          </div>
+
+          {/* Line 2: client info · payment breakdown */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: cfg.dimText }}>
+              <span style={{ fontWeight: 600, color: "#1e293b" }}>{data.clientName}</span>
+              {data.clientPhone && (
+                <><span style={{ color: "#cbd5e1" }}>·</span>
+                <span style={tabular}>{formatPhone(data.clientPhone)}</span></>
+              )}
+              {data.clientAddress && (
+                <><span style={{ color: "#cbd5e1" }}>·</span>
+                <span>{addressToCyrillic(data.clientAddress)}</span></>
+              )}
+              {data.scheduledLabel && (
+                <><span style={{ color: "#cbd5e1" }}>·</span>
+                <span>
+                  <span style={{ fontSize: 9, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.08em", color: cfg.dimText, marginRight: 3 }}>Ет:</span>
+                  <span style={{ fontWeight: 600, ...tabular }}>{data.scheduledLabel}</span>
+                </span></>
+              )}
+            </div>
+            {data.payment && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, fontSize: 11 }}>
+                <span style={{ fontSize: 9, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.08em", color: cfg.dimText }}>Тўлов</span>
+                <span style={{ ...tabular, fontWeight: 600, color: "#374151" }}>{formatNumber(data.payment.paid, 0)}</span>
+                <span style={{ color: "#cbd5e1" }}>·</span>
+                <span style={{ fontSize: 9, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.08em", color: cfg.dimText }}>Қолди</span>
+                <span style={{ ...tabular, fontWeight: 600, color: data.payment.remaining === 0 ? cfg.subtotalColor : "#b45309" }}>
                   {data.payment.remaining === 0 ? "0" : formatNumber(data.payment.remaining, 0)}
                 </span>
-                <span className={`text-[9px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${data.payment.badgeColorCls}`}>
+                <span
+                  className={data.payment.badgeColorCls}
+                  style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", borderRadius: 3, paddingLeft: 6, paddingRight: 6, paddingTop: 2, paddingBottom: 2 }}
+                >
                   {data.payment.badgeLabel}
                 </span>
               </div>
@@ -200,110 +228,115 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
           </div>
         </div>
 
-        {/* ── Calculation table ─────────────────────────────────── */}
-        <div className="mt-3 rounded-lg border border-slate-200 overflow-hidden">
-          <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-baseline justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
+        {/* ── Calculation table ─────────────────────────────── */}
+        <div style={{
+          marginTop: 12,
+          borderRadius: 8,
+          border: `${px(cfg.tableBorderWidth)} solid ${cfg.borderColor}`,
+          overflow: "hidden",
+        }}>
+          {/* Section header bar */}
+          <div style={{
+            backgroundColor: cfg.tableBarBg,
+            paddingLeft: cfg.cellPaddingX,
+            paddingRight: cfg.cellPaddingX,
+            paddingTop: 8,
+            paddingBottom: 8,
+            borderBottom: `1px solid ${cfg.borderColor}`,
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+          }}>
+            <div style={{ fontSize: cfg.tableBarFontSize, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: cfg.tableBarText }}>
               Ҳисоб-китоб хулосаси
             </div>
-            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+            <div style={{ fontSize: cfg.tableBarFontSize, fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.08em", color: cfg.dimText }}>
               {data.rows.length} хона
             </div>
           </div>
-          <table className="w-full text-[8px]">
-            <thead className="bg-slate-100 text-[7px] uppercase tracking-wider text-slate-600">
+
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <colgroup>
+              {cfg.colWidths.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
+            </colgroup>
+            <thead style={{ backgroundColor: cfg.headerBg }}>
               <tr>
-                <th className="text-left px-3 py-[5px] font-semibold">Хона</th>
-                <th className="text-right px-3 py-[5px] font-semibold">Эни</th>
-                <th className="text-right px-3 py-[5px] font-semibold">Бўйи</th>
-                <th className="text-left px-3 py-[5px] font-semibold">Шаблон</th>
-                <th className="text-right px-3 py-[5px] font-semibold">Балка</th>
-                <th className="text-right px-3 py-[5px] font-semibold">Ғ/қатор</th>
-                <th className="text-right px-3 py-[5px] font-semibold">Жами Ғ</th>
-                <th className="text-right px-3 py-[5px] font-semibold">Балка</th>
-                <th className="text-right px-3 py-[5px] font-semibold">Майдон</th>
-                <th className="text-right px-3 py-[5px] font-semibold">м² нархи</th>
-                <th className="text-right px-3 py-[5px] font-semibold">Сумма</th>
+                <th style={thCell("left")}>{COL_LABELS[0]}</th>
+                <th style={thCell("right")}>{COL_LABELS[1]}</th>
+                <th style={thCell("right")}>{COL_LABELS[2]}</th>
+                <th style={thCell("left")}>{COL_LABELS[3]}</th>
+                <th style={thCell("right")}>{COL_LABELS[4]}</th>
+                <th style={thCell("right")}>{COL_LABELS[5]}</th>
+                <th style={thCell("right")}>{COL_LABELS[6]}</th>
+                <th style={thCell("right")}>{COL_LABELS[7]}</th>
+                <th style={thCell("right")}>{COL_LABELS[8]}</th>
+                <th style={thCell("right")}>{COL_LABELS[9]}</th>
+                <th style={thCell("right")}>{COL_LABELS[10]}</th>
               </tr>
             </thead>
             <tbody>
               {data.rows.map((r, i) => (
-                <tr
-                  key={i}
-                  className={
-                    "border-b last:border-b-0 border-slate-100 " +
-                    (i % 2 === 1 ? "bg-slate-50/60" : "")
-                  }
-                >
-                  <td className="px-3 py-[5px] font-medium text-slate-800">
-                    {r.name || (
-                      <span className="text-slate-400 italic">Номсиз хона</span>
+                <tr key={i} style={{ backgroundColor: i % 2 === 0 ? cfg.evenRowBg : cfg.oddRowBg }}>
+                  <td style={tdBase({ color: cfg.nameCellColor, fontWeight: cfg.nameCellWeight })}>
+                    {r.name || <span style={{ color: cfg.dimText, fontStyle: "italic" }}>Номсиз хона</span>}
+                  </td>
+                  <td style={tdBase({ textAlign: "right", ...tabular })}>
+                    {formatNumber(r.innerWidth, 2)}
+                    <span style={{ color: cfg.dimText, fontSize: cfg.bodyFontSize - 1, marginLeft: 1 }}>m</span>
+                  </td>
+                  <td style={tdBase({ textAlign: "right", ...tabular })}>
+                    {formatNumber(r.innerLength, 2)}
+                    <span style={{ color: cfg.dimText, fontSize: cfg.bodyFontSize - 1, marginLeft: 1 }}>m</span>
+                  </td>
+                  <td style={tdBase()}>
+                    <span style={{ fontFamily: "monospace", fontWeight: 600 }}>
+                      {PATTERN_LABEL[r.pattern]}
+                    </span>
+                    {r.patternAuto && r.patternAuto !== r.pattern && (
+                      <span style={{ color: cfg.dimText, fontSize: cfg.bodyFontSize - 1, marginLeft: 4 }}>
+                        (auto: {PATTERN_LABEL[r.patternAuto]})
+                      </span>
                     )}
                   </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums">
-                    {formatNumber(r.innerWidth, 2)}
-                    <span className="text-slate-400 text-[7px] ml-0.5">m</span>
-                  </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums">
-                    {formatNumber(r.innerLength, 2)}
-                    <span className="text-slate-400 text-[7px] ml-0.5">m</span>
-                  </td>
-                  <td className="px-3 py-[5px]">
-                    <span className="inline-flex items-center gap-1.5 font-mono text-[8px]">
-                      <span className="font-semibold">{PATTERN_LABEL[r.pattern]}</span>
-                      {r.patternAuto && r.patternAuto !== r.pattern && (
-                        <span className="text-slate-400 normal-case text-[7px]">
-                          (auto: {PATTERN_LABEL[r.patternAuto]})
-                        </span>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums text-emerald-700 font-semibold">
+                  <td style={tdBase({ textAlign: "right", ...tabular, color: cfg.accentColor, fontWeight: 600 })}>
                     {formatNumber(r.beamLength, 2)}
-                    <span className="text-slate-400 text-[7px] ml-0.5">m</span>
+                    <span style={{ color: cfg.dimText, fontSize: cfg.bodyFontSize - 1, marginLeft: 1 }}>m</span>
                   </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums text-slate-500">
+                  <td style={tdBase({ textAlign: "right", ...tabular, color: cfg.dimText })}>
                     {r.blocksPerRow ?? "—"}
                   </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums font-semibold">
+                  <td style={tdBase({ textAlign: "right", ...tabular, fontWeight: 600 })}>
                     {r.totalBlocks}
                   </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums font-semibold">
+                  <td style={tdBase({ textAlign: "right", ...tabular, fontWeight: 600 })}>
                     {r.beamCount}
                   </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums text-slate-500">
+                  <td style={tdBase({ textAlign: "right", ...tabular, color: cfg.dimText })}>
                     {formatNumber(r.monolithArea, 2)}
-                    <span className="text-[7px] ml-0.5">m²</span>
+                    <span style={{ fontSize: cfg.bodyFontSize - 1, marginLeft: 1 }}>m²</span>
                   </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums">
+                  <td style={tdBase({ textAlign: "right", ...tabular })}>
                     {formatNumber(r.m2Price, 0)}
                   </td>
-                  <td className="px-3 py-[5px] text-right tabular-nums font-bold text-emerald-700">
+                  <td style={tdBase({ textAlign: "right", ...tabular, fontWeight: 700, color: cfg.subtotalColor })}>
                     {formatNumber(r.subtotal, 0)}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-slate-100 border-t-2 border-slate-300">
-                <td
-                  colSpan={6}
-                  className="px-3 py-[6px] text-right text-[7px] uppercase tracking-wider text-slate-600 font-bold"
-                >
+              <tr style={{ backgroundColor: cfg.footerBg, borderTop: `${px(cfg.footerDividerWidth)} solid ${cfg.borderColor}` }}>
+                <td colSpan={6} style={tfCell({ textAlign: "right", textTransform: "uppercase", letterSpacing: "0.08em" })}>
                   Жами
                 </td>
-                <td className="px-3 py-[6px] text-right tabular-nums font-bold">
-                  {data.totals.blocks}
-                </td>
-                <td className="px-3 py-[6px] text-right tabular-nums font-bold">
-                  {data.totals.beams}
-                </td>
-                <td className="px-3 py-[6px] text-right tabular-nums font-bold">
+                <td style={tfCell({ textAlign: "right", ...tabular })}>{data.totals.blocks}</td>
+                <td style={tfCell({ textAlign: "right", ...tabular })}>{data.totals.beams}</td>
+                <td style={tfCell({ textAlign: "right", ...tabular })}>
                   {formatNumber(data.totals.monolithArea, 2)}
-                  <span className="text-[7px] ml-0.5 text-slate-500">m²</span>
+                  <span style={{ fontSize: cfg.footerFontSize - 2, marginLeft: 1, color: cfg.dimText }}>m²</span>
                 </td>
-                <td className="px-3 py-[6px]"></td>
-                <td className="px-3 py-[6px] text-right tabular-nums font-extrabold text-emerald-700 text-[10px]">
+                <td style={tfCell({})} />
+                <td style={tfCell({ textAlign: "right", ...tabular, color: cfg.subtotalColor, fontWeight: 800, fontSize: cfg.footerFontSize + 2 })}>
                   {formatNumber(data.totals.sum, 0)}
                 </td>
               </tr>
@@ -311,13 +344,20 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
           </table>
         </div>
 
-        {/* ── Footer ─────────────────────────────────────────────── */}
-        <div className="mt-6 pt-3 border-t border-slate-200 flex items-center justify-between text-[10px] text-slate-400">
-          <div>{BRAND_NAME} · {BRAND_TAGLINE}</div>
-          <div className="tabular-nums">
-            Чиқарилди ·{" "}
-            {generatedAt.toLocaleDateString("en-GB")}{" "}
-            {generatedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+        {/* ── Footer ──────────────────────────────────────────── */}
+        <div style={{
+          marginTop: 24,
+          paddingTop: 12,
+          borderTop: `1px solid ${cfg.borderColor}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          fontSize: 10,
+          color: cfg.dimText,
+        }}>
+          <div>{cfg.brandName} · {cfg.brandTagline}</div>
+          <div style={tabular}>
+            Чиқарилди · {generatedAt.toLocaleDateString("en-GB")} {generatedAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
           </div>
         </div>
       </div>
@@ -326,24 +366,14 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
 );
 
 /**
- * Wrapper that positions the share card offscreen so html-to-image
- * can capture it. The card is laid out at full 1100 px width even
- * on a 360 px phone viewport because `position: fixed` decouples it
- * from the document flow.
- *
- *   <ShareTarget data={shareData} ref={shareRef} />
- *
- * pointer-events-none + aria-hidden so screen readers and clicks
- * pass through to the visible UI.
+ * Offscreen wrapper — positions the card off-screen so html-to-image can
+ * capture it at the card's native width regardless of current viewport.
  */
-export const ShareTarget = React.forwardRef<HTMLDivElement, { data: ShareData }>(
-  function ShareTarget({ data }, ref) {
+export const ShareTarget = React.forwardRef<HTMLDivElement, { data: ShareData; config?: TableDesignConfig }>(
+  function ShareTarget({ data, config }, ref) {
     return (
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed top-0 left-[-99999px]"
-      >
-        <CalculationShareCard data={data} ref={ref} />
+      <div aria-hidden="true" className="pointer-events-none fixed top-0 left-[-99999px]">
+        <CalculationShareCard data={data} config={config} ref={ref} />
       </div>
     );
   },

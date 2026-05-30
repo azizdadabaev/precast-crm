@@ -25,6 +25,7 @@ import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orde
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
+import { useTableDesign } from "@/hooks/useTableDesign";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { useT } from "@/lib/i18n";
@@ -222,6 +223,7 @@ export default function OrderDetailPage() {
    *  calculation summary card so the operator can ship a one-shot
    *  image of the order to the customer. */
   const shareRef = useRef<HTMLDivElement>(null);
+  const tableDesign = useTableDesign();
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const mirrorScrollRef = useRef<HTMLDivElement>(null);
   const mirrorSpacerRef = useRef<HTMLDivElement>(null);
@@ -413,7 +415,7 @@ export default function OrderDetailPage() {
           visible card means the exported image is consistent across
           phone + desktop, with brand header + full table layout.
           See src/components/share/CalculationShareCard.tsx. */}
-      <ShareTarget ref={shareRef} data={shareData} />
+      <ShareTarget ref={shareRef} data={shareData} config={tableDesign} />
 
       {/* On-screen header + calc summary. No longer the capture target —
           stays responsive for actual viewing. */}

@@ -29,6 +29,7 @@ import { useHydrateCalculator } from "@/store/useHydrateCalculator";
 import { Bi, useT } from "@/lib/i18n";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
+import { useTableDesign } from "@/hooks/useTableDesign";
 
 function CalculationsInner() {
   const router = useRouter();
@@ -66,6 +67,7 @@ function CalculationsInner() {
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   /** Ref to the offscreen <ShareTarget> — see render block below. */
   const shareRef = useRef<HTMLDivElement>(null);
+  const tableDesign = useTableDesign();
   /** Order number + scheduled date for the edit-mode banner and dialog
    *  default. Re-fetched on mount when editingOrderId is in the store
    *  (so a refresh during edit mode keeps showing the right banner).
@@ -712,7 +714,7 @@ function CalculationsInner() {
       {/* Offscreen share card — capture target for the Send button.
           Rendered at fixed 1100 px regardless of viewport so the
           exported image is identical on phones + desktops. */}
-      <ShareTarget ref={shareRef} data={shareData} />
+      <ShareTarget ref={shareRef} data={shareData} config={tableDesign} />
 
       {/* Calculator. The Clear / Save Project / Place Order buttons
           render INSIDE the calculator's bottom toolbar via the

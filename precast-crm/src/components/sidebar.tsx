@@ -27,6 +27,7 @@ import {
   Factory,
   Images,
   Activity as ActivityIcon,
+  TableProperties,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -171,6 +172,13 @@ export const SETTINGS_NAV: NavItem[] = [
     label: "Нархлар",
     sub: "Pricing",
     icon: Coins,
+    permission: "pricing.edit",
+  },
+  {
+    href: "/table-design",
+    label: "Жадвал дизайни",
+    sub: "Table Designer",
+    icon: TableProperties,
     permission: "pricing.edit",
   },
 ];

@@ -11,6 +11,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
+import { useTableDesign } from "@/hooks/useTableDesign";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { formatDraftNumber } from "@/lib/draft-number";
@@ -79,6 +80,7 @@ export default function ProjectDetailPage() {
   /** Captured by ShareCalculationButton — wraps project header +
    *  calculation summary so operators can ship a one-shot image. */
   const shareRef = useRef<HTMLDivElement>(null);
+  const tableDesign = useTableDesign();
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["projects-all"],
@@ -193,7 +195,7 @@ export default function ProjectDetailPage() {
           for the "Send" button. Rendering this in addition to the
           visible card means the exported image is consistent across
           phone + desktop. See src/components/share/CalculationShareCard.tsx. */}
-      <ShareTarget ref={shareRef} data={shareData} />
+      <ShareTarget ref={shareRef} data={shareData} config={tableDesign} />
 
       {/* On-screen layout — stays responsive for viewing. */}
       <div className="flex flex-col gap-6 p-4 bg-background">
