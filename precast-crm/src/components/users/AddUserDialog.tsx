@@ -32,14 +32,10 @@ const ROLE_OPTIONS: Array<{ value: string; uz: string; en: string }> = [
   { value: "CUSTOM",     uz: "Махсус (стандартсиз)", en: "Custom (no defaults)" },
 ];
 
-// 12-char password from a clear character set (no l/I/0/O ambiguity).
-function generatePassword(): string {
-  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  const arr = new Uint32Array(12);
+function generatePin(): string {
+  const arr = new Uint32Array(1);
   crypto.getRandomValues(arr);
-  for (const n of arr) out += chars[n % chars.length];
-  return out;
+  return String(arr[0] % 10000).padStart(4, "0");
 }
 
 export function AddUserDialog({
@@ -55,50 +51,39 @@ export function AddUserDialog({
 }) {
   const t = useT();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState(() => generatePassword());
+  const [pin, setPin] = useState(() => generatePin());
   const [role, setRole] = useState("SALES");
   const [perms, setPerms] = useState<Set<Action>>(
     () => new Set(getDefaultPermissionsForRole("SALES")),
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<{ password: string } | null>(null);
+  const [created, setCreated] = useState<{ pin: string; loginName: string } | null>(null);
 
-  // Non-OWNER actors can't grant the OWNER-only flags. The checklist
-  // greys them out via `lockedActions`, and the server rejects too.
   const lockedActions: ReadonlySet<Action> | undefined =
     currentUser.role === "OWNER"
       ? undefined
       : new Set<Action>(["user.disable", "user.editPermissions"]);
 
   function changeRole(nextRole: string) {
-    const nextDefaults = new Set(
-      getDefaultPermissionsForRole(nextRole) as Action[],
-    );
-    // No confirmation: the spec asks for one but the dialog is single-
-    // step so a wrong template pick is a 1-click fix. If the user
-    // ticked extras after picking SALES and then switches to OWNER,
-    // they get the OWNER defaults and can re-tick what they want.
     setRole(nextRole);
-    setPerms(nextDefaults);
+    setPerms(new Set(getDefaultPermissionsForRole(nextRole) as Action[]));
   }
 
   async function submit() {
     setError(null);
     setBusy(true);
     try {
-      await api("/api/users", {
+      const result = await api<{ loginName: string }>("/api/users", {
         method: "POST",
         json: {
-          name,
-          email: email.toLowerCase().trim(),
-          password,
+          name: name.trim(),
+          pin,
           role,
           permissions: Array.from(perms),
         },
       });
-      setCreated({ password });
+      setCreated({ pin, loginName: result?.loginName ?? name.trim() });
       onCreated();
     } catch (e) {
       setError((e as Error).message);
@@ -109,8 +94,7 @@ export function AddUserDialog({
 
   function reset() {
     setName("");
-    setEmail("");
-    setPassword(generatePassword());
+    setPin(generatePin());
     setRole("SALES");
     setPerms(new Set(getDefaultPermissionsForRole("SALES") as Action[]));
     setError(null);
@@ -137,8 +121,8 @@ export function AddUserDialog({
 
         {created ? (
           <CreatedScreen
-            password={created.password}
-            email={email}
+            pin={created.pin}
+            loginName={created.loginName}
             onClose={() => close(false)}
           />
         ) : (
@@ -155,48 +139,35 @@ export function AddUserDialog({
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
+                    placeholder={t("Тўлиқ исм", "Full name")}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="user-email">Email</Label>
-                  <Input
-                    id="user-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tursunboy@precast.local"
-                    required
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    {t(
-                      "Тўлиқ email: фойдаланувчи@precast.local",
-                      "Full email: username@precast.local",
-                    )}
-                  </p>
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <Label htmlFor="user-password">
-                    Дастлабки парол<span className="lang-en"> · Initial password</span>
+                  <Label htmlFor="user-pin">
+                    Дастлабки PIN<span className="lang-en"> · Initial PIN</span>
                   </Label>
                   <div className="flex gap-2">
                     <Input
-                      id="user-password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      id="user-pin"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={4}
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                       required
-                      minLength={8}
+                      className="tracking-[0.5em] text-center text-lg font-mono"
                     />
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={() => setPassword(generatePassword())}
+                      onClick={() => setPin(generatePin())}
                     >
                       Янгилаш<span className="lang-en"> · Regenerate</span>
                     </Button>
                   </div>
                   <div className="text-xs text-muted-foreground">
                     Фойдаланувчи биринчи киришда ўзгартиради
-                    <span className="lang-en"> · User will change this on first login.</span>
+                    <span className="lang-en"> · User changes this on first login.</span>
                   </div>
                 </div>
               </div>
@@ -242,7 +213,7 @@ export function AddUserDialog({
             <Button variant="outline" onClick={() => close(false)}>
               Бекор қилиш<span className="lang-en"> · Cancel</span>
             </Button>
-            <Button onClick={submit} disabled={busy || !name || !email || password.length < 8}>
+            <Button onClick={submit} disabled={busy || !name.trim() || pin.length !== 4}>
               {busy
                 ? t("Қўшилмоқда…", "Adding…")
                 : t(
@@ -258,12 +229,12 @@ export function AddUserDialog({
 }
 
 function CreatedScreen({
-  password,
-  email,
+  pin,
+  loginName,
   onClose,
 }: {
-  password: string;
-  email: string;
+  pin: string;
+  loginName: string;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -274,14 +245,14 @@ function CreatedScreen({
           ✓ Фойдаланувчи яратилди<span className="lang-en"> · User created</span>
         </div>
         <div className="mt-2 text-sm">
-          Email: <code className="text-xs">{email}</code>
+          Логин исми: <code className="text-sm font-mono bg-card px-2 py-0.5 rounded">{loginName}</code>
         </div>
         <div className="mt-1 text-sm">
-          Парол: <code className="text-base font-mono bg-card px-2 py-0.5 rounded">{password}</code>
+          PIN: <code className="text-base font-mono bg-card px-2 py-0.5 rounded tracking-widest">{pin}</code>
         </div>
         <div className="mt-3 text-xs text-success/80">
-          Бу парол кейин кўрсатилмайди — ҳозир нусхалаб олинг
-          <span className="lang-en"> · This password won&apos;t be shown again — copy it now.</span>
+          Бу PIN кейин кўрсатилмайди — ҳозир нусхалаб олинг
+          <span className="lang-en"> · This PIN won&apos;t be shown again — copy it now.</span>
         </div>
       </div>
 
@@ -289,7 +260,7 @@ function CreatedScreen({
         <Button
           variant="outline"
           onClick={() => {
-            navigator.clipboard.writeText(password).then(
+            navigator.clipboard.writeText(`${loginName} / ${pin}`).then(
               () => setCopied(true),
               () => undefined,
             );
@@ -298,7 +269,7 @@ function CreatedScreen({
         >
           {copied
             ? <>Нусхаланди ✓<span className="lang-en"> · Copied</span></>
-            : <>Паролни нусхалаш<span className="lang-en"> · Copy password</span></>}
+            : <>Нусхалаш<span className="lang-en"> · Copy login + PIN</span></>}
         </Button>
         <Button onClick={onClose}>Ёпиш<span className="lang-en"> · Close</span></Button>
       </div>

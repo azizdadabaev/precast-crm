@@ -23,6 +23,7 @@ async function main() {
   const driverPwd = await bcrypt.hash("driver123", 10);
   const accountantPwd = await bcrypt.hash("accountant123", 10);
   const ownerPwd = await bcrypt.hash("owner123", 10);
+  const seedPin = await bcrypt.hash("1234", 10);
 
   const seedUser = (
     role:
@@ -41,33 +42,39 @@ async function main() {
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@precast.local" },
-    update: { ...seedUser("ADMIN") },
+    update: { ...seedUser("ADMIN"), loginName: "Admin" },
     create: {
       name: "Admin",
+      loginName: "Admin",
       email: "admin@precast.local",
       passwordHash: adminPwd,
+      pinHash: seedPin,
       ...seedUser("ADMIN"),
     },
   });
 
   const sales = await prisma.user.upsert({
     where: { email: "sales@precast.local" },
-    update: { ...seedUser("SALES") },
+    update: { ...seedUser("SALES"), loginName: "Sales Manager" },
     create: {
       name: "Sales Manager",
+      loginName: "Sales Manager",
       email: "sales@precast.local",
       passwordHash: salesPwd,
+      pinHash: seedPin,
       ...seedUser("SALES"),
     },
   });
 
   const owner = await prisma.user.upsert({
     where: { email: "owner@precast.local" },
-    update: { ...seedUser("OWNER") },
+    update: { ...seedUser("OWNER"), loginName: "Aziz Dadabaev" },
     create: {
       name: "Aziz Dadabaev",
+      loginName: "Aziz Dadabaev",
       email: "owner@precast.local",
       passwordHash: ownerPwd,
+      pinHash: seedPin,
       ...seedUser("OWNER"),
     },
   });
@@ -75,44 +82,52 @@ async function main() {
   // TODO: replace "Owner Two" with the brother's real name once provided.
   await prisma.user.upsert({
     where: { email: "owner2@precast.local" },
-    update: { ...seedUser("OWNER") },
+    update: { ...seedUser("OWNER"), loginName: "Owner Two" },
     create: {
       name: "Owner Two",
+      loginName: "Owner Two",
       email: "owner2@precast.local",
       passwordHash: ownerPwd,
+      pinHash: seedPin,
       ...seedUser("OWNER"),
     },
   });
 
   await prisma.user.upsert({
     where: { email: "inventory@precast.local" },
-    update: { ...seedUser("INVENTORY") },
+    update: { ...seedUser("INVENTORY"), loginName: "Inventory Manager" },
     create: {
       name: "Inventory Manager",
+      loginName: "Inventory Manager",
       email: "inventory@precast.local",
       passwordHash: inventoryPwd,
+      pinHash: seedPin,
       ...seedUser("INVENTORY"),
     },
   });
 
   await prisma.user.upsert({
     where: { email: "driver@precast.local" },
-    update: { ...seedUser("DRIVER") },
+    update: { ...seedUser("DRIVER"), loginName: "Driver Demo" },
     create: {
       name: "Driver Demo",
+      loginName: "Driver Demo",
       email: "driver@precast.local",
       passwordHash: driverPwd,
+      pinHash: seedPin,
       ...seedUser("DRIVER"),
     },
   });
 
   await prisma.user.upsert({
     where: { email: "accountant@precast.local" },
-    update: { ...seedUser("ACCOUNTANT") },
+    update: { ...seedUser("ACCOUNTANT"), loginName: "Accountant" },
     create: {
       name: "Accountant",
+      loginName: "Accountant",
       email: "accountant@precast.local",
       passwordHash: accountantPwd,
+      pinHash: seedPin,
       ...seedUser("ACCOUNTANT"),
     },
   });

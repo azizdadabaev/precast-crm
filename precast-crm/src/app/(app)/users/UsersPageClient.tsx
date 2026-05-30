@@ -64,7 +64,7 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
             <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="text-left px-3 py-2.5">Исм<span className="lang-en"> · Name</span></th>
-                <th className="text-left px-3 py-2.5">Email</th>
+                <th className="text-left px-3 py-2.5">Логин</th>
                 <th className="text-left px-3 py-2.5">Шаблон<span className="lang-en"> · Template</span></th>
                 <th className="text-right px-3 py-2.5">{t("Рухсат", "Perms")}</th>
                 <th className="text-left px-3 py-2.5">{t("Ҳолат", "Status")}</th>
@@ -112,7 +112,7 @@ export function UsersPageClient({ currentUser }: { currentUser: AuthUser }) {
                       )}
                     </td>
                     <td className="px-3 py-2.5 font-mono text-xs text-text-tertiary">
-                      {u.email}
+                      {u.loginName ?? "—"}
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1.5 flex-wrap">

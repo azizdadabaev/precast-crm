@@ -59,18 +59,18 @@ export const RoleEnum = z.enum([
 
 // ── Auth ────────────────────────────────────────────────────────
 export const LoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
+  loginName: z.string().min(1).max(120),
+  pin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits"),
 });
 
-// ── User management (Phase 5) ───────────────────────────────────
+// ── User management ─────────────────────────────────────────────
 // The permissions list is validated at the route handler — it has
 // the canonical ACTIONS set and a stricter check is cheaper there
 // than embedding the full enum here.
 export const CreateUserSchema = z.object({
   name: z.string().min(2, "name must be at least 2 chars").max(120),
-  email: z.string().email().max(120),
-  password: z.string().min(8, "password must be at least 8 chars").max(200),
+  email: z.string().email().max(120).optional(),
+  pin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits"),
   role: RoleEnum.default("SALES"),
   permissions: z.array(z.string()).default([]),
 });
@@ -84,22 +84,15 @@ export const UpdateUserSchema = z.object({
   role: RoleEnum.optional(),
   permissions: z.array(z.string()).optional(),
   isActive: z.boolean().optional(),
-  // Optional: admin can reset another user's password to a new value.
-  // The new password gets `mustChangePassword=true` so the user is
-  // forced to change it on next login.
-  resetPassword: z.string().min(8).max(200).optional(),
+  // Admin can reset another user's PIN; mustChangePassword is set to true.
+  resetPin: z.string().regex(/^\d{4}$/).optional(),
 });
 
-// Self-service password change. `currentPassword` is empty when
-// the user is in the forced-change-on-first-login flow (the route
-// detects this via mustChangePassword on the user record).
-export const ChangePasswordSchema = z.object({
-  currentPassword: z.string().optional().default(""),
-  newPassword: z.string().min(8, "password must be at least 8 chars").max(200),
-}).refine(
-  (d) => d.newPassword !== d.currentPassword,
-  { path: ["newPassword"], message: "new password must differ from current" },
-);
+// Self-service PIN change. currentPin is empty during forced-change flow.
+export const ChangePinSchema = z.object({
+  currentPin: z.string().optional().default(""),
+  newPin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits"),
+});
 
 // ── Clients ─────────────────────────────────────────────────────
 export const ReferenceConsentEnum = z.enum(["NOT_ASKED", "GRANTED", "DENIED"]);

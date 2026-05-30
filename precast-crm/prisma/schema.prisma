@@ -178,8 +178,13 @@ enum ReferenceConsent {
 model User {
   id           String   @id @default(cuid())
   name         String
-  email        String   @unique
-  passwordHash String
+  // Login identifier derived from name: "Азиз", "Азиз 2", etc.
+  // Nullable during the initial schema push; seed.ts populates all rows.
+  loginName    String?  @unique
+  // PIN-based auth (bcrypt of 4-digit PIN). Null until seed/reset sets it.
+  pinHash      String?
+  email        String?  @unique  // optional metadata, no longer used for login
+  passwordHash String?           // legacy; null for users created after PIN migration
   // role is the TEMPLATE label this user was created from. Source of
   // truth for access is `permissions`, not `role`.
   role         UserRole @default(SALES)

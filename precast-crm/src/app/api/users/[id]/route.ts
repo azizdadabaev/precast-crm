@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { UpdateUserSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
-import { hashPassword } from "@/lib/auth";
+import { hashPin, deriveLoginName } from "@/lib/auth";
 import { ACTIONS, type Action } from "@/lib/permissions";
 
 /**
@@ -77,6 +77,16 @@ export const PATCH = withPermission<{ id: string }>(
 
     if (data.name !== undefined && data.name !== target.name) {
       updates.name = data.name;
+      // Re-derive loginName when the display name changes, unless the suffix
+      // already matches (e.g. "Азиз 2" stays "Азиз 2" if still unique).
+      const existingLoginNames = await prisma.user.findMany({
+        where: { id: { not: target.id } },
+        select: { loginName: true },
+      });
+      const taken = new Set<string>(
+        existingLoginNames.map((u) => u.loginName?.toLowerCase()).filter((v): v is string => !!v),
+      );
+      updates.loginName = deriveLoginName(data.name, taken);
     }
 
     if (data.role !== undefined && data.role !== target.role) {
@@ -108,12 +118,10 @@ export const PATCH = withPermission<{ id: string }>(
       });
     }
 
-    if (data.resetPassword) {
-      updates.passwordHash = await hashPassword(data.resetPassword);
-      // The user who got their password reset must change it on next
-      // login — same UX as creation.
+    if (data.resetPin) {
+      updates.pinHash = await hashPin(data.resetPin);
       updates.mustChangePassword = true;
-      audits.push({ action: "password_reset" });
+      audits.push({ action: "pin_reset" });
     }
 
     if (!Object.keys(updates).length) {
@@ -122,6 +130,7 @@ export const PATCH = withPermission<{ id: string }>(
         where: { id: target.id },
         select: {
           id: true,
+          loginName: true,
           email: true,
           name: true,
           role: true,
@@ -140,6 +149,7 @@ export const PATCH = withPermission<{ id: string }>(
         data: updates,
         select: {
           id: true,
+          loginName: true,
           email: true,
           name: true,
           role: true,

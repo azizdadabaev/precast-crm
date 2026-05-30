@@ -69,6 +69,27 @@ export async function verifyPassword(
   return bcrypt.compare(plain, hash);
 }
 
+export async function hashPin(pin: string): Promise<string> {
+  return bcrypt.hash(pin, 10);
+}
+
+export async function verifyPin(pin: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(pin, hash);
+}
+
+/**
+ * Derives a unique loginName from a display name.
+ * If "Азиз" is taken, returns "Азиз 2", then "Азиз 3", etc.
+ * Pass all EXISTING loginNames lowercased in `taken`.
+ */
+export function deriveLoginName(name: string, taken: Set<string>): string {
+  const base = name.trim();
+  if (!taken.has(base.toLowerCase())) return base;
+  let n = 2;
+  while (taken.has(`${base} ${n}`.toLowerCase())) n++;
+  return `${base} ${n}`;
+}
+
 export async function signToken(
   payload: Omit<AuthPayload, "iat" | "exp">,
 ): Promise<string> {

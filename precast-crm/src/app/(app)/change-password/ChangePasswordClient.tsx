@@ -17,9 +17,8 @@ export function ChangePasswordClient({
 }) {
   const t = useT();
   const router = useRouter();
-  const [currentPwd, setCurrentPwd] = useState("");
-  const [newPwd, setNewPwd] = useState("");
-  const [confirmPwd, setConfirmPwd] = useState("");
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -27,19 +26,15 @@ export function ChangePasswordClient({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (newPwd.length < 8) {
-      setError(t("Янги парол камида 8 белги бўлиши керак", "New password must be at least 8 chars"));
-      return;
-    }
-    if (newPwd !== confirmPwd) {
-      setError(t("Пароллар мос келмайди", "Passwords do not match"));
+    if (!/^\d{4}$/.test(newPin)) {
+      setError(t("PIN 4 та рақамдан иборат бўлиши керак", "PIN must be exactly 4 digits"));
       return;
     }
     setBusy(true);
     try {
       await api("/api/users/me/password", {
         method: "POST",
-        json: { currentPassword: currentPwd, newPassword: newPwd },
+        json: { currentPin, newPin },
       });
       setSuccess(true);
       setTimeout(() => {
@@ -58,20 +53,20 @@ export function ChangePasswordClient({
       <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="mb-5">
           <h1 className="text-xl font-bold tracking-tight">
-            {mustChange ? "Паролни ўзгартиринг" : "Паролингизни янгиланг"}
+            {mustChange ? "PIN кодни ўзгартиринг" : "PIN кодингизни янгиланг"}
             <span className="lang-en text-muted-foreground font-normal text-base">
-              {" "}· {mustChange ? "Change password" : "Update password"}
+              {" "}· {mustChange ? "Change PIN" : "Update PIN"}
             </span>
           </h1>
           <p className="text-sm text-text-tertiary">
             {mustChange
               ? t(
-                  `${userName}, давом этишдан олдин дастлабки паролни ўзгартиринг.`,
-                  `${userName}, please change your initial password before continuing.`,
+                  `${userName}, давом этишдан олдин янги PIN код ўрнатинг.`,
+                  `${userName}, please set a new PIN before continuing.`,
                 )
               : t(
-                  `${userName}, янги паролни киритинг ва тасдиқланг.`,
-                  `${userName}, enter and confirm a new password.`,
+                  `${userName}, янги 4 хонали PIN кодни киритинг.`,
+                  `${userName}, enter a new 4-digit PIN.`,
                 )}
           </p>
         </div>
@@ -79,44 +74,38 @@ export function ChangePasswordClient({
         <form onSubmit={submit} className="space-y-4">
           {!mustChange && (
             <div className="space-y-1.5">
-              <Label htmlFor="cur">Жорий парол<span className="lang-en"> · Current password</span></Label>
+              <Label htmlFor="cur">Жорий PIN<span className="lang-en"> · Current PIN</span></Label>
               <Input
                 id="cur"
-                type="password"
-                value={currentPwd}
-                onChange={(e) => setCurrentPwd(e.target.value)}
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                value={currentPin}
+                onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 required
                 autoComplete="current-password"
+                placeholder="••••"
+                className="tracking-[0.5em] text-center text-lg font-mono"
               />
             </div>
           )}
           <div className="space-y-1.5">
-            <Label htmlFor="new">Янги парол<span className="lang-en"> · New password</span></Label>
+            <Label htmlFor="new">Янги PIN<span className="lang-en"> · New PIN</span></Label>
             <Input
               id="new"
-              type="password"
-              value={newPwd}
-              onChange={(e) => setNewPwd(e.target.value)}
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={newPin}
+              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
               required
-              minLength={8}
               autoComplete="new-password"
+              placeholder="••••"
+              className="tracking-[0.5em] text-center text-lg font-mono"
             />
             <div className="text-xs text-text-tertiary">
-              Камида 8 белги<span className="lang-en">{" "}· At least 8 chars.</span>
+              4 та рақам<span className="lang-en">{" "}· Exactly 4 digits.</span>
             </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="confirm">
-              Тасдиқланг<span className="lang-en"> · Confirm new password</span>
-            </Label>
-            <Input
-              id="confirm"
-              type="password"
-              value={confirmPwd}
-              onChange={(e) => setConfirmPwd(e.target.value)}
-              required
-              autoComplete="new-password"
-            />
           </div>
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 border border-destructive/30 px-3 py-2 rounded-md">
@@ -125,13 +114,13 @@ export function ChangePasswordClient({
           )}
           {success && (
             <div className="text-sm text-success bg-success/10 border border-success/30 px-3 py-2 rounded-md">
-              ✓ Янгиланди<span className="lang-en"> · Password updated</span>
+              ✓ Янгиланди<span className="lang-en"> · PIN updated</span>
             </div>
           )}
           <Button
             type="submit"
             className="w-full"
-            disabled={busy || success}
+            disabled={busy || success || newPin.length !== 4}
           >
             {busy
               ? t("Сақланмоқда…", "Saving…")

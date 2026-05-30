@@ -2,60 +2,48 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ChangePasswordSchema } from "@/lib/validation";
+import { ChangePinSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
-import { hashPassword, verifyPassword } from "@/lib/auth";
+import { hashPin, verifyPin } from "@/lib/auth";
 
 /**
  * POST /api/users/me/password — withAuth
  *
- * Self-service password change. Two flows land here:
- *   1. Voluntary: user enters current + new password.
- *   2. Forced (mustChangePassword=true): user just enters new password;
- *      currentPassword is ignored. We still require them to be
- *      authenticated (cookie + isActive) — withAuth handles that.
+ * Self-service PIN change. Two flows:
+ *   1. Voluntary: user enters currentPin + newPin.
+ *   2. Forced (mustChangePassword=true): currentPin is ignored.
  *
  * Side effect: clears mustChangePassword, writes a UserAuditLog
- * "password_reset" entry with actorId = userId (self-action).
+ * "pin_reset" entry with actorId = userId (self-action).
  */
 export const POST = withAuth(async (req: NextRequest, { user }) => {
-  const data = ChangePasswordSchema.parse(await req.json());
+  const data = ChangePinSchema.parse(await req.json());
 
   const dbUser = await prisma.user.findUniqueOrThrow({
     where: { id: user.id },
-    select: { id: true, passwordHash: true, mustChangePassword: true },
+    select: { id: true, pinHash: true, mustChangePassword: true },
   });
 
-  // Voluntary change — must verify current password.
   if (!dbUser.mustChangePassword) {
-    if (!data.currentPassword) {
-      return fail(
-        "Жорий парол керак · Current password required",
-        400,
-      );
+    if (!data.currentPin) {
+      return fail("Жорий PIN керак · Current PIN required", 400);
     }
-    const ok = await verifyPassword(data.currentPassword, dbUser.passwordHash);
-    if (!ok) return fail("Current password is wrong", 401);
+    if (!dbUser.pinHash) {
+      return fail("PIN ўрнатилмаган · No PIN set", 400);
+    }
+    const valid = await verifyPin(data.currentPin, dbUser.pinHash);
+    if (!valid) return fail("Жорий PIN нотўғри · Current PIN is wrong", 401);
   }
-  // Forced change — currentPassword ignored. The user already
-  // authenticated with whatever temporary password was set.
 
-  const newHash = await hashPassword(data.newPassword);
+  const newHash = await hashPin(data.newPin);
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: user.id },
-      data: {
-        passwordHash: newHash,
-        mustChangePassword: false,
-      },
+      data: { pinHash: newHash, mustChangePassword: false },
     });
     await tx.userAuditLog.create({
-      data: {
-        userId: user.id,
-        actorId: user.id,
-        action: "password_reset",
-      },
+      data: { userId: user.id, actorId: user.id, action: "pin_reset" },
     });
   });
 

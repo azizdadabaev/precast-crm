@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CreateUserSchema } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
-import { hashPassword } from "@/lib/auth";
+import { hashPin, deriveLoginName } from "@/lib/auth";
 import { ACTIONS, type Action } from "@/lib/permissions";
 
 /**
@@ -20,6 +20,7 @@ export const GET = withPermission("user.view", async () => {
     orderBy: [{ isActive: "desc" }, { role: "asc" }, { name: "asc" }],
     select: {
       id: true,
+      loginName: true,
       email: true,
       name: true,
       role: true,
@@ -37,14 +38,8 @@ export const GET = withPermission("user.view", async () => {
 /**
  * POST /api/users — user.create
  *
- * Creates a new user from the dialog's template + permissions checklist.
- * The actor's authority gate:
- *   - Granting user.disable or user.editPermissions requires the
- *     ACTOR's role to be OWNER (these are OWNER-only powers and we
- *     don't let an ADMIN escalate by handing them to someone else).
- *
- * Side effect: appends a UserAuditLog entry (action="created") with
- * the role + permissions snapshot in newValue.
+ * Creates a new user with a display name + 4-digit PIN.
+ * loginName is auto-derived from the display name (deduped with " 2", " 3" suffix).
  */
 export const POST = withPermission("user.create", async (req: NextRequest, { user: actor }) => {
   const data = CreateUserSchema.parse(await req.json());
@@ -68,28 +63,30 @@ export const POST = withPermission("user.create", async (req: NextRequest, { use
     );
   }
 
-  const emailLower = data.email.toLowerCase();
-  const exists = await prisma.user.findUnique({ where: { email: emailLower } });
-  if (exists) return fail("Email already in use", 409);
+  // Derive a unique loginName from the display name
+  const existingLoginNames = await prisma.user.findMany({ select: { loginName: true } });
+  const taken = new Set<string>(
+    existingLoginNames.map((u) => u.loginName?.toLowerCase()).filter((v): v is string => !!v),
+  );
+  const loginName = deriveLoginName(data.name, taken);
 
-  const passwordHash = await hashPassword(data.password);
+  const pinHash = await hashPin(data.pin);
 
   const newUser = await prisma.$transaction(async (tx) => {
     const u = await tx.user.create({
       data: {
         name: data.name,
-        email: emailLower,
-        passwordHash,
+        loginName,
+        pinHash,
         role: data.role,
         permissions: data.permissions as Action[],
-        // Force-change on first login — operator gives the temporary
-        // password to the user, who then sets their own.
         mustChangePassword: true,
         isActive: true,
         createdById: actor.id,
       },
       select: {
         id: true,
+        loginName: true,
         email: true,
         name: true,
         role: true,

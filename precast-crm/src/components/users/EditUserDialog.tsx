@@ -22,13 +22,10 @@ import { useT } from "@/lib/i18n";
 import type { AuthUser } from "@/lib/auth";
 import type { ManagedUser } from "@/app/(app)/users/types";
 
-function generatePassword(): string {
-  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  const arr = new Uint32Array(12);
+function generatePin(): string {
+  const arr = new Uint32Array(1);
   crypto.getRandomValues(arr);
-  for (const n of arr) out += chars[n % chars.length];
-  return out;
+  return String(arr[0] % 10000).padStart(4, "0");
 }
 
 export function EditUserDialog({
@@ -48,20 +45,13 @@ export function EditUserDialog({
   const [name, setName] = useState("");
   const [perms, setPerms] = useState<Set<Action>>(new Set());
   const [active, setActive] = useState(true);
-  const [resetPwd, setResetPwd] = useState<string | null>(null);
+  const [resetPin, setResetPin] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resetCopied, setResetCopied] = useState(false);
 
-  // Authority gates — these match the server-side checks. The dialog
-  // shows / hides controls based on what the actor can actually do,
-  // so the UX doesn't pretend to allow what'll be 403'd.
-  const canEditPermissions = currentUser.permissions.includes(
-    "user.editPermissions",
-  );
+  const canEditPermissions = currentUser.permissions.includes("user.editPermissions");
   const canDisable = currentUser.permissions.includes("user.disable");
-  // Non-OWNER can't grant the OWNER-only flags even if they have
-  // editPermissions. The server enforces too.
   const lockedActions: ReadonlySet<Action> | undefined =
     currentUser.role === "OWNER"
       ? undefined
@@ -72,7 +62,7 @@ export function EditUserDialog({
       setName(target.name);
       setPerms(new Set(target.permissions as Action[]));
       setActive(target.isActive);
-      setResetPwd(null);
+      setResetPin(null);
       setError(null);
     }
   }, [target]);
@@ -97,8 +87,8 @@ export function EditUserDialog({
       if (canDisable && !isSelf && active !== target?.isActive) {
         body.isActive = active;
       }
-      if (resetPwd) {
-        body.resetPassword = resetPwd;
+      if (resetPin) {
+        body.resetPin = resetPin;
       }
       await api(`/api/users/${target?.id}`, {
         method: "PATCH",
@@ -121,7 +111,7 @@ export function EditUserDialog({
             Фойдаланувчини таҳрирлаш<span className="lang-en"> · Edit user</span>
           </DialogTitle>
           <DialogDescription>
-            {target.email}
+            {target.loginName ?? target.name}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,6 +125,18 @@ export function EditUserDialog({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
+              </div>
+              <div className="space-y-1">
+                <Label>Логин исми<span className="lang-en"> · Login name</span></Label>
+                <Input
+                  value={target.loginName ?? "—"}
+                  readOnly
+                  className="bg-muted/30 font-mono text-sm"
+                />
+                <div className="text-xs text-muted-foreground">
+                  Исм ўзгарса автоматик янгиланади
+                  <span className="lang-en"> · Auto-updated when name changes.</span>
+                </div>
               </div>
               <div className="space-y-1">
                 <Label>Шаблон<span className="lang-en"> · Template</span></Label>
@@ -202,19 +204,19 @@ export function EditUserDialog({
 
           <section className="space-y-2 rounded-md border border-border bg-card p-3">
             <Label className="text-sm font-semibold">
-              Паролни тиклаш<span className="lang-en"> · Reset password</span>
+              PIN кодни тиклаш<span className="lang-en"> · Reset PIN</span>
             </Label>
-            {resetPwd ? (
+            {resetPin ? (
               <div className="flex items-center gap-2">
-                <code className="font-mono text-sm bg-muted px-2 py-1 rounded">
-                  {resetPwd}
+                <code className="font-mono text-base tracking-widest bg-muted px-2 py-1 rounded">
+                  {resetPin}
                 </code>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(resetPwd).then(
+                    navigator.clipboard.writeText(resetPin).then(
                       () => setResetCopied(true),
                       () => undefined,
                     );
@@ -227,7 +229,7 @@ export function EditUserDialog({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => setResetPwd(null)}
+                  onClick={() => setResetPin(null)}
                 >
                   Бекор<span className="lang-en"> · Clear</span>
                 </Button>
@@ -237,14 +239,14 @@ export function EditUserDialog({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setResetPwd(generatePassword())}
+                onClick={() => setResetPin(generatePin())}
               >
-                Янги парол яратиш<span className="lang-en"> · Generate new password</span>
+                Янги PIN яратиш<span className="lang-en"> · Generate new PIN</span>
               </Button>
             )}
             <div className="text-xs text-muted-foreground">
-              Янги паролни сақлаш фойдаланувчини биринчи киришда уни ўзгартиришга мажбур қилади
-              <span className="lang-en"> · Saving with a new password forces the user to change it on next login.</span>
+              Янги PIN сақлаш фойдаланувчини биринчи киришда уни ўзгартиришга мажбур қилади
+              <span className="lang-en"> · Saving with a new PIN forces the user to change it on next login.</span>
             </div>
           </section>
 

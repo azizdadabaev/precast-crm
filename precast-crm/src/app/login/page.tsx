@@ -20,8 +20,8 @@ function LoginForm() {
   const t = useT();
   const router = useRouter();
   const search = useSearchParams();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [loginName, setLoginName] = useState("");
+  const [pin, setPin] = useState("");
   const initialError =
     search.get("error") === "disabled"
       ? "Аккаунт ўчирилган · Account is disabled. Contact your administrator."
@@ -36,7 +36,7 @@ function LoginForm() {
     try {
       const data = await api<{ redirectTo?: string }>("/api/auth/login", {
         method: "POST",
-        json: { email, password },
+        json: { loginName, pin },
       });
       const next = search.get("next") || data?.redirectTo || "/dashboard";
       router.push(next);
@@ -84,25 +84,31 @@ function LoginForm() {
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="loginName">{t("Исм", "Name")}</Label>
               <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="loginName"
+                type="text"
+                value={loginName}
+                onChange={(e) => setLoginName(e.target.value)}
                 required
-                autoComplete="email"
+                autoComplete="username"
+                placeholder={t("Масалан: Азиз", "e.g. Азиз")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">{t("Парол", "Password")}</Label>
+              <Label htmlFor="pin">PIN</Label>
               <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                id="pin"
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                pattern="\d{4}"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 required
                 autoComplete="current-password"
+                placeholder="••••"
+                className="tracking-[0.5em] text-center text-lg font-mono"
               />
             </div>
             {error && (
@@ -110,12 +116,9 @@ function LoginForm() {
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || pin.length !== 4}>
               {loading ? t("Кирилмоқда…", "Signing in…") : t("Кириш", "Sign in")}
             </Button>
-            <p className="text-[11px] font-mono text-text-tertiary text-center pt-2">
-              {t("Стандарт уруғ:", "Default seed:")} admin@precast.local / admin123
-            </p>
           </form>
         </div>
       </div>
