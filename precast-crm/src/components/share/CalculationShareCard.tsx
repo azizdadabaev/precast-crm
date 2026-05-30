@@ -134,85 +134,74 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, { data: Sha
           </div>
         </div>
 
-        {/* ── Title + client + (optional) payment block ─────────── */}
-        <div className="flex items-start justify-between gap-6 mt-5">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 leading-tight">
-              {data.title}
-            </h1>
-            {data.subtitle && (
-              <div className="text-sm text-slate-500 mt-0.5">{data.subtitle}</div>
-            )}
-            <div className="mt-3 space-y-0.5 text-sm">
-              <div className="text-slate-900 font-semibold">{data.clientName}</div>
-              {data.clientPhone && (
-                <div className="text-slate-600 tabular-nums">
-                  {formatPhone(data.clientPhone)}
-                </div>
-              )}
-              {data.clientAddress && (
-                <div className="text-slate-600">
-                  {addressToCyrillic(data.clientAddress)}
-                </div>
-              )}
-              {data.scheduledLabel && (
-                <div className="text-slate-600 mt-1">
-                  <span className="text-slate-400 uppercase text-[10px] font-bold tracking-wider mr-2">
-                    Етказиб бериш
-                  </span>
-                  <span className="font-semibold tabular-nums">
-                    {data.scheduledLabel}
-                  </span>
-                </div>
+        {/* ── Title + client + (optional) payment block — 2-line strip ── */}
+        <div className="mt-3 space-y-[3px]">
+          {/* Line 1: title left · total right */}
+          <div className="flex items-baseline justify-between gap-4">
+            <div className="flex items-baseline gap-3 min-w-0">
+              <span className="text-base font-black tracking-tight text-slate-900 leading-none whitespace-nowrap">
+                {data.title}
+              </span>
+              {data.subtitle && (
+                <span className="text-[10px] text-slate-400">{data.subtitle}</span>
               )}
             </div>
+            {data.payment ? (
+              <div className="flex items-baseline gap-2 shrink-0">
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Жами</span>
+                <span className="text-lg font-black tabular-nums text-emerald-700 leading-none">
+                  {formatNumber(data.payment.totalPrice, 0)}
+                </span>
+                <span className="text-[10px] text-slate-400">UZS</span>
+              </div>
+            ) : null}
           </div>
 
-          {/* Payment recap — orders only */}
-          {data.payment && (
-            <div className="text-right shrink-0 min-w-[260px]">
-              <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
-                Жами
-              </div>
-              <div className="text-3xl font-black tabular-nums text-emerald-700 leading-tight">
-                {formatNumber(data.payment.totalPrice, 0)}
-                <span className="text-xs text-slate-500 font-normal ml-1">UZS</span>
-              </div>
-              <div className="mt-2 flex items-baseline justify-between gap-4 text-xs">
-                <span className="text-slate-500 uppercase tracking-wider font-bold">
-                  Тўлов
-                </span>
-                <span className="tabular-nums font-semibold text-slate-700">
-                  {formatNumber(data.payment.paid, 0)}
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4 text-xs">
-                <span className="text-slate-500 uppercase tracking-wider font-bold">
-                  Қолди
-                </span>
-                <span
-                  className={`tabular-nums font-semibold ${
-                    data.payment.remaining === 0
-                      ? "text-emerald-700"
-                      : "text-amber-700"
-                  }`}
-                >
-                  {data.payment.remaining === 0
-                    ? "0"
-                    : formatNumber(data.payment.remaining, 0)}
-                </span>
-              </div>
-              <div
-                className={`mt-2 inline-block text-[10px] font-bold uppercase tracking-wider rounded px-2 py-1 ${data.payment.badgeColorCls}`}
-              >
-                {data.payment.badgeLabel}
-              </div>
+          {/* Line 2: client details left · payment breakdown right */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-[11px] text-slate-600 min-w-0 flex-wrap">
+              <span className="font-semibold text-slate-800">{data.clientName}</span>
+              {data.clientPhone && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span className="tabular-nums">{formatPhone(data.clientPhone)}</span>
+                </>
+              )}
+              {data.clientAddress && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span>{addressToCyrillic(data.clientAddress)}</span>
+                </>
+              )}
+              {data.scheduledLabel && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span>
+                    <span className="uppercase text-[9px] font-bold tracking-wider text-slate-400 mr-1">Ет:</span>
+                    <span className="font-semibold tabular-nums">{data.scheduledLabel}</span>
+                  </span>
+                </>
+              )}
             </div>
-          )}
+            {data.payment && (
+              <div className="flex items-center gap-3 shrink-0 text-[11px]">
+                <span className="text-slate-400 uppercase text-[9px] font-bold tracking-wider">Тўлов</span>
+                <span className="tabular-nums font-semibold text-slate-700">{formatNumber(data.payment.paid, 0)}</span>
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-400 uppercase text-[9px] font-bold tracking-wider">Қолди</span>
+                <span className={`tabular-nums font-semibold ${data.payment.remaining === 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                  {data.payment.remaining === 0 ? "0" : formatNumber(data.payment.remaining, 0)}
+                </span>
+                <span className={`text-[9px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${data.payment.badgeColorCls}`}>
+                  {data.payment.badgeLabel}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Calculation table ─────────────────────────────────── */}
-        <div className="mt-6 rounded-lg border border-slate-200 overflow-hidden">
+        <div className="mt-3 rounded-lg border border-slate-200 overflow-hidden">
           <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-baseline justify-between">
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600">
               Ҳисоб-китоб хулосаси
