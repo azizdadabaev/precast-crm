@@ -34,7 +34,7 @@ interface AuditRow {
   targetId: string | null;
   message: string | null;
   metadata: unknown;
-  user: { id: string; name: string; email: string; role: string } | null;
+  user: { id: string; name: string; loginName: string | null; role: string } | null;
 }
 
 interface AuditResponse {
@@ -205,7 +205,7 @@ export default function AuditPage() {
                         <>
                           <div className="font-medium">{r.user.name}</div>
                           <div className="text-muted-foreground">
-                            {r.user.role} · {r.user.email}
+                            {r.user.role}{r.user.loginName ? ` · ${r.user.loginName}` : ""}
                           </div>
                         </>
                       ) : (

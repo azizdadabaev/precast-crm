@@ -35,7 +35,7 @@ interface MeDTO {
 interface MentionUser {
   id: string;
   name: string;
-  email: string;
+  loginName: string | null;
   role: string;
 }
 
@@ -141,7 +141,7 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
       .filter(
         (u) =>
           u.name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q),
+          (u.loginName?.toLowerCase() ?? "").includes(q),
       )
       .slice(0, 6);
   }, [mentionQuery, mentionUsers]);
@@ -161,7 +161,7 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
   }
 
   function insertMention(user: MentionUser) {
-    const token = `@${user.email}`;
+    const token = `@${user.loginName ?? user.name}`;
     const el = textareaRef.current;
     const cursor = el?.selectionStart ?? draft.length;
     const atPos = mentionAtPos.current;
@@ -479,7 +479,7 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
                       {u.role}
                     </span>
                     <span className="ml-auto text-xs text-muted-foreground font-mono truncate hidden sm:block">
-                      {u.email}
+                      {u.loginName}
                     </span>
                   </button>
                 );

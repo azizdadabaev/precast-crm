@@ -66,7 +66,7 @@ export const GET = withPermission("audit.view", async (req: NextRequest) => {
       skip: (page - 1) * pageSize,
       take: pageSize,
       include: {
-        user: { select: { id: true, name: true, email: true, role: true } },
+        user: { select: { id: true, name: true, loginName: true, role: true } },
       },
     }),
   ]);
