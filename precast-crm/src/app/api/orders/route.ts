@@ -273,8 +273,9 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
       if (!project) throw new Error("PROJECT_NOT_FOUND");
       await tx.calculation.deleteMany({ where: { projectId: project.id } });
       await tx.calculation.createMany({
-        data: computed.map((c) => ({
+        data: computed.map((c, i) => ({
           projectId: project!.id,
+          seq: i,
           ...calcResultToCreatePayload(c.input, c.result),
         })),
       });
@@ -290,9 +291,10 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
             notes: `${body.rooms.length} rooms`,
           },
           calculations: {
-            create: computed.map((c) =>
-              calcResultToCreatePayload(c.input, c.result),
-            ),
+            create: computed.map((c, i) => ({
+              ...calcResultToCreatePayload(c.input, c.result),
+              seq: i,
+            })),
           },
         },
         include: { calculations: true },
@@ -301,7 +303,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
 
     const projectWithCalcs = await tx.project.findUniqueOrThrow({
       where: { id: project.id },
-      include: { calculations: { orderBy: { createdAt: "asc" } } },
+      include: { calculations: { orderBy: { seq: "asc" } } },
     });
 
     // 3. Allocate the next order number for this month

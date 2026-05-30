@@ -443,6 +443,8 @@ model Calculation {
   manualExtraBeamsCost    Decimal @db.Decimal(14, 2)
   subtotal                Decimal @db.Decimal(14, 2)
 
+  seq             Int      @default(0) // row display order within project
+
   createdAt       DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

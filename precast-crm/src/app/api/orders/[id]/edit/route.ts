@@ -148,14 +148,15 @@ export const PATCH = withPermission<{ id: string }>(
       // Replace the project's calculations with the freshly-computed ones.
       await tx.calculation.deleteMany({ where: { projectId: existing.projectId } });
       await tx.calculation.createMany({
-        data: computed.map((c) => ({
+        data: computed.map((c, i) => ({
           projectId: existing.projectId,
+          seq: i,
           ...calcResultToCreatePayload(c.input, c.result),
         })),
       });
       const refreshed = await tx.project.findUniqueOrThrow({
         where: { id: existing.projectId },
-        include: { calculations: { orderBy: { createdAt: "asc" } } },
+        include: { calculations: { orderBy: { seq: "asc" } } },
       });
       const primaryCalc = refreshed.calculations[0];
 

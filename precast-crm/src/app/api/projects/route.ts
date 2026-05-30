@@ -48,7 +48,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     where,
     orderBy: { updatedAt: "desc" },
     include: {
-      calculations: { orderBy: { createdAt: "asc" } },
+      calculations: { orderBy: { seq: "asc" } },
       client: true,
       orders: { select: { id: true, orderNumber: true, status: true, scheduledAt: true } },
     },
@@ -130,7 +130,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           tentativeClientPhone: existingClient ? null : phoneNorm,
           tentativeClientAddress: existingClient ? null : body.clientAddress ?? null,
           calculations: {
-            create: computed.map((c) => calcResultToCreatePayload(c.input, c.result)),
+            create: computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i })),
           },
         },
         include: { calculations: true, client: true },
@@ -158,7 +158,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
         tentativeClientPhone: existingClient ? null : phoneNorm,
         tentativeClientAddress: existingClient ? null : body.clientAddress ?? null,
         calculations: {
-          create: computed.map((c) => calcResultToCreatePayload(c.input, c.result)),
+          create: computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i })),
         },
       },
       include: { calculations: true, client: true },

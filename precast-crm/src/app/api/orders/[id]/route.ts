@@ -21,7 +21,7 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
     where: { id: params.id },
     include: {
       client: true,
-      project: { include: { calculations: { orderBy: { createdAt: "asc" } } } },
+      project: { include: { calculations: { orderBy: { seq: "asc" } } } },
       primaryCalculation: true,
       dispatch: {
         include: {
