@@ -643,7 +643,12 @@ export function TableDesignerClient() {
       </div>
 
       {/* ── Two-pane layout ─────────────────────────────────── */}
-      <div className="flex gap-6 items-start">
+      {/* `items-stretch` (flex default) is critical: it makes the
+          right column grow to match the tall left settings column,
+          which is what gives `sticky top-4` (line ~739) the scroll
+          range it needs. Without it the right column is only as
+          tall as the preview itself and sticky has nowhere to pin. */}
+      <div className="flex gap-6 items-stretch">
 
         {/* ── Left: Controls ────────────────────────────────── */}
         <div className="w-[420px] shrink-0 space-y-3 pb-24">
