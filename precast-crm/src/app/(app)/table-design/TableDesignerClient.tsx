@@ -624,11 +624,15 @@ export function TableDesignerClient() {
           </Button>
 
           {/* Save */}
+          {!colSumOk && (
+            <span className="text-xs text-destructive font-medium">
+              Устунлар: {colSum.toFixed(1)}% / 100%
+            </span>
+          )}
           <Button
             size="sm"
             onClick={() => save(cfg)}
             disabled={saving || !colSumOk}
-            title={!colSumOk ? "Устун кенгликлари 100% бўлиши керак" : undefined}
           >
             {saving ? (
               <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
