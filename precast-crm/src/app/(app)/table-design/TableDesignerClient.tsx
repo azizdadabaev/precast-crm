@@ -781,7 +781,7 @@ export function TableDesignerClient() {
             </div>
 
             <p className="text-[10px] text-muted-foreground">
-              Реал экспорт 2× пиксел зичликда (2200 px кенглик 1100 px карта учун).
+              Реал экспорт 3× пиксел зичликда ({cfg.cardWidth * 3} px кенглик {cfg.cardWidth} px карта учун).
             </p>
           </div>
         </div>

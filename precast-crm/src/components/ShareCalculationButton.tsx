@@ -65,7 +65,7 @@ export function ShareCalculationButton({
   // when the captured area might overflow (e.g. a long calc table).
   const baseOpts = {
     backgroundColor: "#ffffff",
-    pixelRatio: 2,
+    pixelRatio: 3,
     cacheBust: true,
   };
 
