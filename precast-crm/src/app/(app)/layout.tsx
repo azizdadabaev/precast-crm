@@ -40,7 +40,7 @@ export default async function AppShellLayout({
   const user = await requirePermissionForPath(pathname);
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex h-screen bg-background">
       <AudioUnlocker />
       <NotificationListener />
       <Sidebar user={user} />
