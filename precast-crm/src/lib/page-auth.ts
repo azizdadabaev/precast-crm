@@ -49,6 +49,7 @@ export const ROUTE_PERMISSIONS: Record<
   "/inventory": "inventory.view",
   "/production": "inventory.view",
   "/sandbox": "sandbox.access",
+  "/inbox": "inbox.access",
   "/users": "user.view",
   "/audit": "audit.view",
   "/pricing": "pricing.edit",

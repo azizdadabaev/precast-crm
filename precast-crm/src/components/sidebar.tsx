@@ -28,6 +28,7 @@ import {
   Images,
   Activity as ActivityIcon,
   TableProperties,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -95,6 +96,13 @@ export const NAV: NavItem[] = [
     sub: "Activity",
     icon: ActivityIcon,
     permission: "order.view",
+  },
+  {
+    href: "/inbox",
+    label: "Хабарлар",
+    sub: "Inbox",
+    icon: MessageCircle,
+    permission: "inbox.access",
   },
   {
     href: "/clients",
