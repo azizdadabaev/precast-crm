@@ -185,7 +185,8 @@ function VideoNote({ src, footer }: { src: string; footer?: React.ReactNode }) {
         <button
           type="button"
           aria-label="Play video note"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             setStarted(true);
             void ref.current?.play();
           }}

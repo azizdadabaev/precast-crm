@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause } from "lucide-react";
 
 /**
@@ -76,7 +76,7 @@ export function VoicePlayer({
   const [current, setCurrent] = useState(0);
   const [total, setTotal] = useState(duration ?? 0);
 
-  const bars = buildWaveform(id);
+  const bars = useMemo(() => buildWaveform(id), [id]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -121,6 +121,16 @@ export function VoicePlayer({
     setCurrent(audio.currentTime);
   };
 
+  const seekByKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !total) return;
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const delta = e.key === "ArrowRight" ? 5 : -5;
+    audio.currentTime = Math.min(total, Math.max(0, audio.currentTime + delta));
+    setCurrent(audio.currentTime);
+  };
+
   const progress = total > 0 ? current / total : 0;
   // Time label: count up while playing / scrubbed, show total when idle.
   const label = current > 0 ? fmt(current) : fmt(total);
@@ -129,7 +139,7 @@ export function VoicePlayer({
   return (
     <div className="flex flex-col gap-1">
       {title ? (
-        <span className="truncate text-[13px] font-medium text-[#3a6df0]" title={title}>
+        <span className="truncate text-[13px] font-medium text-[#3390ec]" title={title}>
           {title}
         </span>
       ) : null}
@@ -152,6 +162,7 @@ export function VoicePlayer({
           <div
             ref={waveRef}
             onClick={seek}
+            onKeyDown={seekByKey}
             className="flex h-7 cursor-pointer items-center gap-[2px]"
             role="slider"
             aria-label="Seek"
