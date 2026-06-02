@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
 
   try {
     // 3. Upsert the conversation.
+    const bump = !parsed.isEdited;
     const conversation = await prisma.conversation.upsert({
       where: { channel_externalId: { channel: "TELEGRAM", externalId: parsed.chatId } },
       create: {
@@ -59,9 +60,9 @@ export async function POST(req: NextRequest) {
         displayName: parsed.displayName,
         username: parsed.username,
         businessConnectionId: parsed.businessConnectionId,
-        lastMessageAt: new Date(),
-        lastSnippet: snippetFor(parsed.text, parsed.media),
-        unread: true,
+        ...(bump
+          ? { lastMessageAt: new Date(), lastSnippet: snippetFor(parsed.text, parsed.media), unread: true }
+          : {}),
       },
     });
 
@@ -86,7 +87,10 @@ export async function POST(req: NextRequest) {
 
     if (parsed.media && parsed.media.fileId && parsed.media.kind !== "LOCATION" && parsed.media.kind !== "OTHER") {
       const size = parsed.media.fileSize ?? 0;
-      if (size > 0 && size <= TELEGRAM_MAX_DOWNLOAD_BYTES) {
+      if (size > TELEGRAM_MAX_DOWNLOAD_BYTES) {
+        mediaMeta = { ...(mediaMeta ?? {}), oversize: true };
+      } else {
+        // size unknown (0) or within limit — attempt the download
         try {
           const filePath = await tgGetFilePath(parsed.media.fileId);
           const buf = await tgDownloadFile(filePath);
@@ -96,8 +100,6 @@ export async function POST(req: NextRequest) {
         } catch {
           mediaMeta = { ...(mediaMeta ?? {}), unavailable: true };
         }
-      } else {
-        mediaMeta = { ...(mediaMeta ?? {}), oversize: true };
       }
     }
 
