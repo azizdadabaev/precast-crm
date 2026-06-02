@@ -43,6 +43,9 @@ services:
       # Asia/Tashkent (no DST, fixed +05) keeps both views in sync
       # with what the operator sees.
       TZ: ${TZ:-Asia/Tashkent}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      INBOX_PASSWORD: ${INBOX_PASSWORD:-}
     volumes:
       - uploads:/app/public/uploads
       - drawings_data:/data

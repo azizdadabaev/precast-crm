@@ -72,6 +72,9 @@ export const ACTIONS = [
   // Reports
   "report.view",
   "report.export",
+
+  // Telegram inbox (owner-only)
+  "inbox.access", // owner-only · read & reply to Telegram conversations
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];
@@ -160,6 +163,11 @@ export const PERMISSION_GROUPS: Array<{
     label: "Тажриба · Sandbox",
     actions: ["sandbox.access", "blender.bridge"],
   },
+  {
+    key: "inbox",
+    label: "Хабарлар · Inbox",
+    actions: ["inbox.access"],
+  },
 ];
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -201,6 +209,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "blender.bridge": "Blender чизмаси · Generate Blender drawing",
   "report.view": "Ҳисоботларни кўриш · View reports",
   "report.export": "Ҳисоботларни экспорт · Export reports",
+  "inbox.access": "Telegram хабарлари · Telegram inbox (owner-only)",
 };
 
 // Role templates. When adding a user with role X, these permissions
@@ -244,6 +253,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "dashboard.viewBasic",
     "sandbox.access",
     "blender.bridge",
+    "inbox.access",
     "report.view",
     "report.export",
   ],
