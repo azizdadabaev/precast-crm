@@ -83,3 +83,19 @@ export async function saveImageFromFormData(
   const url = `/uploads/${subdir}/${filename}`.replace(/\\/g, "/");
   return { url, filename, size: f.size, mime };
 }
+
+/**
+ * Persist a raw buffer (e.g. media downloaded from Telegram) to the
+ * uploads volume and return its public URL. Unlike saveImageFromFormData
+ * this does no MIME/size validation — the caller already enforces limits.
+ */
+export async function saveBufferToUploads(
+  buffer: Buffer,
+  subdir: string,
+  filename: string,
+): Promise<string> {
+  const dir = path.join(UPLOAD_ROOT, subdir);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, filename), buffer);
+  return `/uploads/${subdir}/${filename}`.replace(/\\/g, "/");
+}
