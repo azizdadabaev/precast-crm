@@ -150,6 +150,13 @@ function Thread({ conversationId }: { conversationId: string }) {
       qc.invalidateQueries({ queryKey: ["inbox-thread", conversationId] });
       qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
     },
+    onError: () => {
+      // A 502 means the send failed but the server still persisted a
+      // failed bubble. Refetch immediately so the red retry bubble shows
+      // without waiting for the SSE round-trip. Keep the draft so the
+      // operator can resend.
+      qc.invalidateQueries({ queryKey: ["inbox-thread", conversationId] });
+    },
   });
 
   return (
