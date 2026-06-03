@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, FileText, MessageCircle } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { SendQuoteToChatButton } from "@/components/inbox/SendQuoteToChatButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
 import { useTableDesign } from "@/hooks/useTableDesign";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
@@ -106,6 +107,11 @@ export default function ProjectDetailPage() {
   const displayName = project.name || `${t("Сақланган лойиҳа", "Saved Draft")} ${draftLabel}`;
   const clientLabel =
     project.client?.name ?? project.tentativeClientName ?? "";
+  // Windows-safe filename base, shared by the image-export and send-to-chat buttons.
+  const shareFileBase = `${displayName}${clientLabel ? `-${clientLabel}` : ""}`
+    .replace(/[<>:"/\\|?*]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
   const totals = project.calculations.reduce(
     (acc, c) => ({
@@ -169,16 +175,17 @@ export default function ProjectDetailPage() {
           )}
           <ShareCalculationButton
             targetRef={shareRef}
-            fileBase={`${displayName}${
-              clientLabel ? `-${clientLabel}` : ""
-            }`
-              // Strip Windows-forbidden filename chars and collapse
-              // whitespace, same sanitization the order page uses.
-              .replace(/[<>:"/\\|?*]+/g, "")
-              .replace(/\s+/g, " ")
-              .trim()}
+            fileBase={shareFileBase}
             disabled={project.calculations.length === 0}
           />
+          {canUseInbox && project.conversationId && (
+            <SendQuoteToChatButton
+              targetRef={shareRef}
+              conversationId={project.conversationId}
+              fileBase={shareFileBase}
+              disabled={project.calculations.length === 0}
+            />
+          )}
           {/* Owner-only Blender bridge — pushes this project's saved
               rooms to a locally-running Blender. */}
           {canUseBlender && project.calculations.length > 0 && (
