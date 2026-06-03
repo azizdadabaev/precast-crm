@@ -319,7 +319,7 @@ function Thread({ conversationId }: { conversationId: string }) {
         className="tg-wallpaper flex-1 overflow-y-auto px-4 py-4"
         style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
       >
-        <div className="mx-auto flex max-w-[760px] flex-col">
+        <div className="flex flex-col">
           {messages.map((msg, i) => {
             const prev = messages[i - 1];
             const next = messages[i + 1];
@@ -398,7 +398,7 @@ function Bubble({ msg, groupedTop, hasTail }: { msg: InboxMessage; groupedTop: b
     >
       <div
         className={cn(
-          "relative max-w-[min(82%,460px)] text-[14px] leading-[1.35] text-[var(--tg-text)]",
+          "relative max-w-[min(72%,600px)] text-[14px] leading-[1.35] text-[var(--tg-text)]",
           overlayMedia ? "overflow-hidden" : "px-2.5 py-1.5",
           // rounded corners — tighten the tail corner on the tailed bubble
           "rounded-[16px]",
