@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
-import { Check, Clock, Loader2, Lock, Send, MessageCircle } from "lucide-react";
+import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -273,7 +273,7 @@ function Inbox() {
 
         {/* Right: thread */}
         <div className="flex flex-1 flex-col">
-          {active ? <Thread conversationId={active.id} /> : <EmptyState />}
+          {active ? <Thread conversationId={active.id} onDeleted={() => setActiveId(null)} /> : <EmptyState />}
         </div>
       </div>
     </div>
@@ -294,9 +294,18 @@ function EmptyState() {
   );
 }
 
-function Thread({ conversationId }: { conversationId: string }) {
+function Thread({ conversationId, onDeleted }: { conversationId: string; onDeleted: () => void }) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState("");
+  const [confirming, setConfirming] = useState(false);
+
+  const del = useMutation({
+    mutationFn: () => api(`/api/inbox/${conversationId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
+      onDeleted();
+    },
+  });
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data } = useQuery({
@@ -339,6 +348,42 @@ function Thread({ conversationId }: { conversationId: string }) {
           <div className="truncate text-[13px] text-[color:var(--tg-text-dim)]">
             {data?.conversation.username ? `@${data.conversation.username}` : "online"}
           </div>
+        </div>
+        {/* Delete conversation — two-step inline confirm */}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {confirming ? (
+            <>
+              <span className="text-[13px] text-[color:var(--tg-text-dim)]">
+                Ўчирилсинми? · Delete?
+              </span>
+              <button
+                type="button"
+                onClick={() => del.mutate()}
+                disabled={del.isPending}
+                className="flex items-center gap-1 rounded-md bg-destructive/10 px-2.5 py-1 text-[13px] font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-60"
+              >
+                {del.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Ҳа · Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={del.isPending}
+                className="rounded-md px-2.5 py-1 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+              >
+                Йўқ · No
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              title="Суҳбатни ўчириш · Delete chat"
+              className="rounded-md p-1.5 text-[color:var(--tg-text-dim)] transition-colors hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
