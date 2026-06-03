@@ -8,8 +8,16 @@ import type { SlabRow } from "@/components/calculation/MultiRoomCalculator";
 import { fromDrag, isDegenerate, type NormBox } from "@/lib/annotation-box";
 
 const MIN_W = 260;
-const MAX_W = 680;
-const DEFAULT_W = 420;
+const MAX_W = 900;
+const DEFAULT_W = 480;
+const WIDTH_KEY = "calc.drawingDockWidth";
+
+/** The operator's saved dock width, clamped; falls back to the default. */
+function readStoredWidth(): number {
+  if (typeof window === "undefined") return DEFAULT_W;
+  const raw = Number(window.localStorage.getItem(WIDTH_KEY));
+  return Number.isFinite(raw) && raw >= MIN_W && raw <= MAX_W ? raw : DEFAULT_W;
+}
 
 // Per-room box colors, indexed by table position. Bright, distinct hues
 // so a floor plan with several rooms stays readable.
@@ -40,7 +48,14 @@ interface DrawingDockProps {
  */
 export function DrawingDock(props: DrawingDockProps) {
   const [width, setWidth] = useState(DEFAULT_W);
+  const widthRef = useRef(width);
+  widthRef.current = width;
   const dragStart = useRef<{ x: number; w: number } | null>(null);
+
+  // Load the operator's saved dock width after mount (SSR-safe).
+  useEffect(() => {
+    setWidth(readStoredWidth());
+  }, []);
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
@@ -49,7 +64,14 @@ export function DrawingDock(props: DrawingDockProps) {
       setWidth(Math.min(MAX_W, Math.max(MIN_W, next)));
     }
     function onUp() {
+      if (!dragStart.current) return;
       dragStart.current = null;
+      // Persist the chosen width so it becomes the default next time.
+      try {
+        window.localStorage.setItem(WIDTH_KEY, String(Math.round(widthRef.current)));
+      } catch {
+        /* quota / disabled — ignore */
+      }
     }
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
