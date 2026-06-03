@@ -1,32 +1,37 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { X, ChevronLeft, ChevronRight, Download } from "lucide-react";
 
-type ViewerState = { images: string[]; index: number } | null;
-
-const Ctx = createContext<(images: string[], index: number) => void>(() => {});
+const Ctx = createContext<(src: string) => void>(() => {});
 
 export function useImageViewer() {
   return useContext(Ctx);
 }
 
-export function ImageViewerProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<ViewerState>(null);
+export function ImageViewerProvider({ images, children }: { images: string[]; children: React.ReactNode }) {
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
 
-  const open = useCallback((images: string[], index: number) => setState({ images, index }), []);
-  const close = useCallback(() => setState(null), []);
+  const [index, setIndex] = useState<number | null>(null);
+
+  const open = useCallback((src: string) => {
+    const i = imagesRef.current.indexOf(src);
+    setIndex(i >= 0 ? i : 0);
+  }, []);
+
+  const close = useCallback(() => setIndex(null), []);
 
   const prev = useCallback(() => {
-    setState((s) => s && s.index > 0 ? { ...s, index: s.index - 1 } : s);
+    setIndex((i) => (i !== null && i > 0 ? i - 1 : i));
   }, []);
 
   const next = useCallback(() => {
-    setState((s) => s && s.index < s.images.length - 1 ? { ...s, index: s.index + 1 } : s);
+    setIndex((i) => (i !== null && i < imagesRef.current.length - 1 ? i + 1 : i));
   }, []);
 
   useEffect(() => {
-    if (!state) return;
+    if (index === null) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") close();
       else if (e.key === "ArrowLeft") prev();
@@ -34,16 +39,16 @@ export function ImageViewerProvider({ children }: { children: React.ReactNode })
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state, close, prev, next]);
+  }, [index, close, prev, next]);
 
-  const current = state ? state.images[state.index] : null;
-  const total = state ? state.images.length : 0;
+  const current = index !== null ? imagesRef.current[index] : null;
+  const total = imagesRef.current.length;
   const isMulti = total > 1;
 
   return (
     <Ctx.Provider value={open}>
       {children}
-      {state && current && (
+      {index !== null && current && (
         <div
           className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center"
           onClick={close}
@@ -75,7 +80,7 @@ export function ImageViewerProvider({ children }: { children: React.ReactNode })
           </div>
 
           {/* Prev chevron */}
-          {isMulti && state.index > 0 && (
+          {isMulti && index > 0 && (
             <button
               type="button"
               aria-label="Previous image"
@@ -96,7 +101,7 @@ export function ImageViewerProvider({ children }: { children: React.ReactNode })
           />
 
           {/* Next chevron */}
-          {isMulti && state.index < total - 1 && (
+          {isMulti && index < total - 1 && (
             <button
               type="button"
               aria-label="Next image"
@@ -113,7 +118,7 @@ export function ImageViewerProvider({ children }: { children: React.ReactNode })
               className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-[12px] font-medium text-white"
               onClick={(e) => e.stopPropagation()}
             >
-              {state.index + 1} / {total}
+              {index + 1} / {total}
             </div>
           )}
         </div>

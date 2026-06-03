@@ -44,7 +44,7 @@ export function MessageMedia({
   switch (mediaKind) {
     case "IMAGE":
       return mediaPath ? (
-        <button type="button" onClick={() => openViewer([mediaPath], 0)} className="group relative block">
+        <button type="button" onClick={() => openViewer(mediaPath)} className="group relative block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={mediaPath}

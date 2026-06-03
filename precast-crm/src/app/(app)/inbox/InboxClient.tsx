@@ -325,8 +325,12 @@ function Thread({ conversationId }: { conversationId: string }) {
   const messages = data?.messages ?? [];
   const renderItems = buildRenderItems(messages);
 
+  const threadImages = messages
+    .filter((m) => m.mediaKind === "IMAGE" && m.mediaPath)
+    .map((m) => m.mediaPath as string);
+
   return (
-    <ImageViewerProvider>
+    <ImageViewerProvider images={threadImages}>
       {/* Chat header */}
       <div className="flex items-center gap-3 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5">
         <ChatAvatar name={data?.conversation.displayName ?? "?"} size={42} />
@@ -500,7 +504,6 @@ function AlbumBubble({
   const openViewer = useImageViewer();
   const outgoing = album.direction === "OUTBOUND";
   const items = album.items;
-  const imageSrcs = items.map((m) => m.mediaPath).filter(Boolean) as string[];
   const cols = items.length >= 5 ? 3 : 2;
   const gridClass = cols === 3 ? "grid-cols-3" : "grid-cols-2";
   // Use caption from any item that has text (first found).
@@ -542,37 +545,32 @@ function AlbumBubble({
 
         {/* Image grid */}
         <div className={cn("grid gap-[2px]", gridClass)}>
-          {(() => {
-            let viewerIdx = -1;
-            return items.map((item) => {
-              const meta = item.mediaMeta ?? {};
-              if (meta.unavailable || meta.oversize || !item.mediaPath) {
-                return (
-                  <div
-                    key={item.id}
-                    className="aspect-square w-full bg-[color:var(--tg-divider)]"
-                  />
-                );
-              }
-              viewerIdx += 1;
-              const idx = viewerIdx;
+          {items.map((item) => {
+            const meta = item.mediaMeta ?? {};
+            if (meta.unavailable || meta.oversize || !item.mediaPath) {
               return (
-                <button
+                <div
                   key={item.id}
-                  type="button"
-                  onClick={() => openViewer(imageSrcs, idx)}
-                  className="block w-full"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.mediaPath}
-                    alt=""
-                    className="aspect-square w-full object-cover"
-                  />
-                </button>
+                  className="aspect-square w-full bg-[color:var(--tg-divider)]"
+                />
               );
-            });
-          })()}
+            }
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => openViewer(item.mediaPath!)}
+                className="block w-full"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.mediaPath}
+                  alt=""
+                  className="aspect-square w-full object-cover"
+                />
+              </button>
+            );
+          })}
         </div>
 
         {/* Caption + footer */}
