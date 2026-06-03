@@ -25,6 +25,28 @@ interface InboxMessage {
   id: string; direction: "INBOUND" | "OUTBOUND"; text: string | null;
   mediaKind: string | null; mediaPath: string | null; mediaName: string | null;
   mediaMeta: Record<string, unknown> | null; failed: boolean; createdAt: string;
+  mediaGroupId: string | null;
+}
+
+type RenderItem =
+  | { type: "single"; msg: InboxMessage }
+  | { type: "album"; groupId: string; direction: "INBOUND" | "OUTBOUND"; items: InboxMessage[] };
+
+function buildRenderItems(messages: InboxMessage[]): RenderItem[] {
+  const renderItems: RenderItem[] = [];
+  for (const msg of messages) {
+    const gid = msg.mediaGroupId;
+    const isAlbumable = gid && (msg.mediaKind === "IMAGE" || msg.mediaKind === "VIDEO");
+    const last = renderItems[renderItems.length - 1];
+    if (isAlbumable && last && last.type === "album" && last.groupId === gid && last.direction === msg.direction) {
+      last.items.push(msg);
+    } else if (isAlbumable) {
+      renderItems.push({ type: "album", groupId: gid!, direction: msg.direction, items: [msg] });
+    } else {
+      renderItems.push({ type: "single", msg });
+    }
+  }
+  return renderItems;
 }
 
 // Telegram theme colors are expressed as CSS variables (defined in globals.css)
@@ -300,6 +322,7 @@ function Thread({ conversationId }: { conversationId: string }) {
   });
 
   const messages = data?.messages ?? [];
+  const renderItems = buildRenderItems(messages);
 
   return (
     <>
@@ -320,22 +343,33 @@ function Thread({ conversationId }: { conversationId: string }) {
         style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
       >
         <div className="flex flex-col">
-          {messages.map((msg, i) => {
-            const prev = messages[i - 1];
-            const next = messages[i + 1];
-            const showDate = !prev || !sameDay(prev.createdAt, msg.createdAt);
-            const sameAsPrev = !!prev && prev.direction === msg.direction && !showDate;
-            const sameAsNext = !!next && next.direction === msg.direction && sameDay(msg.createdAt, next.createdAt);
-            // The tail goes on the LAST bubble of a same-sender group.
+          {renderItems.map((item, i) => {
+            const prevItem = renderItems[i - 1];
+            const nextItem = renderItems[i + 1];
+            // Representative time and direction for this render item.
+            const itemTime = item.type === "single" ? item.msg.createdAt : item.items[0].createdAt;
+            const itemDir = item.type === "single" ? item.msg.direction : item.direction;
+            const prevTime = prevItem ? (prevItem.type === "single" ? prevItem.msg.createdAt : prevItem.items[0].createdAt) : null;
+            const nextTime = nextItem ? (nextItem.type === "single" ? nextItem.msg.createdAt : nextItem.items[0].createdAt) : null;
+            const nextDir = nextItem ? (nextItem.type === "single" ? nextItem.msg.direction : nextItem.direction) : null;
+            const showDate = !prevTime || !sameDay(prevTime, itemTime);
+            const sameAsPrev = !!prevTime && prevItem!.type !== undefined &&
+              (prevItem!.type === "single" ? prevItem!.msg.direction : prevItem!.direction) === itemDir &&
+              !showDate;
+            const sameAsNext = !!nextTime && nextDir === itemDir && sameDay(itemTime, nextTime);
             const hasTail = !sameAsNext;
+            const key = item.type === "single" ? item.msg.id : item.groupId;
             return (
-              <div key={msg.id}>
-                {showDate && <DateSeparator iso={msg.createdAt} />}
-                <Bubble
-                  msg={msg}
-                  groupedTop={sameAsPrev}
-                  hasTail={hasTail}
-                />
+              <div key={key}>
+                {showDate && <DateSeparator iso={itemTime} />}
+                {item.type === "single" ? (
+                  <Bubble msg={item.msg} groupedTop={sameAsPrev} hasTail={hasTail} />
+                ) : item.items.length === 1 ? (
+                  // Lone album member — render as a normal bubble
+                  <Bubble msg={item.items[0]} groupedTop={sameAsPrev} hasTail={hasTail} />
+                ) : (
+                  <AlbumBubble album={item} groupedTop={sameAsPrev} hasTail={hasTail} />
+                )}
               </div>
             );
           })}
@@ -447,6 +481,101 @@ function Bubble({ msg, groupedTop, hasTail }: { msg: InboxMessage; groupedTop: b
             <span className="float-right ml-2 mt-1 translate-y-0.5">{footer}</span>
             <span className="whitespace-pre-wrap break-words">{msg.text}</span>
           </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AlbumBubble({
+  album,
+  groupedTop,
+  hasTail,
+}: {
+  album: Extract<RenderItem, { type: "album" }>;
+  groupedTop: boolean;
+  hasTail: boolean;
+}) {
+  const outgoing = album.direction === "OUTBOUND";
+  const items = album.items;
+  const cols = items.length >= 5 ? 3 : 2;
+  const gridClass = cols === 3 ? "grid-cols-3" : "grid-cols-2";
+  // Use caption from any item that has text (first found).
+  const caption = items.find((m) => m.text)?.text ?? null;
+  // Footer timestamp from the last message in the album.
+  const lastCreatedAt = items[items.length - 1].createdAt;
+
+  const footer = (
+    <span
+      className="flex select-none items-center gap-1 text-[11px] leading-none text-white"
+    >
+      {clock(lastCreatedAt)}
+      {outgoing && <SentCheck />}
+    </span>
+  );
+
+  return (
+    <div
+      className={cn(
+        "flex tg-msg-in",
+        outgoing ? "justify-end" : "justify-start",
+        groupedTop ? "mt-[2px]" : "mt-[10px]",
+      )}
+    >
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-[14px]",
+          hasTail && (outgoing ? "rounded-br-[5px]" : "rounded-bl-[5px]"),
+        )}
+        style={{
+          width: 300,
+          boxShadow: outgoing ? "0 1px 1px rgba(0,0,0,.06)" : "0 1px 2px rgba(0,0,0,.08)",
+        }}
+      >
+        {/* Tail notch on the album bubble */}
+        {hasTail && (
+          <Tail outgoing={outgoing} color={outgoing ? TG.outgoing : TG.incoming} />
+        )}
+
+        {/* Image grid */}
+        <div className={cn("grid gap-[2px]", gridClass)}>
+          {items.map((item) => {
+            const meta = item.mediaMeta ?? {};
+            if (meta.unavailable || meta.oversize || !item.mediaPath) {
+              return (
+                <div
+                  key={item.id}
+                  className="aspect-square w-full bg-[color:var(--tg-divider)]"
+                />
+              );
+            }
+            return (
+              <a key={item.id} href={item.mediaPath} target="_blank" rel="noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.mediaPath}
+                  alt=""
+                  className="aspect-square w-full object-cover"
+                />
+              </a>
+            );
+          })}
+        </div>
+
+        {/* Caption + footer */}
+        {(caption || true) && (
+          <div
+            className="flex flex-col px-2.5 py-1.5"
+            style={{ background: outgoing ? TG.outgoing : TG.incoming }}
+          >
+            {caption && (
+              <span className="whitespace-pre-wrap break-words text-[14px] leading-[1.35] text-[var(--tg-text)]">
+                {caption}
+              </span>
+            )}
+            {/* Scrim footer over the last image row */}
+            <span className="mt-0.5 flex justify-end">{footer}</span>
+          </div>
         )}
       </div>
     </div>

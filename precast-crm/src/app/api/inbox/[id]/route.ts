@@ -16,6 +16,7 @@ export const GET = withInboxAccess<{ id: string }>(async (_req, { params }) => {
     select: {
       id: true, direction: true, text: true, mediaKind: true,
       mediaPath: true, mediaName: true, mediaMeta: true, failed: true, createdAt: true,
+      mediaGroupId: true,
     },
   });
 

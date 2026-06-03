@@ -46,7 +46,7 @@ export function MessageMedia({
           <img
             src={mediaPath}
             alt={mediaName ?? "image"}
-            className="block max-h-[360px] max-w-[320px] rounded-[14px] object-cover"
+            className="block max-h-[210px] max-w-[180px] rounded-[14px] object-cover"
           />
           {footer ? <MediaScrimFooter>{footer}</MediaScrimFooter> : null}
         </a>

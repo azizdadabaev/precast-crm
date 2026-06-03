@@ -1082,6 +1082,7 @@ model Message {
   mediaName      String?
   mediaMeta      Json?
   telegramMsgId  String?
+  mediaGroupId   String?
   sentById       String?          // operator id (no FK; owner-only inbox)
   failed         Boolean          @default(false)
   createdAt      DateTime         @default(now())
@@ -1089,5 +1090,6 @@ model Message {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+  @@index([conversationId, mediaGroupId])
   @@unique([conversationId, telegramMsgId])
 }

@@ -115,6 +115,7 @@ export async function POST(req: NextRequest) {
         mediaName,
         mediaMeta: mediaMeta as never,
         telegramMsgId: parsed.telegramMsgId,
+        mediaGroupId: parsed.mediaGroupId,
       },
       update: {}, // duplicate delivery — no-op
       select: { id: true, createdAt: true },

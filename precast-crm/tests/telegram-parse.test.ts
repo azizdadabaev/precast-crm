@@ -92,4 +92,23 @@ describe("parseBusinessUpdate", () => {
     expect(p?.displayName).toBe("Бобур");
     expect(p?.username).toBeNull();
   });
+  it("parses media_group_id into mediaGroupId", () => {
+    const p = parseBusinessUpdate({
+      update_id: 1,
+      business_message: {
+        ...base,
+        media_group_id: "album-abc-123",
+        photo: [
+          { file_id: "small", file_size: 100, width: 90, height: 90 },
+          { file_id: "big", file_size: 9000, width: 1280, height: 1280 },
+        ],
+      },
+    });
+    expect(p?.mediaGroupId).toBe("album-abc-123");
+    expect(p?.media).toMatchObject({ kind: "IMAGE" });
+  });
+  it("yields null mediaGroupId when media_group_id is absent", () => {
+    const p = parseBusinessUpdate({ update_id: 1, business_message: { ...base, text: "plain text" } });
+    expect(p?.mediaGroupId).toBeNull();
+  });
 });

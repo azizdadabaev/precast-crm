@@ -17,6 +17,7 @@ export interface ParsedInbound {
   businessConnectionId: string | null;
   chatId: string;
   telegramMsgId: string;
+  mediaGroupId: string | null;
   displayName: string;
   username: string | null;
   text: string | null;
@@ -116,6 +117,7 @@ export function parseBusinessUpdate(update: any): ParsedInbound | null {
     businessConnectionId: m.business_connection_id ?? null,
     chatId: String(m.chat?.id ?? from.id ?? ""),
     telegramMsgId: String(m.message_id ?? ""),
+    mediaGroupId: m.media_group_id ?? null,
     displayName,
     username: from.username ?? null,
     text: m.text ?? m.caption ?? null,
