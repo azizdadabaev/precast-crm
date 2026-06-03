@@ -3,8 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
-import { Loader2, Lock, Send, MessageCircle } from "lucide-react";
+import { Check, Clock, Loader2, Lock, Send, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { MessageMedia } from "@/components/inbox/MediaRenderers";
 import { ChatAvatar } from "@/components/inbox/ChatAvatar";
@@ -89,9 +97,63 @@ function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
   );
 }
 
+const AUTOLOCK_OPTIONS = [
+  { value: 0,  label: "Ўчирилган · Off" },
+  { value: 5,  label: "5 дақиқа · 5 min" },
+  { value: 15, label: "15 дақиқа · 15 min" },
+  { value: 30, label: "30 дақиқа · 30 min" },
+  { value: 60, label: "1 соат · 1 hour" },
+] as const;
+
+function readAutolockMin(): number {
+  if (typeof window === "undefined") return 15;
+  const raw = localStorage.getItem("inbox.autolockMin");
+  const parsed = parseInt(raw ?? "", 10);
+  const valid = [0, 5, 15, 30, 60];
+  return valid.includes(parsed) ? parsed : 15;
+}
+
 function Inbox() {
   const qc = useQueryClient();
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // ── Auto-lock ────────────────────────────────────────────────────
+  const [autolockMin, setAutolockMinState] = useState<number>(() => readAutolockMin());
+  function setAutolockMin(v: number) {
+    setAutolockMinState(v);
+    if (typeof window !== "undefined") localStorage.setItem("inbox.autolockMin", String(v));
+  }
+
+  // ── Lock mutation ────────────────────────────────────────────────
+  const lock = useMutation({
+    mutationFn: () => api("/api/inbox/lock", { method: "POST" }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["inbox-unlock"] }),
+  });
+
+  // Keep a stable ref so the idle effect never goes stale on re-renders.
+  const lockRef = useRef(lock);
+  lockRef.current = lock;
+
+  // ── Idle timer effect ────────────────────────────────────────────
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (autolockMin === 0) return;
+    const delay = autolockMin * 60_000;
+
+    function resetTimer() {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => lockRef.current.mutate(), delay);
+    }
+
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"] as const;
+    events.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+    resetTimer(); // start the initial countdown
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, resetTimer));
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [autolockMin]);
 
   const { data: conversations } = useQuery({
     queryKey: ["inbox-conversations"],
@@ -115,7 +177,43 @@ function Inbox() {
   return (
     <div className="flex h-full flex-col gap-3">
       <style>{TELEGRAM_CSS}</style>
-      <h1 className="shrink-0 text-xl font-bold tracking-tight">Хабарлар<span className="text-muted-foreground"> · Inbox</span></h1>
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <h1 className="text-xl font-bold tracking-tight">Хабарлар<span className="text-muted-foreground"> · Inbox</span></h1>
+        <div className="flex items-center gap-1.5">
+          {/* Settings: auto-lock timeout */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Созламалар · Settings">
+                <Clock className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel>Автоқулф · Auto-lock</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {AUTOLOCK_OPTIONS.map((opt) => (
+                <DropdownMenuItem key={opt.value} onClick={() => setAutolockMin(opt.value)}>
+                  <span className="flex flex-1 items-center justify-between">
+                    {opt.label}
+                    {autolockMin === opt.value && <Check className="h-3.5 w-3.5 text-[#3390ec]" />}
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Manual lock button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            title="Қулфлаш · Lock"
+            onClick={() => lock.mutate()}
+            disabled={lock.isPending}
+          >
+            {lock.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
       <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border shadow-sm">
         {/* Left: conversation list */}
         <div className="flex w-[340px] shrink-0 flex-col border-r border-border bg-white">

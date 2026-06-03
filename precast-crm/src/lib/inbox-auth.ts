@@ -33,6 +33,11 @@ export async function setInboxUnlockCookie(): Promise<void> {
   });
 }
 
+/** Delete the unlock cookie, effectively locking the inbox immediately. */
+export function clearInboxUnlockCookie(): void {
+  cookies().delete(UNLOCK_COOKIE);
+}
+
 /** True if a valid, unexpired unlock cookie is present. */
 export async function isInboxUnlocked(): Promise<boolean> {
   const t = cookies().get(UNLOCK_COOKIE)?.value;
