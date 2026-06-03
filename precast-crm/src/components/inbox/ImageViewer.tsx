@@ -14,6 +14,18 @@ export function ImageViewerProvider({ images, children }: { images: string[]; ch
   imagesRef.current = images;
 
   const [index, setIndex] = useState<number | null>(null);
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragOrigin = useRef({ x: 0, y: 0 });
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Reset zoom/pan whenever the shown image changes (or viewer closes)
+  useEffect(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+    setDragging(false);
+  }, [index]);
 
   const open = useCallback((src: string) => {
     const i = imagesRef.current.indexOf(src);
@@ -30,6 +42,7 @@ export function ImageViewerProvider({ images, children }: { images: string[]; ch
     setIndex((i) => (i !== null && i < imagesRef.current.length - 1 ? i + 1 : i));
   }, []);
 
+  // Keyboard navigation
   useEffect(() => {
     if (index === null) return;
     function onKey(e: KeyboardEvent) {
@@ -41,6 +54,43 @@ export function ImageViewerProvider({ images, children }: { images: string[]; ch
     return () => window.removeEventListener("keydown", onKey);
   }, [index, close, prev, next]);
 
+  // Native non-passive wheel listener — React's onWheel is passive, so
+  // preventDefault() is silently ignored there and the browser's page-zoom fires.
+  useEffect(() => {
+    const el = overlayRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setScale((s) => {
+        const next = s * (e.deltaY < 0 ? 1.15 : 1 / 1.15);
+        return Math.min(6, Math.max(1, next));
+      });
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [index]); // re-bind when a new image is open (index !== null when rendered)
+
+  // Window-level drag listeners (only while dragging)
+  useEffect(() => {
+    if (!dragging) return;
+    function onMouseMove(e: MouseEvent) {
+      setOffset({
+        x: e.clientX - dragOrigin.current.x,
+        y: e.clientY - dragOrigin.current.y,
+      });
+    }
+    function onMouseUp() {
+      setDragging(false);
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [dragging]);
+
   const current = index !== null ? imagesRef.current[index] : null;
   const total = imagesRef.current.length;
   const isMulti = total > 1;
@@ -50,6 +100,7 @@ export function ImageViewerProvider({ images, children }: { images: string[]; ch
       {children}
       {index !== null && current && (
         <div
+          ref={overlayRef}
           className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center"
           onClick={close}
         >
@@ -97,7 +148,20 @@ export function ImageViewerProvider({ images, children }: { images: string[]; ch
             src={current}
             alt=""
             className="max-h-[92vh] max-w-[92vw] object-contain"
+            style={{
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              cursor: scale > 1 ? (dragging ? "grabbing" : "grab") : "default",
+              transition: dragging ? "none" : "transform 0.12s ease-out",
+              willChange: "transform",
+            }}
             onClick={(e) => e.stopPropagation()}
+            onDoubleClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}
+            onMouseDown={(e) => {
+              if (scale <= 1) return;
+              e.preventDefault();
+              dragOrigin.current = { x: e.clientX - offset.x, y: e.clientY - offset.y };
+              setDragging(true);
+            }}
           />
 
           {/* Next chevron */}
