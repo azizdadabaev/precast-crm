@@ -30,6 +30,7 @@ import { NumberInput } from "@/components/calculation/NumberInput";
 import { handleCellNavKeyDown } from "@/lib/cell-nav";
 import { Bi, useT } from "@/lib/i18n";
 import { useLivePricing } from "@/hooks/useLivePricing";
+import type { NormBox } from "@/lib/annotation-box";
 
 export interface SlabRow {
   id: string;
@@ -62,6 +63,13 @@ export interface SlabRow {
   m2PriceOverride: boolean;
   m2PriceOverrideValue: number | null;
   m2PriceReason: string | null;
+  /**
+   * Optional room-capture annotation (Stage ②): the box drawn over a source
+   * drawing, normalized 0..1 to the image's natural size, plus the path of
+   * that drawing. Null/absent for hand-typed rooms. The engine ignores it;
+   * recomputeRow passes it through via the `...row` spread.
+   */
+  box?: ({ imagePath: string } & NormBox) | null;
 }
 
 interface Props {
@@ -86,6 +94,14 @@ interface Props {
    * the table without crossing component boundaries.
    */
   actions?: React.ReactNode;
+  /**
+   * Room-capture highlight sync with the drawing dock (Stage ②). When the
+   * operator hovers a box on the drawing, the matching table row tints; when
+   * they hover a row, the matching box highlights. Both optional so the
+   * calculator works standalone (no dock).
+   */
+  highlightRowId?: string | null;
+  onRowHover?: (id: string | null) => void;
 }
 
 // ── Column registry ─────────────────────────────────────────
@@ -187,7 +203,7 @@ const PATTERN_LABEL: Record<Pattern, string> = {
   GBG: "Г-Б-Г",
 };
 
-function makeRow(seq: number): SlabRow {
+export function makeRow(seq: number): SlabRow {
   return {
     id: Math.random().toString(36).slice(2, 9),
     name: `Хона ${seq}`,
@@ -328,6 +344,8 @@ export function MultiRoomCalculator({
   discountAmount,
   onDiscountAmountChange,
   actions,
+  highlightRowId,
+  onRowHover,
 }: Props) {
   const t = useT();
   // Live pricing — fetched once from /api/pricing and reused by every
@@ -736,7 +754,12 @@ export function MultiRoomCalculator({
               const r = row.result;
               const fmt = (v: number, d = 2) => formatNumber(v, d);
               return (
-                <tr key={row.id}>
+                <tr
+                  key={row.id}
+                  onMouseEnter={() => onRowHover?.(row.id)}
+                  onMouseLeave={() => onRowHover?.(null)}
+                  className={highlightRowId === row.id ? "bg-primary/10" : undefined}
+                >
                   {/* Inputs */}
                   <td className="grid-cell grid-tint-input">
                     {/* On <lg the row's round-up/down arrows live here

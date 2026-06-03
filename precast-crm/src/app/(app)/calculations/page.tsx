@@ -20,8 +20,10 @@ import { PlaceOrderDialog } from "@/components/calculation/PlaceOrderDialog";
 import {
   MultiRoomCalculator,
   recomputeRow,
+  makeRow,
   type SlabRow,
 } from "@/components/calculation/MultiRoomCalculator";
+import type { NormBox } from "@/lib/annotation-box";
 import { projectTotal } from "@/services/calculation-engine";
 import { TaperedPrefillSchema } from "@/lib/validation";
 import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-bridge";
@@ -81,6 +83,8 @@ function CalculationsInner() {
   const [conversationImages, setConversationImages] = useState<string[]>([]);
   const [sharedPhone, setSharedPhone] = useState<string | null>(null);
   const [convLoadError, setConvLoadError] = useState(false);
+  // Room-capture highlight sync between the drawing dock and the table.
+  const [highlightRowId, setHighlightRowId] = useState<string | null>(null);
   const loadedConvRef = useRef<string | null>(null);
   /** Ref to the offscreen <ShareTarget> — see render block below. */
   const shareRef = useRef<HTMLDivElement>(null);
@@ -279,6 +283,22 @@ function CalculationsInner() {
       setConvLoadError(true);
     }
   }
+
+  // ── Room capture (Stage ②): a box drawn on the drawing becomes a room. ──
+  const captureRoom = (imagePath: string, box: NormBox) => {
+    const boxed = { imagePath, ...box };
+    // Reuse a still-blank row (no box, no dims) for the first capture so the
+    // auto-created empty "Хона 1" isn't left dangling; otherwise append.
+    const blankIdx = rows.findIndex(
+      (r) => !r.box && r.innerWidth === 0 && r.innerLength === 0,
+    );
+    if (blankIdx >= 0) {
+      setRows(rows.map((r, i) => (i === blankIdx ? { ...r, box: boxed } : r)));
+    } else {
+      setRows([...rows, { ...makeRow(rows.length + 1), box: boxed }]);
+    }
+  };
+  const deleteRow = (id: string) => setRows(rows.filter((r) => r.id !== id));
 
   async function loadOrder(id: string) {
     try {
@@ -699,7 +719,15 @@ function CalculationsInner() {
   return (
     <div className={sourceConversationId ? "flex items-stretch gap-4" : undefined}>
       {sourceConversationId && (
-        <DrawingDock images={conversationImages} error={convLoadError} />
+        <DrawingDock
+          images={conversationImages}
+          error={convLoadError}
+          rows={rows}
+          onCapture={captureRoom}
+          onDeleteRow={deleteRow}
+          highlightRowId={highlightRowId}
+          onHighlightRow={setHighlightRowId}
+        />
       )}
       <div className={sourceConversationId ? "min-w-0 flex-1 space-y-5" : "space-y-5"}>
       {/* Header — title only. The action buttons (Clear / Save Project /
@@ -817,6 +845,8 @@ function CalculationsInner() {
         onDiscountChange={setDiscountPercent}
         discountAmount={discountAmount}
         onDiscountAmountChange={setDiscountAmount}
+        highlightRowId={highlightRowId}
+        onRowHover={setHighlightRowId}
         actions={
           <>
             {/* Clear — Tier 4 "destructive" action. Outline + destructive
