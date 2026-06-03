@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImageOff, X } from "lucide-react";
+import { ImageOff, X, CheckCircle2 } from "lucide-react";
 import { ImageViewerProvider, useImageViewer } from "@/components/inbox/ImageViewer";
 import { Bi } from "@/lib/i18n";
 import type { SlabRow } from "@/components/calculation/MultiRoomCalculator";
@@ -91,6 +91,8 @@ export function DrawingDock(props: DrawingDockProps) {
 }
 
 function DockBody({ images, error, rows, onCapture, onDeleteRow, highlightRowId, onHighlightRow }: DrawingDockProps) {
+  const [reviewed, setReviewed] = useState(false);
+
   if (error) {
     return (
       <Placeholder>
@@ -105,20 +107,44 @@ function DockBody({ images, error, rows, onCapture, onDeleteRow, highlightRowId,
       </Placeholder>
     );
   }
+
+  // Coverage tally — what's captured so far. "Completeness" stays the
+  // operator's visual call (no AI room-count), so this is a strong aid,
+  // not an automatic guarantee.
+  const withResult = rows.filter((r) => r.result);
+  const totalArea = withResult.reduce((s, r) => s + (r.result?.monolith_area ?? 0), 0);
+  const totalBeams = withResult.reduce((s, r) => s + (r.result?.beam_count ?? 0), 0);
+
   return (
-    <div className="max-h-[calc(100vh-160px)] space-y-2 overflow-y-auto p-2">
-      {images.map((src) => (
-        <ImageWithBoxes
-          key={src}
-          src={src}
-          rows={rows}
-          onCapture={onCapture}
-          onDeleteRow={onDeleteRow}
-          highlightRowId={highlightRowId}
-          onHighlightRow={onHighlightRow}
-        />
-      ))}
-    </div>
+    <>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-2 text-[12px]">
+        <span className="font-semibold">{rows.length} хона</span>
+        <span className="text-muted-foreground">Σ {totalArea.toFixed(1)} m²</span>
+        <span className="text-muted-foreground">Σ {totalBeams} балка</span>
+        <button
+          type="button"
+          onClick={() => setReviewed((v) => !v)}
+          className="ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 transition-colors hover:bg-muted"
+          title="Тўлиқлигини операторнинг ўзи текширади · Completeness is operator-judged"
+        >
+          <CheckCircle2 className={`h-4 w-4 ${reviewed ? "text-success" : "text-muted-foreground/40"}`} />
+          <Bi uz="Чизма тўлиқ" en="Plan reviewed" enClassName="text-muted-foreground font-normal" />
+        </button>
+      </div>
+      <div className="max-h-[calc(100vh-220px)] space-y-2 overflow-y-auto p-2">
+        {images.map((src) => (
+          <ImageWithBoxes
+            key={src}
+            src={src}
+            rows={rows}
+            onCapture={onCapture}
+            onDeleteRow={onDeleteRow}
+            highlightRowId={highlightRowId}
+            onHighlightRow={onHighlightRow}
+          />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -228,6 +254,11 @@ function ImageWithBoxes({
             >
               <X className="h-3 w-3" />
             </button>
+            {row.result ? (
+              <span className="absolute bottom-0 right-0 rounded-tl bg-black/55 px-1 text-[10px] font-medium leading-tight text-white">
+                {row.result.monolith_area.toFixed(1)} m²
+              </span>
+            ) : null}
           </div>
         );
       })}
