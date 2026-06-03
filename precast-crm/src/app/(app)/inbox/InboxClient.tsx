@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
-import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2 } from "lucide-react";
+import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -295,6 +296,7 @@ function EmptyState() {
 }
 
 function Thread({ conversationId, onDeleted }: { conversationId: string; onDeleted: () => void }) {
+  const router = useRouter();
   const qc = useQueryClient();
   const [draft, setDraft] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -349,8 +351,19 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
             {data?.conversation.username ? `@${data.conversation.username}` : "online"}
           </div>
         </div>
-        {/* Delete conversation — two-step inline confirm */}
+        {/* Actions: Calculate-from-chat, then delete (two-step inline confirm) */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {!confirming && (
+            <button
+              type="button"
+              onClick={() => router.push(`/calculations?fromConversation=${conversationId}`)}
+              title="Бу чатдан ҳисоблаш · Calculate from this chat"
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] hover:text-[var(--tg-accent)]"
+            >
+              <Calculator className="h-4 w-4" />
+              <span className="hidden sm:inline">Ҳисоблаш · Calculate</span>
+            </button>
+          )}
           {confirming ? (
             <>
               <span className="text-[13px] text-[color:var(--tg-text-dim)]">
