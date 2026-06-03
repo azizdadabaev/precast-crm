@@ -15,10 +15,10 @@ import { Play, Pause } from "lucide-react";
 
 const BAR_COUNT = 44;
 
-// Outgoing bubbles are pale green; incoming are white. The accent reads
-// well on both, so we keep a single Telegram-blue accent for the played
-// portion and a low-contrast neutral for the unplayed bars.
-const ACCENT = "#3390ec";
+// Colors are CSS variables so they flip with the app's dark mode.
+// Played bars use the accent; unplayed use the wave-track token;
+// time label uses the meta-out token for outgoing, text-dim for incoming.
+const ACCENT = "var(--tg-accent)";
 
 function seeded(seed: number): () => number {
   // mulberry32 — small, fast, deterministic.
@@ -134,12 +134,12 @@ export function VoicePlayer({
   const progress = total > 0 ? current / total : 0;
   // Time label: count up while playing / scrubbed, show total when idle.
   const label = current > 0 ? fmt(current) : fmt(total);
-  const unplayed = outgoing ? "rgba(74, 137, 92, 0.32)" : "#c9d2dc";
+  const unplayed = "var(--tg-wave-track)";
 
   return (
     <div className="flex flex-col gap-1">
       {title ? (
-        <span className="truncate text-[13px] font-medium text-[#3390ec]" title={title}>
+        <span className="truncate text-[13px] font-medium text-[color:var(--tg-accent)]" title={title}>
           {title}
         </span>
       ) : null}
@@ -188,7 +188,7 @@ export function VoicePlayer({
           </div>
           <span
             className="text-[11px] font-medium tabular-nums"
-            style={{ color: outgoing ? "#5fae7e" : "#8696a3" }}
+            style={{ color: outgoing ? "var(--tg-meta-out)" : "var(--tg-text-dim)" }}
           >
             {label}
           </span>

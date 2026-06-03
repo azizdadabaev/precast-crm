@@ -27,15 +27,14 @@ interface InboxMessage {
   mediaMeta: Record<string, unknown> | null; failed: boolean; createdAt: string;
 }
 
-// Telegram light-theme palette.
+// Telegram theme colors are expressed as CSS variables (defined in globals.css)
+// so they flip automatically with the app's dark mode. Use CSS var() strings
+// in inline styles and Tailwind arbitrary-value classes.
 const TG = {
-  wallpaper: "#e6ebee",
-  incoming: "#ffffff",
-  outgoing: "#effdde",
-  accent: "#3390ec",
-  headerBg: "#ffffff",
-  panelBg: "#ffffff",
-  listSelected: "#ededed",
+  wallpaper: "var(--tg-wallpaper)",
+  incoming: "var(--tg-bubble-in)",
+  outgoing: "var(--tg-bubble-out)",
+  accent: "var(--tg-accent)",
 };
 
 export function InboxClient() {
@@ -69,8 +68,7 @@ function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
         className="flex w-full max-w-xs flex-col items-center gap-4 rounded-2xl border border-border bg-card p-8 shadow-sm"
       >
         <div
-          className="flex h-16 w-16 items-center justify-center rounded-full"
-          style={{ background: TG.accent }}
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--tg-accent)]"
         >
           <Lock className="h-7 w-7 text-white" />
         </div>
@@ -85,7 +83,7 @@ function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           autoFocus
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-center text-sm outline-none focus:border-[#3390ec] focus:ring-1 focus:ring-[#3390ec]"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-center text-sm outline-none focus:border-[color:var(--tg-accent)] focus:ring-1 focus:ring-[color:var(--tg-accent)]"
           placeholder="••••••••"
         />
         {error && <span className="text-xs text-destructive">{error}</span>}
@@ -194,7 +192,7 @@ function Inbox() {
                 <DropdownMenuItem key={opt.value} onClick={() => setAutolockMin(opt.value)}>
                   <span className="flex flex-1 items-center justify-between">
                     {opt.label}
-                    {autolockMin === opt.value && <Check className="h-3.5 w-3.5 text-[#3390ec]" />}
+                    {autolockMin === opt.value && <Check className="h-3.5 w-3.5 text-[color:var(--tg-accent)]" />}
                   </span>
                 </DropdownMenuItem>
               ))}
@@ -216,7 +214,7 @@ function Inbox() {
       </div>
       <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border shadow-sm">
         {/* Left: conversation list */}
-        <div className="flex w-[340px] shrink-0 flex-col border-r border-border bg-white">
+        <div className="flex w-[340px] shrink-0 flex-col border-r border-[color:var(--tg-divider)] bg-[var(--tg-panel)]">
           <div className="flex-1 overflow-y-auto">
             {(conversations ?? []).map((c) => (
               <button
@@ -224,21 +222,21 @@ function Inbox() {
                 onClick={() => setActiveId(c.id)}
                 className={cn(
                   "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
-                  activeId === c.id ? "bg-[#ededed]" : "hover:bg-[#f5f5f5]",
+                  activeId === c.id ? "bg-[var(--tg-list-selected)]" : "hover:bg-[var(--tg-list-hover)]",
                 )}
               >
                 <ChatAvatar name={c.displayName} size={50} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[15px] font-semibold text-[#0f1419]">{c.displayName}</span>
-                    <span className={cn("shrink-0 text-[12px]", c.unread ? "text-[#3390ec]" : "text-[#8696a3]")}>
+                    <span className="truncate text-[15px] font-semibold text-[var(--tg-text)]">{c.displayName}</span>
+                    <span className={cn("shrink-0 text-[12px]", c.unread ? "text-[color:var(--tg-accent)]" : "text-[color:var(--tg-text-dim)]")}>
                       {timeAgo(c.lastMessageAt)}
                     </span>
                   </span>
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[13px] text-[#8696a3]">{snippet(c.lastSnippet)}</span>
+                    <span className="truncate text-[13px] text-[color:var(--tg-text-dim)]">{snippet(c.lastSnippet)}</span>
                     {c.unread && (
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#3390ec]" />
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--tg-accent)]" />
                     )}
                   </span>
                 </span>
@@ -262,10 +260,10 @@ function Inbox() {
 function EmptyState() {
   return (
     <div
-      className="flex flex-1 items-center justify-center"
-      style={{ background: TG.wallpaper, backgroundImage: WALLPAPER_PATTERN }}
+      className="tg-wallpaper flex flex-1 items-center justify-center"
+      style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
     >
-      <span className="flex items-center gap-2 rounded-full bg-black/[0.07] px-4 py-2 text-[13px] font-medium text-[#4b5b67]">
+      <span className="flex items-center gap-2 rounded-full bg-[var(--tg-pill-bg)] px-4 py-2 text-[13px] font-medium text-[color:var(--tg-pill-text)]">
         <MessageCircle className="h-4 w-4 opacity-70" />
         Суҳбатни танланг · Select a conversation
       </span>
@@ -306,11 +304,11 @@ function Thread({ conversationId }: { conversationId: string }) {
   return (
     <>
       {/* Chat header */}
-      <div className="flex items-center gap-3 border-b border-border bg-white px-4 py-2.5">
+      <div className="flex items-center gap-3 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5">
         <ChatAvatar name={data?.conversation.displayName ?? "?"} size={42} />
         <div className="flex min-w-0 flex-col">
-          <div className="truncate text-[15px] font-semibold text-[#0f1419]">{data?.conversation.displayName}</div>
-          <div className="truncate text-[13px] text-[#8696a3]">
+          <div className="truncate text-[15px] font-semibold text-[var(--tg-text)]">{data?.conversation.displayName}</div>
+          <div className="truncate text-[13px] text-[color:var(--tg-text-dim)]">
             {data?.conversation.username ? `@${data.conversation.username}` : "online"}
           </div>
         </div>
@@ -318,8 +316,8 @@ function Thread({ conversationId }: { conversationId: string }) {
 
       {/* Messages — Telegram wallpaper */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-4"
-        style={{ background: TG.wallpaper, backgroundImage: WALLPAPER_PATTERN }}
+        className="tg-wallpaper flex-1 overflow-y-auto px-4 py-4"
+        style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
       >
         <div className="mx-auto flex max-w-[760px] flex-col">
           {messages.map((msg, i) => {
@@ -348,13 +346,13 @@ function Thread({ conversationId }: { conversationId: string }) {
       {/* Composer */}
       <form
         onSubmit={(e) => { e.preventDefault(); if (draft.trim()) reply.mutate(draft.trim()); }}
-        className="flex items-end gap-2 border-t border-border bg-white px-4 py-2.5"
+        className="flex items-end gap-2 border-t border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5"
       >
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Жавоб ёзинг…"
-          className="flex-1 rounded-[20px] border border-border bg-[#f5f6f8] px-4 py-2.5 text-sm outline-none transition-colors focus:border-[#3390ec] focus:bg-white"
+          className="flex-1 rounded-[20px] border border-border bg-[var(--tg-input-bg)] px-4 py-2.5 text-sm text-[var(--tg-text)] outline-none transition-colors focus:border-[color:var(--tg-accent)] focus:bg-[var(--tg-panel)]"
         />
         <button
           type="submit"
@@ -364,7 +362,7 @@ function Thread({ conversationId }: { conversationId: string }) {
             "flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-white transition-all",
             draft.trim() ? "scale-100 opacity-100" : "scale-95 opacity-50",
           )}
-          style={{ background: TG.accent }}
+          style={{ background: "var(--tg-accent)" }}
         >
           {reply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
         </button>
@@ -380,7 +378,10 @@ function Bubble({ msg, groupedTop, hasTail }: { msg: InboxMessage; groupedTop: b
     !msg.text && (msg.mediaKind === "IMAGE" || msg.mediaKind === "VIDEO" || msg.mediaKind === "VIDEO_NOTE");
 
   const footer = (
-    <span className={cn("flex select-none items-center gap-1 text-[11px] leading-none", overlayMedia ? "text-white" : msg.failed ? "text-destructive" : outgoing ? "text-[#5fae7e]" : "text-[#8696a3]")}>
+    <span
+      className={cn("flex select-none items-center gap-1 text-[11px] leading-none", overlayMedia ? "text-white" : msg.failed ? "text-destructive" : "")}
+      style={overlayMedia || msg.failed ? undefined : { color: outgoing ? "var(--tg-meta-out)" : "var(--tg-text-dim)" }}
+    >
       {clock(msg.createdAt)}
       {outgoing && !msg.failed && <SentCheck />}
       {msg.failed && <span className="font-semibold">! · юборилмади</span>}
@@ -397,7 +398,7 @@ function Bubble({ msg, groupedTop, hasTail }: { msg: InboxMessage; groupedTop: b
     >
       <div
         className={cn(
-          "relative max-w-[min(82%,460px)] text-[14px] leading-[1.35] text-[#0f1419]",
+          "relative max-w-[min(82%,460px)] text-[14px] leading-[1.35] text-[var(--tg-text)]",
           overlayMedia ? "overflow-hidden" : "px-2.5 py-1.5",
           // rounded corners — tighten the tail corner on the tailed bubble
           "rounded-[16px]",
@@ -488,7 +489,7 @@ function SentCheck() {
 function DateSeparator({ iso }: { iso: string }) {
   return (
     <div className="my-3 flex justify-center">
-      <span className="rounded-full bg-black/[0.07] px-2.5 py-1 text-[12px] font-medium text-[#4b5b67] backdrop-blur-sm">
+      <span className="rounded-full px-2.5 py-1 text-[12px] font-medium backdrop-blur-sm" style={{ background: "var(--tg-pill-bg)", color: "var(--tg-pill-text)" }}>
         {dateLabel(iso)}
       </span>
     </div>

@@ -303,6 +303,54 @@
   }
 }
 
+/* ──────────────────────────────────────────────────────────────
+   Telegram inbox theme tokens.
+   Light defaults in :root; dark overrides flip with the app theme.
+   All Telegram-style inbox components read from these vars instead
+   of hardcoded hex so night-mode works automatically.
+   ────────────────────────────────────────────────────────────── */
+:root {
+  --tg-wallpaper: #e6ebee;
+  --tg-panel: #ffffff;          /* list + header + composer surfaces */
+  --tg-bubble-in: #ffffff;
+  --tg-bubble-out: #effdde;
+  --tg-text: #0f1419;           /* primary message/text */
+  --tg-text-dim: #8696a3;       /* meta, timestamps, snippets */
+  --tg-accent: #3390ec;         /* play button, send, links, unread */
+  --tg-list-hover: #f5f5f5;
+  --tg-list-selected: #ededed;
+  --tg-divider: rgba(0,0,0,0.08);
+  --tg-pill-bg: rgba(255,255,255,0.85);   /* date separator pill */
+  --tg-pill-text: #5a6b78;
+  --tg-wave-track: rgba(0,0,0,0.18);       /* unplayed waveform bars */
+  --tg-input-bg: #f5f6f8;
+  --tg-meta-out: #62a03f;        /* outgoing timestamp/check (green-ish on light) */
+}
+html[data-theme="dark"] {
+  --tg-wallpaper: #0e1621;
+  --tg-panel: #17212b;
+  --tg-bubble-in: #182533;
+  --tg-bubble-out: #2b5278;
+  --tg-text: #ffffff;
+  --tg-text-dim: #6c7883;
+  --tg-accent: #5eb5f7;
+  --tg-list-hover: #202b36;
+  --tg-list-selected: #2b5278;
+  --tg-divider: rgba(255,255,255,0.08);
+  --tg-pill-bg: rgba(0,0,0,0.35);
+  --tg-pill-text: #c6d3df;
+  --tg-wave-track: rgba(255,255,255,0.25);
+  --tg-input-bg: #182533;
+  --tg-meta-out: rgba(255,255,255,0.55);
+}
+
+/* Wallpaper doodle pattern flips stroke color for dark mode.
+   The base background-color is always var(--tg-wallpaper) set inline;
+   the background-image data-URI is overridden here with a lighter stroke. */
+html[data-theme="dark"] .tg-wallpaper {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' opacity='0.04'%3E%3Ccircle cx='24' cy='24' r='9'/%3E%3Cpath d='M70 18 q10 8 0 18 q-10 8 0 18'/%3E%3Cpath d='M96 70 l8 8 m0 -8 l-8 8'/%3E%3Ccircle cx='30' cy='90' r='6'/%3E%3Cpath d='M58 78 h20 m-10 -10 v20'/%3E%3Cpath d='M10 60 q12 -10 24 0 t24 0'/%3E%3Crect x='86' y='14' width='16' height='16' rx='4'/%3E%3C/g%3E%3C/svg%3E");
+}
+
 @layer base {
   * {
     @apply border-border;

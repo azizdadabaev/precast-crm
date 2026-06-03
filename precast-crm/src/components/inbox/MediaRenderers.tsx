@@ -20,7 +20,7 @@ export interface MessageMediaProps {
   footer?: React.ReactNode;
 }
 
-const ACCENT = "#3390ec";
+const ACCENT = "var(--tg-accent)";
 
 export function MessageMedia({
   mediaKind,
@@ -85,10 +85,10 @@ export function MessageMedia({
             <FileText className="h-5 w-5" />
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="max-w-[200px] truncate text-[14px] font-medium text-[#0f1419]">
+            <span className="max-w-[200px] truncate text-[14px] font-medium text-[var(--tg-text)]">
               {mediaName ?? "document"}
             </span>
-            <span className="inline-flex items-center gap-1 text-[12px] text-[#8696a3]">
+            <span className="inline-flex items-center gap-1 text-[12px] text-[color:var(--tg-text-dim)]">
               <Download className="h-3 w-3" />
               {fileHint(mediaName, meta)}
             </span>
@@ -105,11 +105,11 @@ export function MessageMedia({
         <a href={url} target="_blank" rel="noreferrer" className="block w-[260px] overflow-hidden rounded-[12px]">
           <MapTexture lat={lat} lng={lng} />
           <span className="flex flex-col px-2 pb-1 pt-1.5">
-            <span className="text-[14px] font-medium text-[#0f1419]">
+            <span className="text-[14px] font-medium text-[var(--tg-text)]">
               {(meta.title as string) ?? "Жойлашув · Location"}
             </span>
             {meta.address ? (
-              <span className="text-[12px] text-[#8696a3]">{String(meta.address)}</span>
+              <span className="text-[12px] text-[color:var(--tg-text-dim)]">{String(meta.address)}</span>
             ) : null}
             <span className="mt-0.5 text-[12px] font-medium" style={{ color: ACCENT }}>
               Open in Google Maps
@@ -274,7 +274,7 @@ function formatBytes(bytes: number): string {
 
 function Placeholder({ label }: { label: string }) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-[10px] bg-black/[0.04] px-3 py-2 text-[12px] text-[#8696a3]">
+    <div className="inline-flex items-center gap-2 rounded-[10px] border border-[color:var(--tg-divider)] px-3 py-2 text-[12px] text-[color:var(--tg-text-dim)]">
       <AlertCircle className="h-3.5 w-3.5" />
       {label}
     </div>
