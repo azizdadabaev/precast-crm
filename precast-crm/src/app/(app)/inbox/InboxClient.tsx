@@ -284,7 +284,7 @@ function Bubble({ msg, groupedTop, hasTail }: { msg: InboxMessage; groupedTop: b
   const footer = (
     <span className={cn("flex select-none items-center gap-1 text-[11px] leading-none", overlayMedia ? "text-white" : msg.failed ? "text-destructive" : outgoing ? "text-[#5fae7e]" : "text-[#8696a3]")}>
       {clock(msg.createdAt)}
-      {outgoing && !msg.failed && <DoubleCheck />}
+      {outgoing && !msg.failed && <SentCheck />}
       {msg.failed && <span className="font-semibold">! · юборилмади</span>}
     </span>
   );
@@ -375,11 +375,14 @@ function Tail({ outgoing, color }: { outgoing: boolean; color: string }) {
   );
 }
 
-function DoubleCheck() {
+// Single tick = "sent". The Telegram Bot API gives no delivery/read
+// receipts for business messages, so we deliberately do NOT show the
+// double-check (which means "read" in Telegram) — that would be a lie.
+function SentCheck() {
   return (
-    <svg width="16" height="11" viewBox="0 0 16 11" fill="none" className="inline-block">
-      <path d="M1 5.5 L4 8.5 L9.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5.5 8 L6.8 9.2 L13.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="13" height="11" viewBox="0 0 13 11" fill="none" className="inline-block" role="img" aria-label="Юборилди · Sent">
+      <title>Юборилди · Sent</title>
+      <path d="M1 5.8 L4.4 9 L11.5 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
