@@ -201,14 +201,22 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   // survives deletion of the source chat, and stamp annotationImagePath onto
   // each annotated room. Runs outside the tx (fs isn't transactional); a
   // failed copy leaves the box coords intact, just without the image.
+  // A box may only reference this project's own media or the linked chat's
+  // folder — never another conversation's media or arbitrary uploads. This
+  // closes an authz gap: box.imagePath is client-supplied.
+  const ownedPrefix = `/uploads/projects/${project.id}/`;
+  const allowedInbox = linkConversationId ? `/uploads/inbox/${linkConversationId}/` : null;
   const copyCache = new Map<string, string | null>();
   for (const calc of project.calculations) {
-    const box = computed[calc.seq]?.input.box;
-    if (!box?.imagePath) continue;
-    let dest = copyCache.get(box.imagePath);
+    const src = computed[calc.seq]?.input.box?.imagePath;
+    if (!src) continue;
+    if (!(src.startsWith(ownedPrefix) || (allowedInbox && src.startsWith(allowedInbox)))) {
+      continue; // points outside the project's own media / its linked chat — ignore
+    }
+    let dest = copyCache.get(src);
     if (dest === undefined) {
-      dest = await copyUploadToProject(project.id, box.imagePath).catch(() => null);
-      copyCache.set(box.imagePath, dest);
+      dest = await copyUploadToProject(project.id, src).catch(() => null);
+      copyCache.set(src, dest);
     }
     if (dest) {
       await prisma.calculation.update({

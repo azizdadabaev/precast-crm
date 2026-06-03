@@ -19,6 +19,7 @@
 
 import { promises as fs } from "fs";
 import path from "path";
+import { createHash } from "crypto";
 
 const PUBLIC_ROOT = path.join(process.cwd(), "public");
 const UPLOAD_ROOT = path.join(PUBLIC_ROOT, "uploads");
@@ -108,9 +109,12 @@ export async function saveBufferToUploads(
  *
  * Idempotent: a source already inside this project's folder is returned
  * unchanged (so re-saving a reopened draft doesn't re-copy). Throws
- * UploadError if the source escapes the uploads root; the filename is
- * prefixed with its parent folder to avoid collisions between same-named
- * files from different conversations.
+ * UploadError if the source escapes the uploads root.
+ *
+ * The dest filename is a hash of the source-relative path — stable (so the
+ * copy dedupes + idempotent re-save works) but NON-reversible. We must NOT
+ * embed the source folder name: for inbox media that folder is the
+ * conversation id, and this path is served to non-inbox order.view users.
  */
 export async function copyUploadToProject(
   projectId: string,
@@ -129,8 +133,9 @@ export async function copyUploadToProject(
     throw new UploadError("source path escapes uploads root", 400);
   }
 
-  const parent = path.basename(path.dirname(srcAbs));
-  const filename = `${parent}_${path.basename(srcAbs)}`;
+  const ext = path.extname(srcAbs);
+  const stem = createHash("sha1").update(rel).digest("hex").slice(0, 16);
+  const filename = `${stem}${ext}`;
   const destDir = path.join(UPLOAD_ROOT, "projects", projectId);
   await fs.mkdir(destDir, { recursive: true });
   await fs.copyFile(srcAbs, path.join(destDir, filename));
