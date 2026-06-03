@@ -356,6 +356,11 @@ model Project {
   // existing client during the call). Null while we have only tentative info.
   clientId   String?
 
+  // Optional link back to the Telegram conversation this quote was
+  // calculated from (inbox feature). SetNull so deleting a chat never
+  // deletes the quote it produced. Only set by callers with inbox.access.
+  conversationId String?
+
   name       String?
   // Monotonically increasing identifier displayed as "NNNND" — the
   // "D" suffix brands the row as a saved draft, so an operator
@@ -379,6 +384,7 @@ model Project {
 
   deal         Deal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
   client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   calculations Calculation[]
   orders       Order[]
   drawingRequests DrawingRequest[]
@@ -387,6 +393,7 @@ model Project {
   @@index([status])
   @@index([dealId])
   @@index([clientId])
+  @@index([conversationId])
   @@index([tentativeClientPhone])
   @@map("projects")
 }
@@ -442,6 +449,14 @@ model Calculation {
   patternExtraCost        Decimal @db.Decimal(14, 2)
   manualExtraBeamsCost    Decimal @db.Decimal(14, 2)
   subtotal                Decimal @db.Decimal(14, 2)
+
+  // ── Stage-② annotation (drawing→quote) ──
+  // The box this room was drawn over on the source plan, normalized to
+  // the image's natural size (each value 0..1: { x, y, w, h }).
+  // annotationImagePath points at the project-owned copy of that drawing
+  // so the record outlives the source chat. Null for hand-typed rooms.
+  annotationBox       Json?
+  annotationImagePath String?
 
   seq             Int      @default(0) // row display order within project
 
@@ -1062,11 +1077,13 @@ model Conversation {
   businessConnectionId String?
   displayName          String
   username             String?
+  sharedContactPhone   String?             // digits-only; from a client's shared-contact message
   lastMessageAt        DateTime
   lastSnippet          String              @default("")
   unread               Boolean             @default(true)
   createdAt            DateTime            @default(now())
   messages             Message[]
+  projects             Project[]
 
   @@unique([channel, externalId])
   @@index([lastMessageAt])
