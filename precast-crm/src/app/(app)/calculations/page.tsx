@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, PackageCheck, Trash2, Loader2 } from "lucide-react";
+import { Save, PackageCheck, Trash2, Loader2, Phone } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { ClientInfoBar } from "@/components/calculation/ClientInfoBar";
+import { DrawingDock } from "@/components/calculation/DrawingDock";
 import { PlaceOrderDialog } from "@/components/calculation/PlaceOrderDialog";
 import {
   MultiRoomCalculator,
@@ -695,7 +696,11 @@ function CalculationsInner() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className={sourceConversationId ? "flex items-stretch gap-4" : undefined}>
+      {sourceConversationId && (
+        <DrawingDock images={conversationImages} error={convLoadError} />
+      )}
+      <div className={sourceConversationId ? "min-w-0 flex-1 space-y-5" : "space-y-5"}>
       {/* Header — title only. The action buttons (Clear / Save Project /
           Place Order) moved to a dedicated bar after the calculator
           totals so the user's eye lands on the numbers before the CTAs. */}
@@ -778,6 +783,21 @@ function CalculationsInner() {
         matchedClientId={matchedClientId}
         onMatch={setMatchedClientId}
       />
+
+      {/* One-tap fill the phone from a contact the client shared in chat. */}
+      {sharedPhone && !client.phone.trim() && (
+        <button
+          type="button"
+          onClick={() => {
+            setClient({ ...client, phone: sharedPhone });
+            setError(null);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-sm text-primary transition hover:bg-primary/10"
+        >
+          <Phone className="h-3.5 w-3.5" />
+          {t("Юборилган рақамни ишлатиш", "Use shared number")}: {sharedPhone}
+        </button>
+      )}
 
       {/* Offscreen share card — capture target for the Send button.
           Rendered at fixed 1100 px regardless of viewport so the
@@ -938,6 +958,7 @@ function CalculationsInner() {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
