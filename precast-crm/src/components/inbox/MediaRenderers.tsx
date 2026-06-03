@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { MapPin, FileText, Download, AlertCircle, Play } from "lucide-react";
 import { VoicePlayer } from "./VoicePlayer";
+import { useImageViewer } from "./ImageViewer";
 
 export interface MessageMediaProps {
   mediaKind: string | null;
@@ -31,6 +32,8 @@ export function MessageMedia({
   outgoing = false,
   footer,
 }: MessageMediaProps) {
+  const openViewer = useImageViewer();
+
   if (!mediaKind) return null;
 
   const meta = mediaMeta ?? {};
@@ -41,7 +44,7 @@ export function MessageMedia({
   switch (mediaKind) {
     case "IMAGE":
       return mediaPath ? (
-        <a href={mediaPath} target="_blank" rel="noreferrer" className="group relative block">
+        <button type="button" onClick={() => openViewer([mediaPath], 0)} className="group relative block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={mediaPath}
@@ -49,7 +52,7 @@ export function MessageMedia({
             className="block max-h-[210px] max-w-[180px] rounded-[14px] object-cover"
           />
           {footer ? <MediaScrimFooter>{footer}</MediaScrimFooter> : null}
-        </a>
+        </button>
       ) : null;
 
     case "VIDEO":
