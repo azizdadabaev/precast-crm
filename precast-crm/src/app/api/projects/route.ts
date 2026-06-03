@@ -16,7 +16,7 @@ import { addressSearchForms } from "@/lib/regions";
 import { nextDraftNumber } from "@/lib/draft-number";
 
 /** GET /api/projects — order.view. List projects with optional status + search. */
-export const GET = withPermission("order.view", async (req: NextRequest) => {
+export const GET = withPermission("order.view", async (req: NextRequest, { user }) => {
   const { searchParams } = new URL(req.url);
   const dealId = searchParams.get("dealId") ?? undefined;
   const status = searchParams.get("status") ?? undefined; // DRAFT | ORDERED | ARCHIVED
@@ -54,7 +54,13 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       orders: { select: { id: true, orderNumber: true, status: true, scheduledAt: true } },
     },
   });
-  return ok(projects);
+
+  // The conversation link is inbox-only data. Strip it for users without
+  // inbox.access so chat linkage never leaks through the projects surface.
+  const sanitized = can(user, "inbox.access")
+    ? projects
+    : projects.map((p) => ({ ...p, conversationId: null }));
+  return ok(sanitized);
 });
 
 /** POST /api/projects — order.create. Save Project (draft). Phone-only required. */

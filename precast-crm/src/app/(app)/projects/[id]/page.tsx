@@ -7,7 +7,7 @@ import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, FileText, MessageCircle } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
@@ -24,6 +24,7 @@ interface Project {
   draftNumber: number | null;
   shapeType: string;
   status: "DRAFT" | "ORDERED" | "ARCHIVED";
+  conversationId?: string | null;
   dimensions: { width?: number; length?: number; widths?: number[] };
   createdAt: string;
   // tentative client info (when no Client linked yet)
@@ -77,6 +78,7 @@ export default function ProjectDetailPage() {
     queryFn: () => api("/api/auth/me"),
   });
   const canUseBlender = me?.permissions?.includes("blender.bridge") ?? false;
+  const canUseInbox = me?.permissions?.includes("inbox.access") ?? false;
   /** Captured by ShareCalculationButton — wraps project header +
    *  calculation summary so operators can ship a one-shot image. */
   const shareRef = useRef<HTMLDivElement>(null);
@@ -158,6 +160,13 @@ export default function ProjectDetailPage() {
           <ArrowLeft className="h-4 w-4 mr-1" /> {t("Орқага", "Back")}
         </Link>
         <div className="flex gap-2">
+          {canUseInbox && project.conversationId && (
+            <Button variant="outline" asChild size="sm">
+              <Link href={`/inbox/${project.conversationId}`}>
+                <MessageCircle className="h-4 w-4 mr-2" /> {t("Чатни очиш", "Open chat")}
+              </Link>
+            </Button>
+          )}
           <ShareCalculationButton
             targetRef={shareRef}
             fileBase={`${displayName}${
