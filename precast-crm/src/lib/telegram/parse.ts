@@ -23,6 +23,7 @@ export interface ParsedInbound {
   text: string | null;
   media: ParsedMedia | null;
   isEdited: boolean;
+  outgoing: boolean;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -113,6 +114,9 @@ export function parseBusinessUpdate(update: any): ParsedInbound | null {
   const from = m.from ?? {};
   const displayName = [from.first_name, from.last_name].filter(Boolean).join(" ") || "Telegram";
   const media = classifyMedia(m);
+  const fromId = m.from?.id;
+  const chatId2 = m.chat?.id;
+  const outgoing = fromId != null && chatId2 != null && String(fromId) !== String(chatId2);
   return {
     businessConnectionId: m.business_connection_id ?? null,
     chatId: String(m.chat?.id ?? from.id ?? ""),
@@ -123,5 +127,6 @@ export function parseBusinessUpdate(update: any): ParsedInbound | null {
     text: m.text ?? m.caption ?? null,
     media,
     isEdited: picked.edited,
+    outgoing,
   };
 }

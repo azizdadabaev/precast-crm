@@ -54,14 +54,13 @@ export async function POST(req: NextRequest) {
         username: parsed.username,
         lastMessageAt: new Date(),
         lastSnippet: snippetFor(parsed.text, parsed.media),
-        unread: true,
+        unread: !parsed.outgoing,
       },
       update: {
-        displayName: parsed.displayName,
-        username: parsed.username,
+        ...(!parsed.outgoing ? { displayName: parsed.displayName, username: parsed.username } : {}),
         businessConnectionId: parsed.businessConnectionId,
         ...(bump
-          ? { lastMessageAt: new Date(), lastSnippet: snippetFor(parsed.text, parsed.media), unread: true }
+          ? { lastMessageAt: new Date(), lastSnippet: snippetFor(parsed.text, parsed.media), unread: !parsed.outgoing }
           : {}),
       },
     });
@@ -108,7 +107,7 @@ export async function POST(req: NextRequest) {
       where: { conversationId_telegramMsgId: { conversationId: conversation.id, telegramMsgId: parsed.telegramMsgId } },
       create: {
         conversationId: conversation.id,
-        direction: "INBOUND",
+        direction: parsed.outgoing ? "OUTBOUND" : "INBOUND",
         text: parsed.text,
         mediaKind: mediaKind as never,
         mediaPath,

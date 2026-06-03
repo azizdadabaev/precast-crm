@@ -74,6 +74,20 @@ describe("parseBusinessUpdate", () => {
       media: null,
       isEdited: false,
     });
+    // from.id === chat.id → customer message → not outgoing
+    expect(p?.outgoing).toBe(false);
+  });
+  it("marks outgoing=true when from.id differs from chat.id (owner's phone message)", () => {
+    // Owner (id 999) sends from their phone into chat with customer (id 555)
+    const ownerMsg = {
+      ...base,
+      from: { id: 999, first_name: "Owner", username: "owner_handle" },
+      chat: { id: 555 },
+      text: "On my way",
+    };
+    const p = parseBusinessUpdate({ update_id: 2, business_message: ownerMsg });
+    expect(p?.outgoing).toBe(true);
+    expect(p?.chatId).toBe("555");
   });
   it("uses caption as text when media has a caption", () => {
     const p = parseBusinessUpdate({
