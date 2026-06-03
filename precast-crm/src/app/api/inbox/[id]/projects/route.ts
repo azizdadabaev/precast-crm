@@ -12,6 +12,7 @@ export const GET = withInboxAccess<{ id: string }>(async (_req, { params }) => {
   const projects = await prisma.project.findMany({
     where: { conversationId: params.id },
     orderBy: { createdAt: "desc" },
+    take: 100,
     select: { id: true, draftNumber: true, status: true, name: true, createdAt: true },
   });
   return ok(projects);

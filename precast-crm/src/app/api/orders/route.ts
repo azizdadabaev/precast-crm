@@ -443,5 +443,10 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
     });
   })();
 
+  // The conversation link is inbox-only data — never expose it through the
+  // orders surface to order.create users who lack inbox.access.
+  if (order.project && !can(user, "inbox.access")) {
+    order.project.conversationId = null;
+  }
   return created(order);
 });

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { OrderUpdateSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 import {
@@ -16,7 +17,7 @@ import {
 type Params = { id: string };
 
 /** GET /api/orders/[id] — order.view */
-export const GET = withPermission<Params>("order.view", async (_req: NextRequest, { params }) => {
+export const GET = withPermission<Params>("order.view", async (_req: NextRequest, { params, user }) => {
   const order = await prisma.order.findUnique({
     where: { id: params.id },
     include: {
@@ -54,6 +55,11 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
     },
   });
   if (!order) return fail("Order not found", 404);
+  // The conversation link is inbox-only data — strip it for order.view users
+  // who lack inbox.access so chat linkage never leaks through the order surface.
+  if (order.project && !can(user, "inbox.access")) {
+    order.project.conversationId = null;
+  }
   return ok(order);
 });
 
