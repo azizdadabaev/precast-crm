@@ -56,6 +56,10 @@ describe("classifyMedia", () => {
     const m = classifyMedia({ ...base, sticker: { file_id: "s1" } });
     expect(m).toMatchObject({ kind: "OTHER" });
   });
+  it("classifies a shared contact as OTHER (display unchanged; phone captured separately)", () => {
+    const m = classifyMedia({ ...base, contact: { phone_number: "+998901234567", first_name: "Ali" } });
+    expect(m).toMatchObject({ kind: "OTHER" });
+  });
 });
 
 describe("parseBusinessUpdate", () => {
@@ -124,5 +128,16 @@ describe("parseBusinessUpdate", () => {
   it("yields null mediaGroupId when media_group_id is absent", () => {
     const p = parseBusinessUpdate({ update_id: 1, business_message: { ...base, text: "plain text" } });
     expect(p?.mediaGroupId).toBeNull();
+  });
+  it("extracts a digits-only phone + name from a shared contact", () => {
+    const p = parseBusinessUpdate({
+      update_id: 1,
+      business_message: { ...base, contact: { phone_number: "+998 (90) 123-45-67", first_name: "Ali", last_name: "V" } },
+    });
+    expect(p?.contact).toEqual({ phone: "998901234567", name: "Ali V" });
+  });
+  it("leaves contact undefined when no contact is shared", () => {
+    const p = parseBusinessUpdate({ update_id: 1, business_message: { ...base, text: "hi" } });
+    expect(p?.contact).toBeUndefined();
   });
 });

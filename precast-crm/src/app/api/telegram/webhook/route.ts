@@ -44,6 +44,13 @@ export async function POST(req: NextRequest) {
   try {
     // 3. Upsert the conversation.
     const bump = !parsed.isEdited;
+    // Capture a client's shared-contact phone (digits-only) for the
+    // calculator handoff. Inbound only — never store the owner's own
+    // number from an outgoing message.
+    const contactPhonePatch =
+      !parsed.outgoing && parsed.contact?.phone
+        ? { sharedContactPhone: parsed.contact.phone }
+        : {};
     const conversation = await prisma.conversation.upsert({
       where: { channel_externalId: { channel: "TELEGRAM", externalId: parsed.chatId } },
       create: {
@@ -55,10 +62,12 @@ export async function POST(req: NextRequest) {
         lastMessageAt: new Date(),
         lastSnippet: snippetFor(parsed.text, parsed.media),
         unread: !parsed.outgoing,
+        ...contactPhonePatch,
       },
       update: {
         ...(!parsed.outgoing ? { displayName: parsed.displayName, username: parsed.username } : {}),
         businessConnectionId: parsed.businessConnectionId,
+        ...contactPhonePatch,
         ...(bump
           ? { lastMessageAt: new Date(), lastSnippet: snippetFor(parsed.text, parsed.media), unread: !parsed.outgoing }
           : {}),

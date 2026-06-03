@@ -24,6 +24,10 @@ export interface ParsedInbound {
   media: ParsedMedia | null;
   isEdited: boolean;
   outgoing: boolean;
+  /** Present only when the message is a shared contact card. Phone is
+   *  digits-only (matches Client.phone storage). Used by the calculator
+   *  handoff to one-tap the phone field. */
+  contact?: { phone: string; name?: string };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -117,6 +121,13 @@ export function parseBusinessUpdate(update: any): ParsedInbound | null {
   const fromId = m.from?.id;
   const chatId2 = m.chat?.id;
   const outgoing = fromId != null && chatId2 != null && String(fromId) !== String(chatId2);
+  const contactRaw = m.contact;
+  const contact = contactRaw?.phone_number
+    ? {
+        phone: String(contactRaw.phone_number).replace(/\D/g, ""),
+        name: [contactRaw.first_name, contactRaw.last_name].filter(Boolean).join(" ") || undefined,
+      }
+    : undefined;
   return {
     businessConnectionId: m.business_connection_id ?? null,
     chatId: String(m.chat?.id ?? from.id ?? ""),
@@ -128,5 +139,6 @@ export function parseBusinessUpdate(update: any): ParsedInbound | null {
     media,
     isEdited: picked.edited,
     outgoing,
+    contact,
   };
 }
