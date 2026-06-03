@@ -31,6 +31,13 @@ import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
 import { useTableDesign } from "@/hooks/useTableDesign";
 
+type ConversationContext = {
+  displayName: string;
+  username: string | null;
+  sharedContactPhone: string | null;
+  images: { messageId: string; path: string | null; createdAt: string }[];
+};
+
 function CalculationsInner() {
   const router = useRouter();
   const qc = useQueryClient();
@@ -57,6 +64,8 @@ function CalculationsInner() {
   const setDraftProjectId = useCalculatorStore((s) => s.setDraftProjectId);
   const editingOrderId = useCalculatorStore((s) => s.editingOrderId);
   const setEditingOrderId = useCalculatorStore((s) => s.setEditingOrderId);
+  const sourceConversationId = useCalculatorStore((s) => s.sourceConversationId);
+  const setSourceConversationId = useCalculatorStore((s) => s.setSourceConversationId);
   const loadFrom = useCalculatorStore((s) => s.loadFrom);
   const clearAll = useCalculatorStore((s) => s.clearAll);
 
@@ -65,6 +74,13 @@ function CalculationsInner() {
   const [orderOpen, setOrderOpen] = useState(false);
   const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  // ── Drawing-dock state (transient) — populated when the calculator is
+  //    opened from an inbox chat (?fromConversation=). NOT persisted; the
+  //    persisted sourceConversationId lets us re-fetch these on reload.
+  const [conversationImages, setConversationImages] = useState<string[]>([]);
+  const [sharedPhone, setSharedPhone] = useState<string | null>(null);
+  const [convLoadError, setConvLoadError] = useState(false);
+  const loadedConvRef = useRef<string | null>(null);
   /** Ref to the offscreen <ShareTarget> — see render block below. */
   const shareRef = useRef<HTMLDivElement>(null);
   const tableDesign = useTableDesign();
@@ -133,6 +149,17 @@ function CalculationsInner() {
       return;
     }
 
+    // ?fromConversation=<id>: opened from an inbox chat. Prefill the client
+    // name + dock the chat's drawings, then strip the query so a refresh
+    // doesn't re-prefill over the operator's edits.
+    const fromConversation = search.get("fromConversation");
+    if (fromConversation) {
+      void loadConversationContext(fromConversation, { prefillClient: true }).finally(() => {
+        router.replace("/calculations", { scroll: false });
+      });
+      return;
+    }
+
     // Refresh during edit mode: URL doesn't have ?fromOrder= but the
     // store still carries editingOrderId. Re-fetch so the banner +
     // dialog default scheduledAt come back. Don't replace the rows
@@ -145,6 +172,17 @@ function CalculationsInner() {
     if (fromProject) loadProject(fromProject);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
+
+  // Repopulate the drawing dock after a reload while still linked to a chat:
+  // sourceConversationId is persisted but the dock images are transient. The
+  // ref-dedupe in loadConversationContext prevents a double-fetch with the
+  // mount handoff above.
+  useEffect(() => {
+    if (!hydrated || !sourceConversationId) return;
+    if (search.get("fromConversation")) return; // handled by the mount effect
+    void loadConversationContext(sourceConversationId, { prefillClient: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, sourceConversationId]);
 
   // Self-heal stale draftProjectId. The calculator persists the loaded
   // draft's id in localStorage so a refresh keeps the in-progress state.
@@ -211,6 +249,36 @@ function CalculationsInner() {
    *  frozen snapshot for edit-mode. Replaces all session state.
    *  Status checked server-side too — the edit endpoint refuses
    *  DISPATCHED/DELIVERED/CANCELED. */
+  /** Fetch a conversation's context for the drawing dock. `prefillClient`
+   *  replaces the client info (used only on a fresh ?fromConversation
+   *  handoff); on reload we keep the operator's in-progress client/rows and
+   *  only repopulate the dock. Deduped per id via loadedConvRef so the
+   *  mount handoff and the reload effect never double-fetch. Fails open. */
+  async function loadConversationContext(
+    id: string,
+    opts?: { prefillClient?: boolean },
+  ) {
+    if (loadedConvRef.current === id) return;
+    loadedConvRef.current = id;
+    try {
+      const ctx = await api<ConversationContext>(`/api/inbox/${id}/context`);
+      if (opts?.prefillClient) {
+        loadFrom({
+          client: { name: ctx.displayName ?? "", phone: "", address: "", consentGranted: false },
+        });
+      }
+      setSourceConversationId(id);
+      setConversationImages(ctx.images.map((i) => i.path).filter((p): p is string => !!p));
+      setSharedPhone(ctx.sharedContactPhone ?? null);
+      setConvLoadError(false);
+    } catch {
+      // Fail open: keep the persisted draft; flag the dock as errored.
+      setSourceConversationId(id);
+      setConversationImages([]);
+      setConvLoadError(true);
+    }
+  }
+
   async function loadOrder(id: string) {
     try {
       const order = await api<{
