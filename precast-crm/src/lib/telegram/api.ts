@@ -35,6 +35,32 @@ export async function tgSendBusinessMessage(
   return { messageId: String(json.result.message_id) };
 }
 
+/**
+ * Send a photo on behalf of the connected business account (multipart
+ * upload via sendPhoto). Used to push a rendered quote image back into the
+ * customer's chat. Token is server-only; never logged.
+ */
+export async function tgSendBusinessPhoto(
+  businessConnectionId: string,
+  chatId: string,
+  photo: Buffer,
+  opts?: { filename?: string; caption?: string; contentType?: string },
+): Promise<{ messageId: string }> {
+  const form = new FormData();
+  form.append("business_connection_id", businessConnectionId);
+  form.append("chat_id", chatId);
+  if (opts?.caption) form.append("caption", opts.caption);
+  form.append(
+    "photo",
+    new Blob([new Uint8Array(photo)], { type: opts?.contentType ?? "image/png" }),
+    opts?.filename ?? "quote.png",
+  );
+  const res = await fetch(apiUrl("sendPhoto"), { method: "POST", body: form });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram sendPhoto failed: ${json.description ?? res.status}`);
+  return { messageId: String(json.result.message_id) };
+}
+
 /** Resolve a file_id to a server file_path via getFile. */
 export async function tgGetFilePath(fileId: string): Promise<string> {
   const res = await fetch(apiUrl("getFile"), {
