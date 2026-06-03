@@ -93,6 +93,17 @@ describe("calculator store — actions", () => {
     useCalculatorStore.getState().setDraftProjectId("proj-123");
     expect(useCalculatorStore.getState().draftProjectId).toBe("proj-123");
   });
+
+  it("setSourceConversationId stores the id; clearAll and loadFrom reset it", () => {
+    useCalculatorStore.getState().setSourceConversationId("conv-1");
+    expect(useCalculatorStore.getState().sourceConversationId).toBe("conv-1");
+    useCalculatorStore.getState().clearAll();
+    expect(useCalculatorStore.getState().sourceConversationId).toBeNull();
+
+    useCalculatorStore.getState().setSourceConversationId("conv-2");
+    useCalculatorStore.getState().loadFrom({ draftProjectId: "p9" });
+    expect(useCalculatorStore.getState().sourceConversationId).toBeNull();
+  });
 });
 
 describe("calculator store — clearAll", () => {
