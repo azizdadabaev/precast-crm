@@ -40,8 +40,14 @@ export default async function AppShellLayout({
   const user = await requirePermissionForPath(pathname);
 
   // The inbox is a full-bleed app surface (Telegram-style): it fills the
-  // entire main area rather than sitting in the centered max-width column.
+  // entire main area (h-full) rather than sitting in the centered max-width
+  // column.
   const isFullBleed = pathname === "/inbox" || pathname.startsWith("/inbox/");
+  // The calculator runs full-WIDTH (so its wide table + the drawing dock can
+  // use the whole window) but with normal scroll flow — NOT h-full, which
+  // would clip its tall content. The page re-centers itself in a max-w column
+  // when the dock isn't shown.
+  const isWide = pathname === "/calculations";
 
   return (
     <div className="flex h-screen bg-background">
@@ -56,6 +62,8 @@ export default async function AppShellLayout({
             className={
               isFullBleed
                 ? "h-full px-4 py-4 lg:px-6 lg:py-6"
+                : isWide
+                ? "px-4 py-4 lg:px-6 lg:py-6"
                 : "px-4 py-4 lg:px-6 lg:py-6 max-w-[1400px] w-full mx-auto"
             }
           >

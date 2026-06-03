@@ -725,6 +725,13 @@ function CalculationsInner() {
     setClearConfirmOpen(false);
     setError(null);
     setPrefillNotice(null);
+    // Clear acts globally: also drop the docked drawings + chat-link state so
+    // the dock disappears and the table returns to its centered placement.
+    setConversationImages([]);
+    setSharedPhone(null);
+    setConvLoadError(false);
+    setHighlightRowId(null);
+    loadedConvRef.current = null;
   }
 
   if (!hydrated) {
@@ -737,7 +744,7 @@ function CalculationsInner() {
   }
 
   return (
-    <div className={showDock ? "flex items-stretch gap-4" : undefined}>
+    <div className={showDock ? "flex items-stretch gap-4" : "max-w-[1400px] w-full mx-auto"}>
       {showDock && (
         <DrawingDock
           images={conversationImages}
