@@ -544,6 +544,7 @@ function CalculationsInner() {
           // never downgrades from GRANTED — leaving it null is a no-op.
           clientReferenceConsent: client.consentGranted ? "GRANTED" : null,
           shapeType: "RECTANGULAR",
+          conversationId: sourceConversationId ?? undefined,
           rooms: validRooms.map((r) => ({
             name: r.name,
             innerWidth: r.innerWidth,

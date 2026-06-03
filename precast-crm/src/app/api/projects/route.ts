@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { SaveProjectDraftSchema, ProjectStatusEnum } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
@@ -62,6 +63,13 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
 
   const phoneNorm = normalizePhone(body.clientPhone);
   if (!phoneNorm) return fail("phone is required to save a draft", 422);
+
+  // Link the draft to its source Telegram chat — but only if the caller can
+  // actually see the inbox. A non-inbox operator's conversationId is dropped
+  // silently (the quote still saves) so chat linkage can never leak via the
+  // /projects surface.
+  const linkConversationId =
+    can(user, "inbox.access") && body.conversationId ? body.conversationId : undefined;
 
   const pricing = await loadPricingConfig();
   const computed = body.rooms.map((room) => ({
@@ -125,6 +133,9 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           shapeType: body.shapeType,
           dimensions: dim,
           status: "DRAFT",
+          // Only set when a linkable conversationId is present; a plain
+          // re-save (no link in the body) must not null out an existing link.
+          ...(linkConversationId ? { conversationId: linkConversationId } : {}),
           clientId: existingClient?.id ?? null,
           tentativeClientName: existingClient ? null : body.clientName ?? null,
           tentativeClientPhone: existingClient ? null : phoneNorm,
@@ -153,6 +164,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
         shapeType: body.shapeType,
         dimensions: dim,
         status: "DRAFT",
+        conversationId: linkConversationId ?? null,
         clientId: existingClient?.id ?? null,
         tentativeClientName: existingClient ? null : body.clientName ?? null,
         tentativeClientPhone: existingClient ? null : phoneNorm,

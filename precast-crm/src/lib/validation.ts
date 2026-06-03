@@ -225,6 +225,9 @@ export const SaveProjectDraftSchema = z.object({
   shapeType: ShapeTypeEnum.default("RECTANGULAR"),
   dimensions: ProjectDimensionsSchema.optional().nullable(),
   rooms: z.array(RoomCalcInputSchema).default([]),
+  // Link to the originating Telegram conversation. Honored only when the
+  // caller has inbox.access (enforced in the route); otherwise dropped.
+  conversationId: z.string().optional().nullable(),
 });
 
 // ── Place Order (commits the deal) ──────────────────────────────
