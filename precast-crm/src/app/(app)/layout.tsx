@@ -39,6 +39,10 @@ export default async function AppShellLayout({
   const pathname = headers().get("x-pathname") ?? "/";
   const user = await requirePermissionForPath(pathname);
 
+  // The inbox is a full-bleed app surface (Telegram-style): it fills the
+  // entire main area rather than sitting in the centered max-width column.
+  const isFullBleed = pathname === "/inbox" || pathname.startsWith("/inbox/");
+
   return (
     <div className="flex h-screen bg-background">
       <AudioUnlocker />
@@ -48,7 +52,13 @@ export default async function AppShellLayout({
         <TopBar />
         <MobileTopbar user={user} />
         <main className="flex-1 overflow-auto">
-          <div className="px-4 py-4 lg:px-6 lg:py-6 max-w-[1400px] w-full mx-auto">
+          <div
+            className={
+              isFullBleed
+                ? "h-full px-4 py-4 lg:px-6 lg:py-6"
+                : "px-4 py-4 lg:px-6 lg:py-6 max-w-[1400px] w-full mx-auto"
+            }
+          >
             <UnauthorizedBanner />
             {children}
           </div>
