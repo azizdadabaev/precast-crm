@@ -99,3 +99,40 @@ export async function saveBufferToUploads(
   await fs.writeFile(path.join(dir, filename), buffer);
   return `/uploads/${subdir}/${filename}`.replace(/\\/g, "/");
 }
+
+/**
+ * Copy an existing uploaded image (referenced by its `/uploads/...` URL)
+ * into a project-owned folder so the project's visual record survives
+ * deletion of the source (e.g. an inbox conversation whose media folder is
+ * removed on delete).
+ *
+ * Idempotent: a source already inside this project's folder is returned
+ * unchanged (so re-saving a reopened draft doesn't re-copy). Throws
+ * UploadError if the source escapes the uploads root; the filename is
+ * prefixed with its parent folder to avoid collisions between same-named
+ * files from different conversations.
+ */
+export async function copyUploadToProject(
+  projectId: string,
+  sourceUrl: string,
+): Promise<string> {
+  if (!sourceUrl.startsWith("/uploads/")) {
+    throw new UploadError("invalid source path", 400);
+  }
+  const ownedPrefix = `/uploads/projects/${projectId}/`;
+  if (sourceUrl.startsWith(ownedPrefix)) return sourceUrl; // already project-owned
+
+  const rel = sourceUrl.slice("/uploads/".length);
+  const srcAbs = path.resolve(UPLOAD_ROOT, rel);
+  // Path-traversal guard: the resolved source must stay within the uploads root.
+  if (srcAbs !== UPLOAD_ROOT && !srcAbs.startsWith(UPLOAD_ROOT + path.sep)) {
+    throw new UploadError("source path escapes uploads root", 400);
+  }
+
+  const parent = path.basename(path.dirname(srcAbs));
+  const filename = `${parent}_${path.basename(srcAbs)}`;
+  const destDir = path.join(UPLOAD_ROOT, "projects", projectId);
+  await fs.mkdir(destDir, { recursive: true });
+  await fs.copyFile(srcAbs, path.join(destDir, filename));
+  return `/uploads/projects/${projectId}/${filename}`.replace(/\\/g, "/");
+}

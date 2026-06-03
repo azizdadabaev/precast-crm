@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
@@ -14,6 +15,7 @@ import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms } from "@/lib/regions";
 import { nextDraftNumber } from "@/lib/draft-number";
+import { copyUploadToProject } from "@/lib/uploads";
 
 /** GET /api/projects — order.view. List projects with optional status + search. */
 export const GET = withPermission("order.view", async (req: NextRequest, { user }) => {
@@ -147,7 +149,13 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           tentativeClientPhone: existingClient ? null : phoneNorm,
           tentativeClientAddress: existingClient ? null : body.clientAddress ?? null,
           calculations: {
-            create: computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i })),
+            create: computed.map((c, i) => ({
+              ...calcResultToCreatePayload(c.input, c.result),
+              seq: i,
+              annotationBox: c.input.box
+                ? { x: c.input.box.x, y: c.input.box.y, w: c.input.box.w, h: c.input.box.h }
+                : undefined,
+            })),
           },
         },
         include: { calculations: true, client: true },
@@ -176,12 +184,39 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
         tentativeClientPhone: existingClient ? null : phoneNorm,
         tentativeClientAddress: existingClient ? null : body.clientAddress ?? null,
         calculations: {
-          create: computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i })),
+          create: computed.map((c, i) => ({
+            ...calcResultToCreatePayload(c.input, c.result),
+            seq: i,
+            annotationBox: c.input.box
+              ? { x: c.input.box.x, y: c.input.box.y, w: c.input.box.w, h: c.input.box.h }
+              : undefined,
+          })),
         },
       },
       include: { calculations: true, client: true },
     });
   });
+
+  // Copy annotated drawings into a project-owned folder so the visual record
+  // survives deletion of the source chat, and stamp annotationImagePath onto
+  // each annotated room. Runs outside the tx (fs isn't transactional); a
+  // failed copy leaves the box coords intact, just without the image.
+  const copyCache = new Map<string, string | null>();
+  for (const calc of project.calculations) {
+    const box = computed[calc.seq]?.input.box;
+    if (!box?.imagePath) continue;
+    let dest = copyCache.get(box.imagePath);
+    if (dest === undefined) {
+      dest = await copyUploadToProject(project.id, box.imagePath).catch(() => null);
+      copyCache.set(box.imagePath, dest);
+    }
+    if (dest) {
+      await prisma.calculation.update({
+        where: { id: calc.id },
+        data: { annotationImagePath: dest },
+      });
+    }
+  }
 
   recordAudit({
     userId: user.id,

@@ -299,6 +299,9 @@ function CalculationsInner() {
     }
   };
   const deleteRow = (id: string) => setRows(rows.filter((r) => r.id !== id));
+  // Show the split drawing dock during a chat handoff OR when a reopened
+  // linked draft brought its project-owned drawings back.
+  const showDock = !!sourceConversationId || conversationImages.length > 0;
 
   async function loadOrder(id: string) {
     try {
@@ -411,6 +414,8 @@ function CalculationsInner() {
           m2Price: string;
           m2PriceOverride: boolean;
           m2PriceReason: string | null;
+          annotationBox: { x: number; y: number; w: number; h: number } | null;
+          annotationImagePath: string | null;
         }>;
       }>>("/api/projects?status=DRAFT");
       const p = projects.find((x) => x.id === id);
@@ -447,9 +452,23 @@ function CalculationsInner() {
             m2PriceOverride: c.m2PriceOverride,
             m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
             m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
+            box:
+              c.annotationImagePath && c.annotationBox
+                ? { imagePath: c.annotationImagePath, ...c.annotationBox }
+                : null,
           }),
         ),
       });
+      // Re-dock the project-owned drawing copies so a reopened linked draft
+      // shows its annotated plans (decoupled from the live conversation).
+      const docked = Array.from(
+        new Set(
+          p.calculations
+            .map((c) => c.annotationImagePath)
+            .filter((u): u is string => !!u),
+        ),
+      );
+      setConversationImages(docked);
     } catch {
       /* ignore */
     }
@@ -577,6 +596,7 @@ function CalculationsInner() {
             m2PriceOverride: r.m2PriceOverride,
             m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
             m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
+            box: r.box ?? null,
           })),
         },
       }),
@@ -717,8 +737,8 @@ function CalculationsInner() {
   }
 
   return (
-    <div className={sourceConversationId ? "flex items-stretch gap-4" : undefined}>
-      {sourceConversationId && (
+    <div className={showDock ? "flex items-stretch gap-4" : undefined}>
+      {showDock && (
         <DrawingDock
           images={conversationImages}
           error={convLoadError}
@@ -729,7 +749,7 @@ function CalculationsInner() {
           onHighlightRow={setHighlightRowId}
         />
       )}
-      <div className={sourceConversationId ? "min-w-0 flex-1 space-y-5" : "space-y-5"}>
+      <div className={showDock ? "min-w-0 flex-1 space-y-5" : "space-y-5"}>
       {/* Header — title only. The action buttons (Clear / Save Project /
           Place Order) moved to a dedicated bar after the calculator
           totals so the user's eye lands on the numbers before the CTAs. */}

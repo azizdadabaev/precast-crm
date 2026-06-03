@@ -178,6 +178,20 @@ export const RoomCalcInputBaseSchema = z.object({
       { message: "Rate must match a catalog tier" },
     ),
   m2PriceReason: z.string().max(200).nullable().optional(),
+  // Stage-② room-capture annotation: the box drawn over a source drawing,
+  // normalized 0..1, plus that drawing's served path. Persisted on the
+  // resulting Calculation (annotationBox + annotationImagePath); the engine
+  // ignores it.
+  box: z
+    .object({
+      imagePath: z.string().max(500),
+      x: z.number().min(0).max(1),
+      y: z.number().min(0).max(1),
+      w: z.number().min(0).max(1),
+      h: z.number().min(0).max(1),
+    })
+    .nullable()
+    .optional(),
 });
 
 /**
