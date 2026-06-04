@@ -141,6 +141,56 @@ export async function tgUploadDocumentGetFileId(
   return String(fid);
 }
 
+/** Send a voice message (by existing file_id) on behalf of the business
+ *  account. Same business-connection constraint as photos/documents — pass a
+ *  file_id, not a fresh upload (see tgUploadVoiceGetFileId). */
+export async function tgSendBusinessVoice(
+  businessConnectionId: string,
+  chatId: string,
+  fileId: string,
+  opts?: { caption?: string; duration?: number },
+): Promise<{ messageId: string }> {
+  const res = await fetch(apiUrl("sendVoice"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business_connection_id: businessConnectionId,
+      chat_id: chatId,
+      voice: fileId,
+      ...(opts?.caption ? { caption: opts.caption } : {}),
+      ...(opts?.duration ? { duration: Math.round(opts.duration) } : {}),
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram sendVoice failed: ${json.description ?? res.status}`);
+  return { messageId: String(json.result.message_id) };
+}
+
+/** Upload a voice note to the staging channel and return its file_id, so it
+ *  can then be sent over a business connection. Plain upload — NO
+ *  business_connection_id. Telegram requires OGG/OPUS for a true voice-message
+ *  bubble (with the waveform), so the recorder must produce that format. */
+export async function tgUploadVoiceGetFileId(
+  chatId: string,
+  voice: Buffer,
+  opts?: { filename?: string; contentType?: string; duration?: number },
+): Promise<string> {
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  if (opts?.duration) form.append("duration", String(Math.round(opts.duration)));
+  form.append(
+    "voice",
+    new Blob([new Uint8Array(voice)], { type: opts?.contentType ?? "audio/ogg" }),
+    opts?.filename ?? "voice.ogg",
+  );
+  const res = await fetch(apiUrl("sendVoice"), { method: "POST", body: form });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram staging voice upload failed: ${json.description ?? res.status}`);
+  const fid = json.result?.voice?.file_id;
+  if (!fid) throw new Error("Telegram staging upload returned no voice");
+  return String(fid);
+}
+
 /** Resolve a file_id to a server file_path via getFile. */
 export async function tgGetFilePath(fileId: string): Promise<string> {
   const res = await fetch(apiUrl("getFile"), {

@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/api/telegram/webhook",
   "/_next",
   "/favicon.ico",
+  "/opus", // static opus-recorder encoder worker (voice recording)
 ];
 
 function isPublic(pathname: string): boolean {
