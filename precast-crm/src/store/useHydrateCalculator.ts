@@ -6,7 +6,10 @@ import { api } from "@/lib/fetcher";
 import {
   hydrateCalculatorAnon,
   scopeCalculatorPersistToUser,
+  setCalculatorPersistKeyForUser,
 } from "./calculator";
+import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-bridge";
+import { TaperedPrefillSchema } from "@/lib/validation";
 
 interface Me {
   id: string;
@@ -58,7 +61,23 @@ export function useHydrateCalculator(): { hydrated: boolean } {
     if (meQuery.isLoading) return;
     (async () => {
       const userId = meQuery.data?.id ?? null;
-      if (userId) {
+      // A sandbox handoff (?prefill=…) REPLACES the draft, so don't load the
+      // persisted draft — rehydrating it would race with and clobber the
+      // prefill (Strict Mode double-invokes this effect; a discarded
+      // invocation's async rehydrate can land after the page's loadFrom). Only
+      // skip for a VALID prefill so a malformed payload still falls back to the
+      // draft. The page's mount effect applies the prefill rows.
+      const prefillRaw =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("prefill")
+          : null;
+      const hasValidPrefill = prefillRaw
+        ? TaperedPrefillSchema.safeParse(decodePrefillParam(prefillRaw)).success
+        : false;
+
+      if (hasValidPrefill) {
+        if (userId) setCalculatorPersistKeyForUser(userId); // point key, don't rehydrate
+      } else if (userId) {
         await scopeCalculatorPersistToUser(userId);
       } else {
         await hydrateCalculatorAnon();

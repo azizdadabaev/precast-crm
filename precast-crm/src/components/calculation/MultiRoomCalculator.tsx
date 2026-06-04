@@ -364,7 +364,14 @@ export function MultiRoomCalculator({
   // something. We key the effect on the pricing object's identity so it
   // only re-runs when /api/pricing actually returns a new payload.
   useEffect(() => {
-    onChange(rows.map((r) => recomputeRow(r, pricing)));
+    // Re-bill against the LIVE store rows, not this effect's `rows` closure.
+    // A sandbox prefill calls loadFrom() during mount AFTER this effect's
+    // closure was captured (rows=[]); under React Strict Mode the effect is
+    // replayed with that stale closure, so billing the closure would overwrite
+    // the freshly-prefilled rooms with an empty array (which then auto-seeds to
+    // one blank row). Zustand's set() is synchronous, so getState() already
+    // reflects loadFrom even before React re-renders the closure.
+    onChange(useCalculatorStore.getState().rows.map((r) => recomputeRow(r, pricing)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pricing]);
 
@@ -420,7 +427,12 @@ export function MultiRoomCalculator({
   // Result: the calculator never shows an empty "No rooms yet" state;
   // the operator always lands on a blank row they can type over.
   useEffect(() => {
-    if (rows.length === 0) {
+    // Seed a blank row only when the store is TRULY empty. Checking the `rows`
+    // closure would mis-fire under Strict Mode's effect replay: the replay runs
+    // with the stale mount closure (rows.length===0) even after a sandbox
+    // prefill's loadFrom() populated the store, wiping the prefilled rooms back
+    // to one blank row. getState() reads the live count.
+    if (useCalculatorStore.getState().rows.length === 0) {
       onChange([makeRow(1)]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

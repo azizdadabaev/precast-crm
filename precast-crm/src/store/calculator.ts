@@ -283,6 +283,19 @@ export const useCalculatorStore = create<CalculatorState>()(
 );
 
 /**
+ * Point the store's persist storage at the per-user key WITHOUT rehydrating.
+ * Used on a sandbox prefill handoff (?prefill=…): the prefill replaces the
+ * draft, so we must NOT load the old draft — rehydrating would race with and
+ * clobber the prefill (React Strict Mode double-invokes the hydration effect,
+ * and a discarded invocation's async rehydrate can land after the prefill's
+ * loadFrom). Future autosaves still persist to the correct per-user key.
+ */
+export function setCalculatorPersistKeyForUser(userId: string): void {
+  if (typeof window === "undefined") return;
+  useCalculatorStore.persist.setOptions({ name: `calculator-draft-${userId}` });
+}
+
+/**
  * Re-point the store's persist storage at a per-user key, then rehydrate
  * from it. Called once /api/auth/me resolves on app mount. If the
  * per-user slot is empty AND the legacy autosave key still exists, copies
