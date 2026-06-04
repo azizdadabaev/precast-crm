@@ -102,6 +102,42 @@ function buildSimplePdf(title, line2) {
       console.log(`seeded ${label}  (project ${pr.id}) → ${row.id}.pdf  (${pdf.length} bytes)`);
     }
 
+    // Also attach to a couple of orders (the order page lists drawings by
+    // orderId, separate from projectId) so the Order-page Send PDF is testable.
+    const orders = await prisma.order.findMany({
+      orderBy: { placedAt: "desc" },
+      take: 2,
+      select: { id: true, orderNumber: true },
+    });
+    for (const o of orders) {
+      const existing = await prisma.drawingRequest.findFirst({
+        where: { orderId: o.id, status: "DELIVERED" },
+        select: { id: true },
+      });
+      if (existing) {
+        console.log(`skip order ${o.orderNumber} — already has a delivered drawing`);
+        continue;
+      }
+      const row = await prisma.drawingRequest.create({
+        data: { orderId: o.id, roomsJson: "[]", status: "PENDING", createdById: user.id },
+        select: { id: true },
+      });
+      const pdf = buildSimplePdf("Sample Drawing PDF", `Order ${o.orderNumber}`);
+      fs.writeFileSync(path.join(DRAWINGS_DIR, `${row.id}.pdf`), pdf);
+      await prisma.drawingRequest.update({
+        where: { id: row.id },
+        data: {
+          status: "DELIVERED",
+          deliveredAt: new Date(),
+          pdfStorageKey: `drawings/${row.id}.pdf`,
+          pdfSizeBytes: pdf.length,
+          pageCount: 1,
+          renderMs: 0,
+        },
+      });
+      console.log(`seeded Order ${o.orderNumber}  (order ${o.id}) → ${row.id}.pdf  (${pdf.length} bytes)`);
+    }
+
     console.log(`\nPDFs written to: ${path.resolve(DRAWINGS_DIR)}`);
   } finally {
     await prisma.$disconnect();
