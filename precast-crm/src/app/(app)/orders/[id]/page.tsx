@@ -1014,6 +1014,17 @@ export default function OrderDetailPage() {
                     conversationId={order.project.conversationId}
                     fileBase={shareFileBase}
                     caption={sendCaption}
+                    onSent={(convId) => {
+                      // Picked a chat for an unlinked order → persist the link
+                      // so "Open chat" appears and future sends go direct.
+                      if (order.project.conversationId === convId) return;
+                      api(`/api/projects/${order.project.id}/link-conversation`, {
+                        method: "POST",
+                        json: { conversationId: convId },
+                      })
+                        .then(() => qc.invalidateQueries({ queryKey: ["order", params.id] }))
+                        .catch(() => {});
+                    }}
                     disabled={order.project.calculations.length === 0}
                   />
                 )}

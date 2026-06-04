@@ -37,6 +37,7 @@ export function SendQuoteToChatButton({
   conversationId,
   fileBase,
   caption,
+  onSent,
   disabled = false,
 }: {
   targetRef: RefObject<HTMLElement>;
@@ -44,6 +45,9 @@ export function SendQuoteToChatButton({
   conversationId?: string | null;
   fileBase: string;
   caption?: string;
+  /** Called with the destination id after a successful send (e.g. to link the
+   *  order/project to a chat picked from the dialog). */
+  onSent?: (conversationId: string) => void;
   disabled?: boolean;
 }) {
   const t = useT();
@@ -84,6 +88,7 @@ export function SendQuoteToChatButton({
       }
       setState("sent");
       setPickerOpen(false);
+      onSent?.(convId);
       setTimeout(() => setState(null), 2500);
     } catch (err) {
       setState(null);
