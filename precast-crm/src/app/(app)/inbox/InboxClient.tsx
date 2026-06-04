@@ -459,7 +459,7 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollRef}
-          className="tg-wallpaper h-full overflow-y-auto px-4 py-4"
+          className="tg-wallpaper absolute inset-0 overflow-y-auto px-4 py-4"
           style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
         >
           <div className="flex flex-col">
