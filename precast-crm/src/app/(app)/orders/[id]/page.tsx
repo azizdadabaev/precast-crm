@@ -999,7 +999,7 @@ export default function OrderDetailPage() {
                   fileBase={shareFileBase}
                   disabled={order.project.calculations.length === 0}
                 />
-                {canUseInbox && order.project.conversationId && (
+                {canUseInbox && (
                   <SendQuoteToChatButton
                     targetRef={shareRef}
                     conversationId={order.project.conversationId}
