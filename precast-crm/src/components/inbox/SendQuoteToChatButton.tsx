@@ -19,11 +19,14 @@ export function SendQuoteToChatButton({
   targetRef,
   conversationId,
   fileBase,
+  caption,
   disabled = false,
 }: {
   targetRef: RefObject<HTMLElement>;
   conversationId: string;
   fileBase: string;
+  /** Caption sent with the photo. Falls back to fileBase. */
+  caption?: string;
   disabled?: boolean;
 }) {
   const t = useT();
@@ -46,7 +49,7 @@ export function SendQuoteToChatButton({
 
       const form = new FormData();
       form.append("photo", blob, `${fileBase}.png`);
-      form.append("caption", fileBase);
+      form.append("caption", caption || fileBase);
 
       const res = await fetch(`/api/inbox/${conversationId}/reply-photo`, {
         method: "POST",

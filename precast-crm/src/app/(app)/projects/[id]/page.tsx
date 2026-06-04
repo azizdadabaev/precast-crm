@@ -125,6 +125,18 @@ export default function ProjectDetailPage() {
     { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0, concrete: 0, sum: 0 }
   );
 
+  // Caption sent with the quote image: "<order/draft id> · <name>", the total
+  // sum, and the total slab weight (180 kg/m², same factory rule used above).
+  const idLabel =
+    project.status === "ORDERED" && project.orders[0]
+      ? project.orders[0].orderNumber
+      : draftLabel;
+  const sendCaption = [
+    `${idLabel}${clientLabel ? ` · ${clientLabel}` : ""}`,
+    `Жами: ${formatNumber(totals.sum, 0)} so'm`,
+    `Оғирлик: ${formatNumber(totals.monolithArea * 180, 0)} кг`,
+  ].join("\n");
+
   // Build the offscreen share-card payload (rendered at fixed 1100 px
   // so the exported image is identical on phones + desktops).
   const shareData: ShareData = {
@@ -183,6 +195,7 @@ export default function ProjectDetailPage() {
               targetRef={shareRef}
               conversationId={project.conversationId}
               fileBase={shareFileBase}
+              caption={sendCaption}
               disabled={project.calculations.length === 0}
             />
           )}
