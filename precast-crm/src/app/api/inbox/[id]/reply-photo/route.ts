@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { withInboxAccess } from "@/lib/inbox-auth";
-import { tgSendBusinessPhoto } from "@/lib/telegram/api";
+import { tgSendBusinessPhoto, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
 import { emitInbox } from "@/lib/inbox-bus";
 import { ALLOWED_IMAGE_MIME, MAX_IMAGE_SIZE_BYTES, saveBufferToUploads } from "@/lib/uploads";
 
@@ -76,25 +76,25 @@ export const POST = withInboxAccess<{ id: string }>(async (req: NextRequest, { p
   const filename = `out-${Date.now()}.${ext}`;
   const mediaPath = await saveBufferToUploads(buffer, `inbox/${conversation.id}`, filename);
 
-  // Business connections reject fresh uploads (BUSINESS_PEER_USAGE_MISSING), so
-  // we send the photo by a public URL Telegram fetches. That URL must be
-  // publicly reachable: the prod domain (NEXT_PUBLIC_APP_URL) or, for local
-  // testing, the dev tunnel set via TELEGRAM_PUBLIC_BASE_URL.
-  const base = (process.env.TELEGRAM_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
+  // Business connections reject fresh media (BUSINESS_PEER_USAGE_MISSING), so we
+  // first upload the image to a staging channel the bot admins to get a Telegram
+  // file_id, then send THAT file_id over the business connection.
+  const stagingChat = process.env.TELEGRAM_STAGING_CHAT_ID;
 
   let telegramMsgId: string | null = null;
   let failed = false;
   let failReason: string | null = null;
-  if (!base || /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/.test(base)) {
+  if (!stagingChat) {
     failed = true;
     failReason =
-      "Public base URL not set or not reachable by Telegram. Set TELEGRAM_PUBLIC_BASE_URL to your dev tunnel (or NEXT_PUBLIC_APP_URL to the prod domain) and restart.";
+      "TELEGRAM_STAGING_CHAT_ID not set — create a private channel, add the bot as admin, and set its id.";
   } else {
     try {
+      const fileId = await tgUploadPhotoGetFileId(stagingChat, buffer, { filename, contentType: mime });
       const sent = await tgSendBusinessPhoto(
         conversation.businessConnectionId,
         conversation.externalId,
-        `${base}${mediaPath}`,
+        fileId,
         { caption },
       );
       telegramMsgId = sent.messageId;

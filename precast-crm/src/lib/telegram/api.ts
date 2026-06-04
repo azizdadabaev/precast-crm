@@ -36,19 +36,19 @@ export async function tgSendBusinessMessage(
 }
 
 /**
- * Send a photo (by public URL) on behalf of the connected business account.
+ * Send a photo on behalf of the connected business account, by an existing
+ * Telegram `file_id` (NOT a fresh upload).
  *
- * IMPORTANT: business connections REJECT fresh multipart uploads with
- * `BUSINESS_PEER_USAGE_MISSING` — the Bot API doesn't thread the connection
- * through the upload step. The supported path is to send a `photo` that's
- * already on Telegram (file_id) or a URL Telegram can fetch. The caller saves
- * the image to a public /uploads URL first, then passes that URL here. Token
- * is server-only; never logged.
+ * IMPORTANT: business connections REJECT fresh media (multipart upload OR a
+ * URL Telegram must fetch) with `BUSINESS_PEER_USAGE_MISSING` — the Bot API
+ * doesn't scope the upload to the connection. The working path is to pass a
+ * `file_id` that already lives on Telegram (see tgUploadPhotoGetFileId).
+ * Token is server-only; never logged.
  */
 export async function tgSendBusinessPhoto(
   businessConnectionId: string,
   chatId: string,
-  photoUrl: string,
+  fileId: string,
   opts?: { caption?: string },
 ): Promise<{ messageId: string }> {
   const res = await fetch(apiUrl("sendPhoto"), {
@@ -57,13 +57,41 @@ export async function tgSendBusinessPhoto(
     body: JSON.stringify({
       business_connection_id: businessConnectionId,
       chat_id: chatId,
-      photo: photoUrl,
+      photo: fileId,
       ...(opts?.caption ? { caption: opts.caption } : {}),
     }),
   });
   const json = await res.json();
   if (!json.ok) throw new Error(`Telegram sendPhoto failed: ${json.description ?? res.status}`);
   return { messageId: String(json.result.message_id) };
+}
+
+/**
+ * Upload a photo to a chat the bot can post to normally (a private staging
+ * channel where the bot is an admin) and return the resulting `file_id`.
+ * This is a plain upload — NO business_connection_id — so it succeeds, and the
+ * returned file_id can then be sent over a business connection by
+ * tgSendBusinessPhoto. Token is server-only; never logged.
+ */
+export async function tgUploadPhotoGetFileId(
+  chatId: string,
+  photo: Buffer,
+  opts?: { filename?: string; contentType?: string },
+): Promise<string> {
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append(
+    "photo",
+    new Blob([new Uint8Array(photo)], { type: opts?.contentType ?? "image/png" }),
+    opts?.filename ?? "quote.png",
+  );
+  const res = await fetch(apiUrl("sendPhoto"), { method: "POST", body: form });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram staging upload failed: ${json.description ?? res.status}`);
+  const sizes = (json.result?.photo ?? []) as Array<{ file_id: string; file_size?: number }>;
+  const largest = [...sizes].sort((a, b) => (a.file_size ?? 0) - (b.file_size ?? 0)).pop();
+  if (!largest?.file_id) throw new Error("Telegram staging upload returned no photo");
+  return largest.file_id;
 }
 
 /** Resolve a file_id to a server file_path via getFile. */
