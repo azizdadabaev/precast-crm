@@ -36,26 +36,31 @@ export async function tgSendBusinessMessage(
 }
 
 /**
- * Send a photo on behalf of the connected business account (multipart
- * upload via sendPhoto). Used to push a rendered quote image back into the
- * customer's chat. Token is server-only; never logged.
+ * Send a photo (by public URL) on behalf of the connected business account.
+ *
+ * IMPORTANT: business connections REJECT fresh multipart uploads with
+ * `BUSINESS_PEER_USAGE_MISSING` — the Bot API doesn't thread the connection
+ * through the upload step. The supported path is to send a `photo` that's
+ * already on Telegram (file_id) or a URL Telegram can fetch. The caller saves
+ * the image to a public /uploads URL first, then passes that URL here. Token
+ * is server-only; never logged.
  */
 export async function tgSendBusinessPhoto(
   businessConnectionId: string,
   chatId: string,
-  photo: Buffer,
-  opts?: { filename?: string; caption?: string; contentType?: string },
+  photoUrl: string,
+  opts?: { caption?: string },
 ): Promise<{ messageId: string }> {
-  const form = new FormData();
-  form.append("business_connection_id", businessConnectionId);
-  form.append("chat_id", chatId);
-  if (opts?.caption) form.append("caption", opts.caption);
-  form.append(
-    "photo",
-    new Blob([new Uint8Array(photo)], { type: opts?.contentType ?? "image/png" }),
-    opts?.filename ?? "quote.png",
-  );
-  const res = await fetch(apiUrl("sendPhoto"), { method: "POST", body: form });
+  const res = await fetch(apiUrl("sendPhoto"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business_connection_id: businessConnectionId,
+      chat_id: chatId,
+      photo: photoUrl,
+      ...(opts?.caption ? { caption: opts.caption } : {}),
+    }),
+  });
   const json = await res.json();
   if (!json.ok) throw new Error(`Telegram sendPhoto failed: ${json.description ?? res.status}`);
   return { messageId: String(json.result.message_id) };

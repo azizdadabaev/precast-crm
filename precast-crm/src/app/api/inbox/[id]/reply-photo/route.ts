@@ -76,19 +76,33 @@ export const POST = withInboxAccess<{ id: string }>(async (req: NextRequest, { p
   const filename = `out-${Date.now()}.${ext}`;
   const mediaPath = await saveBufferToUploads(buffer, `inbox/${conversation.id}`, filename);
 
+  // Business connections reject fresh uploads (BUSINESS_PEER_USAGE_MISSING), so
+  // we send the photo by a public URL Telegram fetches. That URL must be
+  // publicly reachable: the prod domain (NEXT_PUBLIC_APP_URL) or, for local
+  // testing, the dev tunnel set via TELEGRAM_PUBLIC_BASE_URL.
+  const base = (process.env.TELEGRAM_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/+$/, "");
+
   let telegramMsgId: string | null = null;
   let failed = false;
-  try {
-    const sent = await tgSendBusinessPhoto(
-      conversation.businessConnectionId,
-      conversation.externalId,
-      buffer,
-      { filename, caption, contentType: mime },
-    );
-    telegramMsgId = sent.messageId;
-  } catch (err) {
-    console.error("[inbox reply-photo]", err);
-    failed = true; // persist as a failed bubble so the UI can offer retry
+  let failReason: string | null = null;
+  if (!base || /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/.test(base)) {
+    failed = true;
+    failReason =
+      "Public base URL not set or not reachable by Telegram. Set TELEGRAM_PUBLIC_BASE_URL to your dev tunnel (or NEXT_PUBLIC_APP_URL to the prod domain) and restart.";
+  } else {
+    try {
+      const sent = await tgSendBusinessPhoto(
+        conversation.businessConnectionId,
+        conversation.externalId,
+        `${base}${mediaPath}`,
+        { caption },
+      );
+      telegramMsgId = sent.messageId;
+    } catch (err) {
+      console.error("[inbox reply-photo]", err);
+      failed = true; // persist as a failed bubble so the UI can offer retry
+      failReason = err instanceof Error ? err.message : String(err);
+    }
   }
 
   const message = await prisma.message.create({
@@ -115,6 +129,12 @@ export const POST = withInboxAccess<{ id: string }>(async (req: NextRequest, { p
 
   emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
 
-  if (failed) return fail("Юборилмади · Send failed", 502, { message });
+  if (failed) {
+    return fail(
+      failReason ? `Юборилмади · Send failed — ${failReason}` : "Юборилмади · Send failed",
+      502,
+      { message, reason: failReason },
+    );
+  }
   return ok(message);
 });
