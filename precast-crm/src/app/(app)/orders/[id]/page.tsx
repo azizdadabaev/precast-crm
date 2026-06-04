@@ -24,6 +24,7 @@ import { formatPhone } from "@/lib/phone";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { SendQuoteToChatButton } from "@/components/inbox/SendQuoteToChatButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
 import { useTableDesign } from "@/hooks/useTableDesign";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
@@ -97,6 +98,7 @@ interface OrderDetail {
   project: {
     id: string;
     name: string | null;
+    conversationId: string | null;
     calculations: Array<{
       id: string;
       name: string | null;
@@ -253,6 +255,7 @@ export default function OrderDetailPage() {
     queryFn: () => api("/api/auth/me"),
   });
   const canUseBlender = me?.permissions?.includes("blender.bridge") ?? false;
+  const canUseInbox = me?.permissions?.includes("inbox.access") ?? false;
 
   const updateStatus = useMutation({
     mutationFn: (status: OrderDetail["status"]) =>
@@ -345,6 +348,20 @@ export default function OrderDetailPage() {
     PARTIALLY_PAID: "Қисман тўланган",
     FULLY_PAID: "Тўлиқ тўланган",
   };
+
+  const shareFileBase = `${order.orderNumber}-${order.client.name}`
+    .replace(/[<>:"/\\|?*]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  // Order-context caption for Send-to-chat: the order number (verified-existing
+  // since we're on its detail page) + name, then sum, weight, delivery, payment.
+  const sendCaption = [
+    `№${order.orderNumber}${order.client.name ? ` · ${order.client.name}` : ""}`,
+    `Жами: ${formatNumber(totalNum, 0)} so'm`,
+    `Оғирлик: ${formatNumber(Number(order.totalArea) * 180, 0)} кг`,
+    `Етказиб бериш: ${formatDate(order.scheduledAt)}`,
+    `Тўлов: ${formatNumber(paidNum, 0)}/${formatNumber(totalNum, 0)} · ${sharePaymentLabel[order.paymentState]}`,
+  ].join("\n");
 
   const shareData: ShareData = {
     title: `Буюртма №${order.orderNumber}`,
@@ -981,12 +998,18 @@ export default function OrderDetailPage() {
                 </Button>
                 <ShareCalculationButton
                   targetRef={shareRef}
-                  fileBase={`${order.orderNumber}-${order.client.name
-                    .replace(/[<>:"/\\|?*]+/g, "")
-                    .replace(/\s+/g, " ")
-                    .trim()}`}
+                  fileBase={shareFileBase}
                   disabled={order.project.calculations.length === 0}
                 />
+                {canUseInbox && order.project.conversationId && (
+                  <SendQuoteToChatButton
+                    targetRef={shareRef}
+                    conversationId={order.project.conversationId}
+                    fileBase={shareFileBase}
+                    caption={sendCaption}
+                    disabled={order.project.calculations.length === 0}
+                  />
+                )}
                 {canUseBlender && order.project.calculations.length > 0 && (
                   <SendToBlenderButton orderId={order.id} />
                 )}
