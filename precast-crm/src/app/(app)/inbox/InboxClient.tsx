@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { MessageMedia } from "@/components/inbox/MediaRenderers";
 import { VoiceRecorder } from "@/components/inbox/VoiceRecorder";
+import { AttachFileButton } from "@/components/inbox/AttachFileButton";
 import { ChatAvatar } from "@/components/inbox/ChatAvatar";
 import { ImageViewerProvider, useImageViewer } from "@/components/inbox/ImageViewer";
 import { formatDraftNumber } from "@/lib/draft-number";
@@ -569,6 +570,13 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Жавоб ёзинг…"
           className="flex-1 rounded-[20px] border border-border bg-[var(--tg-input-bg)] px-4 py-2.5 text-sm text-[var(--tg-text)] outline-none transition-colors focus:border-[color:var(--tg-accent)] focus:bg-[var(--tg-panel)]"
+        />
+        <AttachFileButton
+          conversationId={conversationId}
+          onSent={() => {
+            qc.invalidateQueries({ queryKey: ["inbox-thread", conversationId] });
+            qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
+          }}
         />
         {draft.trim() ? (
           <button
