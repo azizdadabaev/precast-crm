@@ -354,13 +354,11 @@ export default function OrderDetailPage() {
     .replace(/\s+/g, " ")
     .trim();
   // Order-context caption for Send-to-chat: the order number (verified-existing
-  // since we're on its detail page) + name, then sum, weight, delivery, payment.
+  // since we're on its detail page) + name, then sum + weight.
   const sendCaption = [
     `№${order.orderNumber}${order.client.name ? ` · ${order.client.name}` : ""}`,
     `Жами: ${formatNumber(totalNum, 0)} so'm`,
     `Оғирлик: ${formatNumber(Number(order.totalArea) * 180, 0)} кг`,
-    `Етказиб бериш: ${formatDate(order.scheduledAt)}`,
-    `Тўлов: ${formatNumber(paidNum, 0)}/${formatNumber(totalNum, 0)} · ${sharePaymentLabel[order.paymentState]}`,
   ].join("\n");
 
   const shareData: ShareData = {
