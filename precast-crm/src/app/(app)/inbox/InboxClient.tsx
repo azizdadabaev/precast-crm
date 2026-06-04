@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { MessageMedia } from "@/components/inbox/MediaRenderers";
+import { VoiceRecorder } from "@/components/inbox/VoiceRecorder";
 import { ChatAvatar } from "@/components/inbox/ChatAvatar";
 import { ImageViewerProvider, useImageViewer } from "@/components/inbox/ImageViewer";
 import { formatDraftNumber } from "@/lib/draft-number";
@@ -321,6 +322,16 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
   const scrollToTop = () => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   const scrollToBottom = () =>
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  // Position-aware FAB visibility: hide ⬆ at the very top, ⬇ at the very
+  // bottom, both when there's nothing to scroll.
+  const [atTop, setAtTop] = useState(true);
+  const [atBottom, setAtBottom] = useState(true);
+  const updateScrollPos = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setAtTop(el.scrollTop <= 8);
+    setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 8);
+  };
 
   const { data } = useQuery({
     queryKey: ["inbox-thread", conversationId],
@@ -342,7 +353,12 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
       >(`/api/inbox/${conversationId}/projects`),
   });
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [data?.messages.length]);
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const id = setTimeout(updateScrollPos, 120);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.messages.length]);
 
   const reply = useMutation({
     mutationFn: (text: string) => api(`/api/inbox/${conversationId}/reply`, { method: "POST", json: { text } }),
@@ -458,6 +474,7 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
           height-bounded pane); header, quotes strip and composer stay pinned. */}
       <div
         ref={scrollRef}
+        onScroll={updateScrollPos}
         className="tg-wallpaper min-h-0 flex-1 overflow-y-auto px-4 py-4"
         style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
       >
@@ -498,30 +515,34 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
 
       {/* Jump to start / end — fixed over the messages, above the composer. */}
       <div className="pointer-events-none absolute bottom-[4.75rem] right-4 z-10 flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={scrollToTop}
-          title="Бошига · To start"
-          aria-label="Scroll to start"
-          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
-        >
-          <ArrowUp className="h-5 w-5" />
-        </button>
-        <button
-          type="button"
-          onClick={scrollToBottom}
-          title="Охирига · To end"
-          aria-label="Scroll to end"
-          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
-        >
-          <ArrowDown className="h-5 w-5" />
-        </button>
+        {!atTop && (
+          <button
+            type="button"
+            onClick={scrollToTop}
+            title="Бошига · To start"
+            aria-label="Scroll to start"
+            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
+          >
+            <ArrowUp className="h-5 w-5" />
+          </button>
+        )}
+        {!atBottom && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            title="Охирига · To end"
+            aria-label="Scroll to end"
+            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
+          >
+            <ArrowDown className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Composer */}
       <form
         onSubmit={(e) => { e.preventDefault(); if (draft.trim()) reply.mutate(draft.trim()); }}
-        className="flex shrink-0 items-end gap-2 border-t border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5"
+        className="relative flex shrink-0 items-end gap-2 border-t border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5"
       >
         <input
           value={draft}
@@ -529,18 +550,25 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
           placeholder="Жавоб ёзинг…"
           className="flex-1 rounded-[20px] border border-border bg-[var(--tg-input-bg)] px-4 py-2.5 text-sm text-[var(--tg-text)] outline-none transition-colors focus:border-[color:var(--tg-accent)] focus:bg-[var(--tg-panel)]"
         />
-        <button
-          type="submit"
-          aria-label="Send"
-          disabled={reply.isPending || !draft.trim()}
-          className={cn(
-            "flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-white transition-all",
-            draft.trim() ? "scale-100 opacity-100" : "scale-95 opacity-50",
-          )}
-          style={{ background: "var(--tg-accent)" }}
-        >
-          {reply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-        </button>
+        {draft.trim() ? (
+          <button
+            type="submit"
+            aria-label="Send"
+            disabled={reply.isPending}
+            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-white transition-all"
+            style={{ background: "var(--tg-accent)" }}
+          >
+            {reply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+          </button>
+        ) : (
+          <VoiceRecorder
+            conversationId={conversationId}
+            onSent={() => {
+              qc.invalidateQueries({ queryKey: ["inbox-thread", conversationId] });
+              qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
+            }}
+          />
+        )}
       </form>
     </ImageViewerProvider>
   );
