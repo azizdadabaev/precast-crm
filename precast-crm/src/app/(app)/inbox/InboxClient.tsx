@@ -280,7 +280,7 @@ function Inbox() {
         </div>
 
         {/* Right: thread */}
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="relative flex min-h-0 flex-1 flex-col">
           {activeId ? <Thread conversationId={activeId} onDeleted={() => setActiveId(null)} /> : <EmptyState />}
         </div>
       </div>
@@ -454,15 +454,14 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
         </div>
       )}
 
-      {/* Messages — Telegram wallpaper. Only this area scrolls; the header +
-          quotes strip stay pinned (shrink-0 + the pane's min-h-0). */}
-      <div className="relative min-h-0 flex-1">
-        <div
-          ref={scrollRef}
-          className="tg-wallpaper absolute inset-0 overflow-y-auto px-4 py-4"
-          style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
-        >
-          <div className="flex flex-col">
+      {/* Messages — only this area scrolls (flex-1 + min-h-0 inside the
+          height-bounded pane); header, quotes strip and composer stay pinned. */}
+      <div
+        ref={scrollRef}
+        className="tg-wallpaper min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
+      >
+        <div className="flex flex-col">
           {renderItems.map((item, i) => {
             const prevItem = renderItems[i - 1];
             const nextItem = renderItems[i + 1];
@@ -493,30 +492,30 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
               </div>
             );
           })}
-            <div ref={bottomRef} />
-          </div>
+          <div ref={bottomRef} />
         </div>
-        {/* Jump to start / end of the conversation (Telegram-style). */}
-        <div className="absolute bottom-4 right-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={scrollToTop}
-            title="Бошига · To start"
-            aria-label="Scroll to start"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
-          >
-            <ArrowUp className="h-5 w-5" />
-          </button>
-          <button
-            type="button"
-            onClick={scrollToBottom}
-            title="Охирига · To end"
-            aria-label="Scroll to end"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
-          >
-            <ArrowDown className="h-5 w-5" />
-          </button>
-        </div>
+      </div>
+
+      {/* Jump to start / end — fixed over the messages, above the composer. */}
+      <div className="pointer-events-none absolute bottom-[4.75rem] right-4 z-10 flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={scrollToTop}
+          title="Бошига · To start"
+          aria-label="Scroll to start"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
+        >
+          <ArrowUp className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          title="Охирига · To end"
+          aria-label="Scroll to end"
+          className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
+        >
+          <ArrowDown className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Composer */}
