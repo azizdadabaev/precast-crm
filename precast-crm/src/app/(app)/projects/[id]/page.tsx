@@ -178,7 +178,7 @@ export default function ProjectDetailPage() {
         <div className="flex gap-2">
           {canUseInbox && project.conversationId && (
             <Button variant="outline" asChild size="sm">
-              <Link href={`/inbox/${project.conversationId}`}>
+              <Link href={`/inbox?c=${project.conversationId}`}>
                 <MessageCircle className="h-4 w-4 mr-2" /> {t("Чатни очиш", "Open chat")}
               </Link>
             </Button>

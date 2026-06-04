@@ -139,6 +139,14 @@ function Inbox() {
   const qc = useQueryClient();
   const [activeId, setActiveId] = useState<string | null>(null);
 
+  // Deep-link support: /inbox?c=<id> opens that conversation (e.g. the
+  // "Open chat" button on a linked project/order). Read from the URL on mount —
+  // client-only, so it needs no useSearchParams Suspense boundary on this page.
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get("c");
+    if (c) setActiveId(c);
+  }, []);
+
   // ── Auto-lock ────────────────────────────────────────────────────
   const [autolockMin, setAutolockMinState] = useState<number>(() => readAutolockMin());
   function setAutolockMin(v: number) {
@@ -193,8 +201,6 @@ function Inbox() {
     es.onerror = () => { /* browser auto-reconnects */ };
     return () => es.close();
   }, [qc]);
-
-  const active = (conversations ?? []).find((c) => c.id === activeId) ?? null;
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -274,7 +280,7 @@ function Inbox() {
 
         {/* Right: thread */}
         <div className="flex flex-1 flex-col">
-          {active ? <Thread conversationId={active.id} onDeleted={() => setActiveId(null)} /> : <EmptyState />}
+          {activeId ? <Thread conversationId={activeId} onDeleted={() => setActiveId(null)} /> : <EmptyState />}
         </div>
       </div>
     </div>
