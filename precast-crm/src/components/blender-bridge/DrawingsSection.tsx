@@ -7,6 +7,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { SendDrawingToChatButton } from "@/components/inbox/SendDrawingToChatButton";
 
 interface DrawingRow {
   id: string;
@@ -21,9 +22,17 @@ interface DrawingRow {
   createdBy: { name: string } | null;
 }
 
+interface InboxLinkProps {
+  /** Linked chat (null = open the picker). Enables "Send PDF" when canSendToChat. */
+  conversationId?: string | null;
+  /** Show the "Send PDF" button (caller has inbox.access). */
+  canSendToChat?: boolean;
+  /** Called after a successful picker-send, to persist the chat link. */
+  onLinked?: (conversationId: string) => void;
+}
 type Props =
-  | { orderId: string; projectId?: never }
-  | { projectId: string; orderId?: never };
+  | ({ orderId: string; projectId?: never } & InboxLinkProps)
+  | ({ projectId: string; orderId?: never } & InboxLinkProps);
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -31,7 +40,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function DrawingsSection({ orderId, projectId }: Props) {
+export function DrawingsSection({ orderId, projectId, conversationId, canSendToChat, onLinked }: Props) {
   const t = useT();
   const qc = useQueryClient();
   const [open, setOpen] = useState(true);
@@ -197,6 +206,14 @@ export function DrawingsSection({ orderId, projectId }: Props) {
                       PDF
                     </a>
                   </Button>
+                )}
+
+                {canSendToChat && d.status === "DELIVERED" && d.pdfStorageKey && (
+                  <SendDrawingToChatButton
+                    drawingId={d.id}
+                    conversationId={conversationId}
+                    onSent={onLinked}
+                  />
                 )}
               </div>
             </li>

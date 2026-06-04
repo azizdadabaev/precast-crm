@@ -436,7 +436,22 @@ export default function ProjectDetailPage() {
       {/* /shareRef */}
 
       {/* Drawings — Blender-generated PDFs attached to this project */}
-      {canUseBlender && <DrawingsSection projectId={project.id} />}
+      {canUseBlender && (
+        <DrawingsSection
+          projectId={project.id}
+          conversationId={project.conversationId}
+          canSendToChat={canUseInbox}
+          onLinked={(convId) => {
+            if (project.conversationId === convId) return;
+            api(`/api/projects/${project.id}/link-conversation`, {
+              method: "POST",
+              json: { conversationId: convId },
+            })
+              .then(() => qc.invalidateQueries({ queryKey: ["projects-all"] }))
+              .catch(() => {});
+          }}
+        />
+      )}
 
       {/* Comments thread — human conversation goes first, reference
           totals (Logistics Summary) below. */}

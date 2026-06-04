@@ -94,6 +94,53 @@ export async function tgUploadPhotoGetFileId(
   return largest.file_id;
 }
 
+/** Send a document (by existing file_id) on behalf of the business account.
+ *  Same business-connection constraint as photos — pass a file_id, not a fresh
+ *  upload (see tgUploadDocumentGetFileId). */
+export async function tgSendBusinessDocument(
+  businessConnectionId: string,
+  chatId: string,
+  fileId: string,
+  opts?: { caption?: string },
+): Promise<{ messageId: string }> {
+  const res = await fetch(apiUrl("sendDocument"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business_connection_id: businessConnectionId,
+      chat_id: chatId,
+      document: fileId,
+      ...(opts?.caption ? { caption: opts.caption } : {}),
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram sendDocument failed: ${json.description ?? res.status}`);
+  return { messageId: String(json.result.message_id) };
+}
+
+/** Upload a document to a chat the bot can post to normally (the staging
+ *  channel) and return its file_id, so it can then be sent over a business
+ *  connection. Plain upload — NO business_connection_id. */
+export async function tgUploadDocumentGetFileId(
+  chatId: string,
+  file: Buffer,
+  opts?: { filename?: string; contentType?: string },
+): Promise<string> {
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append(
+    "document",
+    new Blob([new Uint8Array(file)], { type: opts?.contentType ?? "application/octet-stream" }),
+    opts?.filename ?? "document",
+  );
+  const res = await fetch(apiUrl("sendDocument"), { method: "POST", body: form });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram staging document upload failed: ${json.description ?? res.status}`);
+  const fid = json.result?.document?.file_id;
+  if (!fid) throw new Error("Telegram staging upload returned no document");
+  return String(fid);
+}
+
 /** Resolve a file_id to a server file_path via getFile. */
 export async function tgGetFilePath(fileId: string): Promise<string> {
   const res = await fetch(apiUrl("getFile"), {

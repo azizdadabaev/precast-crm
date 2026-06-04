@@ -1262,7 +1262,22 @@ export default function OrderDetailPage() {
 
 
       {/* Drawings — Blender-generated PDFs attached to this order */}
-      {canUseBlender && <DrawingsSection orderId={order.id} />}
+      {canUseBlender && (
+        <DrawingsSection
+          orderId={order.id}
+          conversationId={order.project.conversationId}
+          canSendToChat={canUseInbox}
+          onLinked={(convId) => {
+            if (order.project.conversationId === convId) return;
+            api(`/api/projects/${order.project.id}/link-conversation`, {
+              method: "POST",
+              json: { conversationId: convId },
+            })
+              .then(() => qc.invalidateQueries({ queryKey: ["order", params.id] }))
+              .catch(() => {});
+          }}
+        />
+      )}
 
       {/* Payments — chain of custody view */}
       {order.payments.length > 0 && (

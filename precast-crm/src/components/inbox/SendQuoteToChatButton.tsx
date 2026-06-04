@@ -130,7 +130,9 @@ export function SendQuoteToChatButton({
   );
 }
 
-function ChatPickerDialog({
+/** Reusable: lists all inbox conversations so the operator can pick a send
+ *  target. Used by the quote-image and drawing-PDF send buttons. */
+export function ChatPickerDialog({
   sending,
   onPick,
   onClose,
