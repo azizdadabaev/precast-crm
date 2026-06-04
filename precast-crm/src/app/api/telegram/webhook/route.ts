@@ -39,6 +39,17 @@ export async function POST(req: NextRequest) {
   //    Telegram doesn't retry a permanently-unprocessable update.
   const update = await req.json().catch(() => null);
   const parsed = update ? parseBusinessUpdate(update) : null;
+
+  // Diagnostic: log chat ids of non-business updates (e.g. the bot being added
+  // to a staging channel) so the operator can read the channel id from the
+  // server log. Harmless; the business-message path below is unchanged.
+  if (update && !parsed) {
+    const chat = update.my_chat_member?.chat ?? update.channel_post?.chat ?? update.message?.chat;
+    if (chat?.id) {
+      console.log(`[telegram non-business] chat id=${chat.id} type=${chat.type ?? "?"} title=${chat.title ?? chat.username ?? ""}`);
+    }
+  }
+
   if (!parsed || !parsed.chatId) return new Response("ok");
 
   try {
