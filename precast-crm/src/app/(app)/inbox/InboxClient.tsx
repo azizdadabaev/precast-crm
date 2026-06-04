@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { MessageMedia } from "@/components/inbox/MediaRenderers";
 import { ChatAvatar } from "@/components/inbox/ChatAvatar";
 import { ImageViewerProvider, useImageViewer } from "@/components/inbox/ImageViewer";
+import { formatDraftNumber } from "@/lib/draft-number";
 
 interface ConversationSummary {
   id: string; displayName: string; username: string | null;
@@ -325,9 +326,15 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
   const { data: linkedQuotes } = useQuery({
     queryKey: ["inbox-quotes", conversationId],
     queryFn: () =>
-      api<Array<{ id: string; draftNumber: number | null; status: string; name: string | null }>>(
-        `/api/inbox/${conversationId}/projects`,
-      ),
+      api<
+        Array<{
+          id: string;
+          draftNumber: number | null;
+          status: string;
+          name: string | null;
+          order: { id: string; orderNumber: string } | null;
+        }>
+      >(`/api/inbox/${conversationId}/projects`),
   });
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [data?.messages.length]);
@@ -419,15 +426,26 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
       {linkedQuotes && linkedQuotes.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-1.5 text-[12px]">
           <span className="text-[color:var(--tg-text-dim)]">Бу чатдан · Quotes:</span>
-          {linkedQuotes.map((q) => (
-            <a
-              key={q.id}
-              href={`/projects/${q.id}`}
-              className="rounded-full bg-[var(--tg-list-hover)] px-2 py-0.5 font-medium text-[var(--tg-accent)] hover:underline"
-            >
-              {q.draftNumber ? `№${q.draftNumber}D` : q.name ?? q.id.slice(-5)}
-            </a>
-          ))}
+          {linkedQuotes.map((q) => {
+            // Ordered → order id, opens the Orders page. Still a draft → draft
+            // id, opens the Projects page. Always a CRM-assigned unique id.
+            const ordered = q.status === "ORDERED" && q.order;
+            const href = ordered ? `/orders/${q.order!.id}` : `/projects/${q.id}`;
+            const label = ordered
+              ? q.order!.orderNumber
+              : q.draftNumber
+                ? formatDraftNumber(q.draftNumber)
+                : q.id.slice(-5);
+            return (
+              <a
+                key={q.id}
+                href={href}
+                className="rounded-full bg-[var(--tg-list-hover)] px-2 py-0.5 font-medium text-[var(--tg-accent)] hover:underline"
+              >
+                {label}
+              </a>
+            );
+          })}
         </div>
       )}
 
