@@ -125,14 +125,12 @@ export default function ProjectDetailPage() {
     { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0, concrete: 0, sum: 0 }
   );
 
-  // Caption sent with the quote image: "<order/draft id> · <name>", the total
-  // sum, and the total slab weight (180 kg/m², same factory rule used above).
-  const idLabel =
-    project.status === "ORDERED" && project.orders[0]
-      ? project.orders[0].orderNumber
-      : draftLabel;
+  // Caption sent with the quote image. This is the Saved Projects view, so the
+  // id is always the project's own DRAFT id — it does NOT flip to the order
+  // number once ordered (the Orders page would send the order id instead).
+  // Followed by the total sum + total slab weight (180 kg/m²).
   const sendCaption = [
-    `${idLabel}${clientLabel ? ` · ${clientLabel}` : ""}`,
+    `${draftLabel}${clientLabel ? ` · ${clientLabel}` : ""}`,
     `Жами: ${formatNumber(totals.sum, 0)} so'm`,
     `Оғирлик: ${formatNumber(totals.monolithArea * 180, 0)} кг`,
   ].join("\n");
