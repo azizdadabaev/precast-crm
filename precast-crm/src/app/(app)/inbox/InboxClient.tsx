@@ -360,6 +360,26 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.messages.length]);
 
+  // Keep the jump-arrow visibility honest. Media (voice, the location card,
+  // images) loads AFTER the first render and grows the content, so a one-shot
+  // check leaves the arrows stuck (both hidden). A ResizeObserver on the
+  // scroller and its content recomputes on every size change; window-resize
+  // and chat-switch are covered too.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollPos();
+    const ro = new ResizeObserver(() => updateScrollPos());
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    window.addEventListener("resize", updateScrollPos);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", updateScrollPos);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId]);
+
   const reply = useMutation({
     mutationFn: (text: string) => api(`/api/inbox/${conversationId}/reply`, { method: "POST", json: { text } }),
     onSuccess: () => {
