@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/fetcher";
@@ -73,6 +73,7 @@ const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
 export default function ProjectDetailPage() {
   const t = useT();
   const params = useParams<{ id: string }>();
+  const qc = useQueryClient();
   // Owner-only Blender bridge gate.
   const { data: me } = useQuery<{ permissions: string[] }>({
     queryKey: ["me"],
@@ -188,12 +189,23 @@ export default function ProjectDetailPage() {
             fileBase={shareFileBase}
             disabled={project.calculations.length === 0}
           />
-          {canUseInbox && project.conversationId && (
+          {canUseInbox && (
             <SendQuoteToChatButton
               targetRef={shareRef}
               conversationId={project.conversationId}
               fileBase={shareFileBase}
               caption={sendCaption}
+              onSent={(convId) => {
+                // Picked a chat for an unlinked draft → persist the link so
+                // "Open chat" appears and future sends go direct.
+                if (project.conversationId === convId) return;
+                api(`/api/projects/${project.id}/link-conversation`, {
+                  method: "POST",
+                  json: { conversationId: convId },
+                })
+                  .then(() => qc.invalidateQueries({ queryKey: ["projects-all"] }))
+                  .catch(() => {});
+              }}
               disabled={project.calculations.length === 0}
             />
           )}
