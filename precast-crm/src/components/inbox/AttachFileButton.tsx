@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Paperclip, Loader2 } from "lucide-react";
 import { useT } from "@/lib/i18n";
 
@@ -12,6 +12,10 @@ const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
  * and send it into the chat as a Telegram document via
  * /api/inbox/[id]/reply-file. Shown to inbox.access users (the whole composer
  * is already gated).
+ *
+ * Uses a <label> wrapping a hidden <input>, so the native file dialog opens on
+ * click — no programmatic .click(), which can silently no-op on display:none
+ * inputs in some browsers / under hot-reload.
  */
 export function AttachFileButton({
   conversationId,
@@ -22,12 +26,12 @@ export function AttachFileButton({
   onSent?: () => void;
 }) {
   const t = useT();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // let the same file be picked again later
+    const input = e.target;
+    const file = input.files?.[0];
+    input.value = ""; // let the same file be picked again later
     if (!file) return;
     if (file.size === 0) {
       alert(t("Бўш файл", "Empty file"));
@@ -65,18 +69,15 @@ export function AttachFileButton({
   }
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={sending}
-        aria-label={t("Файл бириктириш", "Attach file")}
-        title={t("Файл юбориш", "Send a file")}
-        className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-[color:var(--tg-text-dim)] transition-colors hover:text-[var(--tg-accent)] disabled:opacity-50"
-      >
-        {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
-      </button>
-      <input ref={inputRef} type="file" hidden onChange={onPick} />
-    </>
+    <label
+      title={t("Файл юбориш", "Send a file")}
+      aria-label={t("Файл бириктириш", "Attach file")}
+      className={`flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-[color:var(--tg-text-dim)] transition-colors hover:text-[var(--tg-accent)] ${
+        sending ? "pointer-events-none opacity-50" : "cursor-pointer"
+      }`}
+    >
+      {sending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
+      <input type="file" hidden disabled={sending} onChange={onPick} />
+    </label>
   );
 }
