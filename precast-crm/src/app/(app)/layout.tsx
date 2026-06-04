@@ -5,6 +5,7 @@ import { MobileTopbar } from "@/components/MobileTopbar";
 import { UnauthorizedBanner } from "@/components/UnauthorizedBanner";
 import { AudioUnlocker } from "@/components/AudioUnlocker";
 import { NotificationListener } from "@/components/notifications/NotificationListener";
+import { MainContainer } from "@/components/MainContainer";
 import { requirePermissionForPath } from "@/lib/page-auth";
 
 /**
@@ -39,16 +40,6 @@ export default async function AppShellLayout({
   const pathname = headers().get("x-pathname") ?? "/";
   const user = await requirePermissionForPath(pathname);
 
-  // The inbox is a full-bleed app surface (Telegram-style): it fills the
-  // entire main area (h-full) rather than sitting in the centered max-width
-  // column.
-  const isFullBleed = pathname === "/inbox" || pathname.startsWith("/inbox/");
-  // The calculator runs full-WIDTH (so its wide table + the drawing dock can
-  // use the whole window) but with normal scroll flow — NOT h-full, which
-  // would clip its tall content. The page re-centers itself in a max-w column
-  // when the dock isn't shown.
-  const isWide = pathname === "/calculations";
-
   return (
     <div className="flex h-screen bg-background">
       <AudioUnlocker />
@@ -58,18 +49,13 @@ export default async function AppShellLayout({
         <TopBar />
         <MobileTopbar user={user} />
         <main className="flex-1 overflow-auto">
-          <div
-            className={
-              isFullBleed
-                ? "h-full px-4 py-4 lg:px-6 lg:py-6"
-                : isWide
-                ? "px-4 py-4 lg:px-6 lg:py-6"
-                : "px-4 py-4 lg:px-6 lg:py-6 max-w-[1400px] w-full mx-auto"
-            }
-          >
+          {/* Layout mode (full-bleed / wide / centered) is decided client-side
+              in MainContainer via usePathname — the server layout is preserved
+              across client navigation, so a header-derived class goes stale. */}
+          <MainContainer>
             <UnauthorizedBanner />
             {children}
-          </div>
+          </MainContainer>
         </main>
       </div>
     </div>
