@@ -16,6 +16,7 @@ import {
   Pencil,
   Package,
   Split,
+  MessageCircle,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
@@ -999,6 +1000,14 @@ export default function OrderDetailPage() {
                   fileBase={shareFileBase}
                   disabled={order.project.calculations.length === 0}
                 />
+                {canUseInbox && order.project.conversationId && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/inbox?c=${order.project.conversationId}`}>
+                      <MessageCircle className="h-3.5 w-3.5 mr-1.5" />
+                      {t("Чатни очиш", "Open chat")}
+                    </Link>
+                  </Button>
+                )}
                 {canUseInbox && (
                   <SendQuoteToChatButton
                     targetRef={shareRef}
