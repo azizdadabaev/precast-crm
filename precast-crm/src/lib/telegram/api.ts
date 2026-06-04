@@ -191,6 +191,28 @@ export async function tgUploadVoiceGetFileId(
   return String(fid);
 }
 
+/** Delete messages on behalf of the business account (Bot API 9.0
+ *  deleteBusinessMessages). `messageIds` are Telegram message ids. Deletes for
+ *  everyone. Requires the bot's delete right in the business connection
+ *  (BusinessBotRights) — fails otherwise, which the caller surfaces. */
+export async function tgDeleteBusinessMessages(
+  businessConnectionId: string,
+  messageIds: number[],
+): Promise<void> {
+  const res = await fetch(apiUrl("deleteBusinessMessages"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business_connection_id: businessConnectionId,
+      message_ids: messageIds,
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) {
+    throw new Error(`Telegram deleteBusinessMessages failed: ${json.description ?? res.status}`);
+  }
+}
+
 /** Resolve a file_id to a server file_path via getFile. */
 export async function tgGetFilePath(fileId: string): Promise<string> {
   const res = await fetch(apiUrl("getFile"), {

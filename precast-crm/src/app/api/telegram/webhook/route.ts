@@ -38,6 +38,36 @@ export async function POST(req: NextRequest) {
   // 2. Parse. Malformed / non-business updates are acked with 200 so
   //    Telegram doesn't retry a permanently-unprocessable update.
   const update = await req.json().catch(() => null);
+
+  // Deletions from a connected business account (the user deleted messages on
+  // their phone/Desktop Telegram) — mirror them into the CRM. This update has
+  // no message body; it's a batch of message ids for one chat.
+  const del = update?.deleted_business_messages;
+  if (del?.chat?.id != null && Array.isArray(del.message_ids)) {
+    try {
+      const conv = await prisma.conversation.findUnique({
+        where: { channel_externalId: { channel: "TELEGRAM", externalId: String(del.chat.id) } },
+        select: { id: true },
+      });
+      if (conv) {
+        const ids = del.message_ids.map((m: number) => String(m));
+        const rows = await prisma.message.findMany({
+          where: { conversationId: conv.id, telegramMsgId: { in: ids } },
+          select: { id: true },
+        });
+        if (rows.length) {
+          await prisma.message.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+          for (const r of rows) {
+            emitInbox({ type: "message:deleted", conversationId: conv.id, messageId: r.id });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[telegram webhook deleted_business_messages]", err);
+    }
+    return new Response("ok");
+  }
+
   const parsed = update ? parseBusinessUpdate(update) : null;
   if (!parsed || !parsed.chatId) return new Response("ok");
 

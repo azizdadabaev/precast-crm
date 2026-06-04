@@ -397,6 +397,23 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
     },
   });
 
+  // Delete a message we sent — for everyone (Telegram + CRM). Scoped to
+  // OUTBOUND server-side; the trash only shows on our own bubbles.
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const deleteMsg = useMutation({
+    mutationFn: (messageId: string) =>
+      api(`/api/inbox/${conversationId}/messages/${messageId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setPendingDelete(null);
+      qc.invalidateQueries({ queryKey: ["inbox-thread", conversationId] });
+      qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
+    },
+    onError: (err) => {
+      setPendingDelete(null);
+      alert(err instanceof Error ? err.message : "Delete failed");
+    },
+  });
+
   const messages = data?.messages ?? [];
   const renderItems = buildRenderItems(messages);
 
@@ -520,10 +537,10 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
               <div key={key}>
                 {showDate && <DateSeparator iso={itemTime} />}
                 {item.type === "single" ? (
-                  <Bubble msg={item.msg} groupedTop={sameAsPrev} hasTail={hasTail} />
+                  <Bubble msg={item.msg} groupedTop={sameAsPrev} hasTail={hasTail} onDelete={setPendingDelete} />
                 ) : item.items.length === 1 ? (
                   // Lone album member — render as a normal bubble
-                  <Bubble msg={item.items[0]} groupedTop={sameAsPrev} hasTail={hasTail} />
+                  <Bubble msg={item.items[0]} groupedTop={sameAsPrev} hasTail={hasTail} onDelete={setPendingDelete} />
                 ) : (
                   <AlbumBubble album={item} groupedTop={sameAsPrev} hasTail={hasTail} />
                 )}
@@ -598,11 +615,64 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
           />
         )}
       </form>
+
+      {pendingDelete && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => !deleteMsg.isPending && setPendingDelete(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl bg-[var(--tg-panel)] p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-[15px] font-semibold text-[var(--tg-text)]">
+              Хабарни ўчириш · Delete message
+            </div>
+            <p className="mt-1.5 text-[13px] text-[color:var(--tg-text-dim)]">
+              Бу хабар ҳамма учун ўчирилади, қайтариб бўлмайди · It will be deleted for everyone and can&apos;t be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={deleteMsg.isPending}
+                onClick={() => setPendingDelete(null)}
+                className="rounded-lg px-3 py-1.5 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+              >
+                Бекор · Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteMsg.isPending}
+                onClick={() => deleteMsg.mutate(pendingDelete)}
+                className="flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-destructive/90 disabled:opacity-60"
+              >
+                {deleteMsg.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                Ўчириш · Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ImageViewerProvider>
   );
 }
 
-function Bubble({ msg, groupedTop, hasTail }: { msg: InboxMessage; groupedTop: boolean; hasTail: boolean }) {
+function Bubble({
+  msg,
+  groupedTop,
+  hasTail,
+  onDelete,
+}: {
+  msg: InboxMessage;
+  groupedTop: boolean;
+  hasTail: boolean;
+  /** When set and the message is OUTBOUND, a hover trash requests deletion. */
+  onDelete?: (id: string) => void;
+}) {
   const outgoing = msg.direction === "OUTBOUND";
   // Media that fills the bubble edge-to-edge and overlays its own footer.
   const overlayMedia =
@@ -622,11 +692,22 @@ function Bubble({ msg, groupedTop, hasTail }: { msg: InboxMessage; groupedTop: b
   return (
     <div
       className={cn(
-        "flex tg-msg-in",
+        "group flex items-center gap-1 tg-msg-in",
         outgoing ? "justify-end" : "justify-start",
         groupedTop ? "mt-[2px]" : "mt-[10px]",
       )}
     >
+      {outgoing && onDelete && (
+        <button
+          type="button"
+          onClick={() => onDelete(msg.id)}
+          title="Ўчириш · Delete"
+          aria-label="Delete message"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[color:var(--tg-text-dim)] opacity-0 transition-opacity hover:bg-[var(--tg-list-hover)] hover:text-destructive group-hover:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
       <div
         className={cn(
           "relative max-w-[min(72%,600px)] text-[14px] leading-[1.35] text-[var(--tg-text)]",
