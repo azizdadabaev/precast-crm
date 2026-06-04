@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
-import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator } from "lucide-react";
+import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -280,7 +280,7 @@ function Inbox() {
         </div>
 
         {/* Right: thread */}
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
           {activeId ? <Thread conversationId={activeId} onDeleted={() => setActiveId(null)} /> : <EmptyState />}
         </div>
       </div>
@@ -316,6 +316,11 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
     },
   });
   const bottomRef = useRef<HTMLDivElement>(null);
+  // The messages scroll container — for the jump-to-start / jump-to-end FABs.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollToTop = () => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  const scrollToBottom = () =>
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
 
   const { data } = useQuery({
     queryKey: ["inbox-thread", conversationId],
@@ -365,7 +370,7 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
   return (
     <ImageViewerProvider images={threadImages}>
       {/* Chat header */}
-      <div className="flex items-center gap-3 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5">
+      <div className="flex shrink-0 items-center gap-3 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5">
         <ChatAvatar name={data?.conversation.displayName ?? "?"} size={42} />
         <div className="flex min-w-0 flex-col">
           <div className="truncate text-[15px] font-semibold text-[var(--tg-text)]">{data?.conversation.displayName}</div>
@@ -424,7 +429,7 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
 
       {/* Quotes calculated from this chat — links back to /projects. */}
       {linkedQuotes && linkedQuotes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-1.5 text-[12px]">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-1.5 text-[12px]">
           <span className="text-[color:var(--tg-text-dim)]">Бу чатдан · Quotes:</span>
           {linkedQuotes.map((q) => {
             // Ordered → order id, opens the Orders page. Still a draft → draft
@@ -449,12 +454,15 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
         </div>
       )}
 
-      {/* Messages — Telegram wallpaper */}
-      <div
-        className="tg-wallpaper flex-1 overflow-y-auto px-4 py-4"
-        style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
-      >
-        <div className="flex flex-col">
+      {/* Messages — Telegram wallpaper. Only this area scrolls; the header +
+          quotes strip stay pinned (shrink-0 + the pane's min-h-0). */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={scrollRef}
+          className="tg-wallpaper h-full overflow-y-auto px-4 py-4"
+          style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
+        >
+          <div className="flex flex-col">
           {renderItems.map((item, i) => {
             const prevItem = renderItems[i - 1];
             const nextItem = renderItems[i + 1];
@@ -485,14 +493,36 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
               </div>
             );
           })}
-          <div ref={bottomRef} />
+            <div ref={bottomRef} />
+          </div>
+        </div>
+        {/* Jump to start / end of the conversation (Telegram-style). */}
+        <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={scrollToTop}
+            title="Бошига · To start"
+            aria-label="Scroll to start"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
+          >
+            <ArrowUp className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            title="Охирига · To end"
+            aria-label="Scroll to end"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
+          >
+            <ArrowDown className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
       {/* Composer */}
       <form
         onSubmit={(e) => { e.preventDefault(); if (draft.trim()) reply.mutate(draft.trim()); }}
-        className="flex items-end gap-2 border-t border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5"
+        className="flex shrink-0 items-end gap-2 border-t border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5"
       >
         <input
           value={draft}
