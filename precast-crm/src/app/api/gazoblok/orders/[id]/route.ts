@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
-import { withPermission } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import {
   decrementGazoblokForOrder,
@@ -21,8 +21,7 @@ function recomputePaymentState(totalPrice: number, confirmedPaid: number): Payme
 }
 
 /** GET /api/gazoblok/orders/[id] — gazoblok.view. Full order detail. */
-export const GET = withPermission<{ id: string }>(
-  "gazoblok.view",
+export const GET = withAuth<{ id: string }>(
   async (_req: NextRequest, { params }) => {
     const order = await prisma.gazoblokOrder.findUnique({
       where: { id: params.id },
@@ -45,8 +44,7 @@ export const GET = withPermission<{ id: string }>(
  *   record_payment  — add a PENDING_CONFIRMATION payment.
  *   confirm_payment — confirm/reject a payment, recompute confirmedPaid + paymentState.
  */
-export const PATCH = withPermission<{ id: string }>(
-  "gazoblok.order",
+export const PATCH = withAuth<{ id: string }>(
   async (req: NextRequest, { user, params }) => {
     const body = GazoblokOrderActionSchema.parse(await req.json());
     const order = await prisma.gazoblokOrder.findUnique({

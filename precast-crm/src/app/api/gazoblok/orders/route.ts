@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
-import { withPermission } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { orderTotal, lineTotal, blockVolumeM3 } from "@/services/gazoblok-engine";
@@ -11,7 +11,7 @@ import { nextGazoblokOrderNumber, gazoblokMonthPrefix } from "@/lib/gazoblok-num
 import { PlaceGazoblokOrderSchema } from "@/lib/gazoblok-validation";
 
 /** GET /api/gazoblok/orders — gazoblok.view. Filter by q / status. */
-export const GET = withPermission("gazoblok.view", async (req: NextRequest) => {
+export const GET = withAuth(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status") ?? undefined;
@@ -47,7 +47,7 @@ export const GET = withPermission("gazoblok.view", async (req: NextRequest) => {
  *   5. Optional up-front payment (PENDING_CONFIRMATION)
  * Stock is NOT touched here — it decrements when the order is delivered.
  */
-export const POST = withPermission("gazoblok.order", async (req: NextRequest, { user }) => {
+export const POST = withAuth(async (req: NextRequest, { user }) => {
   const body = PlaceGazoblokOrderSchema.parse(await req.json());
 
   const phoneNorm = normalizePhone(body.clientPhone);

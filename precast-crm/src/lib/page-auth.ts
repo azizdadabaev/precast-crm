@@ -53,6 +53,9 @@ export const ROUTE_PERMISSIONS: Record<
   "/audit": "audit.view",
   "/pricing": "pricing.edit",
   "/table-design": "pricing.edit",
+  // Газоблок (aerated blocks) — open to every authenticated user (no
+  // per-user gating, by owner decision).
+  "/gazoblok": "any-auth",
   // Self-service: every authenticated user can change their own password
   // and see their own profile, regardless of permission set.
   "/profile": "any-auth",

@@ -72,12 +72,6 @@ export const ACTIONS = [
   // Reports
   "report.view",
   "report.export",
-
-  // Газоблок (aerated wall blocks) — a SEPARATE product line from beam-and-block
-  "gazoblok.view", // see газоблок orders + stock
-  "gazoblok.order", // create газоблок orders, record/confirm their payments, mark delivery
-  "gazoblok.production", // log газоблок production + adjust газоблок stock
-  "gazoblok.manage", // owner · edit газоблок catalog (sizes, prices, grade)
 ] as const;
 
 export type Action = (typeof ACTIONS)[number];
@@ -166,16 +160,6 @@ export const PERMISSION_GROUPS: Array<{
     label: "Тажриба · Sandbox",
     actions: ["sandbox.access", "blender.bridge"],
   },
-  {
-    key: "gazoblok",
-    label: "Газоблок",
-    actions: [
-      "gazoblok.view",
-      "gazoblok.order",
-      "gazoblok.production",
-      "gazoblok.manage",
-    ],
-  },
 ];
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -217,10 +201,6 @@ export const ACTION_LABELS: Record<Action, string> = {
   "blender.bridge": "Blender чизмаси · Generate Blender drawing",
   "report.view": "Ҳисоботларни кўриш · View reports",
   "report.export": "Ҳисоботларни экспорт · Export reports",
-  "gazoblok.view": "Газоблок буюртмаларини кўриш · View газоблок orders",
-  "gazoblok.order": "Газоблок буюртма яратиш · Create газоблок orders",
-  "gazoblok.production": "Газоблок ишлаб чиқариш · Log газоблок production",
-  "gazoblok.manage": "Газоблок каталогини бошқариш · Manage газоблок catalog",
 };
 
 // Role templates. When adding a user with role X, these permissions
@@ -266,10 +246,6 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "blender.bridge",
     "report.view",
     "report.export",
-    "gazoblok.view",
-    "gazoblok.order",
-    "gazoblok.production",
-    "gazoblok.manage",
   ],
 
   ADMIN: [
@@ -306,10 +282,6 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "blender.bridge",
     "report.view",
     "report.export",
-    "gazoblok.view",
-    "gazoblok.order",
-    "gazoblok.production",
-    "gazoblok.manage",
   ],
 
   SALES: [
@@ -329,8 +301,6 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "dashboard.viewBasic",
     // NOT dashboard.view (financial)
     "blender.bridge",
-    "gazoblok.view",
-    "gazoblok.order",
   ],
 
   INVENTORY: [
@@ -340,8 +310,6 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "inventory.manage",
     "dispatch.view",
     "dashboard.viewBasic",
-    "gazoblok.view",
-    "gazoblok.production",
   ],
 
   // Drivers see the orders queue so they know what's outstanding on

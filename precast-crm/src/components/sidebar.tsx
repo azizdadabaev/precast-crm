@@ -49,8 +49,9 @@ interface NavItem {
   /** Latin secondary label (English / hint). */
   sub: string;
   icon: React.ComponentType<{ className?: string }>;
-  /** Permission(s) required to see this item. Array = any-of. */
-  permission: Action | Action[];
+  /** Permission(s) required to see this item. Array = any-of.
+   *  "any-auth" = visible to every logged-in user (no permission needed). */
+  permission: Action | Action[] | "any-auth";
 }
 
 /** Single source of truth for sidebar entries — desktop and the mobile drawer both consume this. */
@@ -81,7 +82,7 @@ export const NAV: NavItem[] = [
     label: "Газоблок",
     sub: "Gazoblok",
     icon: Boxes,
-    permission: "gazoblok.view",
+    permission: "any-auth",
   },
   {
     href: "/gallery",
@@ -162,14 +163,14 @@ export const OPERATIONS_NAV: NavItem[] = [
     label: "Газоблок и.ч.",
     sub: "Gazoblok production",
     icon: Hammer,
-    permission: "gazoblok.production",
+    permission: "any-auth",
   },
   {
     href: "/gazoblok/stock",
     label: "Газоблок омбор",
     sub: "Gazoblok stock",
     icon: Warehouse,
-    permission: "gazoblok.view",
+    permission: "any-auth",
   },
 ];
 
@@ -208,11 +209,12 @@ export const SETTINGS_NAV: NavItem[] = [
     label: "Газоблок нархлари",
     sub: "Gazoblok catalog",
     icon: Boxes,
-    permission: "gazoblok.manage",
+    permission: "any-auth",
   },
 ];
 
 export function isVisible(user: AuthUser, item: NavItem): boolean {
+  if (item.permission === "any-auth") return true;
   const list = Array.isArray(item.permission) ? item.permission : [item.permission];
   return canAny(user, list);
 }

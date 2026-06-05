@@ -3,13 +3,13 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, created } from "@/lib/api";
-import { withPermission } from "@/lib/api-auth";
+import { withAuth } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
 import { GazoblokProductionSchema } from "@/lib/gazoblok-validation";
 
 /** GET /api/gazoblok/production — gazoblok.view. Recent production entries. */
-export const GET = withPermission("gazoblok.view", async () => {
+export const GET = withAuth(async () => {
   const entries = await prisma.gazoblokProductionEntry.findMany({
     orderBy: { producedAt: "desc" },
     take: 50,
@@ -23,7 +23,7 @@ export const GET = withPermission("gazoblok.view", async () => {
 
 /** POST /api/gazoblok/production — gazoblok.production. Log a day's output;
  *  increments stock per line via the ledger. */
-export const POST = withPermission("gazoblok.production", async (req: NextRequest, { user }) => {
+export const POST = withAuth(async (req: NextRequest, { user }) => {
   const body = GazoblokProductionSchema.parse(await req.json());
   const entry = await prisma.$transaction(async (tx) => {
     const e = await tx.gazoblokProductionEntry.create({
