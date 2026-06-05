@@ -101,6 +101,14 @@ export default function GazoblokOrderDetailPage() {
     queryFn: () => api(`/api/gazoblok/orders/${id}`),
   });
 
+  // Only users with the maker-checker payment.confirm permission may
+  // confirm/reject payments — everything else here stays open to anyone.
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canConfirm = me?.permissions?.includes("payment.confirm") ?? false;
+
   function refresh() {
     qc.invalidateQueries({ queryKey: ["gazoblok-order", id] });
   }
@@ -413,7 +421,7 @@ export default function GazoblokOrderDetailPage() {
                         {p.recordedAt ? formatDate(p.recordedAt) : "—"}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        {p.status === "PENDING_CONFIRMATION" && (
+                        {p.status === "PENDING_CONFIRMATION" && canConfirm && (
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               size="sm"

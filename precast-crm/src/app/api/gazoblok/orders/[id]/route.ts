@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
+import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import {
   decrementGazoblokForOrder,
@@ -57,6 +58,13 @@ export const PATCH = withAuth<{ id: string }>(
     if (body.action === "set_status") {
       if (order.status === "CANCELED") {
         return fail("Бекор қилинган буюртмани ўзгартириб бўлмайди · Cannot change a canceled order", 409);
+      }
+      // A delivered order is terminal except for cancellation. Without this guard
+      // DELIVERED → IN_PRODUCTION → DELIVERED would decrement stock a second time,
+      // and DELIVERED → IN_PRODUCTION → CANCELED would skip the restock — both
+      // silently corrupt on-hand quantities. Keep the flow forward-only.
+      if (order.status === "DELIVERED" && body.status !== "DELIVERED" && body.status !== "CANCELED") {
+        return fail("Етказилган буюртмани фақат бекор қилиш мумкин · A delivered order can only be canceled", 409);
       }
       const next = body.status;
       const lineMoves = order.lines.map((l) => ({ productId: l.productId, quantity: l.quantity }));
@@ -138,6 +146,12 @@ export const PATCH = withAuth<{ id: string }>(
     }
 
     // ── confirm_payment ─────────────────────────────────────────
+    // Confirming/rejecting a payment is restricted to users with the
+    // maker-checker payment.confirm permission (same authority as the floor
+    // side). set_status and record_payment stay open to any logged-in user.
+    if (!can(user, "payment.confirm")) {
+      return fail("Тўловни тасдиқлашга рухсат йўқ · You can't confirm payments", 403);
+    }
     const payment = await prisma.gazoblokPayment.findUnique({ where: { id: body.paymentId } });
     if (!payment || payment.orderId !== order.id) {
       return fail("Тўлов топилмади · Payment not found", 404);
