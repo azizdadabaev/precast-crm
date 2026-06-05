@@ -33,6 +33,9 @@ interface DrawingDockProps {
   /** Drag produced a real box on `imagePath` → create/fill a room. */
   onCapture: (imagePath: string, box: NormBox) => void;
   onDeleteRow: (id: string) => void;
+  /** Dismiss the dock (✕) for a clean full-width table. Hides the panel only —
+   *  the chat link / dropped drawings are preserved; only Clear wipes them. */
+  onHideDock: () => void;
   highlightRowId: string | null;
   onHighlightRow: (id: string | null) => void;
 }
@@ -107,7 +110,7 @@ export function DrawingDock(props: DrawingDockProps) {
   );
 }
 
-function DockBody({ images, error, rows, onCapture, onDeleteRow, highlightRowId, onHighlightRow }: DrawingDockProps) {
+function DockBody({ images, error, rows, onCapture, onDeleteRow, onHideDock, highlightRowId, onHighlightRow }: DrawingDockProps) {
   const [reviewed, setReviewed] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
 
@@ -157,6 +160,17 @@ function DockBody({ images, error, rows, onCapture, onDeleteRow, highlightRowId,
         >
           <CheckCircle2 className={cn("h-4 w-4", reviewed ? "text-success" : "text-muted-foreground/40")} />
           <Bi uz="Тўлиқ" en="Reviewed" enClassName="font-normal" />
+        </button>
+        {/* Dismiss the dock for a clean full-width table — keeps the chat link
+            and any captured boxes; only Clear · Тозалаш wipes the link. */}
+        <button
+          type="button"
+          onClick={onHideDock}
+          aria-label="Hide drawing panel"
+          title="Чизма панелини беркитиш — чат боғланиши сақланади · Hide the panel (keeps the chat link)"
+          className="shrink-0 rounded-md p-1 text-muted-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
         </button>
       </div>
 

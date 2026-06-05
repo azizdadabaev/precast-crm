@@ -6,7 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { withInboxAccess } from "@/lib/inbox-auth";
 import { tgSendBusinessPhoto, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
 import { emitInbox } from "@/lib/inbox-bus";
-import { ALLOWED_IMAGE_MIME, MAX_IMAGE_SIZE_BYTES, saveBufferToUploads } from "@/lib/uploads";
+import {
+  ALLOWED_IMAGE_MIME,
+  MAX_IMAGE_SIZE_BYTES,
+  looksLikeImage,
+  saveBufferToUploads,
+} from "@/lib/uploads";
 
 const EXT_BY_MIME: Record<string, string> = {
   "image/png": "png",
@@ -14,21 +19,6 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/jpg": "jpg",
 };
-
-/** Magic-byte check — don't trust the client-declared MIME alone. */
-function looksLikeImage(b: Buffer): boolean {
-  if (b.length < 12) return false;
-  // PNG
-  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return true;
-  // JPEG
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return true;
-  // WEBP: "RIFF"????"WEBP"
-  if (
-    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
-    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
-  ) return true;
-  return false;
-}
 
 /**
  * POST /api/inbox/[id]/reply-photo — send a rendered quote image back into

@@ -55,6 +55,17 @@ interface CalculatorState {
    *  links the resulting Project back to the chat and the drawing dock
    *  knows which conversation's images to show. Reset by loadFrom/clearAll. */
   sourceConversationId: string | null;
+  /** Operator dismissed the drawing dock (✕) to work on a clean full-width
+   *  table. Hides the dock WITHOUT dropping the chat link — only Clear wipes
+   *  the link. Persisted so the clean table survives a refresh. Reset by
+   *  loadFrom/clearAll so a fresh handoff or reopened project shows the dock. */
+  dockHidden: boolean;
+  /** Drawing URLs the operator drag-dropped onto a non-chat (custom)
+   *  calculation. Unlike conversation images (re-fetched from the chat on
+   *  reload), these have no re-fetch source, so they're persisted here to
+   *  survive a refresh. Each is a `/uploads/drafts/<userId>/…` URL. Cleared by
+   *  loadFrom/clearAll; on Save the captured ones are copied into project media. */
+  droppedImages: string[];
   /** Per-column width overrides keyed by column id (px). null = use
    *  default widths. Wiped by the calculator's "Reset to defaults"
    *  button. Order is fixed; only widths are user-customizable. */
@@ -70,6 +81,9 @@ interface CalculatorState {
   setDraftProjectId: (id: string | null) => void;
   setEditingOrderId: (id: string | null) => void;
   setSourceConversationId: (id: string | null) => void;
+  setDockHidden: (hidden: boolean) => void;
+  /** Append drag-dropped drawing URLs to the dock, de-duplicated. */
+  addDroppedImages: (urls: string[]) => void;
   setColumnWidths: (widths: Record<string, number> | null) => void;
   setRoundingGrid: (grid: RoundingGrid) => void;
   /**
@@ -77,7 +91,7 @@ interface CalculatorState {
    * and by hydration migration. Pass partial state; everything else
    * resets to defaults so a draft load can't leak prior session bits.
    */
-  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDiscountAmount" | "setDraftProjectId" | "setEditingOrderId" | "setSourceConversationId" | "setColumnWidths" | "setRoundingGrid">>) => void;
+  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDiscountAmount" | "setDraftProjectId" | "setEditingOrderId" | "setSourceConversationId" | "setDockHidden" | "addDroppedImages" | "setColumnWidths" | "setRoundingGrid">>) => void;
   /** Wipe all draft state. Called from the Clear button and after a
    *  successful Place Order. */
   clearAll: () => void;
@@ -99,6 +113,8 @@ const INITIAL_STATE = {
   draftProjectId: null,
   editingOrderId: null as string | null,
   sourceConversationId: null as string | null,
+  dockHidden: false,
+  droppedImages: [] as string[],
   columnWidths: null as Record<string, number> | null,
   roundingGrid: 0.1 as RoundingGrid,
 };
@@ -112,6 +128,8 @@ interface PersistedShape {
   draftProjectId: string | null;
   editingOrderId: string | null;
   sourceConversationId: string | null;
+  dockHidden: boolean;
+  droppedImages: string[];
   columnWidths: Record<string, number> | null;
   roundingGrid: RoundingGrid;
 }
@@ -219,6 +237,13 @@ export const useCalculatorStore = create<CalculatorState>()(
       setDraftProjectId: (id) => set({ draftProjectId: id }),
       setEditingOrderId: (id) => set({ editingOrderId: id }),
       setSourceConversationId: (id) => set({ sourceConversationId: id }),
+      setDockHidden: (hidden) => set({ dockHidden: hidden }),
+      addDroppedImages: (urls) =>
+        set((s) => ({
+          droppedImages: Array.from(new Set([...s.droppedImages, ...urls])),
+          // A newly dropped drawing should be visible — un-hide the dock.
+          dockHidden: false,
+        })),
       setColumnWidths: (widths) => set({ columnWidths: widths }),
       setRoundingGrid: (grid) => set({ roundingGrid: grid }),
 
@@ -259,6 +284,8 @@ export const useCalculatorStore = create<CalculatorState>()(
         draftProjectId: s.draftProjectId,
         editingOrderId: s.editingOrderId,
         sourceConversationId: s.sourceConversationId,
+        dockHidden: s.dockHidden,
+        droppedImages: s.droppedImages,
         columnWidths: s.columnWidths,
         roundingGrid: s.roundingGrid,
       }),

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, PackageCheck, Trash2, Loader2, Phone } from "lucide-react";
+import { Save, PackageCheck, Trash2, Loader2, Phone, PanelLeftOpen } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,6 +69,10 @@ function CalculationsInner() {
   const setEditingOrderId = useCalculatorStore((s) => s.setEditingOrderId);
   const sourceConversationId = useCalculatorStore((s) => s.sourceConversationId);
   const setSourceConversationId = useCalculatorStore((s) => s.setSourceConversationId);
+  const dockHidden = useCalculatorStore((s) => s.dockHidden);
+  const setDockHidden = useCalculatorStore((s) => s.setDockHidden);
+  const droppedImages = useCalculatorStore((s) => s.droppedImages);
+  const addDroppedImages = useCalculatorStore((s) => s.addDroppedImages);
   const loadFrom = useCalculatorStore((s) => s.loadFrom);
   const clearAll = useCalculatorStore((s) => s.clearAll);
 
@@ -83,6 +87,9 @@ function CalculationsInner() {
   const [conversationImages, setConversationImages] = useState<string[]>([]);
   const [sharedPhone, setSharedPhone] = useState<string | null>(null);
   const [convLoadError, setConvLoadError] = useState(false);
+  // Drag-drop a drawing onto the calculator (custom calc OR an existing dock).
+  const [dragOverFile, setDragOverFile] = useState(false);
+  const [uploadingDrawing, setUploadingDrawing] = useState(false);
   // Room-capture highlight sync between the drawing dock and the table.
   const [highlightRowId, setHighlightRowId] = useState<string | null>(null);
   const loadedConvRef = useRef<string | null>(null);
@@ -265,6 +272,12 @@ function CalculationsInner() {
   ) {
     if (loadedConvRef.current === id) return;
     loadedConvRef.current = id;
+    // A fresh handoff (prefillClient) REPLACES the workspace. Reset before the
+    // fetch so a failed context load can't silently inherit a prior calc's rows,
+    // hidden-dock flag, or dropped images (which would otherwise leak into the
+    // new quote — and into its project media on Save). The reload path
+    // (prefillClient:false) keeps the operator's in-progress work untouched.
+    if (opts?.prefillClient) loadFrom({});
     try {
       const ctx = await api<ConversationContext>(`/api/inbox/${id}/context`);
       if (opts?.prefillClient) {
@@ -299,9 +312,70 @@ function CalculationsInner() {
     }
   };
   const deleteRow = (id: string) => setRows(rows.filter((r) => r.id !== id));
-  // Show the split drawing dock during a chat handoff OR when a reopened
-  // linked draft brought its project-owned drawings back.
-  const showDock = !!sourceConversationId || conversationImages.length > 0;
+  // Combined dock images: chat-fetched (transient, re-fetched on reload) +
+  // operator drag-dropped (persisted). De-duplicated; either can fill the dock.
+  const dockImages = Array.from(new Set([...conversationImages, ...droppedImages]));
+  // Show the split drawing dock during a chat handoff, when a reopened linked
+  // draft brought its drawings back, or when the operator dropped a drawing on a
+  // custom calc — unless they dismissed it (✕). Dismiss keeps the chat link;
+  // only Clear wipes it.
+  const hasDockContent = !!sourceConversationId || dockImages.length > 0;
+  const showDock = !dockHidden && hasDockContent;
+
+  // Upload drag-dropped image files to the operator's own draft folder, then
+  // dock them for room capture. Works on a custom calc AND an existing (chat-
+  // linked) dock. Non-image files are ignored.
+  async function handleDroppedFiles(files: FileList | null) {
+    const all = Array.from(files ?? []);
+    const images = all.filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) {
+      // Files were dropped but none were images — explain rather than no-op
+      // (the overlay promised "Drop the drawing here").
+      if (all.length > 0) {
+        setError(
+          t(
+            "Фақат расм файллари (JPG/PNG/WEBP) бириктирилади",
+            "Only image files (JPG, PNG, or WEBP) can be docked",
+          ),
+        );
+      }
+      return;
+    }
+    setUploadingDrawing(true);
+    setError(null);
+    const urls: string[] = [];
+    let failure: string | null = null;
+    try {
+      for (const file of images) {
+        const fd = new FormData();
+        fd.append("file", file);
+        // Raw fetch (not api()) — multipart must set its own boundary header.
+        const res = await fetch("/api/calculations/upload-drawing", {
+          method: "POST",
+          body: fd,
+          credentials: "include",
+        });
+        const json = (await res.json()) as {
+          ok: boolean;
+          data?: { url: string };
+          error?: string;
+        };
+        if (!res.ok || !json.ok || !json.data) {
+          throw new Error(json.error || `HTTP ${res.status}`);
+        }
+        urls.push(json.data.url);
+      }
+    } catch (e) {
+      failure = (e as Error).message;
+    } finally {
+      // Dock whatever uploaded so a mid-batch failure doesn't discard the
+      // successes (which would leave orphan files un-referenced). De-duped in
+      // the store; also un-hides the dock.
+      if (urls.length) addDroppedImages(urls);
+      if (failure) setError(urls.length ? `${urls.length}/${images.length} · ${failure}` : failure);
+      setUploadingDrawing(false);
+    }
+  }
 
   async function loadOrder(id: string) {
     try {
@@ -744,19 +818,68 @@ function CalculationsInner() {
   }
 
   return (
-    <div className={showDock ? "flex items-stretch gap-4" : "max-w-[1400px] w-full mx-auto"}>
+    <div
+      className={
+        showDock
+          ? "relative flex items-stretch gap-4"
+          : "relative max-w-[1400px] w-full mx-auto"
+      }
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setDragOverFile(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOverFile(false);
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setDragOverFile(false);
+        void handleDroppedFiles(e.dataTransfer.files);
+      }}
+    >
+      {/* Drag-a-drawing overlay — while a file is dragged over the calculator
+          or an upload is in flight. Drop anywhere on the calculator to dock it. */}
+      {(dragOverFile || uploadingDrawing) && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-xl border-2 border-dashed border-primary bg-primary/10 backdrop-blur-[1px]">
+          <div className="flex items-center gap-2 rounded-full bg-background/90 px-4 py-2 text-sm font-medium text-primary shadow">
+            {uploadingDrawing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t("Чизма юкланмоқда…", "Uploading drawing…")}
+              </>
+            ) : (
+              t("Чизмани шу ерга ташланг", "Drop the drawing here")
+            )}
+          </div>
+        </div>
+      )}
       {showDock && (
         <DrawingDock
-          images={conversationImages}
+          images={dockImages}
           error={convLoadError}
           rows={rows}
           onCapture={captureRoom}
           onDeleteRow={deleteRow}
+          onHideDock={() => setDockHidden(true)}
           highlightRowId={highlightRowId}
           onHighlightRow={setHighlightRowId}
         />
       )}
       <div className={showDock ? "min-w-0 flex-1 space-y-5" : "space-y-5"}>
+        {/* Restore the dock the operator dismissed (✕) — the chat link and any
+            dropped drawings are preserved, so this just re-shows the panel. */}
+        {dockHidden && hasDockContent && (
+          <button
+            type="button"
+            onClick={() => setDockHidden(false)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-sm text-primary transition hover:bg-primary/10"
+          >
+            <PanelLeftOpen className="h-3.5 w-3.5" />
+            {t("Чизмани кўрсатиш", "Show drawing")}
+          </button>
+        )}
       {/* Header — title only. The action buttons (Clear / Save Project /
           Place Order) moved to a dedicated bar after the calculator
           totals so the user's eye lands on the numbers before the CTAs. */}

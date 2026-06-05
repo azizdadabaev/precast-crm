@@ -34,6 +34,61 @@ const IMG_EXT_BY_MIME: Record<string, string> = {
 export const ALLOWED_IMAGE_MIME = new Set(Object.keys(IMG_EXT_BY_MIME));
 export const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024; // 8 MB
 
+/**
+ * Sniff the real image type from magic bytes and return its canonical
+ * extension — or null if the payload is not a JPEG / PNG / WEBP. Used to both
+ * validate uploads (don't trust the client-declared MIME) AND pin the stored
+ * extension to the real type, so a mislabeled/renamed file can't keep a
+ * dangerous extension (e.g. .svg/.html). Shared by every upload + copy path.
+ */
+export function imageExtFromBytes(b: Buffer): "png" | "jpg" | "webp" | null {
+  if (b.length < 12) return null;
+  // PNG
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "png";
+  // JPEG
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "jpg";
+  // WEBP: "RIFF"????"WEBP"
+  if (
+    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+  ) return "webp";
+  return null;
+}
+
+/**
+ * Magic-byte sniff — don't trust the client-declared MIME alone. Confirms the
+ * payload really is a JPEG / PNG / WEBP before we persist it. Shared by every
+ * upload route (inbox reply-photo, calculator draft drawings, …).
+ */
+export function looksLikeImage(b: Buffer): boolean {
+  return imageExtFromBytes(b) !== null;
+}
+
+/**
+ * Authorization gate for which uploaded image a saved project may copy into its
+ * own media (see copyUploadToProject). `box.imagePath` is CLIENT-SUPPLIED, so a
+ * project may only pull from:
+ *   - its own media folder            `/uploads/projects/<projectId>/`
+ *   - its linked chat's media         `/uploads/inbox/<conversationId>/`
+ *   - the requesting operator's drafts `/uploads/drafts/<userId>/`
+ * Anything else — another chat's media, another operator's drafts, arbitrary
+ * uploads, or any `..` traversal — is rejected. Pure + side-effect free so it's
+ * unit-testable in isolation.
+ */
+export function isAllowedAnnotationSource(
+  src: unknown,
+  opts: { projectId: string; conversationId: string | null; userId: string },
+): boolean {
+  if (typeof src !== "string") return false;
+  if (!src.startsWith("/uploads/")) return false;
+  if (src.includes("..")) return false; // no path traversal via the allow-list
+  return (
+    src.startsWith(`/uploads/projects/${opts.projectId}/`) ||
+    (!!opts.conversationId && src.startsWith(`/uploads/inbox/${opts.conversationId}/`)) ||
+    src.startsWith(`/uploads/drafts/${opts.userId}/`)
+  );
+}
+
 export class UploadError extends Error {
   constructor(message: string, public status: number) {
     super(message);
@@ -133,11 +188,18 @@ export async function copyUploadToProject(
     throw new UploadError("source path escapes uploads root", 400);
   }
 
-  const ext = path.extname(srcAbs);
+  // Re-validate by CONTENT at copy time: inbox media can be any Telegram file
+  // (PDF, video, .svg/.html document) and box.imagePath is client-supplied, so
+  // confirm the bytes are a real image and PIN the stored extension to the
+  // sniffed type. A non-image source is refused (the caller skips it) — this
+  // keeps a non-image from being promoted into the public project media folder.
+  const buffer = await fs.readFile(srcAbs);
+  const ext = imageExtFromBytes(buffer);
+  if (!ext) throw new UploadError("source is not a valid image", 400);
   const stem = createHash("sha1").update(rel).digest("hex").slice(0, 16);
-  const filename = `${stem}${ext}`;
+  const filename = `${stem}.${ext}`;
   const destDir = path.join(UPLOAD_ROOT, "projects", projectId);
   await fs.mkdir(destDir, { recursive: true });
-  await fs.copyFile(srcAbs, path.join(destDir, filename));
+  await fs.writeFile(path.join(destDir, filename), buffer);
   return `/uploads/projects/${projectId}/${filename}`.replace(/\\/g, "/");
 }

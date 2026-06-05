@@ -15,7 +15,7 @@ import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms } from "@/lib/regions";
 import { nextDraftNumber } from "@/lib/draft-number";
-import { copyUploadToProject } from "@/lib/uploads";
+import { copyUploadToProject, isAllowedAnnotationSource } from "@/lib/uploads";
 
 /** GET /api/projects — order.view. List projects with optional status + search. */
 export const GET = withPermission("order.view", async (req: NextRequest, { user }) => {
@@ -201,17 +201,22 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   // survives deletion of the source chat, and stamp annotationImagePath onto
   // each annotated room. Runs outside the tx (fs isn't transactional); a
   // failed copy leaves the box coords intact, just without the image.
-  // A box may only reference this project's own media or the linked chat's
-  // folder — never another conversation's media or arbitrary uploads. This
-  // closes an authz gap: box.imagePath is client-supplied.
-  const ownedPrefix = `/uploads/projects/${project.id}/`;
-  const allowedInbox = linkConversationId ? `/uploads/inbox/${linkConversationId}/` : null;
+  // A box may only reference this project's own media, the linked chat's
+  // folder, or the requesting operator's own draft uploads — never another
+  // conversation's media, another operator's drafts, or arbitrary/`..` paths.
+  // This closes an authz gap: box.imagePath is client-supplied.
   const copyCache = new Map<string, string | null>();
   for (const calc of project.calculations) {
     const src = computed[calc.seq]?.input.box?.imagePath;
     if (!src) continue;
-    if (!(src.startsWith(ownedPrefix) || (allowedInbox && src.startsWith(allowedInbox)))) {
-      continue; // points outside the project's own media / its linked chat — ignore
+    if (
+      !isAllowedAnnotationSource(src, {
+        projectId: project.id,
+        conversationId: linkConversationId ?? null,
+        userId: user.id,
+      })
+    ) {
+      continue; // outside the project's own media / its linked chat / the operator's drafts — ignore
     }
     let dest = copyCache.get(src);
     if (dest === undefined) {
