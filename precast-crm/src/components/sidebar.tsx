@@ -29,6 +29,7 @@ import {
   Activity as ActivityIcon,
   TableProperties,
   MessageCircle,
+  Boxes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -49,8 +50,9 @@ interface NavItem {
   /** Latin secondary label (English / hint). */
   sub: string;
   icon: React.ComponentType<{ className?: string }>;
-  /** Permission(s) required to see this item. Array = any-of. */
-  permission: Action | Action[];
+  /** Permission(s) required to see this item. Array = any-of.
+   *  "any-auth" = visible to every logged-in user (no permission needed). */
+  permission: Action | Action[] | "any-auth";
 }
 
 /** Single source of truth for sidebar entries — desktop and the mobile drawer both consume this. */
@@ -75,6 +77,13 @@ export const NAV: NavItem[] = [
     sub: "Orders",
     icon: PackageCheck,
     permission: "order.view",
+  },
+  {
+    href: "/gazoblok/orders",
+    label: "Газоблок",
+    sub: "Gazoblok",
+    icon: Boxes,
+    permission: "any-auth",
   },
   {
     href: "/gallery",
@@ -157,6 +166,20 @@ export const OPERATIONS_NAV: NavItem[] = [
     icon: Truck,
     permission: "driver.view",
   },
+  {
+    href: "/gazoblok/production",
+    label: "Газоблок и.ч.",
+    sub: "Gazoblok production",
+    icon: Hammer,
+    permission: "any-auth",
+  },
+  {
+    href: "/gazoblok/stock",
+    label: "Газоблок омбор",
+    sub: "Gazoblok stock",
+    icon: Warehouse,
+    permission: "any-auth",
+  },
 ];
 
 /** Items grouped under the "Созламалар · Settings" collapsible section. */
@@ -189,9 +212,17 @@ export const SETTINGS_NAV: NavItem[] = [
     icon: TableProperties,
     permission: "pricing.edit",
   },
+  {
+    href: "/gazoblok/catalog",
+    label: "Газоблок нархлари",
+    sub: "Gazoblok catalog",
+    icon: Boxes,
+    permission: "any-auth",
+  },
 ];
 
 export function isVisible(user: AuthUser, item: NavItem): boolean {
+  if (item.permission === "any-auth") return true;
   const list = Array.isArray(item.permission) ? item.permission : [item.permission];
   return canAny(user, list);
 }
