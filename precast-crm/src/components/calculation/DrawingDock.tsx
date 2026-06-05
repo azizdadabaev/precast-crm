@@ -224,13 +224,20 @@ function CaptureCanvas({
 }) {
   const open = useImageViewer();
   const wrapRef = useRef<HTMLDivElement>(null);
+  const bandRef = useRef<HTMLDivElement>(null);
   const rectRef = useRef<{ left: number; top: number; width: number; height: number } | null>(null);
-  const [drag, setDrag] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+
+  // The in-progress drag is tracked entirely in refs and the selection band is
+  // positioned IMPERATIVELY — a mousemove never sets React state, so it never
+  // re-renders this canvas. The previous version called setDrag() on every
+  // mousemove, re-rendering the full-size <img> + every captured-room box
+  // ~100×/sec, which visibly stuttered while drawing a box (worse under memory
+  // pressure). startRef = drag origin; lastRef = latest clamped cursor.
+  const startRef = useRef<{ sx: number; sy: number } | null>(null);
+  const lastRef = useRef<{ ex: number; ey: number } | null>(null);
 
   // Refs so the once-bound window listeners always see the latest values
   // (drawing continues even if the cursor leaves the image — no abrupt cancel).
-  const dragRef = useRef(drag);
-  dragRef.current = drag;
   const srcRef = useRef(src);
   srcRef.current = src;
   const onCaptureRef = useRef(onCapture);
@@ -238,21 +245,38 @@ function CaptureCanvas({
   const openRef = useRef(open);
   openRef.current = open;
 
+  // Position the dashed band straight from the start/last refs — no React state.
+  function paintBand() {
+    const s = startRef.current;
+    const l = lastRef.current;
+    const el = bandRef.current;
+    if (!s || !l || !el) return;
+    el.style.display = "block";
+    el.style.left = `${Math.min(s.sx, l.ex)}px`;
+    el.style.top = `${Math.min(s.sy, l.ey)}px`;
+    el.style.width = `${Math.abs(l.ex - s.sx)}px`;
+    el.style.height = `${Math.abs(l.ey - s.sy)}px`;
+  }
+
   useEffect(() => {
     function onMove(e: MouseEvent) {
-      const d = dragRef.current;
+      const s = startRef.current;
       const rc = rectRef.current;
-      if (!d || !rc) return;
-      const ex = Math.min(Math.max(0, e.clientX - rc.left), rc.width);
-      const ey = Math.min(Math.max(0, e.clientY - rc.top), rc.height);
-      setDrag({ ...d, ex, ey });
+      if (!s || !rc) return;
+      lastRef.current = {
+        ex: Math.min(Math.max(0, e.clientX - rc.left), rc.width),
+        ey: Math.min(Math.max(0, e.clientY - rc.top), rc.height),
+      };
+      paintBand();
     }
     function onUp() {
-      const d = dragRef.current;
+      const s = startRef.current;
+      const l = lastRef.current;
       const rc = rectRef.current;
-      if (!d || !rc) return;
-      setDrag(null);
-      const box = fromDrag({ x: d.sx, y: d.sy }, { x: d.ex, y: d.ey }, { width: rc.width, height: rc.height });
+      startRef.current = null;
+      if (bandRef.current) bandRef.current.style.display = "none";
+      if (!s || !l || !rc) return;
+      const box = fromDrag({ x: s.sx, y: s.sy }, { x: l.ex, y: l.ey }, { width: rc.width, height: rc.height });
       if (isDegenerate(box)) openRef.current(srcRef.current);
       else onCaptureRef.current(srcRef.current, box);
     }
@@ -268,15 +292,6 @@ function CaptureCanvas({
     .map((row, idx) => ({ row, idx }))
     .filter((x) => x.row.box && x.row.box.imagePath === src);
 
-  const band = drag
-    ? {
-        left: Math.min(drag.sx, drag.ex),
-        top: Math.min(drag.sy, drag.ey),
-        width: Math.abs(drag.ex - drag.sx),
-        height: Math.abs(drag.ey - drag.sy),
-      }
-    : null;
-
   return (
     <div
       ref={wrapRef}
@@ -287,7 +302,9 @@ function CaptureCanvas({
         rectRef.current = { left: rc.left, top: rc.top, width: rc.width, height: rc.height };
         const sx = e.clientX - rc.left;
         const sy = e.clientY - rc.top;
-        setDrag({ sx, sy, ex: sx, ey: sy });
+        startRef.current = { sx, sy };
+        lastRef.current = { ex: sx, ey: sy };
+        paintBand();
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -341,12 +358,13 @@ function CaptureCanvas({
         );
       })}
 
-      {band && (
-        <div
-          className="pointer-events-none absolute rounded-[4px] border-2 border-dashed border-primary bg-primary/15"
-          style={{ left: band.left, top: band.top, width: band.width, height: band.height }}
-        />
-      )}
+      {/* Selection band — always mounted, positioned imperatively in paintBand
+          so dragging never re-renders this canvas (see refs above). */}
+      <div
+        ref={bandRef}
+        className="pointer-events-none absolute rounded-[4px] border-2 border-dashed border-primary bg-primary/15"
+        style={{ display: "none" }}
+      />
     </div>
   );
 }
