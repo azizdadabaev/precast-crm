@@ -28,6 +28,7 @@ import {
   Images,
   Activity as ActivityIcon,
   TableProperties,
+  Boxes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -74,6 +75,13 @@ export const NAV: NavItem[] = [
     sub: "Orders",
     icon: PackageCheck,
     permission: "order.view",
+  },
+  {
+    href: "/gazoblok/orders",
+    label: "Газоблок",
+    sub: "Gazoblok",
+    icon: Boxes,
+    permission: "gazoblok.view",
   },
   {
     href: "/gallery",
@@ -149,6 +157,20 @@ export const OPERATIONS_NAV: NavItem[] = [
     icon: Truck,
     permission: "driver.view",
   },
+  {
+    href: "/gazoblok/production",
+    label: "Газоблок и.ч.",
+    sub: "Gazoblok production",
+    icon: Hammer,
+    permission: "gazoblok.production",
+  },
+  {
+    href: "/gazoblok/stock",
+    label: "Газоблок омбор",
+    sub: "Gazoblok stock",
+    icon: Warehouse,
+    permission: "gazoblok.view",
+  },
 ];
 
 /** Items grouped under the "Созламалар · Settings" collapsible section. */
@@ -180,6 +202,13 @@ export const SETTINGS_NAV: NavItem[] = [
     sub: "Table Designer",
     icon: TableProperties,
     permission: "pricing.edit",
+  },
+  {
+    href: "/gazoblok/catalog",
+    label: "Газоблок нархлари",
+    sub: "Gazoblok catalog",
+    icon: Boxes,
+    permission: "gazoblok.manage",
   },
 ];
 

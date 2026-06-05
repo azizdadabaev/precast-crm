@@ -242,6 +242,13 @@ model User {
   // Gallery — photos this user uploaded
   uploadedPhotos     GalleryPhoto[]
 
+  // Газоблок (aerated-block) line — back-relations
+  gazoblokProductionEntries GazoblokProductionEntry[]
+  gazoblokStockMovements    GazoblokStockMovement[]
+  gazoblokOrderEvents       GazoblokOrderEvent[]
+  gazoblokPaymentsRecorded  GazoblokPayment[] @relation("GazoblokPaymentRecorder")
+  gazoblokPaymentsConfirmed GazoblokPayment[] @relation("GazoblokPaymentConfirmer")
+
   @@map("users")
 }
 
@@ -319,6 +326,7 @@ model Client {
   deals    Deal[]
   projects Project[]
   orders   Order[]
+  gazoblokOrders GazoblokOrder[]
 
   @@index([phone])
   @@index([createdAt])
@@ -1029,4 +1037,229 @@ model GalleryPhoto {
   @@index([orderId])
   @@index([kind])
   @@map("gallery_photos")
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ГАЗОБЛОК (Aerated-concrete wall blocks) — a SEPARATE product line.
+//
+// Unlike beam-and-block flooring there is NO room geometry, pattern, or
+// pitch math: a customer simply buys a quantity of blocks of given sizes.
+// The whole line is namespaced `Gazoblok*` so it never collides with the
+// floor INFILL block (InventoryKind.BLOCK). Orders are always separate
+// from floor Orders but link to the SAME Client.
+//
+// Catalog: several sizes, ONE density grade (the grade label lives in
+// AppConfig key "gazoblok.grade"). Operator sets a price PER BLOCK per
+// size; the per-m³ price is DERIVED in src/services/gazoblok-engine.ts.
+//
+// Payment/delivery is intentionally simpler than floor orders (no driver
+// cash-custody / dispatch / discrepancy / split-shipment): a payment is
+// recorded then confirmed, delivery is the status flow + one proof photo,
+// and stock decrements when status flips to DELIVERED.
+// ══════════════════════════════════════════════════════════════════
+
+enum GazoblokOrderStatus {
+  PLACED          // Буюртма берилди
+  IN_PRODUCTION   // Ишлаб чиқарилмоқда (optional middle state)
+  DELIVERED       // Етказиб берилди — stock decrements here
+  CANCELED        // Бекор қилинди
+}
+
+enum GazoblokStockReason {
+  PRODUCTION
+  SALE                  // -N when an order is delivered
+  MANUAL_ADJUSTMENT
+  CANCELLATION_RESTOCK  // +N when a delivered order is canceled
+}
+
+// Catalog row — one per block size (single density grade).
+model GazoblokProduct {
+  id            String   @id @default(cuid())
+  label         String   // e.g. "600×300×200"
+  // Dimensions in METERS, used for m³ derivation + the wall estimator.
+  lengthM       Decimal  @db.Decimal(10, 3)
+  heightM       Decimal  @db.Decimal(10, 3)
+  thicknessM    Decimal  @db.Decimal(10, 3) // = wall thickness this block builds
+  // Operator-set price per single block (UZS). m³ price is derived.
+  pricePerBlock Decimal  @db.Decimal(14, 2)
+  lowStockThreshold Int  @default(50)
+  active        Boolean  @default(true)
+  seq           Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  stock           GazoblokStock?
+  orderLines      GazoblokOrderLine[]
+  productionLines GazoblokProductionLine[]
+  stockMovements  GazoblokStockMovement[]
+
+  @@index([active, seq])
+  @@map("gazoblok_products")
+}
+
+// Current on-hand quantity per catalog row (one-to-one with product).
+model GazoblokStock {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  quantity  Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  product GazoblokProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("gazoblok_stock")
+}
+
+// Append-only stock ledger, mirrors StockMovement but keyed by product.
+model GazoblokStockMovement {
+  id                String              @id @default(cuid())
+  productId         String
+  change            Int                 // +N production/restock, -N sale/neg-adjust
+  resultingQuantity Int
+  reason            GazoblokStockReason
+  productionEntryId String?
+  orderId           String?
+  actorId           String?
+  note              String?
+  createdAt         DateTime            @default(now())
+
+  product         GazoblokProduct          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productionEntry GazoblokProductionEntry? @relation(fields: [productionEntryId], references: [id], onDelete: SetNull)
+  order           GazoblokOrder?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  actor           User?                    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@index([orderId])
+  @@index([productionEntryId])
+  @@index([createdAt])
+  @@map("gazoblok_stock_movements")
+}
+
+model GazoblokProductionEntry {
+  id           String   @id @default(cuid())
+  producedAt   DateTime @default(now())
+  recordedById String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  recordedBy User?                    @relation(fields: [recordedById], references: [id])
+  lines      GazoblokProductionLine[]
+  movements  GazoblokStockMovement[]
+
+  @@index([producedAt])
+  @@map("gazoblok_production_entries")
+}
+
+model GazoblokProductionLine {
+  id        String @id @default(cuid())
+  entryId   String
+  productId String
+  quantity  Int
+
+  entry   GazoblokProductionEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  product GazoblokProduct         @relation(fields: [productId], references: [id])
+
+  @@index([entryId])
+  @@map("gazoblok_production_lines")
+}
+
+model GazoblokOrder {
+  id          String              @id @default(cuid())
+  orderNumber String              @unique // "B-2026-06-0001"
+  clientId    String
+
+  status        GazoblokOrderStatus @default(PLACED)
+  paymentState  OrderPaymentState   @default(AWAITING_PAYMENT)
+  confirmedPaid Decimal             @default(0) @db.Decimal(14, 2)
+
+  // Pricing snapshot — frozen at placement
+  linesSubtotal   Decimal @db.Decimal(14, 2)
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+  deliveryCost    Decimal @default(0) @db.Decimal(14, 2)
+  totalPrice      Decimal @db.Decimal(14, 2)
+
+  // Denormalized capacity
+  totalBlocks   Int     @default(0)
+  totalVolumeM3 Decimal @default(0) @db.Decimal(10, 3)
+
+  scheduledAt  DateTime?
+  placedAt     DateTime  @default(now())
+  deliveredAt  DateTime?
+  canceledAt   DateTime?
+  cancelReason String?
+
+  deliveryProofUrl        String?
+  deliveryProofUploadedAt DateTime?
+
+  notes String?
+
+  client         Client                 @relation(fields: [clientId], references: [id])
+  lines          GazoblokOrderLine[]
+  payments       GazoblokPayment[]
+  events         GazoblokOrderEvent[]
+  stockMovements GazoblokStockMovement[]
+
+  @@index([status])
+  @@index([clientId])
+  @@index([placedAt])
+  @@map("gazoblok_orders")
+}
+
+// One line per product on an order. Snapshots label + unit price so the
+// line survives later catalog edits / deletion.
+model GazoblokOrderLine {
+  id           String  @id @default(cuid())
+  orderId      String
+  productId    String?
+  productLabel String
+  unitPrice    Decimal @db.Decimal(14, 2) // price per block at placement
+  quantity     Int
+  lineTotal    Decimal @db.Decimal(14, 2)
+
+  order   GazoblokOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product GazoblokProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@map("gazoblok_order_lines")
+}
+
+// Simplified payment — recorded then confirmed (no driver custody chain).
+model GazoblokPayment {
+  id      String        @id @default(cuid())
+  orderId String
+  amount  Decimal       @db.Decimal(14, 2)
+  method  PaymentMethod
+  status  PaymentStatus @default(PENDING_CONFIRMATION)
+
+  recordedById  String?
+  recordedAt    DateTime  @default(now())
+  confirmedById String?
+  confirmedAt   DateTime?
+  notes         String?
+
+  order       GazoblokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  recordedBy  User?         @relation("GazoblokPaymentRecorder",  fields: [recordedById],  references: [id])
+  confirmedBy User?         @relation("GazoblokPaymentConfirmer", fields: [confirmedById], references: [id])
+
+  @@index([orderId])
+  @@index([status, recordedAt])
+  @@map("gazoblok_payments")
+}
+
+// Append-only activity log on a Gazoblok order.
+model GazoblokOrderEvent {
+  id        String   @id @default(cuid())
+  orderId   String
+  type      String   // "ORDER_PLACED" | "STATUS_CHANGED" | "PAYMENT_RECORDED" | ...
+  actorId   String?
+  message   String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  order GazoblokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User?         @relation(fields: [actorId], references: [id])
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("gazoblok_order_events")
 }
