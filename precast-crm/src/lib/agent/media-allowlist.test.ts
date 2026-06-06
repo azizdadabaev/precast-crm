@@ -63,4 +63,16 @@ describe('classifyInboundMedia', () => {
     ).toBe('escalate');
     expect(classifyInboundMedia({ kind: 'voice', fileSize: 50_000_000 }).action).toBe('escalate');
   });
+
+  it('normalises uppercase extensions (e.g. ROOM.PNG from Android)', () => {
+    expect(
+      classifyInboundMedia({ kind: 'document', mimeType: 'image/png', fileName: 'ROOM.PNG' }),
+    ).toEqual({ action: 'process', as: 'image' });
+  });
+
+  it('REJECTS a document missing fileName (no extension to verify)', () => {
+    expect(
+      classifyInboundMedia({ kind: 'document', mimeType: 'application/pdf' }).action,
+    ).toBe('reject');
+  });
 });

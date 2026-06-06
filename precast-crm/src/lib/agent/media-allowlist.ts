@@ -47,12 +47,12 @@ export function classifyInboundMedia(m: InboundMedia): MediaDecision {
       return { action: 'pass' };
 
     case 'photo':
-      if (m.fileSize && m.fileSize > MAX_IMAGE_BYTES)
+      if (m.fileSize != null && m.fileSize > MAX_IMAGE_BYTES)
         return { action: 'escalate', reason: 'image too large' };
       return { action: 'process', as: 'image' };
 
     case 'voice':
-      if (m.fileSize && m.fileSize > MAX_VOICE_BYTES)
+      if (m.fileSize != null && m.fileSize > MAX_VOICE_BYTES)
         return { action: 'escalate', reason: 'voice note too large' };
       return { action: 'transcribe' };
 
@@ -77,14 +77,14 @@ function classifyDocument(m: InboundMedia): MediaDecision {
 
   // PDF: mime AND extension must both say pdf.
   if (mime === 'application/pdf' && ext === 'pdf') {
-    if (m.fileSize && m.fileSize > MAX_PDF_BYTES)
+    if (m.fileSize != null && m.fileSize > MAX_PDF_BYTES)
       return { action: 'escalate', reason: 'pdf too large' };
     return { action: 'process', as: 'pdf' };
   }
 
   // Image sent as a file: mime AND extension must both be an allowed image.
   if (ALLOWED_IMAGE_MIMES.has(mime) && ALLOWED_IMAGE_EXTS.has(ext)) {
-    if (m.fileSize && m.fileSize > MAX_IMAGE_BYTES)
+    if (m.fileSize != null && m.fileSize > MAX_IMAGE_BYTES)
       return { action: 'escalate', reason: 'image too large' };
     return { action: 'process', as: 'image' };
   }
