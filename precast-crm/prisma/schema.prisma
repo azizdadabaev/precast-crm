@@ -19,13 +19,13 @@ datasource db {
 // When adding a user, the operator picks a role to pre-fill the
 // permissions checklist; after creation, the role is metadata only.
 enum UserRole {
-  OWNER       // template: full access incl. user.disable + user.editPermissions
-  ADMIN       // template: management (no user.disable / user.editPermissions)
-  SALES       // template: customer-facing operations
-  INVENTORY   // template: warehouse
-  DRIVER      // template: delivery
-  ACCOUNTANT  // template: financial reporting
-  CUSTOM      // no template — operator picks every permission manually
+  OWNER // template: full access incl. user.disable + user.editPermissions
+  ADMIN // template: management (no user.disable / user.editPermissions)
+  SALES // template: customer-facing operations
+  INVENTORY // template: warehouse
+  DRIVER // template: delivery
+  ACCOUNTANT // template: financial reporting
+  CUSTOM // no template — operator picks every permission manually
 }
 
 enum Language {
@@ -55,25 +55,25 @@ enum ShapeType {
 }
 
 enum LayoutPattern {
-  GB    // Г-Б — alternating, equal beam and block rows
-  BGB   // Б-Г-Б — extra closing beam
-  GBG   // Г-Б-Г — extra closing block row
+  GB // Г-Б — alternating, equal beam and block rows
+  BGB // Б-Г-Б — extra closing beam
+  GBG // Г-Б-Г — extra closing block row
 }
 
 enum ProjectStatus {
-  DRAFT      // saved calculation, not yet placed as an order
-  ORDERED    // an Order exists for this project
-  ARCHIVED   // soft-deleted draft
+  DRAFT // saved calculation, not yet placed as an order
+  ORDERED // an Order exists for this project
+  ARCHIVED // soft-deleted draft
 }
 
 enum OrderStatus {
-  DRAFT           // reserved (drafts currently live on Project.status; included for future workflow flexibility)
-  PLACED          // Буюртма Берилди — newly placed
-  IN_PRODUCTION   // Ишлаб чиқарилмоқда
-  LOADED          // truck photo taken, awaiting dispatch (single-truck path)
-  DISPATCHED      // Жўнатилди — truck en route with driver
-  DELIVERED       // Етказиб берилди
-  CANCELED        // Бекор қилинди
+  DRAFT // reserved (drafts currently live on Project.status; included for future workflow flexibility)
+  PLACED // Буюртма Берилди — newly placed
+  IN_PRODUCTION // Ишлаб чиқарилмоқда
+  LOADED // truck photo taken, awaiting dispatch (single-truck path)
+  DISPATCHED // Жўнатилди — truck en route with driver
+  DELIVERED // Етказиб берилди
+  CANCELED // Бекор қилинди
 }
 
 // Tracks how much of an Order's totalPrice is confirmed-paid.
@@ -100,11 +100,11 @@ enum PaymentMethod {
 }
 
 enum DiscrepancyStatus {
-  OPEN                   // shortfall flagged, not yet resolved
-  RESOLVED_RECOVERED     // shortfall later collected (customer paid the rest)
-  RESOLVED_DISCOUNT      // owner approved as a retroactive discount
-  RESOLVED_WRITEOFF      // owner wrote off as a loss
-  DISPUTED               // disputed with driver/operator (HR / disciplinary)
+  OPEN // shortfall flagged, not yet resolved
+  RESOLVED_RECOVERED // shortfall later collected (customer paid the rest)
+  RESOLVED_DISCOUNT // owner approved as a retroactive discount
+  RESOLVED_WRITEOFF // owner wrote off as a loss
+  DISPUTED // disputed with driver/operator (HR / disciplinary)
 }
 
 enum OrderEventType {
@@ -113,31 +113,31 @@ enum OrderEventType {
   SCHEDULED_DATE_CHANGED
   DISCOUNT_APPLIED
   ORDER_CANCELED
-  ORDER_EDITED              // post-placement edit of rooms / pricing snapshot
+  ORDER_EDITED // post-placement edit of rooms / pricing snapshot
   NOTE_ADDED
   STOCK_WARNING
   // Cash custody / dispatch lifecycle events:
-  ORDER_DISPATCHED          // driver assigned, order on the road
-  DISPATCH_RETURNED         // driver back at office (or delivery rejected)
-  PAYMENT_RECORDED          // operator entered a Payment row (PENDING_CONFIRMATION)
-  PAYMENT_HANDED_OVER       // physical cash handed from driver to office
-  PAYMENT_CONFIRMED         // owner confirmed amount is correct
-  PAYMENT_REJECTED          // owner rejected the recorded payment
-  PAYMENT_ADJUSTED          // confirmer changed the amount (originalAmount kept)
-  DISCREPANCY_OPENED        // confirmer flagged a shortfall to track
-  DISCREPANCY_RESOLVED      // owner resolved it (recovered/discount/writeoff/disputed)
-  ORDER_LOADED              // single-truck: photo taken, status → LOADED
-  SHIPMENT_CREATED          // split: new Shipment row added
-  SHIPMENT_LOADED           // split: shipment photo + counts saved
-  SHIPMENT_DISPATCHED       // split: shipment truck left the yard
-  SHIPMENT_DELIVERED        // split: shipment confirmed delivered
+  ORDER_DISPATCHED // driver assigned, order on the road
+  DISPATCH_RETURNED // driver back at office (or delivery rejected)
+  PAYMENT_RECORDED // operator entered a Payment row (PENDING_CONFIRMATION)
+  PAYMENT_HANDED_OVER // physical cash handed from driver to office
+  PAYMENT_CONFIRMED // owner confirmed amount is correct
+  PAYMENT_REJECTED // owner rejected the recorded payment
+  PAYMENT_ADJUSTED // confirmer changed the amount (originalAmount kept)
+  DISCREPANCY_OPENED // confirmer flagged a shortfall to track
+  DISCREPANCY_RESOLVED // owner resolved it (recovered/discount/writeoff/disputed)
+  ORDER_LOADED // single-truck: photo taken, status → LOADED
+  SHIPMENT_CREATED // split: new Shipment row added
+  SHIPMENT_LOADED // split: shipment photo + counts saved
+  SHIPMENT_DISPATCHED // split: shipment truck left the yard
+  SHIPMENT_DELIVERED // split: shipment confirmed delivered
 }
 
 enum ShipmentStatus {
-  PENDING     // created, not yet loaded
-  LOADED      // photo + counts saved
-  DISPATCHED  // truck left the yard
-  DELIVERED   // confirmed delivered to client
+  PENDING // created, not yet loaded
+  LOADED // photo + counts saved
+  DISPATCHED // truck left the yard
+  DELIVERED // confirmed delivered to client
 }
 
 enum InventoryKind {
@@ -176,30 +176,30 @@ enum ReferenceConsent {
 // ─────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
+  id                 String    @id @default(cuid())
+  name               String
   // Login identifier derived from name: "Азиз", "Азиз 2", etc.
   // Nullable during the initial schema push; seed.ts populates all rows.
-  loginName    String?  @unique
+  loginName          String?   @unique
   // PIN-based auth (bcrypt of 4-digit PIN). Null until seed/reset sets it.
-  pinHash      String?
-  email        String?  @unique  // optional metadata, no longer used for login
-  passwordHash String?           // legacy; null for users created after PIN migration
+  pinHash            String?
+  email              String?   @unique // optional metadata, no longer used for login
+  passwordHash       String? // legacy; null for users created after PIN migration
   // role is the TEMPLATE label this user was created from. Source of
   // truth for access is `permissions`, not `role`.
-  role         UserRole @default(SALES)
+  role               UserRole  @default(SALES)
   // The actual access control. Strings from src/lib/permissions.ts ACTIONS.
-  permissions  String[] @default([])
-  isActive     Boolean  @default(true)
+  permissions        String[]  @default([])
+  isActive           Boolean   @default(true)
   // Forces a /change-password redirect on first login after creation
   // or after an admin reset.
   mustChangePassword Boolean   @default(true)
-  lastLogin    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  createdById  String?
+  lastLogin          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  createdById        String?
 
-  deals             Deal[]             @relation("AssignedDeals")
+  deals             Deal[]            @relation("AssignedDeals")
   orderEvents       OrderEvent[]
   productionEntries ProductionEntry[]
   stockMovements    StockMovement[]
@@ -215,39 +215,39 @@ model User {
   resolvedDiscrepancies Discrepancy[] @relation("DiscrepancyResolver")
 
   // Self-relation: who created this user, and what users this user has created
-  createdBy             User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdUsers          User[] @relation("UserCreatedBy")
+  createdBy    User?  @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers User[] @relation("UserCreatedBy")
 
   // Audit-log back-relations
-  auditEntriesAsActor   UserAuditLog[] @relation("UserAuditActor")
-  auditEntriesAsTarget  UserAuditLog[] @relation("UserAuditTarget")
+  auditEntriesAsActor  UserAuditLog[] @relation("UserAuditActor")
+  auditEntriesAsTarget UserAuditLog[] @relation("UserAuditTarget")
 
   // System-wide audit log (AuditLog table) — entries this user is the
   // actor of. Distinct from UserAuditLog above which is user-account
   // changes only.
-  systemAuditEntries    AuditLog[] @relation("AuditLogActor")
+  systemAuditEntries AuditLog[] @relation("AuditLogActor")
 
   // Blender Bridge — drawing requests this user created.
-  drawingRequests       DrawingRequest[]
+  drawingRequests DrawingRequest[]
 
-  shipmentsDispatched   Shipment[] @relation("ShipmentDispatcher")
+  shipmentsDispatched Shipment[] @relation("ShipmentDispatcher")
 
   // Comments authored / moderated by this user
-  authoredComments   Comment[] @relation("CommentAuthor")
-  deletedComments    Comment[] @relation("CommentDeleter")
+  authoredComments Comment[] @relation("CommentAuthor")
+  deletedComments  Comment[] @relation("CommentDeleter")
 
   // In-app notifications targeted at this user
-  notifications      Notification[]
+  notifications Notification[]
 
   // Gallery — photos this user uploaded
-  uploadedPhotos     GalleryPhoto[]
+  uploadedPhotos GalleryPhoto[]
 
   // Газоблок (aerated-block) line — back-relations
   gazoblokProductionEntries GazoblokProductionEntry[]
   gazoblokStockMovements    GazoblokStockMovement[]
   gazoblokOrderEvents       GazoblokOrderEvent[]
-  gazoblokPaymentsRecorded  GazoblokPayment[] @relation("GazoblokPaymentRecorder")
-  gazoblokPaymentsConfirmed GazoblokPayment[] @relation("GazoblokPaymentConfirmer")
+  gazoblokPaymentsRecorded  GazoblokPayment[]         @relation("GazoblokPaymentRecorder")
+  gazoblokPaymentsConfirmed GazoblokPayment[]         @relation("GazoblokPaymentConfirmer")
 
   @@map("users")
 }
@@ -258,16 +258,16 @@ model User {
 // is needed later, it's there.
 model UserAuditLog {
   id        String   @id @default(cuid())
-  userId    String   // user being modified
-  actorId   String   // user doing the modifying
-  action    String   // "created" | "permissions_changed" | "role_changed"
-                     //  | "disabled" | "enabled" | "password_reset"
-  oldValue  String?  // JSON snapshot of previous state
-  newValue  String?  // JSON snapshot of new state
+  userId    String // user being modified
+  actorId   String // user doing the modifying
+  action    String // "created" | "permissions_changed" | "role_changed"
+  //  | "disabled" | "enabled" | "password_reset"
+  oldValue  String? // JSON snapshot of previous state
+  newValue  String? // JSON snapshot of new state
   createdAt DateTime @default(now())
 
-  user  User @relation("UserAuditTarget", fields: [userId],  references: [id], onDelete: Cascade)
-  actor User @relation("UserAuditActor",  fields: [actorId], references: [id], onDelete: Cascade)
+  user  User @relation("UserAuditTarget", fields: [userId], references: [id], onDelete: Cascade)
+  actor User @relation("UserAuditActor", fields: [actorId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([actorId, createdAt])
@@ -287,12 +287,12 @@ model UserAuditLog {
 model AuditLog {
   id         String   @id @default(cuid())
   createdAt  DateTime @default(now())
-  userId     String?  // nullable for system-triggered events (cron, bridge writeback)
-  action     String   // e.g. "project.create", "order.place", "order.status.change"
-  targetType String?  // e.g. "project", "order", "payment", "user"
-  targetId   String?  // affected entity id (no FK — survives target deletion)
-  message    String?  // short human-readable summary
-  metadata   Json?    // structured extras (oldValue, newValue, etc.)
+  userId     String? // nullable for system-triggered events (cron, bridge writeback)
+  action     String // e.g. "project.create", "order.place", "order.status.change"
+  targetType String? // e.g. "project", "order", "payment", "user"
+  targetId   String? // affected entity id (no FK — survives target deletion)
+  message    String? // short human-readable summary
+  metadata   Json? // structured extras (oldValue, newValue, etc.)
 
   user User? @relation("AuditLogActor", fields: [userId], references: [id], onDelete: SetNull)
 
@@ -308,7 +308,7 @@ model Client {
   name      String
   // Stored DIGITS-ONLY for stable lookup/dedup. Display formats it back.
   phone     String   @unique
-  address   String?  // "Манзил" (renamed from `location`)
+  address   String? // "Манзил" (renamed from `location`)
   language  Language @default(UZ)
   source    String?
   notes     String?
@@ -319,13 +319,13 @@ model Client {
   // listed when an operator exports contacts for a new prospect to visit
   // their finished slab. NOT_ASKED is the default — operators must
   // explicitly mark the answer.
-  referenceConsent  ReferenceConsent @default(NOT_ASKED)
-  consentNote       String?
-  consentUpdatedAt  DateTime?
+  referenceConsent ReferenceConsent @default(NOT_ASKED)
+  consentNote      String?
+  consentUpdatedAt DateTime?
 
-  deals    Deal[]
-  projects Project[]
-  orders   Order[]
+  deals          Deal[]
+  projects       Project[]
+  orders         Order[]
   gazoblokOrders GazoblokOrder[]
 
   @@index([phone])
@@ -356,29 +356,29 @@ model Deal {
 }
 
 model Project {
-  id         String        @id @default(cuid())
+  id       String  @id @default(cuid())
   // Optional now: Calculations page can save a draft BEFORE a Deal exists.
   // The Deal is materialized when an order is placed.
-  dealId     String?
+  dealId   String?
   // Hardened client link (set when ordered, or when the operator picks an
   // existing client during the call). Null while we have only tentative info.
-  clientId   String?
+  clientId String?
 
   // Optional link back to the Telegram conversation this quote was
   // calculated from (inbox feature). SetNull so deleting a chat never
   // deletes the quote it produced. Only set by callers with inbox.access.
   conversationId String?
 
-  name       String?
+  name        String?
   // Monotonically increasing identifier displayed as "NNNND" — the
   // "D" suffix brands the row as a saved draft, so an operator
   // skimming downloads / chat history can tell drafts apart from
   // real orders. Assigned at create time in POST /api/projects.
   // Nullable so existing pre-feature rows can be backfilled lazily.
-  draftNumber Int?         @unique
-  shapeType  ShapeType     @default(RECTANGULAR)
-  dimensions Json
-  status     ProjectStatus @default(DRAFT)
+  draftNumber Int?          @unique
+  shapeType   ShapeType     @default(RECTANGULAR)
+  dimensions  Json
+  status      ProjectStatus @default(DRAFT)
 
   // Tentative client info captured during the phone call.
   // Once the order is placed (or operator picks an existing client),
@@ -387,16 +387,16 @@ model Project {
   tentativeClientPhone   String? // stored DIGITS-ONLY for dedup
   tentativeClientAddress String?
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  deal         Deal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
-  client       Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
-  calculations Calculation[]
-  orders       Order[]
+  deal            Deal?            @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  client          Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  conversation    Conversation?    @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  calculations    Calculation[]
+  orders          Order[]
   drawingRequests DrawingRequest[]
-  comments     Comment[]
+  comments        Comment[]
 
   @@index([status])
   @@index([dealId])
@@ -407,39 +407,39 @@ model Project {
 }
 
 model Calculation {
-  id              String        @id @default(cuid())
-  projectId       String
-  name            String? // Room label (e.g. "Kitchen")
+  id        String  @id @default(cuid())
+  projectId String
+  name      String? // Room label (e.g. "Kitchen")
 
   // ── Inputs (snapshot for reproducibility) ──
-  innerWidth      Decimal       @db.Decimal(10, 3)
-  innerLength     Decimal       @db.Decimal(10, 3)
-  bearing         Decimal       @default(0.15) @db.Decimal(10, 3)
-  correction      Decimal       @default(0) @db.Decimal(10, 3)
-  extraBeams      Int           @default(0)
-  forceStartBeam  Boolean       @default(false)
+  innerWidth      Decimal        @db.Decimal(10, 3)
+  innerLength     Decimal        @db.Decimal(10, 3)
+  bearing         Decimal        @default(0.15) @db.Decimal(10, 3)
+  correction      Decimal        @default(0) @db.Decimal(10, 3)
+  extraBeams      Int            @default(0)
+  forceStartBeam  Boolean        @default(false)
   patternOverride LayoutPattern? // user-picked; null = auto
 
   // ── Pitch math ──
-  pitches         Int
-  remainder       Decimal       @db.Decimal(10, 3)
-  pattern         LayoutPattern // chosen (after override + force_start_beam)
-  patternAuto     LayoutPattern // what auto-pick would have chosen
+  pitches     Int
+  remainder   Decimal       @db.Decimal(10, 3)
+  pattern     LayoutPattern // chosen (after override + force_start_beam)
+  patternAuto LayoutPattern // what auto-pick would have chosen
 
   // ── Geometry ──
-  beamLength      Decimal       @db.Decimal(10, 3)
-  blocksPerRow    Int
-  beamCount       Int
-  blockRows       Int
-  totalBlocks     Int
+  beamLength   Decimal @db.Decimal(10, 3)
+  blocksPerRow Int
+  beamCount    Int
+  blockRows    Int
+  totalBlocks  Int
 
-  monolithLength  Decimal       @db.Decimal(10, 3)
-  billedLength    Decimal       @db.Decimal(10, 3)
+  monolithLength Decimal @db.Decimal(10, 3)
+  billedLength   Decimal @db.Decimal(10, 3)
 
-  monolithArea    Decimal       @db.Decimal(10, 3)
-  billedArea      Decimal       @db.Decimal(10, 3)
+  monolithArea Decimal @db.Decimal(10, 3)
+  billedArea   Decimal @db.Decimal(10, 3)
 
-  concreteVolume  Decimal       @db.Decimal(10, 3)
+  concreteVolume Decimal @db.Decimal(10, 3)
 
   // ── Pricing snapshot (UZS) ──
   // m2Price is the EFFECTIVE rate used for m2Cost / subtotal — i.e. the
@@ -449,14 +449,14 @@ model Calculation {
   // operator's optional explanation. The auto-picked rate is recoverable
   // at any time by calling tierPrice(beam_length, M2_PRICE_TIERS), so we
   // don't store it separately.
-  m2Price                 Decimal @db.Decimal(14, 2)
-  m2PriceOverride         Boolean @default(false)
-  m2PriceReason           String?
-  extraBeamPricePerM      Decimal @db.Decimal(14, 2)
-  m2Cost                  Decimal @db.Decimal(14, 2)
-  patternExtraCost        Decimal @db.Decimal(14, 2)
-  manualExtraBeamsCost    Decimal @db.Decimal(14, 2)
-  subtotal                Decimal @db.Decimal(14, 2)
+  m2Price              Decimal @db.Decimal(14, 2)
+  m2PriceOverride      Boolean @default(false)
+  m2PriceReason        String?
+  extraBeamPricePerM   Decimal @db.Decimal(14, 2)
+  m2Cost               Decimal @db.Decimal(14, 2)
+  patternExtraCost     Decimal @db.Decimal(14, 2)
+  manualExtraBeamsCost Decimal @db.Decimal(14, 2)
+  subtotal             Decimal @db.Decimal(14, 2)
 
   // ── Stage-② annotation (drawing→quote) ──
   // The box this room was drawn over on the source plan, normalized to
@@ -466,9 +466,9 @@ model Calculation {
   annotationBox       Json?
   annotationImagePath String?
 
-  seq             Int      @default(0) // row display order within project
+  seq Int @default(0) // row display order within project
 
-  createdAt       DateTime @default(now())
+  createdAt DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   orders  Order[] // an Order may snapshot a particular Calculation as primary
@@ -483,41 +483,41 @@ model Calculation {
 // ─────────────────────────────────────────────
 
 model Order {
-  id              String       @id @default(cuid())
+  id                   String  @id @default(cuid())
   // Human-readable, monotonic per month: "2026-05-0001"
-  orderNumber     String       @unique
-  projectId       String       @unique // one Order per Project for now
-  clientId        String
+  orderNumber          String  @unique
+  projectId            String  @unique // one Order per Project for now
+  clientId             String
   primaryCalculationId String?
 
-  status          OrderStatus       @default(PLACED)
-  paymentState    OrderPaymentState @default(AWAITING_PAYMENT)
+  status        OrderStatus       @default(PLACED)
+  paymentState  OrderPaymentState @default(AWAITING_PAYMENT)
   // Sum of all CONFIRMED payments for this order. Recomputed by the
   // confirm/reject flows; never edited directly by the UI.
-  confirmedPaid   Decimal           @default(0) @db.Decimal(14, 2)
+  confirmedPaid Decimal           @default(0) @db.Decimal(14, 2)
 
   // Pricing snapshot — frozen at placement time
-  roomsSubtotal   Decimal      @db.Decimal(14, 2)
-  discountPercent Decimal      @default(0) @db.Decimal(5, 2)
-  discountAmount  Decimal      @default(0) @db.Decimal(14, 2)
-  deliveryCost    Decimal      @default(0) @db.Decimal(14, 2)
-  otherCost       Decimal      @default(0) @db.Decimal(14, 2)
-  totalPrice      Decimal      @db.Decimal(14, 2)
+  roomsSubtotal   Decimal @db.Decimal(14, 2)
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+  deliveryCost    Decimal @default(0) @db.Decimal(14, 2)
+  otherCost       Decimal @default(0) @db.Decimal(14, 2)
+  totalPrice      Decimal @db.Decimal(14, 2)
 
   // Capacity snapshot at placement time — denormalized so the calendar
   // can sum without joining calculations.
-  totalArea       Decimal      @db.Decimal(10, 3) // sum of monolithArea across rooms
-  totalBlocks     Int          @default(0)
-  totalBeams      Int          @default(0)
+  totalArea   Decimal @db.Decimal(10, 3) // sum of monolithArea across rooms
+  totalBlocks Int     @default(0)
+  totalBeams  Int     @default(0)
 
   // Production / delivery scheduling
-  scheduledAt     DateTime     // when the customer wants delivery / production day
-  placedAt        DateTime     @default(now())
+  scheduledAt         DateTime // when the customer wants delivery / production day
+  placedAt            DateTime  @default(now())
   productionStartedAt DateTime?
-  deliveredAt     DateTime?
-  paidAt          DateTime?
-  canceledAt      DateTime?
-  cancelReason    String?
+  deliveredAt         DateTime?
+  paidAt              DateTime?
+  canceledAt          DateTime?
+  cancelReason        String?
 
   // Proof-of-delivery photo (truck loaded with the product)
   // — required by the UI before the IN_PRODUCTION → DELIVERED transition
@@ -525,24 +525,24 @@ model Order {
   deliveryProofUploadedAt DateTime?
 
   // Single-truck loading (new flow)
-  loadedPhotoUrl  String?
-  loadedAt        DateTime?
+  loadedPhotoUrl String?
+  loadedAt       DateTime?
 
-  notes           String?
+  notes String?
 
-  project       Project       @relation(fields: [projectId], references: [id])
-  client        Client        @relation(fields: [clientId], references: [id])
-  primaryCalculation Calculation? @relation(fields: [primaryCalculationId], references: [id])
-  events        OrderEvent[]
-  stockMovements StockMovement[]
+  project            Project          @relation(fields: [projectId], references: [id])
+  client             Client           @relation(fields: [clientId], references: [id])
+  primaryCalculation Calculation?     @relation(fields: [primaryCalculationId], references: [id])
+  events             OrderEvent[]
+  stockMovements     StockMovement[]
   // Cash-custody relations
-  dispatch      Dispatch?      // 0-or-1 active dispatch (orderId is @unique on Dispatch)
-  payments      Payment[]
-  discrepancies Discrepancy[]
-  drawingRequests DrawingRequest[]
-  shipments     Shipment[]
-  comments      Comment[]
-  galleryPhotos GalleryPhoto[]
+  dispatch           Dispatch? // 0-or-1 active dispatch (orderId is @unique on Dispatch)
+  payments           Payment[]
+  discrepancies      Discrepancy[]
+  drawingRequests    DrawingRequest[]
+  shipments          Shipment[]
+  comments           Comment[]
+  galleryPhotos      GalleryPhoto[]
 
   @@index([status])
   @@index([paymentState])
@@ -560,7 +560,7 @@ model OrderEvent {
   type      OrderEventType
   actorId   String?
   message   String?
-  payload   Json?          // type-specific data (from/to status, prev value, etc.)
+  payload   Json? // type-specific data (from/to status, prev value, etc.)
   createdAt DateTime       @default(now())
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -611,16 +611,16 @@ model Driver {
 }
 
 model Dispatch {
-  id                  String    @id @default(cuid())
-  orderId             String    @unique  // one active dispatch per order in v1
-  driverId            String?   // nullable — client may bring their own truck
-  truckIdentifier     String?
-  expectedCollection  Decimal   @db.Decimal(14, 2)
-  notes               String?
-  dispatchedById      String
-  dispatchedAt        DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  orderId            String    @unique // one active dispatch per order in v1
+  driverId           String? // nullable — client may bring their own truck
+  truckIdentifier    String?
+  expectedCollection Decimal   @db.Decimal(14, 2)
+  notes              String?
+  dispatchedById     String
+  dispatchedAt       DateTime  @default(now())
   // Set when the driver returns to the office. Null while on the road.
-  returnedAt          DateTime?
+  returnedAt         DateTime?
 
   order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   driver       Driver? @relation(fields: [driverId], references: [id])
@@ -635,37 +635,37 @@ model Dispatch {
 // Single-truck orders skip this model entirely and use Order.loadedPhotoUrl
 // + the existing Dispatch model instead.
 model Shipment {
-  id              String         @id @default(cuid())
-  orderId         String
-  number          Int            // 1-based sequence within the order
+  id      String @id @default(cuid())
+  orderId String
+  number  Int // 1-based sequence within the order
 
-  status          ShipmentStatus @default(PENDING)
+  status ShipmentStatus @default(PENDING)
 
   // Counts — null until operator fills the loading form.
   // JSON shape: Record<string, number>  e.g. { "3.3": 5, "4.3": 10 }
-  loadedBeams     Json?
-  loadedBlocks    Int?
+  loadedBeams  Json?
+  loadedBlocks Int?
 
   // Loaded truck photo
-  loadedPhotoUrl  String?
-  loadedAt        DateTime?
+  loadedPhotoUrl String?
+  loadedAt       DateTime?
 
   // Optional driver assignment per shipment
-  driverId             String?
-  truckIdentifier      String?
-  driverWillCollectCash Boolean  @default(false)
-  cashToCollect        Decimal?  @db.Decimal(14, 2)
-  dispatchedById       String?
-  dispatchedAt         DateTime?
+  driverId              String?
+  truckIdentifier       String?
+  driverWillCollectCash Boolean   @default(false)
+  cashToCollect         Decimal?  @db.Decimal(14, 2)
+  dispatchedById        String?
+  dispatchedAt          DateTime?
 
-  deliveredAt     DateTime?
-  notes           String?
+  deliveredAt DateTime?
+  notes       String?
 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  driver       Driver? @relation("ShipmentDriver",     fields: [driverId],       references: [id])
+  driver       Driver? @relation("ShipmentDriver", fields: [driverId], references: [id])
   dispatchedBy User?   @relation("ShipmentDispatcher", fields: [dispatchedById], references: [id])
 
   @@unique([orderId, number])
@@ -674,11 +674,11 @@ model Shipment {
 }
 
 model Payment {
-  id              String        @id @default(cuid())
-  orderId         String
-  amount          Decimal       @db.Decimal(14, 2)
-  method          PaymentMethod
-  status          PaymentStatus @default(PENDING_CONFIRMATION)
+  id      String        @id @default(cuid())
+  orderId String
+  amount  Decimal       @db.Decimal(14, 2)
+  method  PaymentMethod
+  status  PaymentStatus @default(PENDING_CONFIRMATION)
 
   // ── Chain of custody ──
   // Driver who took the cash from the customer (CASH only; null for transfers).
@@ -701,18 +701,18 @@ model Payment {
   // ── Adjustment audit ──
   // If the confirmer changed the amount on the form, we keep the original
   // here so the record explains the discrepancy.
-  originalAmount         Decimal?  @db.Decimal(14, 2)
-  adjustmentNote         String?
+  originalAmount Decimal? @db.Decimal(14, 2)
+  adjustmentNote String?
 
-  notes                  String?
+  notes String?
 
-  order              Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  collectedByDriver  Driver? @relation("PaymentCollector", fields: [collectedById], references: [id])
-  recordedBy         User    @relation("PaymentRecorder", fields: [recordedById], references: [id])
-  handedOverTo       User?   @relation("PaymentHandedOverTo", fields: [handedOverToOfficeById], references: [id])
-  confirmedBy        User?   @relation("PaymentConfirmer", fields: [confirmedById], references: [id])
-  rejectedBy         User?   @relation("PaymentRejecter", fields: [rejectedById], references: [id])
-  discrepancies      Discrepancy[]
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  collectedByDriver Driver?       @relation("PaymentCollector", fields: [collectedById], references: [id])
+  recordedBy        User          @relation("PaymentRecorder", fields: [recordedById], references: [id])
+  handedOverTo      User?         @relation("PaymentHandedOverTo", fields: [handedOverToOfficeById], references: [id])
+  confirmedBy       User?         @relation("PaymentConfirmer", fields: [confirmedById], references: [id])
+  rejectedBy        User?         @relation("PaymentRejecter", fields: [rejectedById], references: [id])
+  discrepancies     Discrepancy[]
 
   @@index([orderId])
   @@index([status, recordedAt])
@@ -720,25 +720,25 @@ model Payment {
 }
 
 model Discrepancy {
-  id              String              @id @default(cuid())
-  orderId         String
-  paymentId       String?            // the linked payment if confirmation produced one
-  driverId        String?            // who collected from the customer
-  expectedAmount  Decimal             @db.Decimal(14, 2)
-  receivedAmount  Decimal             @db.Decimal(14, 2)
-  shortfall       Decimal             @db.Decimal(14, 2)   // expected - received (always positive)
-  status          DiscrepancyStatus   @default(OPEN)
-  reportedById    String              // confirmer who flagged it
-  reportedAt      DateTime            @default(now())
-  resolvedById    String?
-  resolvedAt      DateTime?
-  resolutionNote  String?
+  id             String            @id @default(cuid())
+  orderId        String
+  paymentId      String? // the linked payment if confirmation produced one
+  driverId       String? // who collected from the customer
+  expectedAmount Decimal           @db.Decimal(14, 2)
+  receivedAmount Decimal           @db.Decimal(14, 2)
+  shortfall      Decimal           @db.Decimal(14, 2) // expected - received (always positive)
+  status         DiscrepancyStatus @default(OPEN)
+  reportedById   String // confirmer who flagged it
+  reportedAt     DateTime          @default(now())
+  resolvedById   String?
+  resolvedAt     DateTime?
+  resolutionNote String?
 
-  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   payment    Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   driver     Driver?  @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  reportedBy User    @relation("DiscrepancyReporter", fields: [reportedById], references: [id])
-  resolvedBy User?   @relation("DiscrepancyResolver", fields: [resolvedById], references: [id])
+  reportedBy User     @relation("DiscrepancyReporter", fields: [reportedById], references: [id])
+  resolvedBy User?    @relation("DiscrepancyResolver", fields: [resolvedById], references: [id])
 
   @@index([driverId, reportedAt])
   @@index([status])
@@ -790,15 +790,15 @@ model AppConfig {
 // ─────────────────────────────────────────────
 
 model InventoryItem {
-  id                 String        @id @default(cuid())
-  kind               InventoryKind
+  id                String        @id @default(cuid())
+  kind              InventoryKind
   // For BEAM: manufactured length in meters, rounded to 2 decimals (e.g. 4.30).
   // For BLOCK: NULL (one row only, lookup by kind).
-  beamLength         Decimal?      @db.Decimal(10, 2)
-  quantity           Int           @default(0)
-  lowStockThreshold  Int           @default(10)
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  beamLength        Decimal?      @db.Decimal(10, 2)
+  quantity          Int           @default(0)
+  lowStockThreshold Int           @default(10)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   movements StockMovement[]
 
@@ -818,7 +818,7 @@ model ProductionEntry {
   notes        String?
   createdAt    DateTime @default(now())
 
-  recordedBy User?           @relation(fields: [recordedById], references: [id])
+  recordedBy User?            @relation(fields: [recordedById], references: [id])
   lines      ProductionLine[]
   movements  StockMovement[]
 
@@ -887,27 +887,27 @@ model StockMovement {
 // ─────────────────────────────────────────────
 
 model DrawingRequest {
-  id           String   @id @default(cuid())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Source: exactly one of orderId or projectId is non-null. The API
   // layer enforces this (no DB-level check; one nullable FK each is
   // enough for Postgres + simpler than a CHECK constraint).
-  orderId      String?
-  order        Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  projectId    String?
-  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   // Snapshot of the rooms array sent to Blender. Stored as a JSON
   // string (not Postgres jsonb) because the ws-bridge service reads
   // it via raw SQL and forwards it verbatim — keeping the field as
   // a plain string avoids serialization round-trips on the bridge.
-  roomsJson    String
+  roomsJson String
 
-  status        DrawingRequestStatus @default(PENDING)
-  deliveredAt   DateTime?
-  errorMessage  String?
+  status       DrawingRequestStatus @default(PENDING)
+  deliveredAt  DateTime?
+  errorMessage String?
 
   // Populated by ws-bridge when DRAWING_RESULT arrives from the addon.
   // pdfStorageKey is a relative path ("drawings/<id>.pdf") under the
@@ -917,8 +917,8 @@ model DrawingRequest {
   pageCount     Int?
   renderMs      Int?
 
-  createdById  String
-  createdBy    User     @relation(fields: [createdById], references: [id])
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
   @@index([status, createdAt])
   @@index([createdById, createdAt])
@@ -942,15 +942,15 @@ model Comment {
 
   // Source: exactly one non-null.
   orderId   String?
-  order     Order?   @relation(fields: [orderId],   references: [id], onDelete: Cascade)
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  authorId  String
-  author    User     @relation("CommentAuthor", fields: [authorId], references: [id])
+  authorId String
+  author   User   @relation("CommentAuthor", fields: [authorId], references: [id])
 
   // Raw text; frontend resolves @mentions to links at display time.
-  body      String   @db.Text
+  body String @db.Text
 
   // User IDs extracted from @mentions in body at write time. Used for
   // notification fan-out without re-parsing the body on every read.
@@ -963,11 +963,11 @@ model Comment {
   // for audit. Hard deletes are forbidden by convention.
   deletedAt   DateTime?
   deletedById String?
-  deletedBy   User?    @relation("CommentDeleter", fields: [deletedById], references: [id])
+  deletedBy   User?     @relation("CommentDeleter", fields: [deletedById], references: [id])
 
-  @@index([orderId,   createdAt])
+  @@index([orderId, createdAt])
   @@index([projectId, createdAt])
-  @@index([authorId,  createdAt])
+  @@index([authorId, createdAt])
   @@index([deletedAt, createdAt])
   @@map("comments")
 }
@@ -989,20 +989,21 @@ enum NotificationType {
   PAYMENT_REJECTED
   COMMENT_MENTION
   NEW_COMMENT
+  AGENT_ESCALATION
 }
 
 model Notification {
-  id        String           @id @default(cuid())
-  createdAt DateTime         @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
-  type      NotificationType
+  type NotificationType
 
-  userId    String
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Pre-rendered bilingual title (e.g. "Янги буюртма #2026-05-0042 · New order #2026-05-0042")
-  title     String
-  body      String?
+  title String
+  body  String?
 
   // Polymorphic target — no FK constraints (intentional, see comment above)
   orderId   String?
@@ -1011,7 +1012,7 @@ model Notification {
   commentId String?
 
   // Unread state per-user.
-  readAt    DateTime?
+  readAt DateTime?
 
   @@index([userId, readAt, createdAt])
   @@index([userId, createdAt])
@@ -1031,8 +1032,8 @@ model Notification {
 // stay as the source of truth for the invoice + delivery flow.
 // ──────────────────────────────────────────────────────────────────
 enum GalleryPhotoKind {
-  LOADED          // Order.loadedPhotoUrl — single-truck loaded photo
-  DELIVERY_PROOF  // Order.deliveryProofUrl — proof of delivery
+  LOADED // Order.loadedPhotoUrl — single-truck loaded photo
+  DELIVERY_PROOF // Order.deliveryProofUrl — proof of delivery
   SHIPMENT_LOADED // Shipment.loadedPhotoUrl — split-shipment truck photo
 }
 
@@ -1045,8 +1046,8 @@ model GalleryPhoto {
   uploadedAt   DateTime         @default(now())
   uploadedById String?
 
-  order        Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  uploadedBy   User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  order      Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([uploadedAt(sort: Desc)])
   @@index([orderId])
@@ -1078,19 +1079,29 @@ enum MediaKind {
   OTHER
 }
 
+enum ConversationAiState {
+  AI_HANDLING // bot auto-handles; staff watch passively
+  PENDING_HUMAN // escalated, or a write-action awaits staff approval; sorts to top
+  HUMAN_ACTIVE // a human took over; the bot is paused for this chat
+  RESOLVED
+}
+
 model Conversation {
   id                   String              @id @default(cuid())
   channel              ConversationChannel @default(TELEGRAM)
-  externalId           String              // Telegram chat id (the chat to reply to)
+  externalId           String // Telegram chat id (the chat to reply to)
   businessConnectionId String?
   displayName          String
   username             String?
-  sharedContactPhone   String?             // digits-only; from a client's shared-contact message
+  sharedContactPhone   String? // digits-only; from a client's shared-contact message
   lastMessageAt        DateTime
   lastSnippet          String              @default("")
   unread               Boolean             @default(true)
+  aiState              ConversationAiState @default(AI_HANDLING)
+  aiPaused             Boolean             @default(false)
   createdAt            DateTime            @default(now())
   messages             Message[]
+  pendingOrders        PendingOrder[]
   projects             Project[]
 
   @@unique([channel, externalId])
@@ -1108,15 +1119,54 @@ model Message {
   mediaMeta      Json?
   telegramMsgId  String?
   mediaGroupId   String?
-  sentById       String?          // operator id (no FK; owner-only inbox)
+  sentById       String? // operator id (no FK; owner-only inbox)
   failed         Boolean          @default(false)
   createdAt      DateTime         @default(now())
 
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  @@unique([conversationId, telegramMsgId])
   @@index([conversationId, createdAt])
   @@index([conversationId, mediaGroupId])
-  @@unique([conversationId, telegramMsgId])
+}
+
+enum PendingOrderStatus {
+  AWAITING_CUSTOMER // draft built; waiting for the customer to confirm dims + agree to order
+  AWAITING_STAFF // customer agreed; waiting for the one-tap staff approval
+  APPROVED // committed into a real Order
+  REJECTED
+  EXPIRED
+}
+
+// A proposed order the AI agent prepared but has NOT placed. The HITL flow is
+// Propose -> Customer-confirm -> Staff-approve -> Commit (spec §6 guardrail 3).
+// The price is carried ONLY by quoteId (never free text); a real Order is
+// created via the existing createOrder flow when status flips to APPROVED.
+model PendingOrder {
+  id             String             @id @default(cuid())
+  conversationId String
+  clientId       String?
+  quoteId        String // price comes ONLY from a minted quote_id, never free text
+  payload        Json // line items, parsed dims, delivery, snapshot for the staff card
+  status         PendingOrderStatus @default(AWAITING_CUSTOMER)
+
+  // Idempotency: at most one pending order per (conversation + the customer
+  // confirmation message that triggered it) — webhook retries can't duplicate.
+  idempotencyKey     String  @unique
+  // Idempotency for the staff Approve/Reject tap (Telegram callback_query id).
+  telegramCallbackId String? @unique
+
+  orderId     String? // set when APPROVED and a real Order is created
+  decidedById String? // staff user id who approved/rejected (no FK; owner-only inbox)
+  decidedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([conversationId])
+  @@map("pending_orders")
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1139,34 +1189,34 @@ model Message {
 // ══════════════════════════════════════════════════════════════════
 
 enum GazoblokOrderStatus {
-  PLACED          // Буюртма берилди
-  IN_PRODUCTION   // Ишлаб чиқарилмоқда (optional middle state)
-  DELIVERED       // Етказиб берилди — stock decrements here
-  CANCELED        // Бекор қилинди
+  PLACED // Буюртма берилди
+  IN_PRODUCTION // Ишлаб чиқарилмоқда (optional middle state)
+  DELIVERED // Етказиб берилди — stock decrements here
+  CANCELED // Бекор қилинди
 }
 
 enum GazoblokStockReason {
   PRODUCTION
-  SALE                  // -N when an order is delivered
+  SALE // -N when an order is delivered
   MANUAL_ADJUSTMENT
-  CANCELLATION_RESTOCK  // +N when a delivered order is canceled
+  CANCELLATION_RESTOCK // +N when a delivered order is canceled
 }
 
 // Catalog row — one per block size (single density grade).
 model GazoblokProduct {
-  id            String   @id @default(cuid())
-  label         String   // e.g. "600×300×200"
+  id                String   @id @default(cuid())
+  label             String // e.g. "600×300×200"
   // Dimensions in METERS, used for m³ derivation + the wall estimator.
-  lengthM       Decimal  @db.Decimal(10, 3)
-  heightM       Decimal  @db.Decimal(10, 3)
-  thicknessM    Decimal  @db.Decimal(10, 3) // = wall thickness this block builds
+  lengthM           Decimal  @db.Decimal(10, 3)
+  heightM           Decimal  @db.Decimal(10, 3)
+  thicknessM        Decimal  @db.Decimal(10, 3) // = wall thickness this block builds
   // Operator-set price per single block (UZS). m³ price is derived.
-  pricePerBlock Decimal  @db.Decimal(14, 2)
-  lowStockThreshold Int  @default(50)
-  active        Boolean  @default(true)
-  seq           Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  pricePerBlock     Decimal  @db.Decimal(14, 2)
+  lowStockThreshold Int      @default(50)
+  active            Boolean  @default(true)
+  seq               Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   stock           GazoblokStock?
   orderLines      GazoblokOrderLine[]
@@ -1193,7 +1243,7 @@ model GazoblokStock {
 model GazoblokStockMovement {
   id                String              @id @default(cuid())
   productId         String
-  change            Int                 // +N production/restock, -N sale/neg-adjust
+  change            Int // +N production/restock, -N sale/neg-adjust
   resultingQuantity Int
   reason            GazoblokStockReason
   productionEntryId String?
@@ -1243,8 +1293,8 @@ model GazoblokProductionLine {
 }
 
 model GazoblokOrder {
-  id          String              @id @default(cuid())
-  orderNumber String              @unique // "B-2026-06-0001"
+  id          String @id @default(cuid())
+  orderNumber String @unique // "B-2026-06-0001"
   clientId    String
 
   status        GazoblokOrderStatus @default(PLACED)
@@ -1273,7 +1323,7 @@ model GazoblokOrder {
 
   notes String?
 
-  client         Client                 @relation(fields: [clientId], references: [id])
+  client         Client                  @relation(fields: [clientId], references: [id])
   lines          GazoblokOrderLine[]
   payments       GazoblokPayment[]
   events         GazoblokOrderEvent[]
@@ -1318,7 +1368,7 @@ model GazoblokPayment {
   notes         String?
 
   order       GazoblokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  recordedBy  User?         @relation("GazoblokPaymentRecorder",  fields: [recordedById],  references: [id])
+  recordedBy  User?         @relation("GazoblokPaymentRecorder", fields: [recordedById], references: [id])
   confirmedBy User?         @relation("GazoblokPaymentConfirmer", fields: [confirmedById], references: [id])
 
   @@index([orderId])
@@ -1330,7 +1380,7 @@ model GazoblokPayment {
 model GazoblokOrderEvent {
   id        String   @id @default(cuid())
   orderId   String
-  type      String   // "ORDER_PLACED" | "STATUS_CHANGED" | "PAYMENT_RECORDED" | ...
+  type      String // "ORDER_PLACED" | "STATUS_CHANGED" | "PAYMENT_RECORDED" | ...
   actorId   String?
   message   String?
   payload   Json?
