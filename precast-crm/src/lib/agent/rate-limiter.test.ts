@@ -1,0 +1,77 @@
+import { describe, it, expect } from 'vitest';
+import { RateLimiter, type RateLimitConfig } from './rate-limiter';
+
+const CFG: RateLimitConfig = {
+  perMinute: 3,
+  perHour: 10,
+  userDailyTokens: 1000,
+  globalDailyTokens: 5000,
+};
+
+// A controllable clock so windows are deterministic.
+function fakeClock(start = 1_000_000) {
+  let t = start;
+  return { now: () => t, advance: (ms: number) => (t += ms) };
+}
+
+describe('RateLimiter', () => {
+  it('allows up to perMinute messages, then denies with a retryAfter', () => {
+    const clock = fakeClock();
+    const rl = new RateLimiter(CFG, clock.now);
+    expect(rl.check('u1', 1).allowed).toBe(true);
+    expect(rl.check('u1', 1).allowed).toBe(true);
+    expect(rl.check('u1', 1).allowed).toBe(true);
+    const denied = rl.check('u1', 1);
+    expect(denied.allowed).toBe(false);
+    expect(denied.reason).toContain('minute');
+    expect(denied.retryAfterSec).toBeGreaterThan(0);
+  });
+
+  it('resets the per-minute window after 60s', () => {
+    const clock = fakeClock();
+    const rl = new RateLimiter(CFG, clock.now);
+    rl.check('u1', 1);
+    rl.check('u1', 1);
+    rl.check('u1', 1);
+    expect(rl.check('u1', 1).allowed).toBe(false);
+    clock.advance(60_000);
+    expect(rl.check('u1', 1).allowed).toBe(true);
+  });
+
+  it('isolates users from each other', () => {
+    const clock = fakeClock();
+    const rl = new RateLimiter(CFG, clock.now);
+    rl.check('u1', 1);
+    rl.check('u1', 1);
+    rl.check('u1', 1);
+    expect(rl.check('u1', 1).allowed).toBe(false);
+    expect(rl.check('u2', 1).allowed).toBe(true);
+  });
+
+  it('denies when the estimated tokens would exceed the per-user daily budget', () => {
+    const clock = fakeClock();
+    const rl = new RateLimiter(CFG, clock.now);
+    rl.record('u1', 900); // already spent 900 of 1000
+    const d = rl.check('u1', 200); // 900 + 200 > 1000
+    expect(d.allowed).toBe(false);
+    expect(d.reason).toContain('per-user daily token');
+  });
+
+  it('denies when estimated tokens would exceed the global daily ceiling', () => {
+    const clock = fakeClock();
+    const rl = new RateLimiter(CFG, clock.now);
+    rl.record('whoever', 4900); // global now 4900 of 5000
+    const d = rl.check('u1', 200); // 4900 + 200 > 5000
+    expect(d.allowed).toBe(false);
+    expect(d.reason).toContain('global daily token');
+  });
+
+  it('record() accumulates user + global token spend and resets after 24h', () => {
+    const clock = fakeClock();
+    const rl = new RateLimiter(CFG, clock.now);
+    rl.record('u1', 500);
+    expect(rl.check('u1', 600).allowed).toBe(false); // 500 + 600 > 1000
+    clock.advance(86_400_000); // +24h
+    expect(rl.check('u1', 600).allowed).toBe(true); // window reset
+  });
+});
