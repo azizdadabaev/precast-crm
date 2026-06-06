@@ -21,13 +21,14 @@ export function isValidServiceToken(
 }
 
 /** Extract the token from an `Authorization: Bearer <token>` header value. */
+const BEARER_PREFIX = 'Bearer ';
+
 export function serviceTokenFromAuthHeader(
   headerValue: string | null | undefined,
 ): string | null {
   if (!headerValue) return null;
-  const prefix = 'Bearer ';
-  if (!headerValue.startsWith(prefix)) return null;
-  const token = headerValue.slice(prefix.length).trim();
+  if (!headerValue.startsWith(BEARER_PREFIX)) return null;
+  const token = headerValue.slice(BEARER_PREFIX.length).trim();
   return token.length > 0 ? token : null;
 }
 

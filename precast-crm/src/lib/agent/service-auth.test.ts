@@ -40,6 +40,12 @@ describe('serviceTokenFromAuthHeader', () => {
     expect(serviceTokenFromAuthHeader(null)).toBeNull();
     expect(serviceTokenFromAuthHeader(undefined)).toBeNull();
   });
+
+  it('returns null for non-Bearer schemes and case-mismatched prefix', () => {
+    expect(serviceTokenFromAuthHeader('Basic abc123')).toBeNull();
+    expect(serviceTokenFromAuthHeader('bearer abc123')).toBeNull(); // case-sensitive
+    expect(serviceTokenFromAuthHeader('BEARER abc123')).toBeNull();
+  });
 });
 
 describe('authorizeServiceRequest', () => {
