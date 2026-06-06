@@ -232,3 +232,77 @@ export async function tgDownloadFile(filePath: string): Promise<Buffer> {
   if (!res.ok) throw new Error(`Telegram file download failed: ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
 }
+
+export interface InlineButton {
+  text: string;
+  callback_data: string;
+}
+
+/**
+ * Send a plain message (NOT via a business connection) with an inline keyboard —
+ * used to post the staff [Approve]/[Reject] card to the internal staff group.
+ * Token is server-only; never logged.
+ */
+export async function tgSendMessageWithInlineKeyboard(
+  chatId: string,
+  text: string,
+  inlineKeyboard: InlineButton[][],
+): Promise<{ messageId: string }> {
+  const res = await fetch(apiUrl("sendMessage"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      reply_markup: { inline_keyboard: inlineKeyboard },
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram sendMessage(keyboard) failed: ${json.description ?? res.status}`);
+  return { messageId: String(json.result.message_id) };
+}
+
+/**
+ * Acknowledge a callback_query (stops the button's loading spinner; optional
+ * toast to the staff member). Must be called once per callback within ~15s.
+ */
+export async function tgAnswerCallbackQuery(
+  callbackQueryId: string,
+  opts?: { text?: string; showAlert?: boolean },
+): Promise<void> {
+  const res = await fetch(apiUrl("answerCallbackQuery"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      callback_query_id: callbackQueryId,
+      ...(opts?.text ? { text: opts.text } : {}),
+      ...(opts?.showAlert ? { show_alert: true } : {}),
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram answerCallbackQuery failed: ${json.description ?? res.status}`);
+}
+
+/**
+ * Replace a message's text (e.g. mark the staff card "✅ Approved by …"). Pass
+ * `inlineKeyboard: []` to remove the buttons after a decision.
+ */
+export async function tgEditMessageText(
+  chatId: string,
+  messageId: string,
+  text: string,
+  opts?: { inlineKeyboard?: InlineButton[][] },
+): Promise<void> {
+  const res = await fetch(apiUrl("editMessageText"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: Number(messageId),
+      text,
+      ...(opts?.inlineKeyboard ? { reply_markup: { inline_keyboard: opts.inlineKeyboard } } : {}),
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram editMessageText failed: ${json.description ?? res.status}`);
+}

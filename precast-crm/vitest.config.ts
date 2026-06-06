@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["tests/**/*.test.ts", "src/sandbox/**/__tests__/*.test.ts", "src/lib/agent/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "src/sandbox/**/__tests__/*.test.ts", "src/lib/agent/**/*.test.ts", "src/lib/telegram/**/*.test.ts"],
   },
   resolve: {
     alias: {
