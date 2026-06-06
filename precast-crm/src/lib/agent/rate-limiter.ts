@@ -16,7 +16,7 @@ export interface RateDecision {
   retryAfterSec?: number;
 }
 
-interface Window {
+interface CountWindow {
   start: number;
   count: number;
 }
@@ -26,10 +26,12 @@ const HOUR = 3_600_000;
 const DAY = 86_400_000;
 
 export class RateLimiter {
-  private perMinute = new Map<string, Window>();
-  private perHour = new Map<string, Window>();
-  private userTokensDay = new Map<string, Window>();
-  private globalTokensDay: Window = { start: 0, count: 0 };
+  // Entries accumulate one-per-userId until process restart; acceptable until
+  // a later plan swaps this for a shared (Redis/Postgres) store.
+  private perMinute = new Map<string, CountWindow>();
+  private perHour = new Map<string, CountWindow>();
+  private userTokensDay = new Map<string, CountWindow>();
+  private globalTokensDay: CountWindow = { start: 0, count: 0 };
 
   constructor(
     private cfg: RateLimitConfig,
@@ -40,6 +42,11 @@ export class RateLimiter {
    * Call BEFORE any paid model call. `estTokens` is a rough estimate of this
    * turn's spend; it gates against the daily budgets without recording.
    * Message-rate windows ARE incremented here (one check == one message).
+   *
+   * Order is intentional: the per-minute/per-hour message gates run (and
+   * increment) BEFORE the token-budget gates. So an inbound message still
+   * consumes a message slot even if the call is ultimately denied by the
+   * token budget — an abuser cannot dodge rate limits by exhausting tokens.
    */
   check(userId: string, estTokens: number): RateDecision {
     const t = this.now();
@@ -70,13 +77,13 @@ export class RateLimiter {
     this.globalWindow(t).count += actualTokens;
   }
 
-  private bump(map: Map<string, Window>, key: string, t: number, windowMs: number): Window {
+  private bump(map: Map<string, CountWindow>, key: string, t: number, windowMs: number): CountWindow {
     const w = this.window(map, key, t, windowMs);
     w.count += 1;
     return w;
   }
 
-  private window(map: Map<string, Window>, key: string, t: number, windowMs: number): Window {
+  private window(map: Map<string, CountWindow>, key: string, t: number, windowMs: number): CountWindow {
     let w = map.get(key);
     if (!w || t - w.start >= windowMs) {
       w = { start: t, count: 0 };
@@ -85,7 +92,7 @@ export class RateLimiter {
     return w;
   }
 
-  private globalWindow(t: number): Window {
+  private globalWindow(t: number): CountWindow {
     if (t - this.globalTokensDay.start >= DAY) this.globalTokensDay = { start: t, count: 0 };
     return this.globalTokensDay;
   }
@@ -95,6 +102,6 @@ function deny(reason: string, retryAfterSec: number): RateDecision {
   return { allowed: false, reason, retryAfterSec };
 }
 
-function remaining(w: Window, t: number, windowMs: number): number {
+function remaining(w: CountWindow, t: number, windowMs: number): number {
   return Math.max(1, Math.ceil((w.start + windowMs - t) / 1000));
 }

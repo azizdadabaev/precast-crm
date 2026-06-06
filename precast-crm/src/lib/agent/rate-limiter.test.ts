@@ -25,6 +25,7 @@ describe('RateLimiter', () => {
     expect(denied.allowed).toBe(false);
     expect(denied.reason).toContain('minute');
     expect(denied.retryAfterSec).toBeGreaterThan(0);
+    expect(denied.retryAfterSec).toBeLessThanOrEqual(60);
   });
 
   it('resets the per-minute window after 60s', () => {
@@ -73,5 +74,21 @@ describe('RateLimiter', () => {
     expect(rl.check('u1', 600).allowed).toBe(false); // 500 + 600 > 1000
     clock.advance(86_400_000); // +24h
     expect(rl.check('u1', 600).allowed).toBe(true); // window reset
+  });
+
+  it('denies when the per-hour cap is exceeded (independent of the minute cap)', () => {
+    const clock = fakeClock();
+    // High per-minute + big token budgets so ONLY the per-hour cap can fire.
+    const rl = new RateLimiter(
+      { perMinute: 1000, perHour: 10, userDailyTokens: 1_000_000, globalDailyTokens: 1_000_000 },
+      clock.now,
+    );
+    for (let i = 0; i < 10; i++) {
+      expect(rl.check('u1', 1).allowed).toBe(true);
+    }
+    const denied = rl.check('u1', 1); // 11th within the hour
+    expect(denied.allowed).toBe(false);
+    expect(denied.reason).toContain('hour');
+    expect(denied.retryAfterSec).toBeGreaterThan(0);
   });
 });
