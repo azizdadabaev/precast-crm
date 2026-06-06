@@ -18,7 +18,7 @@ const MAX_CALLBACK_BYTES = 64; // Telegram hard limit on callback_data
  * practice — it guards against a future id-format change).
  */
 export function encodeApprovalCallback(action: ApprovalAction, pendingOrderId: string): string {
-  if (!pendingOrderId) throw new Error('pendingOrderId is required');
+  if (!pendingOrderId) throw new Error('encodeApprovalCallback: pendingOrderId is required');
   const data = `${action}${SEP}${pendingOrderId}`;
   if (Buffer.byteLength(data, 'utf8') > MAX_CALLBACK_BYTES) {
     throw new Error(`callback_data exceeds ${MAX_CALLBACK_BYTES} bytes`);

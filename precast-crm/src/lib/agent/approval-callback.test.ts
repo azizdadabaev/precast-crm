@@ -28,6 +28,11 @@ describe('parseApprovalCallback', () => {
     expect(parseApprovalCallback(data)).toEqual({ action: 'reject', pendingOrderId: 'cuid_xyz' });
   });
 
+  it('round-trips an id that contains a colon (parser splits on the first colon only)', () => {
+    const data = encodeApprovalCallback('approve', 'ns:cuid_abc');
+    expect(parseApprovalCallback(data)).toEqual({ action: 'approve', pendingOrderId: 'ns:cuid_abc' });
+  });
+
   it('returns null for unrelated / malformed callback_data (so other callbacks are ignored)', () => {
     expect(parseApprovalCallback(null)).toBeNull();
     expect(parseApprovalCallback(undefined)).toBeNull();
