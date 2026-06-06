@@ -17,7 +17,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Plus, Search, Send, X } from "lucide-react";
+import { Plus, Search, Send, X, Trash2, Loader2 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { formatPhone } from "@/lib/phone";
@@ -38,10 +38,13 @@ interface Client {
 
 export default function ClientsPage() {
   const t = useT();
+  const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [language, setLanguage] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exportOpen, setExportOpen] = useState(false);
+  const [toDelete, setToDelete] = useState<Client | null>(null);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   const { data: clients = [], isLoading } = useQuery<Client[]>({
     queryKey: ["clients", q, language],
@@ -51,6 +54,29 @@ export default function ClientsPage() {
       if (language) params.set("language", language);
       return api(`/api/clients?${params.toString()}`);
     },
+  });
+
+  // Permission check — only the owner sees the per-row delete button.
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canDelete = me?.permissions?.includes("client.delete") ?? false;
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch("/api/clients/" + id, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      return json as { deleted: boolean };
+    },
+    onSuccess: () => {
+      setToDelete(null);
+      setDeleteErr(null);
+      qc.invalidateQueries({ queryKey: ["clients"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (e: Error) => setDeleteErr(e.message),
   });
 
   // Clear selection whenever filters change — operators should re-confirm
@@ -207,6 +233,7 @@ export default function ClientsPage() {
                   <th className="text-left px-3 py-2.5">{t("Манба", "Source")}</th>
                   <th className="text-right px-3 py-2.5">{t("Буюртма", "Orders")}</th>
                   <th className="text-left px-3 py-2.5">{t("Қўшилди", "Added")}</th>
+                  {canDelete && <th className="px-3 py-2.5 w-10" />}
                 </tr>
               </thead>
               <tbody>
@@ -261,6 +288,22 @@ export default function ClientsPage() {
                       <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
                         {formatDate(c.createdAt)}
                       </td>
+                      {canDelete && (
+                        <td className="px-3 py-2.5 w-10 text-center">
+                          <button
+                            type="button"
+                            title={t("Мижозни ўчириш", "Delete client")}
+                            className="text-text-tertiary hover:text-destructive transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteErr(null);
+                              setToDelete(c);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -275,6 +318,58 @@ export default function ClientsPage() {
         ids={selectedIds}
         onClose={() => setExportOpen(false)}
       />
+
+      {/* Single-client delete confirmation modal (owner-only). Strongest
+          warning — deleting a client cascades to all their orders/projects/deals. */}
+      {toDelete && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setToDelete(null)}
+        >
+          <div
+            className="bg-card rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3 border border-destructive/40"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-destructive">
+              Мижозни ўчириш<span className="lang-en font-normal"> · Delete client</span>
+            </h2>
+            <p className="text-sm text-foreground">
+              {t(
+                `${toDelete.name} ва унинг БАРЧА буюртмалари, лойиҳалари ва битимлари ўчирилади. Бу амални орқага қайтариб бўлмайди.`,
+                `${toDelete.name} and ALL their orders, projects and deals will be permanently deleted.`,
+              )}
+            </p>
+            {deleteErr && (
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+                {deleteErr}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setToDelete(null)}
+                disabled={deleteMutation.isPending}
+              >
+                {t("Бекор қилиш", "Cancel")}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(toDelete.id)}
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                {t("Ўчириш", "Delete")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

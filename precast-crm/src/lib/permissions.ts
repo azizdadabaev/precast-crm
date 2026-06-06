@@ -27,8 +27,9 @@ export const ACTIONS = [
   "order.create",
   "order.edit",
   "order.cancel",
+  "order.delete", // owner-only · hard-delete an order + its children (events, payments, dispatch…)
   "order.exportBackup", // owner-only · download Excel snapshot of all orders
-  "project.delete", // owner-only · bulk-delete draft projects
+  "project.delete", // owner-only · delete saved/draft projects (+ their order)
   "audit.view", // owner-only · view system-wide audit log
   "pricing.edit", // owner-only · edit m² + extra-beam tier prices
   "comment.moderate", // ADMIN/OWNER · delete any user's comment on orders/drafts
@@ -39,6 +40,7 @@ export const ACTIONS = [
   "client.create",
   "client.edit",
   "client.export", // export contacts list
+  "client.delete", // owner-only · hard-delete a client + its orders/projects
 
   // Payments
   "payment.view",
@@ -105,6 +107,7 @@ export const PERMISSION_GROUPS: Array<{
       "order.create",
       "order.edit",
       "order.cancel",
+      "order.delete",
       "order.exportBackup",
       "project.delete",
       "audit.view",
@@ -121,6 +124,7 @@ export const PERMISSION_GROUPS: Array<{
       "client.create",
       "client.edit",
       "client.export",
+      "client.delete",
     ],
   },
   {
@@ -182,6 +186,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "order.create": "Янги буюртма яратиш · Create orders",
   "order.edit": "Буюртмаларни таҳрирлаш · Edit orders",
   "order.cancel": "Буюртмани бекор қилиш · Cancel orders",
+  "order.delete": "Буюртмани бутунлай ўчириш · Delete order permanently",
   "order.exportBackup": "Буюртмалар захираси (Excel) · Export orders backup (Excel)",
   "project.delete": "Сақланган лойиҳаларни ўчириш · Delete saved projects",
   "audit.view": "Журнал · View audit log",
@@ -192,6 +197,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "client.create": "Янги мижоз қўшиш · Add clients",
   "client.edit": "Мижозларни таҳрирлаш · Edit clients",
   "client.export": "Мижозлар рўйхатини экспорт · Export client list",
+  "client.delete": "Мижозни бутунлай ўчириш · Delete client permanently",
   "payment.view": "Тўловларни кўриш · View payments",
   "payment.record": "Тўловни киритиш · Record payments",
   "payment.confirm": "Тўловни тасдиқлаш · Confirm payments",
@@ -228,6 +234,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "order.create",
     "order.edit",
     "order.cancel",
+    "order.delete",
     "order.exportBackup",
     "project.delete",
     "audit.view",
@@ -238,6 +245,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "client.create",
     "client.edit",
     "client.export",
+    "client.delete",
     "payment.view",
     "payment.record",
     "payment.confirm",

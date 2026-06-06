@@ -42,6 +42,10 @@ export default function ProjectsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Single-row delete (uses /api/projects/[id], so it can also remove a
+  // project that already became an order — unlike the DRAFT-only bulk delete).
+  const [toDelete, setToDelete] = useState<Project | null>(null);
+  const [rowErrorMsg, setRowErrorMsg] = useState<string | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["projects", status, q],
@@ -114,6 +118,21 @@ export default function ProjectsPage() {
       qc.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (e: Error) => setErrorMsg(e.message),
+  });
+
+  const deleteOneMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch("/api/projects/" + id, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      return json as { deleted: boolean };
+    },
+    onSuccess: () => {
+      setToDelete(null);
+      setRowErrorMsg(null);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (e: Error) => setRowErrorMsg(e.message),
   });
 
   return (
@@ -261,6 +280,7 @@ export default function ProjectsPage() {
                 <th className="text-right px-3 py-2">Сумма<span className="lang-en"> · Subtotal</span></th>
                 <th className="text-left px-3 py-2">{t("Ҳолат", "Status")}</th>
                 <th className="text-left px-3 py-2">{t("Янгиланди", "Updated")}</th>
+                {canDelete && <th className="px-3 py-2 w-8" />}
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -339,6 +359,22 @@ export default function ProjectsPage() {
                     <td className="px-3 py-2 text-muted-foreground text-xs">
                       {formatDate(p.updatedAt)}
                     </td>
+                    {canDelete && (
+                      <td className="px-3 py-2 w-8">
+                        <button
+                          type="button"
+                          title={t("Лойиҳани ўчириш", "Delete project")}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRowErrorMsg(null);
+                            setToDelete(p);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -386,6 +422,57 @@ export default function ProjectsPage() {
                 }
               >
                 {deleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                {t("Ўчириш", "Delete")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single-row delete confirmation modal */}
+      {toDelete && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setToDelete(null)}
+        >
+          <div
+            className="bg-card rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3 border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold">
+              Лойиҳани ўчириш<span className="lang-en font-normal"> · Delete project</span>
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                "Лойиҳа ва (агар бўлса) унинг буюртмаси ўчирилади.",
+                "The project and its order (if any) will be permanently deleted.",
+              )}
+            </p>
+            {rowErrorMsg && (
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+                {rowErrorMsg}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setToDelete(null)}
+                disabled={deleteOneMutation.isPending}
+              >
+                {t("Бекор қилиш", "Cancel")}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                disabled={deleteOneMutation.isPending}
+                onClick={() => deleteOneMutation.mutate(toDelete.id)}
+              >
+                {deleteOneMutation.isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />

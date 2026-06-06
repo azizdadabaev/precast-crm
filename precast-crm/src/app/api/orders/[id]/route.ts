@@ -7,6 +7,7 @@ import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
+import { deleteOrderCascade } from "@/lib/record-delete";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 import {
   calcSnapshotToInventoryLines,
@@ -240,3 +241,32 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
 
   return ok(updated);
 });
+
+/**
+ * DELETE /api/orders/[id] — order.delete (owner-only).
+ * Hard-removes the order and everything that belongs to it (events,
+ * payments, dispatch, shipments, discrepancies, comments, photos). This
+ * is for clearing test data — the normal lifecycle uses /cancel, not delete.
+ */
+export const DELETE = withPermission<Params>(
+  "order.delete",
+  async (_req: NextRequest, { params, user }) => {
+    const order = await prisma.order.findUnique({
+      where: { id: params.id },
+      select: { id: true, orderNumber: true },
+    });
+    if (!order) return fail("Order not found", 404);
+
+    await prisma.$transaction((tx) => deleteOrderCascade(tx, order.id));
+
+    recordAudit({
+      userId: user.id,
+      action: "order.delete",
+      targetType: "order",
+      targetId: order.id,
+      message: `Deleted order ${order.orderNumber} permanently`,
+      metadata: { orderNumber: order.orderNumber },
+    });
+    return ok({ deleted: true });
+  },
+);

@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { ClientUpdateSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { recordAudit } from "@/lib/audit";
+import { deleteClientCascade } from "@/lib/record-delete";
 
 type Ctx = { params: { id: string } };
 
@@ -49,9 +51,27 @@ export const PATCH = withPermission<Ctx["params"]>(
 );
 
 export const DELETE = withPermission<Ctx["params"]>(
-  "client.edit",
-  async (_req: NextRequest, { params }) => {
-    await prisma.client.delete({ where: { id: params.id } });
+  "client.delete",
+  async (_req: NextRequest, { params, user }) => {
+    const client = await prisma.client.findUnique({
+      where: { id: params.id },
+      select: { id: true, name: true },
+    });
+    if (!client) return fail("Client not found", 404);
+
+    // Owner-only hard delete used to clear test data: removes the client
+    // along with its orders, projects (+ calculations), deals, and any
+    // gazoblok orders.
+    await prisma.$transaction((tx) => deleteClientCascade(tx, client.id));
+
+    recordAudit({
+      userId: user.id,
+      action: "client.delete",
+      targetType: "client",
+      targetId: client.id,
+      message: `Deleted client ${client.name} (+ orders, projects, deals)`,
+      metadata: { clientId: client.id },
+    });
     return ok({ deleted: true });
   },
 );

@@ -1,14 +1,14 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/fetcher";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { ChevronLeft, ChevronRight, Search, X, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X, Download, Trash2, Loader2 } from "lucide-react";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { paidVariant } from "@/lib/order-display";
@@ -112,6 +112,9 @@ function OrdersList() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const qc = useQueryClient();
+  const [toDelete, setToDelete] = useState<Order | null>(null);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   // All filter state lives in the URL so pressing Back restores it exactly.
   const q      = searchParams.get("q") ?? "";
@@ -164,6 +167,23 @@ function OrdersList() {
     queryFn: () => api("/api/auth/me"),
   });
   const canExportBackup = me?.permissions?.includes("order.exportBackup") ?? false;
+  const canDelete = me?.permissions?.includes("order.delete") ?? false;
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch("/api/orders/" + id, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to delete");
+      return json as { deleted: boolean };
+    },
+    onSuccess: () => {
+      setToDelete(null);
+      setDeleteErr(null);
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+    onError: (e: Error) => setDeleteErr(e.message),
+  });
 
   // New-order chime. We ring it only when an orderId appears that wasn't
   // in the previous successful fetch — the very first load is treated as
@@ -325,6 +345,7 @@ function OrdersList() {
                   <th className="text-left px-3 py-2.5 w-36 whitespace-nowrap">{t("Ҳолат", "Status")}</th>
                   <th className="text-left px-3 py-2.5 w-28 whitespace-nowrap">{t("Тўлов", "Payment")}</th>
                   <th className="text-left px-3 py-2.5 w-32 whitespace-nowrap">{t("Жадвал", "Scheduled")}</th>
+                  {canDelete && <th className="px-3 py-2.5 w-10" />}
                 </tr>
               </thead>
               <tbody>
@@ -397,6 +418,22 @@ function OrdersList() {
                       <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary whitespace-nowrap">
                         {formatDate(o.scheduledAt)}
                       </td>
+                      {canDelete && (
+                        <td className="px-3 py-2.5 w-10 text-center">
+                          <button
+                            type="button"
+                            title={t("Буюртмани ўчириш", "Delete order")}
+                            className="text-text-tertiary hover:text-destructive transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteErr(null);
+                              setToDelete(o);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -438,6 +475,57 @@ function OrdersList() {
           </div>
         )}
       </div>
+
+      {/* Single-order delete confirmation modal (owner-only) */}
+      {toDelete && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setToDelete(null)}
+        >
+          <div
+            className="bg-card rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3 border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold">
+              Буюртмани ўчириш<span className="lang-en font-normal"> · Delete order</span>
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                `Буюртма #${toDelete.orderNumber} ва унга боғлиқ барча маълумотлар бутунлай ўчирилади. Орқага қайтариб бўлмайди.`,
+                `Order #${toDelete.orderNumber} and all its data will be permanently deleted.`,
+              )}
+            </p>
+            {deleteErr && (
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+                {deleteErr}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setToDelete(null)}
+                disabled={deleteMutation.isPending}
+              >
+                {t("Бекор қилиш", "Cancel")}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate(toDelete.id)}
+              >
+                {deleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                {t("Ўчириш", "Delete")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
