@@ -86,4 +86,11 @@ describe('tgEditMessageText', () => {
     mockFetchOnce({ ok: false, description: 'message not found' });
     await expect(tgEditMessageText('c', '1', 'x')).rejects.toThrow(/editMessageText/);
   });
+
+  it('omits reply_markup when opts is undefined', async () => {
+    const fn = mockFetchOnce({ ok: true, result: { message_id: 7 } });
+    await tgEditMessageText('chat-1', '7', 'plain');
+    const body = lastBody(fn);
+    expect(body.reply_markup).toBeUndefined();
+  });
 });

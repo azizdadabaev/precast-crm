@@ -258,7 +258,7 @@ export async function tgSendMessageWithInlineKeyboard(
     }),
   });
   const json = await res.json();
-  if (!json.ok) throw new Error(`Telegram sendMessage(keyboard) failed: ${json.description ?? res.status}`);
+  if (!json.ok) throw new Error(`Telegram sendMessage failed: ${json.description ?? res.status}`);
   return { messageId: String(json.result.message_id) };
 }
 
@@ -293,14 +293,18 @@ export async function tgEditMessageText(
   text: string,
   opts?: { inlineKeyboard?: InlineButton[][] },
 ): Promise<void> {
+  const messageIdNum = Number(messageId);
+  if (!Number.isFinite(messageIdNum)) {
+    throw new Error(`tgEditMessageText: invalid messageId "${messageId}"`);
+  }
   const res = await fetch(apiUrl("editMessageText"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      message_id: Number(messageId),
+      message_id: messageIdNum,
       text,
-      ...(opts?.inlineKeyboard ? { reply_markup: { inline_keyboard: opts.inlineKeyboard } } : {}),
+      ...(opts?.inlineKeyboard !== undefined ? { reply_markup: { inline_keyboard: opts.inlineKeyboard } } : {}),
     }),
   });
   const json = await res.json();
