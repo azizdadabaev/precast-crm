@@ -1097,8 +1097,8 @@ model Conversation {
   lastMessageAt        DateTime
   lastSnippet          String              @default("")
   unread               Boolean             @default(true)
-  aiState              ConversationAiState @default(AI_HANDLING)
-  aiPaused             Boolean             @default(false)
+  aiState              ConversationAiState @default(AI_HANDLING) // who is driving this chat — see ConversationAiState
+  aiPaused             Boolean             @default(false) // transient mute (e.g. owner started typing in the real Telegram app); can be true even while aiState=AI_HANDLING. aiState stays the authoritative lifecycle.
   createdAt            DateTime            @default(now())
   messages             Message[]
   pendingOrders        PendingOrder[]
