@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — model registry + LlmProvider core shipped).
+**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — LlmProvider + 3 clients shipped).
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -31,7 +31,7 @@ Then start a Claude session and say: **"continue the AI agent build — Plan 6"*
 | 05 | Guardrail text screening (outbound validator + inbound screen) | ✅ DONE |
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
-| 08 | **Integration: LlmProvider + clients · agent loop + guardrail wiring · Gemini voice STT · `/api/agent/approve` webhook** | 🚧 Tasks 1 (registry) + 2a (LlmProvider core + adapters) DONE |
+| 08 | **Integration: LlmProvider + clients · agent loop + guardrail wiring · Gemini voice STT · `/api/agent/approve` webhook** | 🚧 Tasks 1 (registry) + 2 (LlmProvider + 3 clients) DONE; loop + webhook next |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
@@ -72,7 +72,12 @@ Plus: Telegram inline-keyboard + callback Bot-API wrappers appended to `precast-
 **Plan 08 Task 2a (DONE) — the provider-agnostic LlmProvider core:**
 - `precast-crm/src/lib/agent/llm/provider.ts` — the `LlmProvider` interface (`generate` / optional `transcribe`) + agnostic types (`GenerateRequest`/`GenerateResult`, `LlmMessage`, `LlmToolCall`, `LlmToolChoice`). The loop talks only to this; the Shadow bake-off swaps clients behind it.
 - `precast-crm/src/lib/agent/llm/adapters.ts` (+ test, 18 cases) — PURE translation for Claude/Gemini/OpenAI: tools, tool_choice (incl. force-a-tool), and response normalization, plus `buildClaudeRequest` encoding the verified Claude mechanics from the claude-api skill (`cache_control {ttl:'1h'}` on last tool + system block; render order tools→system→messages; `tool_choice` forcing; adaptive thinking; **no** temperature/top_p/top_k — they 400 on Opus 4.8; caching verified via `cache_read_input_tokens`).
-- **Task 2b NEXT:** the concrete clients (`claude.ts` via official `@anthropic-ai/sdk` — `npm i` needed; `gemini.ts` incl. voice STT; `openai.ts`). They're thin pass-throughs over the Task-2a adapters; need a provider key to validate live.
+**Plan 08 Task 2b (DONE) — the three concrete clients + factory:**
+- `precast-crm/src/lib/agent/llm/claude.ts` (official `@anthropic-ai/sdk`), `gemini.ts` (`@google/genai`, incl. `transcribe()` voice STT), `openai.ts` (`openai`, `max_completion_tokens`), `factory.ts` (`createProvider` / `createProviderByKey` / `createTranscriptionProvider`). Tests in `clients.test.ts`. `adapters.ts` gained `toGeminiContents`/`toOpenAIMessages` (tool round-trip).
+- All clients take an **injectable SDK client** → unit-tested without keys (37 LLM tests). The three SDKs are now in `package.json`.
+- ⚠️ **Not yet validated against a live API** — needs a provider key. Gemini (incl. voice STT) is validatable first (Google access). Then confirm Claude caching hits via `usage.cache_read_input_tokens`.
+- 💡 Side effect: the `npm install` regenerated the Prisma client, so `npx tsc --noEmit` is now **fully clean** (the prior ~40 stale-client errors are gone).
+- **Tasks 3–6 NEXT:** system-prompt/KB assembly, the agent loop (forcing a quote tool on price turns + guardrail wiring), the `/api/agent/approve` webhook, and the guarded live-webhook entry (Shadow).
 
 ## Plan 08 (in progress) — scope + cautions
 The integration plan — wires everything built so far into a running agent. Heaviest since Plan 06; touches the live Telegram webhook. **Task 1 (model registry) is done** (above); Tasks 2–6 below remain.
