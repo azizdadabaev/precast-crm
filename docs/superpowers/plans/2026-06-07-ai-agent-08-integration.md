@@ -67,8 +67,10 @@
 - Reviewed (safety): confirmed no send path exists in the whole agent tree (read-only tools, loop returns a decision); gate read before any model work; default OFF; webhook can't be broken by the agent. **Validatable now on `npm run dev`** once `agent.runtime.enabled=true` is set in AppConfig (proposals appear in the `[agent:shadow]` logs).
 - **Deferred:** auto-send (Plan 09 rollout); Telegram 429/retry_after handling lands with the send path (Task 5b/Plan 09).
 
-### Task 5b (NEXT) — Approval route + Action Card posting
-See Task 5 above — the `callback_query` routing into `decidePendingOrder` and the staff Action Card posting (+ the loop's `request_approval`/`draft_order` seam) are the remaining write-action wiring.
+### Task 5b (DONE — built/tested; propose-execution staged to Plan 09)
+- ✅ Wired live: `src/app/api/telegram/webhook/route.ts` routes `callback_query` → `handleApprovalCallback` (`approval-webhook.ts`) → `decidePendingOrder` (answer + card-edit + customer commit-confirmation). Tested.
+- ✅ Built + tested: the loop's `request_approval` decision (`loop.ts` `REQUEST_APPROVAL_TOOL`) and `proposeOrder`/`formatActionCard` (`propose-order.ts`: `draft_order` → `AWAITING_STAFF` → staff `[Approve][Reject]` card). `.env.example` gained `AGENT_STAFF_CHAT_ID`.
+- ⏸ `proposeOrder` is intentionally NOT reachable from the Shadow path — Shadow logs a `request_approval` decision but writes nothing (spec §14 zero write-action leakage). It activates with the write-capable rollout mode (Plan 09). Pre-go-live: decide whether the staff tap needs CRM-identity auth (currently authorized by Telegram staff-group membership; `decidedById: null`).
 
 ---
 

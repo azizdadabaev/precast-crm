@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — agent runs in Shadow on the live webhook).
+**Last updated:** 2026-06-07 (Plans 01–08 built; agent runs in Shadow on the live webhook. Plan 09 = rollout/UX next).
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -31,7 +31,8 @@ Then start a Claude session and say: **"continue the AI agent build — Plan 6"*
 | 05 | Guardrail text screening (outbound validator + inbound screen) | ✅ DONE |
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
-| 08 | **Integration: LlmProvider + clients · agent loop · approval commit · live webhook (Shadow)** | 🚧 Tasks 1–4 + 5a + 6 DONE; only 5b (approval route + Action Card) left |
+| 08 | Integration: LlmProvider + clients · agent loop · approval commit + callback · live webhook (Shadow) | ✅ DONE (built/tested; write-action activation staged to Plan 09) |
+| 09 | **Rollout: inbox 4-state HITL UX · KB editor · write-action + auto-send activation · voice/vision wiring · eval + shadow bake-off + native-Uzbek review** | ⬅ NEXT |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
@@ -87,7 +88,7 @@ Plus: Telegram inline-keyboard + callback Bot-API wrappers appended to `precast-
 - ⚠️ Loop is tested with a fake provider; **live model behavior validated once the webhook (Task 6) is wired + keys are in `.env.local`** (all 3 keys now configured).
 
 **Plan 08 Task 5a (DONE) — the approval commit/reject service:**
-- `precast-crm/src/lib/agent/approve-order.ts` (+ test, 13 cases) — `decidePendingOrder`: staff Approve re-verifies the quote_id's provenance (`ignoreExpiry`; forged/wrong-kind blocked), guards customer info, **atomically claims `AWAITING_STAFF→APPROVED`** and commits a real Order via Plan 06 `createOrder` (staff approver as actor), reverting on any failure (returned or thrown). Reject → `REJECTED` + `Conversation.aiState=HUMAN_ACTIVE`. Idempotent + race-safe (exactly one Order under concurrent taps, asserted). `makeApproveDb()` is the Prisma impl (conditional `updateMany`).
+- `precast-crm/src/lib/agent/approve-order.ts` (+ test, 13 cases) — `decidePendingOrder`: staff Approve re-verifies the quote_id's provenance (`ignoreExpiry`; forged/wrong-kind blocked), guards customer info, **atomically claims `AWAITING_STAFF→APPROVED`** and commits a real Order via Plan 06 `createOrder` with a **system actor (`userId: null`)** — the Telegram tapper isn't a CRM user — reverting on any failure (returned or thrown). Reject → `REJECTED` + `Conversation.aiState=HUMAN_ACTIVE`. Idempotent + race-safe (exactly one Order under concurrent taps, asserted). `makeApproveDb()` is the Prisma impl (conditional `updateMany`).
 - `quote-token.ts` gained `ignoreExpiry` (commit-path provenance check). Reviewed by spec + code-quality subagents: fixed a real throw-doesn't-revert bug, tightened the approve claim to `AWAITING_STAFF`, added the concurrency + throw tests. No blockers.
 - Decisions (documented): order re-priced live at placement (frozen quote price not reused); `scheduledAt` placeholder = approval time (staff set the real delivery date); single-room agent orders.
 **Plan 08 Task 6 (DONE) — agent runs in Shadow on the live webhook:**
@@ -95,15 +96,18 @@ Plus: Telegram inline-keyboard + callback Bot-API wrappers appended to `precast-
 - Reviewed: no send path exists anywhere in the agent tree; gate read first; default OFF; can't break inbox delivery.
 - ▶ **To see it on `npm run dev`:** set AppConfig `agent.runtime` = `{enabled:true, mode:'shadow'}`; proposed replies appear in the `[agent:shadow]` server logs (nothing is sent to customers). Needs the provider key in `.env.local` (all 3 configured).
 
-**Plan 08 Task 5b (ONLY REMAINING) — approval route + Action Card:**
-- Route `callback_query` → `decidePendingOrder` in the Telegram webhook (catch `telegramCallbackId` P2002 → no-op; answer callback; send customer confirmation on commit).
-- Post the staff Action Card (`request_approval`/`notify_staff` → `draft_order` → `[Approve][Reject]`) + add the loop's `request_approval` seam (the model detects customer agreement → draft + card). This closes the write-action propose→commit loop. Then Plan 09 (inbox UX, KB editor, eval/bake-off).
+**Plan 08 Task 5b (DONE — built/tested; propose-execution staged) — approval route + Action Card:**
+- ✅ **Wired live:** `callback_query` → `handleApprovalCallback` (`approval-webhook.ts`) → `decidePendingOrder` in the Telegram webhook (`route.ts` step before parse): answers the callback, edits the card to the outcome, sends the customer confirmation on commit. Tested (`approval-webhook.test.ts`, 4 cases).
+- ✅ **Loop seam + propose-execution BUILT + tested:** `request_approval` decision (`loop.ts` `REQUEST_APPROVAL_TOOL`) and `proposeOrder`/`formatActionCard`/`approvalKeyboard` (`propose-order.ts`: `draft_order` → `AWAITING_STAFF` → post `[Approve][Reject]` card). `.env.example` gained `AGENT_STAFF_CHAT_ID`.
+- ⏸ **Intentionally NOT wired to a live path** (and correct: Shadow must not write — spec §14 "zero write-action leakage"). In Shadow a `request_approval` decision is **logged only**. `proposeOrder` activates with the write-capable rollout mode (Plan 09 suggest/auto), which reads `AGENT_STAFF_CHAT_ID`. Same staged posture as `service-auth` (Plan 02) and `gemini.transcribe()` (voice STT) — built ahead of activation.
+- 🔒 **Pre-go-live decision (finding):** the staff tap is authorized only by Telegram staff-group membership (the tapper isn't a CRM user; `decidedById: null`). Decide before enabling write-actions whether CRM-identity auth on the approval is required.
 
-## Plan 08 (in progress) — scope + cautions
-The integration plan — wires everything built so far into a running agent. Heaviest since Plan 06; touches the live Telegram webhook. **Task 1 (model registry) is done** (above); Tasks 2–6 below remain.
-- **Approval webhook + DB handler:** `/api/agent/approve` — `callback_query` dispatch using the Plan 03 callback codec + keyboard wrappers; service-auth (Plan 02); flips `PendingOrder → APPROVED`/`REJECTED` (UNIQUE `telegramCallbackId` idempotency) and on approve calls `createOrder(input, { userId: null })` (Plan 06, service-account actor). Posts the staff Action Card (raw facts, not agent prose — spec §6 guardrail 3 / §10).
-- **`LlmProvider` abstraction + clients:** Claude (pinned snapshot, prompt caching `ttl:"1h"`, ≥4096-token cached prefix — spec §4.4), Gemini, OpenAI behind one interface (generate/vision/transcribe); **Gemini voice STT** as the fixed transcription step (spec §3/§4.5).
-- **Agent loop + guardrail wiring:** input-screen (Plan 05) → load history → call model with the Plan 07 toolset **forced on price turns** → dispatch tools (parallel where order-independent) → outbound validator (Plan 05) → auto-send vs HITL. 12-turn guard; rolling key-facts summary from ~turn 10 (spec §4.3).
+## Plan 08 — COMPLETE (all components built/tested; agent runs in Shadow on the live webhook)
+All Tasks 1–6 are built, tested, and wired to the extent Shadow allows. What remains is **rollout** (Plan 09), not Plan-08 construction:
+- **Activate write-actions** (wire `proposeOrder` behind a suggest/auto mode + `AGENT_STAFF_CHAT_ID`) and **customer auto-send** — both intentionally off in Shadow.
+- **Voice STT wiring** (`gemini.transcribe()` built; webhook is text-only) and photo/floor-plan vision.
+- **Live-API validation** of the 3 providers + pin dated model snapshots / re-verify pricing (`requiresSnapshotPin`).
+- Coherence-checked end-to-end (price-integrity + HITL chains hold; Shadow leaks nothing; kill-switch default OFF).
 - **Defer to Plan 09:** inbox 4-state HITL UX, KB editor, eval/shadow/bake-off.
 - Keep the pure-core + thin-shell pattern; reuse the existing primitives rather than re-implementing.
 
