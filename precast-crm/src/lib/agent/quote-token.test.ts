@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createHmac } from 'crypto';
 import { mintQuoteToken, verifyQuoteToken } from './quote-token';
 
 const SECRET = 'quote-secret-key';
@@ -28,7 +29,21 @@ describe('mintQuoteToken / verifyQuoteToken', () => {
   it('rejects an expired token (now > expiresAt) but accepts it before expiry', () => {
     const token = mintQuoteToken({ price: 1, expiresAt: 5000 }, SECRET);
     expect(verifyQuoteToken(token, SECRET, { now: 4999 })).toEqual({ price: 1, expiresAt: 5000 });
+    expect(verifyQuoteToken(token, SECRET, { now: 5000 })).toBeNull(); // exact boundary: >= rejects
     expect(verifyQuoteToken(token, SECRET, { now: 5001 })).toBeNull();
+  });
+
+  it('accepts a payload with no expiresAt regardless of now', () => {
+    const token = mintQuoteToken({ price: 42 }, SECRET);
+    expect(verifyQuoteToken(token, SECRET, { now: Number.MAX_SAFE_INTEGER })).toEqual({ price: 42 });
+  });
+
+  it('returns null when the body decodes but is not valid JSON (signature still valid)', () => {
+    const badBody = Buffer.from('not-json', 'utf8').toString('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const sig = createHmac('sha256', SECRET).update(badBody).digest().toString('base64')
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    expect(verifyQuoteToken(`${badBody}.${sig}`, SECRET)).toBeNull();
   });
 
   it('returns null for malformed / empty input and never throws', () => {

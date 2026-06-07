@@ -7,10 +7,12 @@
 
 import { createHmac, timingSafeEqual } from 'crypto';
 
+/** Encode a Buffer → URL-safe Base64 (no padding). */
 function b64url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+/** Decode URL-safe Base64 back to a Buffer. Never throws (ignores bad chars). */
 function fromB64url(s: string): Buffer {
   return Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 }
@@ -50,6 +52,8 @@ export function verifyQuoteToken<T = unknown>(
   const expectedSig = sign(body, secret);
   const a = Buffer.from(providedSig, 'utf8');
   const b = Buffer.from(expectedSig, 'utf8');
+  // HMAC-SHA256 base64url output is always 43 chars — a length mismatch means a
+  // structurally invalid token, not a secret-dependent branch (no timing oracle).
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
 
   let payload: unknown;
