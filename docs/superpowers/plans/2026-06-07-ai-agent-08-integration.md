@@ -22,17 +22,15 @@
 - **Before Shadow:** re-verify ids/prices (`PRICING_VERIFIED_AT`) and replace alias ids flagged `requiresSnapshotPin` with dated snapshots.
 
 ### Task 2 — `LlmProvider` abstraction + clients
-- `src/lib/agent/llm/provider.ts` — one interface the loop talks to, swappable per `AGENT_MODEL_KEY`:
-  ```ts
-  interface LlmProvider {
-    generate(req: GenerateRequest): Promise<GenerateResult>;   // messages + tools + system; returns text | tool_use[]
-    transcribe?(audio: AudioInput): Promise<string>;           // voice → text (Gemini only)
-  }
-  ```
-  Normalize tool-calling to a provider-agnostic shape: take the Plan 07 `AgentToolDefinition[]`, adapt to each vendor (Claude `input_schema` / Gemini functionDeclarations / OpenAI tools), and return a uniform `{ text, toolCalls: [{name, input, id}] }`.
-- Clients: `claude.ts`, `gemini.ts`, `openai.ts` — thin HTTP wrappers keyed off `models.ts`. **Claude prompt caching (spec §4.4):** order tools → system(identity+KB) → messages; `cache_control` on the last tool def + a system breakpoint; pass `ttl:"1h"`; ensure the cached prefix clears Opus 4.8's 4096-token minimum; assert via `usage.cache_read_input_tokens`. Gemini/OpenAI: their explicit context caching with the same stable-prefix discipline.
-- **Voice STT:** `gemini.transcribe()` is the fixed path (spec §3) — download the allowlisted voice note (Plan 01 media-allowlist) → Gemini → text into the loop. Quotes built from voice → human-checked (spec § quote review).
-- Tests: tool-definition→vendor-format adapters (pure, unit-tested); client request-building with a mocked fetch; a recorded tool_use round-trip.
+
+**Task 2a (DONE) — provider-agnostic core + adapters:**
+- `src/lib/agent/llm/provider.ts` — the `LlmProvider` interface (`generate` / optional `transcribe`) + provider-agnostic types (`GenerateRequest`/`GenerateResult`, `LlmMessage`, `LlmToolCall`, `LlmToolChoice`).
+- `src/lib/agent/llm/adapters.ts` (+ test) — PURE translation for all three vendors: `toClaudeTools`/`toGeminiTools`/`toOpenAITools`, `to{Claude,Gemini,OpenAI}ToolChoice`, `from{Claude,Gemini,OpenAI}Response`, plus `buildClaudeRequest` (the full Messages API body: `cache_control {ttl:'1h'}` on the last tool + system block, `tool_choice` forcing, adaptive thinking, **no** sampling params — they 400 on Opus 4.8) and `toClaudeMessages`. Fully unit-tested (18 cases), no SDK/keys needed.
+
+**Task 2b (NEXT) — the concrete clients (need a key to validate live):**
+- `claude.ts` — `new Anthropic().messages.create(buildClaudeRequest(req, model))` → `fromClaudeResponse`. Use the **official `@anthropic-ai/sdk`** (`npm i @anthropic-ai/sdk`), per the claude-api skill. Verify caching via `usage.cache_read_input_tokens`; ensure the cached prefix clears Opus 4.8's 4096-token minimum.
+- `gemini.ts` (+ `transcribe()` voice STT, spec §3) and `openai.ts` — thin wrappers composing the Task-2a adapters with each vendor SDK; their message/generationConfig assembly mirrors `buildClaudeRequest`. **Voice STT:** download the allowlisted voice note (Plan 01) → `gemini.transcribe()` → text into the loop; voice-derived quotes are human-checked (spec § quote review).
+- Tests: client request-building with a mocked SDK/fetch; a recorded tool_use round-trip.
 
 ### Task 3 — System prompt + KB assembly (spec §6.2 / §9)
 - `src/lib/agent/prompt.ts` — assemble the labelled hard-constraint system prompt (IDENTITY / CAPABILITIES / HARD PROHIBITIONS / ESCALATION TRIGGERS / UNTRUSTED-CONTENT POLICY) + the few-shot UZ exchanges + the domain glossary, and inject the KB from `AppConfig` key `agent.knowledge_base`. Server-side language+script detection sets the reply language explicitly (not the model). Keep the prefix STABLE for caching.
