@@ -24,6 +24,9 @@ export interface LlmToolResult {
   /** Serialized tool output (JSON string of a ToolResult, typically). */
   content: string;
   isError?: boolean;
+  /** The tool's name. Optional for Claude/OpenAI (they key by id); REQUIRED by
+   *  Gemini, whose functionResponse part carries the name. The loop populates it. */
+  name?: string;
 }
 
 export interface LlmTextBlock {

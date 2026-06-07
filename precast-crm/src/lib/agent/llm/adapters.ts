@@ -148,7 +148,8 @@ interface ClaudeResponseLike {
   };
 }
 
-export function fromClaudeResponse(resp: ClaudeResponseLike): GenerateResult {
+export function fromClaudeResponse(raw: unknown): GenerateResult {
+  const resp = raw as ClaudeResponseLike;
   let text = '';
   const toolCalls: LlmToolCall[] = [];
   for (const block of resp.content ?? []) {
@@ -202,6 +203,53 @@ export function toGeminiToolChoice(tc: LlmToolChoice): GeminiToolConfig {
   }
 }
 
+/** Gemini functionResponse.response must be an object; wrap non-object output. */
+function geminiResponseObject(content: string): Record<string, unknown> {
+  try {
+    const v = JSON.parse(content);
+    if (v && typeof v === 'object' && !Array.isArray(v)) return v as Record<string, unknown>;
+    return { result: v };
+  } catch {
+    return { result: content };
+  }
+}
+
+type GeminiPart =
+  | { text: string }
+  | { functionCall: { name: string; id?: string; args: Record<string, unknown> } }
+  | { functionResponse: { name: string; id?: string; response: Record<string, unknown> } };
+
+export interface GeminiContent {
+  role: 'user' | 'model';
+  parts: GeminiPart[];
+}
+
+/** Convert agnostic messages → Gemini `contents`. System is passed separately
+ *  as `config.systemInstruction`, so it is NOT included here. Assistant turns
+ *  use role 'model'; tool results become `functionResponse` parts (which carry
+ *  the tool name — hence LlmToolResult.name). */
+export function toGeminiContents(messages: LlmMessage[]): GeminiContent[] {
+  return messages.map((m): GeminiContent => {
+    if (m.role === 'user') {
+      if (typeof m.content === 'string') return { role: 'user', parts: [{ text: m.content }] };
+      return {
+        role: 'user',
+        parts: m.content.map((b): GeminiPart =>
+          b.type === 'text'
+            ? { text: b.text }
+            : { functionResponse: { name: b.name ?? '', ...(b.toolUseId ? { id: b.toolUseId } : {}), response: geminiResponseObject(b.content) } },
+        ),
+      };
+    }
+    const parts: GeminiPart[] = [];
+    if (m.content) parts.push({ text: m.content });
+    for (const tc of m.toolCalls ?? []) {
+      parts.push({ functionCall: { name: tc.name, id: tc.id, args: tc.input } });
+    }
+    return { role: 'model', parts: parts.length ? parts : [{ text: '' }] };
+  });
+}
+
 interface GeminiResponseLike {
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args?: Record<string, unknown> } }> };
@@ -210,7 +258,8 @@ interface GeminiResponseLike {
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number };
 }
 
-export function fromGeminiResponse(resp: GeminiResponseLike): GenerateResult {
+export function fromGeminiResponse(raw: unknown): GenerateResult {
+  const resp = raw as GeminiResponseLike;
   const cand = resp.candidates?.[0];
   let text = '';
   const toolCalls: LlmToolCall[] = [];
@@ -264,6 +313,41 @@ export function toOpenAIToolChoice(tc: LlmToolChoice): OpenAIToolChoice {
   }
 }
 
+type OpenAIMessage =
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string }
+  | { role: 'assistant'; content: string | null; tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> }
+  | { role: 'tool'; tool_call_id: string; content: string };
+
+/** Convert system + agnostic messages → OpenAI chat messages. Tool results
+ *  become separate `role:'tool'` messages (emitted before any user text in the
+ *  same turn); assistant tool calls go on `tool_calls` with stringified args. */
+export function toOpenAIMessages(system: string, messages: LlmMessage[]): OpenAIMessage[] {
+  const out: OpenAIMessage[] = [];
+  if (system) out.push({ role: 'system', content: system });
+  for (const m of messages) {
+    if (m.role === 'user') {
+      if (typeof m.content === 'string') {
+        out.push({ role: 'user', content: m.content });
+        continue;
+      }
+      // tool results first (must directly follow the assistant tool_calls turn)
+      for (const b of m.content) {
+        if (b.type === 'tool_result') out.push({ role: 'tool', tool_call_id: b.toolUseId, content: b.content });
+      }
+      const text = m.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('');
+      if (text) out.push({ role: 'user', content: text });
+    } else {
+      const msg: OpenAIMessage = { role: 'assistant', content: m.content || null };
+      if (m.toolCalls?.length) {
+        msg.tool_calls = m.toolCalls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.input) } }));
+      }
+      out.push(msg);
+    }
+  }
+  return out;
+}
+
 interface OpenAIResponseLike {
   choices?: Array<{
     message?: {
@@ -275,7 +359,8 @@ interface OpenAIResponseLike {
   usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
 }
 
-export function fromOpenAIResponse(resp: OpenAIResponseLike): GenerateResult {
+export function fromOpenAIResponse(raw: unknown): GenerateResult {
+  const resp = raw as OpenAIResponseLike;
   const choice = resp.choices?.[0];
   const toolCalls: LlmToolCall[] = [];
   for (const tc of choice?.message?.tool_calls ?? []) {

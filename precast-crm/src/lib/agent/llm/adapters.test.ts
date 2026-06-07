@@ -9,9 +9,11 @@ import {
   fromClaudeResponse,
   toGeminiTools,
   toGeminiToolChoice,
+  toGeminiContents,
   fromGeminiResponse,
   toOpenAITools,
   toOpenAIToolChoice,
+  toOpenAIMessages,
   fromOpenAIResponse,
 } from './adapters';
 import type { GenerateRequest, LlmMessage } from './provider';
@@ -155,6 +157,24 @@ describe('Gemini adapters', () => {
     expect(toGeminiToolChoice({ type: 'tool', name: 'get_quote' })).toEqual({ functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['get_quote'] } });
   });
 
+  it('converts messages to contents: model role, functionCall, functionResponse with name', () => {
+    const msgs: LlmMessage[] = [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'checking', toolCalls: [{ id: 'c1', name: 'get_quote', input: { w: 4 } }] },
+      { role: 'user', content: [{ type: 'tool_result', toolUseId: 'c1', name: 'get_quote', content: '{"price":100}' }] },
+    ];
+    expect(toGeminiContents(msgs)).toEqual([
+      { role: 'user', parts: [{ text: 'hi' }] },
+      { role: 'model', parts: [{ text: 'checking' }, { functionCall: { name: 'get_quote', id: 'c1', args: { w: 4 } } }] },
+      { role: 'user', parts: [{ functionResponse: { name: 'get_quote', id: 'c1', response: { price: 100 } } }] },
+    ]);
+  });
+
+  it('wraps non-object tool output in {result} for functionResponse', () => {
+    const out = toGeminiContents([{ role: 'user', content: [{ type: 'tool_result', toolUseId: 'c1', name: 'x', content: 'plain text' }] }]);
+    expect(out[0].parts[0]).toEqual({ functionResponse: { name: 'x', id: 'c1', response: { result: 'plain text' } } });
+  });
+
   it('normalizes a response: text + synthesized function-call id + cached usage', () => {
     const res = fromGeminiResponse({
       candidates: [{ content: { parts: [{ text: 'Hi' }, { functionCall: { name: 'get_quote', args: { w: 4 } } }] }, finishReason: 'STOP' }],
@@ -173,6 +193,27 @@ describe('OpenAI adapters', () => {
     expect(toOpenAIToolChoice({ type: 'auto' })).toBe('auto');
     expect(toOpenAIToolChoice({ type: 'required' })).toBe('required');
     expect(toOpenAIToolChoice({ type: 'tool', name: 'get_quote' })).toEqual({ type: 'function', function: { name: 'get_quote' } });
+  });
+
+  it('builds chat messages: system first, tool results as role:tool, assistant tool_calls', () => {
+    const msgs: LlmMessage[] = [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'checking', toolCalls: [{ id: 'c1', name: 'get_quote', input: { w: 4 } }] },
+      { role: 'user', content: [{ type: 'tool_result', toolUseId: 'c1', content: '{"price":100}' }] },
+    ];
+    expect(toOpenAIMessages('SYS', msgs)).toEqual([
+      { role: 'system', content: 'SYS' },
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'checking', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'get_quote', arguments: '{"w":4}' } }] },
+      { role: 'tool', tool_call_id: 'c1', content: '{"price":100}' },
+    ]);
+  });
+
+  it('omits the system message when system is empty and nulls empty assistant content', () => {
+    const out = toOpenAIMessages('', [{ role: 'assistant', content: '', toolCalls: [{ id: 'c1', name: 'x', input: {} }] }]);
+    expect(out).toEqual([
+      { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'x', arguments: '{}' } }] },
+    ]);
   });
 
   it('parses tool-call arguments JSON and maps cached usage', () => {
