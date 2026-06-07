@@ -16,9 +16,11 @@ export type OutboundVerdict = { ok: true } | { ok: false; reason: string };
 // UZS currency word. The `so.?m` arm matches som / so'm / soʻm (any apostrophe
 // variant). Requiring the currency word keeps phone numbers, room counts, and
 // beam sizes ("4.30 m") from matching.
-const PRICE_RE = /\d[\d\s.,]*\s*(so.?m|sum|сум|сўм)/iu;
+const PRICE_RE = /\d[\d\s.,]*\s*(so[''ʻ]?m|sum|сум|сўм)/iu;
 
 // Any link: an explicit URL, a t.me handle, or a bare domain with a known TLD.
+// TLDs are business-context (UZ/RU market); a false positive is safe (escalates
+// to a human) and is unlikely since the LLM rarely emits bare-domain strings.
 const URL_RE =
   /(https?:\/\/\S+|\bwww\.\S+|\bt\.me\/\S+|\b[a-z0-9-]+\.(uz|com|net|org|ru|io|me)\b)/i;
 

@@ -35,4 +35,20 @@ describe('validateOutbound', () => {
   it('does not flag ordinary text that merely contains a dot', () => {
     expect(validateOutbound('Rahmat. Tez orada javob beramiz.', { hasFreshQuote: false })).toEqual({ ok: true });
   });
+
+  it('blocks a link regardless of hasFreshQuote', () => {
+    expect(validateOutbound('https://evil.com', { hasFreshQuote: false }).ok).toBe(false);
+  });
+
+  it('blocks a price written with no space before the currency word', () => {
+    expect(validateOutbound("Narx: 300000so'm", { hasFreshQuote: false }).ok).toBe(false);
+  });
+
+  it('blocks an uppercase currency word (case-insensitive)', () => {
+    expect(validateOutbound('450 000 SUM', { hasFreshQuote: false }).ok).toBe(false);
+  });
+
+  it('blocks an https link embedded mid-sentence', () => {
+    expect(validateOutbound("Ko'proq uchun https://example.com sahifasiga kiring.", { hasFreshQuote: true }).ok).toBe(false);
+  });
 });
