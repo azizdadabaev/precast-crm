@@ -15,8 +15,10 @@ export type OutboundVerdict = { ok: true } | { ok: false; reason: string };
 // A price = a digit run (optionally grouped by spaces/dots/commas) followed by a
 // UZS currency word. The `so.?m` arm matches som / so'm / soʻm (any apostrophe
 // variant). Requiring the currency word keeps phone numbers, room counts, and
-// beam sizes ("4.30 m") from matching.
-const PRICE_RE = /\d[\d\s.,]*\s*(so[''ʻ]?m|sum|сум|сўм)/iu;
+// beam sizes ("4.30 m") from matching. `[\d\s.,]*` already absorbs any spacing
+// before the currency word, so there is NO separate trailing `\s*` — adding one
+// would overlap this class and make the match O(n²) (catastrophic backtracking).
+const PRICE_RE = /\d[\d\s.,]*(so[''ʻ]?m|sum|сум|сўм)/iu;
 
 // Any link: an explicit URL, a t.me handle, or a bare domain with a known TLD.
 // TLDs are business-context (UZ/RU market); a false positive is safe (escalates
