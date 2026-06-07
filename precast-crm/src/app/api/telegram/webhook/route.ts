@@ -9,6 +9,7 @@ import { tgGetFilePath, tgDownloadFile, TELEGRAM_MAX_DOWNLOAD_BYTES } from "@/li
 import { saveBufferToUploads } from "@/lib/uploads";
 import { emitInbox } from "@/lib/inbox-bus";
 import { runAgentForInbound } from "@/lib/agent/webhook-entry";
+import { handleApprovalCallback } from "@/lib/agent/approval-webhook";
 
 const EXT_BY_KIND: Record<string, string> = {
   IMAGE: ".jpg", VIDEO: ".mp4", VIDEO_NOTE: ".mp4", VOICE: ".ogg", AUDIO: ".mp3", DOCUMENT: "",
@@ -66,6 +67,15 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[telegram webhook deleted_business_messages]", err);
     }
+    return new Response("ok");
+  }
+
+  // Staff [Approve]/[Reject] tap on an Action Card arrives as a callback_query
+  // (not a business message). Commit/reject via the approval handler, ack fast.
+  if (update?.callback_query) {
+    void handleApprovalCallback(update.callback_query, {
+      secret: process.env.QUOTE_SIGNING_SECRET ?? "",
+    }).catch((err) => console.error("[telegram webhook callback]", err));
     return new Response("ok");
   }
 

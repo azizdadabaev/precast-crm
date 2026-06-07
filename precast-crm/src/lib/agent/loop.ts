@@ -35,18 +35,64 @@ export const ESCALATE_TOOL: AgentToolDefinition = {
   },
 };
 
+/** The order details the model gathers to start the write-action flow. The
+ *  price comes ONLY from `quoteId` (a get_quote token from this conversation);
+ *  draft_order re-verifies it (spec §6.1). */
+export interface ApprovalDraft {
+  quoteId: string;
+  customerName: string | null;
+  customerPhone: string | null;
+  deliveryAddress: string | null;
+  notes: string | null;
+}
+
 export type AgentDecision =
   | { action: 'reply'; reply: string }
   | { action: 'escalate'; reason: string }
+  | { action: 'request_approval'; draft: ApprovalDraft } // customer agreed → propose an order for staff approval
   | { action: 'blocked'; reason: string } // outbound validator blocked the reply → treat as escalate
   | { action: 'max_turns' }; // hit the turn guard without a final reply → escalate
-// NOTE: the write-action `request_approval` flow (draft_order → staff Action Card,
-// spec §4.2/§5/§10) is NOT in this read-loop's decisions — it's handled by the
-// separate approval path (Plan 08 Task 5). The loop answers and escalates only.
-// Also a deliberate simplification vs spec §4.2's 3-language structured output:
-// language is pinned server-side into the prompt (prompt.ts), so the model returns
-// ONE reply in the detected language rather than {message_uz_latin, _cyrillic, _ru}
-// — cheaper and keeps language off the model. `confidence` is likewise deferred.
+// Deliberate simplification vs spec §4.2's 3-language structured output: language
+// is pinned server-side into the prompt (prompt.ts), so the model returns ONE
+// reply in the detected language rather than {message_uz_latin, _cyrillic, _ru}.
+// `confidence` is deferred (Plan 09). request_approval is TERMINAL here — the
+// caller (Plan 08 Task 5) runs draft_order + posts the staff Action Card.
+
+const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
+
+function toApprovalDraft(input: Record<string, unknown>): ApprovalDraft {
+  return {
+    quoteId: typeof input.quote_id === 'string' ? input.quote_id : '',
+    customerName: strOrNull(input.customer_name),
+    customerPhone: strOrNull(input.customer_phone),
+    deliveryAddress: strOrNull(input.delivery_address),
+    notes: strOrNull(input.notes),
+  };
+}
+
+/** Terminal tool: the model calls this once the customer has confirmed the room
+ *  dimensions AND agreed to order (spec §6.3). Carries the quote_id + customer
+ *  details; the caller writes the PendingOrder and posts the staff card. */
+export const REQUEST_APPROVAL_TOOL: AgentToolDefinition = {
+  name: 'request_approval',
+  description:
+    'Start an order for staff approval. Call this ONLY after the customer has (a) confirmed the exact ' +
+    'room dimensions you quoted AND (b) clearly agreed to place the order. Provide the quote_id from a ' +
+    'get_quote call in THIS conversation plus the customer name, phone, and delivery address. Do not ' +
+    'call it speculatively — if the customer is still deciding, keep answering instead.',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['quote_id', 'customer_name', 'customer_phone', 'delivery_address'],
+    properties: {
+      quote_id: { type: 'string', description: 'The signed quote_id the customer agreed to.' },
+      customer_name: { type: 'string' },
+      customer_phone: { type: 'string' },
+      delivery_address: { type: 'string' },
+      notes: { type: 'string', description: 'Optional order notes.' },
+    },
+  },
+};
 
 export interface AgentTurnInput {
   /** Cached system prompt (from prompt.ts). */
@@ -94,7 +140,7 @@ export async function runAgentTurn(
   deps: AgentTurnDeps,
 ): Promise<AgentTurnResult> {
   const maxTurns = deps.maxTurns ?? 12;
-  const definitions = [...deps.tools.definitions(), ESCALATE_TOOL];
+  const definitions = [...deps.tools.definitions(), ESCALATE_TOOL, REQUEST_APPROVAL_TOOL];
   const messages: LlmMessage[] = [...input.history, { role: 'user', content: input.inbound }];
   const toolCalls: Array<{ name: string; ok: boolean }> = [];
   const usage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
@@ -146,12 +192,16 @@ export async function runAgentTurn(
       return verdict.ok ? done({ action: 'reply', reply }) : done({ action: 'blocked', reason: verdict.reason });
     }
 
-    // A terminal escalate_to_human ends the run deterministically — wherever it
-    // sits among the calls, no other tools run (order-independent).
+    // Terminal tools end the run deterministically — wherever they sit among the
+    // calls, no read tools run (order-independent). Escalate wins over approval.
     const escalateCall = res.toolCalls.find((c) => c.name === ESCALATE_TOOL.name);
     if (escalateCall) {
       const reason = typeof escalateCall.input?.reason === 'string' ? escalateCall.input.reason : 'agent requested escalation';
       return done({ action: 'escalate', reason });
+    }
+    const approvalCall = res.toolCalls.find((c) => c.name === REQUEST_APPROVAL_TOOL.name);
+    if (approvalCall) {
+      return done({ action: 'request_approval', draft: toApprovalDraft(approvalCall.input) });
     }
 
     // Dispatch every (non-terminal) tool call; feed all results back as one turn.

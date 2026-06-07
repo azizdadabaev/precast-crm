@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runAgentTurn, ESCALATE_TOOL } from './loop';
+import { runAgentTurn, ESCALATE_TOOL, REQUEST_APPROVAL_TOOL } from './loop';
 import { createToolRegistry } from './tools/registry';
 import { type AgentTool, type ToolResult, toolOk } from './tools/types';
 import type { GenerateRequest, GenerateResult, LlmProvider, LlmToolResult } from './llm/provider';
@@ -66,6 +66,16 @@ describe('runAgentTurn', () => {
     expect(r.decision).toEqual({ action: 'escalate', reason: 'customer is upset' });
     // escalate_to_human is advertised to the model
     expect(p.requests[0].tools.some((t) => t.name === 'escalate_to_human')).toBe(true);
+  });
+
+  it('returns a request_approval decision with the gathered draft (terminal)', async () => {
+    const p = provider([res({ toolCalls: [{ id: 't1', name: REQUEST_APPROVAL_TOOL.name, input: { quote_id: 'q1', customer_name: 'Akmal', customer_phone: '998901112233', delivery_address: 'Tashkent', notes: 'asap' } }] })]);
+    const r = await runAgentTurn(base, { provider: p, tools: createToolRegistry([]) });
+    expect(r.decision).toEqual({
+      action: 'request_approval',
+      draft: { quoteId: 'q1', customerName: 'Akmal', customerPhone: '998901112233', deliveryAddress: 'Tashkent', notes: 'asap' },
+    });
+    expect(p.requests[0].tools.some((t) => t.name === 'request_approval')).toBe(true);
   });
 
   it('forces a tool on the first turn only, then auto', async () => {
