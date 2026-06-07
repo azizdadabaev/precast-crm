@@ -30,6 +30,7 @@ import {
   TableProperties,
   MessageCircle,
   Boxes,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -111,6 +112,13 @@ export const NAV: NavItem[] = [
     label: "Хабарлар",
     sub: "Inbox",
     icon: MessageCircle,
+    permission: "inbox.access",
+  },
+  {
+    href: "/agent",
+    label: "AI Агент",
+    sub: "AI agent",
+    icon: Bot,
     permission: "inbox.access",
   },
   {

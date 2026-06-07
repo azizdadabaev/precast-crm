@@ -11,7 +11,6 @@ import { createToolRegistry } from './tools/registry';
 import { runAgentShadow, toLlmHistory, type HistoryRow } from './shadow';
 
 const HISTORY_LIMIT = 20;
-const DEFAULT_MODEL_KEY = 'claude-opus-4-8';
 
 export interface InboundConversation {
   id: string;
@@ -44,7 +43,9 @@ export async function runAgentForInbound(
     });
     const history = toLlmHistory(rows.reverse() as HistoryRow[]);
     const kbContent = await loadKnowledgeBase();
-    const provider = createProviderByKey(process.env.AGENT_MODEL_KEY ?? DEFAULT_MODEL_KEY);
+    // Model is owner-selected via the control panel (config.modelKey), resolved
+    // in loadAgentRuntimeConfig (AppConfig → env → fallback).
+    const provider = createProviderByKey(config.modelKey);
 
     await runAgentShadow(
       { conversationId: conversation.id, history, inboundRaw: inboundText },
