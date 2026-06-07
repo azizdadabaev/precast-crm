@@ -10,10 +10,17 @@ import { createProvider } from "@/lib/agent/llm/factory";
 import { resolveApiKey } from "@/lib/agent/provider-keys";
 import { createToolRegistry } from "@/lib/agent/tools/registry";
 import { runAgentShadow } from "@/lib/agent/shadow";
+import type { LlmMessage } from "@/lib/agent/llm/provider";
 
 const Body = z.object({
   message: z.string().min(1).max(2000),
   modelKey: z.string().optional(),
+  // Prior turns so the tester can exercise multi-turn flow (mirrors how the live
+  // webhook loads conversation history). Plain text turns only.
+  history: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(4000) }))
+    .max(40)
+    .optional(),
 });
 
 /**
@@ -39,7 +46,7 @@ export const POST = withPermission("inbox.access", async (req: NextRequest) => {
 
   try {
     const outcome = await runAgentShadow(
-      { conversationId: "agent-test", history: [], inboundRaw: parsed.data.message },
+      { conversationId: "agent-test", history: (parsed.data.history ?? []) as LlmMessage[], inboundRaw: parsed.data.message },
       {
         provider: createProvider(model, { apiKey }),
         tools: createToolRegistry(),

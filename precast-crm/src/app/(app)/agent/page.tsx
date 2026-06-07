@@ -93,21 +93,33 @@ export default function AgentPage() {
     onError: (e: Error) => setError(e.message),
   });
 
-  // ── Test the agent (real model call) ──
+  // ── Test the agent (real, multi-turn model call) ──
   const [testMsg, setTestMsg] = useState("");
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+  // The running conversation = model history. Only completed (user → reply) turns
+  // are kept, so roles always alternate (mirrors the live webhook's history load).
+  const [chat, setChat] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const runTest = useMutation({
     mutationFn: async () => {
+      const sent = testMsg.trim();
       const res = await fetch("/api/agent/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: testMsg, modelKey: draft?.modelKey }),
+        body: JSON.stringify({ message: sent, modelKey: draft?.modelKey, history: chat }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Test failed");
-      return json.data as TestResult;
+      return { r: json.data as TestResult, sent };
     },
-    onSuccess: (r) => setTestResult(r),
+    onSuccess: ({ r, sent }) => {
+      setTestResult(r);
+      // Append the turn pair only when the agent actually replied, keeping the
+      // history alternating; escalate/blocked just show in the meta box.
+      if (r.decision.reply) {
+        setChat((prev) => [...prev, { role: "user", content: sent }, { role: "assistant", content: r.decision.reply! }]);
+      }
+      setTestMsg("");
+    },
     onError: (e: Error) => setTestResult({ model: { label: "—", provider: "—" }, language: "", escalatedEarly: false, decision: { action: "error", reason: e.message }, toolCalls: [], usage: null }),
   });
 
@@ -267,26 +279,64 @@ export default function AgentPage() {
         </div>
       </section>
 
-      {/* Test the agent */}
+      {/* Test the agent (multi-turn conversation) */}
       <section className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <div className="text-sm font-semibold flex items-center gap-2">
-          <FlaskConical className="h-4 w-4 text-muted-foreground" />
-          {t("Агентни синаш", "Test the agent")}
-          <span className="text-xs font-normal text-muted-foreground">
-            {t("(жонли модель чақируви — мижозга юборилмайди)", "(real model call — nothing sent to a customer)")}
-          </span>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <FlaskConical className="h-4 w-4 text-muted-foreground" />
+            {t("Агент билан суҳбат синови", "Test the agent — conversation")}
+            <span className="text-xs font-normal text-muted-foreground">
+              {t("(жонли модель — мижозга юборилмайди)", "(real model — nothing sent to a customer)")}
+            </span>
+          </div>
+          {(chat.length > 0 || testResult) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setChat([]);
+                setTestResult(null);
+                setTestMsg("");
+              }}
+            >
+              {t("Янги суҳбат", "New chat")}
+            </Button>
+          )}
         </div>
+
+        {/* Conversation thread (this is the memory the agent sees) */}
+        {chat.length > 0 && (
+          <div className="rounded-md border border-border bg-muted/20 p-3 space-y-2 max-h-[360px] overflow-y-auto">
+            {chat.map((m, i) => (
+              <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+                <span
+                  className={`inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-1.5 text-sm text-left ${
+                    m.role === "user" ? "bg-primary/10" : "bg-card border border-border"
+                  }`}
+                >
+                  {m.content}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <textarea
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm min-h-[80px]"
-          placeholder={t("Мижоз хабарини ёзинг, масалан: 4x5 xona narxi qancha?", "Type a customer message, e.g. 4x5 xona narxi qancha?")}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm min-h-[72px]"
+          placeholder={
+            chat.length
+              ? t("Кейинги хабарни ёзинг…", "Type the next message…")
+              : t("Мижоз хабарини ёзинг, масалан: 4x5 xona narxi qancha?", "Type a customer message, e.g. 4x5 xona narxi qancha?")
+          }
           value={testMsg}
           onChange={(e) => setTestMsg(e.target.value)}
         />
         <Button disabled={!testMsg.trim() || runTest.isPending} onClick={() => runTest.mutate()}>
           {runTest.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-2" />}
-          {t("Ишга тушириш", "Run")} · {draft.modelKey}
+          {chat.length ? t("Юбориш", "Send") : t("Ишга тушириш", "Run")} · {draft.modelKey}
         </Button>
 
+        {/* Meta for the latest turn (reply itself shows in the thread above) */}
         {testResult && (
           <div className="rounded-md border border-border bg-muted/40 p-3 text-sm space-y-1">
             <div>
@@ -294,11 +344,11 @@ export default function AgentPage() {
               <span className="font-mono">{testResult.decision.action}</span>
               {testResult.language && <span className="text-muted-foreground"> · {testResult.language}</span>}
             </div>
-            {testResult.decision.reply && (
-              <div className="whitespace-pre-wrap border-l-2 border-green-500/40 pl-2">{testResult.decision.reply}</div>
-            )}
-            {testResult.decision.reason && (
-              <div className="text-amber-600">{testResult.decision.reason}</div>
+            {testResult.decision.action !== "reply" && testResult.decision.reason && (
+              <div className="text-amber-600">
+                {testResult.decision.reason}
+                <span className="text-muted-foreground"> {t("(суҳбатга қўшилмади)", "(not added to the conversation)")}</span>
+              </div>
             )}
             {testResult.toolCalls.length > 0 && (
               <div className="text-xs text-muted-foreground">
