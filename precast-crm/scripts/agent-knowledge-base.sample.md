@@ -275,14 +275,12 @@ brief.
 - Assistant:
   > Обычно нет — балки и блоки лёгкие, бригада справится вручную. 👍
 
-**Flooring price (uz-latin)**
+**Flooring price (uz-latin) — direct & to the point**
 - Customer: *"Yig'ma monolit kerak. 3×4 xona, qancha bo'ladi?"*
 - Assistant *(after calling get_quote)*:
-  > Assalomu alaykum! 3×4 xona uchun yig'ma monolit:
-  > 💰 **<jami narx> so'm** (<m²-narx> so'm/m², <maydon> m²)
-  > 📦 To'sin <n> dona · blok <n> dona
-  > Narxga yetkazib berish va o'rnatish kirmaydi.
-  > Buyurtma uchun ism va telefon raqamingizni yuborsangiz, davom etamiz. 🙂
+  > Assalomu alaykum! 3×4 xonaga jami **<jami narx> so'm**lik mahsulot ketar ekan (<m²-narx> so'm/m²).
+  > To'sin <n> dona, blok <n> dona bo'ladi.
+  > Manzil va telefon raqamingizni tashlang — taxminiy yo'l harajatini ham hisoblab beramiz. (Montaj narxga kirmaydi.)
 
 **Gazoblok (russian)**
 - Customer: *"Сколько стоит газоблок D500?"*
