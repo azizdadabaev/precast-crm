@@ -41,6 +41,11 @@ export interface StockData {
   availability: Availability;
   /** True unless fully in stock — the bot may say a lead time applies (never a date). */
   leadTimeApplies: boolean;
+  /** True = availability comes from a counted inventory row. False = the item
+   *  isn't separately tracked and we default it to available (owner policy:
+   *  "we almost always have stock"). The bot should then say it's generally
+   *  available and the team confirms exact quantities at order time. */
+  tracked: boolean;
 }
 
 /** Map an on-hand quantity to a coarse availability bucket. */
@@ -68,6 +73,10 @@ export interface GazoblokStockRow {
 export interface CheckStockDeps {
   floor: FloorStockRow[];
   gazoblok: GazoblokStockRow[];
+  /** Owner policy for an item with NO tracked inventory row. Default true:
+   *  "we almost always have stock" → report it as available (tracked:false)
+   *  rather than escalating. Set false to fall back to escalate-on-untracked. */
+  untrackedAvailable?: boolean;
 }
 
 function sameBeamLength(a: number | null, b: number): boolean {
@@ -76,39 +85,40 @@ function sameBeamLength(a: number | null, b: number): boolean {
 
 /**
  * Pure core: resolve the requested line item and report its coarse availability.
- * A row that isn't tracked escalates (we never assert availability we can't see).
+ * A tracked row reports its real bucket. An UNTRACKED item defaults to available
+ * (tracked:false) per the owner policy "we almost always have stock" — unless
+ * deps.untrackedAvailable is false, in which case it escalates as before.
+ * Invalid input always escalates (it's a real error, not an availability answer).
  */
 export function runCheckStock(raw: unknown, deps: CheckStockDeps): ToolResult<StockData> {
   const parsed = CheckStockInput.safeParse(raw);
   if (!parsed.success) return toolEscalate('invalid stock request');
   const i = parsed.data;
+  const assumeAvailable = deps.untrackedAvailable !== false;
 
   if (i.line === 'floor') {
+    const item = i.kind === 'BLOCK' ? 'BLOCK (infill)' : `BEAM ${(i.beam_length_m as number).toFixed(2)}m`;
     const row =
       i.kind === 'BLOCK'
         ? deps.floor.find((r) => r.kind === 'BLOCK')
         : deps.floor.find((r) => r.kind === 'BEAM' && sameBeamLength(r.beamLengthM, i.beam_length_m as number));
-    if (!row) return toolEscalate('this floor item is not tracked in inventory — escalate');
+    if (!row) {
+      if (!assumeAvailable) return toolEscalate('this floor item is not tracked in inventory — escalate');
+      return toolOk({ line: 'floor', item, availability: 'in_stock', leadTimeApplies: false, tracked: false });
+    }
     const availability = availabilityFromQuantity(row.quantity, row.lowStockThreshold);
-    return toolOk({
-      line: 'floor',
-      item: i.kind === 'BLOCK' ? 'BLOCK (infill)' : `BEAM ${(i.beam_length_m as number).toFixed(2)}m`,
-      availability,
-      leadTimeApplies: availability !== 'in_stock',
-    });
+    return toolOk({ line: 'floor', item, availability, leadTimeApplies: availability !== 'in_stock', tracked: true });
   }
 
   // gazoblok
   const wantMm = Math.round(i.thickness_mm as number);
   const row = deps.gazoblok.find((r) => r.thicknessMm === wantMm);
-  if (!row) return toolEscalate('no gazoblok size matches that thickness — escalate');
+  if (!row) {
+    if (!assumeAvailable) return toolEscalate('no gazoblok size matches that thickness — escalate');
+    return toolOk({ line: 'gazoblok', item: `gazoblok ${wantMm}mm`, availability: 'in_stock', leadTimeApplies: false, tracked: false });
+  }
   const availability = availabilityFromQuantity(row.quantity, row.lowStockThreshold);
-  return toolOk({
-    line: 'gazoblok',
-    item: `gazoblok ${row.label} (${wantMm}mm)`,
-    availability,
-    leadTimeApplies: availability !== 'in_stock',
-  });
+  return toolOk({ line: 'gazoblok', item: `gazoblok ${row.label} (${wantMm}mm)`, availability, leadTimeApplies: availability !== 'in_stock', tracked: true });
 }
 
 async function loadStockDeps(): Promise<CheckStockDeps> {
@@ -118,6 +128,10 @@ async function loadStockDeps(): Promise<CheckStockDeps> {
     prisma.gazoblokProduct.findMany({ where: { active: true }, include: { stock: true } }),
   ]);
   return {
+    // Owner policy: "we almost always have stock" — untracked items report as
+    // available rather than escalating. Flip to false if inventory becomes the
+    // source of truth and untracked should mean "ask a human".
+    untrackedAvailable: true,
     floor: floorRows.map((r) => ({
       kind: r.kind as 'BEAM' | 'BLOCK',
       beamLengthM: r.beamLength == null ? null : Number(r.beamLength),
@@ -140,9 +154,12 @@ export const checkStockDefinition: AgentToolDefinition = {
     'stock or a lead time applies — WITHOUT inventing a number. For floor, set ' +
     'line="floor" and kind=BEAM (with beam_length_m, from a quote) or kind=BLOCK. ' +
     'For wall blocks, set line="gazoblok" and thickness_mm. Returns a coarse ' +
-    'availability (in_stock / low / out_of_stock) only. NEVER promise a delivery ' +
-    'DATE and never state an exact quantity — if a customer needs a firm date or ' +
-    'a quantity guarantee, escalate.',
+    'availability (in_stock / low / out_of_stock) and a "tracked" flag. When ' +
+    'tracked=false the item is not separately counted but is generally available ' +
+    '(we almost always have stock) — tell the customer it is available and the ' +
+    'team confirms exact quantities at order time; do NOT escalate just for that. ' +
+    'NEVER promise a delivery DATE and never state an exact quantity — if a ' +
+    'customer needs a firm date or a hard quantity guarantee, escalate.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,

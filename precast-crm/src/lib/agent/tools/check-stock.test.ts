@@ -64,9 +64,29 @@ describe('runCheckStock', () => {
     expect(low.ok && low.data.availability).toBe('low');
   });
 
-  it('escalates when the item is not tracked', () => {
-    expect(runCheckStock({ line: 'floor', kind: 'BEAM', beam_length_m: 9.9 }, DEPS)).toMatchObject({ ok: false, escalate: true });
-    expect(runCheckStock({ line: 'gazoblok', thickness_mm: 999 }, DEPS)).toMatchObject({ ok: false, escalate: true });
+  it('defaults an untracked item to available (owner: almost always in stock)', () => {
+    const beam = runCheckStock({ line: 'floor', kind: 'BEAM', beam_length_m: 9.9 }, DEPS);
+    expect(beam.ok).toBe(true);
+    if (beam.ok) {
+      expect(beam.data.availability).toBe('in_stock');
+      expect(beam.data.leadTimeApplies).toBe(false);
+      expect(beam.data.tracked).toBe(false); // signals "available, not separately counted"
+      expect(beam.data.item).toBe('BEAM 9.90m');
+    }
+    const gb = runCheckStock({ line: 'gazoblok', thickness_mm: 999 }, DEPS);
+    expect(gb.ok && gb.data.availability).toBe('in_stock');
+    expect(gb.ok && gb.data.tracked).toBe(false);
+  });
+
+  it('marks a tracked row as tracked:true', () => {
+    const res = runCheckStock({ line: 'floor', kind: 'BEAM', beam_length_m: 4.3 }, DEPS);
+    expect(res.ok && res.data.tracked).toBe(true);
+  });
+
+  it('still escalates untracked when untrackedAvailable is false', () => {
+    const deps: CheckStockDeps = { ...DEPS, untrackedAvailable: false };
+    expect(runCheckStock({ line: 'floor', kind: 'BEAM', beam_length_m: 9.9 }, deps)).toMatchObject({ ok: false, escalate: true });
+    expect(runCheckStock({ line: 'gazoblok', thickness_mm: 999 }, deps)).toMatchObject({ ok: false, escalate: true });
   });
 
   it('escalates on invalid input (missing required selectors)', () => {
