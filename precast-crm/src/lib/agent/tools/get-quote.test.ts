@@ -43,12 +43,11 @@ describe('runGetQuote', () => {
     });
   });
 
-  it('computes delivered weight from the BOM (beams 32 kg/m + blocks 16 kg)', () => {
+  it('computes delivered weight at ~180 kg per m² of billed floor area', () => {
     const res = runGetQuote({ inner_width: 4, inner_length: 5 }, deps());
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const bom = res.data.bill_of_materials;
-    const expected = Math.round(bom.beams.count * bom.beams.lengthM * 32 + bom.totalBlocks * 16);
+    const expected = Math.round(res.data.bill_of_materials.billedAreaM2 * 180);
     expect(res.data.weight_kg).toBe(expected);
     expect(res.data.weight_kg).toBeGreaterThan(0);
   });

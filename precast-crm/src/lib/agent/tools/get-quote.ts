@@ -25,12 +25,10 @@ import {
 
 const DEFAULT_VALIDITY_MS = 24 * 60 * 60 * 1000; // 24h — matches buildSlabQuote
 
-// Delivered-cargo weight constants (owner-provided physical facts, not prices):
-// a beam weighs ~32 kg per metre; an infill block ~16 kg. Total shipped weight =
-// beams (count × length × 32) + blocks (count × 16). Approximate — used for a
-// transport estimate, never a binding figure.
-const BEAM_KG_PER_M = 32;
-const BLOCK_KG = 16;
+// Delivered-cargo weight (owner-provided): a finished beam-and-block floor weighs
+// ~180 kg per m² of billed floor area. Weight = billed area × 180. Approximate —
+// for a transport estimate, never a binding figure.
+const FLOOR_KG_PER_M2 = 180;
 
 // Numeric min/max live in code, not the JSON schema, so the schema stays
 // strict-friendly (spec §4.2 layer 3 — plausibility checks run server-side).
@@ -55,8 +53,8 @@ export interface QuoteData {
     totalBlocks: number;
     billedAreaM2: number;
   };
-  /** Approximate delivered-cargo weight in kg (beams + blocks). For a transport
-   *  estimate only — not a binding figure. */
+  /** Approximate delivered-cargo weight in kg (~180 kg per m² of floor). For a
+   *  transport estimate only — not a binding figure. */
   weight_kg: number;
   quote_id: string;
   currency: 'UZS';
@@ -112,7 +110,7 @@ export function runGetQuote(raw: unknown, deps: GetQuoteDeps): ToolResult<QuoteD
   }
 
   const p = quote.payload;
-  const weight_kg = Math.round(p.beamCount * p.beamLength * BEAM_KG_PER_M + p.totalBlocks * BLOCK_KG);
+  const weight_kg = Math.round(p.billedArea * FLOOR_KG_PER_M2);
   return toolOk({
     subtotal: quote.price,
     m2_price: p.m2Price,
