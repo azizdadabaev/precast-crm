@@ -45,6 +45,34 @@ describe('buildSlabQuote', () => {
     expect(quote.payload.expiresAt).toBe(ISSUED + 60_000);
   });
 
+  it('passes through the extras-only calculator path', () => {
+    const input = { inner_width: 4, inner_length: 0, extra_beams: 2 };
+    const expected = calculateSlab(input, DEFAULT_PRICE_CONFIG);
+    const quote = buildSlabQuote(input, { secret: SECRET, issuedAt: ISSUED });
+    expect(quote.price).toBe(expected.subtotal);
+    const verified = verifyQuoteToken<{ price: number }>(quote.quoteId, SECRET, { now: ISSUED });
+    expect(verified!.price).toBe(expected.subtotal);
+  });
+
+  it('uses an injected priceConfig (different tier prices change the quote)', () => {
+    const input = { inner_width: 4, inner_length: 5 };
+    const base = buildSlabQuote(input, { secret: SECRET, issuedAt: ISSUED });
+    const bumped = {
+      ...DEFAULT_PRICE_CONFIG,
+      m2_price_tiers: DEFAULT_PRICE_CONFIG.m2_price_tiers.map((t) => ({ ...t, price: t.price * 2 })),
+    };
+    const quote = buildSlabQuote(input, { secret: SECRET, issuedAt: ISSUED, priceConfig: bumped });
+    expect(quote.price).not.toBe(base.price);
+    expect(quote.price).toBe(calculateSlab(input, bumped).subtotal);
+  });
+
+  it('round-trips the input snapshot through the signed token', () => {
+    const input = { inner_width: 3.5, inner_length: 6 };
+    const quote = buildSlabQuote(input, { secret: SECRET, issuedAt: ISSUED });
+    const verified = verifyQuoteToken<{ input: typeof input }>(quote.quoteId, SECRET, { now: ISSUED });
+    expect(verified!.input).toEqual(input);
+  });
+
   it('propagates calculator validation errors (so the agent escalates rather than guessing)', () => {
     expect(() => buildSlabQuote({ inner_width: 0, inner_length: 5 }, { secret: SECRET, issuedAt: ISSUED }))
       .toThrow(CalculationError);

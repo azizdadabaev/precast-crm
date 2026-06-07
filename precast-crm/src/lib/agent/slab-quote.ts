@@ -31,7 +31,7 @@ export interface SlabQuotePayload {
 
 export interface SlabQuote {
   quoteId: string; // the signed token — this is the quote_id
-  price: number;
+  price: number; // convenience alias for payload.price; the token carries the canonical signed copy
   currency: 'UZS';
   pattern: string;
   payload: SlabQuotePayload;
@@ -64,7 +64,7 @@ export function buildSlabQuote(input: SlabInput, opts: BuildSlabQuoteOptions): S
     totalBlocks: r.total_blocks,
     billedArea: r.billed_area,
     m2Price: r.m2_price,
-    input,
+    input: { ...input }, // defensive copy — a caller mutating `input` later can't corrupt the signed snapshot
     issuedAt,
     expiresAt,
   };
