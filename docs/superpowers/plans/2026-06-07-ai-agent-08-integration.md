@@ -49,10 +49,15 @@
 - **Documented deviations/deferrals** (flagged by review, not silent): single detected-language reply instead of the §4.2 3-language structured object (language pinned server-side); `request_approval` write-flow handled by Task 5 (not in the read-loop's decisions); `confidence` surface + the ~turn-10 rolling key-facts summary deferred to Plan 09; the input-screen/rate-limit are the **caller's precondition** (Task 6), not re-run in the loop.
 - **Shadow mode** is a property of the caller (the loop only returns a decision; it never sends).
 
-### Task 5 — Approval webhook + Action Card (spec §5 / §6.3 / §10)
-- `src/app/api/agent/approve/route.ts` — service-auth (Plan 02 `service-auth`); parse `callback_query` via the Plan 03 callback codec; idempotency on UNIQUE `PendingOrder.telegramCallbackId`. **Approve** → `createOrder(input, { userId: null })` (Plan 06) → flip `PendingOrder.status=APPROVED`, set `orderId`, send the customer confirmation. **Reject** → `status=REJECTED`, set `Conversation.aiState=HUMAN_ACTIVE`. Answer the callback (Plan 03 wrapper).
-- Posting the staff Action Card: `notify_staff`/`request_approval` builds the `PendingOrder` (Plan 06 `draft_order`) then posts a staff-group message with raw facts (name, phone, line items, price-from-quote_id) + `[Approve][Reject]` inline keyboard (Plan 03 keyboard wrappers). Approval SLA: hold + re-ping every 10–15 min, up to 1 day (spec §10).
-- Tests: callback dispatch + idempotency (double-tap → one Order) with a fake db; approve→createOrder happy path; reject→HUMAN_ACTIVE.
+### Task 5 — Approval commit/reject + Action Card (spec §5 / §6.3 / §10)
+
+**Task 5a (DONE) — the commit/reject service:**
+- `src/lib/agent/approve-order.ts` (+ test) — `decidePendingOrder(callback, tap, deps)`: **Approve** re-verifies the quote_id's provenance (`verifyQuoteToken {ignoreExpiry}` — order re-priced live, so expiry is irrelevant; forged/wrong-kind → blocked), guards customer name/phone/address, atomically claims `AWAITING_STAFF → APPROVED`, commits via `createOrder(input, { userId: decidedById })` (the staff approver as actor), and links the Order; any failure (returned OR thrown) reverts the claim. **Reject** atomically claims `AWAITING_* → REJECTED` and sets `Conversation.aiState=HUMAN_ACTIVE`. Idempotent + race-safe (atomic claim ⇒ exactly one Order under concurrent taps; verified by test). `pendingOrderToCreateInput` maps the verified quote's dim snapshot → a single placement room; `scheduledAt` is a placeholder (approval time) — the bot never commits a delivery date, staff set it. `makeApproveDb()` is the Prisma impl (conditional `updateMany` claims). 13 tests, no DB needed.
+- ⚠️ Quote `ignoreExpiry` added to `quote-token.ts` (provenance-only check). Single-room agent orders only (one quote = one `SlabInput`).
+
+**Task 5b (NEXT) — the route + Action Card posting:**
+- Telegram `callback_query` routing into `decidePendingOrder` (lands at the existing `src/app/api/telegram/webhook/route.ts` — Telegram has one webhook; service-auth applies to any server-to-server `/api/agent/*` path). Parse via the Plan 03 callback codec; the route catches a `telegramCallbackId` P2002 (same-tap retry) → no-op; answers the callback + sends the customer confirmation on commit.
+- Posting the staff Action Card: `notify_staff`/`request_approval` builds the `PendingOrder` (Plan 06 `draft_order`, flips to `AWAITING_STAFF`) then posts a staff-group message with raw facts + `[Approve][Reject]` (Plan 03 keyboard). Approval SLA: hold + re-ping every 10–15 min, up to 1 day (spec §10).
 
 ### Task 6 — Wire the live webhook entry (guarded)
 - Hook the agent loop into the existing Telegram Business webhook so inbound messages reach it — but behind the **global kill-switch** (read first) + per-chat `aiPaused`, defaulting to **Shadow (log-only)**. No auto-send until the owner flips the stage. Telegram 429 → honour `retry_after`; hard send failure → escalate.

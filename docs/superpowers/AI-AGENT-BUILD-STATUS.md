@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — LlmProvider + clients + prompt + agent loop shipped).
+**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — through the approval commit/reject service).
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -31,7 +31,7 @@ Then start a Claude session and say: **"continue the AI agent build — Plan 6"*
 | 05 | Guardrail text screening (outbound validator + inbound screen) | ✅ DONE |
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
-| 08 | **Integration: LlmProvider + clients · agent loop + guardrail wiring · Gemini voice STT · `/api/agent/approve` webhook** | 🚧 Tasks 1–4 DONE (registry, clients, prompt/KB, agent loop); webhook (5) + live wiring (6) next |
+| 08 | **Integration: LlmProvider + clients · agent loop · approval commit · live webhook wiring** | 🚧 Tasks 1–4 + 5a DONE; route+Action-Card (5b) + live wiring (6) next |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
@@ -85,6 +85,12 @@ Plus: Telegram inline-keyboard + callback Bot-API wrappers appended to `precast-
 - `precast-crm/src/lib/agent/loop.ts` (+ test) — `runAgentTurn`: tool-use loop over an injected `LlmProvider`, 12-turn guard, deterministic `escalate_to_human`, price-integrity wired (fresh quote_id gates price replies via the outbound validator), returns a routed `AgentDecision`. Tested with a fake provider (9 cases).
 - Reviewed (spec + code-quality subagents): deterministic-escalation fix applied; outbound-validator `PRICE_RE` linearized; deviations documented (single detected-language reply vs §4.2 3-variant; `request_approval`/`confidence`/turn-10 rolling summary deferred). No blockers.
 - ⚠️ Loop is tested with a fake provider; **live model behavior validated once the webhook (Task 6) is wired + keys are in `.env.local`** (all 3 keys now configured).
+
+**Plan 08 Task 5a (DONE) — the approval commit/reject service:**
+- `precast-crm/src/lib/agent/approve-order.ts` (+ test, 13 cases) — `decidePendingOrder`: staff Approve re-verifies the quote_id's provenance (`ignoreExpiry`; forged/wrong-kind blocked), guards customer info, **atomically claims `AWAITING_STAFF→APPROVED`** and commits a real Order via Plan 06 `createOrder` (staff approver as actor), reverting on any failure (returned or thrown). Reject → `REJECTED` + `Conversation.aiState=HUMAN_ACTIVE`. Idempotent + race-safe (exactly one Order under concurrent taps, asserted). `makeApproveDb()` is the Prisma impl (conditional `updateMany`).
+- `quote-token.ts` gained `ignoreExpiry` (commit-path provenance check). Reviewed by spec + code-quality subagents: fixed a real throw-doesn't-revert bug, tightened the approve claim to `AWAITING_STAFF`, added the concurrency + throw tests. No blockers.
+- Decisions (documented): order re-priced live at placement (frozen quote price not reused); `scheduledAt` placeholder = approval time (staff set the real delivery date); single-room agent orders.
+- **Task 5b NEXT:** route `callback_query` → `decidePendingOrder` in the existing Telegram webhook (catch `telegramCallbackId` P2002 → no-op; answer callback; send customer confirmation) + post the staff Action Card (`request_approval`/`notify_staff` → `draft_order` → `[Approve][Reject]`).
 
 ## Plan 08 (in progress) — scope + cautions
 The integration plan — wires everything built so far into a running agent. Heaviest since Plan 06; touches the live Telegram webhook. **Task 1 (model registry) is done** (above); Tasks 2–6 below remain.
