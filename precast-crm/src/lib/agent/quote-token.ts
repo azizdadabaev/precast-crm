@@ -32,6 +32,11 @@ export interface VerifyQuoteOptions {
   /** Current time in ms; defaults to Date.now(). If the payload has a numeric
    *  `expiresAt`, a token at/after that time is rejected. */
   now?: number;
+  /** Skip the expiry check (signature + structure only). Use ONLY where expiry
+   *  is irrelevant — e.g. committing a staff-approved order whose quote may have
+   *  aged past its customer-facing validity within the approval SLA; the order is
+   *  re-priced live at placement, so this verifies provenance, not freshness. */
+  ignoreExpiry?: boolean;
 }
 
 /**
@@ -62,7 +67,7 @@ export function verifyQuoteToken<T = unknown>(
   } catch {
     return null;
   }
-  if (payload && typeof (payload as { expiresAt?: unknown }).expiresAt === 'number') {
+  if (!opts?.ignoreExpiry && payload && typeof (payload as { expiresAt?: unknown }).expiresAt === 'number') {
     const now = opts?.now ?? Date.now();
     if (now >= (payload as { expiresAt: number }).expiresAt) return null;
   }

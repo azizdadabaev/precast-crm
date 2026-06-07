@@ -59,4 +59,12 @@ describe('mintQuoteToken / verifyQuoteToken', () => {
   it('mintQuoteToken throws when the secret is empty', () => {
     expect(() => mintQuoteToken({ price: 1 }, '')).toThrow();
   });
+
+  it('ignoreExpiry verifies signature only (accepts an expired but authentic token)', () => {
+    const token = mintQuoteToken({ price: 1, expiresAt: 5000 }, SECRET);
+    expect(verifyQuoteToken(token, SECRET, { now: 9999 })).toBeNull(); // expired → rejected
+    expect(verifyQuoteToken(token, SECRET, { now: 9999, ignoreExpiry: true })).toEqual({ price: 1, expiresAt: 5000 });
+    // still rejects a forged token even with ignoreExpiry
+    expect(verifyQuoteToken(mintQuoteToken({ price: 1 }, 'attacker'), SECRET, { ignoreExpiry: true })).toBeNull();
+  });
 });
