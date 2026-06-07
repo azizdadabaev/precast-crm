@@ -216,7 +216,7 @@ function geminiResponseObject(content: string): Record<string, unknown> {
 
 type GeminiPart =
   | { text: string }
-  | { functionCall: { name: string; id?: string; args: Record<string, unknown> } }
+  | { functionCall: { name: string; id?: string; args: Record<string, unknown> }; thoughtSignature?: string }
   | { functionResponse: { name: string; id?: string; response: Record<string, unknown> } };
 
 export interface GeminiContent {
@@ -244,7 +244,12 @@ export function toGeminiContents(messages: LlmMessage[]): GeminiContent[] {
     const parts: GeminiPart[] = [];
     if (m.content) parts.push({ text: m.content });
     for (const tc of m.toolCalls ?? []) {
-      parts.push({ functionCall: { name: tc.name, id: tc.id, args: tc.input } });
+      // Echo the thoughtSignature back on the functionCall part — Gemini thinking
+      // models require it round-tripped verbatim or they reject the follow-up turn.
+      parts.push({
+        functionCall: { name: tc.name, id: tc.id, args: tc.input },
+        ...(tc.thoughtSignature ? { thoughtSignature: tc.thoughtSignature } : {}),
+      });
     }
     return { role: 'model', parts: parts.length ? parts : [{ text: '' }] };
   });
@@ -252,7 +257,7 @@ export function toGeminiContents(messages: LlmMessage[]): GeminiContent[] {
 
 interface GeminiResponseLike {
   candidates?: Array<{
-    content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args?: Record<string, unknown> } }> };
+    content?: { parts?: Array<{ text?: string; functionCall?: { name: string; args?: Record<string, unknown> }; thoughtSignature?: string }> };
     finishReason?: string;
   }>;
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; cachedContentTokenCount?: number };
@@ -268,7 +273,14 @@ export function fromGeminiResponse(raw: unknown): GenerateResult {
     if (p.text) text += p.text;
     else if (p.functionCall) {
       // Gemini function calls carry no id; synthesize a stable one for the loop.
-      toolCalls.push({ id: `${p.functionCall.name}-${i}`, name: p.functionCall.name, input: p.functionCall.args ?? {} });
+      // Preserve thoughtSignature so the next turn can echo it back (required by
+      // thinking models, else a 400 "missing thought_signature").
+      toolCalls.push({
+        id: `${p.functionCall.name}-${i}`,
+        name: p.functionCall.name,
+        input: p.functionCall.args ?? {},
+        ...(p.thoughtSignature ? { thoughtSignature: p.thoughtSignature } : {}),
+      });
     }
   });
   return {

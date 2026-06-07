@@ -15,6 +15,11 @@ export interface LlmToolCall {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  /** Gemini-only: the opaque `thoughtSignature` returned on the functionCall part
+   *  by thinking models. It MUST be echoed back verbatim on the same functionCall
+   *  part in the next request, or Gemini 400s ("missing thought_signature").
+   *  Ignored by Claude/OpenAI. */
+  thoughtSignature?: string;
 }
 
 /** A tool result the loop feeds back on the next user turn. */

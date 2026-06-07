@@ -185,6 +185,20 @@ describe('Gemini adapters', () => {
     expect(res.stopReason).toBe('STOP');
     expect(res.usage).toEqual({ inputTokens: 10, outputTokens: 5, cacheReadInputTokens: 8 });
   });
+
+  it('round-trips thoughtSignature: captured from the functionCall part and echoed back', () => {
+    // Thinking models attach an opaque thoughtSignature to the functionCall part;
+    // it MUST be returned verbatim on the same part next turn or Gemini 400s.
+    const res = fromGeminiResponse({
+      candidates: [{ content: { parts: [{ functionCall: { name: 'get_quote', args: { w: 4 } }, thoughtSignature: 'sig-abc' }] } }],
+    });
+    expect(res.toolCalls).toEqual([{ id: 'get_quote-0', name: 'get_quote', input: { w: 4 }, thoughtSignature: 'sig-abc' }]);
+
+    const contents = toGeminiContents([{ role: 'assistant', content: '', toolCalls: res.toolCalls }]);
+    expect(contents[0].parts).toEqual([
+      { functionCall: { name: 'get_quote', id: 'get_quote-0', args: { w: 4 } }, thoughtSignature: 'sig-abc' },
+    ]);
+  });
 });
 
 describe('OpenAI adapters', () => {
