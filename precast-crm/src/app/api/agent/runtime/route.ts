@@ -6,6 +6,7 @@ import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { loadAgentRuntimeConfig, saveAgentRuntimeConfig } from "@/lib/agent/runtime-config";
 import { bakeOffModels } from "@/lib/agent/llm/models";
+import { providerKeyStatus } from "@/lib/agent/provider-keys";
 
 /** Models offered in the conversation-brain dropdown (the bake-off candidates). */
 function modelOptions() {
@@ -25,8 +26,8 @@ function modelOptions() {
  * inbox feature.
  */
 export const GET = withPermission("inbox.access", async () => {
-  const config = await loadAgentRuntimeConfig();
-  return ok({ config, models: modelOptions() });
+  const [config, keyStatus] = await Promise.all([loadAgentRuntimeConfig(), providerKeyStatus()]);
+  return ok({ config, models: modelOptions(), keyStatus });
 });
 
 /**

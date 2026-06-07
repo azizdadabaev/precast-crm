@@ -6,7 +6,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { loadAgentRuntimeConfig, loadKnowledgeBase, shouldAgentHandle } from './runtime-config';
-import { createProviderByKey } from './llm/factory';
+import { createProviderForModelKey } from './llm/factory';
 import { createToolRegistry } from './tools/registry';
 import { runAgentShadow, toLlmHistory, type HistoryRow } from './shadow';
 
@@ -43,9 +43,9 @@ export async function runAgentForInbound(
     });
     const history = toLlmHistory(rows.reverse() as HistoryRow[]);
     const kbContent = await loadKnowledgeBase();
-    // Model is owner-selected via the control panel (config.modelKey), resolved
-    // in loadAgentRuntimeConfig (AppConfig → env → fallback).
-    const provider = createProviderByKey(config.modelKey);
+    // Model is owner-selected via the control panel (config.modelKey); the API
+    // key resolves from UI-saved DB keys → env.
+    const provider = await createProviderForModelKey(config.modelKey);
 
     await runAgentShadow(
       { conversationId: conversation.id, history, inboundRaw: inboundText },

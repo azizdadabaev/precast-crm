@@ -8,6 +8,12 @@
 - **Backend:** `AgentRuntimeConfig` gains `modelKey`; `loadAgentRuntimeConfig` resolves `modelKey` from AppConfig (→ env `AGENT_MODEL_KEY` → `claude-opus-4-8`). `saveAgentRuntimeConfig` upserts AppConfig `agent.runtime` (validates `enabled:bool`, `mode∈{shadow,suggest,auto}`, `modelKey∈registry`). `webhook-entry` uses `config.modelKey`. Route `GET/PUT /api/agent/runtime` (owner-gated via `inbox.access`) + audit. Pure `validateRuntimeUpdate` unit-tested.
 - **Frontend:** `/(app)/agent` page — global ON/OFF kill-switch, model dropdown (brains from `bakeOffModels()`, with price/provider), mode selector (Shadow enabled; Suggest/Auto shown disabled "rollout — Plan 09 slice C"), last-updated, Save. Sidebar item "AI Агент · AI agent" gated `inbox.access`.
 
+## Slice A+ (DONE) — provider API-key UI + local test console
+- `provider-keys.ts` — store Anthropic/Google/OpenAI keys in AppConfig (`agent.provider_keys`); `resolveApiKey` (DB → env); `mergeProviderKeys` (write-only, blank = unchanged); `providerKeyStatus` (set/not-set, never values). `factory.createProviderForModelKey` resolves the key; `webhook-entry` uses it.
+- `GET/PUT /api/agent/keys` (owner-gated, write-only, audited); `POST /api/agent/test` (owner-gated) runs the FULL agent on a typed message (real model call) → decision/reply/tools/usage; `GET /api/agent/runtime` now returns `keyStatus`.
+- `/agent` page gains a **Provider keys** section (paste/save, status badges) and a **Test the agent** box (type a message → run the selected model → see reply/tools/tokens). This is the no-Telegram local test path.
+- ⚠️ Found during this slice: the deploy env had **no** provider keys, `TELEGRAM_BOT_TOKEN`, or `TELEGRAM_WEBHOOK_SECRET` loaded — the DB key store fixes the provider side.
+
 ## Slice B (next) — Inbox ghost-drafts + test affordance
 - Persist the Shadow proposal per conversation (e.g. `Conversation.aiDraft` + `aiDraftMeta` JSON, or an `AgentTurn` row) instead of only console-logging; `runAgentForInbound` writes it.
 - `/inbox` (InboxClient) renders the agent's proposed reply as a ghost-draft on the conversation (model + tools + decision badge), per spec §10 — read-only in Shadow.

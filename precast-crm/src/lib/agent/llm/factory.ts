@@ -33,6 +33,16 @@ export function createProviderByKey(key: string, deps: ProviderDeps = {}): LlmPr
   return createProvider(model, deps);
 }
 
+/** Build a provider for a model key, resolving the API key from storage (UI-saved
+ *  DB key → env). Use this from request handlers so the owner's saved keys apply. */
+export async function createProviderForModelKey(key: string): Promise<LlmProvider> {
+  const model = getModel(key);
+  if (!model) throw new Error(`createProviderForModelKey: unknown model key "${key}"`);
+  const { resolveApiKey } = await import('../provider-keys');
+  const apiKey = await resolveApiKey(model.provider);
+  return createProvider(model, { apiKey });
+}
+
 /** The Gemini provider used for voice-note transcription (spec §3 fixes STT to
  *  Google regardless of which model wins the conversation bake-off). Picks the
  *  first audio-capable Google transcription model from the registry. */

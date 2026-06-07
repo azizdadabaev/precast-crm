@@ -32,7 +32,7 @@ Then start a Claude session and say: **"continue the AI agent build — Plan 6"*
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
 | 08 | Integration: LlmProvider + clients · agent loop · approval commit + callback · live webhook (Shadow) | ✅ DONE (built/tested; write-action activation staged to Plan 09) |
-| 09 | **Operator UI + rollout: agent control panel (DONE) · inbox ghost-drafts (next) · KB editor · write-action/auto-send activation · voice/vision · bake-off** | 🚧 Slice A (control panel) DONE |
+| 09 | **Operator UI + rollout: control panel + API keys + test console (DONE) · inbox ghost-drafts · KB editor · write-action/auto-send activation · voice/vision · bake-off** | 🚧 Control panel + provider-key UI + local test console DONE |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
