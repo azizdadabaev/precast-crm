@@ -148,6 +148,18 @@ Give the ГОСТ number / MPa figures only if the customer asks for specifics. 
 term: "po'lat armatura" — technically it's prestressing *wire*, but "armatura" is what
 customers understand.)
 
+**If a customer doubts the thin 5 mm wire** (it looks too thin — people often do): its
+breaking / tensile resistance is **on par with local 12–14 mm rebar**, because it's special
+high-strength prestressed steel. So thin does NOT mean weak.
+> "Ingichka ko'rinadi-yu, bu oddiy sim emas — yuqori mustahkam, oldindan taranglashtirilgan
+> po'lat. Uning uzilishga qarshilik kuchi mahalliy 12–14мм armatura kuchiga teng. Shuning
+> uchun balka juda baquvvat."
+
+_Basis (internal): this compares to typical **local** rebar, which is usually rolled below
+lab-standard strength and often under-diameter — not to certified lab-spec A240/A400 bars. If
+an engineer challenges it with standard specs, clarify "mahalliy armaturaga nisbatan" (vs local
+rebar) and pivot to the beam's tested capacity: 600–1000 kg/m²; 2 beams held 4–5 tonnes._
+
 ---
 
 ## 3. Product — Gazoblok (Autoclaved Aerated Concrete, AAC)
@@ -370,6 +382,12 @@ brief.
   > Oddiy armatura emas — **oldindan taranglashtirilgan yuqori uglerodli po'lat armatura** (ВР2, 5мм) ishlatilgan,
   > oddiy armaturadan bir necha barobar kuchli. Shu sabab balka baquvvat va yuqori yuklanishlarga bardoshli.
 - *(Backup if they ask for specifics: ГОСТ 7348-81, mustahkamligi ≥1670 MPa.)*
+
+**Customer doubts the thin 5mm wire (uz-latin)**
+- Customer: *"5мм sim juda ingichka-ku, shuncha yukni ko'taradimi?"*
+- Assistant:
+  > Ingichka ko'rinadi, lekin bu oddiy sim emas 🙂 Yuqori mustahkam, oldindan taranglashtirilgan po'lat.
+  > Uning uzilishga qarshilik kuchi mahalliy 12–14мм armatura bilan teng — shuning uchun balka baquvvat.
 
 **"Do blocks have rebar?" (uz-latin)**
 - Customer: *"Bloklarning ichida armatura bormi?"*
