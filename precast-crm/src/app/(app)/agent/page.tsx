@@ -38,6 +38,8 @@ interface TestResult {
   decision: { action: string; reply?: string; reason?: string };
   toolCalls: Array<{ name: string; ok: boolean }>;
   usage: { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number } | null;
+  tookMs?: number;
+  turns?: number;
 }
 
 export default function AgentPage() {
@@ -358,6 +360,13 @@ export default function AgentPage() {
             {testResult.usage && (
               <div className="text-xs text-muted-foreground tabular-nums">
                 {t("Токенлар", "Tokens")}: in {testResult.usage.inputTokens} · out {testResult.usage.outputTokens} · cache {testResult.usage.cacheReadInputTokens}
+              </div>
+            )}
+            {testResult.tookMs != null && (
+              <div className="text-xs text-muted-foreground tabular-nums">
+                {t("Вақт", "Time")}: {(testResult.tookMs / 1000).toFixed(1)}s
+                {testResult.turns ? ` · ${testResult.turns} ${t("қадам", "model turns")}` : ""}
+                <span className="text-muted-foreground/70"> {t("(сервер; туннел+браузер қўшилади)", "(server only; tunnel+browser add more)")}</span>
               </div>
             )}
           </div>

@@ -45,6 +45,7 @@ export const POST = withPermission("inbox.access", async (req: NextRequest) => {
   }
 
   try {
+    const startedAt = Date.now();
     const outcome = await runAgentShadow(
       { conversationId: "agent-test", history: (parsed.data.history ?? []) as LlmMessage[], inboundRaw: parsed.data.message },
       {
@@ -61,6 +62,10 @@ export const POST = withPermission("inbox.access", async (req: NextRequest) => {
       decision: outcome.decision,
       toolCalls: outcome.result?.toolCalls ?? [],
       usage: outcome.result?.usage ?? null,
+      // Server-side wall time for the whole pipeline (model call(s) + tools).
+      // Excludes the tunnel/browser hop, so the real number you feel is higher.
+      tookMs: Date.now() - startedAt,
+      turns: outcome.result?.turns ?? 0,
     });
   } catch (err) {
     // Surface the provider error (bad key, model id, rate limit) to the UI.
