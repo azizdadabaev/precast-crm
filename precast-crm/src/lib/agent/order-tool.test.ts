@@ -9,6 +9,7 @@ import {
   type PendingOrderRow,
 } from './order-tool';
 import { buildSlabQuote } from './slab-quote';
+import { mintQuoteToken } from './quote-token';
 
 const SECRET = 'quote-secret-key';
 const ISSUED = 1_700_000_000_000;
@@ -83,6 +84,16 @@ describe('buildPendingOrderDraft', () => {
 
   it('rejects a malformed quote token', () => {
     const res = buildPendingOrderDraft(input({ quoteId: 'not-a-token' }), SECRET, { now: ISSUED });
+    expect(res).toEqual({ ok: false, reason: 'INVALID_QUOTE' });
+  });
+
+  it('rejects a valid token of the WRONG kind (a gazoblok quote can not draft a slab order)', () => {
+    // Signed with the SAME secret, but kind:'gazoblok' — must not pass as a slab quote.
+    const gazoblokToken = mintQuoteToken(
+      { kind: 'gazoblok', price: 500_000, expiresAt: ISSUED + 60_000 },
+      SECRET,
+    );
+    const res = buildPendingOrderDraft(input({ quoteId: gazoblokToken }), SECRET, { now: ISSUED });
     expect(res).toEqual({ ok: false, reason: 'INVALID_QUOTE' });
   });
 

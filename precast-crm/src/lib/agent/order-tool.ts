@@ -76,7 +76,11 @@ export function buildPendingOrderDraft(
     return { ok: false, reason: 'MISSING_FIELDS' };
   }
   const quote = verifyQuoteToken<SlabQuotePayload>(input.quoteId, secret, opts);
-  if (!quote) return { ok: false, reason: 'INVALID_QUOTE' };
+  // Reject not just tampered/forged/expired tokens but also a valid token of the
+  // WRONG kind: gazoblok quotes are signed with the same secret (kind:'gazoblok'),
+  // so without this guard one could be stored as a slab order. A draft_order here
+  // is the slab flow only; a gazoblok pending-order line is a later (Plan 08) path.
+  if (!quote || quote.kind !== 'slab') return { ok: false, reason: 'INVALID_QUOTE' };
 
   return {
     ok: true,
