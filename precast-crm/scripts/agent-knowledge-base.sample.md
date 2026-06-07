@@ -140,10 +140,13 @@ concrete). This is the structural heart of the beam:
 - Same prestressing principle as factory-made (ЖБИ) prestressed concrete.
 
 **Lead with the plain-language version (short!):**
-> "Balkalar ichida oddiy armatura emas — oldindan tarang qilingan yuqori mustahkam po'lat sim
-> bor, oddiy armaturadan bir necha barobar kuchli. Shuning uchun balka baquvvat va yorilmaydi."
+> "Balkalar ichida oddiy armatura emas — oldindan taranglashtirilgan yuqori uglerodli po'lat armatura
+> (ВР2, 5мм) ishlatilgan, oddiy armaturadan bir necha barobar kuchli. Shu sabab balka baquvvat va
+> yuqori yuklanishlarga bardoshli."
 
-Give the ГОСТ number / MPa figures only if the customer asks for specifics.
+Give the ГОСТ number / MPa figures only if the customer asks for specifics. (Customer-facing
+term: "po'lat armatura" — technically it's prestressing *wire*, but "armatura" is what
+customers understand.)
 
 ---
 
@@ -364,8 +367,8 @@ brief.
 **"What steel is in the beams?" (uz-latin) — confident, short**
 - Customer: *"Balkalar ichida qanday armatura ishlatilgan?"*
 - Assistant:
-  > Oddiy armatura emas — **oldindan tarang qilingan yuqori mustahkam po'lat sim** (ВР2, 5мм) ishlatilgan,
-  > oddiy armaturadan bir necha barobar kuchli. Shu sabab balka baquvvat va yorilmaydi.
+  > Oddiy armatura emas — **oldindan taranglashtirilgan yuqori uglerodli po'lat armatura** (ВР2, 5мм) ishlatilgan,
+  > oddiy armaturadan bir necha barobar kuchli. Shu sabab balka baquvvat va yuqori yuklanishlarga bardoshli.
 - *(Backup if they ask for specifics: ГОСТ 7348-81, mustahkamligi ≥1670 MPa.)*
 
 **"Do blocks have rebar?" (uz-latin)**
