@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-07 (Plan 06 done).
+**Last updated:** 2026-06-07 (Plan 07 done).
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -30,8 +30,8 @@ Then start a Claude session and say: **"continue the AI agent build — Plan 6"*
 | 04 | Price-integrity (signed quote tokens + buildSlabQuote) | ✅ DONE |
 | 05 | Guardrail text screening (outbound validator + inbound screen) | ✅ DONE |
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
-| 07 | **Live `get_quote` tool + gazoblok/stock/lookup read tools** | ⬅ NEXT |
-| 08 | Webhook `callback_query` dispatch + DB approval handler; LlmProvider + Claude/Gemini/OpenAI clients + Gemini voice STT; agent loop + guardrail wiring | ⏳ |
+| 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
+| 08 | **Webhook `callback_query` dispatch + DB approval handler; LlmProvider + Claude/Gemini/OpenAI clients + Gemini voice STT; agent loop + guardrail wiring** | ⬅ NEXT |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
@@ -54,11 +54,22 @@ Plus: Telegram inline-keyboard + callback Bot-API wrappers appended to `precast-
 - `precast-crm/src/lib/agent/order-tool.ts` — the `draft_order` tool. Pure `buildPendingOrderDraft` verifies a `quote_id` (`verifyQuoteToken`) and assembles the `PendingOrder` draft (price lives ONLY inside the verified quote snapshot — no free-text price path); `idempotencyKey` = `sha256(conversationId:confirmationMsgId)` per spec §5; thin `draftOrder` shell writes idempotently (`createMany skipDuplicates` = ON CONFLICT DO NOTHING) with an injectable `db` for unit tests. Tested in `precast-crm/src/lib/agent/order-tool.test.ts`.
 - Plan doc: `docs/superpowers/plans/2026-06-07-ai-agent-06-create-order-and-order-tool.md`.
 
-## Plan 07 (next) — scope + cautions
-- **Live `get_quote` tool:** wrap `buildSlabQuote` (Plan 04) with the LIVE `PriceConfig` (async, `precast-crm/src/lib/pricing-config.ts` → `loadPricingConfig()`) and `process.env.QUOTE_SIGNING_SECRET`, returning the `{…, quote_id, currency:"UZS", validity_ts}` shape (spec §5). This is what *mints* the `quote_id` the Plan 06 order tool consumes.
-- **`get_gazoblok_quote`:** same `{price, quote_id}` shape over `precast-crm/src/services/gazoblok-engine.ts`; empty catalog → structured not-found → escalate, never invent (spec §5).
-- **Read tools:** `check_stock` (read-only stock, never promise a delivery date), `lookup_client` (by `Conversation.sharedContactPhone` or name; return minimum PII, require phone match beyond a name). Spec §5.
-- All tools are forced/`strict` on price turns and their descriptions list what they do NOT cover → escalate. Keep the pure-core + thin-shell pattern (live config injected; unit-test the pure part).
+**Plan 07 (DONE) — the read-only toolset (every grounded number the agent is forced to use):**
+- `precast-crm/src/lib/agent/tools/types.ts` — provider-agnostic `AgentTool` / `AgentToolDefinition` / `ToolResult` (`toolOk`/`toolEscalate`). Plan 08 maps the definitions to Claude/Gemini/OpenAI tool formats.
+- `precast-crm/src/lib/agent/tools/get-quote.ts` — **the keystone.** Pure `runGetQuote` wraps `buildSlabQuote` with LIVE `loadPricingConfig()` + `QUOTE_SIGNING_SECRET` to mint the `quote_id` the Plan 06 `draft_order` consumes — closing the price-integrity chain end-to-end.
+- `precast-crm/src/lib/agent/gazoblok-quote.ts` (pure `buildGazoblokQuote` + `resolveGazoblokProduct`, mirrors `slab-quote.ts`) + `tools/get-gazoblok-quote.ts` (live catalog; empty/unknown size → escalate, never invent). Mints a `kind:'gazoblok'` token.
+- `precast-crm/src/lib/agent/tools/check-stock.ts` — coarse availability (`in_stock`/`low`/`out_of_stock`) for floor (`InventoryItem`) + gazoblok (`GazoblokStock`); never a raw count, never a delivery date.
+- `precast-crm/src/lib/agent/tools/lookup-client.ts` — by phone or name with minimal PII (phone match ⇒ id+name+language; name-only ⇒ id+name, ≥2 chars; never another customer's contact details).
+- **Hardening from review:** `draft_order` (Plan 06 `order-tool.ts`) now rejects a valid-but-wrong-`kind` token — a `kind:'gazoblok'` quote (same signing secret) can no longer be stored as a slab order.
+- Plan doc: `docs/superpowers/plans/2026-06-07-ai-agent-07-read-tools.md`.
+
+## Plan 08 (next) — scope + cautions
+The integration plan — wires everything built so far into a running agent. Heaviest since Plan 06; touches the live Telegram webhook.
+- **Approval webhook + DB handler:** `/api/agent/approve` — `callback_query` dispatch using the Plan 03 callback codec + keyboard wrappers; service-auth (Plan 02); flips `PendingOrder → APPROVED`/`REJECTED` (UNIQUE `telegramCallbackId` idempotency) and on approve calls `createOrder(input, { userId: null })` (Plan 06, service-account actor). Posts the staff Action Card (raw facts, not agent prose — spec §6 guardrail 3 / §10).
+- **`LlmProvider` abstraction + clients:** Claude (pinned snapshot, prompt caching `ttl:"1h"`, ≥4096-token cached prefix — spec §4.4), Gemini, OpenAI behind one interface (generate/vision/transcribe); **Gemini voice STT** as the fixed transcription step (spec §3/§4.5).
+- **Agent loop + guardrail wiring:** input-screen (Plan 05) → load history → call model with the Plan 07 toolset **forced on price turns** → dispatch tools (parallel where order-independent) → outbound validator (Plan 05) → auto-send vs HITL. 12-turn guard; rolling key-facts summary from ~turn 10 (spec §4.3).
+- **Defer to Plan 09:** inbox 4-state HITL UX, KB editor, eval/shadow/bake-off.
+- Keep the pure-core + thin-shell pattern; reuse the existing primitives rather than re-implementing.
 
 ## Gotchas learned
 - **Never put literal invisible (zero-width/control) characters in regex/text source.** Use numeric codepoints (e.g. `c === 0x200b`) and `String.fromCharCode(...)` in tests. When a module has Cyrillic/special chars, have the implementer copy verbatim from the committed plan file, and scan the source for codepoints `0x200b/0x200c/0x200d/0xfeff/0x7f` and `< 0x20` (except `0x09/0x0a/0x0d`).
