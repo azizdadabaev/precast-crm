@@ -19,7 +19,7 @@ const INJECTION_RES: readonly RegExp[] = [
   /forget\s+(everything|all|previous)/i,
   /you\s+are\s+now\b/i,
   /system\s+prompt/i,
-  /\boldingi\b[\s\S]*\bko.?rsatma/i, // uz-latin: "previous ... instruction"
+  /\boldingi\b.{0,80}\bko.?rsatma/i, // uz-latin: "(forget) previous ... instruction" (bounded span)
   /забудь\s+(все|всё|предыдущ\w*)/i, // ru: forget all/previous
   /игнорируй\s+(все|всё|предыдущ\w*)/i, // ru: ignore all/previous
   /ты\s+теперь\b/i, // ru: you are now
