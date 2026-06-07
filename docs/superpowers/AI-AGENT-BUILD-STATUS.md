@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — LlmProvider + 3 clients shipped).
+**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — LlmProvider + clients + prompt + agent loop shipped).
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -31,7 +31,7 @@ Then start a Claude session and say: **"continue the AI agent build — Plan 6"*
 | 05 | Guardrail text screening (outbound validator + inbound screen) | ✅ DONE |
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
-| 08 | **Integration: LlmProvider + clients · agent loop + guardrail wiring · Gemini voice STT · `/api/agent/approve` webhook** | 🚧 Tasks 1 (registry) + 2 (LlmProvider + 3 clients) DONE; loop + webhook next |
+| 08 | **Integration: LlmProvider + clients · agent loop + guardrail wiring · Gemini voice STT · `/api/agent/approve` webhook** | 🚧 Tasks 1–4 DONE (registry, clients, prompt/KB, agent loop); webhook (5) + live wiring (6) next |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
@@ -77,7 +77,14 @@ Plus: Telegram inline-keyboard + callback Bot-API wrappers appended to `precast-
 - All clients take an **injectable SDK client** → unit-tested without keys (37 LLM tests). The three SDKs are now in `package.json`.
 - ⚠️ **Not yet validated against a live API** — needs a provider key. Gemini (incl. voice STT) is validatable first (Google access). Then confirm Claude caching hits via `usage.cache_read_input_tokens`.
 - 💡 Side effect: the `npm install` regenerated the Prisma client, so `npx tsc --noEmit` is now **fully clean** (the prior ~40 stale-client errors are gone).
-- **Tasks 3–6 NEXT:** system-prompt/KB assembly, the agent loop (forcing a quote tool on price turns + guardrail wiring), the `/api/agent/approve` webhook, and the guarded live-webhook entry (Shadow).
+- **Tasks 5–6 NEXT:** the `/api/agent/approve` webhook (commit a `PendingOrder` via `createOrder`), and the guarded live-webhook entry (Shadow).
+
+**Plan 08 Tasks 3–4 (DONE) — prompt/KB assembly + the agent loop:**
+- `precast-crm/src/lib/agent/prompt.ts` (+ test) — server-side `detectLanguage` (uz-latin/uz-cyrillic/ru) + `detectPriceIntent` + `buildSystemPrompt` (hard-constraint sections + KB hard-rule + injected owner KB + pinned reply language; deterministic/cache-safe; never interpolates customer text; source codepoint-scanned).
+- `precast-crm/src/lib/agent/tools/registry.ts` (+ test) — aggregates the 4 read tools, dispatch-by-name (unknown → escalate), `QUOTE_TOOL_NAMES`.
+- `precast-crm/src/lib/agent/loop.ts` (+ test) — `runAgentTurn`: tool-use loop over an injected `LlmProvider`, 12-turn guard, deterministic `escalate_to_human`, price-integrity wired (fresh quote_id gates price replies via the outbound validator), returns a routed `AgentDecision`. Tested with a fake provider (9 cases).
+- Reviewed (spec + code-quality subagents): deterministic-escalation fix applied; outbound-validator `PRICE_RE` linearized; deviations documented (single detected-language reply vs §4.2 3-variant; `request_approval`/`confidence`/turn-10 rolling summary deferred). No blockers.
+- ⚠️ Loop is tested with a fake provider; **live model behavior validated once the webhook (Task 6) is wired + keys are in `.env.local`** (all 3 keys now configured).
 
 ## Plan 08 (in progress) — scope + cautions
 The integration plan — wires everything built so far into a running agent. Heaviest since Plan 06; touches the live Telegram webhook. **Task 1 (model registry) is done** (above); Tasks 2–6 below remain.
