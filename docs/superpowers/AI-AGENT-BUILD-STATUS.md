@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-07 (Plan 07 done).
+**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 started — model registry shipped).
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -31,7 +31,7 @@ Then start a Claude session and say: **"continue the AI agent build — Plan 6"*
 | 05 | Guardrail text screening (outbound validator + inbound screen) | ✅ DONE |
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
-| 08 | **Webhook `callback_query` dispatch + DB approval handler; LlmProvider + Claude/Gemini/OpenAI clients + Gemini voice STT; agent loop + guardrail wiring** | ⬅ NEXT |
+| 08 | **Integration: LlmProvider + clients · agent loop + guardrail wiring · Gemini voice STT · `/api/agent/approve` webhook** | 🚧 Task 1 (model registry) DONE |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
@@ -63,8 +63,14 @@ Plus: Telegram inline-keyboard + callback Bot-API wrappers appended to `precast-
 - **Hardening from review:** `draft_order` (Plan 06 `order-tool.ts`) now rejects a valid-but-wrong-`kind` token — a `kind:'gazoblok'` quote (same signing secret) can no longer be stored as a slab order.
 - Plan doc: `docs/superpowers/plans/2026-06-07-ai-agent-07-read-tools.md`.
 
-## Plan 08 (next) — scope + cautions
-The integration plan — wires everything built so far into a running agent. Heaviest since Plan 06; touches the live Telegram webhook.
+**Plan 08 Task 1 (DONE) — verified bake-off model registry:**
+- `precast-crm/src/lib/agent/llm/models.ts` (+ test) — the latest models from all three providers, verified 2026-06-07 (USD/MTok): Anthropic Opus 4.8 `claude-opus-4-8` $5/$25 + Sonnet 4.6 `claude-sonnet-4-6` $3/$15; Google Gemini 3.1 Pro `gemini-3.1-pro-preview` $2/$12 (2M ctx) + 3.5 Flash `gemini-3.5-flash` $1.50/$9 (both native audio → voice STT); OpenAI GPT-5.5 `gpt-5.5` $5/$30 + GPT-5.4 `gpt-5.4` $2.50/$15. Classifiers: Haiku 4.5 / Gemini Flash-Lite / GPT-5 Mini. Each carries roles + capabilities + `bakeOff` + `requiresSnapshotPin`; helpers `bakeOffModels()` / `modelsByRole()` / `modelsByProvider()`.
+- `.env.example` gained `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OPENAI_API_KEY` / `AGENT_MODEL_KEY`. Spec §3 refreshed with these verified ids/prices.
+- ⚠️ **Before Shadow:** re-verify ids/prices (`PRICING_VERIFIED_AT`) and pin dated snapshots for anything flagged `requiresSnapshotPin` (Opus 4.8, Sonnet 4.6, Gemini 3.1 Pro preview).
+- Plan doc: `docs/superpowers/plans/2026-06-07-ai-agent-08-integration.md` (full integration scope; Task 1 done, Tasks 2–6 next).
+
+## Plan 08 (in progress) — scope + cautions
+The integration plan — wires everything built so far into a running agent. Heaviest since Plan 06; touches the live Telegram webhook. **Task 1 (model registry) is done** (above); Tasks 2–6 below remain.
 - **Approval webhook + DB handler:** `/api/agent/approve` — `callback_query` dispatch using the Plan 03 callback codec + keyboard wrappers; service-auth (Plan 02); flips `PendingOrder → APPROVED`/`REJECTED` (UNIQUE `telegramCallbackId` idempotency) and on approve calls `createOrder(input, { userId: null })` (Plan 06, service-account actor). Posts the staff Action Card (raw facts, not agent prose — spec §6 guardrail 3 / §10).
 - **`LlmProvider` abstraction + clients:** Claude (pinned snapshot, prompt caching `ttl:"1h"`, ≥4096-token cached prefix — spec §4.4), Gemini, OpenAI behind one interface (generate/vision/transcribe); **Gemini voice STT** as the fixed transcription step (spec §3/§4.5).
 - **Agent loop + guardrail wiring:** input-screen (Plan 05) → load history → call model with the Plan 07 toolset **forced on price turns** → dispatch tools (parallel where order-independent) → outbound validator (Plan 05) → auto-send vs HITL. 12-turn guard; rolling key-facts summary from ~turn 10 (spec §4.3).
