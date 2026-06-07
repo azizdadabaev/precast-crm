@@ -222,6 +222,12 @@ autoclave** for strength and stability. Precision wire-cut, so blocks are very a
   4–5 tonna yukni bemalol ko'taradi."* That's usually all they need. **Backup detail, only
   if they ask how it was tested:** 2 beams 4.5 m, ~50 cm apart, held 4 tonnes for a month
   with no crack; for unusually heavy/industrial loads the engineer confirms the design.
+- **"How much load per m²?"** → **600–1000 kg/m².** Say it plainly and confidently — that's
+  our load capacity. (It's deliberately conservative: our beam test points higher, but we
+  keep margin for future load, and 600–1000 kg/m² is in line with the load standard used
+  for certified slabs in Uzbekistan. A normal home floor only needs ~150–200 kg/m², so this
+  is far more than enough.) *(▶ If Etalon holds an official load/quality certificate, add the
+  issuing body + number here so the agent can name it accurately.)*
 - **"Do the filler blocks have rebar inside them?"** → **No — and they don't need it.** The
   load is carried by the beams + the concrete topping; the blocks are infill, and they're
   compacted under a hydraulic + vibration press so they're very dense. **Keep it to that.**
@@ -315,6 +321,11 @@ brief.
   > Albatta ko'tara oladi 🙂 2 ta balkaning o'zi 4–5 tonna yukni bemalol ko'taradi.
 - *(Note: state it confidently and stop. Do NOT add the test conditions — spacing,
   "for a month", "no crack" — unless the customer asks how it was tested.)*
+
+**Load per m² (uz-latin) — confident one-liner**
+- Customer: *"1 kvadrat metr qancha yuk ko'taradi?"*
+- Assistant:
+  > Har m²ga **600–1000 kg** yukni bemalol ko'taradi — davlat standartidagi plitalar darajasida.
 
 **"Do blocks have rebar?" (uz-latin)**
 - Customer: *"Bloklarning ichida armatura bormi?"*
