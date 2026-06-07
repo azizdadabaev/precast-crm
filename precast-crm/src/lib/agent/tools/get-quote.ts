@@ -25,6 +25,13 @@ import {
 
 const DEFAULT_VALIDITY_MS = 24 * 60 * 60 * 1000; // 24h — matches buildSlabQuote
 
+// Delivered-cargo weight constants (owner-provided physical facts, not prices):
+// a beam weighs ~32 kg per metre; an infill block ~16 kg. Total shipped weight =
+// beams (count × length × 32) + blocks (count × 16). Approximate — used for a
+// transport estimate, never a binding figure.
+const BEAM_KG_PER_M = 32;
+const BLOCK_KG = 16;
+
 // Numeric min/max live in code, not the JSON schema, so the schema stays
 // strict-friendly (spec §4.2 layer 3 — plausibility checks run server-side).
 export const GetQuoteInput = z.object({
@@ -48,6 +55,9 @@ export interface QuoteData {
     totalBlocks: number;
     billedAreaM2: number;
   };
+  /** Approximate delivered-cargo weight in kg (beams + blocks). For a transport
+   *  estimate only — not a binding figure. */
+  weight_kg: number;
   quote_id: string;
   currency: 'UZS';
   validity_ts: number; // ms epoch the quote_id expires at
@@ -102,6 +112,7 @@ export function runGetQuote(raw: unknown, deps: GetQuoteDeps): ToolResult<QuoteD
   }
 
   const p = quote.payload;
+  const weight_kg = Math.round(p.beamCount * p.beamLength * BEAM_KG_PER_M + p.totalBlocks * BLOCK_KG);
   return toolOk({
     subtotal: quote.price,
     m2_price: p.m2Price,
@@ -112,6 +123,7 @@ export function runGetQuote(raw: unknown, deps: GetQuoteDeps): ToolResult<QuoteD
       totalBlocks: p.totalBlocks,
       billedAreaM2: p.billedArea,
     },
+    weight_kg,
     quote_id: quote.quoteId,
     currency: 'UZS',
     validity_ts: p.expiresAt,
@@ -123,8 +135,9 @@ export const getQuoteDefinition: AgentToolDefinition = {
   description:
     'Price a beam-and-block (precast) FLOORING slab for one room and return a ' +
     'binding quote_id. Input the inside-wall dimensions in METERS (wall-to-wall). ' +
-    'Returns subtotal, m²-price, pattern, a bill of materials, and a signed ' +
-    'quote_id (UZS) — this quote_id is REQUIRED to later draft an order. ' +
+    'Returns subtotal, m²-price, pattern, a bill of materials, an approximate ' +
+    'delivered weight in kg (weight_kg — useful to volunteer for transport), and a ' +
+    'signed quote_id (UZS) — this quote_id is REQUIRED to later draft an order. ' +
     'Does NOT cover: gazoblok wall blocks (use get_gazoblok_quote), delivery ' +
     'dates or costs, discounts, or non-standard / irregular / multi-level shapes. ' +
     'If the dimensions are unclear or the job is non-standard, escalate instead of guessing.',

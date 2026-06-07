@@ -30,6 +30,15 @@ describe('runGetGazoblokQuote', () => {
     expect(v!.price).toBe(res.data.price);
   });
 
+  it('computes delivered weight from block volume × D600 density (≈22 kg for a 200mm block)', () => {
+    const res = runGetGazoblokQuote({ thickness_mm: 200, quantity: 50 }, deps());
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // 0.6 × 0.3 × 0.2 m³ × 600 kg/m³ = 21.6 kg/block → 50 × 21.6 = 1080 kg.
+    expect(res.data.weight_kg).toBe(1080);
+    expect(Math.round(res.data.weight_kg / 50)).toBe(22); // matches owner's "D600 = 22kg"
+  });
+
   it('prices a wall request', () => {
     const res = runGetGazoblokQuote({ product_id: 'p300', wall: { length_m: 8, height_m: 3 } }, deps());
     expect(res.ok).toBe(true);

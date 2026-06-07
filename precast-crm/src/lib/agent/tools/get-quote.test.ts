@@ -43,6 +43,16 @@ describe('runGetQuote', () => {
     });
   });
 
+  it('computes delivered weight from the BOM (beams 32 kg/m + blocks 16 kg)', () => {
+    const res = runGetQuote({ inner_width: 4, inner_length: 5 }, deps());
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const bom = res.data.bill_of_materials;
+    const expected = Math.round(bom.beams.count * bom.beams.lengthM * 32 + bom.totalBlocks * 16);
+    expect(res.data.weight_kg).toBe(expected);
+    expect(res.data.weight_kg).toBeGreaterThan(0);
+  });
+
   it('escalates (does not crash) when the signing secret is missing', () => {
     const res = runGetQuote({ inner_width: 4, inner_length: 5 }, deps({ secret: '' }));
     expect(res).toEqual({ ok: false, escalate: true, reason: expect.stringContaining('signing') });

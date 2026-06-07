@@ -23,6 +23,11 @@ import {
 
 const DEFAULT_VALIDITY_MS = 24 * 60 * 60 * 1000;
 
+// Gazoblok is D600 (≈600 kg/m³ dry, owner-confirmed). Per-block weight = block
+// volume × this density — gives ≈22 kg for a 600×300×200 block and stays correct
+// across sizes. Approximate, for a transport estimate only.
+const GAZOBLOK_DENSITY_KG_M3 = 600;
+
 export const GetGazoblokQuoteInput = z
   .object({
     product_id: z.string().optional(),
@@ -55,6 +60,9 @@ export interface GazoblokQuoteData {
   label: string;
   thickness_mm: number;
   mode: 'quantity' | 'wall';
+  /** Approximate delivered-cargo weight in kg (block volume × D600 density ×
+   *  quantity). For a transport estimate only. */
+  weight_kg: number;
   quote_id: string;
   currency: 'UZS';
   validity_ts: number;
@@ -122,6 +130,7 @@ export function runGetGazoblokQuote(
   }
 
   const p = quote.payload;
+  const weight_kg = Math.round(p.quantity * product.lengthM * product.heightM * product.thicknessM * GAZOBLOK_DENSITY_KG_M3);
   return toolOk({
     price: quote.price,
     unit_price: p.unitPrice,
@@ -129,6 +138,7 @@ export function runGetGazoblokQuote(
     label: p.label,
     thickness_mm: p.thicknessMm,
     mode: p.mode,
+    weight_kg,
     quote_id: quote.quoteId,
     currency: 'UZS',
     validity_ts: p.expiresAt,
@@ -160,7 +170,8 @@ export const getGazoblokQuoteDefinition: AgentToolDefinition = {
     'Pick a size by wall thickness in millimetres (thickness_mm) or by product_id, ' +
     'then give either a block quantity or wall dimensions (length_m × height_m, ' +
     'minus openings_m2) to estimate the count. Returns price, unit price, quantity, ' +
-    'and a signed quote_id (UZS). Does NOT cover: beam-and-block flooring (use ' +
+    'an approximate delivered weight in kg (weight_kg — useful to volunteer for ' +
+    'transport), and a signed quote_id (UZS). Does NOT cover: beam-and-block flooring (use ' +
     'get_quote), delivery dates or costs, or custom densities. If no size matches ' +
     'or the catalog is empty, escalate — never invent a size or price.',
   inputSchema: {
