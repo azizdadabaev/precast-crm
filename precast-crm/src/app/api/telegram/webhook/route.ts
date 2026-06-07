@@ -8,6 +8,7 @@ import { isValidWebhookSecret } from "@/lib/telegram/webhook-secret";
 import { tgGetFilePath, tgDownloadFile, TELEGRAM_MAX_DOWNLOAD_BYTES } from "@/lib/telegram/api";
 import { saveBufferToUploads } from "@/lib/uploads";
 import { emitInbox } from "@/lib/inbox-bus";
+import { runAgentForInbound } from "@/lib/agent/webhook-entry";
 
 const EXT_BY_KIND: Record<string, string> = {
   IMAGE: ".jpg", VIDEO: ".mp4", VIDEO_NOTE: ".mp4", VOICE: ".ogg", AUDIO: ".mp3", DOCUMENT: "",
@@ -161,6 +162,22 @@ export async function POST(req: NextRequest) {
 
     // 7. Notify live listeners.
     emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
+
+    // 8. AI agent (Plan 08 Task 6) — inbound customer TEXT only, fire-and-forget
+    //    so the webhook still 200s fast. The agent reads the kill-switch + the
+    //    per-chat gate itself and, in Shadow mode, only logs a proposed reply.
+    if (!parsed.outgoing && !parsed.isEdited && parsed.text && parsed.text.trim()) {
+      void runAgentForInbound(
+        {
+          id: conversation.id,
+          aiState: conversation.aiState,
+          aiPaused: conversation.aiPaused,
+          sharedContactPhone: conversation.sharedContactPhone,
+        },
+        parsed.text,
+        message.id,
+      ).catch((e) => console.error("[telegram webhook agent]", e));
+    }
   } catch (err) {
     // Log but still 200 — a 500 makes Telegram retry the same update for 24h.
     console.error("[telegram webhook]", err);
