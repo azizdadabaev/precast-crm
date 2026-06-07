@@ -59,8 +59,16 @@
 - Telegram `callback_query` routing into `decidePendingOrder` (lands at the existing `src/app/api/telegram/webhook/route.ts` — Telegram has one webhook; service-auth applies to any server-to-server `/api/agent/*` path). Parse via the Plan 03 callback codec; the route catches a `telegramCallbackId` P2002 (same-tap retry) → no-op; answers the callback + sends the customer confirmation on commit.
 - Posting the staff Action Card: `notify_staff`/`request_approval` builds the `PendingOrder` (Plan 06 `draft_order`, flips to `AWAITING_STAFF`) then posts a staff-group message with raw facts + `[Approve][Reject]` (Plan 03 keyboard). Approval SLA: hold + re-ping every 10–15 min, up to 1 day (spec §10).
 
-### Task 6 — Wire the live webhook entry (guarded)
-- Hook the agent loop into the existing Telegram Business webhook so inbound messages reach it — but behind the **global kill-switch** (read first) + per-chat `aiPaused`, defaulting to **Shadow (log-only)**. No auto-send until the owner flips the stage. Telegram 429 → honour `retry_after`; hard send failure → escalate.
+### Task 6 (DONE) — Wire the live webhook entry, Shadow mode
+- `src/lib/agent/runtime-config.ts` (+ test) — `loadAgentRuntimeConfig` (AppConfig `agent.runtime`, **default `{enabled:false, mode:'shadow'}`** — kill-switch OFF until the owner opts in), `loadKnowledgeBase` (AppConfig `agent.knowledge_base`.content), and the pure `shouldAgentHandle` gate (enabled + `aiState==='AI_HANDLING'` + `!aiPaused`).
+- `src/lib/agent/shadow.ts` (+ test) — `runAgentShadow`: screen → detectLanguage → buildSystemPrompt(KB) → `runAgentTurn` → structured **log only** (suspicious inbound escalates with NO model call). `toLlmHistory` maps stored messages → loop history. **Sends nothing.**
+- `src/lib/agent/webhook-entry.ts` — `runAgentForInbound`: reads the kill-switch + gate first, loads recent history + KB, builds the provider (`createProviderByKey(AGENT_MODEL_KEY ?? 'claude-opus-4-8')`), runs Shadow. Total try/catch — never breaks inbox delivery.
+- `src/app/api/telegram/webhook/route.ts` — step 8 fires `void runAgentForInbound(...).catch(...)` for inbound customer TEXT only (not outgoing/edited/media-only), fire-and-forget so the webhook still 200s fast.
+- Reviewed (safety): confirmed no send path exists in the whole agent tree (read-only tools, loop returns a decision); gate read before any model work; default OFF; webhook can't be broken by the agent. **Validatable now on `npm run dev`** once `agent.runtime.enabled=true` is set in AppConfig (proposals appear in the `[agent:shadow]` logs).
+- **Deferred:** auto-send (Plan 09 rollout); Telegram 429/retry_after handling lands with the send path (Task 5b/Plan 09).
+
+### Task 5b (NEXT) — Approval route + Action Card posting
+See Task 5 above — the `callback_query` routing into `decidePendingOrder` and the staff Action Card posting (+ the loop's `request_approval`/`draft_order` seam) are the remaining write-action wiring.
 
 ---
 

@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — through the approval commit/reject service).
+**Last updated:** 2026-06-07 (Plan 07 done; Plan 08 in progress — agent runs in Shadow on the live webhook).
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -31,7 +31,7 @@ Then start a Claude session and say: **"continue the AI agent build — Plan 6"*
 | 05 | Guardrail text screening (outbound validator + inbound screen) | ✅ DONE |
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
-| 08 | **Integration: LlmProvider + clients · agent loop · approval commit · live webhook wiring** | 🚧 Tasks 1–4 + 5a DONE; route+Action-Card (5b) + live wiring (6) next |
+| 08 | **Integration: LlmProvider + clients · agent loop · approval commit · live webhook (Shadow)** | 🚧 Tasks 1–4 + 5a + 6 DONE; only 5b (approval route + Action Card) left |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
@@ -90,7 +90,14 @@ Plus: Telegram inline-keyboard + callback Bot-API wrappers appended to `precast-
 - `precast-crm/src/lib/agent/approve-order.ts` (+ test, 13 cases) — `decidePendingOrder`: staff Approve re-verifies the quote_id's provenance (`ignoreExpiry`; forged/wrong-kind blocked), guards customer info, **atomically claims `AWAITING_STAFF→APPROVED`** and commits a real Order via Plan 06 `createOrder` (staff approver as actor), reverting on any failure (returned or thrown). Reject → `REJECTED` + `Conversation.aiState=HUMAN_ACTIVE`. Idempotent + race-safe (exactly one Order under concurrent taps, asserted). `makeApproveDb()` is the Prisma impl (conditional `updateMany`).
 - `quote-token.ts` gained `ignoreExpiry` (commit-path provenance check). Reviewed by spec + code-quality subagents: fixed a real throw-doesn't-revert bug, tightened the approve claim to `AWAITING_STAFF`, added the concurrency + throw tests. No blockers.
 - Decisions (documented): order re-priced live at placement (frozen quote price not reused); `scheduledAt` placeholder = approval time (staff set the real delivery date); single-room agent orders.
-- **Task 5b NEXT:** route `callback_query` → `decidePendingOrder` in the existing Telegram webhook (catch `telegramCallbackId` P2002 → no-op; answer callback; send customer confirmation) + post the staff Action Card (`request_approval`/`notify_staff` → `draft_order` → `[Approve][Reject]`).
+**Plan 08 Task 6 (DONE) — agent runs in Shadow on the live webhook:**
+- `precast-crm/src/lib/agent/runtime-config.ts` (kill-switch `agent.runtime` default OFF + `shouldAgentHandle` gate + KB loader), `shadow.ts` (`runAgentShadow`: screen→lang→prompt→loop→**log only**, suspicious→escalate w/o model call), `webhook-entry.ts` (`runAgentForInbound`: gate→history→KB→provider→Shadow, total try/catch). Wired into `src/app/api/telegram/webhook/route.ts` step 8 (inbound TEXT only, fire-and-forget). Tests: `shadow.test.ts`, `tests/agent-runtime-config.test.ts`.
+- Reviewed: no send path exists anywhere in the agent tree; gate read first; default OFF; can't break inbox delivery.
+- ▶ **To see it on `npm run dev`:** set AppConfig `agent.runtime` = `{enabled:true, mode:'shadow'}`; proposed replies appear in the `[agent:shadow]` server logs (nothing is sent to customers). Needs the provider key in `.env.local` (all 3 configured).
+
+**Plan 08 Task 5b (ONLY REMAINING) — approval route + Action Card:**
+- Route `callback_query` → `decidePendingOrder` in the Telegram webhook (catch `telegramCallbackId` P2002 → no-op; answer callback; send customer confirmation on commit).
+- Post the staff Action Card (`request_approval`/`notify_staff` → `draft_order` → `[Approve][Reject]`) + add the loop's `request_approval` seam (the model detects customer agreement → draft + card). This closes the write-action propose→commit loop. Then Plan 09 (inbox UX, KB editor, eval/bake-off).
 
 ## Plan 08 (in progress) — scope + cautions
 The integration plan — wires everything built so far into a running agent. Heaviest since Plan 06; touches the live Telegram webhook. **Task 1 (model registry) is done** (above); Tasks 2–6 below remain.
