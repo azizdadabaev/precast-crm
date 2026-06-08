@@ -97,10 +97,34 @@ export interface TranscribeInput {
   mimeType: string;
 }
 
+/** A floor-plan image to read room dimensions from (spec §4.5). */
+export interface ImageInput {
+  /** Base64-encoded image bytes (jpeg/png — allowlisted in the webhook). */
+  data: string;
+  mimeType: string;
+}
+
+/** Room dimensions read from a floor-plan image. NEVER used to quote directly —
+ *  the caller echoes them back for the customer to confirm first (spec §4.5). */
+export interface ExtractedDimensions {
+  /** True only when a clear single room with both inner dimensions was read. */
+  found: boolean;
+  innerWidthM?: number;
+  innerLengthM?: number;
+  /** `low` (or !found) → don't echo a number; ask for typed dims / escalate. */
+  confidence: 'high' | 'low';
+  /** Short note on what was seen / why unsure (staff-facing, not the customer). */
+  note?: string;
+}
+
 export interface LlmProvider {
   /** Which registry model this provider instance drives. */
   readonly model: ModelSpec;
   generate(req: GenerateRequest): Promise<GenerateResult>;
   /** Voice-note STT — implemented only by the Google provider (spec §3). */
   transcribe?(audio: TranscribeInput): Promise<string>;
+  /** Floor-plan dimension reading — vision-capable providers only (spec §4.5).
+   *  Returns parsed dimensions; the caller echoes them to the customer to confirm
+   *  before any calculation, and never quotes off a misread sketch. */
+  extractDimensions?(image: ImageInput): Promise<ExtractedDimensions>;
 }

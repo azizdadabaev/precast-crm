@@ -53,3 +53,12 @@ export function createTranscriptionProvider(deps: ProviderDeps = {}): GeminiProv
   if (!model) throw new Error('createTranscriptionProvider: no Google transcription model in registry');
   return new GeminiProvider(model, deps);
 }
+
+/** The Gemini provider used for floor-plan dimension reading (spec §4.5 — Gemini
+ *  is the vision path regardless of which model wins the conversation bake-off).
+ *  Picks the first vision-capable Google model from the registry. */
+export function createVisionProvider(deps: ProviderDeps = {}): GeminiProvider {
+  const model = modelsByRole('vision').find((m) => m.provider === 'google' && m.capabilities.vision) ?? null;
+  if (!model) throw new Error('createVisionProvider: no Google vision model in registry');
+  return new GeminiProvider(model, deps);
+}

@@ -123,7 +123,12 @@ export async function saveAgentProposal(
   meta: ProposalMeta,
   db?: AgentProposalDb,
 ): Promise<SaveProposalResult> {
-  const row = buildProposalRow(outcome, meta);
+  return saveAgentProposalRow(buildProposalRow(outcome, meta), db);
+}
+
+/** Thin idempotent insert of a pre-built row — also used by the vision path
+ *  (which builds its row directly, not from a ShadowOutcome). */
+export async function saveAgentProposalRow(row: AgentProposalRow, db?: AgentProposalDb): Promise<SaveProposalResult> {
   // Lazy import so unit tests that pass a fake `db` never load the Prisma client.
   const client = db ?? ((await import('@/lib/prisma')).prisma as unknown as AgentProposalDb);
   const { count } = await client.agentProposal.createMany({ data: [row], skipDuplicates: true });

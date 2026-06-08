@@ -8,11 +8,13 @@
 
 import { prisma } from '@/lib/prisma';
 import { loadAgentRuntimeConfig, loadKnowledgeBase, shouldAgentHandle } from './runtime-config';
-import { createProviderForModelKey } from './llm/factory';
+import { createProviderForModelKey, createVisionProvider } from './llm/factory';
 import { createToolRegistry } from './tools/registry';
 import { runAgentShadow, toLlmHistory, type HistoryRow } from './shadow';
-import { saveAgentProposal } from './proposal';
+import { saveAgentProposal, saveAgentProposalRow, type AgentProposalRow } from './proposal';
 import { applyAutoMode, defaultAutoModeDeps } from './auto-mode';
+import { detectConversationLanguage } from './prompt';
+import { buildVisionEcho } from './vision';
 
 const HISTORY_LIMIT = 20;
 
@@ -78,5 +80,71 @@ export async function runAgentForInbound(
   } catch (err) {
     // Shadow is non-critical; a failure must never break inbox delivery.
     console.error('[agent:webhook-entry]', err);
+  }
+}
+
+/**
+ * Floor-plan vision (spec §4.5). For an inbound IMAGE: read the room dimensions
+ * with the Gemini vision provider, then propose an ECHO-to-confirm reply (never a
+ * quote off the sketch). The proposal is persisted and is ALWAYS human-reviewed —
+ * it never auto-sends, regardless of mode (photo flows are human-checked, §10).
+ * Best-effort: never throws.
+ */
+export async function runVisionForInbound(
+  conversation: InboundConversation,
+  mediaPath: string,
+  mimeType: string,
+  inboundMessageId: string,
+): Promise<void> {
+  try {
+    const config = await loadAgentRuntimeConfig();
+    if (!shouldAgentHandle(conversation, config)) return;
+
+    // Vision is fixed to Gemini (spec §3/§4.5), regardless of the brain model.
+    const { resolveApiKey } = await import('./provider-keys');
+    const apiKey = await resolveApiKey('google');
+    if (!apiKey) {
+      console.warn('[agent:vision] no Google API key configured — skipping image');
+      return;
+    }
+    const provider = createVisionProvider({ apiKey });
+    if (!provider.extractDimensions) return;
+
+    // Read the saved image bytes → base64. mediaPath is "/uploads/...".
+    const { readFile } = await import('fs/promises');
+    const { join } = await import('path');
+    const data = (await readFile(join(process.cwd(), 'public', mediaPath))).toString('base64');
+
+    const dims = await provider.extractDimensions({ data, mimeType });
+
+    // No text on an image turn — keep the conversation's established language.
+    const rows = await prisma.message.findMany({
+      where: { conversationId: conversation.id, id: { not: inboundMessageId }, text: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: HISTORY_LIMIT,
+      select: { direction: true, text: true },
+    });
+    const language = detectConversationLanguage('', toLlmHistory(rows.reverse() as HistoryRow[]));
+    const decision = buildVisionEcho(dims, language);
+
+    // Persist as a proposal — NO auto-send (image-derived → always human-reviewed).
+    const row: AgentProposalRow = {
+      conversationId: conversation.id,
+      inboundMessageId,
+      language,
+      decision: decision.action,
+      reply: decision.action === 'reply' ? decision.reply : null,
+      escalationReason: decision.action === 'escalate' ? decision.reason : null,
+      screen: { tooLong: false, injection: false, link: false, verdict: 'ok' },
+      escalatedEarly: false,
+      modelKey: provider.model.key,
+      toolCalls: [],
+      usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+      turns: 1,
+      confidence: dims.confidence,
+    };
+    await saveAgentProposalRow(row);
+  } catch (err) {
+    console.error('[agent:vision]', err);
   }
 }

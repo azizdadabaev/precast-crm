@@ -951,15 +951,22 @@ function SimulateModal({
 }) {
   const qc = useQueryClient();
   const [text, setText] = useState("");
+  const [image, setImage] = useState<{ base64: string; mime: string; name: string } | null>(null);
   const [intoCurrent, setIntoCurrent] = useState(true);
   const [note, setNote] = useState<string | null>(null);
 
   const sim = useMutation({
-    mutationFn: () =>
-      api<{ conversationId: string; ranAgent: boolean; proposal: unknown; note?: string }>(
+    mutationFn: () => {
+      const conversationId = activeId && intoCurrent ? activeId : undefined;
+      // An attached image tests the floor-plan vision path; otherwise plain text.
+      const json = image
+        ? { imageBase64: image.base64, imageMime: image.mime, conversationId }
+        : { text: text.trim(), conversationId };
+      return api<{ conversationId: string; ranAgent: boolean; proposal: unknown; note?: string }>(
         "/api/agent/simulate-inbound",
-        { method: "POST", json: { text: text.trim(), conversationId: activeId && intoCurrent ? activeId : undefined } },
-      ),
+        { method: "POST", json },
+      );
+    },
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
       qc.invalidateQueries({ queryKey: ["inbox-thread", res.conversationId] });
@@ -1002,6 +1009,25 @@ function SimulateModal({
           placeholder="масалан: 4x5 хона нархи қанча? · e.g. how much for a 4x5 room?"
           className="mt-3 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-[color:var(--tg-accent)]"
         />
+        <label className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-[color:var(--tg-text-dim)]">
+          <span>📐 Чизма расм · Floor-plan image (vision):</span>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="text-[11px]"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (!f) { setImage(null); return; }
+              const reader = new FileReader();
+              reader.onload = () => {
+                const r = String(reader.result);
+                setImage({ base64: r.includes(",") ? r.slice(r.indexOf(",") + 1) : r, mime: f.type || "image/jpeg", name: f.name });
+              };
+              reader.readAsDataURL(f);
+            }}
+          />
+          {image && <span className="text-[var(--tg-accent)]">📎 {image.name} · расм юборилади · image will be sent</span>}
+        </label>
         {activeId && (
           <label className="mt-2 flex items-center gap-2 text-[13px] text-[color:var(--tg-text-dim)]">
             <input type="checkbox" checked={intoCurrent} onChange={(e) => setIntoCurrent(e.target.checked)} />
@@ -1025,7 +1051,7 @@ function SimulateModal({
           <button
             type="button"
             onClick={() => { setNote(null); sim.mutate(); }}
-            disabled={sim.isPending || !text.trim()}
+            disabled={sim.isPending || (!text.trim() && !image)}
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-white transition-colors disabled:opacity-60"
             style={{ background: "var(--tg-accent)" }}
           >

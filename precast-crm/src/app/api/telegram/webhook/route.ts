@@ -8,7 +8,7 @@ import { isValidWebhookSecret } from "@/lib/telegram/webhook-secret";
 import { tgGetFilePath, tgDownloadFile, TELEGRAM_MAX_DOWNLOAD_BYTES } from "@/lib/telegram/api";
 import { saveBufferToUploads } from "@/lib/uploads";
 import { emitInbox } from "@/lib/inbox-bus";
-import { runAgentForInbound } from "@/lib/agent/webhook-entry";
+import { runAgentForInbound, runVisionForInbound } from "@/lib/agent/webhook-entry";
 import { handleApprovalCallback } from "@/lib/agent/approval-webhook";
 
 const EXT_BY_KIND: Record<string, string> = {
@@ -187,6 +187,23 @@ export async function POST(req: NextRequest) {
         parsed.text,
         message.id,
       ).catch((e) => console.error("[telegram webhook agent]", e));
+    }
+
+    // 8b. AI vision (spec §4.5) — inbound floor-plan IMAGE → read dimensions →
+    //     echo them back to confirm. Fire-and-forget; image-derived proposals are
+    //     always human-reviewed (never auto-sent).
+    if (!parsed.outgoing && !parsed.isEdited && mediaKind === "IMAGE" && mediaPath) {
+      void runVisionForInbound(
+        {
+          id: conversation.id,
+          aiState: conversation.aiState,
+          aiPaused: conversation.aiPaused,
+          sharedContactPhone: conversation.sharedContactPhone,
+        },
+        mediaPath,
+        "image/jpeg",
+        message.id,
+      ).catch((e) => console.error("[telegram webhook vision]", e));
     }
   } catch (err) {
     // Log but still 200 — a 500 makes Telegram retry the same update for 24h.
