@@ -104,14 +104,22 @@ export interface ImageInput {
   mimeType: string;
 }
 
-/** Room dimensions read from a floor-plan image. NEVER used to quote directly —
- *  the caller echoes them back for the customer to confirm first (spec §4.5). */
+/** One room read from a floor-plan (inner wall-to-wall dimensions, meters). */
+export interface ExtractedRoom {
+  widthM: number;
+  lengthM: number;
+  /** Optional label seen on the plan (e.g. "xona 1"). */
+  label?: string;
+}
+
+/** Rooms read from a floor-plan image. NEVER used to quote directly — the caller
+ *  echoes them back for the customer to confirm first (spec §4.5). A plan may have
+ *  MULTIPLE rooms (the common case for a house); all clearly-read rooms are returned. */
 export interface ExtractedDimensions {
-  /** True only when a clear single room with both inner dimensions was read. */
+  /** True when ≥1 room's two inner dimensions were read clearly. */
   found: boolean;
-  innerWidthM?: number;
-  innerLengthM?: number;
-  /** `low` (or !found) → don't echo a number; ask for typed dims / escalate. */
+  rooms: ExtractedRoom[];
+  /** `low` (or !found) → don't echo numbers; ask for typed dims / escalate. */
   confidence: 'high' | 'low';
   /** Short note on what was seen / why unsure (staff-facing, not the customer). */
   note?: string;
