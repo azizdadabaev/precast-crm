@@ -6,7 +6,7 @@
 // tools) → a structured log entry. Auto-send is a later rollout stage (Plan 09).
 
 import { screenInbound, type ScreenResult } from './inbound-screen';
-import { detectLanguage, detectPriceIntent, buildSystemPrompt } from './prompt';
+import { detectConversationLanguage, detectPriceIntent, buildSystemPrompt } from './prompt';
 import { runAgentTurn, type AgentDecision, type AgentTurnResult } from './loop';
 import type { LlmMessage, LlmProvider, LlmToolChoice } from './llm/provider';
 import type { ToolRegistry } from './tools/registry';
@@ -85,7 +85,10 @@ const PREVIEW_LEN = 200;
 export async function runAgentShadow(input: ShadowInput, deps: ShadowDeps): Promise<ShadowOutcome> {
   const log = deps.log ?? ((e: ShadowLogEntry) => console.info('[agent:shadow]', JSON.stringify(e)));
   const screened = screenInbound(input.inboundRaw);
-  const language = detectLanguage(screened.normalized);
+  // Conversation-aware: a digits-only dimensions message ("4x5") carries no real
+  // language, so keep the language the customer established earlier in the chat
+  // (spec §3) instead of snapping back to the uz-latin default.
+  const language = detectConversationLanguage(screened.normalized, input.history);
 
   const baseEntry = (
     decision: AgentDecision,

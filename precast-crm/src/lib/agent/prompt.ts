@@ -27,6 +27,37 @@ export function detectLanguage(text: string, fallback: ReplyLanguage = 'uz-latin
   return fallback;
 }
 
+// A run of ≥2 consecutive letters = a real word, i.e. a genuine language signal.
+// This deliberately ignores a lone letter such as the "x" in a dimension string
+// ("4x5", "5.2 x 4.0") — that "x" is a multiplication sign, not Uzbek-Latin.
+const WORD = /\p{L}{2,}/u;
+
+/**
+ * Conversation-aware reply language (spec §3 mitigation d, fixing multi-turn
+ * drift). A single message is an unreliable signal: room dimensions like "4x5"
+ * or "4 5 3" carry no real language, so per-message detection would snap back to
+ * the uz-latin default and the reply would switch languages mid-chat.
+ *
+ * Rule: if the CURRENT message carries a real word, it decides (so the customer
+ * may switch languages). Otherwise keep the language of the most recent CUSTOMER
+ * (user-role) message that carried a word — the customer's own language is
+ * authoritative, so our own (possibly drifted) replies are ignored. If nothing is
+ * decisive anywhere, fall back to detectLanguage's default.
+ */
+export function detectConversationLanguage(
+  inbound: string,
+  history: ReadonlyArray<{ role: string; content: unknown }>,
+): ReplyLanguage {
+  if (WORD.test(inbound)) return detectLanguage(inbound);
+  for (let i = history.length - 1; i >= 0; i--) {
+    const turn = history[i];
+    if (turn.role !== 'user') continue;
+    const content = typeof turn.content === 'string' ? turn.content : '';
+    if (WORD.test(content)) return detectLanguage(content);
+  }
+  return detectLanguage(inbound);
+}
+
 const LANGUAGE_LABEL: Record<ReplyLanguage, string> = {
   'uz-latin': 'Uzbek (Latin script)',
   'uz-cyrillic': 'Uzbek (Cyrillic script)',

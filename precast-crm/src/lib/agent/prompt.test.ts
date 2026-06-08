@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { detectLanguage, detectPriceIntent, buildSystemPrompt } from './prompt';
+import { detectLanguage, detectConversationLanguage, detectPriceIntent, buildSystemPrompt } from './prompt';
 
 describe('detectLanguage', () => {
   it('returns uz-latin for Latin text (market default)', () => {
@@ -18,6 +18,45 @@ describe('detectLanguage', () => {
   it('falls back when there are no decisive letters', () => {
     expect(detectLanguage('4 x 5 = ?')).toBe('uz-latin');
     expect(detectLanguage('123', 'ru')).toBe('ru');
+  });
+});
+
+describe('detectConversationLanguage', () => {
+  const u = (content: string) => ({ role: 'user' as const, content });
+  const a = (content: string) => ({ role: 'assistant' as const, content });
+
+  it('uses the current message when it carries a real word (honors a mid-chat switch)', () => {
+    expect(detectConversationLanguage('Сколько стоит?', [u('Salom')])).toBe('ru');
+    expect(detectConversationLanguage('Narxi qancha?', [u('Сколько?')])).toBe('uz-latin');
+  });
+
+  it('keeps the conversation language when the message is digits-only dimensions (the bug)', () => {
+    // Customer established Russian; then sends only numbers — reply must stay ru,
+    // not drift to the uz-latin default.
+    const history = [u('Здравствуйте'), a('Здравствуйте! Чем помочь?'), u('Сколько стоит перекрытие?')];
+    expect(detectConversationLanguage('4x5', history)).toBe('ru');
+    expect(detectConversationLanguage('4 5 3', history)).toBe('ru');
+    expect(detectConversationLanguage('5.2 x 4.0', history)).toBe('ru');
+  });
+
+  it('does not treat a stray dimension "x" as an Uzbek-Latin language signal', () => {
+    expect(detectConversationLanguage('4x5', [u('Нархи қанча?')])).toBe('uz-cyrillic');
+  });
+
+  it('determines language from the customer, ignoring our own (possibly wrong) replies', () => {
+    // Even if a prior assistant turn drifted to Uzbek, the customer's language wins.
+    const history = [u('Сколько стоит?'), a('Narxi ... (drifted)')];
+    expect(detectConversationLanguage('4x5', history)).toBe('ru');
+  });
+
+  it('uses the most recent decisive customer turn (latest language wins)', () => {
+    const history = [u('Сколько стоит?'), u('Narxi qancha?')];
+    expect(detectConversationLanguage('4x5', history)).toBe('uz-latin');
+  });
+
+  it('falls back to the default when neither the message nor history is decisive', () => {
+    expect(detectConversationLanguage('4x5', [])).toBe('uz-latin');
+    expect(detectConversationLanguage('123', [u('456')])).toBe('uz-latin');
   });
 });
 

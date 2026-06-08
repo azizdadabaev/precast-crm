@@ -71,6 +71,19 @@ describe('runAgentShadow', () => {
     expect(p.requests[0].toolChoice).toEqual({ type: 'required' });
   });
 
+  it('keeps the conversation language when the latest inbound is digits-only dimensions', async () => {
+    // The reported multi-turn bug: customer established Russian, then sends only
+    // "4x5" — the reply must stay Russian, not drift to the uz-latin default.
+    const p = provider([res({ text: 'ответ' })]);
+    const { deps: d } = deps(p);
+    const out = await runAgentShadow(
+      { conversationId: 'c1', history: [{ role: 'user', content: 'Сколько стоит перекрытие?' }], inboundRaw: '4x5' },
+      d,
+    );
+    expect(out.language).toBe('ru');
+    expect(p.requests[0].system).toContain('Reply in Russian');
+  });
+
   it('detects Russian and pins the reply language in the prompt', async () => {
     const p = provider([res({ text: 'Здравствуйте!' })]);
     const { deps: d } = deps(p);
