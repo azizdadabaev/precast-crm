@@ -7,6 +7,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/lib/i18n";
+import { findKbPrices } from "@/lib/agent/kb-lint";
 
 type ProviderName = "anthropic" | "google" | "openai";
 
@@ -40,6 +41,89 @@ interface TestResult {
   usage: { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number } | null;
   tookMs?: number;
   turns?: number;
+}
+
+// Owner-managed knowledge base (spec §9). Single Markdown editor over the
+// AppConfig the agent reads live; the agent picks up a save on its next turn.
+function KnowledgeBaseSection() {
+  const t = useT();
+  const qc = useQueryClient();
+  const { data } = useQuery<{ content: string; updatedAt: string | null; updatedBy: string | null }>({
+    queryKey: ["agent-kb"],
+    queryFn: () => api("/api/agent/kb"),
+  });
+  const [text, setText] = useState("");
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [savedBy, setSavedBy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data) { setText(data.content); setSavedAt(data.updatedAt); setSavedBy(data.updatedBy); }
+  }, [data]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/agent/kb", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to save");
+      return (json.data ?? json) as { updatedAt: string; updatedBy: string | null };
+    },
+    onSuccess: (saved) => {
+      setErr(null); setSavedAt(saved.updatedAt); setSavedBy(saved.updatedBy);
+      qc.invalidateQueries({ queryKey: ["agent-kb"] });
+    },
+    onError: (e: Error) => setErr(e.message),
+  });
+
+  const dirty = data != null && text !== data.content;
+  const prices = findKbPrices(text);
+  const tokens = Math.ceil(text.length / 4);
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold">{t("Билимлар базаси", "Knowledge base")}</div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={!dirty || save.isPending} onClick={() => data && setText(data.content)}>
+            {t("Бекор", "Revert")}
+          </Button>
+          <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {t("Сақлаш", "Save")}
+          </Button>
+        </div>
+      </div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        spellCheck={false}
+        className="h-[360px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none"
+        placeholder={t("Билимлар базаси (Markdown)…", "Knowledge base (Markdown)…")}
+      />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span>{text.length.toLocaleString()} {t("белги", "chars")} · ~{tokens.toLocaleString()} tokens</span>
+        {savedAt && <span>· {t("охирги сақлаш", "last saved")}: {new Date(savedAt).toLocaleString()}{savedBy ? ` · ${savedBy}` : ""}</span>}
+        {dirty && <span className="text-amber-600 dark:text-amber-400">· {t("сақланмаган ўзгаришлар", "unsaved changes")}</span>}
+      </div>
+      {prices.length > 0 && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+          {t("Диққат: базада нархга ўхшаш сон бор — нарх фақат калькулятордан келади, базада эмас:", "Warning: price-shaped numbers in the KB — prices must come from the calculator, never the KB:")}{" "}
+          <span className="font-mono">{prices.join(", ")}</span>
+        </div>
+      )}
+      {err && <div className="text-xs text-destructive">{err}</div>}
+      <div className="text-xs text-muted-foreground">
+        {t(
+          "Сақлангач, агент дарҳол шу базадан фойдаланади. Эслатма: кэш туфайли ўзгариш иссиқ суҳбатларга 1 соатгача етиб бориши мумкин. Ўзбекча/кирилл матнни ишга туширишдан олдин она тилида сўзлашувчи текширсин.",
+          "Saved immediately for new turns. Note: with prompt caching an edit can take up to ~1h to reach a warm conversation cache. Have a native speaker review the Uzbek/Cyrillic before go-live.",
+        )}
+      </div>
+    </section>
+  );
 }
 
 export default function AgentPage() {
@@ -235,6 +319,9 @@ export default function AgentPage() {
           )}
         </div>
       </section>
+
+      {/* Knowledge base */}
+      <KnowledgeBaseSection />
 
       {/* Provider API keys */}
       <section className="rounded-lg border border-border bg-card p-4 space-y-3">
