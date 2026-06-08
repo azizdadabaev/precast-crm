@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-08 (Plans 01–08 done; Plan 09 control panel + provider-keys UI + multi-turn test console done; KB built & tuned to owner voice. **Next: complete the feature — Plan 09 Slice B/C.** See "▶ RESUME HERE" below.)
+**Last updated:** 2026-06-08 (Plans 01–08 done; Plan 09 Slice A done; **Slice B Steps 1–2 done — proposals PERSIST + show as a read-only inbox ghost-draft, with an owner "Simulate inbound" test tool.** KB built & tuned to owner voice. **Next: Slice C Step 3 — Suggest mode (Send / Edit-and-send).** See "▶ RESUME HERE" below.)
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -42,16 +42,21 @@ npx tsx prisma/reset-pin.ts "Your Name" 1234     # if you need to recover the lo
 - **Grounded cargo weight** in quotes: flooring **180 kg/m²**; gazoblok **D600 density** → `weight_kg` field in `get-quote.ts` / `get-gazoblok-quote.ts`.
 - Behavior tuning (prompt.ts STYLE + KB): handle discounts/delivery/stock instead of escalating; untracked stock = available; don't nag for contact details (ask once after a quote); don't pile on proof (confident one-liner, details only if asked).
 
+**Done in the 2026-06-08 session (committed pending push to `origin/feat/telegram-ai-agent`):**
+- **Slice B/C build doc** — `docs/superpowers/plans/2026-06-08-ai-agent-09-slice-bc-build.md` (the 3 decisions resolved, below).
+- **Step 1 — proposals now PERSIST.** New `AgentProposal` model (`@@map("agent_proposals")`: conversationId FK-cascade, `inboundMessageId @unique` for retry-idempotency + ghost-draft lookup, decision/reply/escalationReason/approvalDraft/screen/modelKey/toolCalls/usage/turns/confidence/escalatedEarly). `src/lib/agent/proposal.ts` (pure `buildProposalRow` + thin injectable-db `saveAgentProposal`, `createMany skipDuplicates` = ON CONFLICT DO NOTHING) + `proposal.test.ts` (8 cases). `webhook-entry.ts` now captures the `runAgentShadow` outcome and writes the proposal (inside the existing try/catch — a write failure never breaks inbox delivery). Verified: 741 unit tests green, full-project `tsc --noEmit` 0 errors, `prisma validate` ✓, `prisma db push` applied the table, real-DB persist/read/idempotency/cascade confirmed. **Persisting is NOT sending — Shadow stays send/write-free.**
+- **Step 2 — inbox ghost-draft + "Simulate inbound".** `GET /api/agent/proposals?conversationId=` (owner-gated) returns the latest proposal; `POST /api/agent/simulate-inbound` (owner-gated) injects an INBOUND `Message` and runs the agent on the REAL webhook path (`runAgentForInbound`, awaited) so the full inbound→agent→proposal chain works with NO Telegram — reuses the open chat for multi-turn or spins up a `🧪 Simulated customer` chat; returns a `note` explaining the gate (kill-switch OFF / no key / not AI_HANDLING). `InboxClient.tsx`: a read-only `GhostDraft` above the composer (badges: decision · model · language · tools · suspicious; "shadow · read-only"; Send/Edit deferred to Slice C) + a top-bar **Simulate** button/modal. Verified: tsc 0 errors, routes 401-gated, dev server compiles clean. ⚠️ Producing a real proposal needs a provider key entered in `/agent` + the kill-switch ON.
+
 **NEXT — agreed feature-completion plan:**
-0. Write the Plan 09 Slice B/C build doc.
-1. **Persist agent proposals** — new `AgentProposal` table (conversationId, inbound msg id, decision, reply, model, toolCalls, usage, confidence, ts); `runAgentForInbound` (`webhook-entry.ts`) writes it instead of only `console.info`. Backbone for inbox UI + suggest/auto + eval.
-2. **Inbox ghost-draft + "Simulate inbound"** — render the latest proposal read-only in `/inbox` (model/decision/tools badges, spec §10) + owner-only button to inject a test customer message (exercise the full path with no Telegram/tunnel).
-3. **Suggest mode** — ghost draft gets Send / Edit-and-send via the existing inbox outbound path (operator approves each message; first customer-facing stage).
-4. **Order-taking live** — wire the dormant chain `proposeOrder` → staff Action Card → `approval-webhook` → `createOrder` into the send path.
+0. ✅ **DONE** — Plan 09 Slice B/C build doc.
+1. ✅ **DONE (2026-06-08)** — persist agent proposals (`AgentProposal` + `proposal.ts` + `webhook-entry` wiring).
+2. ✅ **DONE (2026-06-08)** — inbox ghost-draft + "Simulate inbound" (`/api/agent/proposals`, `/api/agent/simulate-inbound`, `GhostDraft` + Simulate modal in `InboxClient.tsx`).
+3. ▶ **START HERE — Suggest mode** — ghost draft gets **Send / Edit-and-send** (decision b) via the existing inbox outbound path (operator approves each message; first customer-facing stage). `webhook-entry` stops short-circuiting on `mode==='suggest'`.
+4. **Order-taking live** — wire the dormant chain `proposeOrder` → staff Action Card → `approval-webhook` → `createOrder`; the Approve/Reject requires a **logged-in CRM user** (decision c) and records `decidedById`.
 5. **Auto mode + deploy** — auto-send replies (orders still staff-approved); deploy to prod in Shadow → watch → graduate per rollout gates.
 Parallel/later: voice (`gemini.transcribe()`), vision (drawing photos), KB editor UI, few-shot wiring (curated+anonymized Telegram/IG chats as a TONE guide only), eval/bake-off.
 
-**Decisions to confirm first:** (a) proposals as a NEW table [recommended] vs fields on `Message`; (b) Suggest UX send-only vs **send+edit** [recommended]; (c) staff-tap CRM-identity auth for order approvals (open since Plan 08).
+**Decisions (resolved 2026-06-08):** (a) proposals = a **NEW `AgentProposal` table** ✓; (b) Suggest UX = **send + edit** ✓; (c) order-approval = **require CRM identity** (`decidedById` set; approve via the owner-gated `/inbox` UI, not an anonymous Telegram-group tap) ✓.
 
 ## 9-plan roadmap
 | # | Plan | Status |
@@ -64,7 +69,7 @@ Parallel/later: voice (`gemini.transcribe()`), vision (drawing photos), KB edito
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
 | 08 | Integration: LlmProvider + clients · agent loop · approval commit + callback · live webhook (Shadow) | ✅ DONE (built/tested; write-action activation staged to Plan 09) |
-| 09 | **Operator UI + rollout: control panel + API keys + test console (DONE) · inbox ghost-drafts · KB editor · write-action/auto-send activation · voice/vision · bake-off** | 🚧 Control panel + provider-key UI + local test console DONE |
+| 09 | **Operator UI + rollout: control panel + API keys + test console (DONE) · inbox ghost-drafts · KB editor · write-action/auto-send activation · voice/vision · bake-off** | 🚧 Slice A DONE · Slice B DONE (persistence + ghost-draft + simulate) |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.

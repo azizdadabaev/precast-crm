@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
-import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator, ArrowUp, ArrowDown } from "lucide-react";
+import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator, ArrowUp, ArrowDown, Bot, FlaskConical, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -141,6 +141,7 @@ function readAutolockMin(): number {
 function Inbox() {
   const qc = useQueryClient();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [simOpen, setSimOpen] = useState(false);
 
   // Deep-link support: /inbox?c=<id> opens that conversation (e.g. the
   // "Open chat" button on a linked project/order). Read from the URL on mount —
@@ -200,6 +201,7 @@ function Inbox() {
     es.onmessage = () => {
       qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
       qc.invalidateQueries({ queryKey: ["inbox-thread"] });
+      qc.invalidateQueries({ queryKey: ["agent-proposal"] });
     };
     es.onerror = () => { /* browser auto-reconnects */ };
     return () => es.close();
@@ -211,6 +213,19 @@ function Inbox() {
       <div className="flex shrink-0 items-center justify-between gap-3">
         <h1 className="text-xl font-bold tracking-tight">Хабарлар<span className="text-muted-foreground"> · Inbox</span></h1>
         <div className="flex items-center gap-1.5">
+          {/* Simulate an inbound customer message (owner test tool — Plan 09
+              Slice B). Runs the agent on the real webhook path with no Telegram. */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            title="Хабарни синаб кўриш · Simulate an inbound message"
+            onClick={() => setSimOpen(true)}
+          >
+            <FlaskConical className="h-4 w-4" />
+            <span className="hidden sm:inline">Синаш · Simulate</span>
+          </Button>
+
           {/* Settings: auto-lock timeout */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -286,6 +301,14 @@ function Inbox() {
           {activeId ? <Thread conversationId={activeId} onDeleted={() => setActiveId(null)} /> : <EmptyState />}
         </div>
       </div>
+
+      {simOpen && (
+        <SimulateModal
+          activeId={activeId}
+          onClose={() => setSimOpen(false)}
+          onDone={(id) => setActiveId(id)}
+        />
+      )}
     </div>
   );
 }
@@ -577,6 +600,10 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
         )}
       </div>
 
+      {/* AI ghost-draft (Plan 09 Slice B) — the agent's latest proposal for this
+          chat, read-only in Shadow. Send/Edit arrives with Suggest mode (Slice C). */}
+      <GhostDraft conversationId={conversationId} />
+
       {/* Composer */}
       <form
         onSubmit={(e) => { e.preventDefault(); if (draft.trim()) reply.mutate(draft.trim()); }}
@@ -658,6 +685,187 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
         </div>
       )}
     </ImageViewerProvider>
+  );
+}
+
+// ── AI agent (Plan 09 Slice B) ─────────────────────────────────────────
+
+interface AgentProposal {
+  id: string;
+  inboundMessageId: string;
+  decision: "reply" | "escalate" | "request_approval" | "blocked" | "max_turns";
+  reply: string | null;
+  escalationReason: string | null;
+  approvalDraft: { customerName?: string | null } | null;
+  language: string;
+  screen: { verdict?: string } | null;
+  escalatedEarly: boolean;
+  modelKey: string;
+  toolCalls: Array<{ name: string; ok: boolean }> | null;
+  usage: { inputTokens?: number; outputTokens?: number } | null;
+  turns: number;
+  confidence: string | null;
+  createdAt: string;
+}
+
+const DECISION_STYLE: Record<string, { label: string; cls: string }> = {
+  reply: { label: "Жавоб · Reply", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
+  escalate: { label: "Одамга · Escalate", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
+  max_turns: { label: "Лимит · Max turns", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
+  blocked: { label: "Блок · Blocked", cls: "bg-red-500/15 text-red-700 dark:text-red-400" },
+  request_approval: { label: "Буюртма · Approval", cls: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
+};
+
+// The agent's latest proposal for this chat, rendered read-only (Shadow). The
+// Send / Edit-and-send affordance arrives with Suggest mode (Slice C).
+function GhostDraft({ conversationId }: { conversationId: string }) {
+  const { data: proposal } = useQuery({
+    queryKey: ["agent-proposal", conversationId],
+    queryFn: () => api<AgentProposal | null>(`/api/agent/proposals?conversationId=${conversationId}`),
+    refetchInterval: 15_000,
+  });
+  if (!proposal) return null;
+
+  const ds = DECISION_STYLE[proposal.decision] ?? { label: proposal.decision, cls: "bg-muted text-muted-foreground" };
+  const body =
+    proposal.decision === "reply"
+      ? proposal.reply
+      : proposal.decision === "request_approval"
+        ? `Буюртмани тасдиқлашга таклиф қилади · Proposes an order for approval${proposal.approvalDraft?.customerName ? ` — ${proposal.approvalDraft.customerName}` : ""}`
+        : proposal.escalationReason;
+  const tools = (proposal.toolCalls ?? []).map((t) => t.name);
+
+  return (
+    <div className="shrink-0 border-t border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 pt-2">
+      <div className="rounded-xl border border-dashed border-[color:var(--tg-accent)]/50 bg-[color:var(--tg-accent)]/[0.06] p-3">
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+          <span className="flex items-center gap-1 font-semibold text-[var(--tg-accent)]">
+            <Bot className="h-3.5 w-3.5" /> AI таклифи · AI proposal
+          </span>
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">shadow · read-only</span>
+          <span className={cn("rounded-full px-1.5 py-0.5 font-medium", ds.cls)}>{ds.label}</span>
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{proposal.modelKey}</span>
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{proposal.language}</span>
+          {tools.length > 0 && (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">🔧 {tools.join(", ")}</span>
+          )}
+          {proposal.screen?.verdict === "suspicious" && (
+            <span className="flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 font-medium text-red-700 dark:text-red-400">
+              <AlertTriangle className="h-3 w-3" /> suspicious
+            </span>
+          )}
+        </div>
+        <div className="mt-2 whitespace-pre-wrap break-words text-[14px] leading-[1.4] text-[var(--tg-text)]">
+          {body || <span className="italic text-muted-foreground">—</span>}
+        </div>
+        <div className="mt-1.5 text-[10px] text-[color:var(--tg-text-dim)]">
+          {proposal.turns} turn(s)
+          {proposal.usage?.inputTokens != null && ` · ${proposal.usage.inputTokens}+${proposal.usage.outputTokens ?? 0} tok`}
+          {" · "}Shadow — юборилмади · not sent
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Owner test tool: inject a customer message and run the agent on the real
+// webhook path (no Telegram). Reuses the open chat for multi-turn, or spins up a
+// fresh simulated conversation.
+function SimulateModal({
+  activeId,
+  onClose,
+  onDone,
+}: {
+  activeId: string | null;
+  onClose: () => void;
+  onDone: (conversationId: string) => void;
+}) {
+  const qc = useQueryClient();
+  const [text, setText] = useState("");
+  const [intoCurrent, setIntoCurrent] = useState(true);
+  const [note, setNote] = useState<string | null>(null);
+
+  const sim = useMutation({
+    mutationFn: () =>
+      api<{ conversationId: string; ranAgent: boolean; proposal: unknown; note?: string }>(
+        "/api/agent/simulate-inbound",
+        { method: "POST", json: { text: text.trim(), conversationId: activeId && intoCurrent ? activeId : undefined } },
+      ),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
+      qc.invalidateQueries({ queryKey: ["inbox-thread", res.conversationId] });
+      qc.invalidateQueries({ queryKey: ["agent-proposal", res.conversationId] });
+      onDone(res.conversationId);
+      if (res.note) setNote(res.note); // gate blocked / no key — keep open, explain
+      else onClose(); // proposal landed — close; it shows as the ghost-draft
+    },
+    onError: (e: Error) => setNote(e.message),
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      onClick={() => !sim.isPending && onClose()}
+    >
+      <div className="w-full max-w-md rounded-2xl bg-[var(--tg-panel)] p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[15px] font-semibold text-[var(--tg-text)]">
+            <FlaskConical className="h-4 w-4 text-[var(--tg-accent)]" />
+            Хабарни синаш · Simulate inbound
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="mt-1.5 text-[12px] text-[color:var(--tg-text-dim)]">
+          Мижоз хабарини ёзинг — AI агент Shadow режимида жавоб таклиф қилади (мижозга ҳеч нима юборилмайди) · Type a
+          customer message; the AI proposes a reply in Shadow (nothing is sent to a customer).
+        </p>
+        <textarea
+          autoFocus
+          rows={3}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="масалан: 4x5 хона нархи қанча? · e.g. how much for a 4x5 room?"
+          className="mt-3 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-[color:var(--tg-accent)]"
+        />
+        {activeId && (
+          <label className="mt-2 flex items-center gap-2 text-[13px] text-[color:var(--tg-text-dim)]">
+            <input type="checkbox" checked={intoCurrent} onChange={(e) => setIntoCurrent(e.target.checked)} />
+            Очиқ суҳбатга қўшиш · Add to the open chat
+          </label>
+        )}
+        {note && (
+          <div className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-[12px] text-amber-700 dark:text-amber-400">
+            {note}
+          </div>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={sim.isPending}
+            className="rounded-lg px-3 py-1.5 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+          >
+            Бекор · Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => { setNote(null); sim.mutate(); }}
+            disabled={sim.isPending || !text.trim()}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-white transition-colors disabled:opacity-60"
+            style={{ background: "var(--tg-accent)" }}
+          >
+            {sim.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
+            Юбориш · Run
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
