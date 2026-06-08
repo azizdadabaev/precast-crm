@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-07 (Plans 01–08 built; agent runs in Shadow on the live webhook. Plan 09 = rollout/UX next).
+**Last updated:** 2026-06-08 (Plans 01–08 done; Plan 09 control panel + provider-keys UI + multi-turn test console done; KB built & tuned to owner voice. **Next: complete the feature — Plan 09 Slice B/C.** See "▶ RESUME HERE" below.)
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -19,7 +19,39 @@ npm test                # all unit tests — pure, no DB/.env needed (should be 
 ```
 New env vars (documented in `precast-crm/.env.example`, only needed later for runtime, not for tests): `AGENT_SERVICE_TOKEN`, `QUOTE_SIGNING_SECRET`.
 
-Then start a Claude session and say: **"continue the AI agent build — Plan 6"**. It should read this file + the spec + the plan docs to rebuild context.
+Then start a Claude session and say: **"Continue the Telegram AI agent — read docs/superpowers/AI-AGENT-BUILD-STATUS.md (▶ RESUME HERE) + the spec + the Plan 09 doc, then let's start Plan 09 Slice B."**
+
+**Fresh-PC runtime setup (the KB + provider keys live in the DB / `.env`, NOT in git):**
+```bash
+# in precast-crm/
+npx tsx scripts/load-knowledge-base.ts          # load the KB into this machine's dev DB
+# set QUOTE_SIGNING_SECRET in precast-crm/.env (any random hex) — else get_quote escalates
+# enter a provider API key in the /agent page (or GEMINI_API_KEY/ANTHROPIC_API_KEY/OPENAI_API_KEY in .env)
+npx tsx prisma/reset-pin.ts "Your Name" 1234     # if you need to recover the local login
+```
+⚠️ The Telegram token in BotFather is the **LIVE production bot** (@etalontbm_bot → etalontbm.uz) — never repoint its webhook to localhost. Test via the `/agent` console, or a SEPARATE test bot + a cloudflared tunnel.
+
+## ▶ RESUME HERE (2026-06-08)
+
+**Agent conversational quality is dialed in. We're now COMPLETING THE FEATURE (Plan 09 Slice B/C):** turn the headless Shadow engine into a live, operator-in-the-loop agent inside `/inbox`, then order-taking, then deploy.
+
+**Done in the 2026-06-07 night session (committed + pushed to `origin/feat/telegram-ai-agent`):**
+- Plan 09 control panel + **provider-key UI** (`/agent`: save Anthropic/Google/OpenAI keys to AppConfig `agent.provider_keys`, write-only) + **multi-turn test console** (`POST /api/agent/test` runs the full Shadow pipeline with conversation history → decision/reply/tools/tokens/latency). This is how we exercise the agent with no Telegram.
+- **Gemini fix:** round-trip `thoughtSignature` on functionCall parts (was breaking every Gemini tool turn).
+- **Knowledge base** at `precast-crm/scripts/agent-knowledge-base.sample.md`, loaded via `npx tsx scripts/load-knowledge-base.ts` → AppConfig `agent.knowledge_base`. Researched sales playbook + EU beam-and-block/AAC tech, then tuned to owner voice: direct/short seller tone; geometry from the calc engine (pitch 0.58 m, beam 0.12 m, block 0.20 m / 0.45 m gap, full-coverage logic); load facts (2 beams 4-5 t; **600-1000 kg/m²**; honest "not certified yet"); blocks have **no rebar**; beams use **prestressed ВР2 5mm wire (ГОСТ 7348-81)**; "5mm ≈ local 12-14mm rebar" doubt-buster.
+- **Grounded cargo weight** in quotes: flooring **180 kg/m²**; gazoblok **D600 density** → `weight_kg` field in `get-quote.ts` / `get-gazoblok-quote.ts`.
+- Behavior tuning (prompt.ts STYLE + KB): handle discounts/delivery/stock instead of escalating; untracked stock = available; don't nag for contact details (ask once after a quote); don't pile on proof (confident one-liner, details only if asked).
+
+**NEXT — agreed feature-completion plan:**
+0. Write the Plan 09 Slice B/C build doc.
+1. **Persist agent proposals** — new `AgentProposal` table (conversationId, inbound msg id, decision, reply, model, toolCalls, usage, confidence, ts); `runAgentForInbound` (`webhook-entry.ts`) writes it instead of only `console.info`. Backbone for inbox UI + suggest/auto + eval.
+2. **Inbox ghost-draft + "Simulate inbound"** — render the latest proposal read-only in `/inbox` (model/decision/tools badges, spec §10) + owner-only button to inject a test customer message (exercise the full path with no Telegram/tunnel).
+3. **Suggest mode** — ghost draft gets Send / Edit-and-send via the existing inbox outbound path (operator approves each message; first customer-facing stage).
+4. **Order-taking live** — wire the dormant chain `proposeOrder` → staff Action Card → `approval-webhook` → `createOrder` into the send path.
+5. **Auto mode + deploy** — auto-send replies (orders still staff-approved); deploy to prod in Shadow → watch → graduate per rollout gates.
+Parallel/later: voice (`gemini.transcribe()`), vision (drawing photos), KB editor UI, few-shot wiring (curated+anonymized Telegram/IG chats as a TONE guide only), eval/bake-off.
+
+**Decisions to confirm first:** (a) proposals as a NEW table [recommended] vs fields on `Message`; (b) Suggest UX send-only vs **send+edit** [recommended]; (c) staff-tap CRM-identity auth for order approvals (open since Plan 08).
 
 ## 9-plan roadmap
 | # | Plan | Status |
