@@ -740,9 +740,11 @@ function GhostDraft({ conversationId }: { conversationId: string }) {
   });
   if (!proposal || proposal.status !== "PENDING") return null;
 
-  const suggest = (runtime?.config?.mode ?? "shadow") === "suggest";
+  const mode = runtime?.config?.mode ?? "shadow";
+  const suggest = mode === "suggest";
   const canSend = suggest && proposal.decision === "reply" && !!proposal.reply;
-  const canPlaceOrder = suggest && proposal.decision === "request_approval";
+  // Orders are operator-placed in suggest AND auto (auto never auto-places an order).
+  const canPlaceOrder = (suggest || mode === "auto") && proposal.decision === "request_approval";
 
   const ds = DECISION_STYLE[proposal.decision] ?? { label: proposal.decision, cls: "bg-muted text-muted-foreground" };
   const body =
@@ -760,7 +762,7 @@ function GhostDraft({ conversationId }: { conversationId: string }) {
           <span className="flex items-center gap-1 font-semibold text-[var(--tg-accent)]">
             <Bot className="h-3.5 w-3.5" /> AI таклифи · AI proposal
           </span>
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{suggest ? "suggest" : "shadow · read-only"}</span>
+          <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{mode === "shadow" ? "shadow · read-only" : mode}</span>
           <span className={cn("rounded-full px-1.5 py-0.5 font-medium", ds.cls)}>{ds.label}</span>
           <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{proposal.modelKey}</span>
           <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{proposal.language}</span>
@@ -787,7 +789,7 @@ function GhostDraft({ conversationId }: { conversationId: string }) {
               <span className="text-[10px] text-[color:var(--tg-text-dim)]">
                 {proposal.turns} turn(s)
                 {proposal.usage?.inputTokens != null && ` · ${proposal.usage.inputTokens}+${proposal.usage.outputTokens ?? 0} tok`}
-                {!suggest && " · Shadow — юборилмади · not sent"}
+                {mode === "shadow" && " · юборилмади · not sent"}
               </span>
               {suggest && <GhostDismiss conversationId={conversationId} proposalId={proposal.id} />}
             </div>

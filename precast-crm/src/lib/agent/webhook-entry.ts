@@ -1,8 +1,10 @@
 // Webhook entry for the agent (Plan 08 Task 6). The Telegram webhook calls this
 // for each inbound customer text message. It reads the kill-switch + per-chat
-// gate FIRST (spec §10), then runs the message through the agent in SHADOW mode
-// (generate + log, send nothing — spec §14 Stage 1). Best-effort: it never
-// throws, so the webhook always returns 200. Auto-send is a later rollout stage.
+// gate FIRST (spec §10), then runs the message through the agent and PERSISTS a
+// proposal. What happens next depends on the mode: shadow & suggest send nothing
+// (suggest exposes Send/Edit in /inbox); auto auto-sends a reply and routes
+// everything else to a human (applyAutoMode). Best-effort: it never throws, so
+// the webhook always returns 200.
 
 import { prisma } from '@/lib/prisma';
 import { loadAgentRuntimeConfig, loadKnowledgeBase, shouldAgentHandle } from './runtime-config';
@@ -10,6 +12,7 @@ import { createProviderForModelKey } from './llm/factory';
 import { createToolRegistry } from './tools/registry';
 import { runAgentShadow, toLlmHistory, type HistoryRow } from './shadow';
 import { saveAgentProposal } from './proposal';
+import { applyAutoMode, defaultAutoModeDeps } from './auto-mode';
 
 const HISTORY_LIMIT = 20;
 
@@ -28,14 +31,6 @@ export async function runAgentForInbound(
   try {
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
-    if (config.mode === 'auto') {
-      // Auto-send (no operator approval) is a later rollout stage. shadow + suggest
-      // both run here: they generate + PERSIST a proposal and send nothing — the
-      // difference is purely UI (suggest exposes Send/Edit in /inbox). Breadcrumb so
-      // a premature switch to auto isn't a silent no-op.
-      console.warn('[agent:webhook-entry] mode "auto" (auto-send) not implemented yet — skipping');
-      return;
-    }
 
     // Recent prior turns (this message excluded; media-only rows dropped later).
     const rows = await prisma.message.findMany({
@@ -69,6 +64,17 @@ export async function runAgentForInbound(
       inboundMessageId: excludeMessageId,
       modelKey: config.modelKey,
     });
+
+    // Auto mode (spec §14 Stage 3): auto-send a reply; route everything else to a
+    // human. Orders are NEVER auto-placed — request_approval escalates to the
+    // operator who places it in /inbox. shadow/suggest do nothing here.
+    if (config.mode === 'auto') {
+      await applyAutoMode(
+        outcome,
+        { conversationId: conversation.id, inboundMessageId: excludeMessageId },
+        defaultAutoModeDeps(),
+      );
+    }
   } catch (err) {
     // Shadow is non-critical; a failure must never break inbox delivery.
     console.error('[agent:webhook-entry]', err);

@@ -225,17 +225,13 @@ export default function AgentPage() {
           onChange={(e) => setDraft({ ...draft, mode: e.target.value as Mode })}
         >
           <option value="shadow">{t("Кузатув (фақат лог)", "Shadow (log only)")}</option>
-          <option value="suggest" disabled>
-            {t("Таклиф (тез орада)", "Suggest (rollout — coming)")}
-          </option>
-          <option value="auto" disabled>
-            {t("Авто (тез орада)", "Auto (rollout — coming)")}
-          </option>
+          <option value="suggest">{t("Таклиф (оператор юборади)", "Suggest (operator sends)")}</option>
+          <option value="auto">{t("Авто (жавоблар автоматик)", "Auto (replies auto-send)")}</option>
         </select>
         <div className="text-xs text-muted-foreground">
           {t(
-            "Кузатув режимида агент жавоб таклифини серверда логга ёзади, мижозга ҳеч нарса юбормайди.",
-            "In Shadow, the agent logs a proposed reply on the server and sends nothing to customers. Suggest/Auto arrive in a later rollout slice.",
+            "Кузатув: фақат логга ёзади. Таклиф: жавоб таклифи инбоксда чиқади, оператор юборади. Авто: оддий жавоблар автоматик юборилади — буюртмаларни доимо оператор тасдиқлайди.",
+            "Shadow: logs a proposal, sends nothing. Suggest: the proposal appears in /inbox for the operator to Send/Edit. Auto: straightforward replies auto-send; escalations and orders always go to a human (orders are never auto-placed).",
           )}
         </div>
       </section>
