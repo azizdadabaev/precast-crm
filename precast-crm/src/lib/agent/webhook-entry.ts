@@ -8,9 +8,9 @@
 
 import { prisma } from '@/lib/prisma';
 import { loadAgentRuntimeConfig, loadKnowledgeBase, shouldAgentHandle } from './runtime-config';
-import { createProviderForModelKey, createVisionProvider } from './llm/factory';
+import { createProviderForModelKey, createVisionProvider, createTranscriptionProvider } from './llm/factory';
 import { createToolRegistry } from './tools/registry';
-import { runAgentShadow, toLlmHistory, type HistoryRow } from './shadow';
+import { runAgentShadow, toLlmHistory, type HistoryRow, type ShadowOutcome } from './shadow';
 import { saveAgentProposal, saveAgentProposalRow, type AgentProposalRow } from './proposal';
 import { applyAutoMode, defaultAutoModeDeps } from './auto-mode';
 import { detectConversationLanguage } from './prompt';
@@ -25,6 +25,36 @@ export interface InboundConversation {
   sharedContactPhone: string | null;
 }
 
+/** Shared core: load recent history, build prompt + KB, run the agent, and
+ *  PERSIST the proposal (send-free). Returns the outcome so the caller decides
+ *  what to do next — auto-send for text (auto mode); voice/vision callers
+ *  persist-only and never auto-send. */
+async function generateAndPersistProposal(
+  conversation: InboundConversation,
+  inboundText: string,
+  inboundMessageId: string,
+  config: { modelKey: string },
+): Promise<ShadowOutcome> {
+  // Recent prior turns (this message excluded; media-only rows dropped later).
+  const rows = await prisma.message.findMany({
+    where: { conversationId: conversation.id, id: { not: inboundMessageId }, text: { not: null } },
+    orderBy: { createdAt: 'desc' },
+    take: HISTORY_LIMIT,
+    select: { direction: true, text: true },
+  });
+  const history = toLlmHistory(rows.reverse() as HistoryRow[]);
+  const kbContent = await loadKnowledgeBase();
+  // Model is owner-selected via the control panel (config.modelKey); the API key
+  // resolves from UI-saved DB keys → env.
+  const provider = await createProviderForModelKey(config.modelKey);
+  const outcome = await runAgentShadow(
+    { conversationId: conversation.id, history, inboundRaw: inboundText },
+    { provider, tools: createToolRegistry(), kbContent, ctx: { sharedContactPhone: conversation.sharedContactPhone } },
+  );
+  await saveAgentProposal(outcome, { conversationId: conversation.id, inboundMessageId, modelKey: config.modelKey });
+  return outcome;
+}
+
 export async function runAgentForInbound(
   conversation: InboundConversation,
   inboundText: string,
@@ -34,38 +64,7 @@ export async function runAgentForInbound(
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
 
-    // Recent prior turns (this message excluded; media-only rows dropped later).
-    const rows = await prisma.message.findMany({
-      where: { conversationId: conversation.id, id: { not: excludeMessageId }, text: { not: null } },
-      orderBy: { createdAt: 'desc' },
-      take: HISTORY_LIMIT,
-      select: { direction: true, text: true },
-    });
-    const history = toLlmHistory(rows.reverse() as HistoryRow[]);
-    const kbContent = await loadKnowledgeBase();
-    // Model is owner-selected via the control panel (config.modelKey); the API
-    // key resolves from UI-saved DB keys → env.
-    const provider = await createProviderForModelKey(config.modelKey);
-
-    const outcome = await runAgentShadow(
-      { conversationId: conversation.id, history, inboundRaw: inboundText },
-      {
-        provider,
-        tools: createToolRegistry(),
-        kbContent,
-        ctx: { sharedContactPhone: conversation.sharedContactPhone },
-      },
-    );
-
-    // Persist the proposal (Plan 09 Slice B): turn the console-only Shadow log
-    // into an inbox-visible, eval-queryable row. `excludeMessageId` is the inbound
-    // Message that triggered this run (its UNIQUE key makes a retry a no-op).
-    // Persisting is NOT sending — Shadow stays send/write-free.
-    await saveAgentProposal(outcome, {
-      conversationId: conversation.id,
-      inboundMessageId: excludeMessageId,
-      modelKey: config.modelKey,
-    });
+    const outcome = await generateAndPersistProposal(conversation, inboundText, excludeMessageId, config);
 
     // Auto mode (spec §14 Stage 3): auto-send a reply; route everything else to a
     // human. Orders are NEVER auto-placed — request_approval escalates to the
@@ -146,5 +145,48 @@ export async function runVisionForInbound(
     await saveAgentProposalRow(row);
   } catch (err) {
     console.error('[agent:vision]', err);
+  }
+}
+
+/**
+ * Voice note (spec §3 / §4.5). Transcribe with Gemini (the fixed STT path), store
+ * the transcript on the message so the inbox + history show it, then run the agent
+ * on the transcript and PERSIST the proposal. Voice-derived proposals are ALWAYS
+ * human-reviewed — never auto-sent, regardless of mode (spec §2/§10). Never throws.
+ */
+export async function runVoiceForInbound(
+  conversation: InboundConversation,
+  mediaPath: string,
+  mimeType: string,
+  inboundMessageId: string,
+): Promise<void> {
+  try {
+    const config = await loadAgentRuntimeConfig();
+    if (!shouldAgentHandle(conversation, config)) return;
+
+    const { resolveApiKey } = await import('./provider-keys');
+    const apiKey = await resolveApiKey('google');
+    if (!apiKey) {
+      console.warn('[agent:voice] no Google API key configured — skipping voice note');
+      return;
+    }
+    const provider = createTranscriptionProvider({ apiKey });
+    if (!provider.transcribe) return;
+
+    const { readFile } = await import('fs/promises');
+    const { join } = await import('path');
+    const data = (await readFile(join(process.cwd(), 'public', mediaPath))).toString('base64');
+    const transcript = (await provider.transcribe({ data, mimeType })).trim();
+    if (!transcript) {
+      console.warn('[agent:voice] empty transcript — skipping');
+      return;
+    }
+
+    // Surface the transcript on the voice message (the inbox shows it + it feeds
+    // future history). Then run the agent on it — persist-only, no auto-send.
+    await prisma.message.update({ where: { id: inboundMessageId }, data: { text: transcript } });
+    await generateAndPersistProposal(conversation, transcript, inboundMessageId, config);
+  } catch (err) {
+    console.error('[agent:voice]', err);
   }
 }

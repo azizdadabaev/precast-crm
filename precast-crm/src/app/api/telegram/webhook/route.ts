@@ -8,7 +8,7 @@ import { isValidWebhookSecret } from "@/lib/telegram/webhook-secret";
 import { tgGetFilePath, tgDownloadFile, TELEGRAM_MAX_DOWNLOAD_BYTES } from "@/lib/telegram/api";
 import { saveBufferToUploads } from "@/lib/uploads";
 import { emitInbox } from "@/lib/inbox-bus";
-import { runAgentForInbound, runVisionForInbound } from "@/lib/agent/webhook-entry";
+import { runAgentForInbound, runVisionForInbound, runVoiceForInbound } from "@/lib/agent/webhook-entry";
 import { handleApprovalCallback } from "@/lib/agent/approval-webhook";
 
 const EXT_BY_KIND: Record<string, string> = {
@@ -204,6 +204,22 @@ export async function POST(req: NextRequest) {
         "image/jpeg",
         message.id,
       ).catch((e) => console.error("[telegram webhook vision]", e));
+    }
+
+    // 8c. AI voice (spec §3/§4.5) — inbound VOICE note → transcribe → run the
+    //     agent. Fire-and-forget; voice-derived proposals are always human-reviewed.
+    if (!parsed.outgoing && !parsed.isEdited && mediaKind === "VOICE" && mediaPath) {
+      void runVoiceForInbound(
+        {
+          id: conversation.id,
+          aiState: conversation.aiState,
+          aiPaused: conversation.aiPaused,
+          sharedContactPhone: conversation.sharedContactPhone,
+        },
+        mediaPath,
+        "audio/ogg",
+        message.id,
+      ).catch((e) => console.error("[telegram webhook voice]", e));
     }
   } catch (err) {
     // Log but still 200 — a 500 makes Telegram retry the same update for 24h.
