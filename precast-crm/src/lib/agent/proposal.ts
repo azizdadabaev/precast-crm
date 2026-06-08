@@ -85,6 +85,16 @@ export function buildProposalRow(outcome: ShadowOutcome, meta: ProposalMeta): Ag
   return row;
 }
 
+/** Operator-action status when a Suggest-mode proposal is sent (Plan 09 Slice C):
+ *  EDITED_SENT if the final text differs from the agent's proposed reply, else
+ *  SENT (sent verbatim). Feeds the Stage-2 "unedited send rate" gate (spec §14). */
+export function resolveSentStatus(
+  proposedReply: string | null,
+  finalText: string,
+): 'SENT' | 'EDITED_SENT' {
+  return (proposedReply ?? '').trim() === finalText.trim() ? 'SENT' : 'EDITED_SENT';
+}
+
 /** A narrow structural subset of PrismaClient — only what saveAgentProposal needs,
  *  so a fake makes the idempotency path testable without a database. */
 export interface AgentProposalDb {

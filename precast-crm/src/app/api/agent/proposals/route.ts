@@ -33,6 +33,7 @@ export const GET = withPermission("inbox.access", async (req: NextRequest) => {
       usage: true,
       turns: true,
       confidence: true,
+      status: true,
       createdAt: true,
     },
   });

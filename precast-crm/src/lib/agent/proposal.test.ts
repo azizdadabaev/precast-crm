@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildProposalRow,
+  resolveSentStatus,
   saveAgentProposal,
   type AgentProposalDb,
   type AgentProposalRow,
@@ -95,6 +96,17 @@ describe('buildProposalRow', () => {
     );
     expect(row.escalatedEarly).toBe(true);
     expect(row.language).toBe('ru');
+  });
+});
+
+describe('resolveSentStatus', () => {
+  it('is SENT when the final text matches the proposal verbatim (ignoring edge whitespace)', () => {
+    expect(resolveSentStatus('Assalomu alaykum!', 'Assalomu alaykum!')).toBe('SENT');
+    expect(resolveSentStatus('  hi  ', 'hi')).toBe('SENT');
+  });
+  it('is EDITED_SENT when the operator changed the text', () => {
+    expect(resolveSentStatus('Narxi 1 mln', 'Narxi 1 mln so‘m')).toBe('EDITED_SENT');
+    expect(resolveSentStatus(null, 'typed from scratch')).toBe('EDITED_SENT');
   });
 });
 

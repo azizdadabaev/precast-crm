@@ -28,10 +28,12 @@ export async function runAgentForInbound(
   try {
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
-    if (config.mode !== 'shadow') {
-      // suggest/auto are later rollout stages (Plan 09); leave a breadcrumb so a
-      // premature mode change isn't a silent no-op.
-      console.warn(`[agent:webhook-entry] mode "${config.mode}" not implemented yet — skipping`);
+    if (config.mode === 'auto') {
+      // Auto-send (no operator approval) is a later rollout stage. shadow + suggest
+      // both run here: they generate + PERSIST a proposal and send nothing — the
+      // difference is purely UI (suggest exposes Send/Edit in /inbox). Breadcrumb so
+      // a premature switch to auto isn't a silent no-op.
+      console.warn('[agent:webhook-entry] mode "auto" (auto-send) not implemented yet — skipping');
       return;
     }
 

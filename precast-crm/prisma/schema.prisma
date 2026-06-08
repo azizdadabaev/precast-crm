@@ -1219,6 +1219,14 @@ model AgentProposal {
   // not surface confidence yet (deferred); column added now to avoid a later migration.
   confidence String?
 
+  // Operator-action lifecycle for Suggest mode (Plan 09 Slice C). PENDING until the
+  // operator acts on the ghost-draft: SENT (sent verbatim), EDITED_SENT (sent after
+  // editing — feeds the Stage-2 "unedited send rate" gate, spec §14), or DISMISSED.
+  // Shadow proposals stay PENDING (there is no send/act path in Shadow).
+  status    String    @default("PENDING") // PENDING | SENT | EDITED_SENT | DISMISSED
+  actedAt   DateTime?
+  actedById String? // operator who sent/dismissed (no FK; owner-only inbox)
+
   createdAt DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
