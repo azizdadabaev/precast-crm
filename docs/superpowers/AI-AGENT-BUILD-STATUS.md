@@ -1,7 +1,7 @@
 # Telegram AI Sales Agent — Build Status & Resume Guide
 
 **Branch:** `feat/telegram-ai-agent` (NOT merged to `main` — feature is mid-build).
-**Last updated:** 2026-06-08 (Plans 01–08 done; Plan 09 Slice A done; **Slice B Steps 1–2 done — proposals PERSIST + show as a read-only inbox ghost-draft, with an owner "Simulate inbound" test tool.** KB built & tuned to owner voice. **Next: Slice C Step 3 — Suggest mode (Send / Edit-and-send).** See "▶ RESUME HERE" below.)
+**Last updated:** 2026-06-08 (Plans 01–08 done; Plan 09 Slice A + Slice B done; **Slice C Step 3 done — Suggest mode: operator Send / Edit-and-send on inbox ghost-drafts (first customer-facing stage).** KB tuned to owner voice; get_quote capped at 6.30m beam. **Next: Slice C Step 4 — Order-taking live (proposeOrder → Action Card → createOrder).** See "▶ RESUME HERE" below.)
 
 This file is the portable handoff (Claude's per-machine memory does not travel between PCs; this doc + the spec + the plan docs + git history are the authoritative record).
 
@@ -51,8 +51,8 @@ npx tsx prisma/reset-pin.ts "Your Name" 1234     # if you need to recover the lo
 0. ✅ **DONE** — Plan 09 Slice B/C build doc.
 1. ✅ **DONE (2026-06-08)** — persist agent proposals (`AgentProposal` + `proposal.ts` + `webhook-entry` wiring).
 2. ✅ **DONE (2026-06-08)** — inbox ghost-draft + "Simulate inbound" (`/api/agent/proposals`, `/api/agent/simulate-inbound`, `GhostDraft` + Simulate modal in `InboxClient.tsx`).
-3. ▶ **START HERE — Suggest mode** — ghost draft gets **Send / Edit-and-send** (decision b) via the existing inbox outbound path (operator approves each message; first customer-facing stage). `webhook-entry` stops short-circuiting on `mode==='suggest'`.
-4. **Order-taking live** — wire the dormant chain `proposeOrder` → staff Action Card → `approval-webhook` → `createOrder`; the Approve/Reject requires a **logged-in CRM user** (decision c) and records `decidedById`.
+3. ✅ **DONE (2026-06-08)** — Suggest mode: `AgentProposal.status` lifecycle (PENDING→SENT|EDITED_SENT|DISMISSED); `sendBusinessReply()` (`inbox-send.ts`) shared by the reply route + the new `POST /api/agent/proposals/[id]/act`; `GhostDraft` editable Send/Edit/Dismiss when `mode==='suggest'`; `webhook-entry` runs in suggest too; sim chats send locally for testing. `get_quote` also capped at 6.30m beam (escalates longer).
+4. ▶ **START HERE — Order-taking live** — wire the dormant chain `proposeOrder` → staff Action Card → `approval-webhook` → `createOrder`; the Approve/Reject requires a **logged-in CRM user** (decision c) and records `decidedById`. The pieces exist (Plan 08 Task 5b, `propose-order.ts`/`approve-order.ts`/`approval-webhook.ts`) — wire them behind a write-capable mode + `AGENT_STAFF_CHAT_ID`.
 5. **Auto mode + deploy** — auto-send replies (orders still staff-approved); deploy to prod in Shadow → watch → graduate per rollout gates.
 Parallel/later: voice (`gemini.transcribe()`), vision (drawing photos), KB editor UI, few-shot wiring (curated+anonymized Telegram/IG chats as a TONE guide only), eval/bake-off.
 
@@ -69,7 +69,7 @@ Parallel/later: voice (`gemini.transcribe()`), vision (drawing photos), KB edito
 | 06 | Extract `createOrder` service + the order tool (consumes a verified quote_id) | ✅ DONE |
 | 07 | Live `get_quote` tool + gazoblok/stock/lookup read tools | ✅ DONE |
 | 08 | Integration: LlmProvider + clients · agent loop · approval commit + callback · live webhook (Shadow) | ✅ DONE (built/tested; write-action activation staged to Plan 09) |
-| 09 | **Operator UI + rollout: control panel + API keys + test console (DONE) · inbox ghost-drafts · KB editor · write-action/auto-send activation · voice/vision · bake-off** | 🚧 Slice A DONE · Slice B DONE (persistence + ghost-draft + simulate) |
+| 09 | **Operator UI + rollout: control panel + API keys + test console (DONE) · inbox ghost-drafts · KB editor · write-action/auto-send activation · voice/vision · bake-off** | 🚧 Slice A + B DONE · Slice C Step 3 (Suggest mode) DONE |
 | 09 | Inbox UX (4-state HITL) · KB editor · eval + shadow + 3-model bake-off | ⏳ |
 
 > Plan boundaries 06–09 are indicative; refine when you get there. Each plan is its own doc in `docs/superpowers/plans/`.
