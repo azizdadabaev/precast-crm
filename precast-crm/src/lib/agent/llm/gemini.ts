@@ -5,11 +5,28 @@
 // contents; tools/toolConfig from the agnostic shapes).
 
 import { GoogleGenAI } from '@google/genai';
+import { createHash } from 'crypto';
 import type { LlmProvider, GenerateRequest, GenerateResult, TranscribeInput, ImageInput, ExtractedDimensions, ExtractedRoom } from './provider';
 import type { ModelSpec } from './models';
 import { toGeminiContents, toGeminiTools, toGeminiToolChoice, fromGeminiResponse } from './adapters';
 
 const DEFAULT_MAX_TOKENS = 4096;
+
+// Explicit context caching for the stable prefix (system prompt + KB + tools).
+// That prefix is re-sent every turn, so caching it cuts input cost sharply (cached
+// reads bill a fraction; spec §4.2/§4.4). Keyed by a hash of (model + system +
+// tools): when the owner edits the KB the hash changes → a fresh cache is created,
+// so an edit is live immediately (no stale-cache lag). The store is process-local
+// (one container per deploy); ANY cache failure falls back to inline so the live
+// agent never breaks. Only generate() caches — transcribe()/extractDimensions()
+// send small one-off prompts.
+const CACHE_TTL_SECONDS = 3600; // 1h — Telegram replies arrive minutes-to-hours apart
+const CACHE_REUSE_BUFFER_MS = 60_000; // stop reusing a cache 1 min before it expires
+const cacheStore = new Map<string, { name: string; expiresAt: number }>();
+
+function cachePrefixKey(modelId: string, system: string, tools: unknown): string {
+  return createHash('sha256').update(`${modelId}\n${system}\n${JSON.stringify(tools ?? null)}`).digest('hex');
+}
 
 const DIMENSIONS_PROMPT = [
   'Read this floor-plan / room sketch and extract EVERY room\'s INNER wall-to-wall dimensions in METERS.',
@@ -49,6 +66,9 @@ export function parseDimensions(text: string): ExtractedDimensions {
 
 export interface GeminiLike {
   models: { generateContent(req: unknown): Promise<unknown> };
+  /** Explicit context caching. Optional — absent in the test fakes and the
+   *  vision/STT one-off paths, so generate() simply runs inline when it's missing. */
+  caches?: { create(req: unknown): Promise<{ name?: string }> };
 }
 
 export interface GeminiProviderDeps {
@@ -72,17 +92,64 @@ export class GeminiProvider implements LlmProvider {
   }
 
   async generate(req: GenerateRequest): Promise<GenerateResult> {
-    const config: Record<string, unknown> = { maxOutputTokens: req.maxTokens ?? DEFAULT_MAX_TOKENS };
-    if (req.system) config.systemInstruction = req.system;
-    if (req.tools.length) config.tools = [toGeminiTools(req.tools)];
-    if (req.toolChoice) config.toolConfig = toGeminiToolChoice(req.toolChoice);
+    const client = this.getClient();
+    const tools = req.tools.length ? [toGeminiTools(req.tools)] : undefined;
+    const contents = toGeminiContents(req.messages);
+    // toolChoice + maxTokens are PER-REQUEST (not cached) — the tool defs and the
+    // system prompt are what get cached.
+    const baseConfig: Record<string, unknown> = { maxOutputTokens: req.maxTokens ?? DEFAULT_MAX_TOKENS };
+    if (req.toolChoice) baseConfig.toolConfig = toGeminiToolChoice(req.toolChoice);
 
-    const resp = await this.getClient().models.generateContent({
-      model: this.model.modelId,
-      contents: toGeminiContents(req.messages),
-      config,
-    });
+    const cacheName = await this.getOrCreateCache(client, req.system, tools);
+    if (cacheName) {
+      try {
+        const resp = await client.models.generateContent({
+          model: this.model.modelId,
+          contents,
+          config: { ...baseConfig, cachedContent: cacheName },
+        });
+        return fromGeminiResponse(resp);
+      } catch (err) {
+        // Stale/evicted cache (or a bad combo) must never lose a reply — drop the
+        // cache entry and retry inline below.
+        console.warn('[gemini cache] cached generate failed — retrying inline:', err instanceof Error ? err.message : String(err));
+        this.dropCache(req.system, tools);
+      }
+    }
+
+    // Inline (no cache available, create failed, or a cached call failed).
+    const config: Record<string, unknown> = { ...baseConfig };
+    if (req.system) config.systemInstruction = req.system;
+    if (tools) config.tools = tools;
+    const resp = await client.models.generateContent({ model: this.model.modelId, contents, config });
     return fromGeminiResponse(resp);
+  }
+
+  /** Live cached-content name for the stable prefix, creating one on miss. Returns
+   *  null (→ inline) when caching is unavailable, or create fails (min-token
+   *  threshold, quota, unsupported model) — a cache problem never breaks a reply. */
+  private async getOrCreateCache(client: GeminiLike, system: string, tools: unknown): Promise<string | null> {
+    if (!client.caches || !system) return null;
+    const key = cachePrefixKey(this.model.modelId, system, tools);
+    const now = Date.now();
+    const hit = cacheStore.get(key);
+    if (hit && hit.expiresAt - CACHE_REUSE_BUFFER_MS > now) return hit.name;
+    try {
+      const created = await client.caches.create({
+        model: this.model.modelId,
+        config: { systemInstruction: system, ...(tools ? { tools } : {}), ttl: `${CACHE_TTL_SECONDS}s` },
+      });
+      if (!created?.name) return null;
+      cacheStore.set(key, { name: created.name, expiresAt: now + CACHE_TTL_SECONDS * 1000 });
+      return created.name;
+    } catch (err) {
+      console.warn('[gemini cache] create failed — sending inline:', err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  }
+
+  private dropCache(system: string, tools: unknown): void {
+    cacheStore.delete(cachePrefixKey(this.model.modelId, system, tools));
   }
 
   /** Voice-note STT (spec §3). Sends allowlisted audio inline and returns the

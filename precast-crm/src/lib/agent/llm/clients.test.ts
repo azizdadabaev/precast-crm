@@ -89,6 +89,71 @@ describe('GeminiProvider', () => {
     const inline = captured!.contents![0].parts!.find((p) => p.inlineData);
     expect(inline!.inlineData).toEqual({ mimeType: 'audio/ogg', data: 'BASE64AUDIO' });
   });
+
+  it('caches the stable prefix (system + tools) and reuses it', async () => {
+    let createCalls = 0;
+    const configs: Record<string, unknown>[] = [];
+    const fake: GeminiLike = {
+      models: {
+        async generateContent(req) {
+          configs.push((req as Record<string, unknown>).config as Record<string, unknown>);
+          return { candidates: [{ content: { parts: [{ text: 'ok' }] } }], usageMetadata: { promptTokenCount: 5, cachedContentTokenCount: 4 } };
+        },
+      },
+      caches: { async create() { createCalls += 1; return { name: `cachedContents/c${createCalls}` }; } },
+    };
+    const provider = new GeminiProvider(getModel('gemini-3.1-pro')!, { client: fake });
+    const req = { ...REQ, system: 'CACHE-REUSE' };
+    const r1 = await provider.generate(req);
+    await provider.generate(req); // same prefix → reuse, no second create
+
+    expect(createCalls).toBe(1);
+    expect(configs[0].cachedContent).toBe('cachedContents/c1');
+    expect(configs[0].systemInstruction).toBeUndefined(); // prefix lives in the cache
+    expect(configs[0].tools).toBeUndefined();
+    expect(configs[0].toolConfig).toBeDefined(); // per-request toolChoice still sent
+    expect(r1.usage?.cacheReadInputTokens).toBe(4); // cache hit visible in usage
+  });
+
+  it('falls back to inline when cache creation fails', async () => {
+    let captured: Record<string, unknown> | undefined;
+    const fake: GeminiLike = {
+      models: {
+        async generateContent(req) {
+          captured = (req as Record<string, unknown>).config as Record<string, unknown>;
+          return { candidates: [{ content: { parts: [{ text: 'ok' }] } }] };
+        },
+      },
+      caches: { async create() { throw new Error('content too small to cache'); } },
+    };
+    const provider = new GeminiProvider(getModel('gemini-3.5-flash')!, { client: fake });
+    await provider.generate({ ...REQ, system: 'CACHE-FAIL' });
+    expect(captured!.cachedContent).toBeUndefined();
+    expect(captured!.systemInstruction).toBe('CACHE-FAIL'); // inline
+    expect(captured!.tools).toBeDefined();
+  });
+
+  it('retries inline when a cached generate fails (stale cache never loses a reply)', async () => {
+    let calls = 0;
+    const configs: Record<string, unknown>[] = [];
+    const fake: GeminiLike = {
+      models: {
+        async generateContent(req) {
+          calls += 1;
+          configs.push((req as Record<string, unknown>).config as Record<string, unknown>);
+          if (calls === 1) throw new Error('CachedContent not found'); // stale / evicted
+          return { candidates: [{ content: { parts: [{ text: 'ok' }] } }] };
+        },
+      },
+      caches: { async create() { return { name: 'cachedContents/stale' }; } },
+    };
+    const provider = new GeminiProvider(getModel('gemini-3.1-pro')!, { client: fake });
+    const res = await provider.generate({ ...REQ, system: 'CACHE-STALE' });
+    expect(res.text).toBe('ok');
+    expect(calls).toBe(2); // cached attempt failed, retried inline
+    expect(configs[0].cachedContent).toBe('cachedContents/stale');
+    expect(configs[1].systemInstruction).toBe('CACHE-STALE'); // inline retry
+  });
 });
 
 describe('OpenAIProvider', () => {
