@@ -7,7 +7,7 @@
 // the webhook always returns 200.
 
 import { prisma } from '@/lib/prisma';
-import { loadAgentRuntimeConfig, loadKnowledgeBase, shouldAgentHandle } from './runtime-config';
+import { loadAgentRuntimeConfig, loadKnowledgeBase, loadFewShot, shouldAgentHandle } from './runtime-config';
 import { createProviderForModelKey, createVisionProvider, createTranscriptionProvider } from './llm/factory';
 import { createToolRegistry } from './tools/registry';
 import { runAgentShadow, toLlmHistory, type HistoryRow, type ShadowOutcome } from './shadow';
@@ -43,13 +43,13 @@ async function generateAndPersistProposal(
     select: { direction: true, text: true },
   });
   const history = toLlmHistory(rows.reverse() as HistoryRow[]);
-  const kbContent = await loadKnowledgeBase();
+  const [kbContent, fewShot] = await Promise.all([loadKnowledgeBase(), loadFewShot()]);
   // Model is owner-selected via the control panel (config.modelKey); the API key
   // resolves from UI-saved DB keys → env.
   const provider = await createProviderForModelKey(config.modelKey);
   const outcome = await runAgentShadow(
     { conversationId: conversation.id, history, inboundRaw: inboundText },
-    { provider, tools: createToolRegistry(), kbContent, ctx: { sharedContactPhone: conversation.sharedContactPhone } },
+    { provider, tools: createToolRegistry(), kbContent, fewShot, ctx: { sharedContactPhone: conversation.sharedContactPhone } },
   );
   await saveAgentProposal(outcome, { conversationId: conversation.id, inboundMessageId, modelKey: config.modelKey });
   return outcome;

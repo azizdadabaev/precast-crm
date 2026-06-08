@@ -43,14 +43,27 @@ interface TestResult {
   turns?: number;
 }
 
-// Owner-managed knowledge base (spec §9). Single Markdown editor over the
-// AppConfig the agent reads live; the agent picks up a save on its next turn.
-function KnowledgeBaseSection() {
+// Owner-managed agent text doc (spec §9 KB / §3 few-shot). A Markdown editor over
+// an AppConfig key the agent reads live; saves are stamped + audited. lintPrices
+// flags price-shaped text (the KB must carry no prices — those come from tools).
+function AgentDocEditor({
+  title,
+  endpoint,
+  queryKey,
+  hint,
+  lintPrices,
+}: {
+  title: { uz: string; en: string };
+  endpoint: string;
+  queryKey: string;
+  hint: { uz: string; en: string };
+  lintPrices?: boolean;
+}) {
   const t = useT();
   const qc = useQueryClient();
   const { data } = useQuery<{ content: string; updatedAt: string | null; updatedBy: string | null }>({
-    queryKey: ["agent-kb"],
-    queryFn: () => api("/api/agent/kb"),
+    queryKey: [queryKey],
+    queryFn: () => api(endpoint),
   });
   const [text, setText] = useState("");
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -63,7 +76,7 @@ function KnowledgeBaseSection() {
 
   const save = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/agent/kb", {
+      const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: text }),
@@ -74,19 +87,19 @@ function KnowledgeBaseSection() {
     },
     onSuccess: (saved) => {
       setErr(null); setSavedAt(saved.updatedAt); setSavedBy(saved.updatedBy);
-      qc.invalidateQueries({ queryKey: ["agent-kb"] });
+      qc.invalidateQueries({ queryKey: [queryKey] });
     },
     onError: (e: Error) => setErr(e.message),
   });
 
   const dirty = data != null && text !== data.content;
-  const prices = findKbPrices(text);
+  const prices = lintPrices ? findKbPrices(text) : [];
   const tokens = Math.ceil(text.length / 4);
 
   return (
     <section className="rounded-lg border border-border bg-card p-4 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-semibold">{t("Билимлар базаси", "Knowledge base")}</div>
+        <div className="text-sm font-semibold">{t(title.uz, title.en)}</div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={!dirty || save.isPending} onClick={() => data && setText(data.content)}>
             {t("Бекор", "Revert")}
@@ -101,8 +114,7 @@ function KnowledgeBaseSection() {
         value={text}
         onChange={(e) => setText(e.target.value)}
         spellCheck={false}
-        className="h-[360px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none"
-        placeholder={t("Билимлар базаси (Markdown)…", "Knowledge base (Markdown)…")}
+        className="h-[300px] w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs leading-relaxed outline-none"
       />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span>{text.length.toLocaleString()} {t("белги", "chars")} · ~{tokens.toLocaleString()} tokens</span>
@@ -111,17 +123,12 @@ function KnowledgeBaseSection() {
       </div>
       {prices.length > 0 && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
-          {t("Диққат: базада нархга ўхшаш сон бор — нарх фақат калькулятордан келади, базада эмас:", "Warning: price-shaped numbers in the KB — prices must come from the calculator, never the KB:")}{" "}
+          {t("Диққат: нархга ўхшаш сон бор — нарх фақат калькулятордан келади:", "Warning: price-shaped numbers — prices must come from the calculator, never this doc:")}{" "}
           <span className="font-mono">{prices.join(", ")}</span>
         </div>
       )}
       {err && <div className="text-xs text-destructive">{err}</div>}
-      <div className="text-xs text-muted-foreground">
-        {t(
-          "Сақлангач, агент дарҳол шу базадан фойдаланади. Эслатма: кэш туфайли ўзгариш иссиқ суҳбатларга 1 соатгача етиб бориши мумкин. Ўзбекча/кирилл матнни ишга туширишдан олдин она тилида сўзлашувчи текширсин.",
-          "Saved immediately for new turns. Note: with prompt caching an edit can take up to ~1h to reach a warm conversation cache. Have a native speaker review the Uzbek/Cyrillic before go-live.",
-        )}
-      </div>
+      <div className="text-xs text-muted-foreground">{t(hint.uz, hint.en)}</div>
     </section>
   );
 }
@@ -321,7 +328,27 @@ export default function AgentPage() {
       </section>
 
       {/* Knowledge base */}
-      <KnowledgeBaseSection />
+      <AgentDocEditor
+        title={{ uz: "Билимлар базаси", en: "Knowledge base" }}
+        endpoint="/api/agent/kb"
+        queryKey="agent-kb"
+        lintPrices
+        hint={{
+          uz: "Сақлангач, агент дарҳол шу базадан фойдаланади. Эслатма: кэш туфайли ўзгариш иссиқ суҳбатларга 1 соатгача етиб бориши мумкин. Ишга туширишдан олдин она тилида сўзлашувчи текширсин.",
+          en: "Saved immediately for new turns. Note: prompt caching can delay a warm cache by ~1h. Have a native speaker review the Uzbek/Cyrillic before go-live.",
+        }}
+      />
+
+      {/* Few-shot examples (tone guide) */}
+      <AgentDocEditor
+        title={{ uz: "Few-shot мисоллар (оҳанг)", en: "Few-shot examples (tone)" }}
+        endpoint="/api/agent/fewshot"
+        queryKey="agent-fewshot"
+        hint={{
+          uz: "Намунавий суҳбатлар — фақат ОҲАНГ учун, нарх/факт манбаи эмас. Қисқа тутинг; рақамлар ўрнига <…> ишлатинг. Она тилида текширилсин.",
+          en: "Example exchanges — a TONE guide only, never a source of facts or prices. Keep it short; use <…> placeholders, not real numbers. Native-speaker reviewed.",
+        }}
+      />
 
       {/* Provider API keys */}
       <section className="rounded-lg border border-border bg-card p-4 space-y-3">

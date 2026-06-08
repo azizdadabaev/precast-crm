@@ -30,6 +30,7 @@ export const DEFAULT_AGENT_RUNTIME: AgentRuntimeConfig = {
 
 const RUNTIME_KEY = 'agent.runtime';
 const KB_KEY = 'agent.knowledge_base';
+const FEWSHOT_KEY = 'agent.few_shot';
 
 function isMode(v: unknown): v is AgentMode {
   return v === 'shadow' || v === 'suggest' || v === 'auto';
@@ -89,6 +90,15 @@ export async function saveAgentRuntimeConfig(input: unknown): Promise<RuntimeUpd
  *  the agent then escalates anything not covered by its hard constraints. */
 export async function loadKnowledgeBase(): Promise<string> {
   const row = await prisma.appConfig.findUnique({ where: { key: KB_KEY } });
+  const v = row?.value as { content?: unknown } | null | undefined;
+  return v && typeof v.content === 'string' ? v.content : '';
+}
+
+/** Load the owner-curated few-shot block (spec §3 mitigation a) — a small set of
+ *  example exchanges injected as a TONE guide only (never a source of facts or
+ *  prices). Empty if unset. */
+export async function loadFewShot(): Promise<string> {
+  const row = await prisma.appConfig.findUnique({ where: { key: FEWSHOT_KEY } });
   const v = row?.value as { content?: unknown } | null | undefined;
   return v && typeof v.content === 'string' ? v.content : '';
 }

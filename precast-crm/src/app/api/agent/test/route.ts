@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
-import { loadAgentRuntimeConfig, loadKnowledgeBase } from "@/lib/agent/runtime-config";
+import { loadAgentRuntimeConfig, loadKnowledgeBase, loadFewShot } from "@/lib/agent/runtime-config";
 import { getModel } from "@/lib/agent/llm/models";
 import { createProvider } from "@/lib/agent/llm/factory";
 import { resolveApiKey } from "@/lib/agent/provider-keys";
@@ -52,6 +52,7 @@ export const POST = withPermission("inbox.access", async (req: NextRequest) => {
         provider: createProvider(model, { apiKey }),
         tools: createToolRegistry(),
         kbContent: await loadKnowledgeBase(),
+        fewShot: await loadFewShot(),
         log: () => {}, // the response IS the output here
       },
     );
