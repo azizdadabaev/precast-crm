@@ -30,6 +30,12 @@ const DEFAULT_VALIDITY_MS = 24 * 60 * 60 * 1000; // 24h — matches buildSlabQuo
 // for a transport estimate, never a binding figure.
 const FLOOR_KG_PER_M2 = 180;
 
+// Etalon manufactures beams up to 6.30 m. A longer beam (inner_width + 2×bearing
+// > 6.30) is a custom / non-standard job — the agent must hand it to staff, never
+// quote a beam we can't make. The pricing tiers extend higher (7.30/8.30) for
+// other purposes, so this cap is enforced here, not by the price table.
+const MAX_BEAM_LENGTH_M = 6.30;
+
 // Numeric min/max live in code, not the JSON schema, so the schema stays
 // strict-friendly (spec §4.2 layer 3 — plausibility checks run server-side).
 export const GetQuoteInput = z.object({
@@ -110,6 +116,13 @@ export function runGetQuote(raw: unknown, deps: GetQuoteDeps): ToolResult<QuoteD
   }
 
   const p = quote.payload;
+  // Hard cap: never quote a beam longer than we manufacture — escalate instead.
+  if (p.beamLength > MAX_BEAM_LENGTH_M + 1e-9) {
+    return toolEscalate(
+      `beam length ${p.beamLength.toFixed(2)}m exceeds the 6.30m maximum Etalon produces — ` +
+        `escalate for a custom solution, do not quote`,
+    );
+  }
   const weight_kg = Math.round(p.billedArea * FLOOR_KG_PER_M2);
   return toolOk({
     subtotal: quote.price,
@@ -137,7 +150,8 @@ export const getQuoteDefinition: AgentToolDefinition = {
     'delivered weight in kg (weight_kg — useful to volunteer for transport), and a ' +
     'signed quote_id (UZS) — this quote_id is REQUIRED to later draft an order. ' +
     'Does NOT cover: gazoblok wall blocks (use get_gazoblok_quote), delivery ' +
-    'dates or costs, discounts, or non-standard / irregular / multi-level shapes. ' +
+    'dates or costs, discounts, non-standard / irregular / multi-level shapes, or a ' +
+    'beam longer than 6.30 m (room inner width + bearings) — those escalate. ' +
     'If the dimensions are unclear or the job is non-standard, escalate instead of guessing.',
   inputSchema: {
     type: 'object',

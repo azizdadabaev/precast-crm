@@ -97,6 +97,24 @@ describe('runGetQuote', () => {
     ).toThrow();
   });
 
+  it('escalates when the beam length exceeds the 6.30m we manufacture', () => {
+    // inner_width 6.5 + 2×0.15 bearing = 6.80m beam → over the 6.30 max → escalate,
+    // never quote a beam Etalon can't produce.
+    const res = runGetQuote({ inner_width: 6.5, inner_length: 4 }, deps());
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.escalate).toBe(true);
+      expect(res.reason).toContain('6.30');
+    }
+  });
+
+  it('still quotes a beam length exactly at the 6.30m maximum', () => {
+    // inner_width 6.0 + 0.30 = 6.30m → allowed (boundary is inclusive).
+    const res = runGetQuote({ inner_width: 6.0, inner_length: 4 }, deps());
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data.bill_of_materials.beams.lengthM).toBeCloseTo(6.30, 2);
+  });
+
   it('honours an explicit pattern override', () => {
     const res = runGetQuote({ inner_width: 4, inner_length: 5, pattern: 'GBG' }, deps());
     expect(res.ok).toBe(true);
