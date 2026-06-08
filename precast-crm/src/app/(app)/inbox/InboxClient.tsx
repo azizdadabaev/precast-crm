@@ -696,7 +696,13 @@ interface AgentProposal {
   decision: "reply" | "escalate" | "request_approval" | "blocked" | "max_turns";
   reply: string | null;
   escalationReason: string | null;
-  approvalDraft: { customerName?: string | null } | null;
+  approvalDraft: {
+    quoteId?: string;
+    customerName?: string | null;
+    customerPhone?: string | null;
+    deliveryAddress?: string | null;
+    notes?: string | null;
+  } | null;
   language: string;
   screen: { verdict?: string } | null;
   escalatedEarly: boolean;
@@ -736,6 +742,7 @@ function GhostDraft({ conversationId }: { conversationId: string }) {
 
   const suggest = (runtime?.config?.mode ?? "shadow") === "suggest";
   const canSend = suggest && proposal.decision === "reply" && !!proposal.reply;
+  const canPlaceOrder = suggest && proposal.decision === "request_approval";
 
   const ds = DECISION_STYLE[proposal.decision] ?? { label: proposal.decision, cls: "bg-muted text-muted-foreground" };
   const body =
@@ -769,6 +776,8 @@ function GhostDraft({ conversationId }: { conversationId: string }) {
 
         {canSend ? (
           <GhostSuggestForm key={proposal.id} conversationId={conversationId} proposalId={proposal.id} reply={proposal.reply ?? ""} />
+        ) : canPlaceOrder ? (
+          <GhostOrderForm key={proposal.id} conversationId={conversationId} proposalId={proposal.id} draft={proposal.approvalDraft} />
         ) : (
           <>
             <div className="mt-2 whitespace-pre-wrap break-words text-[14px] leading-[1.4] text-[var(--tg-text)]">
@@ -837,6 +846,71 @@ function GhostSuggestForm({ conversationId, proposalId, reply }: { conversationI
           Рад этиш · Dismiss
         </button>
         <span className="ml-auto text-[10px] text-[color:var(--tg-text-dim)]">текширинг · review before sending</span>
+      </div>
+    </div>
+  );
+}
+
+// Suggest mode, request_approval: review the order + Place / Reject. Place commits
+// a real Order under the operator (decision c) and auto-confirms the customer.
+function GhostOrderForm({
+  conversationId,
+  proposalId,
+  draft,
+}: {
+  conversationId: string;
+  proposalId: string;
+  draft: AgentProposal["approvalDraft"];
+}) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const act = useMutation({
+    mutationFn: (action: "place_order" | "dismiss") =>
+      api(`/api/agent/proposals/${proposalId}/act`, { method: "POST", json: { action } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["agent-proposal", conversationId] });
+      qc.invalidateQueries({ queryKey: ["inbox-thread", conversationId] });
+      qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+
+  const need = (v: string | null | undefined) => v || <span className="text-destructive">— kerak · needed</span>;
+  const missing = !draft?.customerName || !draft?.customerPhone || !draft?.deliveryAddress;
+
+  return (
+    <div className="mt-2">
+      <div className="rounded-lg border border-blue-500/30 bg-blue-500/[0.06] p-2.5 text-[13px] text-[var(--tg-text)]">
+        <div className="mb-1 font-semibold">Buyurtma · Order</div>
+        <div>Mijoz · Customer: {need(draft?.customerName)}</div>
+        <div>Tel: {need(draft?.customerPhone)}</div>
+        <div>Manzil · Address: {need(draft?.deliveryAddress)}</div>
+      </div>
+      {missing && (
+        <div className="mt-1 text-[12px] text-[color:var(--tg-text-dim)]">
+          Ism, telefon va manzil yig&apos;ilgach joylash mumkin · collect name, phone and address first
+        </div>
+      )}
+      {error && <div className="mt-1 text-[12px] text-destructive">{error}</div>}
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          disabled={act.isPending || missing}
+          onClick={() => { setError(null); act.mutate("place_order"); }}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-white transition-colors disabled:opacity-60"
+          style={{ background: "var(--tg-accent)" }}
+        >
+          {act.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          Tasdiqlab joylash · Place order
+        </button>
+        <button
+          type="button"
+          disabled={act.isPending}
+          onClick={() => { setError(null); act.mutate("dismiss"); }}
+          className="rounded-lg px-3 py-1.5 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+        >
+          Рад этиш · Reject
+        </button>
       </div>
     </div>
   );
