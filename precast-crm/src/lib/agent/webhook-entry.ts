@@ -9,6 +9,7 @@ import { loadAgentRuntimeConfig, loadKnowledgeBase, shouldAgentHandle } from './
 import { createProviderForModelKey } from './llm/factory';
 import { createToolRegistry } from './tools/registry';
 import { runAgentShadow, toLlmHistory, type HistoryRow } from './shadow';
+import { saveAgentProposal } from './proposal';
 
 const HISTORY_LIMIT = 20;
 
@@ -47,7 +48,7 @@ export async function runAgentForInbound(
     // key resolves from UI-saved DB keys → env.
     const provider = await createProviderForModelKey(config.modelKey);
 
-    await runAgentShadow(
+    const outcome = await runAgentShadow(
       { conversationId: conversation.id, history, inboundRaw: inboundText },
       {
         provider,
@@ -56,6 +57,16 @@ export async function runAgentForInbound(
         ctx: { sharedContactPhone: conversation.sharedContactPhone },
       },
     );
+
+    // Persist the proposal (Plan 09 Slice B): turn the console-only Shadow log
+    // into an inbox-visible, eval-queryable row. `excludeMessageId` is the inbound
+    // Message that triggered this run (its UNIQUE key makes a retry a no-op).
+    // Persisting is NOT sending — Shadow stays send/write-free.
+    await saveAgentProposal(outcome, {
+      conversationId: conversation.id,
+      inboundMessageId: excludeMessageId,
+      modelKey: config.modelKey,
+    });
   } catch (err) {
     // Shadow is non-critical; a failure must never break inbox delivery.
     console.error('[agent:webhook-entry]', err);

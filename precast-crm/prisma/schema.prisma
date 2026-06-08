@@ -1102,6 +1102,7 @@ model Conversation {
   createdAt            DateTime            @default(now())
   messages             Message[]
   pendingOrders        PendingOrder[]
+  agentProposals       AgentProposal[]
   projects             Project[]
 
   @@unique([channel, externalId])
@@ -1167,6 +1168,63 @@ model PendingOrder {
   @@index([status, createdAt])
   @@index([conversationId])
   @@map("pending_orders")
+}
+
+// Every Shadow-mode run leaves an AgentProposal: the reply/decision the agent
+// WOULD send, persisted (not sent). It is the backbone for the inbox ghost-draft
+// (Plan 09 Slice B), suggest/auto rollout, and the provider bake-off / eval — and
+// makes a proposal visible in the CRM instead of evaporating into the server log.
+//
+// Storage is a NEW table (not fields on Message) because a proposal is 1:1 with
+// the inbound message that triggered it and carries ~10 fields that would be null
+// on every other Message row. `runAgentForInbound` (webhook-entry.ts) writes one
+// per inbound text via saveAgentProposal (proposal.ts).
+model AgentProposal {
+  id             String @id @default(cuid())
+  conversationId String
+  // The inbound customer Message.id that triggered this run. UNIQUE => at most
+  // one proposal per inbound message (a webhook retry is a no-op) AND the natural
+  // key to fetch "the latest proposal" for the inbox ghost-draft. No FK to Message
+  // (matches the inbox's no-FK convention for Message/user refs); the conversation
+  // FK below cascades cleanup.
+  inboundMessageId String @unique
+
+  // Server-side detected language/script the reply is in (uz-latin/uz-cyrillic/ru/…).
+  language String
+
+  // The routed AgentDecision.action: reply | escalate | request_approval | blocked | max_turns.
+  decision String
+  // Full proposed reply (single detected-language variant). Set only for decision=reply.
+  reply String?
+  // Escalation/block reason. Set for escalate | blocked | max_turns.
+  escalationReason String?
+  // The ApprovalDraft (quote_id + customer details) when decision=request_approval;
+  // lets Slice C wire proposeOrder without re-running the model. Null otherwise.
+  approvalDraft Json?
+
+  // Pre-LLM input-screen outcome (spec §6.4/§7): { ...flags, verdict }.
+  screen Json
+  // True when a suspicious inbound short-circuited to escalation with NO model call.
+  escalatedEarly Boolean @default(false)
+
+  // Registry key of the model that produced it (the bake-off dimension).
+  modelKey String
+  // Tool calls made this run: [{ name, ok }].
+  toolCalls Json
+  // Token usage { inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens }.
+  usage Json
+  // Loop turns taken (model calls).
+  turns Int @default(0)
+  // Staff-side confidence surface (spec §10): high | low. Nullable — the loop does
+  // not surface confidence yet (deferred); column added now to avoid a later migration.
+  confidence String?
+
+  createdAt DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("agent_proposals")
 }
 
 // ══════════════════════════════════════════════════════════════════
