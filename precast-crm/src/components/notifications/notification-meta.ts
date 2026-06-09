@@ -9,6 +9,7 @@ import {
   XCircle,
   AtSign,
   MessageSquare,
+  Bot,
   type LucideIcon,
 } from "lucide-react";
 import type { NotificationItem } from "@/hooks/useNotifications";
@@ -30,6 +31,7 @@ export const TYPE_META: Record<
   PAYMENT_REJECTED:       { icon: XCircle,        color: "text-red-600",     bg: "bg-red-50 dark:bg-red-950/40" },
   COMMENT_MENTION:        { icon: AtSign,         color: "text-purple-600",  bg: "bg-purple-50 dark:bg-purple-950/40" },
   NEW_COMMENT:            { icon: MessageSquare,  color: "text-gray-600",    bg: "bg-gray-50 dark:bg-gray-900/40" },
+  AGENT_ESCALATION:       { icon: Bot,            color: "text-amber-600",   bg: "bg-amber-50 dark:bg-amber-950/40" },
 };
 
 /**
@@ -41,6 +43,7 @@ export function targetUrl(n: NotificationItem): string | null {
   if (n.orderId) return `/orders/${n.orderId}`;
   if (n.paymentId) return `/payments`;
   if (n.projectId) return `/projects/${n.projectId}`;
+  if (n.conversationId) return `/inbox?c=${n.conversationId}`;
   return null;
 }
 

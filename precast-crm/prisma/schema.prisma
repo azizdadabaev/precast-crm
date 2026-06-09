@@ -1010,10 +1010,11 @@ model Notification {
   body  String?
 
   // Polymorphic target — no FK constraints (intentional, see comment above)
-  orderId   String?
-  paymentId String?
-  projectId String?
-  commentId String?
+  orderId        String?
+  paymentId      String?
+  projectId      String?
+  commentId      String?
+  conversationId String? // inbox chat — agent escalations link here (→ /inbox?c=…)
 
   // Unread state per-user.
   readAt DateTime?

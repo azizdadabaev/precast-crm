@@ -11,6 +11,7 @@ export interface CreateNotificationInput {
   paymentId?: string | null;
   projectId?: string | null;
   commentId?: string | null;
+  conversationId?: string | null;
 }
 
 /**
@@ -36,6 +37,7 @@ export async function emitNotifications(
             paymentId: input.paymentId ?? null,
             projectId: input.projectId ?? null,
             commentId: input.commentId ?? null,
+            conversationId: input.conversationId ?? null,
           },
         }),
       ),
@@ -53,6 +55,7 @@ export async function emitNotifications(
           paymentId: row.paymentId,
           projectId: row.projectId,
           commentId: row.commentId,
+          conversationId: row.conversationId,
           createdAt: row.createdAt.toISOString(),
           readAt: null,
         }),

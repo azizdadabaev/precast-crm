@@ -12,6 +12,7 @@ export interface NotificationItem {
   paymentId: string | null;
   projectId: string | null;
   commentId: string | null;
+  conversationId: string | null;
   createdAt: string;
   readAt: string | null;
 }

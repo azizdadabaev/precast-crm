@@ -78,6 +78,7 @@ export async function routeToHuman(conversationId: string, reason: string): Prom
     userIds,
     title: 'AI agent · diqqat talab qiladi · needs attention',
     body: reason.slice(0, 300),
+    conversationId,
   });
 }
 

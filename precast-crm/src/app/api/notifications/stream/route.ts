@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
                 paymentId: n.paymentId,
                 projectId: n.projectId,
                 commentId: n.commentId,
+                conversationId: n.conversationId,
                 createdAt: n.createdAt.toISOString(),
                 readAt: n.readAt?.toISOString() ?? null,
               });
