@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/health",
   "/api/telegram/webhook",
+  "/internal/quote-card", // agent's headless quote-card render target — gated by an in-process token, not the session
   "/_next",
   "/favicon.ico",
   "/opus", // static opus-recorder encoder worker (voice recording)

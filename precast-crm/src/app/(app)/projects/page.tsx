@@ -11,11 +11,14 @@ import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { useT } from "@/lib/i18n";
 
+type ProjectFilter = "DRAFT" | "ALL" | "AGENT";
+
 interface Project {
   id: string;
   name: string | null;
   shapeType: string;
   status: "DRAFT" | "ORDERED" | "ARCHIVED";
+  aiGenerated: boolean;
   dimensions: { width?: number; length?: number; widths?: number[] };
   createdAt: string;
   updatedAt: string;
@@ -38,7 +41,7 @@ export default function ProjectsPage() {
   const t = useT();
   const qc = useQueryClient();
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"DRAFT" | "ALL">("DRAFT");
+  const [filter, setFilter] = useState<ProjectFilter>("DRAFT");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -48,10 +51,11 @@ export default function ProjectsPage() {
   const [rowErrorMsg, setRowErrorMsg] = useState<string | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
-    queryKey: ["projects", status, q],
+    queryKey: ["projects", filter, q],
     queryFn: () => {
       const params = new URLSearchParams();
-      if (status !== "ALL") params.set("status", status);
+      if (filter === "DRAFT") params.set("status", "DRAFT");
+      if (filter === "AGENT") params.set("source", "agent");
       if (q.trim()) params.set("q", q.trim());
       return api(`/api/projects?${params.toString()}`);
     },
@@ -205,20 +209,33 @@ export default function ProjectsPage() {
           />
         </div>
         <div className="flex rounded-md border border-border bg-card overflow-hidden">
-          {(["DRAFT", "ALL"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`px-3 h-9 text-xs font-semibold uppercase tracking-wider transition-colors ${
-                status === s
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-              onClick={() => setStatus(s)}
-            >
-              {s === "DRAFT" ? t("Лойиҳалар", "Drafts") : t("Барчаси", "All")}
-            </button>
-          ))}
+          {([
+            { key: "DRAFT", label: t("Лойиҳалар", "Drafts") },
+            { key: "ALL", label: t("Барчаси", "All") },
+            { key: "AGENT", label: t("AI агент", "AI Agent") },
+          ] as const).map((opt) => {
+            const active = filter === opt.key;
+            const isAgent = opt.key === "AGENT";
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                className={`px-3 h-9 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                  active
+                    ? isAgent
+                      ? "bg-amber-500 text-white"
+                      : "bg-primary text-primary-foreground"
+                    : isAgent
+                      ? "text-amber-600 hover:bg-amber-500/10"
+                      : "text-muted-foreground hover:bg-muted"
+                }`}
+                onClick={() => setFilter(opt.key)}
+              >
+                {isAgent ? "🤖 " : ""}
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
         {/* Bulk-delete trigger. Renders only for users with project.delete
             permission AND when at least one DRAFT row is selected. The
@@ -330,9 +347,19 @@ export default function ProjectsPage() {
                       </td>
                     )}
                     <td className="px-3 py-2">
-                      <Link href={`/projects/${p.id}`} className="font-medium hover:underline">
-                        {clientName}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/projects/${p.id}`} className="font-medium hover:underline">
+                          {clientName}
+                        </Link>
+                        {p.aiGenerated && (
+                          <span
+                            title={t("AI агент яратган", "Created by the AI agent")}
+                            className="shrink-0 text-[9px] font-bold uppercase tracking-wider bg-amber-500 text-white rounded px-1.5 py-0.5"
+                          >
+                            🤖 AI
+                          </span>
+                        )}
+                      </div>
                       {p.name && (
                         <div className="text-xs text-muted-foreground">{p.name}</div>
                       )}

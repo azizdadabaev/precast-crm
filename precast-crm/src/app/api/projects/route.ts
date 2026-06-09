@@ -22,11 +22,13 @@ export const GET = withPermission("order.view", async (req: NextRequest, { user 
   const { searchParams } = new URL(req.url);
   const dealId = searchParams.get("dealId") ?? undefined;
   const status = searchParams.get("status") ?? undefined; // DRAFT | ORDERED | ARCHIVED
+  const source = searchParams.get("source") ?? undefined; // "agent" → AI-agent drafts only
   const q = searchParams.get("q")?.trim() ?? "";
 
   const where: Record<string, unknown> = {};
   if (dealId) where.dealId = dealId;
   if (status && ProjectStatusEnum.options.includes(status as never)) where.status = status;
+  if (source === "agent") where.aiGenerated = true;
 
   if (q) {
     const phoneForms = phoneMatchForms(q);

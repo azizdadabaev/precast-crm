@@ -380,6 +380,10 @@ model Project {
   dimensions  Json
   status      ProjectStatus @default(DRAFT)
 
+  // True when this draft was created automatically by the Telegram AI sales
+  // agent (Auto mode). Drives the "AI" badge + "AI Agent" filter in /projects.
+  aiGenerated Boolean       @default(false)
+
   // Tentative client info captured during the phone call.
   // Once the order is placed (or operator picks an existing client),
   // this gets reconciled into a Client row and these fields are cleared.

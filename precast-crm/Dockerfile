@@ -5,6 +5,9 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
+# patches/ must be present before install — the postinstall (patch-package)
+# applies our vendored @vercel/og fix during `npm ci`.
+COPY patches ./patches
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --prefer-offline
 
@@ -20,11 +23,15 @@ RUN npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
-RUN apk add --no-cache libc6-compat openssl
+# chromium + fonts: the AI agent screenshots the quote card with a headless
+# browser (puppeteer-core). font-noto covers the card's Cyrillic labels.
+RUN apk add --no-cache libc6-compat openssl \
+    chromium nss freetype harfbuzz ca-certificates ttf-freefont font-noto
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 nextjs

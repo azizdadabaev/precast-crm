@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildVisionEcho } from './vision';
+import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote } from './vision';
 import { parseDimensions } from './llm/gemini';
 
 describe('parseDimensions', () => {
@@ -41,43 +41,51 @@ describe('parseDimensions', () => {
   });
 });
 
-describe('buildVisionEcho', () => {
-  it('echoes a single room to confirm (no price)', () => {
-    const r = buildVisionEcho({ found: true, rooms: [{ widthM: 5.2, lengthM: 4 }], confidence: 'high' }, 'uz-latin');
-    expect(r.action).toBe('reply');
-    if (r.action === 'reply') {
-      expect(r.rooms).toHaveLength(1);
-      expect(r.reply).toContain('5.2');
-      expect(r.reply).toContain('4');
-      expect(r.reply.toLowerCase()).not.toMatch(/so['’ʻ]?m|сум|narx|цена/); // never a price
-    }
+describe('describeExtractedRooms', () => {
+  it('renders a single room as a customer-style dimensions question (no price)', () => {
+    const t = describeExtractedRooms([{ widthM: 5.2, lengthM: 4 }], 'uz-latin');
+    expect(t).toContain('5.2×4 m');
+    expect(t).toContain('Narxi qancha?');
+    expect(t.toLowerCase()).not.toMatch(/so['’ʻ]?m|сум|цена/); // dims question, never a price
   });
 
-  it('echoes ALL rooms for a multi-room plan (the reported 3.8×3.8 + 3.8×7.5 case)', () => {
-    const r = buildVisionEcho(
-      { found: true, rooms: [{ widthM: 3.8, lengthM: 3.8 }, { widthM: 3.8, lengthM: 7.5 }], confidence: 'high' },
-      'uz-latin',
-    );
-    expect(r.action).toBe('reply');
-    if (r.action === 'reply') {
-      expect(r.rooms).toHaveLength(2);
-      expect(r.reply).toContain('2 ta');
-      expect(r.reply).toContain('3.8 × 3.8 m');
-      expect(r.reply).toContain('3.8 × 7.5 m');
-    }
+  it('lists every room for a multi-room plan', () => {
+    const t = describeExtractedRooms([{ widthM: 3.8, lengthM: 3.8 }, { widthM: 3.8, lengthM: 7.5 }], 'uz-latin');
+    expect(t).toContain('3.8×3.8 m');
+    expect(t).toContain('3.8×7.5 m');
   });
 
-  it('echoes in the conversation language', () => {
-    const ru = buildVisionEcho({ found: true, rooms: [{ widthM: 3, lengthM: 4 }], confidence: 'high' }, 'ru');
-    expect(ru.action === 'reply' && ru.reply).toContain('вижу');
+  it('uses the conversation language', () => {
+    expect(describeExtractedRooms([{ widthM: 3, lengthM: 4 }], 'ru')).toContain('Сколько стоит');
+    expect(describeExtractedRooms([{ widthM: 3, lengthM: 4 }], 'uz-cyrillic')).toContain('Нархи қанча');
+  });
+});
+
+describe('visionFallbackReply', () => {
+  it('asks for typed dimensions in the conversation language', () => {
+    expect(visionFallbackReply('uz-latin')).toContain('4×5 m');
+    expect(visionFallbackReply('ru')).toContain('чертёж');
+    expect(visionFallbackReply('uz-cyrillic')).toContain('4×5 m');
+  });
+});
+
+describe('mediaCorrectionNote', () => {
+  it('lists the dimensions and uses drawing wording for an image source', () => {
+    const t = mediaCorrectionNote([{ innerWidth: 4, innerLength: 6 }, { innerWidth: 4, innerLength: 4 }], 'uz-latin', 'image');
+    expect(t).toContain('4×6 m');
+    expect(t).toContain('4×4 m');
+    expect(t.toLowerCase()).toContain('chizma'); // "drawing" wording
+    expect(t.toLowerCase()).toContain('xato'); // invites a correction
   });
 
-  it('escalates an unclear / low-confidence image (asks for typed dims)', () => {
-    for (const dims of [
-      { found: false, rooms: [], confidence: 'low' as const, note: 'no labels' },
-      { found: true, rooms: [{ widthM: 5, lengthM: 4 }], confidence: 'low' as const },
-    ]) {
-      expect(buildVisionEcho(dims, 'uz-latin').action).toBe('escalate');
-    }
+  it('uses voice wording for a voice source', () => {
+    const t = mediaCorrectionNote([{ innerWidth: 3, innerLength: 5 }], 'uz-latin', 'voice');
+    expect(t).toContain('3×5 m');
+    expect(t.toLowerCase()).toContain('ovoz'); // "voice" wording
+  });
+
+  it('localizes the note (ru / uz-cyrillic)', () => {
+    expect(mediaCorrectionNote([{ innerWidth: 3, innerLength: 4 }], 'ru', 'image')).toContain('чертеж');
+    expect(mediaCorrectionNote([{ innerWidth: 3, innerLength: 4 }], 'uz-cyrillic', 'voice')).toContain('Овозли');
   });
 });

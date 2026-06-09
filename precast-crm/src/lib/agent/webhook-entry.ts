@@ -11,10 +11,14 @@ import { loadAgentRuntimeConfig, loadKnowledgeBase, loadFewShot, shouldAgentHand
 import { createProviderForModelKey, createVisionProvider, createTranscriptionProvider } from './llm/factory';
 import { createToolRegistry } from './tools/registry';
 import { runAgentShadow, toLlmHistory, type HistoryRow, type ShadowOutcome } from './shadow';
-import { saveAgentProposal, saveAgentProposalRow, type AgentProposalRow } from './proposal';
+import { saveAgentProposal, saveAgentProposalRow } from './proposal';
 import { applyAutoMode, defaultAutoModeDeps } from './auto-mode';
-import { detectConversationLanguage } from './prompt';
-import { buildVisionEcho } from './vision';
+import { detectConversationLanguage, type ReplyLanguage } from './prompt';
+import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote } from './vision';
+import { extractQuotedRooms, persistConversationDraft } from './persist-quote';
+import { renderAgentQuoteImage } from './quote-card-shot';
+import { sendBusinessPhoto, sendBusinessReply } from '@/lib/inbox-send';
+import type { RoomInput } from '@/lib/calc-persistence';
 
 const HISTORY_LIMIT = 20;
 
@@ -34,7 +38,7 @@ async function generateAndPersistProposal(
   inboundText: string,
   inboundMessageId: string,
   config: { modelKey: string },
-): Promise<ShadowOutcome> {
+): Promise<{ outcome: ShadowOutcome; quotedRooms: RoomInput[] }> {
   // Recent prior turns (this message excluded; media-only rows dropped later).
   const rows = await prisma.message.findMany({
     where: { conversationId: conversation.id, id: { not: inboundMessageId }, text: { not: null } },
@@ -52,19 +56,85 @@ async function generateAndPersistProposal(
     { provider, tools: createToolRegistry(), kbContent, fewShot, ctx: { sharedContactPhone: conversation.sharedContactPhone } },
   );
   await saveAgentProposal(outcome, { conversationId: conversation.id, inboundMessageId, modelKey: config.modelKey });
-  return outcome;
+  // Rooms the agent priced THIS turn (from the get_quote tool inputs in the turn
+  // transcript) — used by Auto mode to save an operator-side draft. Slice off the
+  // prior history so a long chat never resurrects superseded dimensions.
+  const quotedRooms = outcome.result
+    ? extractQuotedRooms(outcome.result.messages.slice(history.length))
+    : [];
+  return { outcome, quotedRooms };
+}
+
+/**
+ * Auto-mode only: persist the operator-side DRAFT Project for this quote, then
+ * send the rendered calculation-summary image into the chat — right AFTER the
+ * short price reply has gone out. Best-effort: any failure is logged and
+ * swallowed so the already-sent reply is never affected. The customer's text
+ * reply stays short; this image is the equivalent of the manual "Send to chat".
+ */
+async function saveDraftAndSendSummary(
+  conversation: InboundConversation,
+  rooms: RoomInput[],
+  opts: { source: 'text' | 'image' | 'voice'; language: ReplyLanguage },
+): Promise<void> {
+  try {
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversation.id },
+      select: { displayName: true },
+    });
+    const draft = await persistConversationDraft(
+      {
+        id: conversation.id,
+        displayName: conv?.displayName ?? null,
+        sharedContactPhone: conversation.sharedContactPhone,
+      },
+      rooms,
+    );
+    if (!draft) return;
+
+    // Pixel-identical to the operator's "Send to chat" card (headless screenshot
+    // of the real CalculationShareCard; next/og fallback if the browser is
+    // unavailable). The customer's text reply stays short — this is the image.
+    const png = await renderAgentQuoteImage(draft.projectId);
+    await sendBusinessPhoto({
+      conversationId: conversation.id,
+      photo: png,
+      mime: 'image/png',
+      userId: null,
+      filename: `quote-${draft.draftNumber ?? draft.projectId}.png`,
+    });
+
+    // For EXTRACTED dimensions (drawing/voice), follow the image with a line that
+    // states what we read and invites a typed correction → recalculation. Typed
+    // dimensions don't need it (the customer typed them).
+    if (opts.source !== 'text') {
+      await sendBusinessReply({
+        conversationId: conversation.id,
+        text: mediaCorrectionNote(rooms, opts.language, opts.source),
+        userId: null,
+      });
+    }
+  } catch (err) {
+    console.error('[agent:draft+summary]', err);
+  }
 }
 
 export async function runAgentForInbound(
   conversation: InboundConversation,
   inboundText: string,
   excludeMessageId: string,
+  source: 'text' | 'image' | 'voice' = 'text',
 ): Promise<void> {
   try {
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
 
-    const outcome = await generateAndPersistProposal(conversation, inboundText, excludeMessageId, config);
+    const { outcome, quotedRooms } = await generateAndPersistProposal(
+      conversation,
+      inboundText,
+      excludeMessageId,
+      config,
+    );
 
     // Auto mode (spec §14 Stage 3): auto-send a reply; route everything else to a
     // human. Orders are NEVER auto-placed — request_approval escalates to the
@@ -75,6 +145,14 @@ export async function runAgentForInbound(
         { conversationId: conversation.id, inboundMessageId: excludeMessageId },
         defaultAutoModeDeps(),
       );
+      // Auto only: once the short price has been sent, save the operator-side
+      // draft Project and send the calculation-summary image after it.
+      if (outcome.decision.action === 'reply' && quotedRooms.length > 0) {
+        await saveDraftAndSendSummary(conversation, quotedRooms, {
+          source,
+          language: outcome.language as ReplyLanguage,
+        });
+      }
     }
   } catch (err) {
     // Shadow is non-critical; a failure must never break inbox delivery.
@@ -83,11 +161,12 @@ export async function runAgentForInbound(
 }
 
 /**
- * Floor-plan vision (spec §4.5). For an inbound IMAGE: read the room dimensions
- * with the Gemini vision provider, then propose an ECHO-to-confirm reply (never a
- * quote off the sketch). The proposal is persisted and is ALWAYS human-reviewed —
- * it never auto-sends, regardless of mode (photo flows are human-checked, §10).
- * Best-effort: never throws.
+ * Floor-plan vision (spec §4.5). Gemini reads the room dimensions; the read is
+ * accurate enough that we PROCEED without a confirm step. On a clear read we store
+ * the dimensions on the image message (a transcription, like voice) and run the
+ * SAME pipeline typed dimensions use (runAgentForInbound) — quote, short price, a
+ * conversation-linked draft, and the 1:1 summary image, honoring the mode. If the
+ * plan can't be read, we ask for typed dimensions. Best-effort: never throws.
  */
 export async function runVisionForInbound(
   conversation: InboundConversation,
@@ -124,25 +203,40 @@ export async function runVisionForInbound(
       select: { direction: true, text: true },
     });
     const language = detectConversationLanguage('', toLlmHistory(rows.reverse() as HistoryRow[]));
-    const decision = buildVisionEcho(dims, language);
 
-    // Persist as a proposal — NO auto-send (image-derived → always human-reviewed).
-    const row: AgentProposalRow = {
-      conversationId: conversation.id,
-      inboundMessageId,
-      language,
-      decision: decision.action,
-      reply: decision.action === 'reply' ? decision.reply : null,
-      escalationReason: decision.action === 'escalate' ? decision.reason : null,
-      screen: { tooLong: false, injection: false, link: false, verdict: 'ok' },
-      escalatedEarly: false,
-      modelKey: provider.model.key,
-      toolCalls: [],
-      usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
-      turns: 1,
-      confidence: dims.confidence,
-    };
-    await saveAgentProposalRow(row);
+    // Clear read → treat the plan as typed dimensions: store them on the image
+    // message (so the inbox + history show them), then run the SAME pipeline typed
+    // dimensions use — quote, short price, conversation-linked draft, 1:1 image,
+    // honoring the mode. No confirmation step: Gemini's vision is accurate enough.
+    if (dims.found && dims.confidence === 'high' && dims.rooms.length > 0) {
+      const dimsText = describeExtractedRooms(dims.rooms, language);
+      await prisma.message.update({ where: { id: inboundMessageId }, data: { text: dimsText } });
+      await runAgentForInbound(conversation, dimsText, inboundMessageId, 'image');
+      return;
+    }
+
+    // Couldn't read it → ask for typed dimensions. Auto mode sends the ask;
+    // otherwise persist it as a proposal for the operator to send.
+    const fallback = visionFallbackReply(language);
+    if (config.mode === 'auto') {
+      await sendBusinessReply({ conversationId: conversation.id, text: fallback, userId: null });
+    } else {
+      await saveAgentProposalRow({
+        conversationId: conversation.id,
+        inboundMessageId,
+        language,
+        decision: 'reply',
+        reply: fallback,
+        escalationReason: null,
+        screen: { tooLong: false, injection: false, link: false, verdict: 'ok' },
+        escalatedEarly: false,
+        modelKey: provider.model.key,
+        toolCalls: [],
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
+        turns: 1,
+        confidence: dims.confidence,
+      });
+    }
   } catch (err) {
     console.error('[agent:vision]', err);
   }
@@ -150,9 +244,11 @@ export async function runVisionForInbound(
 
 /**
  * Voice note (spec §3 / §4.5). Transcribe with Gemini (the fixed STT path), store
- * the transcript on the message so the inbox + history show it, then run the agent
- * on the transcript and PERSIST the proposal. Voice-derived proposals are ALWAYS
- * human-reviewed — never auto-sent, regardless of mode (spec §2/§10). Never throws.
+ * the transcript on the message so the inbox + history show it, then run the SAME
+ * pipeline typed dimensions use (runAgentForInbound) — quote, short price, a
+ * conversation-linked draft, and the 1:1 summary image, honoring the mode. The
+ * transcription is accurate enough to proceed without a confirm step (like vision).
+ * Never throws.
  */
 export async function runVoiceForInbound(
   conversation: InboundConversation,
@@ -183,9 +279,10 @@ export async function runVoiceForInbound(
     }
 
     // Surface the transcript on the voice message (the inbox shows it + it feeds
-    // future history). Then run the agent on it — persist-only, no auto-send.
+    // future history), then run the normal pipeline on it — same as a typed message
+    // (quote, short price, conversation-linked draft, 1:1 image), honoring the mode.
     await prisma.message.update({ where: { id: inboundMessageId }, data: { text: transcript } });
-    await generateAndPersistProposal(conversation, transcript, inboundMessageId, config);
+    await runAgentForInbound(conversation, transcript, inboundMessageId, 'voice');
   } catch (err) {
     console.error('[agent:voice]', err);
   }
