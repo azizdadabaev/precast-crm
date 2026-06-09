@@ -7,7 +7,7 @@ import { withPermission } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { sendBusinessReply } from "@/lib/inbox-send";
 import { resolveSentStatus } from "@/lib/agent/proposal";
-import { placeOrderFromProposal, orderConfirmationMessage } from "@/lib/agent/place-order";
+import { placeOrderFromProposal, placeAgentOrderFromDraft, orderConfirmationMessage } from "@/lib/agent/place-order";
 import type { ApprovalDraft } from "@/lib/agent/loop";
 
 const Body = z.object({
@@ -56,30 +56,61 @@ export const POST = withPermission<{ id: string }>("inbox.access", async (req: N
   if (parsed.data.action === "place_order") {
     if (proposal.decision !== "request_approval") return fail("this proposal is not an order proposal", 422);
     const draft = proposal.approvalDraft as ApprovalDraft | null;
-    if (!draft?.quoteId) return fail("order proposal is missing a quote", 422);
+    if (!draft) return fail("order proposal is missing its draft", 422);
     if (!draft.customerName || !draft.customerPhone || !draft.deliveryAddress) {
       return fail("Buyurtma uchun mijoz ismi, telefoni va manzili kerak · Order needs the customer name, phone and address", 422);
     }
-    const secret = process.env.QUOTE_SIGNING_SECRET ?? "";
-    if (!secret) return fail("quote signing unavailable (QUOTE_SIGNING_SECRET unset)", 500);
 
-    const placed = await placeOrderFromProposal(
-      { draft, conversationId: proposal.conversationId, confirmationMsgId: proposal.inboundMessageId, decidedById: user.id },
-      { secret },
-    );
-    if (!placed.ok) {
-      const message = "message" in placed ? placed.message : undefined;
-      const labels: Record<string, string> = {
-        INVALID_QUOTE: "Narx tekshiruvidan o‘tmadi · Quote could not be verified",
-        MISSING_FIELDS: "Buyurtma ma’lumotlari to‘liq emas · Order details incomplete",
-        MISSING_CUSTOMER_INFO: "Mijoz ma’lumotlari yetishmaydi · Missing customer info",
-        NOT_FOUND: "Topilmadi · Not found",
-        CREATE_FAILED: message ?? "Buyurtma joylanmadi · Order placement failed",
-      };
-      return fail(labels[placed.reason] ?? "Buyurtma joylanmadi · Order placement failed", placed.reason === "CREATE_FAILED" ? 502 : 422);
-    }
-    if (placed.status !== "committed") {
-      return fail(`order not placed (${placed.status})`, 409); // already decided / rejected
+    // Preferred path: convert the conversation's AI draft Project into the order —
+    // ALL of its rooms, the SAME project (flipped to ORDERED), and the client
+    // reconciled by phone (matched or created, never duplicated). This is the
+    // record the agent already saved when it quoted; the legacy single-quote
+    // path below is only a fallback for proposals that have no such draft.
+    let orderId: string;
+    let orderNumber: string;
+
+    const fromDraft = await placeAgentOrderFromDraft({
+      conversationId: proposal.conversationId,
+      customerName: draft.customerName,
+      customerPhone: draft.customerPhone,
+      deliveryAddress: draft.deliveryAddress,
+      notes: draft.notes,
+      operatorId: user.id,
+    });
+
+    if (fromDraft.ok) {
+      orderId = fromDraft.orderId;
+      orderNumber = fromDraft.orderNumber;
+    } else if (fromDraft.reason === "ALREADY_ORDERED") {
+      return fail(fromDraft.message ?? "Буюртма аллақачон жойлаштирилган · An order was already placed", 409);
+    } else if (fromDraft.reason === "CREATE_FAILED") {
+      return fail(fromDraft.message ?? "Buyurtma joylanmadi · Order placement failed", 502);
+    } else {
+      // NO_DRAFT → legacy single-quote path (verified quote_id → one room).
+      const secret = process.env.QUOTE_SIGNING_SECRET ?? "";
+      if (!secret) return fail("quote signing unavailable (QUOTE_SIGNING_SECRET unset)", 500);
+      if (!draft.quoteId) return fail("order proposal is missing a quote", 422);
+
+      const placed = await placeOrderFromProposal(
+        { draft, conversationId: proposal.conversationId, confirmationMsgId: proposal.inboundMessageId, decidedById: user.id },
+        { secret },
+      );
+      if (!placed.ok) {
+        const message = "message" in placed ? placed.message : undefined;
+        const labels: Record<string, string> = {
+          INVALID_QUOTE: "Narx tekshiruvidan o‘tmadi · Quote could not be verified",
+          MISSING_FIELDS: "Buyurtma ma’lumotlari to‘liq emas · Order details incomplete",
+          MISSING_CUSTOMER_INFO: "Mijoz ma’lumotlari yetishmaydi · Missing customer info",
+          NOT_FOUND: "Topilmadi · Not found",
+          CREATE_FAILED: message ?? "Buyurtma joylanmadi · Order placement failed",
+        };
+        return fail(labels[placed.reason] ?? "Buyurtma joylanmadi · Order placement failed", placed.reason === "CREATE_FAILED" ? 502 : 422);
+      }
+      if (placed.status !== "committed") {
+        return fail(`order not placed (${placed.status})`, 409); // already decided / rejected
+      }
+      orderId = placed.orderId;
+      orderNumber = placed.orderNumber;
     }
 
     // Auto-confirm the customer (decision: yes). Best-effort — a send failure must
@@ -87,7 +118,7 @@ export const POST = withPermission<{ id: string }>("inbox.access", async (req: N
     try {
       await sendBusinessReply({
         conversationId: proposal.conversationId,
-        text: orderConfirmationMessage(proposal.language, placed.orderNumber),
+        text: orderConfirmationMessage(proposal.language, orderNumber),
         userId: user.id,
       });
     } catch (err) {
@@ -98,7 +129,7 @@ export const POST = withPermission<{ id: string }>("inbox.access", async (req: N
       where: { id: proposal.id },
       data: { status: "ORDER_PLACED", actedAt: new Date(), actedById: user.id },
     });
-    return ok({ status: "ORDER_PLACED", orderId: placed.orderId, orderNumber: placed.orderNumber });
+    return ok({ status: "ORDER_PLACED", orderId, orderNumber });
   }
 
   // action === "send"

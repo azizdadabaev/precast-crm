@@ -20,6 +20,7 @@ import {
 } from './approve-order';
 import type { ApprovalCallback } from './approval-callback';
 import type { ApprovalDraft } from './loop';
+import { createOrder, type CreateOrderInput } from '@/lib/create-order';
 
 export interface PlaceOrderInput {
   /** quote_id + customer details the agent gathered (proposal.approvalDraft). */
@@ -76,6 +77,75 @@ export async function placeOrderFromProposal(input: PlaceOrderInput, deps: Place
     { callbackId: null, decidedById: input.decidedById },
     { db: deps.approveDb ?? makeApproveDb(), secret: deps.secret, now: deps.now != null ? new Date(deps.now) : undefined },
   );
+}
+
+export type PlaceAgentOrderResult =
+  | { ok: true; orderId: string; orderNumber: string }
+  | { ok: false; reason: 'NO_DRAFT' | 'ALREADY_ORDERED' | 'CREATE_FAILED'; message?: string };
+
+/**
+ * Convert the conversation's existing AI draft Project into a real Order — the
+ * correct flow when a customer agreed in Auto mode. Unlike placeOrderFromProposal
+ * (single quote_id → one room + a brand-new project/client), this reuses the draft
+ * the agent already saved for the conversation: ALL of its rooms are carried over,
+ * the same Project is flipped to ORDERED (createOrder's projectId path), and the
+ * Client is reconciled by phone (created or matched — never duplicated).
+ *
+ * Prices are NOT trusted from any free text: createOrder recomputes every room
+ * from the live pricing engine off the draft's persisted input fields, exactly as
+ * the draft itself was computed. No scheduled delivery date is known yet, so it
+ * defaults to now (the operator can reschedule on the order).
+ */
+export async function placeAgentOrderFromDraft(input: {
+  conversationId: string;
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  notes?: string | null;
+  operatorId: string;
+}): Promise<PlaceAgentOrderResult> {
+  const { prisma } = await import('@/lib/prisma');
+  const draft = await prisma.project.findFirst({
+    where: { conversationId: input.conversationId, aiGenerated: true, status: 'DRAFT' },
+    orderBy: { updatedAt: 'desc' },
+    include: { calculations: { orderBy: { seq: 'asc' } } },
+  });
+  if (!draft || draft.calculations.length === 0) return { ok: false, reason: 'NO_DRAFT' };
+
+  const orderInput: CreateOrderInput = {
+    projectId: draft.id,
+    clientName: input.customerName,
+    clientPhone: input.customerPhone,
+    clientAddress: input.deliveryAddress,
+    shapeType: draft.shapeType,
+    rooms: draft.calculations.map((c) => ({
+      name: c.name,
+      innerWidth: Number(c.innerWidth),
+      innerLength: Number(c.innerLength),
+      bearing: Number(c.bearing),
+      correction: Number(c.correction),
+      extraBeams: c.extraBeams,
+      forceStartBeam: c.forceStartBeam,
+      patternOverride: c.patternOverride,
+      m2PriceOverride: c.m2PriceOverride,
+      m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
+      m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
+    })),
+    discountPercent: 0,
+    discountAmount: 0,
+    deliveryCost: 0,
+    otherCost: 0,
+    paidAmount: 0,
+    scheduledAt: new Date(),
+    notes: input.notes ?? null,
+  };
+
+  const result = await createOrder(orderInput, { userId: input.operatorId });
+  if (result.ok) return { ok: true, orderId: result.order.id, orderNumber: result.order.orderNumber };
+  if (result.error.code === 'PROJECT_ALREADY_ORDERED') {
+    return { ok: false, reason: 'ALREADY_ORDERED', message: result.error.message };
+  }
+  return { ok: false, reason: 'CREATE_FAILED', message: result.error.message };
 }
 
 /** Brief factual order confirmation for the customer, in their detected language
