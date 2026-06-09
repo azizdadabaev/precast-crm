@@ -46,13 +46,15 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       INBOX_PASSWORD: ${INBOX_PASSWORD:-}
+      TELEGRAM_STAGING_CHAT_ID: ${TELEGRAM_STAGING_CHAT_ID:-}
+      QUOTE_SIGNING_SECRET: ${QUOTE_SIGNING_SECRET:-}
     volumes:
       - uploads:/app/public/uploads
       - drawings_data:/data
     expose:
       - "3000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
       interval: 30s
       timeout: 5s
       start_period: 30s
@@ -60,7 +62,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1024m
 
   # Blender Bridge — owner-only WebSocket service that forwards
   # DrawingRequest rows from Postgres to a locally-running Blender
