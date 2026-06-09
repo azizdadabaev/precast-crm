@@ -5,6 +5,8 @@
 //      get_quote quote_id was minted this turn (price-integrity, §6.1).
 //   2. The bot NEVER sends links (§7).
 
+import { COMPANY_LOCATION } from './location';
+
 export interface OutboundContext {
   /** A fresh quote_id was minted on THIS turn, so a price is allowed to appear. */
   hasFreshQuote: boolean;
@@ -27,7 +29,10 @@ const URL_RE =
   /(https?:\/\/\S+|\bwww\.\S+|\bt\.me\/\S+|\b[a-z0-9-]+\.(uz|com|net|org|ru|io|me)\b)/i;
 
 export function validateOutbound(message: string, ctx: OutboundContext): OutboundVerdict {
-  if (URL_RE.test(message)) {
+  // The company's own Maps location is owner-approved — allow it, but still block
+  // any OTHER link. Strip the approved URL before the link check.
+  const linkScan = message.split(COMPANY_LOCATION.mapsUrl).join(' ');
+  if (URL_RE.test(linkScan)) {
     return { ok: false, reason: 'outgoing message contains a link (the bot never sends links)' };
   }
   if (PRICE_RE.test(message) && !ctx.hasFreshQuote) {

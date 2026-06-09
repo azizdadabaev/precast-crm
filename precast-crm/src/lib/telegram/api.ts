@@ -35,6 +35,30 @@ export async function tgSendBusinessMessage(
   return { messageId: String(json.result.message_id) };
 }
 
+/** Send a location pin on behalf of the connected business account. Not media
+ *  (no file_id workaround needed) — a simple lat/long message that renders as a
+ *  tappable map pin in the chat. */
+export async function tgSendBusinessLocation(
+  businessConnectionId: string,
+  chatId: string,
+  latitude: number,
+  longitude: number,
+): Promise<{ messageId: string }> {
+  const res = await fetch(apiUrl("sendLocation"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business_connection_id: businessConnectionId,
+      chat_id: chatId,
+      latitude,
+      longitude,
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram sendLocation failed: ${json.description ?? res.status}`);
+  return { messageId: String(json.result.message_id) };
+}
+
 /**
  * Send a photo on behalf of the connected business account, by an existing
  * Telegram `file_id` (NOT a fresh upload).

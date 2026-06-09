@@ -15,9 +15,10 @@ import { saveAgentProposal, saveAgentProposalRow } from './proposal';
 import { applyAutoMode, defaultAutoModeDeps } from './auto-mode';
 import { detectConversationLanguage, type ReplyLanguage } from './prompt';
 import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote } from './vision';
+import { detectLocationIntent, locationReplyText, COMPANY_LOCATION } from './location';
 import { extractQuotedRooms, persistConversationDraft } from './persist-quote';
 import { renderAgentQuoteImage } from './quote-card-shot';
-import { sendBusinessPhoto, sendBusinessReply } from '@/lib/inbox-send';
+import { sendBusinessPhoto, sendBusinessReply, sendBusinessLocation } from '@/lib/inbox-send';
 import type { RoomInput } from '@/lib/calc-persistence';
 
 const HISTORY_LIMIT = 20;
@@ -119,6 +120,32 @@ async function saveDraftAndSendSummary(
   }
 }
 
+/**
+ * Auto-mode quick reply for "where are you?" — the company address text + a
+ * native map pin, in the conversation language. Works with no history (the caller
+ * gated on Auto mode + location intent). Best-effort.
+ */
+async function sendCompanyLocation(
+  conversation: InboundConversation,
+  inboundText: string,
+  inboundMessageId: string,
+): Promise<void> {
+  const rows = await prisma.message.findMany({
+    where: { conversationId: conversation.id, id: { not: inboundMessageId }, text: { not: null } },
+    orderBy: { createdAt: 'desc' },
+    take: HISTORY_LIMIT,
+    select: { direction: true, text: true },
+  });
+  const language = detectConversationLanguage(inboundText, toLlmHistory(rows.reverse() as HistoryRow[]));
+  await sendBusinessReply({ conversationId: conversation.id, text: locationReplyText(language), userId: null });
+  await sendBusinessLocation({
+    conversationId: conversation.id,
+    latitude: COMPANY_LOCATION.lat,
+    longitude: COMPANY_LOCATION.long,
+    userId: null,
+  });
+}
+
 export async function runAgentForInbound(
   conversation: InboundConversation,
   inboundText: string,
@@ -128,6 +155,14 @@ export async function runAgentForInbound(
   try {
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
+
+    // Company location: a request for our location (to visit / load trucks) — even
+    // a bare "lokatsiya?" with no history — is answered directly in Auto mode with
+    // the address + a native map pin, skipping the quote flow.
+    if (config.mode === 'auto' && detectLocationIntent(inboundText)) {
+      await sendCompanyLocation(conversation, inboundText, excludeMessageId);
+      return;
+    }
 
     const { outcome, quotedRooms } = await generateAndPersistProposal(
       conversation,

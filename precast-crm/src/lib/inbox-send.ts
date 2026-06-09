@@ -7,7 +7,7 @@
 // handling, same sentById attribution, same live event.
 
 import { prisma } from "@/lib/prisma";
-import { tgSendBusinessMessage, tgSendBusinessPhoto, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
+import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessLocation, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
 import { emitInbox } from "@/lib/inbox-bus";
 import { saveBufferToUploads } from "@/lib/uploads";
 
@@ -75,6 +75,62 @@ export async function sendBusinessReply(input: {
     data: { lastMessageAt: new Date(), lastSnippet: input.text.slice(0, 80), unread: false },
   });
 
+  emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
+
+  return failed ? { ok: false, reason: "SEND_FAILED", message } : { ok: true, message };
+}
+
+/**
+ * Send a native map-pin location on a conversation (the company's location).
+ * Persists an OUTBOUND marker so the inbox shows it. Simulated chats (`sim-…`)
+ * persist locally with no Telegram call. Mirrors sendBusinessReply's contract.
+ */
+export async function sendBusinessLocation(input: {
+  conversationId: string;
+  latitude: number;
+  longitude: number;
+  userId: string | null;
+}): Promise<SendBusinessReplyResult> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: input.conversationId },
+    select: { id: true, externalId: true, businessConnectionId: true },
+  });
+  if (!conversation) return { ok: false, reason: "NOT_FOUND" };
+  const simulated = !conversation.businessConnectionId && conversation.externalId.startsWith("sim-");
+  if (!conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
+
+  let telegramMsgId: string | null = null;
+  let failed = false;
+  if (conversation.businessConnectionId) {
+    try {
+      const sent = await tgSendBusinessLocation(
+        conversation.businessConnectionId,
+        conversation.externalId,
+        input.latitude,
+        input.longitude,
+      );
+      telegramMsgId = sent.messageId;
+    } catch (err) {
+      console.error("[inbox send-location]", err);
+      failed = true;
+    }
+  }
+
+  const message = await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      direction: "OUTBOUND",
+      text: "📍 Lokatsiya",
+      telegramMsgId,
+      sentById: input.userId,
+      failed,
+    },
+    select: { id: true, direction: true, text: true, failed: true, createdAt: true },
+  });
+  await prisma.conversation.update({
+    where: { id: conversation.id },
+    data: { lastMessageAt: new Date(), lastSnippet: "📍 Lokatsiya", unread: false },
+  });
   emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
 
   return failed ? { ok: false, reason: "SEND_FAILED", message } : { ok: true, message };
