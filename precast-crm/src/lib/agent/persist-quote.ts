@@ -19,7 +19,28 @@ import { computeOrderTotals } from '@/lib/order-totals';
 import { loadPricingConfig } from '@/lib/pricing-config';
 import { nextDraftNumber } from '@/lib/draft-number';
 import { normalizePhone } from '@/lib/phone';
+import { applyAgentPatternPolicy } from './pattern-policy';
 import type { Pattern } from '@/services/calculation-engine';
+
+/** Apply the agent's GBG→Г-Б round-up policy to a room (same transform the
+ *  get_quote tool applies), keeping the draft in lockstep with the quote. Only
+ *  `correction` + `patternOverride` can change; inner_length is untouched. */
+function withAgentPatternPolicy(room: RoomInput): RoomInput {
+  const pol = applyAgentPatternPolicy({
+    inner_width: room.innerWidth,
+    inner_length: room.innerLength,
+    bearing: room.bearing,
+    correction: room.correction,
+    extra_beams: room.extraBeams,
+    force_start_beam: room.forceStartBeam,
+    pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
+  });
+  return {
+    ...room,
+    correction: pol.correction,
+    patternOverride: (pol.pattern ?? room.patternOverride ?? null) as Pattern | null,
+  };
+}
 
 // The agent draft carries no discount/delivery — it's the bare room calculation.
 const NO_EXTRAS = { discountPercent: 0, discountAmount: 0, deliveryCost: 0, otherCost: 0 };
@@ -106,7 +127,10 @@ export async function persistConversationDraft(
   if (rooms.length === 0) return null;
 
   const pricing = await loadPricingConfig();
-  const { computed } = computeOrderTotals(rooms, NO_EXTRAS, pricing);
+  // Same GBG→Г-Б round-up the get_quote tool applied, so the saved draft (and any
+  // order it becomes) matches the price the customer was quoted.
+  const policyRooms = rooms.map(withAgentPatternPolicy);
+  const { computed } = computeOrderTotals(policyRooms, NO_EXTRAS, pricing);
   const calcs = computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i }));
 
   const dimensions = {

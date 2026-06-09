@@ -3,6 +3,7 @@ import { runGetQuote, getQuoteDefinition } from './get-quote';
 import { verifyQuoteToken } from '@/lib/agent/quote-token';
 import type { SlabQuotePayload } from '@/lib/agent/slab-quote';
 import { calculateSlab, DEFAULT_PRICE_CONFIG } from '@/services/calculation-engine';
+import { applyAgentPatternPolicy } from '@/lib/agent/pattern-policy';
 
 const SECRET = 'quote-secret-key';
 const NOW = 1_700_000_000_000;
@@ -17,7 +18,10 @@ describe('runGetQuote', () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
-    const expected = calculateSlab({ inner_width: 4, inner_length: 5 }, DEFAULT_PRICE_CONFIG);
+    // 4×5 auto-picks Г-Б-Г; the agent's pattern policy rounds it up to Г-Б, so
+    // the quote must match the engine on the POLICY-ADJUSTED input.
+    const expected = calculateSlab(applyAgentPatternPolicy({ inner_width: 4, inner_length: 5 }), DEFAULT_PRICE_CONFIG);
+    expect(expected.pattern).toBe('GB'); // policy fired (GBG → GB)
     expect(res.data.subtotal).toBe(expected.subtotal);
     expect(res.data.m2_price).toBe(expected.m2_price);
     expect(res.data.pattern).toBe(expected.pattern);
@@ -34,7 +38,7 @@ describe('runGetQuote', () => {
     const res = runGetQuote({ inner_width: 4, inner_length: 5 }, deps());
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const e = calculateSlab({ inner_width: 4, inner_length: 5 }, DEFAULT_PRICE_CONFIG);
+    const e = calculateSlab(applyAgentPatternPolicy({ inner_width: 4, inner_length: 5 }), DEFAULT_PRICE_CONFIG);
     expect(res.data.bill_of_materials).toEqual({
       beams: { count: e.beam_count, lengthM: e.beam_length },
       blockRows: e.block_rows,

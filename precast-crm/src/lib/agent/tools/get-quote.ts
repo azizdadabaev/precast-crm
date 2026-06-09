@@ -14,6 +14,7 @@ import {
 } from '@/services/calculation-engine';
 import { loadPricingConfig } from '@/lib/pricing-config';
 import { buildSlabQuote } from '@/lib/agent/slab-quote';
+import { applyAgentPatternPolicy } from '@/lib/agent/pattern-policy';
 import {
   type AgentTool,
   type AgentToolContext,
@@ -89,18 +90,21 @@ export function runGetQuote(raw: unknown, deps: GetQuoteDeps): ToolResult<QuoteD
   }
 
   const i = parsed.data;
+  // Agent pattern policy: never auto-quote Г-Б-Г — round up to Г-Б instead
+  // (no-op when the auto-pick is GB/BGB or the pattern was given explicitly).
+  const slabInput = applyAgentPatternPolicy({
+    inner_width: i.inner_width,
+    inner_length: i.inner_length,
+    bearing: i.bearing,
+    correction: i.correction,
+    extra_beams: i.extra_beams,
+    force_start_beam: i.force_start_beam,
+    pattern: i.pattern,
+  });
   let quote;
   try {
     quote = buildSlabQuote(
-      {
-        inner_width: i.inner_width,
-        inner_length: i.inner_length,
-        bearing: i.bearing,
-        correction: i.correction,
-        extra_beams: i.extra_beams,
-        force_start_beam: i.force_start_beam,
-        pattern: i.pattern,
-      },
+      slabInput,
       {
         secret: deps.secret,
         issuedAt: deps.now,
