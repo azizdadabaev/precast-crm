@@ -1,6 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote } from './vision';
-import { parseDimensions } from './llm/gemini';
+import { parseDimensions, betterDimensions } from './llm/gemini';
+import type { ExtractedDimensions } from './llm/provider';
+
+describe('betterDimensions (primary vs retry pass selection)', () => {
+  const D = (found: boolean, confidence: 'high' | 'low', n: number): ExtractedDimensions => ({
+    found,
+    confidence,
+    rooms: Array.from({ length: n }, () => ({ widthM: 3, lengthM: 4 })),
+  });
+
+  it('prefers a found read over a not-found one', () => {
+    expect(betterDimensions(D(false, 'low', 0), D(true, 'low', 1))).toMatchObject({ found: true });
+  });
+  it('prefers high confidence when both found', () => {
+    expect(betterDimensions(D(true, 'low', 5), D(true, 'high', 1)).confidence).toBe('high');
+  });
+  it('prefers more rooms on an equal found+confidence tie', () => {
+    expect(betterDimensions(D(true, 'high', 2), D(true, 'high', 4)).rooms).toHaveLength(4);
+  });
+  it('keeps the primary when the retry is no better', () => {
+    const primary = D(true, 'high', 3);
+    expect(betterDimensions(primary, D(false, 'low', 0))).toBe(primary);
+  });
+});
 
 describe('parseDimensions', () => {
   it('parses multiple rooms (the common floor-plan case)', () => {

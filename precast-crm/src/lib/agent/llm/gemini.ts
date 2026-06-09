@@ -28,15 +28,43 @@ function cachePrefixKey(modelId: string, system: string, tools: unknown): string
   return createHash('sha256').update(`${modelId}\n${system}\n${JSON.stringify(tools ?? null)}`).digest('hex');
 }
 
+// The agent reads customer-sent images to quote a precast floor. These are
+// almost never clean CAD exports — they're phone photos of HAND-DRAWN plans or
+// handwritten dimension lists, with clutter around the edges and messy digits.
+// The prompt is engineered for that reality; a focused retry (below) runs when
+// the first pass comes back empty/low-confidence before we ask the customer to type.
+const STRICT_JSON_SHAPE =
+  '{"found": boolean, "rooms": [{"widthM": number, "lengthM": number, "label": string}], "confidence": "high"|"low", "note": string}';
+
 const DIMENSIONS_PROMPT = [
-  'Read this floor-plan / room sketch and extract EVERY room\'s INNER wall-to-wall dimensions in METERS.',
-  'Return ONLY strict JSON, no prose and no code fence:',
-  '{"found": boolean, "rooms": [{"widthM": number, "lengthM": number, "label": string}], "confidence": "high"|"low", "note": string}.',
-  'Include one entry per distinct room (convert cm/mm to meters if the drawing is labelled in those units).',
-  'MULTIPLE rooms are fine — list them all. Set found=true and confidence="high" when you can read at least one',
-  'room\'s two inner dimensions clearly. If no dimensions are readable or you are unsure, set found=false,',
-  'confidence="low", rooms=[] with a short note. NEVER guess a number you cannot actually read.',
-].join(' ');
+  'You are reading an image a construction customer sent to get a precast beam-and-block FLOOR quote.',
+  'It may be a hand-drawn floor plan (often several rooms, sketched roughly to imitate a CAD layout), a quick sketch, or simply a handwritten / typed list of room sizes. It is usually a phone photo of a notebook or paper, so expect clutter around the edges (desk, hands, tools, lighting, another page) — IGNORE everything that is not the plan or the dimension numbers.',
+  '',
+  "Extract EVERY distinct room's INNER wall-to-wall dimensions, in METERS.",
+  'Reading rules:',
+  '- Each room is two numbers, width then length, e.g. "3,40 × 5,60". Keep the written order (first = widthM, second = lengthM); do NOT reorder.',
+  '- The separator may be ×, x, X, *, "·", "/", or the word "на". A decimal point may be written as a COMMA or a DOT — both mean a decimal (3,40 = 3.40). A number written alone on one side (e.g. "5") is a whole-meter value (5.00).',
+  '- Values are inner room sizes, almost always in METERS (a real room side is ~1.5–12 m). If a value is clearly centimeters (e.g. 340, 560) divide by 100; if millimeters (e.g. 3400) divide by 1000. Use the plausible-room-size range to decide the unit.',
+  '- List EVERY room — there are often many, in rows or scattered across a plan. A heading or word beside a group (e.g. "Zinaga", "zal", "oshxona") is that group\'s label → put it in "label".',
+  '- Handwriting is messy: 5/3, 7/1, 4/9, 0/6 are easily confused. Read each digit deliberately. NEVER output a number you cannot actually read — drop that one room instead of guessing.',
+  '',
+  'Return ONLY strict JSON, no prose, no code fence:',
+  STRICT_JSON_SHAPE,
+  'Set found=true and confidence="high" ONLY when you have clearly read at least one room\'s BOTH inner dimensions. If nothing is readable or you are unsure, return found=false, confidence="low", rooms=[] and a short English note (for staff) on what blocked the read.',
+].join('\n');
+
+// Second pass — only when the first comes back empty/low-confidence. Pushes the
+// model to ignore clutter and transcribe row by row before we give up.
+const DIMENSIONS_PROMPT_RETRY = [
+  'A first attempt to read room dimensions from this image failed. Look again, much more carefully.',
+  'This is very likely a low-quality phone photo of a HAND-DRAWN sketch or a handwritten notebook page, with background clutter (desk, hands, tools, lighting, another page) around the edges. IGNORE all of that — focus only on the handwritten / drawn content.',
+  'Scan line by line, top to bottom, for anything shaped like "<number> <separator> <number>" (separator ×, x, X, *, /, "на"). Transcribe each pair EXACTLY as written. A comma is a decimal point (3,40 = 3.40). A lone number on one side is a whole-meter value.',
+  'There are usually SEVERAL rooms — capture every readable pair. A heading beside a group (e.g. "Zinaga") is that room\'s label.',
+  'Convert to METERS using the plausible-room-size range (~1.5–12 m): a value like 340 is centimeters → 3.40 m.',
+  'Still: never invent a digit you genuinely cannot see — omit that room instead.',
+  'Return ONLY the same strict JSON, no prose, no code fence:',
+  STRICT_JSON_SHAPE,
+].join('\n');
 
 /** Parse the model's JSON dimension output defensively — any malformed or
  *  incomplete output degrades to a low-confidence not-found so the caller asks
@@ -62,6 +90,14 @@ export function parseDimensions(text: string): ExtractedDimensions {
   } catch {
     return { found: false, rooms: [], confidence: 'low', note: 'could not parse vision output' };
   }
+}
+
+/** Pick the better of the primary + retry vision passes: a found read beats
+ *  not-found, then high beats low confidence, then more rooms wins. Pure. */
+export function betterDimensions(a: ExtractedDimensions, b: ExtractedDimensions): ExtractedDimensions {
+  const score = (d: ExtractedDimensions) =>
+    (d.found ? 100 : 0) + (d.confidence === 'high' ? 10 : 0) + d.rooms.length;
+  return score(b) > score(a) ? b : a;
 }
 
 export interface GeminiLike {
@@ -170,22 +206,33 @@ export class GeminiProvider implements LlmProvider {
     return fromGeminiResponse(resp).text;
   }
 
-  /** Floor-plan dimension reading (spec §4.5). Sends the image inline and parses
-   *  the model's JSON; the caller echoes the dims to the customer to confirm and
-   *  never quotes off a misread sketch. */
-  async extractDimensions(image: ImageInput): Promise<ExtractedDimensions> {
+  /** One vision pass with a given prompt. */
+  private async readDimensions(image: ImageInput, prompt: string): Promise<ExtractedDimensions> {
     const resp = await this.getClient().models.generateContent({
       model: this.model.modelId,
       contents: [
         {
           role: 'user',
           parts: [
-            { text: DIMENSIONS_PROMPT },
+            { text: prompt },
             { inlineData: { mimeType: image.mimeType, data: image.data } },
           ],
         },
       ],
     });
     return parseDimensions(fromGeminiResponse(resp).text);
+  }
+
+  /** Floor-plan dimension reading (spec §4.5). Customer images are usually messy
+   *  phone photos of hand-drawn plans, so on an empty/low-confidence first pass we
+   *  run ONE focused retry (clutter-ignoring, handwriting-aware) before giving up —
+   *  this recovers the common "numbers buried in a cluttered photo" case. The
+   *  caller still echoes the dims to the customer to confirm and never quotes off a
+   *  misread sketch. */
+  async extractDimensions(image: ImageInput): Promise<ExtractedDimensions> {
+    const primary = await this.readDimensions(image, DIMENSIONS_PROMPT);
+    if (primary.found && primary.confidence === 'high') return primary;
+    const retry = await this.readDimensions(image, DIMENSIONS_PROMPT_RETRY);
+    return betterDimensions(primary, retry);
   }
 }
