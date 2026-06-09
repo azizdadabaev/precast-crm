@@ -171,15 +171,30 @@ function ProofMediaManager() {
 
   const upload = useMutation({
     mutationFn: async () => {
-      if (!file) throw new Error("Fayl tanlang · pick a file");
+      if (!file) throw new Error(t("Файл танланг", "Pick a file"));
+      // Telegram bot upload cap is 50MB — reject client-side so we never hit the
+      // proxy's body limit (which would reset the connection → an opaque error).
+      if (file.size > 50 * 1024 * 1024) {
+        throw new Error(t("Файл жуда катта — макс ~50MB. Видеони қисқартиринг.", "File too large — max ~50MB. Please compress the video."));
+      }
       const fd = new FormData();
       fd.append("file", file);
       fd.append("title", title);
       fd.append("tags", tags);
       fd.append("caption", caption);
       const res = await fetch("/api/agent/proof-media/upload", { method: "POST", body: fd });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Upload failed");
+      // Parse defensively: a proxy 413 / reset can return an empty or non-JSON body.
+      const body = await res.text();
+      let json: { error?: string } = {};
+      try { json = body ? JSON.parse(body) : {}; } catch { /* non-JSON proxy response */ }
+      if (!res.ok) {
+        throw new Error(
+          json.error ??
+            (res.status === 413
+              ? t("Файл жуда катта (макс ~50MB)", "File too large (max ~50MB)")
+              : t(`Юклаш хатоси (${res.status})`, `Upload failed (${res.status})`)),
+        );
+      }
       return json;
     },
     onSuccess: () => {
@@ -236,6 +251,10 @@ function ProofMediaManager() {
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
           className="block w-full text-sm"
         />
+        <div className="text-[11px] text-muted-foreground">
+          {t("Видео/расм · макс ~50MB (Telegram чекови). MP4 тавсия этилади.", "Video/photo · max ~50MB (Telegram limit). MP4 recommended.")}
+          {file && <span className="ml-1 tabular-nums">· {(file.size / (1024 * 1024)).toFixed(1)} MB</span>}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Input placeholder={t("Сарлавҳа · Title", "Title")} value={title} onChange={(e) => setTitle(e.target.value)} />
           <Input placeholder={t("Теглар (вергул билан)", "Tags (comma-separated)")} value={tags} onChange={(e) => setTags(e.target.value)} />
