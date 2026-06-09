@@ -350,6 +350,9 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["inbox-thread", conversationId] });
       qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
+      // The toggle clears any pending "needs attention" proposal server-side;
+      // refetch so the ghost card disappears right away.
+      qc.invalidateQueries({ queryKey: ["agent-proposal", conversationId] });
     },
   });
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -820,7 +823,10 @@ function GhostDraft({ conversationId }: { conversationId: string }) {
                 {proposal.usage?.inputTokens != null && ` · ${proposal.usage.inputTokens}+${proposal.usage.outputTokens ?? 0} tok`}
                 {mode === "shadow" && " · юборилмади · not sent"}
               </span>
-              {suggest && <GhostDismiss conversationId={conversationId} proposalId={proposal.id} />}
+              {/* Let the operator clear a non-actionable card (escalate / blocked /
+                  max_turns) in any active mode — without this, an auto-mode
+                  escalation has no way to be dismissed. */}
+              {mode !== "shadow" && <GhostDismiss conversationId={conversationId} proposalId={proposal.id} />}
             </div>
           </>
         )}

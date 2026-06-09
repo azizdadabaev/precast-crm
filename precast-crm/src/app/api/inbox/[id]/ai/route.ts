@@ -17,7 +17,7 @@ const Body = z.object({ handling: z.boolean() });
  * (PENDING_HUMAN) or an order is placed (HUMAN_ACTIVE) — the agent's gate
  * (shouldAgentHandle) only acts on AI_HANDLING && !aiPaused. Owner-only (inbox.access).
  */
-export const POST = withInboxAccess<{ id: string }>(async (req: NextRequest, { params }) => {
+export const POST = withInboxAccess<{ id: string }>(async (req: NextRequest, { params, user }) => {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("handling (boolean) is required", 422);
 
@@ -32,5 +32,20 @@ export const POST = withInboxAccess<{ id: string }>(async (req: NextRequest, { p
     .catch(() => null);
 
   if (!updated) return fail("Суҳбат топилмади · Conversation not found", 404);
+
+  // Toggling AI either way is the operator's "I've dealt with this" signal, so
+  // clear the lingering "needs attention" card (escalate / blocked / max_turns)
+  // for this chat — in auto mode that card otherwise has no UI affordance to
+  // dismiss it. A request_approval (order to place) is left PENDING on purpose:
+  // it must be explicitly placed or dismissed, never dropped by a toggle.
+  await prisma.agentProposal.updateMany({
+    where: {
+      conversationId: params.id,
+      status: "PENDING",
+      decision: { in: ["escalate", "blocked", "max_turns"] },
+    },
+    data: { status: "DISMISSED", actedAt: new Date(), actedById: user.id },
+  });
+
   return ok(updated);
 });
