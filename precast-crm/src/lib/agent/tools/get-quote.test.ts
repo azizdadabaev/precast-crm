@@ -119,10 +119,23 @@ describe('runGetQuote', () => {
     if (res.ok) expect(res.data.bill_of_materials.beams.lengthM).toBeCloseTo(6.30, 2);
   });
 
-  it('honours an explicit pattern override', () => {
+  it('never quotes Г-Б-Г even when the model passes pattern:GBG — rounds up to Г-Б', () => {
     const res = runGetQuote({ inner_width: 4, inner_length: 5, pattern: 'GBG' }, deps());
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.data.pattern).toBe('GBG');
+    if (res.ok) expect(res.data.pattern).toBe('GB');
+  });
+
+  it('rounds up an explicit pattern:GB that would under-cover (never floors below the room)', () => {
+    // 4×5: engine floors GB to 8 pitches (4.64 m) for a 5 m room → under-covers.
+    // The agent must round up so the slab covers the room.
+    const floored = calculateSlab({ inner_width: 4, inner_length: 5, pattern: 'GB' }, DEFAULT_PRICE_CONFIG);
+    expect(floored.monolith_length).toBeLessThan(5);
+    const res = runGetQuote({ inner_width: 4, inner_length: 5, pattern: 'GB' }, deps());
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.data.pattern).toBe('GB');
+      expect(res.data.bill_of_materials.beams.count).toBe(9); // 8 → rounded up to 9 pitches
+    }
   });
 });
 

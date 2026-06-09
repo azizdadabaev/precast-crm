@@ -17,23 +17,35 @@
 import { calculateSlab, PITCH, round3, type SlabInput } from '@/services/calculation-engine';
 
 /**
- * If auto-pick would choose Г-Б-Г, return the input rounded up to the next full
- * pitch as Г-Б (via a correction; inner_length unchanged). Otherwise return the
- * input unchanged. Pure + deterministic so the quote and the persisted draft
- * agree without threading state between them.
+ * Normalize a room to the agent's pattern rule:
+ *   pitches = roundUp(inner_length / PITCH), built as Г-Б.
+ * i.e. the slab ALWAYS covers the room and is NEVER Г-Б-Г. This holds no matter
+ * how the pattern was chosen — auto-pick OR an explicit `pattern` the model
+ * passed (an explicit Г-Б uses floor() pitches in the engine and would
+ * UNDER-COVER, which is the bug this fixes). The round-up is encoded as a length
+ * correction so inner_length stays the customer's value and every recompute
+ * (quote → draft → order) reproduces it. Pure + deterministic.
+ *
+ * The ONE exception is a naturally-chosen Б-Г-Б (owner's decision: keep it) —
+ * its closing beam already extends the slab, and it's an intuitive layout.
  */
 export function applyAgentPatternPolicy(input: SlabInput): SlabInput {
-  if (input.pattern) return input; // explicit override — respect it
   let dry;
   try {
     dry = calculateSlab(input);
   } catch {
     return input; // invalid dims surface in the caller's escalation; don't mask
   }
-  if (dry.pattern_auto !== 'GBG') return input; // GB / BGB auto-picks: leave as-is
+  if (dry.pattern === 'BGB') return input; // keep Б-Г-Б
 
-  // GBG band is 0.20 < R ≤ 0.45 with pitches = floor(eff/PITCH). Round up to
-  // (pitches+1) full pitches as GB; fold the bump into any existing correction.
+  // A Г-Б that already covers the room (auto-pick at R=0, or at R>0.45 where the
+  // engine itself rounded up) is correct as-is. For Г-Б the slab span along the
+  // length axis is pitches × PITCH (no pattern extension).
+  const covers = dry.pitches * PITCH + 1e-9 >= input.inner_length;
+  if (dry.pattern === 'GB' && covers) return input;
+
+  // Г-Б-Г, or a Г-Б that under-covers → round UP to Г-Б at the next full pitch.
+  // (R > 0 here, so ceil(eff/PITCH) === floor(eff/PITCH) + 1 === dry.pitches + 1.)
   const delta = round3((dry.pitches + 1) * PITCH - dry.effective_length);
   return {
     ...input,

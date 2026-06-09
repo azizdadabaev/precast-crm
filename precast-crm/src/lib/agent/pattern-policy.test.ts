@@ -34,9 +34,28 @@ describe('applyAgentPatternPolicy', () => {
     expect(applyAgentPatternPolicy(input)).toEqual(input);
   });
 
-  it('respects an explicit pattern — even an explicit Г-Б-Г', () => {
-    const input: SlabInput = { inner_width: 3, inner_length: 5.6, pattern: 'GBG' };
-    expect(applyAgentPatternPolicy(input)).toEqual(input);
+  it('converts an explicit Г-Б-Г to round-up Г-Б (agent never quotes Г-Б-Г)', () => {
+    const out = applyAgentPatternPolicy({ inner_width: 3, inner_length: 5.6, pattern: 'GBG' });
+    expect(out.pattern).toBe('GB');
+    const r = calculateSlab(out);
+    expect(r.pattern).toBe('GB');
+    expect(r.pitches).toBe(10);
+    expect(r.monolith_length).toBeGreaterThanOrEqual(5.6); // covers
+  });
+
+  it('rounds UP an explicit Г-Б that would under-cover (the reported bug)', () => {
+    // The model passes pattern:'GB'; the engine floors to 9 pitches (5.22 m) for a
+    // 5.6 m room → under-covers. The policy must round it up so it covers.
+    const floored = calculateSlab({ inner_width: 3, inner_length: 5.6, pattern: 'GB' });
+    expect(floored.pitches).toBe(9);
+    expect(floored.monolith_length).toBeLessThan(5.6); // under-covers without the policy
+
+    const out = applyAgentPatternPolicy({ inner_width: 3, inner_length: 5.6, pattern: 'GB' });
+    const r = calculateSlab(out);
+    expect(r.pattern).toBe('GB');
+    expect(r.pitches).toBe(10);
+    expect(r.monolith_length).toBeGreaterThanOrEqual(5.6); // now covers
+    expect(out.inner_length).toBe(5.6); // length unchanged
   });
 
   it('is idempotent (re-applying the converted room is a no-op)', () => {
