@@ -7,7 +7,7 @@
 // handling, same sentById attribution, same live event.
 
 import { prisma } from "@/lib/prisma";
-import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessVideo, tgSendBusinessLocation, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
+import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessVideo, tgSendBusinessLocation, tgSendBusinessChatAction, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
 import { emitInbox } from "@/lib/inbox-bus";
 import { saveBufferToUploads } from "@/lib/uploads";
 
@@ -137,6 +137,29 @@ export async function sendBusinessProofMedia(input: {
   emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
 
   return failed ? { ok: false, reason: "SEND_FAILED", message } : { ok: true, message };
+}
+
+/**
+ * Show the customer a "typing…" indicator while the agent prepares a reply.
+ * Purely cosmetic + best-effort: any failure (no connection, sim chat, Telegram
+ * error, unsupported channel) is swallowed so it can NEVER affect the real reply.
+ * Telegram clears the indicator on the next message or after ~5s — callers
+ * re-send on a heartbeat (see startTyping). WhatsApp will map to Baileys'
+ * 'composing' presence once that bridge exists.
+ */
+export async function sendBusinessTyping(conversationId: string): Promise<void> {
+  try {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { externalId: true, businessConnectionId: true, channel: true },
+    });
+    if (!conversation?.businessConnectionId) return; // sim / no-connection / future channels
+    if (conversation.channel === "TELEGRAM") {
+      await tgSendBusinessChatAction(conversation.businessConnectionId, conversation.externalId, "typing");
+    }
+  } catch {
+    /* cosmetic — never let a typing hint break or delay the actual reply */
+  }
 }
 
 /**

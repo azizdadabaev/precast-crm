@@ -21,6 +21,7 @@ import { extractProofTopics } from './tools/share-proof';
 import { loadProofMedia, selectProofMedia } from './proof-media';
 import { renderAgentQuoteImage } from './quote-card-shot';
 import { sendBusinessPhoto, sendBusinessReply, sendBusinessLocation, sendBusinessProofMedia } from '@/lib/inbox-send';
+import { startTyping } from './typing';
 import type { RoomInput } from '@/lib/calc-persistence';
 
 const HISTORY_LIMIT = 20;
@@ -199,35 +200,43 @@ export async function runAgentForInbound(
       return;
     }
 
-    const { outcome, quotedRooms, proofTopics } = await generateAndPersistProposal(
-      conversation,
-      inboundText,
-      excludeMessageId,
-      config,
-    );
-
-    // Auto mode (spec §14 Stage 3): auto-send a reply; route everything else to a
-    // human. Orders are NEVER auto-placed — request_approval escalates to the
-    // operator who places it in /inbox. shadow/suggest do nothing here.
-    if (config.mode === 'auto') {
-      await applyAutoMode(
-        outcome,
-        { conversationId: conversation.id, inboundMessageId: excludeMessageId },
-        defaultAutoModeDeps(),
+    // Show the customer a live "typing…" indicator while we prepare an auto reply.
+    // Only the direct TEXT path starts it here; for image/voice the vision/voice
+    // handler already started one covering its transcription/extraction too.
+    const typing = config.mode === 'auto' && source === 'text' ? startTyping(conversation.id) : null;
+    try {
+      const { outcome, quotedRooms, proofTopics } = await generateAndPersistProposal(
+        conversation,
+        inboundText,
+        excludeMessageId,
+        config,
       );
-      // Auto only: once the short price has been sent, save the operator-side
-      // draft Project and send the calculation-summary image after it.
-      if (outcome.decision.action === 'reply' && quotedRooms.length > 0) {
-        await saveDraftAndSendSummary(conversation, quotedRooms, {
-          source,
-          language: outcome.language as ReplyLanguage,
-        });
+
+      // Auto mode (spec §14 Stage 3): auto-send a reply; route everything else to a
+      // human. Orders are NEVER auto-placed — request_approval escalates to the
+      // operator who places it in /inbox. shadow/suggest do nothing here.
+      if (config.mode === 'auto') {
+        await applyAutoMode(
+          outcome,
+          { conversationId: conversation.id, inboundMessageId: excludeMessageId },
+          defaultAutoModeDeps(),
+        );
+        // Auto only: once the short price has been sent, save the operator-side
+        // draft Project and send the calculation-summary image after it.
+        if (outcome.decision.action === 'reply' && quotedRooms.length > 0) {
+          await saveDraftAndSendSummary(conversation, quotedRooms, {
+            source,
+            language: outcome.language as ReplyLanguage,
+          });
+        }
+        // Auto only: the agent asked to show proof this turn → send the clips after
+        // its line. (PROOF stage — the strongest buying signal, delivered instantly.)
+        if (outcome.decision.action === 'reply' && proofTopics.length > 0) {
+          await sendProofForTurn(conversation, proofTopics);
+        }
       }
-      // Auto only: the agent asked to show proof this turn → send the clips after
-      // its line. (PROOF stage — the strongest buying signal, delivered instantly.)
-      if (outcome.decision.action === 'reply' && proofTopics.length > 0) {
-        await sendProofForTurn(conversation, proofTopics);
-      }
+    } finally {
+      typing?.stop();
     }
   } catch (err) {
     // Shadow is non-critical; a failure must never break inbox delivery.
@@ -249,9 +258,12 @@ export async function runVisionForInbound(
   mimeType: string,
   inboundMessageId: string,
 ): Promise<void> {
+  let typing: ReturnType<typeof startTyping> | null = null;
   try {
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
+    // "typing…" across the whole prepare window — Gemini read + quote + image.
+    if (config.mode === 'auto') typing = startTyping(conversation.id);
 
     // Vision is fixed to Gemini (spec §3/§4.5), regardless of the brain model.
     const { resolveApiKey } = await import('./provider-keys');
@@ -314,6 +326,8 @@ export async function runVisionForInbound(
     }
   } catch (err) {
     console.error('[agent:vision]', err);
+  } finally {
+    typing?.stop();
   }
 }
 
@@ -331,9 +345,12 @@ export async function runVoiceForInbound(
   mimeType: string,
   inboundMessageId: string,
 ): Promise<void> {
+  let typing: ReturnType<typeof startTyping> | null = null;
   try {
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
+    // "typing…" across transcription + quote + image.
+    if (config.mode === 'auto') typing = startTyping(conversation.id);
 
     const { resolveApiKey } = await import('./provider-keys');
     const apiKey = await resolveApiKey('google');
@@ -360,5 +377,7 @@ export async function runVoiceForInbound(
     await runAgentForInbound(conversation, transcript, inboundMessageId, 'voice');
   } catch (err) {
     console.error('[agent:voice]', err);
+  } finally {
+    typing?.stop();
   }
 }

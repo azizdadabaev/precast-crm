@@ -35,6 +35,28 @@ export async function tgSendBusinessMessage(
   return { messageId: String(json.result.message_id) };
 }
 
+/** Show a chat action (e.g. "typing…") on behalf of the connected business
+ *  account. Telegram clears it when the next message is sent or after ~5s, so the
+ *  caller re-sends on a heartbeat for longer work. Purely cosmetic — the caller
+ *  swallows failures so it can never affect the actual reply. */
+export async function tgSendBusinessChatAction(
+  businessConnectionId: string,
+  chatId: string,
+  action: string,
+): Promise<void> {
+  const res = await fetch(apiUrl("sendChatAction"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business_connection_id: businessConnectionId,
+      chat_id: chatId,
+      action,
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram sendChatAction failed: ${json.description ?? res.status}`);
+}
+
 /** Send a location pin on behalf of the connected business account. Not media
  *  (no file_id workaround needed) — a simple lat/long message that renders as a
  *  tappable map pin in the chat. */
