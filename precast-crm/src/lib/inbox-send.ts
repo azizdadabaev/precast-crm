@@ -7,7 +7,7 @@
 // handling, same sentById attribution, same live event.
 
 import { prisma } from "@/lib/prisma";
-import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessLocation, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
+import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessVideo, tgSendBusinessLocation, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
 import { emitInbox } from "@/lib/inbox-bus";
 import { saveBufferToUploads } from "@/lib/uploads";
 
@@ -75,6 +75,65 @@ export async function sendBusinessReply(input: {
     data: { lastMessageAt: new Date(), lastSnippet: input.text.slice(0, 80), unread: false },
   });
 
+  emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
+
+  return failed ? { ok: false, reason: "SEND_FAILED", message } : { ok: true, message };
+}
+
+/**
+ * Send a curated proof VIDEO/PHOTO by an existing Telegram `file_id` (captured
+ * once at curation time — no per-send upload). Persists a brief OUTBOUND marker
+ * so the inbox shows what was sent. Simulated chats (`sim-…`) persist locally
+ * with no Telegram call. Mirrors sendBusinessReply's contract.
+ */
+export async function sendBusinessProofMedia(input: {
+  conversationId: string;
+  kind: "VIDEO" | "PHOTO";
+  fileId: string;
+  caption?: string | null;
+  userId: string | null;
+}): Promise<SendBusinessReplyResult> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: input.conversationId },
+    select: { id: true, externalId: true, businessConnectionId: true },
+  });
+  if (!conversation) return { ok: false, reason: "NOT_FOUND" };
+  const simulated = !conversation.businessConnectionId && conversation.externalId.startsWith("sim-");
+  if (!conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
+
+  const caption = input.caption?.trim() ? input.caption.trim().slice(0, 1024) : null;
+  const marker = caption ?? (input.kind === "VIDEO" ? "📹 Video" : "🖼 Rasm");
+
+  let telegramMsgId: string | null = null;
+  let failed = false;
+  if (conversation.businessConnectionId) {
+    try {
+      const send = input.kind === "VIDEO" ? tgSendBusinessVideo : tgSendBusinessPhoto;
+      const sent = await send(conversation.businessConnectionId, conversation.externalId, input.fileId, {
+        caption: caption ?? undefined,
+      });
+      telegramMsgId = sent.messageId;
+    } catch (err) {
+      console.error("[inbox send-proof]", err);
+      failed = true;
+    }
+  }
+
+  const message = await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      direction: "OUTBOUND",
+      text: marker,
+      telegramMsgId,
+      sentById: input.userId,
+      failed,
+    },
+    select: { id: true, direction: true, text: true, failed: true, createdAt: true },
+  });
+  await prisma.conversation.update({
+    where: { id: conversation.id },
+    data: { lastMessageAt: new Date(), lastSnippet: marker.slice(0, 80), unread: false },
+  });
   emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
 
   return failed ? { ok: false, reason: "SEND_FAILED", message } : { ok: true, message };

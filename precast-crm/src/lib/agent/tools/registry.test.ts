@@ -34,11 +34,11 @@ describe('createToolRegistry', () => {
 });
 
 describe('READ_TOOLS registry', () => {
-  it('contains exactly the four Plan 07 read tools', () => {
+  it('contains the read tools (incl. share_proof)', () => {
     expect(createToolRegistry().definitions().map((d) => d.name).sort()).toEqual(
-      ['check_stock', 'get_gazoblok_quote', 'get_quote', 'lookup_client'].sort(),
+      ['check_stock', 'get_gazoblok_quote', 'get_quote', 'lookup_client', 'share_proof'].sort(),
     );
-    expect(READ_TOOLS).toHaveLength(4);
+    expect(READ_TOOLS).toHaveLength(5);
   });
 
   it('marks both quote tools as quote sources', () => {

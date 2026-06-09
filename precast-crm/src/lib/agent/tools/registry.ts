@@ -14,14 +14,17 @@ import { getQuoteTool } from './get-quote';
 import { getGazoblokQuoteTool } from './get-gazoblok-quote';
 import { checkStockTool } from './check-stock';
 import { lookupClientTool } from './lookup-client';
+import { shareProofTool } from './share-proof';
 
 /** The read-only toolset the agent is given (spec §5). Write/terminal actions
- *  (draft_order, escalate, request_approval) are handled by the loop, not here. */
+ *  (draft_order, escalate, request_approval) are handled by the loop, not here.
+ *  share_proof returns a summary; its media is SENT post-turn (mode-gated). */
 export const READ_TOOLS: readonly AgentTool[] = [
   getQuoteTool,
   getGazoblokQuoteTool,
   checkStockTool,
   lookupClientTool,
+  shareProofTool,
 ];
 
 /** Tools whose successful result carries a fresh, signed quote_id — the loop

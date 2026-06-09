@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Loader2, Save, KeyRound, FlaskConical } from "lucide-react";
+import { Bot, Loader2, Save, KeyRound, FlaskConical, Film, ImageIcon, Trash2, Upload } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,6 +129,171 @@ function AgentDocEditor({
       )}
       {err && <div className="text-xs text-destructive">{err}</div>}
       <div className="text-xs text-muted-foreground">{t(hint.uz, hint.en)}</div>
+    </section>
+  );
+}
+
+interface ProofMediaItem {
+  id: string;
+  kind: "VIDEO" | "PHOTO";
+  fileId: string;
+  title: string;
+  tags: string[];
+  caption: string | null;
+  enabled: boolean;
+  order: number;
+  previewPath: string | null;
+}
+
+// Curated proof-media library (Plan 2026-06-09). The owner uploads installation /
+// finished-object clips here; each is staged to Telegram ONCE to capture a
+// reusable file_id. The agent sends them by file_id the moment a customer reaches
+// the PROOF stage ("videosi bormi?"). Metadata edits (title/tags/caption/enable/
+// delete) save via PUT; uploads go through the multipart upload route.
+function ProofMediaManager() {
+  const t = useT();
+  const qc = useQueryClient();
+  const { data } = useQuery<{ items: ProofMediaItem[] }>({
+    queryKey: ["agent-proof-media"],
+    queryFn: () => api("/api/agent/proof-media"),
+  });
+  const [items, setItems] = useState<ProofMediaItem[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (data) setItems(data.items);
+  }, [data]);
+
+  // Upload form
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [tags, setTags] = useState("");
+  const [caption, setCaption] = useState("");
+
+  const upload = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error("Fayl tanlang · pick a file");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("title", title);
+      fd.append("tags", tags);
+      fd.append("caption", caption);
+      const res = await fetch("/api/agent/proof-media/upload", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Upload failed");
+      return json;
+    },
+    onSuccess: () => {
+      setErr(null); setFile(null); setTitle(""); setTags(""); setCaption("");
+      qc.invalidateQueries({ queryKey: ["agent-proof-media"] });
+    },
+    onError: (e: Error) => setErr(e.message),
+  });
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/agent/proof-media", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Save failed");
+      return json;
+    },
+    onSuccess: () => { setErr(null); qc.invalidateQueries({ queryKey: ["agent-proof-media"] }); },
+    onError: (e: Error) => setErr(e.message),
+  });
+
+  const patch = (id: string, over: Partial<ProofMediaItem>) =>
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...over } : i)));
+  const remove = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id));
+  const dirty = data != null && JSON.stringify(items) !== JSON.stringify(data.items);
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold flex items-center gap-2">
+          <Film className="h-4 w-4 text-muted-foreground" />
+          {t("Исбот медиа (видео/расм)", "Proof media (videos/photos)")}
+        </div>
+        <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
+          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {t("Сақлаш", "Save")}
+        </Button>
+      </div>
+      <div className="text-xs text-muted-foreground">
+        {t(
+          "Мижоз «видеоси борми?» деб сўраганда агент шу клипларни дарҳол юборади. Тег: montaj, tayyor_obyekt, monolit, zina, gazoblok.",
+          "When a customer asks \"videosi bormi?\", the agent sends these clips instantly. Tags: montaj, tayyor_obyekt, monolit, zina, gazoblok.",
+        )}
+      </div>
+
+      {/* Upload form */}
+      <div className="rounded-md border border-dashed border-border p-3 space-y-2">
+        <input
+          type="file"
+          accept="video/*,image/*"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          className="block w-full text-sm"
+        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Input placeholder={t("Сарлавҳа · Title", "Title")} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Input placeholder={t("Теглар (вергул билан)", "Tags (comma-separated)")} value={tags} onChange={(e) => setTags(e.target.value)} />
+        </div>
+        <Input placeholder={t("Изоҳ (ихтиёрий)", "Caption (optional)")} value={caption} onChange={(e) => setCaption(e.target.value)} />
+        <Button size="sm" disabled={!file || upload.isPending} onClick={() => upload.mutate()}>
+          {upload.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+          {t("Юклаш", "Upload")}
+        </Button>
+      </div>
+
+      {err && <div className="text-xs text-destructive">{err}</div>}
+
+      {/* Library */}
+      {items.length === 0 ? (
+        <div className="text-xs text-muted-foreground italic">{t("Ҳали медиа йўқ.", "No media yet.")}</div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((it) => (
+            <div key={it.id} className="flex gap-3 rounded-md border border-border p-2">
+              <div className="w-24 shrink-0">
+                {it.previewPath ? (
+                  it.kind === "VIDEO" ? (
+                    <video src={it.previewPath} className="w-24 h-16 rounded object-cover bg-black" muted controls={false} />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={it.previewPath} alt={it.title} className="w-24 h-16 rounded object-cover" />
+                  )
+                ) : (
+                  <div className="w-24 h-16 rounded bg-muted flex items-center justify-center">
+                    {it.kind === "VIDEO" ? <Film className="h-5 w-5 text-muted-foreground" /> : <ImageIcon className="h-5 w-5 text-muted-foreground" />}
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <Input value={it.title} placeholder={t("Сарлавҳа", "Title")} onChange={(e) => patch(it.id, { title: e.target.value })} className="h-8 text-sm" />
+                <Input
+                  value={it.tags.join(", ")}
+                  placeholder={t("Теглар", "Tags")}
+                  onChange={(e) => patch(it.id, { tags: e.target.value.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) })}
+                  className="h-8 text-sm"
+                />
+                <Input value={it.caption ?? ""} placeholder={t("Изоҳ", "Caption")} onChange={(e) => patch(it.id, { caption: e.target.value || null })} className="h-8 text-sm" />
+              </div>
+              <div className="flex flex-col items-end justify-between shrink-0">
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={it.enabled} onChange={(e) => patch(it.id, { enabled: e.target.checked })} />
+                  {t("ёқилган", "on")}
+                </label>
+                <button type="button" onClick={() => remove(it.id)} className="text-destructive" title={t("Ўчириш", "Delete")}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {dirty && <div className="text-xs text-amber-600 dark:text-amber-400">{t("сақланмаган ўзгаришлар", "unsaved changes")}</div>}
     </section>
   );
 }
@@ -349,6 +514,9 @@ export default function AgentPage() {
           en: "Example exchanges — a TONE guide only, never a source of facts or prices. Keep it short; use <…> placeholders, not real numbers. Native-speaker reviewed.",
         }}
       />
+
+      {/* Proof media library */}
+      <ProofMediaManager />
 
       {/* Provider API keys */}
       <section className="rounded-lg border border-border bg-card p-4 space-y-3">

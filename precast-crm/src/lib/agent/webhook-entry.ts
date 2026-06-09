@@ -17,8 +17,10 @@ import { detectConversationLanguage, type ReplyLanguage } from './prompt';
 import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote } from './vision';
 import { detectLocationIntent, locationReplyText, COMPANY_LOCATION } from './location';
 import { extractQuotedRooms, persistConversationDraft } from './persist-quote';
+import { extractProofTopics } from './tools/share-proof';
+import { loadProofMedia, selectProofMedia } from './proof-media';
 import { renderAgentQuoteImage } from './quote-card-shot';
-import { sendBusinessPhoto, sendBusinessReply, sendBusinessLocation } from '@/lib/inbox-send';
+import { sendBusinessPhoto, sendBusinessReply, sendBusinessLocation, sendBusinessProofMedia } from '@/lib/inbox-send';
 import type { RoomInput } from '@/lib/calc-persistence';
 
 const HISTORY_LIMIT = 20;
@@ -39,7 +41,7 @@ async function generateAndPersistProposal(
   inboundText: string,
   inboundMessageId: string,
   config: { modelKey: string },
-): Promise<{ outcome: ShadowOutcome; quotedRooms: RoomInput[] }> {
+): Promise<{ outcome: ShadowOutcome; quotedRooms: RoomInput[]; proofTopics: (string | null)[] }> {
   // Recent prior turns (this message excluded; media-only rows dropped later).
   const rows = await prisma.message.findMany({
     where: { conversationId: conversation.id, id: { not: inboundMessageId }, text: { not: null } },
@@ -60,10 +62,12 @@ async function generateAndPersistProposal(
   // Rooms the agent priced THIS turn (from the get_quote tool inputs in the turn
   // transcript) — used by Auto mode to save an operator-side draft. Slice off the
   // prior history so a long chat never resurrects superseded dimensions.
-  const quotedRooms = outcome.result
-    ? extractQuotedRooms(outcome.result.messages.slice(history.length))
-    : [];
-  return { outcome, quotedRooms };
+  const turnMessages = outcome.result ? outcome.result.messages.slice(history.length) : [];
+  const quotedRooms = extractQuotedRooms(turnMessages);
+  // Topics the agent asked to show proof for THIS turn (share_proof tool calls);
+  // the actual clips are sent post-turn, mode-gated.
+  const proofTopics = extractProofTopics(turnMessages);
+  return { outcome, quotedRooms, proofTopics };
 }
 
 /**
@@ -121,6 +125,37 @@ async function saveDraftAndSendSummary(
 }
 
 /**
+ * Auto-mode only: the agent called share_proof this turn → send the actual
+ * curated clips into the chat right after its short confident line. One batch
+ * per turn, capped (selectProofMedia), by stored file_id (no upload). If the
+ * library is empty we send nothing — the agent already told the customer the
+ * team will follow up. Best-effort: failures are logged and swallowed.
+ */
+async function sendProofForTurn(
+  conversation: InboundConversation,
+  topics: (string | null)[],
+): Promise<void> {
+  if (topics.length === 0) return;
+  try {
+    const { items } = await loadProofMedia();
+    if (items.length === 0) return;
+    const topic = topics.find((t) => t) ?? null; // first explicit topic, else default set
+    const selected = selectProofMedia(items, { topic });
+    for (const item of selected) {
+      await sendBusinessProofMedia({
+        conversationId: conversation.id,
+        kind: item.kind,
+        fileId: item.fileId,
+        caption: item.caption ?? null,
+        userId: null,
+      });
+    }
+  } catch (err) {
+    console.error('[agent:proof-send]', err);
+  }
+}
+
+/**
  * Auto-mode quick reply for "where are you?" — the company address text + a
  * native map pin, in the conversation language. Works with no history (the caller
  * gated on Auto mode + location intent). Best-effort.
@@ -164,7 +199,7 @@ export async function runAgentForInbound(
       return;
     }
 
-    const { outcome, quotedRooms } = await generateAndPersistProposal(
+    const { outcome, quotedRooms, proofTopics } = await generateAndPersistProposal(
       conversation,
       inboundText,
       excludeMessageId,
@@ -187,6 +222,11 @@ export async function runAgentForInbound(
           source,
           language: outcome.language as ReplyLanguage,
         });
+      }
+      // Auto only: the agent asked to show proof this turn → send the clips after
+      // its line. (PROOF stage — the strongest buying signal, delivered instantly.)
+      if (outcome.decision.action === 'reply' && proofTopics.length > 0) {
+        await sendProofForTurn(conversation, proofTopics);
       }
     }
   } catch (err) {

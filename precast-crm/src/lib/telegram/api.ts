@@ -118,6 +118,60 @@ export async function tgUploadPhotoGetFileId(
   return largest.file_id;
 }
 
+/**
+ * Send a video (by existing file_id) on behalf of the business account. Same
+ * business-connection constraint as photos — pass a `file_id` that already lives
+ * on Telegram (see tgUploadVideoGetFileId), never a fresh upload. Used by the
+ * curated proof-media library (the file_id is captured once at curation time).
+ */
+export async function tgSendBusinessVideo(
+  businessConnectionId: string,
+  chatId: string,
+  fileId: string,
+  opts?: { caption?: string },
+): Promise<{ messageId: string }> {
+  const res = await fetch(apiUrl("sendVideo"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      business_connection_id: businessConnectionId,
+      chat_id: chatId,
+      video: fileId,
+      supports_streaming: true,
+      ...(opts?.caption ? { caption: opts.caption } : {}),
+    }),
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram sendVideo failed: ${json.description ?? res.status}`);
+  return { messageId: String(json.result.message_id) };
+}
+
+/**
+ * Upload a video to the staging channel (plain upload — NO business_connection_id)
+ * and return its `file_id`, so it can then be sent over a business connection by
+ * tgSendBusinessVideo. Telegram may classify some files as a document rather than
+ * a video; we read whichever the result carries.
+ */
+export async function tgUploadVideoGetFileId(
+  chatId: string,
+  video: Buffer,
+  opts?: { filename?: string; contentType?: string },
+): Promise<string> {
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  form.append(
+    "video",
+    new Blob([new Uint8Array(video)], { type: opts?.contentType ?? "video/mp4" }),
+    opts?.filename ?? "proof.mp4",
+  );
+  const res = await fetch(apiUrl("sendVideo"), { method: "POST", body: form });
+  const json = await res.json();
+  if (!json.ok) throw new Error(`Telegram staging video upload failed: ${json.description ?? res.status}`);
+  const fid = json.result?.video?.file_id ?? json.result?.document?.file_id;
+  if (!fid) throw new Error("Telegram staging upload returned no video");
+  return String(fid);
+}
+
 /** Send a document (by existing file_id) on behalf of the business account.
  *  Same business-connection constraint as photos — pass a file_id, not a fresh
  *  upload (see tgUploadDocumentGetFileId). */
