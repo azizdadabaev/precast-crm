@@ -18,7 +18,7 @@ export const DELETE = withInboxAccess<{ id: string }>(async (_req, { params }) =
 export const GET = withInboxAccess<{ id: string }>(async (_req, { params }) => {
   const conversation = await prisma.conversation.findUnique({
     where: { id: params.id },
-    select: { id: true, displayName: true, username: true, externalId: true },
+    select: { id: true, displayName: true, username: true, externalId: true, aiState: true, aiPaused: true },
   });
   if (!conversation) return fail("Суҳбат топилмади · Conversation not found", 404);
 

@@ -25,6 +25,7 @@ import { formatDraftNumber } from "@/lib/draft-number";
 interface ConversationSummary {
   id: string; displayName: string; username: string | null;
   lastMessageAt: string; lastSnippet: string; unread: boolean;
+  aiState?: string; aiPaused?: boolean;
 }
 interface InboxMessage {
   id: string; direction: "INBOUND" | "OUTBOUND"; text: string | null;
@@ -340,6 +341,17 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
       onDeleted();
     },
   });
+
+  // Hand the chat back to the AI (or take it over). The only path back to
+  // AI_HANDLING once a chat escalated / an order was placed.
+  const aiToggle = useMutation({
+    mutationFn: (handling: boolean) =>
+      api(`/api/inbox/${conversationId}/ai`, { method: "POST", json: { handling } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inbox-thread", conversationId] });
+      qc.invalidateQueries({ queryKey: ["inbox-conversations"] });
+    },
+  });
   const bottomRef = useRef<HTMLDivElement>(null);
   // The messages scroll container — for the jump-to-start / jump-to-end FABs.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -437,6 +449,7 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
     },
   });
 
+  const aiOn = data?.conversation.aiState === "AI_HANDLING" && !data.conversation.aiPaused;
   const messages = data?.messages ?? [];
   const renderItems = buildRenderItems(messages);
 
@@ -455,8 +468,24 @@ function Thread({ conversationId, onDeleted }: { conversationId: string; onDelet
             {data?.conversation.username ? `@${data.conversation.username}` : "online"}
           </div>
         </div>
-        {/* Actions: Calculate-from-chat, then delete (two-step inline confirm) */}
+        {/* Actions: AI handoff toggle, Calculate-from-chat, then delete (two-step inline confirm) */}
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {!confirming && data?.conversation && (
+            <button
+              type="button"
+              disabled={aiToggle.isPending}
+              onClick={() => aiToggle.mutate(!aiOn)}
+              title={aiOn ? "AI bu chatni boshqaryapti — qo'lda olish uchun bosing" : "AI ga qaytarish · Resume AI"}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors ${
+                aiOn
+                  ? "text-emerald-600 hover:bg-[var(--tg-list-hover)]"
+                  : "bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
+              }`}
+            >
+              {aiToggle.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
+              <span className="hidden sm:inline">{aiOn ? "AI ✓" : "Resume AI"}</span>
+            </button>
+          )}
           {!confirming && (
             <button
               type="button"
