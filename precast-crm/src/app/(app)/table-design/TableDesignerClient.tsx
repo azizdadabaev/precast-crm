@@ -59,32 +59,32 @@ const MOCK: ShareData = {
       name: "Хона 1",
       innerWidth: 3.6, innerLength: 5.8, bearing: 5.8,
       pattern: "GB", beamLength: 5.8, blocksPerRow: 7,
-      totalBlocks: 42, beamCount: 5, monolithArea: 20.88,
+      totalBlocks: 42, beamCount: 5, monolithLength: 3.6, monolithArea: 20.88,
       m2Price: 850_000, subtotal: 17_748_000,
     },
     {
       name: "Хона 2",
       innerWidth: 4.2, innerLength: 6.3, bearing: 6.3,
       pattern: "BGB", patternAuto: "GB", beamLength: 6.3, blocksPerRow: 8,
-      totalBlocks: 56, beamCount: 6, monolithArea: 26.46,
+      totalBlocks: 56, beamCount: 6, monolithLength: 4.2, monolithArea: 26.46,
       m2Price: 920_000, subtotal: 24_343_200,
     },
     {
       name: "Хона 3",
       innerWidth: 2.8, innerLength: 4.1, bearing: 4.1,
       pattern: "GBG", beamLength: 4.1, blocksPerRow: null,
-      totalBlocks: 20, beamCount: 4, monolithArea: 11.48,
+      totalBlocks: 20, beamCount: 4, monolithLength: 2.8, monolithArea: 11.48,
       m2Price: 750_000, subtotal: 8_610_000,
     },
     {
       name: "Хона 4",
       innerWidth: 5.1, innerLength: 7.2, bearing: 7.2,
       pattern: "GB", beamLength: 7.2, blocksPerRow: 11,
-      totalBlocks: 88, beamCount: 7, monolithArea: 36.72,
+      totalBlocks: 88, beamCount: 7, monolithLength: 5.1, monolithArea: 36.72,
       m2Price: 980_000, subtotal: 35_985_600,
     },
   ],
-  totals: { blocks: 206, beams: 22, monolithArea: 95.54, sum: 86_686_800 },
+  totals: { blocks: 206, beams: 22, monolithLength: 15.7, monolithArea: 95.54, sum: 86_686_800 },
 };
 
 // ─────────────────────────────────────────────────────────────────

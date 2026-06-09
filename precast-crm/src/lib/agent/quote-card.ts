@@ -41,6 +41,7 @@ export interface CardProject {
     blockRows: number;
     totalBlocks: number;
     beamCount: number;
+    monolithLength: unknown;
     monolithArea: unknown;
     m2Price: unknown;
     subtotal: unknown;
@@ -60,10 +61,11 @@ export function buildShareDataFromProject(p: CardProject): ShareData {
     (a, c) => ({
       blocks: a.blocks + c.totalBlocks,
       beams: a.beams + c.beamCount,
+      monolithLength: a.monolithLength + num(c.monolithLength),
       monolithArea: a.monolithArea + num(c.monolithArea),
       sum: a.sum + num(c.subtotal),
     }),
-    { blocks: 0, beams: 0, monolithArea: 0, sum: 0 },
+    { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0, sum: 0 },
   );
 
   return {
@@ -83,6 +85,7 @@ export function buildShareDataFromProject(p: CardProject): ShareData {
       blocksPerRow: c.blockRows > 0 ? c.blocksPerRow : null,
       totalBlocks: c.totalBlocks,
       beamCount: c.beamCount,
+      monolithLength: num(c.monolithLength),
       monolithArea: num(c.monolithArea),
       m2Price: num(c.m2Price),
       subtotal: num(c.subtotal),

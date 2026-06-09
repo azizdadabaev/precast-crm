@@ -155,6 +155,7 @@ export default function ProjectDetailPage() {
       blocksPerRow: c.blockRows > 0 ? c.blocksPerRow : null,
       totalBlocks: c.totalBlocks,
       beamCount: c.beamCount,
+      monolithLength: Number(c.monolithLength),
       monolithArea: Number(c.monolithArea),
       m2Price: Number(c.m2Price),
       subtotal: Number(c.subtotal),
@@ -162,6 +163,7 @@ export default function ProjectDetailPage() {
     totals: {
       blocks: totals.blocks,
       beams: totals.beams,
+      monolithLength: totals.monolithLength,
       monolithArea: totals.monolithArea,
       sum: totals.sum,
     },

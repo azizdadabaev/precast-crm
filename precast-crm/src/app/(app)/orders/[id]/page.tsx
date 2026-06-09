@@ -387,6 +387,7 @@ export default function OrderDetailPage() {
       blocksPerRow: c.blockRows > 0 ? c.blocksPerRow : null,
       totalBlocks: c.totalBlocks,
       beamCount: c.beamCount,
+      monolithLength: Number(c.monolithLength),
       monolithArea: Number(c.monolithArea),
       m2Price: Number(c.m2Price),
       subtotal: Number(c.subtotal),
@@ -394,6 +395,7 @@ export default function OrderDetailPage() {
     totals: {
       blocks: calcTotals.blocks,
       beams: calcTotals.beams,
+      monolithLength: calcTotals.monolithLength,
       monolithArea: calcTotals.monolithArea,
       sum: order.project.calculations.reduce((s, c) => s + Number(c.subtotal), 0),
     },

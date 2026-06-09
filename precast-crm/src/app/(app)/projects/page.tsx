@@ -294,6 +294,7 @@ export default function ProjectsPage() {
                 <th className="text-center px-3 py-2">Хоналар<span className="lang-en"> · Rooms</span></th>
                 <th className="text-right px-3 py-2">Монолит Б<span className="lang-en"> · Slab L</span></th>
                 <th className="text-right px-3 py-2">Майдон<span className="lang-en"> · Area</span></th>
+                <th className="text-right px-3 py-2">Оғирлик<span className="lang-en"> · Weight</span></th>
                 <th className="text-right px-3 py-2">Сумма<span className="lang-en"> · Subtotal</span></th>
                 <th className="text-left px-3 py-2">{t("Ҳолат", "Status")}</th>
                 <th className="text-left px-3 py-2">{t("Янгиланди", "Updated")}</th>
@@ -376,6 +377,9 @@ export default function ProjectsPage() {
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {formatNumber(totalArea, 2)} m²
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                      {formatNumber(totalArea * 180, 0)} <span className="text-xs">кг</span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">
                       {formatNumber(totalSum, 0)}

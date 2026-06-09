@@ -619,6 +619,7 @@ function CalculationsInner() {
         blocksPerRow: r.result.block_rows > 0 ? r.result.blocks_per_row : null,
         totalBlocks: r.result.total_blocks,
         beamCount: r.result.beam_count,
+        monolithLength: r.result.monolith_length,
         monolithArea: r.result.monolith_area,
         m2Price: r.result.m2_price,
         subtotal: r.result.subtotal,
@@ -626,6 +627,7 @@ function CalculationsInner() {
       totals: {
         blocks: withResult.reduce((s, r) => s + r.result.total_blocks, 0),
         beams: withResult.reduce((s, r) => s + r.result.beam_count, 0),
+        monolithLength: withResult.reduce((s, r) => s + r.result.monolith_length, 0),
         monolithArea: withResult.reduce((s, r) => s + r.result.monolith_area, 0),
         sum: withResult.reduce((s, r) => s + r.result.subtotal, 0),
       },

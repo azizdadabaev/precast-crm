@@ -46,6 +46,7 @@ export default async function QuoteCardRenderPage({
           blockRows: true,
           totalBlocks: true,
           beamCount: true,
+          monolithLength: true,
           monolithArea: true,
           m2Price: true,
           subtotal: true,

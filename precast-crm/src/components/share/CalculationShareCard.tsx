@@ -28,8 +28,12 @@ const PATTERN_LABEL: Record<"GB" | "BGB" | "GBG", string> = {
 const COL_LABELS = [
   "Хона", "Эни", "Бўйи", "Шаблон",
   "Балка", "Ғ/қатор", "Жами Ғ", "Балка",
-  "Майдон", "м² нархи", "Сумма",
+  "Монолит", "Майдон", "м² нархи", "Сумма",
 ] as const;
+
+// Slab weight: a finished beam-and-block floor ≈ 180 kg per m² of floor area
+// (owner-provided; matches the project / order pages and the send caption).
+const FLOOR_KG_PER_M2 = 180;
 
 export interface ShareRow {
   name: string;
@@ -42,6 +46,7 @@ export interface ShareRow {
   blocksPerRow: number | null;
   totalBlocks: number;
   beamCount: number;
+  monolithLength: number;
   monolithArea: number;
   m2Price: number;
   subtotal: number;
@@ -65,6 +70,7 @@ export interface ShareData {
   totals: {
     blocks: number;
     beams: number;
+    monolithLength: number;
     monolithArea: number;
     sum: number;
   };
@@ -79,6 +85,19 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, Props>(
   function CalculationShareCard({ data, config: configProp }, ref) {
     const cfg = { ...DEFAULT_TABLE_DESIGN, ...configProp };
     const generatedAt = new Date();
+
+    // The "Монолит" (Slab L) column is inserted at render time so the table
+    // designer keeps its 11-column contract (no config/migration change). Derive
+    // a 12-width array from the configured 11 by giving the new column the area
+    // column's width, then renormalize so the set still sums to 100%.
+    const SLAB_L_AT = 8; // inserted before "Майдон" (area)
+    const widthsRaw = [
+      ...cfg.colWidths.slice(0, SLAB_L_AT),
+      cfg.colWidths[SLAB_L_AT],
+      ...cfg.colWidths.slice(SLAB_L_AT),
+    ];
+    const widthsSum = widthsRaw.reduce((a, b) => a + b, 0) || 1;
+    const colWidths = widthsRaw.map((w) => (w / widthsSum) * 100);
 
     // ── Style helpers ───────────────────────────────────────
     const px = (n: number) => `${n}px`;
@@ -257,7 +276,7 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, Props>(
 
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <colgroup>
-              {cfg.colWidths.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
+              {colWidths.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
             </colgroup>
             <thead style={{ backgroundColor: cfg.headerBg }}>
               <tr>
@@ -272,6 +291,7 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, Props>(
                 <th style={thCell("right")}>{COL_LABELS[8]}</th>
                 <th style={thCell("right")}>{COL_LABELS[9]}</th>
                 <th style={thCell("right")}>{COL_LABELS[10]}</th>
+                <th style={thCell("right")}>{COL_LABELS[11]}</th>
               </tr>
             </thead>
             <tbody>
@@ -311,6 +331,10 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, Props>(
                   <td style={tdBase({ textAlign: "right", ...tabular, fontWeight: 600 })}>
                     {r.beamCount}
                   </td>
+                  <td style={tdBase({ textAlign: "right", ...tabular, color: cfg.accentColor })}>
+                    {formatNumber(r.monolithLength, 2)}
+                    <span style={{ color: cfg.dimText, fontSize: cfg.bodyFontSize - 1, marginLeft: 1 }}>m</span>
+                  </td>
                   <td style={tdBase({ textAlign: "right", ...tabular, color: cfg.dimText })}>
                     {formatNumber(r.monolithArea, 2)}
                     <span style={{ fontSize: cfg.bodyFontSize - 1, marginLeft: 1 }}>m²</span>
@@ -328,9 +352,16 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, Props>(
               <tr style={{ backgroundColor: cfg.footerBg, borderTop: `${px(cfg.footerDividerWidth)} solid ${cfg.borderColor}` }}>
                 <td colSpan={6} style={tfCell({ textAlign: "right", textTransform: "uppercase", letterSpacing: "0.08em" })}>
                   Жами
+                  <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: cfg.bodyFontWeight, color: cfg.dimText, marginLeft: 8, ...tabular }}>
+                    · {formatNumber(data.totals.monolithArea * FLOOR_KG_PER_M2, 0)} кг
+                  </span>
                 </td>
                 <td style={tfCell({ textAlign: "right", ...tabular })}>{data.totals.blocks}</td>
                 <td style={tfCell({ textAlign: "right", ...tabular })}>{data.totals.beams}</td>
+                <td style={tfCell({ textAlign: "right", ...tabular })}>
+                  {formatNumber(data.totals.monolithLength, 2)}
+                  <span style={{ fontSize: cfg.footerFontSize - 2, marginLeft: 1, color: cfg.dimText }}>m</span>
+                </td>
                 <td style={tfCell({ textAlign: "right", ...tabular })}>
                   {formatNumber(data.totals.monolithArea, 2)}
                   <span style={{ fontSize: cfg.footerFontSize - 2, marginLeft: 1, color: cfg.dimText }}>m²</span>
