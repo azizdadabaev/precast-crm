@@ -55,7 +55,18 @@ describe('parseDimensions', () => {
 
   it('returns low/not-found on unparseable output (never guesses)', () => {
     const d = parseDimensions('about 5 by 4 meters');
-    expect(d).toEqual({ found: false, rooms: [], confidence: 'low', note: 'could not parse vision output' });
+    expect(d).toEqual({ found: false, rooms: [], confidence: 'low', note: 'could not parse vision output', isPlanLike: true });
+  });
+
+  it('marks a clearly non-construction image (isConstructionImage:false) so the caller stays silent', () => {
+    const d = parseDimensions('{"found":false,"isConstructionImage":false,"rooms":[],"confidence":"low","note":"product ad"}');
+    expect(d.found).toBe(false);
+    expect(d.isPlanLike).toBe(false);
+  });
+
+  it('defaults to plan-like when the field is absent (preserves the ask-for-dims fallback)', () => {
+    const d = parseDimensions('{"found":false,"rooms":[],"confidence":"low"}');
+    expect(d.isPlanLike).toBe(true);
   });
 
   it('keeps low confidence as low even with rooms present', () => {

@@ -123,6 +123,10 @@ export interface ExtractedDimensions {
   confidence: 'high' | 'low';
   /** Short note on what was seen / why unsure (staff-facing, not the customer). */
   note?: string;
+  /** False when the image is clearly NOT construction-related (a product ad, a
+   *  selfie, a meme…) — the caller then stays SILENT instead of asking for room
+   *  dimensions. Absent/true = plan-like (preserves the old fallback). */
+  isPlanLike?: boolean;
 }
 
 export interface LlmProvider {

@@ -192,7 +192,17 @@ export async function POST(req: NextRequest) {
     // 8b. AI vision (spec §4.5) — inbound floor-plan IMAGE → read dimensions →
     //     echo them back to confirm. Fire-and-forget; image-derived proposals are
     //     always human-reviewed (never auto-sent).
-    if (!parsed.outgoing && !parsed.isEdited && mediaKind === "IMAGE" && mediaPath) {
+    //     Albums: Telegram delivers a media group as N separate updates — run
+    //     vision ONLY on the group's first photo, or the customer gets N
+    //     identical replies (live bug: a 2-photo forward → 2 fallbacks).
+    let firstOfMediaGroup = true;
+    if (parsed.mediaGroupId) {
+      const groupCount = await prisma.message.count({
+        where: { conversationId: conversation.id, mediaGroupId: parsed.mediaGroupId },
+      });
+      firstOfMediaGroup = groupCount <= 1; // only the row we just inserted
+    }
+    if (!parsed.outgoing && !parsed.isEdited && mediaKind === "IMAGE" && mediaPath && firstOfMediaGroup) {
       void runVisionForInbound(
         {
           id: conversation.id,

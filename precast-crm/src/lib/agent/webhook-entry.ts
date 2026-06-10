@@ -303,6 +303,15 @@ export async function runVisionForInbound(
       return;
     }
 
+    // NOT a construction image at all (a product ad, a meme, a selfie…) → stay
+    // SILENT on the image. Asking such a sender for "room dimensions" is the
+    // robotic tell (live bug: a forwarded cap ad got a dimensions request —
+    // twice). Any caption still flows through the normal text path.
+    if (dims.isPlanLike === false) {
+      console.log('[agent:vision] non-construction image — no dimensions fallback sent');
+      return;
+    }
+
     // Couldn't read it → ask for typed dimensions. Auto mode sends the ask;
     // otherwise persist it as a proposal for the operator to send.
     const fallback = visionFallbackReply(language);

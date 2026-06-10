@@ -34,7 +34,7 @@ function cachePrefixKey(modelId: string, system: string, tools: unknown): string
 // The prompt is engineered for that reality; a focused retry (below) runs when
 // the first pass comes back empty/low-confidence before we ask the customer to type.
 const STRICT_JSON_SHAPE =
-  '{"found": boolean, "rooms": [{"widthM": number, "lengthM": number, "label": string}], "confidence": "high"|"low", "note": string}';
+  '{"found": boolean, "isConstructionImage": boolean, "rooms": [{"widthM": number, "lengthM": number, "label": string}], "confidence": "high"|"low", "note": string}';
 
 const DIMENSIONS_PROMPT = [
   'You are reading an image a construction customer sent to get a precast beam-and-block FLOOR quote.',
@@ -51,6 +51,7 @@ const DIMENSIONS_PROMPT = [
   'Return ONLY strict JSON, no prose, no code fence:',
   STRICT_JSON_SHAPE,
   'Set found=true and confidence="high" ONLY when you have clearly read at least one room\'s BOTH inner dimensions. If nothing is readable or you are unsure, return found=false, confidence="low", rooms=[] and a short English note (for staff) on what blocked the read.',
+  'isConstructionImage: true when the image IS construction-related (a floor plan, room sketch, building drawing, a handwritten/typed dimensions list, a slab/site/building photo) — even if unreadable. false when it is clearly something else entirely (people, products, clothing, food, ads, screenshots of shops, memes). This tells the caller whether asking for room dimensions even makes sense.',
 ].join('\n');
 
 // Second pass — only when the first comes back empty/low-confidence. Pushes the
@@ -86,9 +87,18 @@ export function parseDimensions(text: string): ExtractedDimensions {
       rooms.push({ widthM: w, lengthM: l, label: typeof rr.label === 'string' && rr.label.trim() ? rr.label.trim() : undefined });
     }
     const found = o.found === true && rooms.length > 0;
-    return { found, rooms, confidence: found && o.confidence === 'high' ? 'high' : 'low', note };
+    return {
+      found,
+      rooms,
+      confidence: found && o.confidence === 'high' ? 'high' : 'low',
+      note,
+      // Only an explicit false marks the image as non-construction; absent/other
+      // values default to plan-like so the ask-for-dimensions fallback (old
+      // behavior) is preserved when the model omits the field.
+      isPlanLike: o.isConstructionImage === false ? false : true,
+    };
   } catch {
-    return { found: false, rooms: [], confidence: 'low', note: 'could not parse vision output' };
+    return { found: false, rooms: [], confidence: 'low', note: 'could not parse vision output', isPlanLike: true };
   }
 }
 
@@ -232,6 +242,9 @@ export class GeminiProvider implements LlmProvider {
   async extractDimensions(image: ImageInput): Promise<ExtractedDimensions> {
     const primary = await this.readDimensions(image, DIMENSIONS_PROMPT);
     if (primary.found && primary.confidence === 'high') return primary;
+    // Clearly not a construction image (product ad / selfie / meme) → no point
+    // re-reading harder; the caller stays silent on it.
+    if (primary.isPlanLike === false) return primary;
     const retry = await this.readDimensions(image, DIMENSIONS_PROMPT_RETRY);
     return betterDimensions(primary, retry);
   }
