@@ -48,6 +48,10 @@ services:
       INBOX_PASSWORD: ${INBOX_PASSWORD:-}
       TELEGRAM_STAGING_CHAT_ID: ${TELEGRAM_STAGING_CHAT_ID:-}
       QUOTE_SIGNING_SECRET: ${QUOTE_SIGNING_SECRET:-}
+      INSTAGRAM_ACCESS_TOKEN: ${INSTAGRAM_ACCESS_TOKEN:-}
+      INSTAGRAM_VERIFY_TOKEN: ${INSTAGRAM_VERIFY_TOKEN:-}
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://etalontbm.uz}
     volumes:
       - uploads:/app/public/uploads
       - drawings_data:/data
