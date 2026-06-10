@@ -12,8 +12,25 @@ describe('detectLanguage', () => {
     expect(detectLanguage('Нархи қанча?')).toBe('uz-cyrillic'); // қ is Uzbek-specific
     expect(detectLanguage('Тўсин ўлчами')).toBe('uz-cyrillic'); // ў
   });
-  it('returns ru for plain Cyrillic without Uzbek markers', () => {
+  it('returns ru only on a POSITIVE Russian signal (words / ы)', () => {
     expect(detectLanguage('Сколько стоит перекрытие?')).toBe('ru');
+    expect(detectLanguage('Здравствуйте')).toBe('ru');
+    expect(detectLanguage('Вы доставляете?')).toBe('ru'); // ы — not in the Uzbek Cyrillic alphabet
+  });
+  it('treats casual Uzbek written in PLAIN Cyrillic as Uzbek, never Russian (the reported bug)', () => {
+    // Customers substitute plain Russian letters for ў ғ қ ҳ — these are all Uzbek:
+    expect(detectLanguage('Ассалому алейкум')).toBe('uz-cyrillic');
+    expect(detectLanguage('Яхшимисиз')).toBe('uz-cyrillic');
+    expect(detectLanguage('Рахмат')).toBe('uz-cyrillic');
+    expect(detectLanguage('Канча булади')).toBe('uz-cyrillic');
+    expect(detectLanguage('Балка керак эди')).toBe('uz-cyrillic');
+    expect(detectLanguage('Кайерда')).toBe('uz-cyrillic');
+  });
+  it('defaults uncertain Cyrillic to Uzbek (never "Cyrillic = Russian")', () => {
+    expect(detectLanguage('Балка')).toBe('uz-cyrillic'); // ambiguous word, Uzbekistan default
+  });
+  it('lets an Uzbek signal win over an incidental Russian-looking word', () => {
+    expect(detectLanguage('Балка канча стоит')).toBe('uz-cyrillic'); // канча (uz) beats стоит (ru)
   });
   it('falls back when there are no decisive letters', () => {
     expect(detectLanguage('4 x 5 = ?')).toBe('uz-latin');
