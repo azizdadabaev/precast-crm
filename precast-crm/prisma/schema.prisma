@@ -1066,6 +1066,7 @@ model GalleryPhoto {
 
 enum ConversationChannel {
   TELEGRAM
+  INSTAGRAM
 }
 
 enum MessageDirection {
