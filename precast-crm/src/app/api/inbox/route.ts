@@ -7,7 +7,7 @@ export const GET = withInboxAccess(async () => {
     orderBy: { lastMessageAt: "desc" },
     take: 100,
     select: {
-      id: true, displayName: true, username: true,
+      id: true, channel: true, displayName: true, username: true,
       lastMessageAt: true, lastSnippet: true, unread: true,
     },
   });

@@ -28,11 +28,15 @@ export function GET(req: NextRequest): Response {
 export async function POST(req: NextRequest): Promise<Response> {
   const raw = await req.text();
   if (!verifyWebhookSignature(raw, req.headers.get("x-hub-signature-256"), igAppSecret())) {
+    // Diagnostic: distinguishes "Meta never called" (no log at all) from
+    // "called but the app secret mismatches" (this log) when DMs don't arrive.
+    console.warn("[instagram webhook] signature check failed — app secret mismatch or unsigned probe");
     return new Response("forbidden", { status: 401 });
   }
 
   const body = JSON.parse(raw || "null");
   const msgs = parseInstagramWebhook(body);
+  console.log(`[instagram webhook] delivery ok — ${msgs.length} message(s)`);
 
   for (const m of msgs) {
     try {

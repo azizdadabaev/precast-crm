@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
-import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator, ArrowUp, ArrowDown, Bot, FlaskConical, X, AlertTriangle } from "lucide-react";
+import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator, ArrowUp, ArrowDown, Bot, FlaskConical, X, AlertTriangle, Instagram as InstagramIcon, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -23,10 +23,18 @@ import { ImageViewerProvider, useImageViewer } from "@/components/inbox/ImageVie
 import { formatDraftNumber } from "@/lib/draft-number";
 
 interface ConversationSummary {
-  id: string; displayName: string; username: string | null;
+  id: string; channel?: string; displayName: string; username: string | null;
   lastMessageAt: string; lastSnippet: string; unread: boolean;
   aiState?: string; aiPaused?: boolean;
 }
+
+// Channel chrome for the multi-channel inbox (Telegram today, Instagram now,
+// WhatsApp later). Tabs appear automatically for any channel present in the list.
+const CHANNEL_META: Record<string, { label: string; icon: LucideIcon; cls: string }> = {
+  TELEGRAM:  { label: "Telegram",  icon: Send,          cls: "text-sky-500" },
+  INSTAGRAM: { label: "Instagram", icon: InstagramIcon, cls: "text-pink-500" },
+  WHATSAPP:  { label: "WhatsApp",  icon: MessageCircle, cls: "text-green-500" },
+};
 interface InboxMessage {
   id: string; direction: "INBOUND" | "OUTBOUND"; text: string | null;
   mediaKind: string | null; mediaPath: string | null; mediaName: string | null;
@@ -196,6 +204,14 @@ function Inbox() {
     refetchInterval: 60_000,
   });
 
+  // Multi-channel filter (Telegram / Instagram / …). Tabs render only when the
+  // inbox actually has more than one channel; legacy rows default to TELEGRAM.
+  const [channelFilter, setChannelFilter] = useState<string>("ALL");
+  const channelsPresent = Array.from(new Set((conversations ?? []).map((c) => c.channel ?? "TELEGRAM")));
+  const visibleConversations = (conversations ?? []).filter(
+    (c) => channelFilter === "ALL" || (c.channel ?? "TELEGRAM") === channelFilter,
+  );
+
   // Live updates: invalidate the list + the open thread on any inbox event.
   useEffect(() => {
     const es = new EventSource("/api/inbox/stream");
@@ -264,8 +280,41 @@ function Inbox() {
       <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border shadow-sm">
         {/* Left: conversation list */}
         <div className="flex w-[340px] shrink-0 flex-col border-r border-[color:var(--tg-divider)] bg-[var(--tg-panel)]">
+          {/* Channel tabs — appear once >1 channel exists (Telegram / Instagram / …) */}
+          {channelsPresent.length > 1 && (
+            <div className="flex shrink-0 gap-1 border-b border-[color:var(--tg-divider)] px-2 py-1.5">
+              <button
+                type="button"
+                onClick={() => setChannelFilter("ALL")}
+                className={cn(
+                  "rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
+                  channelFilter === "ALL" ? "bg-[var(--tg-accent)] text-white" : "text-[color:var(--tg-text-dim)] hover:bg-[var(--tg-list-hover)]",
+                )}
+              >
+                Ҳаммаси · All
+              </button>
+              {channelsPresent.map((ch) => {
+                const meta = CHANNEL_META[ch];
+                const Icon = meta?.icon ?? MessageCircle;
+                return (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() => setChannelFilter(ch)}
+                    className={cn(
+                      "flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
+                      channelFilter === ch ? "bg-[var(--tg-accent)] text-white" : "text-[color:var(--tg-text-dim)] hover:bg-[var(--tg-list-hover)]",
+                    )}
+                  >
+                    <Icon className={cn("h-3.5 w-3.5", channelFilter === ch ? "text-white" : meta?.cls)} />
+                    {meta?.label ?? ch}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto">
-            {(conversations ?? []).map((c) => (
+            {visibleConversations.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setActiveId(c.id)}
@@ -277,7 +326,14 @@ function Inbox() {
                 <ChatAvatar name={c.displayName} size={50} />
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[15px] font-semibold text-[var(--tg-text)]">{c.displayName}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {(() => {
+                        const meta = CHANNEL_META[c.channel ?? "TELEGRAM"];
+                        const Icon = meta?.icon ?? MessageCircle;
+                        return <Icon className={cn("h-3.5 w-3.5 shrink-0", meta?.cls)} aria-label={meta?.label} />;
+                      })()}
+                      <span className="truncate text-[15px] font-semibold text-[var(--tg-text)]">{c.displayName}</span>
+                    </span>
                     <span className={cn("shrink-0 text-[12px]", c.unread ? "text-[color:var(--tg-accent)]" : "text-[color:var(--tg-text-dim)]")}>
                       {timeAgo(c.lastMessageAt)}
                     </span>
