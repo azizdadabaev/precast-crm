@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/health",
   "/api/telegram/webhook",
+  "/api/instagram/webhook", // Meta webhook — GET verify handshake + signed POST (HMAC), not the session
   "/internal/quote-card", // agent's headless quote-card render target — gated by an in-process token, not the session
   "/_next",
   "/favicon.ico",

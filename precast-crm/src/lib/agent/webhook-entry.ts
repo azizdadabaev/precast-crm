@@ -147,6 +147,7 @@ async function sendProofForTurn(
         conversationId: conversation.id,
         kind: item.kind,
         fileId: item.fileId,
+        previewPath: item.previewPath, // Instagram sends this as a public URL
         caption: item.caption ?? null,
         userId: null,
       });

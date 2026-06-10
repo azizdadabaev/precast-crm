@@ -8,6 +8,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessVideo, tgSendBusinessLocation, tgSendBusinessChatAction, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
+import { igSendText, igSendImage, igSendVideo, igSendTyping } from "@/lib/instagram/api";
+import { publicBaseUrl } from "@/lib/instagram/config";
 import { emitInbox } from "@/lib/inbox-bus";
 import { saveBufferToUploads } from "@/lib/uploads";
 
@@ -36,19 +38,29 @@ export async function sendBusinessReply(input: {
 }): Promise<SendBusinessReplyResult> {
   const conversation = await prisma.conversation.findUnique({
     where: { id: input.conversationId },
-    select: { id: true, externalId: true, businessConnectionId: true },
+    select: { id: true, externalId: true, businessConnectionId: true, channel: true },
   });
   if (!conversation) return { ok: false, reason: "NOT_FOUND" };
   // Simulated test chats (from /api/agent/simulate-inbound) have no Telegram
   // business connection. Send LOCALLY for them — persist the outbound so the owner
   // can exercise the Suggest flow end-to-end without messaging a real customer. A
-  // real chat that genuinely lacks a connection still errors.
+  // real chat that genuinely lacks a connection still errors. Instagram chats have
+  // no businessConnectionId — they send via the Graph API token instead.
+  const isInstagram = conversation.channel === "INSTAGRAM";
   const simulated = !conversation.businessConnectionId && conversation.externalId.startsWith("sim-");
-  if (!conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
+  if (!isInstagram && !conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
 
   let telegramMsgId: string | null = null;
   let failed = false;
-  if (conversation.businessConnectionId) {
+  if (isInstagram) {
+    try {
+      const sent = await igSendText(conversation.externalId, input.text);
+      telegramMsgId = sent.messageId || null;
+    } catch (err) {
+      console.error("[inbox send ig]", err); // e.g. outside the 24h window → routed to a human
+      failed = true;
+    }
+  } else if (conversation.businessConnectionId) {
     try {
       const sent = await tgSendBusinessMessage(conversation.businessConnectionId, conversation.externalId, input.text);
       telegramMsgId = sent.messageId;
@@ -89,24 +101,41 @@ export async function sendBusinessReply(input: {
 export async function sendBusinessProofMedia(input: {
   conversationId: string;
   kind: "VIDEO" | "PHOTO";
+  /** Telegram file_id (Telegram channel only — reused, never re-uploaded). */
   fileId: string;
+  /** Local /uploads path (Instagram channel — sent as a public URL, since IG has
+   *  no file_id concept). The proof library stores both. */
+  previewPath?: string | null;
   caption?: string | null;
   userId: string | null;
 }): Promise<SendBusinessReplyResult> {
   const conversation = await prisma.conversation.findUnique({
     where: { id: input.conversationId },
-    select: { id: true, externalId: true, businessConnectionId: true },
+    select: { id: true, externalId: true, businessConnectionId: true, channel: true },
   });
   if (!conversation) return { ok: false, reason: "NOT_FOUND" };
+  const isInstagram = conversation.channel === "INSTAGRAM";
   const simulated = !conversation.businessConnectionId && conversation.externalId.startsWith("sim-");
-  if (!conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
+  if (!isInstagram && !conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
 
   const caption = input.caption?.trim() ? input.caption.trim().slice(0, 1024) : null;
   const marker = caption ?? (input.kind === "VIDEO" ? "📹 Video" : "🖼 Rasm");
 
   let telegramMsgId: string | null = null;
   let failed = false;
-  if (conversation.businessConnectionId) {
+  if (isInstagram) {
+    try {
+      if (!input.previewPath) throw new Error("no previewPath for Instagram proof media");
+      const url = `${publicBaseUrl()}${input.previewPath}`;
+      const sent = input.kind === "VIDEO"
+        ? await igSendVideo(conversation.externalId, url)
+        : await igSendImage(conversation.externalId, url);
+      telegramMsgId = sent.messageId || null;
+    } catch (err) {
+      console.error("[inbox send-proof ig]", err);
+      failed = true;
+    }
+  } else if (conversation.businessConnectionId) {
     try {
       const send = input.kind === "VIDEO" ? tgSendBusinessVideo : tgSendBusinessPhoto;
       const sent = await send(conversation.businessConnectionId, conversation.externalId, input.fileId, {
@@ -153,9 +182,11 @@ export async function sendBusinessTyping(conversationId: string): Promise<void> 
       where: { id: conversationId },
       select: { externalId: true, businessConnectionId: true, channel: true },
     });
-    if (!conversation?.businessConnectionId) return; // sim / no-connection / future channels
-    if (conversation.channel === "TELEGRAM") {
+    if (!conversation) return;
+    if (conversation.channel === "TELEGRAM" && conversation.businessConnectionId) {
       await tgSendBusinessChatAction(conversation.businessConnectionId, conversation.externalId, "typing");
+    } else if (conversation.channel === "INSTAGRAM") {
+      await igSendTyping(conversation.externalId);
     }
   } catch {
     /* cosmetic — never let a typing hint break or delay the actual reply */
@@ -175,15 +206,26 @@ export async function sendBusinessLocation(input: {
 }): Promise<SendBusinessReplyResult> {
   const conversation = await prisma.conversation.findUnique({
     where: { id: input.conversationId },
-    select: { id: true, externalId: true, businessConnectionId: true },
+    select: { id: true, externalId: true, businessConnectionId: true, channel: true },
   });
   if (!conversation) return { ok: false, reason: "NOT_FOUND" };
+  const isInstagram = conversation.channel === "INSTAGRAM";
   const simulated = !conversation.businessConnectionId && conversation.externalId.startsWith("sim-");
-  if (!conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
+  if (!isInstagram && !conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
 
   let telegramMsgId: string | null = null;
   let failed = false;
-  if (conversation.businessConnectionId) {
+  if (isInstagram) {
+    // Instagram has no native map pin → send the Google Maps link as text.
+    try {
+      const { COMPANY_LOCATION } = await import("@/lib/agent/location");
+      const sent = await igSendText(conversation.externalId, COMPANY_LOCATION.mapsUrl);
+      telegramMsgId = sent.messageId || null;
+    } catch (err) {
+      console.error("[inbox send-location ig]", err);
+      failed = true;
+    }
+  } else if (conversation.businessConnectionId) {
     try {
       const sent = await tgSendBusinessLocation(
         conversation.businessConnectionId,
@@ -297,17 +339,36 @@ export async function sendBusinessPhoto(input: {
 }): Promise<SendBusinessPhotoResult> {
   const conversation = await prisma.conversation.findUnique({
     where: { id: input.conversationId },
-    select: { id: true, externalId: true, businessConnectionId: true },
+    select: { id: true, externalId: true, businessConnectionId: true, channel: true },
   });
   if (!conversation) return { ok: false, reason: "NOT_FOUND" };
 
+  const isInstagram = conversation.channel === "INSTAGRAM";
   const simulated = !conversation.businessConnectionId && conversation.externalId.startsWith("sim-");
-  if (!conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
+  if (!isInstagram && !conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
 
   const caption = input.caption?.trim() ? input.caption.trim().slice(0, 1024) : null;
   const ext = EXT_BY_MIME[input.mime.toLowerCase()] ?? "png";
   const filename = input.filename ?? `out-${Date.now()}.${ext}`;
   const mediaPath = await saveBufferToUploads(input.photo, `inbox/${conversation.id}`, filename);
+
+  // Instagram → send the saved image by its public /uploads URL (Meta fetches it;
+  // no staging/file_id like Telegram).
+  if (isInstagram) {
+    let igMsgId: string | null = null;
+    let igFailed = false;
+    let igDetail: string | undefined;
+    try {
+      const sent = await igSendImage(conversation.externalId, `${publicBaseUrl()}${mediaPath}`);
+      igMsgId = sent.messageId || null;
+    } catch (err) {
+      console.error("[inbox send-photo ig]", err);
+      igFailed = true;
+      igDetail = err instanceof Error ? err.message : String(err);
+    }
+    const message = await persistOutboundPhoto(conversation.id, mediaPath, caption, igMsgId, input.userId, igFailed);
+    return igFailed ? { ok: false, reason: "SEND_FAILED", message, detail: igDetail } : { ok: true, message };
+  }
 
   // Simulated chat → persist locally, no Telegram.
   if (!conversation.businessConnectionId) {
