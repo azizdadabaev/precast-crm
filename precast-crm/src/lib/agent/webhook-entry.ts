@@ -258,6 +258,10 @@ export async function runVisionForInbound(
   mediaPath: string,
   mimeType: string,
   inboundMessageId: string,
+  /** The image's caption, if any. Vision LEADS for captioned images; when the
+   *  image turns out non-construction, the caption falls through to the normal
+   *  text agent so a joke/forward still gets a (light) human reply. */
+  caption?: string | null,
 ): Promise<void> {
   let typing: ReturnType<typeof startTyping> | null = null;
   try {
@@ -303,12 +307,18 @@ export async function runVisionForInbound(
       return;
     }
 
-    // NOT a construction image at all (a product ad, a meme, a selfie…) → stay
-    // SILENT on the image. Asking such a sender for "room dimensions" is the
-    // robotic tell (live bug: a forwarded cap ad got a dimensions request —
-    // twice). Any caption still flows through the normal text path.
+    // NOT a construction image at all (a product ad, a meme, a selfie…) → never
+    // ask for "room dimensions" (the robotic tell; live bug: a forwarded cap ad
+    // got a dimensions request — twice). If the image carried a caption, hand it
+    // to the normal TEXT agent now (vision led; the OFF-TOPIC prompt rule gives
+    // jokes/forwards a light human reply). No caption → stay silent.
     if (dims.isPlanLike === false) {
-      console.log('[agent:vision] non-construction image — no dimensions fallback sent');
+      if (caption && caption.trim()) {
+        console.log('[agent:vision] non-construction image — routing caption to the text agent');
+        await runAgentForInbound(conversation, caption, inboundMessageId, 'text');
+      } else {
+        console.log('[agent:vision] non-construction image — no dimensions fallback sent');
+      }
       return;
     }
 

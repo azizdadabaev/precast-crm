@@ -173,10 +173,28 @@ export async function POST(req: NextRequest) {
     // 7. Notify live listeners.
     emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
 
+    // Albums: Telegram delivers a media group as N separate updates — run
+    // vision ONLY on the group's first photo, or the customer gets N identical
+    // replies (live bug: a 2-photo forward → 2 fallbacks).
+    let firstOfMediaGroup = true;
+    if (parsed.mediaGroupId) {
+      const groupCount = await prisma.message.count({
+        where: { conversationId: conversation.id, mediaGroupId: parsed.mediaGroupId },
+      });
+      firstOfMediaGroup = groupCount <= 1; // only the row we just inserted
+    }
+    // For a CAPTIONED image, vision LEADS (one brain at a time): the caption is
+    // handed to runVisionForInbound, which either proceeds with the plan flow or
+    // falls the caption through to the text agent when the image turns out to be
+    // non-construction — otherwise the text agent and the vision pipeline both
+    // answer the same message (live bug: a captioned cap ad got a beam spiel AND
+    // dimension requests).
+    const visionWillRun = mediaKind === "IMAGE" && !!mediaPath && firstOfMediaGroup;
+
     // 8. AI agent (Plan 08 Task 6) — inbound customer TEXT only, fire-and-forget
     //    so the webhook still 200s fast. The agent reads the kill-switch + the
     //    per-chat gate itself and, in Shadow mode, only logs a proposed reply.
-    if (!parsed.outgoing && !parsed.isEdited && parsed.text && parsed.text.trim()) {
+    if (!parsed.outgoing && !parsed.isEdited && parsed.text && parsed.text.trim() && !visionWillRun) {
       void runAgentForInbound(
         {
           id: conversation.id,
@@ -192,17 +210,7 @@ export async function POST(req: NextRequest) {
     // 8b. AI vision (spec §4.5) — inbound floor-plan IMAGE → read dimensions →
     //     echo them back to confirm. Fire-and-forget; image-derived proposals are
     //     always human-reviewed (never auto-sent).
-    //     Albums: Telegram delivers a media group as N separate updates — run
-    //     vision ONLY on the group's first photo, or the customer gets N
-    //     identical replies (live bug: a 2-photo forward → 2 fallbacks).
-    let firstOfMediaGroup = true;
-    if (parsed.mediaGroupId) {
-      const groupCount = await prisma.message.count({
-        where: { conversationId: conversation.id, mediaGroupId: parsed.mediaGroupId },
-      });
-      firstOfMediaGroup = groupCount <= 1; // only the row we just inserted
-    }
-    if (!parsed.outgoing && !parsed.isEdited && mediaKind === "IMAGE" && mediaPath && firstOfMediaGroup) {
+    if (!parsed.outgoing && !parsed.isEdited && visionWillRun && mediaPath) {
       void runVisionForInbound(
         {
           id: conversation.id,
@@ -213,6 +221,7 @@ export async function POST(req: NextRequest) {
         mediaPath,
         "image/jpeg",
         message.id,
+        parsed.text, // caption — falls through to the text agent if the image is non-construction
       ).catch((e) => console.error("[telegram webhook vision]", e));
     }
 
