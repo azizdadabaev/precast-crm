@@ -204,10 +204,16 @@ function Inbox() {
     refetchInterval: 60_000,
   });
 
-  // Multi-channel filter (Telegram / Instagram / …). Tabs render only when the
-  // inbox actually has more than one channel; legacy rows default to TELEGRAM.
+  // Multi-channel switcher (header). Telegram + Instagram always offered; any
+  // future channel (WhatsApp…) joins automatically once it has conversations.
+  // Legacy rows default to TELEGRAM.
   const [channelFilter, setChannelFilter] = useState<string>("ALL");
-  const channelsPresent = Array.from(new Set((conversations ?? []).map((c) => c.channel ?? "TELEGRAM")));
+  const channelCounts: Record<string, number> = {};
+  for (const c of conversations ?? []) {
+    const ch = c.channel ?? "TELEGRAM";
+    channelCounts[ch] = (channelCounts[ch] ?? 0) + 1;
+  }
+  const channelTabs = Array.from(new Set(["TELEGRAM", "INSTAGRAM", ...Object.keys(channelCounts)]));
   const visibleConversations = (conversations ?? []).filter(
     (c) => channelFilter === "ALL" || (c.channel ?? "TELEGRAM") === channelFilter,
   );
@@ -228,7 +234,42 @@ function Inbox() {
     <div className="flex h-full flex-col gap-3">
       <style>{TELEGRAM_CSS}</style>
       <div className="flex shrink-0 items-center justify-between gap-3">
-        <h1 className="text-xl font-bold tracking-tight">Хабарлар<span className="text-muted-foreground"> · Inbox</span></h1>
+        <div className="flex min-w-0 items-center gap-4">
+          <h1 className="text-xl font-bold tracking-tight">Хабарлар<span className="text-muted-foreground"> · Inbox</span></h1>
+          {/* Channel switcher — always visible; the conversation list filters live. */}
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-0.5">
+            <button
+              type="button"
+              onClick={() => setChannelFilter("ALL")}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors",
+                channelFilter === "ALL" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Ҳаммаси
+            </button>
+            {channelTabs.map((ch) => {
+              const meta = CHANNEL_META[ch];
+              const Icon = meta?.icon ?? MessageCircle;
+              const count = channelCounts[ch] ?? 0;
+              return (
+                <button
+                  key={ch}
+                  type="button"
+                  onClick={() => setChannelFilter(ch)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors",
+                    channelFilter === ch ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className={cn("h-3.5 w-3.5", meta?.cls)} />
+                  {meta?.label ?? ch}
+                  <span className="tabular-nums text-[11px] text-muted-foreground">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="flex items-center gap-1.5">
           {/* Simulate an inbound customer message (owner test tool — Plan 09
               Slice B). Runs the agent on the real webhook path with no Telegram. */}
@@ -280,39 +321,6 @@ function Inbox() {
       <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border shadow-sm">
         {/* Left: conversation list */}
         <div className="flex w-[340px] shrink-0 flex-col border-r border-[color:var(--tg-divider)] bg-[var(--tg-panel)]">
-          {/* Channel tabs — appear once >1 channel exists (Telegram / Instagram / …) */}
-          {channelsPresent.length > 1 && (
-            <div className="flex shrink-0 gap-1 border-b border-[color:var(--tg-divider)] px-2 py-1.5">
-              <button
-                type="button"
-                onClick={() => setChannelFilter("ALL")}
-                className={cn(
-                  "rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
-                  channelFilter === "ALL" ? "bg-[var(--tg-accent)] text-white" : "text-[color:var(--tg-text-dim)] hover:bg-[var(--tg-list-hover)]",
-                )}
-              >
-                Ҳаммаси · All
-              </button>
-              {channelsPresent.map((ch) => {
-                const meta = CHANNEL_META[ch];
-                const Icon = meta?.icon ?? MessageCircle;
-                return (
-                  <button
-                    key={ch}
-                    type="button"
-                    onClick={() => setChannelFilter(ch)}
-                    className={cn(
-                      "flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
-                      channelFilter === ch ? "bg-[var(--tg-accent)] text-white" : "text-[color:var(--tg-text-dim)] hover:bg-[var(--tg-list-hover)]",
-                    )}
-                  >
-                    <Icon className={cn("h-3.5 w-3.5", channelFilter === ch ? "text-white" : meta?.cls)} />
-                    {meta?.label ?? ch}
-                  </button>
-                );
-              })}
-            </div>
-          )}
           <div className="flex-1 overflow-y-auto">
             {visibleConversations.map((c) => (
               <button
@@ -347,8 +355,12 @@ function Inbox() {
                 </span>
               </button>
             ))}
-            {conversations && conversations.length === 0 && (
-              <div className="p-6 text-center text-sm text-muted-foreground">Ҳозирча хабарлар йўқ · No messages yet</div>
+            {conversations && visibleConversations.length === 0 && (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                {channelFilter === "ALL"
+                  ? "Ҳозирча хабарлар йўқ · No messages yet"
+                  : `Бу каналда ҳозирча суҳбат йўқ · No ${CHANNEL_META[channelFilter]?.label ?? channelFilter} conversations yet`}
+              </div>
             )}
           </div>
         </div>
