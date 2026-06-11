@@ -131,6 +131,14 @@ export async function sendBusinessProofMedia(input: {
         ? await igSendVideo(conversation.externalId, url)
         : await igSendImage(conversation.externalId, url);
       telegramMsgId = sent.messageId || null;
+      // Instagram attachments carry no caption → deliver it as a follow-up text.
+      if (caption) {
+        try {
+          await igSendText(conversation.externalId, caption);
+        } catch (err) {
+          console.error("[inbox send-proof ig caption]", err);
+        }
+      }
     } catch (err) {
       console.error("[inbox send-proof ig]", err);
       failed = true;
@@ -353,7 +361,9 @@ export async function sendBusinessPhoto(input: {
   const mediaPath = await saveBufferToUploads(input.photo, `inbox/${conversation.id}`, filename);
 
   // Instagram → send the saved image by its public /uploads URL (Meta fetches it;
-  // no staging/file_id like Telegram).
+  // no staging/file_id like Telegram). Instagram's image attachment has NO caption
+  // concept, so a caption is delivered as a separate TEXT message right after the
+  // image — otherwise the customer sees a bare picture while the CRM shows text.
   if (isInstagram) {
     let igMsgId: string | null = null;
     let igFailed = false;
@@ -361,6 +371,14 @@ export async function sendBusinessPhoto(input: {
     try {
       const sent = await igSendImage(conversation.externalId, `${publicBaseUrl()}${mediaPath}`);
       igMsgId = sent.messageId || null;
+      if (caption) {
+        try {
+          await igSendText(conversation.externalId, caption);
+        } catch (err) {
+          // The image made it — don't fail the send over the follow-up text.
+          console.error("[inbox send-photo ig caption]", err);
+        }
+      }
     } catch (err) {
       console.error("[inbox send-photo ig]", err);
       igFailed = true;
