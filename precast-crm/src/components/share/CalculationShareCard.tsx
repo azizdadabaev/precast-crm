@@ -274,6 +274,54 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, Props>(
             </div>
           </div>
 
+          {/* Юклаш рўйхати — beam lengths × counts + total blocks, for the loading
+              operators. Computed from the rows themselves (beamLength/beamCount are
+              already in ShareData), so every render path — Save-PNG, Send-to-chat,
+              and the agent's headless Chromium — gets it with no builder changes. */}
+          {(() => {
+            const groups = new Map<string, number>();
+            for (const r of data.rows) {
+              const key = r.beamLength.toFixed(2);
+              groups.set(key, (groups.get(key) ?? 0) + r.beamCount);
+            }
+            if (groups.size === 0) return null;
+            const chip: React.CSSProperties = {
+              display: "flex", alignItems: "center", gap: 4,
+              borderRadius: 6, border: `1px solid ${cfg.borderColor}`, backgroundColor: cfg.cardBg,
+              paddingLeft: 9, paddingRight: 9, paddingTop: 4, paddingBottom: 4,
+              fontSize: cfg.bodyFontSize + 1,
+            };
+            return (
+              <div style={{
+                borderBottom: `1px solid ${cfg.borderColor}`,
+                backgroundColor: cfg.tableBarBg,
+                paddingLeft: cfg.cellPaddingX, paddingRight: cfg.cellPaddingX,
+                paddingTop: 6, paddingBottom: 8,
+              }}>
+                <div style={{ fontSize: cfg.tableBarFontSize - 1, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: cfg.dimText, marginBottom: 5 }}>
+                  Юклаш рўйхати
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {Array.from(groups.entries()).map(([len, count]) => (
+                    <div key={len} style={chip}>
+                      <span style={{ fontWeight: 600 }}>
+                        {len}
+                        <span style={{ color: cfg.dimText, fontSize: cfg.bodyFontSize - 1, marginLeft: 1 }}>m</span>
+                      </span>
+                      <span style={{ color: cfg.dimText, fontSize: cfg.bodyFontSize - 1 }}>=</span>
+                      <span style={{ fontWeight: 700, ...tabular }}>{count}</span>
+                    </div>
+                  ))}
+                  <div style={{ ...chip, border: "1px solid #fde68a", backgroundColor: "#fffbeb" }}>
+                    <span style={{ fontWeight: 600, color: "#92400e" }}>Ғишт</span>
+                    <span style={{ color: "#b45309", fontSize: cfg.bodyFontSize - 1 }}>=</span>
+                    <span style={{ fontWeight: 700, color: "#92400e", ...tabular }}>{data.totals.blocks}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
             <colgroup>
               {colWidths.map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
