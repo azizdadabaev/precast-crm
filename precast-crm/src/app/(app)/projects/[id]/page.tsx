@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "next/navigation";
+import { useRef, useState } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, FileText, MessageCircle } from "lucide-react";
+import { ArrowLeft, FileText, MessageCircle, ShoppingCart, Loader2 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { SendQuoteToChatButton } from "@/components/inbox/SendQuoteToChatButton";
@@ -25,6 +25,7 @@ interface Project {
   draftNumber: number | null;
   shapeType: string;
   status: "DRAFT" | "ORDERED" | "ARCHIVED";
+  aiGenerated?: boolean;
   conversationId?: string | null;
   dimensions: { width?: number; length?: number; widths?: number[] };
   createdAt: string;
@@ -85,6 +86,20 @@ export default function ProjectDetailPage() {
    *  calculation summary so operators can ship a one-shot image. */
   const shareRef = useRef<HTMLDivElement>(null);
   const tableDesign = useTableDesign();
+  const router = useRouter();
+
+  // One-tap "apply this AI draft to the conversation's existing order" — the
+  // operator half of an order-change request the agent can't perform itself.
+  const [addErr, setAddErr] = useState<string | null>(null);
+  const addToOrder = useMutation({
+    mutationFn: () =>
+      api<{ orderId: string; orderNumber: string }>(`/api/projects/${params.id}/add-to-order`, { method: "POST" }),
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ["projects-all"] });
+      router.push(`/orders/${d.orderId}`);
+    },
+    onError: (e: Error) => setAddErr(e.message),
+  });
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["projects-all"],
@@ -216,6 +231,25 @@ export default function ProjectDetailPage() {
           {canUseBlender && project.calculations.length > 0 && (
             <SendToBlenderButton projectId={project.id} />
           )}
+          {/* AI draft on a conversation that may already have an order → one-tap
+              merge into that order (server validates; 404s when no active order). */}
+          {project.status === "DRAFT" && project.aiGenerated && project.conversationId && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setAddErr(null);
+                addToOrder.mutate();
+              }}
+              disabled={addToOrder.isPending || project.calculations.length === 0}
+            >
+              {addToOrder.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <ShoppingCart className="h-4 w-4 mr-2" />
+              )}
+              {t("Буюртмага қўшиш", "Add to order")}
+            </Button>
+          )}
           {project.status === "ORDERED" && project.orders[0] ? (
             <Button variant="outline" asChild size="sm">
               <Link href={`/orders/${project.orders[0].id}`}>
@@ -231,6 +265,7 @@ export default function ProjectDetailPage() {
           )}
         </div>
       </div>
+      {addErr && <div className="text-sm text-destructive">{addErr}</div>}
 
       {/* Offscreen, fixed-width share card — the actual capture target
           for the "Send" button. Rendering this in addition to the

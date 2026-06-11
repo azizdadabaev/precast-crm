@@ -98,6 +98,36 @@ async function saveDraftAndSendSummary(
     );
     if (!draft) return;
 
+    // The conversation already has an active order → these freshly-quoted rooms
+    // are an ORDER-CHANGE request. The agent cannot write to orders (and its
+    // prompt forbids claiming to) — so alert the operators, linking to the draft
+    // page where the one-tap "Add to order" action lives. Best-effort.
+    try {
+      const existingOrder = await prisma.order.findFirst({
+        where: {
+          project: { conversationId: conversation.id },
+          status: { in: ['PLACED', 'IN_PRODUCTION'] },
+        },
+        orderBy: { placedAt: 'desc' },
+        select: { orderNumber: true },
+      });
+      if (existingOrder) {
+        const { emitNotifications, usersWithPermission } = await import('@/lib/notifications');
+        const { formatDraftNumber } = await import('@/lib/draft-number');
+        const userIds = await usersWithPermission('inbox.access');
+        const draftLabel = draft.draftNumber ? formatDraftNumber(draft.draftNumber) : 'draft';
+        await emitNotifications({
+          type: 'AGENT_ESCALATION',
+          userIds,
+          title: 'Буюртмага ўзгариш сўралди · Order change requested',
+          body: `Mijoz buyurtma №${existingOrder.orderNumber} ga xona qo'shmoqchi — ${draftLabel} ni ochib, "Buyurtmaga qo'shish" bosing`,
+          projectId: draft.projectId,
+        });
+      }
+    } catch (err) {
+      console.error('[agent:order-change-alert]', err);
+    }
+
     // Pixel-identical to the operator's "Send to chat" card (headless screenshot
     // of the real CalculationShareCard; next/og fallback if the browser is
     // unavailable). The customer's text reply stays short — this is the image.

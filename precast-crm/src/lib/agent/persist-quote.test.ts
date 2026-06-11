@@ -1,6 +1,47 @@
 import { describe, it, expect } from 'vitest';
-import { extractQuotedRooms } from './persist-quote';
+import { extractQuotedRooms, resolveDraftIdentity } from './persist-quote';
 import type { LlmMessage } from './llm/provider';
+
+describe('resolveDraftIdentity', () => {
+  it("the order's client (customer-stated name) beats the channel profile (the reported bug)", () => {
+    expect(
+      resolveDraftIdentity({
+        orderedClient: { name: 'Davron aka', phone: '998901234567' },
+        profileName: 'Aziz Dadabaev', // Instagram username — must NOT win
+        sharedPhone: null,
+      }),
+    ).toEqual({ name: 'Davron aka', phone: '998901234567' });
+  });
+
+  it('values already saved on the draft are preserved over the profile on refresh', () => {
+    expect(
+      resolveDraftIdentity({
+        existingTentative: { name: 'Davron aka', phone: '998901234567' },
+        profileName: 'insta_user',
+      }),
+    ).toEqual({ name: 'Davron aka', phone: '998901234567' });
+  });
+
+  it('resolves per FIELD — a draft name with no phone still picks up the shared contact', () => {
+    expect(
+      resolveDraftIdentity({
+        existingTentative: { name: 'Davron aka', phone: null },
+        profileName: 'insta_user',
+        sharedPhone: '+998 93 481 33 30',
+      }),
+    ).toEqual({ name: 'Davron aka', phone: '998934813330' });
+  });
+
+  it('falls back to the channel profile + shared contact when nothing better exists', () => {
+    expect(
+      resolveDraftIdentity({ profileName: '  Aziz Dadabaev  ', sharedPhone: '90 111 22 33' }),
+    ).toEqual({ name: 'Aziz Dadabaev', phone: '998901112233' });
+  });
+
+  it('returns nulls (not empty strings) when no source is usable', () => {
+    expect(resolveDraftIdentity({ profileName: '   ', sharedPhone: ' - ' })).toEqual({ name: null, phone: null });
+  });
+});
 
 /** Build the (assistant tool_use → user tool_result) message pair the loop
  *  produces for a get_quote call. */

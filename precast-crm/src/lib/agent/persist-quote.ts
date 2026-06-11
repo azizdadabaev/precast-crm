@@ -113,6 +113,34 @@ export interface PersistedDraft {
   isNew: boolean;
 }
 
+/** Identity sources for a conversation draft, strongest first. */
+export interface DraftIdentitySources {
+  /** Client on the conversation's most recent ORDERED project — the name/phone
+   *  the customer STATED at order time. */
+  orderedClient?: { name: string; phone: string } | null;
+  /** Tentative fields already saved on the draft being refreshed. */
+  existingTentative?: { name: string | null; phone: string | null } | null;
+  /** Channel profile display name (IG username / TG name) — last resort. */
+  profileName?: string | null;
+  /** Shared-contact phone from the conversation (digits-only). */
+  sharedPhone?: string | null;
+}
+
+/**
+ * Resolve the draft's client identity per field: the real order Client (what the
+ * customer said their name/phone is) > values already on the draft > the channel
+ * profile. An Instagram username must never displace "Davron aka" once the
+ * customer has identified themselves. Pure.
+ */
+export function resolveDraftIdentity(s: DraftIdentitySources): { name: string | null; phone: string | null } {
+  const name = s.orderedClient?.name ?? s.existingTentative?.name ?? (s.profileName?.trim() || null);
+  const phone =
+    s.orderedClient?.phone ??
+    s.existingTentative?.phone ??
+    (s.sharedPhone ? normalizePhone(s.sharedPhone) || null : null);
+  return { name, phone };
+}
+
 /**
  * Create or refresh the agent's DRAFT Project for a conversation and replace its
  * Calculations with the freshly-computed rooms. One agent draft per conversation
@@ -138,16 +166,28 @@ export async function persistConversationDraft(
     length: rooms[0].innerLength,
     notes: `${rooms.length} room${rooms.length === 1 ? '' : 's'} · AI`,
   };
-  const tentativeClientName = conversation.displayName?.trim() || null;
-  const tentativeClientPhone = conversation.sharedContactPhone
-    ? normalizePhone(conversation.sharedContactPhone)
-    : null;
-
   return prisma.$transaction(async (tx) => {
     const existing = await tx.project.findFirst({
       where: { conversationId: conversation.id, aiGenerated: true, status: 'DRAFT' },
-      select: { id: true, draftNumber: true },
+      select: { id: true, draftNumber: true, tentativeClientName: true, tentativeClientPhone: true },
     });
+    // The customer-stated identity (the order's Client, or values already on the
+    // draft) outranks the channel profile name — see resolveDraftIdentity.
+    const orderedProject = await tx.project.findFirst({
+      where: { conversationId: conversation.id, status: 'ORDERED', clientId: { not: null } },
+      orderBy: { updatedAt: 'desc' },
+      select: { client: { select: { name: true, phone: true } } },
+    });
+    const identity = resolveDraftIdentity({
+      orderedClient: orderedProject?.client ?? null,
+      existingTentative: existing
+        ? { name: existing.tentativeClientName, phone: existing.tentativeClientPhone }
+        : null,
+      profileName: conversation.displayName,
+      sharedPhone: conversation.sharedContactPhone,
+    });
+    const tentativeClientName = identity.name;
+    const tentativeClientPhone = identity.phone;
 
     if (existing) {
       await tx.calculation.deleteMany({ where: { projectId: existing.id } });
