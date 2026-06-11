@@ -47,12 +47,16 @@ describe('runGetQuote', () => {
     });
   });
 
-  it('computes delivered weight at ~180 kg per m² of billed floor area', () => {
-    const res = runGetQuote({ inner_width: 4, inner_length: 5 }, deps());
+  it('computes delivered weight at ~180 kg per m² of PHYSICAL (monolith) area — same basis as the CRM card', () => {
+    // 4×5.3 auto-picks Б-Г-Б: the closing beam extends the physical slab past the
+    // billed length, so monolith > billed — the case where the bases differ.
+    // (Live bug: the agent said 6577 kg while its own card image said 6713 kg.)
+    const e = calculateSlab(applyAgentPatternPolicy({ inner_width: 4, inner_length: 5.3 }), DEFAULT_PRICE_CONFIG);
+    expect(e.monolith_area).toBeGreaterThan(e.billed_area); // the distinction is real here
+    const res = runGetQuote({ inner_width: 4, inner_length: 5.3 }, deps());
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const expected = Math.round(res.data.bill_of_materials.billedAreaM2 * 180);
-    expect(res.data.weight_kg).toBe(expected);
+    expect(res.data.weight_kg).toBe(Math.round(e.monolith_area * 180));
     expect(res.data.weight_kg).toBeGreaterThan(0);
   });
 

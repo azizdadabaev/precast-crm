@@ -23,6 +23,9 @@ export interface SlabQuotePayload {
   blockRows: number;
   totalBlocks: number;
   billedArea: number;
+  /** Physical slab area (engine monolith_area) — the basis for delivered-weight
+   *  estimates, matching every CRM surface (card image, projects, orders). */
+  monolithArea: number;
   m2Price: number;
   input: SlabInput; // snapshot of the dimensions that produced this price
   issuedAt: number;
@@ -63,6 +66,7 @@ export function buildSlabQuote(input: SlabInput, opts: BuildSlabQuoteOptions): S
     blockRows: r.block_rows,
     totalBlocks: r.total_blocks,
     billedArea: r.billed_area,
+    monolithArea: r.monolith_area,
     m2Price: r.m2_price,
     input: { ...input }, // defensive copy — a caller mutating `input` later can't corrupt the signed snapshot
     issuedAt,

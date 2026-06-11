@@ -27,8 +27,10 @@ import {
 const DEFAULT_VALIDITY_MS = 24 * 60 * 60 * 1000; // 24h — matches buildSlabQuote
 
 // Delivered-cargo weight (owner-provided): a finished beam-and-block floor weighs
-// ~180 kg per m² of billed floor area. Weight = billed area × 180. Approximate —
-// for a transport estimate, never a binding figure.
+// ~180 kg per m² of PHYSICAL slab area (monolith_area) — the same basis every CRM
+// surface uses (share-card image, projects, orders), so the agent's spoken weight
+// always matches the card it sends. Approximate — a transport estimate, never a
+// binding figure. (Billing stays on billed_area / N×PITCH — pricing is untouched.)
 const FLOOR_KG_PER_M2 = 180;
 
 // Etalon manufactures beams up to 6.30 m. A longer beam (inner_width + 2×bearing
@@ -127,7 +129,7 @@ export function runGetQuote(raw: unknown, deps: GetQuoteDeps): ToolResult<QuoteD
         `escalate for a custom solution, do not quote`,
     );
   }
-  const weight_kg = Math.round(p.billedArea * FLOOR_KG_PER_M2);
+  const weight_kg = Math.round(p.monolithArea * FLOOR_KG_PER_M2);
   return toolOk({
     subtotal: quote.price,
     m2_price: p.m2Price,
