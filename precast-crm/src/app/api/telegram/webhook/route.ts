@@ -9,6 +9,7 @@ import { tgGetFilePath, tgDownloadFile, TELEGRAM_MAX_DOWNLOAD_BYTES } from "@/li
 import { saveBufferToUploads } from "@/lib/uploads";
 import { emitInbox } from "@/lib/inbox-bus";
 import { runAgentForInbound, runVisionForInbound, runVoiceForInbound } from "@/lib/agent/webhook-entry";
+import { enqueueInboundText } from "@/lib/agent/burst";
 import { handleApprovalCallback } from "@/lib/agent/approval-webhook";
 
 const EXT_BY_KIND: Record<string, string> = {
@@ -191,11 +192,12 @@ export async function POST(req: NextRequest) {
     // dimension requests).
     const visionWillRun = mediaKind === "IMAGE" && !!mediaPath && firstOfMediaGroup;
 
-    // 8. AI agent (Plan 08 Task 6) — inbound customer TEXT only, fire-and-forget
-    //    so the webhook still 200s fast. The agent reads the kill-switch + the
-    //    per-chat gate itself and, in Shadow mode, only logs a proposed reply.
+    // 8. AI agent (Plan 08 Task 6) — inbound customer TEXT, fire-and-forget so the
+    //    webhook still 200s fast. Rapid message bursts are COALESCED per
+    //    conversation (burst.ts): the agent reads the whole burst, then replies
+    //    once — never per-message racing duplicate answers.
     if (!parsed.outgoing && !parsed.isEdited && parsed.text && parsed.text.trim() && !visionWillRun) {
-      void runAgentForInbound(
+      enqueueInboundText(
         {
           id: conversation.id,
           aiState: conversation.aiState,
@@ -204,7 +206,8 @@ export async function POST(req: NextRequest) {
         },
         parsed.text,
         message.id,
-      ).catch((e) => console.error("[telegram webhook agent]", e));
+        (conv, joined, ids) => runAgentForInbound(conv, joined, ids),
+      );
     }
 
     // 8b. AI vision (spec §4.5) — inbound floor-plan IMAGE → read dimensions →

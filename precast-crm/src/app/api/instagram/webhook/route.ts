@@ -8,6 +8,7 @@ import { igGetName, igDownloadMedia } from "@/lib/instagram/api";
 import { saveBufferToUploads } from "@/lib/uploads";
 import { emitInbox } from "@/lib/inbox-bus";
 import { runAgentForInbound, runVisionForInbound, runVoiceForInbound } from "@/lib/agent/webhook-entry";
+import { enqueueInboundText } from "@/lib/agent/burst";
 
 /** GET — Meta's subscription handshake: echo hub.challenge iff the verify token matches. */
 export function GET(req: NextRequest): Response {
@@ -90,7 +91,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         sharedContactPhone: conversation.sharedContactPhone,
       };
       if (m.text && m.text.trim()) {
-        void runAgentForInbound(conv, m.text, message.id).catch((e) => console.error("[ig agent]", e));
+        // Bursts coalesce per conversation — one consolidated reply (burst.ts).
+        enqueueInboundText(conv, m.text, message.id, (c, joined, ids) => runAgentForInbound(c, joined, ids));
       } else if (m.media?.kind === "IMAGE" && mediaPath) {
         void runVisionForInbound(conv, mediaPath, "image/jpeg", message.id).catch((e) => console.error("[ig vision]", e));
       } else if (m.media?.kind === "VOICE" && mediaPath) {

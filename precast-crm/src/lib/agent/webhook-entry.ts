@@ -40,12 +40,15 @@ export interface InboundConversation {
 async function generateAndPersistProposal(
   conversation: InboundConversation,
   inboundText: string,
-  inboundMessageId: string,
+  /** All message ids of this (possibly coalesced) inbound batch — excluded from
+   *  history; the LAST one keys the proposal. */
+  inboundMessageIds: string[],
   config: { modelKey: string },
 ): Promise<{ outcome: ShadowOutcome; quotedRooms: RoomInput[]; proofTopics: (string | null)[] }> {
-  // Recent prior turns (this message excluded; media-only rows dropped later).
+  const inboundMessageId = inboundMessageIds[inboundMessageIds.length - 1];
+  // Recent prior turns (this batch excluded; media-only rows dropped later).
   const rows = await prisma.message.findMany({
-    where: { conversationId: conversation.id, id: { not: inboundMessageId }, text: { not: null } },
+    where: { conversationId: conversation.id, id: { notIn: inboundMessageIds }, text: { not: null } },
     orderBy: { createdAt: 'desc' },
     take: HISTORY_LIMIT,
     select: { direction: true, text: true },
@@ -209,10 +212,10 @@ async function sendProofForTurn(
 async function sendCompanyLocation(
   conversation: InboundConversation,
   inboundText: string,
-  inboundMessageId: string,
+  inboundMessageIds: string[],
 ): Promise<void> {
   const rows = await prisma.message.findMany({
-    where: { conversationId: conversation.id, id: { not: inboundMessageId }, text: { not: null } },
+    where: { conversationId: conversation.id, id: { notIn: inboundMessageIds }, text: { not: null } },
     orderBy: { createdAt: 'desc' },
     take: HISTORY_LIMIT,
     select: { direction: true, text: true },
@@ -230,9 +233,12 @@ async function sendCompanyLocation(
 export async function runAgentForInbound(
   conversation: InboundConversation,
   inboundText: string,
-  excludeMessageId: string,
+  /** One id, or the whole coalesced burst's ids (see burst.ts). */
+  excludeMessageId: string | string[],
   source: 'text' | 'image' | 'voice' = 'text',
 ): Promise<void> {
+  const excludeIds = Array.isArray(excludeMessageId) ? excludeMessageId : [excludeMessageId];
+  const lastMessageId = excludeIds[excludeIds.length - 1];
   try {
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
@@ -241,7 +247,7 @@ export async function runAgentForInbound(
     // a bare "lokatsiya?" with no history — is answered directly in Auto mode with
     // the address + a native map pin, skipping the quote flow.
     if (config.mode === 'auto' && detectLocationIntent(inboundText)) {
-      await sendCompanyLocation(conversation, inboundText, excludeMessageId);
+      await sendCompanyLocation(conversation, inboundText, excludeIds);
       return;
     }
 
@@ -253,7 +259,7 @@ export async function runAgentForInbound(
       const { outcome, quotedRooms, proofTopics } = await generateAndPersistProposal(
         conversation,
         inboundText,
-        excludeMessageId,
+        excludeIds,
         config,
       );
 
@@ -263,7 +269,7 @@ export async function runAgentForInbound(
       if (config.mode === 'auto') {
         await applyAutoMode(
           outcome,
-          { conversationId: conversation.id, inboundMessageId: excludeMessageId },
+          { conversationId: conversation.id, inboundMessageId: lastMessageId },
           defaultAutoModeDeps(),
         );
         // Auto only: once the short price has been sent, save the operator-side

@@ -1,6 +1,58 @@
 import { describe, it, expect } from 'vitest';
-import { extractQuotedRooms, resolveDraftIdentity, roomsFingerprint } from './persist-quote';
+import { extractQuotedRooms, resolveDraftIdentity, roomsFingerprint, mergeDraftRooms } from './persist-quote';
 import type { LlmMessage } from './llm/provider';
+
+describe('mergeDraftRooms (one cumulative project per conversation)', () => {
+  const A = { innerWidth: 8.3, innerLength: 4 };
+  const B = { innerWidth: 7, innerLength: 3.6 };
+  const C = { innerWidth: 6, innerLength: 3.4 };
+
+  it('first quote of the conversation → replace (the draft is born)', () => {
+    expect(mergeDraftRooms([], [A])).toEqual({ rooms: [A], changed: true, mode: 'replace' });
+  });
+
+  it('a NEW room quoted alone APPENDS — earlier rooms are never lost (the Dilshodbek bug)', () => {
+    const r = mergeDraftRooms([A], [B]);
+    expect(r.mode).toBe('merge');
+    expect(r.rooms).toEqual([A, B]);
+  });
+
+  it('the trickle pattern accumulates the whole house', () => {
+    const step1 = mergeDraftRooms([], [A]).rooms;
+    const step2 = mergeDraftRooms(step1, [B, C]).rooms;
+    expect(step2).toEqual([A, B, C]);
+  });
+
+  it('the same set re-quoted (any order) → unchanged, no card resend', () => {
+    const r = mergeDraftRooms([A, B], [B, A]);
+    expect(r.changed).toBe(false);
+    expect(r.mode).toBe('unchanged');
+  });
+
+  it('a re-sent SUBSET (customer repeats one room of many) → unchanged', () => {
+    const r = mergeDraftRooms([A, B, C], [B]);
+    expect(r.changed).toBe(false);
+  });
+
+  it('a full re-quote with a correction REPLACES (covers dimension fixes)', () => {
+    const Bfixed = { innerWidth: 7, innerLength: 3.8 };
+    const r = mergeDraftRooms([A, B], [A, Bfixed]);
+    expect(r.mode).toBe('merge'); // B stays (not silently lost), Bfixed appended
+    expect(r.rooms).toEqual([A, B, Bfixed]);
+    // ...whereas re-quoting the full corrected set INCLUDING all kept rooms replaces:
+    const r2 = mergeDraftRooms([A, B], [A, B, Bfixed]);
+    expect(r2.mode).toBe('replace');
+    expect(r2.rooms).toEqual([A, B, Bfixed]);
+  });
+
+  it('is count-aware — two identical bedrooms are preserved as two', () => {
+    const r = mergeDraftRooms([A, A], [A]); // re-sent one of the twin rooms
+    expect(r.changed).toBe(false);
+    const r2 = mergeDraftRooms([A], [A, A]); // second twin added (superset)
+    expect(r2.mode).toBe('replace');
+    expect(r2.rooms).toHaveLength(2);
+  });
+});
 
 describe('roomsFingerprint (re-sent same drawing → no duplicate card)', () => {
   it('identical rooms match even across Decimal-string vs number representations and defaults', () => {

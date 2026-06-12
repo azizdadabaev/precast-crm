@@ -107,6 +107,48 @@ export interface AgentDraftConversation {
   sharedContactPhone?: string | null;
 }
 
+const fpCounts = (fps: string[]): Map<string, number> =>
+  fps.reduce((m, f) => m.set(f, (m.get(f) ?? 0) + 1), new Map<string, number>());
+
+/**
+ * Decide how this turn's quoted rooms combine with the draft's existing rooms —
+ * a customer often describes their house room by room across separate messages
+ * (live bug: each new message OVERWROTE the draft, so a 5-room house ended as a
+ * 1-room draft). Count-aware (houses really do have two identical bedrooms):
+ *   - turn ≡ existing (same multiset)  → unchanged (no rewrite, no card resend)
+ *   - turn ⊆ existing (re-sent some)   → unchanged
+ *   - turn ⊇ existing (full re-quote / correction of the full set) → replace
+ *   - otherwise → MERGE: keep existing, append the genuinely new rooms — rooms
+ *     are never silently lost; a stale room is operator-fixable, a vanished one
+ *     isn't. Pure.
+ */
+export function mergeDraftRooms(
+  existingRooms: RoomInput[],
+  turnRooms: RoomInput[],
+): { rooms: RoomInput[]; changed: boolean; mode: 'unchanged' | 'replace' | 'merge' } {
+  if (existingRooms.length === 0) return { rooms: turnRooms, changed: true, mode: 'replace' };
+  const exFp = existingRooms.map((r) => roomsFingerprint([r]));
+  const newFp = turnRooms.map((r) => roomsFingerprint([r]));
+  const newCounts = fpCounts(newFp);
+  const containsAllExisting = [...fpCounts(exFp)].every(([f, c]) => (newCounts.get(f) ?? 0) >= c);
+  if (containsAllExisting && newFp.length === exFp.length) {
+    return { rooms: existingRooms, changed: false, mode: 'unchanged' };
+  }
+  if (containsAllExisting) return { rooms: turnRooms, changed: true, mode: 'replace' };
+
+  // Append only the turn rooms beyond what the draft already holds.
+  const remaining = fpCounts(exFp);
+  const extras: RoomInput[] = [];
+  turnRooms.forEach((r, i) => {
+    const f = newFp[i];
+    const have = remaining.get(f) ?? 0;
+    if (have > 0) remaining.set(f, have - 1);
+    else extras.push(r);
+  });
+  if (extras.length === 0) return { rooms: existingRooms, changed: false, mode: 'unchanged' };
+  return { rooms: [...existingRooms, ...extras], changed: true, mode: 'merge' };
+}
+
 export interface PersistedDraft {
   projectId: string;
   draftNumber: number | null;
@@ -193,14 +235,7 @@ export async function persistConversationDraft(
   // Same GBG→Г-Б round-up the get_quote tool applied, so the saved draft (and any
   // order it becomes) matches the price the customer was quoted.
   const policyRooms = rooms.map(withAgentPatternPolicy);
-  const { computed } = computeOrderTotals(policyRooms, NO_EXTRAS, pricing);
-  const calcs = computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i }));
 
-  const dimensions = {
-    width: rooms[0].innerWidth,
-    length: rooms[0].innerLength,
-    notes: `${rooms.length} room${rooms.length === 1 ? '' : 's'} · AI`,
-  };
   return prisma.$transaction(async (tx) => {
     const existing = await tx.project.findFirst({
       where: { conversationId: conversation.id, aiGenerated: true, status: 'DRAFT' },
@@ -212,20 +247,43 @@ export async function persistConversationDraft(
         calculations: {
           orderBy: { seq: 'asc' },
           select: {
-            innerWidth: true, innerLength: true, bearing: true, correction: true,
+            name: true, innerWidth: true, innerLength: true, bearing: true, correction: true,
             extraBeams: true, forceStartBeam: true, patternOverride: true,
+            m2PriceOverride: true, m2Price: true, m2PriceReason: true,
           },
         },
       },
     });
 
-    // Same rooms as already saved (customer re-sent the same drawing / repeated
-    // dimensions)? Nothing to rewrite — and the caller must NOT re-send the
-    // summary card. Compare on the policy-adjusted inputs the calcs were
-    // persisted from.
-    if (existing && roomsFingerprint(existing.calculations) === roomsFingerprint(policyRooms)) {
+    // ONE cumulative project per conversation: this turn's rooms MERGE with what
+    // the draft already holds (a house arrives room by room) — identical set or a
+    // re-sent subset changes nothing (and the caller skips the card resend); a
+    // full re-quote replaces; new rooms append. See mergeDraftRooms.
+    const existingRooms: RoomInput[] = (existing?.calculations ?? []).map((c) => ({
+      name: c.name,
+      innerWidth: Number(c.innerWidth),
+      innerLength: Number(c.innerLength),
+      bearing: Number(c.bearing),
+      correction: Number(c.correction),
+      extraBeams: c.extraBeams,
+      forceStartBeam: c.forceStartBeam,
+      patternOverride: c.patternOverride as RoomInput['patternOverride'],
+      m2PriceOverride: c.m2PriceOverride,
+      m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
+      m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
+    }));
+    const merge = mergeDraftRooms(existingRooms, policyRooms);
+    if (existing && !merge.changed) {
       return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: false };
     }
+
+    const { computed } = computeOrderTotals(merge.rooms, NO_EXTRAS, pricing);
+    const calcs = computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i }));
+    const dimensions = {
+      width: merge.rooms[0].innerWidth,
+      length: merge.rooms[0].innerLength,
+      notes: `${merge.rooms.length} room${merge.rooms.length === 1 ? '' : 's'} · AI`,
+    };
     // The customer-stated identity (the order's Client, or values already on the
     // draft) outranks the channel profile name — see resolveDraftIdentity.
     const orderedProject = await tx.project.findFirst({
