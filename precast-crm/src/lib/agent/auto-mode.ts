@@ -87,9 +87,25 @@ export async function routeToHuman(conversationId: string, reason: string): Prom
 export function defaultAutoModeDeps(): AutoModeDeps {
   return {
     send: async (conversationId, text) => {
-      const { sendBusinessReply } = await import('@/lib/inbox-send');
-      const r = await sendBusinessReply({ conversationId, text, userId: null });
-      return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+      const { sendBusinessReply, sendBusinessTyping } = await import('@/lib/inbox-send');
+      const { splitIntoBubbles, bubbleDelayMs } = await import('./bubbles');
+      // Text like a person: send the reply as 1–3 short bubbles with a typing
+      // pause between. The first bubble's failure routes to a human; a later
+      // bubble failing is logged but the customer already has the substance.
+      const bubbles = splitIntoBubbles(text);
+      for (let idx = 0; idx < bubbles.length; idx++) {
+        if (idx > 0) {
+          await sendBusinessTyping(conversationId);
+          await new Promise((r) => setTimeout(r, bubbleDelayMs(bubbles[idx])));
+        }
+        const r = await sendBusinessReply({ conversationId, text: bubbles[idx], userId: null });
+        if (!r.ok) {
+          if (idx === 0) return { ok: false, reason: r.reason };
+          console.error('[auto bubble] later bubble failed:', r.reason);
+          break;
+        }
+      }
+      return { ok: true };
     },
     routeToHuman,
     markSent: async (inboundMessageId) => {
