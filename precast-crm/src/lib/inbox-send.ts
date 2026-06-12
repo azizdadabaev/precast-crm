@@ -21,6 +21,18 @@ export interface SentMessage {
   createdAt: Date;
 }
 
+/** Translate Telegram's cryptic Business-API errors into operator-readable
+ *  bilingual text (shown in the send-failure toast). Pass-through otherwise. */
+function humanizeTelegramSendError(raw: string): string {
+  if (raw.includes("BUSINESS_PEER_INVALID")) {
+    return (
+      "Мижоз чатни ўчирган ёки бизнес аккаунтни блоклаган кўринади — бу чатга энди ёзиб бўлмайди · " +
+      "The customer appears to have deleted this chat or blocked the business account, so it can no longer receive messages."
+    );
+  }
+  return raw;
+}
+
 export type SendBusinessReplyResult =
   | { ok: true; message: SentMessage }
   // SEND_FAILED still persisted a failed bubble (returned in `message`) so the UI
@@ -418,7 +430,7 @@ export async function sendBusinessPhoto(input: {
   } catch (err) {
     console.error("[inbox send-photo]", err);
     failed = true;
-    detail = err instanceof Error ? err.message : String(err);
+    detail = humanizeTelegramSendError(err instanceof Error ? err.message : String(err));
   }
 
   const message = await persistOutboundPhoto(conversation.id, mediaPath, caption, telegramMsgId, input.userId, failed);
