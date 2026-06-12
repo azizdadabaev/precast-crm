@@ -10,6 +10,11 @@ import { COMPANY_LOCATION } from './location';
 export interface OutboundContext {
   /** A fresh quote_id was minted on THIS turn, so a price is allowed to appear. */
   hasFreshQuote: boolean;
+  /** The live published starting rate (lowest m² tier, UZS). This ONE amount may
+   *  appear without a quote_id — it's injected into the prompt from the owner's
+   *  price list ("140 000 so'mdan boshlanadi"). Any OTHER price still requires a
+   *  fresh quote. */
+  startingTierPrice?: number;
 }
 
 export type OutboundVerdict = { ok: true } | { ok: false; reason: string };
@@ -35,8 +40,18 @@ export function validateOutbound(message: string, ctx: OutboundContext): Outboun
   if (URL_RE.test(linkScan)) {
     return { ok: false, reason: 'outgoing message contains a link (the bot never sends links)' };
   }
-  if (PRICE_RE.test(message) && !ctx.hasFreshQuote) {
-    return { ok: false, reason: 'price present without a fresh quote_id this turn' };
+  if (!ctx.hasFreshQuote) {
+    // Without a fresh quote_id, every price-shaped mention must be EXACTLY the
+    // published starting rate (compared digit-for-digit), else block. With a
+    // fresh quote, prices are allowed as before.
+    const allowedDigits =
+      ctx.startingTierPrice != null ? String(Math.round(ctx.startingTierPrice)) : null;
+    for (const m of message.matchAll(new RegExp(PRICE_RE.source, 'giu'))) {
+      const digits = m[0].replace(/\D/g, '');
+      if (allowedDigits === null || digits !== allowedDigits) {
+        return { ok: false, reason: 'price present without a fresh quote_id this turn' };
+      }
+    }
   }
   return { ok: true };
 }

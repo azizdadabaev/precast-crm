@@ -116,11 +116,22 @@ export async function runAgentShadow(input: ShadowInput, deps: ShadowDeps): Prom
   }
 
   const system = buildSystemPrompt({ kbContent: deps.kbContent, language, fewShot: deps.fewShot, startingTier: deps.startingTier });
-  const forceFirstTool: LlmToolChoice | undefined = detectPriceIntent(screened.normalized) ? { type: 'required' } : undefined;
+  // Force a quote tool only when the price question carries NUMBERS (dimensions/
+  // quantities to compute on). A bare "Narxi qancha?" is answered from the
+  // injected STARTING RATE — forcing a tool there has nothing to compute.
+  const forceFirstTool: LlmToolChoice | undefined =
+    detectPriceIntent(screened.normalized) && /\d/.test(screened.normalized) ? { type: 'required' } : undefined;
 
   const result = await runAgentTurn(
     { system, history: input.history, inbound: screened.normalized, forceFirstTool },
-    { provider: deps.provider, tools: deps.tools, ctx: deps.ctx, maxTurns: deps.maxTurns, maxTokens: deps.maxTokens },
+    {
+      provider: deps.provider,
+      tools: deps.tools,
+      ctx: deps.ctx,
+      maxTurns: deps.maxTurns,
+      maxTokens: deps.maxTokens,
+      startingTierPrice: deps.startingTier?.price,
+    },
   );
 
   const entry = baseEntry(result.decision, result);

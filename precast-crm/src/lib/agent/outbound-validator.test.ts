@@ -16,6 +16,20 @@ describe('validateOutbound', () => {
     expect(validateOutbound("Jami narx: 300 000 so'm.", { hasFreshQuote: true })).toEqual({ ok: true });
   });
 
+  it('allows the published STARTING RATE without a quote (the "dan boshlanadi" answer)', () => {
+    const ctx = { hasFreshQuote: false, startingTierPrice: 140_000 };
+    expect(validateOutbound("1 m² narxi 140 000 so'mdan boshlanadi 🙂", ctx)).toEqual({ ok: true });
+    expect(validateOutbound('1 м² нархи 140 000 сўмдан бошланади', ctx)).toEqual({ ok: true });
+    expect(validateOutbound("Narxi 140,000 so'm atrofida boshlanadi", ctx)).toEqual({ ok: true }); // comma grouping
+  });
+
+  it('still blocks any OTHER price without a quote, even when a starting rate exists', () => {
+    const ctx = { hasFreshQuote: false, startingTierPrice: 140_000 };
+    expect(validateOutbound("Jami 10 350 000 so'm chiqadi", ctx).ok).toBe(false);
+    // Mixed: starting rate + an invented total → still blocked.
+    expect(validateOutbound("140 000 so'mdan boshlanadi, jami 2 800 000 so'm bo'ladi", ctx).ok).toBe(false);
+  });
+
   it('matches Russian/Cyrillic currency too', () => {
     expect(validateOutbound('Цена 450 000 сум', { hasFreshQuote: false }).ok).toBe(false);
   });

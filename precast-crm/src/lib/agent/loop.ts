@@ -118,6 +118,9 @@ export interface AgentTurnDeps {
   maxTurns?: number;
   /** Per-call output cap. */
   maxTokens?: number;
+  /** Published starting rate (lowest m² tier, UZS) — the ONE price the outbound
+   *  validator allows without a fresh quote_id (the "dan boshlanadi" answer). */
+  startingTierPrice?: number;
 }
 
 export interface AgentTurnResult {
@@ -188,7 +191,7 @@ export async function runAgentTurn(
     // No tool calls → this is the final reply. Validate before returning it.
     if (res.toolCalls.length === 0) {
       const reply = res.text.trim();
-      const verdict = validateOutbound(reply, { hasFreshQuote: freshQuote });
+      const verdict = validateOutbound(reply, { hasFreshQuote: freshQuote, startingTierPrice: deps.startingTierPrice });
       return verdict.ok ? done({ action: 'reply', reply }) : done({ action: 'blocked', reason: verdict.reason });
     }
 
