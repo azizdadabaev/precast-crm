@@ -109,7 +109,7 @@ describe('buildSystemPrompt', () => {
     const p = buildSystemPrompt(base);
     expect(p).toContain('# EXAMPLE EXCHANGES'); // built-in persona few-shot is always present
     expect(p).toContain('RADIOACTIVE'); // the never-send-verbatim guard
-    expect(p).toContain("1 m² <BOSHLANG_ICH_NARX> so'mdan boshlanadi"); // a persona example
+    expect(p).toContain("Narxlar o'zgardimi?"); // the terse persona few-shot ("Yo'q.")
     // Owner few-shot is appended after the built-in block.
     expect(buildSystemPrompt({ ...base, fewShot: 'Q: owner-line A: owner-ans' })).toContain('owner-line');
   });
