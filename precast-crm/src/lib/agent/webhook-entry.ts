@@ -103,6 +103,15 @@ async function saveDraftAndSendSummary(
     );
     if (!draft) return;
 
+    // The customer re-sent the same drawing / repeated the same dimensions —
+    // the draft is untouched and the summary card was already sent. Re-sending
+    // the identical card + correction note is the #1 bot tell (live: 3 identical
+    // cards in 10 minutes). Stay quiet; the agent's text reply already went out.
+    if (!draft.changed) {
+      console.log('[agent:draft+summary] rooms unchanged — skipping duplicate card/notes');
+      return;
+    }
+
     // The conversation already has an active order → these freshly-quoted rooms
     // are an ORDER-CHANGE request. The agent cannot write to orders (and its
     // prompt forbids claiming to) — so alert the operators, linking to the draft

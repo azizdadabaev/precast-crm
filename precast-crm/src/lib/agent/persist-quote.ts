@@ -111,6 +111,41 @@ export interface PersistedDraft {
   projectId: string;
   draftNumber: number | null;
   isNew: boolean;
+  /** False when the freshly-quoted rooms are IDENTICAL to what the draft already
+   *  holds — the caller then skips re-sending the summary image/notes (live bug:
+   *  a customer re-sending the same drawing got the same card 3× in 10 min). */
+  changed: boolean;
+}
+
+const num3 = (v: unknown): string => Number(v).toFixed(3);
+
+/**
+ * Canonical fingerprint of a room list — every field that affects the engine,
+ * defaults normalized, numbers fixed to 3dp (Decimal/float noise immune).
+ * Order-sensitive (the same plan yields the same order). Pure.
+ */
+export function roomsFingerprint(
+  rooms: ReadonlyArray<{
+    innerWidth: unknown;
+    innerLength: unknown;
+    bearing?: unknown;
+    correction?: unknown;
+    extraBeams?: number | null;
+    forceStartBeam?: boolean | null;
+    patternOverride?: string | null;
+  }>,
+): string {
+  return JSON.stringify(
+    rooms.map((r) => [
+      num3(r.innerWidth),
+      num3(r.innerLength),
+      num3(r.bearing ?? 0.15),
+      num3(r.correction ?? 0),
+      r.extraBeams ?? 0,
+      !!r.forceStartBeam,
+      r.patternOverride ?? null,
+    ]),
+  );
 }
 
 /** Identity sources for a conversation draft, strongest first. */
@@ -169,8 +204,28 @@ export async function persistConversationDraft(
   return prisma.$transaction(async (tx) => {
     const existing = await tx.project.findFirst({
       where: { conversationId: conversation.id, aiGenerated: true, status: 'DRAFT' },
-      select: { id: true, draftNumber: true, tentativeClientName: true, tentativeClientPhone: true },
+      select: {
+        id: true,
+        draftNumber: true,
+        tentativeClientName: true,
+        tentativeClientPhone: true,
+        calculations: {
+          orderBy: { seq: 'asc' },
+          select: {
+            innerWidth: true, innerLength: true, bearing: true, correction: true,
+            extraBeams: true, forceStartBeam: true, patternOverride: true,
+          },
+        },
+      },
     });
+
+    // Same rooms as already saved (customer re-sent the same drawing / repeated
+    // dimensions)? Nothing to rewrite — and the caller must NOT re-send the
+    // summary card. Compare on the policy-adjusted inputs the calcs were
+    // persisted from.
+    if (existing && roomsFingerprint(existing.calculations) === roomsFingerprint(policyRooms)) {
+      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: false };
+    }
     // The customer-stated identity (the order's Client, or values already on the
     // draft) outranks the channel profile name — see resolveDraftIdentity.
     const orderedProject = await tx.project.findFirst({
@@ -200,7 +255,7 @@ export async function persistConversationDraft(
           calculations: { create: calcs },
         },
       });
-      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false };
+      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: true };
     }
 
     const maxAgg = await tx.project.aggregate({ _max: { draftNumber: true } });
@@ -219,6 +274,6 @@ export async function persistConversationDraft(
       },
       select: { id: true, draftNumber: true },
     });
-    return { projectId: created.id, draftNumber: created.draftNumber, isNew: true };
+    return { projectId: created.id, draftNumber: created.draftNumber, isNew: true, changed: true };
   });
 }

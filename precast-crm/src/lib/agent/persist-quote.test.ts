@@ -1,6 +1,34 @@
 import { describe, it, expect } from 'vitest';
-import { extractQuotedRooms, resolveDraftIdentity } from './persist-quote';
+import { extractQuotedRooms, resolveDraftIdentity, roomsFingerprint } from './persist-quote';
 import type { LlmMessage } from './llm/provider';
+
+describe('roomsFingerprint (re-sent same drawing → no duplicate card)', () => {
+  it('identical rooms match even across Decimal-string vs number representations and defaults', () => {
+    const fresh = [{ innerWidth: 4, innerLength: 10.35, correction: 0.1, patternOverride: 'GB' }];
+    const persisted = [{
+      innerWidth: '4', innerLength: '10.350', bearing: '0.15', correction: '0.100',
+      extraBeams: 0, forceStartBeam: false, patternOverride: 'GB',
+    }];
+    expect(roomsFingerprint(persisted)).toBe(roomsFingerprint(fresh));
+  });
+
+  it('a changed dimension produces a different fingerprint', () => {
+    expect(roomsFingerprint([{ innerWidth: 4, innerLength: 10.35 }])).not.toBe(
+      roomsFingerprint([{ innerWidth: 4, innerLength: 6.47 }]),
+    );
+  });
+
+  it('an added room produces a different fingerprint', () => {
+    const one = [{ innerWidth: 4, innerLength: 10.35 }];
+    expect(roomsFingerprint([...one, { innerWidth: 3.97, innerLength: 6.47 }])).not.toBe(roomsFingerprint(one));
+  });
+
+  it('pattern/extras changes are detected', () => {
+    expect(roomsFingerprint([{ innerWidth: 4, innerLength: 5, extraBeams: 1 }])).not.toBe(
+      roomsFingerprint([{ innerWidth: 4, innerLength: 5 }]),
+    );
+  });
+});
 
 describe('resolveDraftIdentity', () => {
   it("the order's client (customer-stated name) beats the channel profile (the reported bug)", () => {
