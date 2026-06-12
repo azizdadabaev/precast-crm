@@ -219,7 +219,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
       [
         '# STARTING RATE (live from the owner\'s price list — the ONE price you may state without a tool call)',
         `Beam-and-block flooring starts at ${fmtUzs(t.price)} so'm per m² (for beam length up to ${String(t.maxBeamLengthM).replace('.', ',')} m).`,
-        `When a customer asks the price WITHOUT giving dimensions: answer with this starting rate right away — "1 m² narxi ${fmtUzs(t.price)} so'mdan boshlanadi" — add ONE short line that this usually comes out cheaper than hollow-core panels (pustotka/plita), then ask for the room's inner width × length to calculate the exact total. Do NOT lead with a clarifying question instead of the price.`,
+        `When a customer asks the price WITHOUT giving dimensions: answer with this starting rate right away — "1 m² narxi ${fmtUzs(t.price)} so'mdan boshlanadi". Then add ONE short, informative line explaining WHY it's a starting price: the m² rate depends on beam length — it's lowest for shorter spans (balka ${String(t.maxBeamLengthM).replace('.', ',')} m gacha) and rises for longer rooms, so the exact figure needs their dimensions. E.g. "Narx balka uzunligiga qarab ortadi, aniq hisob uchun xona o'lchamini ayting." Then ask for the room's inner width × length. Do NOT volunteer comparisons to other products (pustotka/plita), and do NOT open with a clarifying question instead of the price. Never state a second, higher price figure here — only the starting rate; the exact total comes from the quote tool.`,
         'Always frame it as "dan boshlanadi" (starts from) — the exact total still requires the quote tool on real dimensions.',
       ].join('\n'),
     );

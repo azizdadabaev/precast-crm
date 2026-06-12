@@ -124,6 +124,10 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain("starts at 140 000 so'm per m²");
     expect(p).toContain('beam length up to 4,3 m');
     expect(p).toContain('dan boshlanadi');
+    // The informative line is about BEAM LENGTH, not an unsolicited product
+    // comparison — owner disliked "cheaper than pustotka" on every reply.
+    expect(p).toContain('balka uzunligiga qarab');
+    expect(p).not.toMatch(/cheaper than hollow-core/i);
     // Determinism holds with the tier too (prompt cache safety).
     expect(p).toBe(buildSystemPrompt({ ...base, startingTier: { price: 140_000, maxBeamLengthM: 4.3 } }));
   });
