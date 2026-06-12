@@ -105,9 +105,13 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt({ ...base, language: 'uz-cyrillic' })).toContain('Uzbek (Cyrillic script)');
   });
 
-  it('injects few-shot examples only when provided', () => {
-    expect(buildSystemPrompt(base)).not.toContain('EXAMPLE EXCHANGES');
-    expect(buildSystemPrompt({ ...base, fewShot: 'Q: ... A: ...' })).toContain('# EXAMPLE EXCHANGES');
+  it('always includes the built-in persona few-shot, and appends owner-provided examples', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('# EXAMPLE EXCHANGES'); // built-in persona few-shot is always present
+    expect(p).toContain('RADIOACTIVE'); // the never-send-verbatim guard
+    expect(p).toContain("1 m² <BOSHLANG_ICH_NARX> so'mdan boshlanadi"); // a persona example
+    // Owner few-shot is appended after the built-in block.
+    expect(buildSystemPrompt({ ...base, fewShot: 'Q: owner-line A: owner-ans' })).toContain('owner-line');
   });
 
   it('is deterministic (cache-safe — no timestamps/ids)', () => {
