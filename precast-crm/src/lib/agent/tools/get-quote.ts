@@ -37,7 +37,7 @@ const FLOOR_KG_PER_M2 = 180;
 // > 6.30) is a custom / non-standard job — the agent must hand it to staff, never
 // quote a beam we can't make. The pricing tiers extend higher (7.30/8.30) for
 // other purposes, so this cap is enforced here, not by the price table.
-const MAX_BEAM_LENGTH_M = 6.30;
+export const MAX_BEAM_LENGTH_M = 6.30;
 
 // Numeric min/max live in code, not the JSON schema, so the schema stays
 // strict-friendly (spec §4.2 layer 3 — plausibility checks run server-side).
@@ -164,8 +164,8 @@ export const getQuoteDefinition: AgentToolDefinition = {
     additionalProperties: false,
     required: ['inner_width', 'inner_length'],
     properties: {
-      inner_width: { type: 'number', description: 'Inside-wall width, perpendicular to beams (meters).' },
-      inner_length: { type: 'number', description: 'Inside-wall length, parallel to beams (meters).' },
+      inner_width: { type: 'number', description: 'Inside-wall width = the BEAM SPAN (perpendicular to beams), meters. Beams span the SHORTER wall, so put the smaller dimension here; the beam (width + 2 bearings) must stay ≤ 6.30 m. If BOTH walls exceed ~6.0 m, do not quote — escalate (custom job).' },
+      inner_length: { type: 'number', description: 'Inside-wall length, parallel to beams (meters) — usually the LONGER wall.' },
       bearing: { type: 'number', description: 'Beam bearing onto each wall (meters). Default 0.15.' },
       correction: { type: 'number', description: 'Length adjustment before pitch math (meters). Default 0.' },
       extra_beams: { type: 'integer', description: 'Manual extra beams. Default 0.' },

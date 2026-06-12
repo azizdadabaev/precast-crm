@@ -1,6 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { extractQuotedRooms, resolveDraftIdentity, roomsFingerprint, mergeDraftRooms } from './persist-quote';
+import { extractQuotedRooms, resolveDraftIdentity, roomsFingerprint, mergeDraftRooms, feasibleRooms } from './persist-quote';
 import type { LlmMessage } from './llm/provider';
+
+describe('feasibleRooms (no un-buildable beam reaches the draft/card)', () => {
+  it('drops a room whose beam exceeds the 6.30 m max (the 9.35 m live bug)', () => {
+    const rooms = [
+      { innerWidth: 9.05, innerLength: 4 }, // beam 9.35 — infeasible
+      { innerWidth: 4, innerLength: 9.05 }, // beam 4.30 — the right orientation
+    ];
+    expect(feasibleRooms(rooms)).toEqual([{ innerWidth: 4, innerLength: 9.05 }]);
+  });
+
+  it('keeps a room exactly at the max (beam 6.30, width 6.00)', () => {
+    expect(feasibleRooms([{ innerWidth: 6.0, innerLength: 5 }])).toHaveLength(1);
+  });
+
+  it('honors an explicit bearing when computing the beam', () => {
+    // width 6.0 + 2×0.20 = 6.40 > 6.30 → dropped
+    expect(feasibleRooms([{ innerWidth: 6.0, innerLength: 5, bearing: 0.2 }])).toHaveLength(0);
+  });
+});
 
 describe('mergeDraftRooms (one cumulative project per conversation)', () => {
   const A = { innerWidth: 8.3, innerLength: 4 };

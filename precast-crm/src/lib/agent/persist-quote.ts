@@ -20,7 +20,31 @@ import { loadPricingConfig } from '@/lib/pricing-config';
 import { nextDraftNumber } from '@/lib/draft-number';
 import { normalizePhone } from '@/lib/phone';
 import { applyAgentPatternPolicy } from './pattern-policy';
-import type { Pattern } from '@/services/calculation-engine';
+import { MAX_BEAM_LENGTH_M } from './tools/get-quote';
+import { DEFAULT_BEARING, type Pattern } from '@/services/calculation-engine';
+
+/** Beam length a room would need = inner width + a bearing each side. Mirrors the
+ *  engine so the draft can be screened without a full recompute. */
+function roomBeamLength(room: RoomInput): number {
+  const bearing = room.bearing ?? DEFAULT_BEARING;
+  return room.innerWidth + 2 * bearing;
+}
+
+/** Invariant: a draft (and the card the customer sees) must NEVER contain a beam
+ *  the factory can't build. get_quote already escalates an over-long span, but a
+ *  room can still reach persistence (e.g. an exploratory orientation) — drop it
+ *  here so the uncovered engine path never prices an impossible 9.35 m beam. */
+export function feasibleRooms(rooms: RoomInput[]): RoomInput[] {
+  return rooms.filter((r) => {
+    const ok = roomBeamLength(r) <= MAX_BEAM_LENGTH_M + 1e-9;
+    if (!ok) {
+      console.warn(
+        `[agent:draft] dropping room ${r.innerWidth}×${r.innerLength} — beam ${roomBeamLength(r).toFixed(2)}m exceeds ${MAX_BEAM_LENGTH_M}m max`,
+      );
+    }
+    return ok;
+  });
+}
 
 /** Apply the agent's GBG→Г-Б round-up policy to a room (same transform the
  *  get_quote tool applies), keeping the draft in lockstep with the quote. Only
@@ -233,8 +257,11 @@ export async function persistConversationDraft(
 
   const pricing = await loadPricingConfig();
   // Same GBG→Г-Б round-up the get_quote tool applied, so the saved draft (and any
-  // order it becomes) matches the price the customer was quoted.
-  const policyRooms = rooms.map(withAgentPatternPolicy);
+  // order it becomes) matches the price the customer was quoted. Then drop any
+  // room whose beam exceeds what the factory builds — the draft/card invariant
+  // (live bug: a 9.05 m-wide room's 9.35 m beam reached the share card).
+  const policyRooms = feasibleRooms(rooms.map(withAgentPatternPolicy));
+  if (policyRooms.length === 0) return null; // nothing buildable to persist this turn
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.project.findFirst({
