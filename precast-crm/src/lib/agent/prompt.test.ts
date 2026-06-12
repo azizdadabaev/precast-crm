@@ -113,6 +113,24 @@ describe('buildSystemPrompt', () => {
   it('is deterministic (cache-safe — no timestamps/ids)', () => {
     expect(buildSystemPrompt(base)).toBe(buildSystemPrompt(base));
   });
+
+  it('defaults unspecified enquiries to beam-and-block (ad traffic)', () => {
+    expect(buildSystemPrompt(base)).toContain('# DEFAULT PRODUCT — ASSUME BEAM-AND-BLOCK');
+  });
+
+  it('injects the live starting rate (formatted, with the tier beam length) when provided', () => {
+    const p = buildSystemPrompt({ ...base, startingTier: { price: 140_000, maxBeamLengthM: 4.3 } });
+    expect(p).toContain('# STARTING RATE');
+    expect(p).toContain("starts at 140 000 so'm per m²");
+    expect(p).toContain('beam length up to 4,3 m');
+    expect(p).toContain('dan boshlanadi');
+    // Determinism holds with the tier too (prompt cache safety).
+    expect(p).toBe(buildSystemPrompt({ ...base, startingTier: { price: 140_000, maxBeamLengthM: 4.3 } }));
+  });
+
+  it('omits the starting-rate section when no tier is provided', () => {
+    expect(buildSystemPrompt(base)).not.toContain('# STARTING RATE');
+  });
 });
 
 describe('prompt source safety', () => {

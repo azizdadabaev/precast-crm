@@ -51,13 +51,18 @@ async function generateAndPersistProposal(
     select: { direction: true, text: true },
   });
   const history = toLlmHistory(rows.reverse() as HistoryRow[]);
-  const [kbContent, fewShot] = await Promise.all([loadKnowledgeBase(), loadFewShot()]);
+  const { loadPricingConfig } = await import('@/lib/pricing-config');
+  const [kbContent, fewShot, pricing] = await Promise.all([loadKnowledgeBase(), loadFewShot(), loadPricingConfig()]);
+  // The live lowest m²-tier lets the agent answer a bare "narxi qancha?" with a
+  // truthful "starts from" figure (follows /pricing edits automatically).
+  const lowestTier = pricing.m2_price_tiers[0];
+  const startingTier = lowestTier ? { price: lowestTier.price, maxBeamLengthM: lowestTier.max_beam_length } : undefined;
   // Model is owner-selected via the control panel (config.modelKey); the API key
   // resolves from UI-saved DB keys → env.
   const provider = await createProviderForModelKey(config.modelKey);
   const outcome = await runAgentShadow(
     { conversationId: conversation.id, history, inboundRaw: inboundText },
-    { provider, tools: createToolRegistry(), kbContent, fewShot, ctx: { sharedContactPhone: conversation.sharedContactPhone } },
+    { provider, tools: createToolRegistry(), kbContent, fewShot, startingTier, ctx: { sharedContactPhone: conversation.sharedContactPhone } },
   );
   await saveAgentProposal(outcome, { conversationId: conversation.id, inboundMessageId, modelKey: config.modelKey });
   // Rooms the agent priced THIS turn (from the get_quote tool inputs in the turn

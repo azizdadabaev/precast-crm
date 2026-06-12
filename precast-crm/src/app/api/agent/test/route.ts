@@ -53,6 +53,13 @@ export const POST = withPermission("inbox.access", async (req: NextRequest) => {
         tools: createToolRegistry(),
         kbContent: await loadKnowledgeBase(),
         fewShot: await loadFewShot(),
+        startingTier: await (async () => {
+          // Same live starting-rate injection the webhook uses, so the test
+          // console reproduces real behavior on a bare "narxi qancha?".
+          const { loadPricingConfig } = await import("@/lib/pricing-config");
+          const t = (await loadPricingConfig()).m2_price_tiers[0];
+          return t ? { price: t.price, maxBeamLengthM: t.max_beam_length } : undefined;
+        })(),
         log: () => {}, // the response IS the output here
       },
     );

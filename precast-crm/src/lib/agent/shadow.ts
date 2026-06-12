@@ -6,7 +6,7 @@
 // tools) → a structured log entry. Auto-send is a later rollout stage (Plan 09).
 
 import { screenInbound, type ScreenResult } from './inbound-screen';
-import { detectConversationLanguage, detectPriceIntent, buildSystemPrompt } from './prompt';
+import { detectConversationLanguage, detectPriceIntent, buildSystemPrompt, type StartingTier } from './prompt';
 import { runAgentTurn, type AgentDecision, type AgentTurnResult } from './loop';
 import type { LlmMessage, LlmProvider, LlmToolChoice } from './llm/provider';
 import type { ToolRegistry } from './tools/registry';
@@ -50,6 +50,8 @@ export interface ShadowDeps {
   kbContent: string;
   /** Optional owner-provided, native-reviewed few-shot block. */
   fewShot?: string;
+  /** Live lowest m²-price tier — lets the agent state a "starts from" price. */
+  startingTier?: StartingTier;
   ctx?: AgentToolContext;
   maxTurns?: number;
   maxTokens?: number;
@@ -113,7 +115,7 @@ export async function runAgentShadow(input: ShadowInput, deps: ShadowDeps): Prom
     return { screened, language, escalatedEarly: true, decision, entry };
   }
 
-  const system = buildSystemPrompt({ kbContent: deps.kbContent, language, fewShot: deps.fewShot });
+  const system = buildSystemPrompt({ kbContent: deps.kbContent, language, fewShot: deps.fewShot, startingTier: deps.startingTier });
   const forceFirstTool: LlmToolChoice | undefined = detectPriceIntent(screened.normalized) ? { type: 'required' } : undefined;
 
   const result = await runAgentTurn(
