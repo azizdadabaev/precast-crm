@@ -122,16 +122,16 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt(base)).toContain('# DEFAULT PRODUCT — ASSUME BEAM-AND-BLOCK');
   });
 
-  it('injects the live starting rate (formatted, with the tier beam length) when provided', () => {
+  it('injects the live starting rate and keeps the no-dimensions answer CONCISE', () => {
     const p = buildSystemPrompt({ ...base, startingTier: { price: 140_000, maxBeamLengthM: 4.3 } });
     expect(p).toContain('# STARTING RATE');
     expect(p).toContain("starts at 140 000 so'm per m²");
-    expect(p).toContain('beam length up to 4,3 m');
     expect(p).toContain('dan boshlanadi');
-    // The informative line is about BEAM LENGTH, not an unsolicited product
-    // comparison — owner disliked "cheaper than pustotka" on every reply.
-    expect(p).toContain('balka uzunligiga qarab');
+    // Owner wants it short: just price + dimensions ask, no beam-length tier
+    // parenthetical and no product comparison on every reply.
+    expect(p).toContain('two short lines');
     expect(p).not.toMatch(/cheaper than hollow-core/i);
+    expect(p).not.toContain('lowest for shorter spans');
     // Determinism holds with the tier too (prompt cache safety).
     expect(p).toBe(buildSystemPrompt({ ...base, startingTier: { price: 140_000, maxBeamLengthM: 4.3 } }));
   });

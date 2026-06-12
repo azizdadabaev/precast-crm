@@ -331,8 +331,8 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     parts.push(
       [
         '# STARTING RATE (live from the owner\'s price list — the ONE price you may state without a tool call)',
-        `Beam-and-block flooring starts at ${fmtUzs(t.price)} so'm per m² (for beam length up to ${String(t.maxBeamLengthM).replace('.', ',')} m).`,
-        `When a customer asks the price WITHOUT giving dimensions: answer with this starting rate right away — "1 m² narxi ${fmtUzs(t.price)} so'mdan boshlanadi". Then add ONE short, informative line explaining WHY it's a starting price: the m² rate depends on beam length — it's lowest for shorter spans (balka ${String(t.maxBeamLengthM).replace('.', ',')} m gacha) and rises for longer rooms, so the exact figure needs their dimensions. E.g. "Narx balka uzunligiga qarab ortadi, aniq hisob uchun xona o'lchamini ayting." Then ask for the room's inner width × length. Do NOT volunteer comparisons to other products (pustotka/plita), and do NOT open with a clarifying question instead of the price. Never state a second, higher price figure here — only the starting rate; the exact total comes from the quote tool.`,
+        `Beam-and-block flooring starts at ${fmtUzs(t.price)} so'm per m².`,
+        `When a customer asks the price WITHOUT giving dimensions: give the starting rate and ask for the room's inner width × length — that's it, two short lines. E.g. "1 m² ${fmtUzs(t.price)} so'mdan boshlanadi. Xonangiz ichki eni va bo'yini tashlang, aniq chiqaray." Do NOT add a beam-length / tier parenthetical like "(… gacha eng arzon)", do NOT compare to other products (pustotka/plita), do NOT open with a clarifying question. The rate rises with beam length, but say that ONLY if the customer asks why — never state a second, higher figure; the exact total comes from the quote tool.`,
         'Always frame it as "dan boshlanadi" (starts from) — the exact total still requires the quote tool on real dimensions.',
       ].join('\n'),
     );
