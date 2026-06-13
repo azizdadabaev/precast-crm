@@ -32,6 +32,11 @@ describe('detectLanguage', () => {
   it('lets an Uzbek signal win over an incidental Russian-looking word', () => {
     expect(detectLanguage('Балка канча стоит')).toBe('uz-cyrillic'); // канча (uz) beats стоит (ru)
   });
+  it('reads the -mi particle as Uzbek and ignores loanwords like dostavka (the reported bug)', () => {
+    expect(detectLanguage('Доставка борми')).toBe('uz-cyrillic'); // борми (uz -mi); доставка is a loanword, not ru
+    expect(detectLanguage('Бор')).toBe('uz-cyrillic');
+    expect(detectLanguage('Доставка?')).toBe('uz-cyrillic'); // a bare loanword defaults to Uzbek now
+  });
   it('falls back when there are no decisive letters', () => {
     expect(detectLanguage('4 x 5 = ?')).toBe('uz-latin');
     expect(detectLanguage('123', 'ru')).toBe('ru');
@@ -58,6 +63,15 @@ describe('detectConversationLanguage', () => {
 
   it('does not treat a stray dimension "x" as an Uzbek-Latin language signal', () => {
     expect(detectConversationLanguage('4x5', [u('Нархи қанча?')])).toBe('uz-cyrillic');
+  });
+
+  it('does not flip an established Uzbek chat to Russian on a weak single word', () => {
+    // One Russian-ish word, no ы, in an Uzbek conversation → stay Uzbek.
+    expect(detectConversationLanguage('Можно?', [u('Нархи қанча?')])).toBe('uz-cyrillic');
+  });
+
+  it('still switches to Russian when the customer clearly writes Russian', () => {
+    expect(detectConversationLanguage('Сколько стоит, когда привезёте?', [u('Нархи қанча?')])).toBe('ru');
   });
 
   it('determines language from the customer, ignoring our own (possibly wrong) replies', () => {

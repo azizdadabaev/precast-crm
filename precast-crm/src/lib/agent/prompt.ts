@@ -20,10 +20,16 @@ export type ReplyLanguage = 'uz-latin' | 'uz-cyrillic' | 'ru';
 const UZ_CYRILLIC_MARKERS = /[ўғқҳЎҒҚҲ]/u;
 // Frequent Uzbek words as customers actually type them in plain Cyrillic.
 const UZ_CYRILLIC_WORDS =
-  /(?<![\p{L}\p{N}])(ассалом\p{L}*|ал[ея]йкум|ва\p{L}*лейкум|салом|яхшимисиз|яхшими|ра[хҳ]мат|канча|неча|булади|буладими|керак|эди|кайерда|каерда|хоп|майли|сизчи|узингиз|хайр|туш[ау]нарли)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(ассалом\p{L}*|ал[ея]йкум|ва\p{L}*лейкум|салом|яхшимисиз|яхшими|ра[хҳ]мат|канча|неча|булади|буладими|керак|керакми|эди|кайерда|каерда|хоп|майли|сизчи|узингиз|хайр|туш[ау]нарли|борми|бор|й[ўу][қк]|учун|нима|қачон|кани|ака|опа)(?![\p{L}\p{N}])/iu;
 const RU_LETTER = /[ыЫ]/u;
+// Genuinely Russian words ONLY. Loanwords Uzbeks routinely use in Cyrillic
+// (доставка, заказ, ремонт, скидка…) are deliberately EXCLUDED — they are not
+// evidence of Russian, and treating them as such answered Uzbek customers in
+// Russian (live bug: "Доставка борми" → a Russian reply).
 const RU_WORDS =
-  /(?<![\p{L}\p{N}])(здравствуйте|привет|добрый|день|сколько|стоит|цен[аыу]|нуж[ен]н?[оа]?|можно|есть|спасибо|пожалуйста|когда|где|что|чем|как|какой|какая|доставка|здесь|россия)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(здравствуйте|привет|добрый|день|сколько|стоит|цен[аыу]|нуж[ен]н?[оа]?|можно|есть|спасибо|пожалуйста|когда|где|что|чем|как|какой|какая|здесь|россия)(?![\p{L}\p{N}])/iu;
+/** How many distinct Russian-word hits a text carries (a strength gauge). */
+const ruWordHits = (t: string): number => (t.match(new RegExp(RU_WORDS.source, 'giu')) ?? []).length;
 const CYRILLIC = /[Ѐ-ӿ]/u;
 const LATIN_LETTER = /[A-Za-z]/u;
 
@@ -64,14 +70,23 @@ export function detectConversationLanguage(
   inbound: string,
   history: ReadonlyArray<{ role: string; content: unknown }>,
 ): ReplyLanguage {
-  if (WORD.test(inbound)) return detectLanguage(inbound);
+  // Most recent CUSTOMER message that carried a real word (our own possibly-drifted
+  // replies are ignored) — the established conversation language.
+  let histLang: ReplyLanguage | null = null;
   for (let i = history.length - 1; i >= 0; i--) {
     const turn = history[i];
     if (turn.role !== 'user') continue;
     const content = typeof turn.content === 'string' ? turn.content : '';
-    if (WORD.test(content)) return detectLanguage(content);
+    if (WORD.test(content)) { histLang = detectLanguage(content); break; }
   }
-  return detectLanguage(inbound);
+  if (!WORD.test(inbound)) return histLang ?? detectLanguage(inbound);
+  const cur = detectLanguage(inbound);
+  // Don't flip an established Uzbek chat to Russian on a WEAK signal — a single
+  // Russian-ish word and no ы. One loanword in an Uzbek conversation isn't Russian.
+  if (cur === 'ru' && histLang && histLang !== 'ru' && !RU_LETTER.test(inbound) && ruWordHits(inbound) <= 1) {
+    return histLang;
+  }
+  return cur;
 }
 
 const LANGUAGE_LABEL: Record<ReplyLanguage, string> = {
@@ -287,7 +302,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     `# EXAMPLE EXCHANGES — TONE & LENGTH ONLY\nThe example sentences are RADIOACTIVE as strings: never send any of them verbatim or near-verbatim. Match their brevity and register, then say it in your own words.\n\n${fewShotBlock}`,
   );
   parts.push(
-    `# REPLY LANGUAGE\nReply in ${LANGUAGE_LABEL[input.language]}. (The calculation summary is sent separately as an image by the system — never type a price table yourself.)`,
+    `# REPLY LANGUAGE\nReply in ${LANGUAGE_LABEL[input.language]} — match the language the customer uses across THIS whole chat, not just their last word. Uzbek written in Cyrillic is normal here; a lone Russian loanword (dostavka, zakaz, remont) is NOT Russian — never switch to Russian over it. (The calculation summary is sent separately as an image by the system — never type a price table yourself.)`,
   );
   return parts.join('\n\n');
 }
