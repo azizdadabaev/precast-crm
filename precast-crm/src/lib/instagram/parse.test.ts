@@ -10,7 +10,7 @@ describe('parseInstagramWebhook', () => {
       ]}],
     });
     expect(msgs).toHaveLength(1);
-    expect(msgs[0]).toMatchObject({ externalId: 'u1', externalMsgId: 'm1', text: 'salom', media: null });
+    expect(msgs[0]).toMatchObject({ externalId: 'u1', externalMsgId: 'm1', text: 'salom', media: null, direction: 'INBOUND' });
   });
 
   it('parses an image attachment', () => {
@@ -35,16 +35,30 @@ describe('parseInstagramWebhook', () => {
     expect(s[0].media?.kind).toBe('OTHER');
   });
 
-  it('drops echoes, empty payloads, and malformed events', () => {
-    expect(parseInstagramWebhook({ object: 'instagram', entry: [{ messaging: [
-      { sender: { id: 'IG' }, message: { mid: 'm3', text: 'hi', is_echo: true } },
-    ]}]})).toEqual([]);
+  it('parses an echo (our own / native-app reply) as OUTBOUND, keyed by the recipient', () => {
+    // sender = our IG account, recipient = the customer → conversation key is the customer.
+    const msgs = parseInstagramWebhook({ object: 'instagram', entry: [{ messaging: [
+      { sender: { id: 'IG' }, recipient: { id: 'u1' }, message: { mid: 'm3', text: 'rahmat, aka', is_echo: true } },
+    ]}]});
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toMatchObject({ externalId: 'u1', externalMsgId: 'm3', text: 'rahmat, aka', direction: 'OUTBOUND' });
+  });
+
+  it('drops empty payloads, read/seen events, and malformed events', () => {
     expect(parseInstagramWebhook({})).toEqual([]);
     expect(parseInstagramWebhook(null)).toEqual([]);
     expect(parseInstagramWebhook({ object: 'page', entry: [] })).toEqual([]);
-    // missing mid or sender → dropped
+    // read/seen/delivery events carry no `message` → dropped
+    expect(parseInstagramWebhook({ object: 'instagram', entry: [{ messaging: [
+      { sender: { id: 'u1' }, recipient: { id: 'IG' }, read: { mid: 'm' } },
+    ]}]})).toEqual([]);
+    // missing mid → dropped (inbound)
     expect(parseInstagramWebhook({ object: 'instagram', entry: [{ messaging: [
       { sender: { id: 'u1' }, message: { text: 'no mid' } },
+    ]}]})).toEqual([]);
+    // echo missing recipient → dropped (no conversation key)
+    expect(parseInstagramWebhook({ object: 'instagram', entry: [{ messaging: [
+      { sender: { id: 'IG' }, message: { mid: 'm4', text: 'x', is_echo: true } },
     ]}]})).toEqual([]);
   });
 

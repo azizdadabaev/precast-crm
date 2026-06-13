@@ -41,6 +41,10 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   for (const m of msgs) {
     try {
+      // OUTBOUND = an echo of a message we/the owner sent (incl. from the native
+      // Instagram app). We mirror it into the inbox for thread parity with
+      // Telegram, but never mark unread and never run the agent on our own message.
+      const outbound = m.direction === "OUTBOUND";
       const snippet = (m.text ?? (m.media ? "[media]" : "")).slice(0, 80);
       const conversation = await prisma.conversation.upsert({
         where: { channel_externalId: { channel: "INSTAGRAM", externalId: m.externalId } },
@@ -50,12 +54,13 @@ export async function POST(req: NextRequest): Promise<Response> {
           displayName: await igGetName(m.externalId),
           lastMessageAt: new Date(),
           lastSnippet: snippet,
-          unread: true,
+          unread: !outbound,
         },
-        update: { lastMessageAt: new Date(), lastSnippet: snippet, unread: true },
+        update: { lastMessageAt: new Date(), lastSnippet: snippet, ...(outbound ? {} : { unread: true }) },
       });
 
-      // Download image/voice for the vision/voice pipeline (best-effort).
+      // Download image/voice (best-effort) — for inbound vision/voice, and so an
+      // outbound photo the owner sent from the app still shows in the thread.
       let mediaPath: string | null = null;
       if (m.media && (m.media.kind === "IMAGE" || m.media.kind === "VOICE")) {
         try {
@@ -72,16 +77,19 @@ export async function POST(req: NextRequest): Promise<Response> {
         where: { conversationId_telegramMsgId: { conversationId: conversation.id, telegramMsgId: m.externalMsgId } },
         create: {
           conversationId: conversation.id,
-          direction: "INBOUND",
+          direction: outbound ? "OUTBOUND" : "INBOUND",
           text: m.text,
           mediaKind: mediaKind as never,
           mediaPath,
           telegramMsgId: m.externalMsgId, // generic external message id (reused column)
         },
-        update: {}, // duplicate delivery → no-op
+        update: {}, // duplicate delivery (incl. echo of our own API send) → no-op
         select: { id: true },
       });
       emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
+
+      // Never run the agent on our own (outbound) message.
+      if (outbound) continue;
 
       // Dispatch into the channel-agnostic agent pipeline (same as Telegram).
       const conv = {
