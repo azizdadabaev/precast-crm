@@ -142,10 +142,11 @@ export function ChatPickerDialog({
   onClose: () => void;
 }) {
   const t = useT();
-  const { data: chats, isLoading } = useQuery<Conversation[]>({
+  const { data, isLoading } = useQuery<{ conversations: Conversation[]; counts: Record<string, number> }>({
     queryKey: ["inbox-conversations"],
     queryFn: () => api("/api/inbox"),
   });
+  const chats = data?.conversations;
 
   return (
     <Dialog open onOpenChange={(v) => !v && !sending && onClose()}>

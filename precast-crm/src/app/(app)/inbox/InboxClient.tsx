@@ -198,21 +198,19 @@ function Inbox() {
     };
   }, [autolockMin]);
 
-  const { data: conversations } = useQuery({
+  const { data } = useQuery({
     queryKey: ["inbox-conversations"],
-    queryFn: () => api<ConversationSummary[]>("/api/inbox"),
+    queryFn: () => api<{ conversations: ConversationSummary[]; counts: Record<string, number> }>("/api/inbox"),
     refetchInterval: 60_000,
   });
+  const conversations = data?.conversations;
 
   // Multi-channel switcher (header). Telegram + Instagram always offered; any
   // future channel (WhatsApp…) joins automatically once it has conversations.
-  // Legacy rows default to TELEGRAM.
+  // Legacy rows default to TELEGRAM. Counts are REAL DB totals (server groupBy),
+  // not the length of the capped list — so they don't stall at 99 past 100 chats.
   const [channelFilter, setChannelFilter] = useState<string>("ALL");
-  const channelCounts: Record<string, number> = {};
-  for (const c of conversations ?? []) {
-    const ch = c.channel ?? "TELEGRAM";
-    channelCounts[ch] = (channelCounts[ch] ?? 0) + 1;
-  }
+  const channelCounts: Record<string, number> = data?.counts ?? {};
   const channelTabs = Array.from(new Set(["TELEGRAM", "INSTAGRAM", ...Object.keys(channelCounts)]));
   const visibleConversations = (conversations ?? []).filter(
     (c) => channelFilter === "ALL" || (c.channel ?? "TELEGRAM") === channelFilter,
