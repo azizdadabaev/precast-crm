@@ -3,6 +3,8 @@ import {
   tgSendMessageWithInlineKeyboard,
   tgAnswerCallbackQuery,
   tgEditMessageText,
+  humanizeTelegramSendError,
+  isPeerSendError,
 } from './api';
 
 const realFetch = globalThis.fetch;
@@ -92,5 +94,40 @@ describe('tgEditMessageText', () => {
     await tgEditMessageText('chat-1', '7', 'plain');
     const body = lastBody(fn);
     expect(body.reply_markup).toBeUndefined();
+  });
+});
+
+describe('humanizeTelegramSendError', () => {
+  it('explains BUSINESS_PEER_INVALID in operator-readable bilingual text', () => {
+    const out = humanizeTelegramSendError('Telegram sendDocument failed: Bad Request: BUSINESS_PEER_INVALID');
+    expect(out).toContain('blocked the business account');
+    expect(out).toContain('блоклаган');
+    expect(out).not.toContain('BUSINESS_PEER_INVALID');
+  });
+
+  it('explains PEER_ID_INVALID (a lost/stale chat link) and tells the operator to pick another', () => {
+    const out = humanizeTelegramSendError('Telegram sendPhoto failed: Bad Request: PEER_ID_INVALID');
+    expect(out).toContain('pick another chat');
+    expect(out).toContain('Бошқа чат танланг');
+    expect(out).not.toContain('PEER_ID_INVALID');
+  });
+
+  it('passes other errors through unchanged', () => {
+    expect(humanizeTelegramSendError('Telegram sendDocument failed: Bad Request: MESSAGE_TOO_LONG')).toBe(
+      'Telegram sendDocument failed: Bad Request: MESSAGE_TOO_LONG',
+    );
+  });
+});
+
+describe('isPeerSendError', () => {
+  it('flags the destination-peer rejections that warrant a chat picker', () => {
+    expect(isPeerSendError('Telegram sendPhoto failed: Bad Request: PEER_ID_INVALID')).toBe(true);
+    expect(isPeerSendError('Telegram sendMessage failed: Bad Request: BUSINESS_PEER_INVALID')).toBe(true);
+    expect(isPeerSendError('Telegram sendPhoto failed: Bad Request: CHAT_WRITE_FORBIDDEN')).toBe(true);
+  });
+
+  it('does not flag unrelated errors', () => {
+    expect(isPeerSendError('Telegram sendPhoto failed: Bad Request: MESSAGE_TOO_LONG')).toBe(false);
+    expect(isPeerSendError('Telegram staging upload failed: 500')).toBe(false);
   });
 });

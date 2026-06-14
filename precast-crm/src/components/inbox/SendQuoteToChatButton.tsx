@@ -2,7 +2,7 @@
 
 import { useState, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MessageCircle, Loader2, Check } from "lucide-react";
+import { MessageCircle, Loader2, Check, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/lib/fetcher";
 import { ChatAvatar } from "@/components/inbox/ChatAvatar";
+import { matchesSearch } from "@/lib/search-fold";
 import { useT } from "@/lib/i18n";
 
 type Conversation = {
@@ -53,6 +54,9 @@ export function SendQuoteToChatButton({
   const t = useT();
   const [state, setState] = useState<null | "sending" | "sent">(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Set when the picker is opened because the linked chat was unreachable
+  // (vs. opened manually for an unlinked draft) — shown atop the picker.
+  const [pickerNotice, setPickerNotice] = useState<string | null>(null);
 
   async function renderBlob(): Promise<Blob> {
     const node = targetRef.current;
@@ -84,10 +88,24 @@ export function SendQuoteToChatButton({
       const text = await res.text();
       const payload = text ? JSON.parse(text) : {};
       if (!res.ok || payload?.ok === false) {
+        // The destination chat is unreachable (link lost / blocked). Don't
+        // dead-end on an alert — open the picker so the operator can re-target.
+        if (payload?.details?.peerInvalid === true) {
+          setState(null);
+          setPickerNotice(
+            t(
+              "Боғланган чат топилмади. Бошқа чат танланг:",
+              "The linked chat is unreachable. Pick another chat:",
+            ),
+          );
+          setPickerOpen(true);
+          return;
+        }
         throw new Error(payload?.error || `HTTP ${res.status}`);
       }
       setState("sent");
       setPickerOpen(false);
+      setPickerNotice(null);
       onSent?.(convId);
       setTimeout(() => setState(null), 2500);
     } catch (err) {
@@ -106,7 +124,11 @@ export function SendQuoteToChatButton({
         variant="outline"
         size="sm"
         disabled={disabled || state === "sending"}
-        onClick={() => (conversationId ? void sendTo(conversationId) : setPickerOpen(true))}
+        onClick={() =>
+          conversationId
+            ? void sendTo(conversationId)
+            : (setPickerNotice(null), setPickerOpen(true))
+        }
         title={t("Хулосани мижоз чатига расм сифатида юбориш", "Send the summary as an image to a chat")}
       >
         {state === "sending" ? (
@@ -122,8 +144,12 @@ export function SendQuoteToChatButton({
       {pickerOpen && (
         <ChatPickerDialog
           sending={state === "sending"}
+          notice={pickerNotice}
           onPick={(id) => void sendTo(id)}
-          onClose={() => setPickerOpen(false)}
+          onClose={() => {
+            setPickerOpen(false);
+            setPickerNotice(null);
+          }}
         />
       )}
     </>
@@ -134,19 +160,28 @@ export function SendQuoteToChatButton({
  *  target. Used by the quote-image and drawing-PDF send buttons. */
 export function ChatPickerDialog({
   sending,
+  notice,
   onPick,
   onClose,
 }: {
   sending: boolean;
+  /** Optional banner shown above the list, e.g. why the picker auto-opened. */
+  notice?: string | null;
   onPick: (id: string) => void;
   onClose: () => void;
 }) {
   const t = useT();
+  const [query, setQuery] = useState("");
   const { data, isLoading } = useQuery<{ conversations: Conversation[]; counts: Record<string, number> }>({
     queryKey: ["inbox-conversations"],
     queryFn: () => api("/api/inbox"),
   });
   const chats = data?.conversations;
+  // Script-insensitive (Cyrillic/Latin) substring search across name, username
+  // and last snippet — same cross-alphabet behaviour as the address search.
+  const filtered = chats?.filter((c) =>
+    matchesSearch(`${c.displayName} ${c.username ?? ""} ${c.lastSnippet ?? ""}`, query),
+  );
 
   return (
     <Dialog open onOpenChange={(v) => !v && !sending && onClose()}>
@@ -154,6 +189,21 @@ export function ChatPickerDialog({
         <DialogHeader>
           <DialogTitle>{t("Қайси чатга юборилсин?", "Send to which chat?")}</DialogTitle>
         </DialogHeader>
+        {notice && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            {notice}
+          </div>
+        )}
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("Чат қидириш…", "Search chats…")}
+            className="w-full rounded-md border border-border bg-background py-2 pl-8 pr-3 text-sm outline-none focus:border-ring"
+          />
+        </div>
         <div className="-mx-2 max-h-[60vh] overflow-y-auto">
           {isLoading ? (
             <div className="p-6 text-center text-sm text-muted-foreground">
@@ -163,8 +213,12 @@ export function ChatPickerDialog({
             <div className="p-6 text-center text-sm text-muted-foreground">
               {t("Чатлар йўқ", "No chats yet")}
             </div>
+          ) : !filtered || filtered.length === 0 ? (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              {t("Натижа йўқ", "No matches")}
+            </div>
           ) : (
-            chats.map((c) => (
+            filtered.map((c) => (
               <button
                 key={c.id}
                 type="button"

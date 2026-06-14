@@ -7,7 +7,7 @@ import { ok, fail } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { withInboxAccess } from "@/lib/inbox-auth";
 import { can } from "@/lib/permissions";
-import { tgSendBusinessDocument, tgUploadDocumentGetFileId } from "@/lib/telegram/api";
+import { tgSendBusinessDocument, tgUploadDocumentGetFileId, humanizeTelegramSendError } from "@/lib/telegram/api";
 import { emitInbox } from "@/lib/inbox-bus";
 
 const DRAWINGS_DIR = process.env.DRAWINGS_DIR ?? "/data/drawings";
@@ -80,7 +80,7 @@ export const POST = withInboxAccess<{ id: string }>(async (req, { params, user }
     } catch (err) {
       console.error("[inbox reply-document]", err);
       failed = true;
-      failReason = err instanceof Error ? err.message : String(err);
+      failReason = humanizeTelegramSendError(err instanceof Error ? err.message : String(err));
     }
   }
 

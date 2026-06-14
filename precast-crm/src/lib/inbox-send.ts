@@ -7,7 +7,7 @@
 // handling, same sentById attribution, same live event.
 
 import { prisma } from "@/lib/prisma";
-import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessVideo, tgSendBusinessLocation, tgSendBusinessChatAction, tgUploadPhotoGetFileId } from "@/lib/telegram/api";
+import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessVideo, tgSendBusinessLocation, tgSendBusinessChatAction, tgUploadPhotoGetFileId, humanizeTelegramSendError, isPeerSendError } from "@/lib/telegram/api";
 import { igSendText, igSendImage, igSendVideo, igSendTyping } from "@/lib/instagram/api";
 import { publicBaseUrl } from "@/lib/instagram/config";
 import { emitInbox } from "@/lib/inbox-bus";
@@ -19,18 +19,6 @@ export interface SentMessage {
   text: string | null;
   failed: boolean;
   createdAt: Date;
-}
-
-/** Translate Telegram's cryptic Business-API errors into operator-readable
- *  bilingual text (shown in the send-failure toast). Pass-through otherwise. */
-function humanizeTelegramSendError(raw: string): string {
-  if (raw.includes("BUSINESS_PEER_INVALID")) {
-    return (
-      "Мижоз чатни ўчирган ёки бизнес аккаунтни блоклаган кўринади — бу чатга энди ёзиб бўлмайди · " +
-      "The customer appears to have deleted this chat or blocked the business account, so it can no longer receive messages."
-    );
-  }
-  return raw;
 }
 
 export type SendBusinessReplyResult =
@@ -301,11 +289,14 @@ export type SendBusinessPhotoResult =
   | { ok: true; message: SentPhotoMessage }
   // NO_STAGING / SEND_FAILED still persisted a failed bubble (in `message`) for
   // retry; NOT_FOUND / NO_CONNECTION wrote nothing. `detail` carries the reason.
+  // `peerInvalid` is set when Telegram rejected the destination chat (link lost /
+  // blocked) — the UI uses it to offer a conversation picker.
   | {
       ok: false;
       reason: "NOT_FOUND" | "NO_CONNECTION" | "NO_STAGING" | "SEND_FAILED";
       message?: SentPhotoMessage;
       detail?: string;
+      peerInvalid?: boolean;
     };
 
 async function persistOutboundPhoto(
@@ -415,6 +406,7 @@ export async function sendBusinessPhoto(input: {
   let telegramMsgId: string | null = null;
   let failed = false;
   let detail: string | undefined;
+  let peerInvalid = false;
   try {
     const fileId = await tgUploadPhotoGetFileId(stagingChat, input.photo, {
       filename,
@@ -430,9 +422,11 @@ export async function sendBusinessPhoto(input: {
   } catch (err) {
     console.error("[inbox send-photo]", err);
     failed = true;
-    detail = humanizeTelegramSendError(err instanceof Error ? err.message : String(err));
+    const raw = err instanceof Error ? err.message : String(err);
+    detail = humanizeTelegramSendError(raw);
+    peerInvalid = isPeerSendError(raw);
   }
 
   const message = await persistOutboundPhoto(conversation.id, mediaPath, caption, telegramMsgId, input.userId, failed);
-  return failed ? { ok: false, reason: "SEND_FAILED", message, detail } : { ok: true, message };
+  return failed ? { ok: false, reason: "SEND_FAILED", message, detail, peerInvalid } : { ok: true, message };
 }

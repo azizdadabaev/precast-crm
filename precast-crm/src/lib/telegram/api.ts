@@ -15,6 +15,39 @@ function apiUrl(method: string): string {
   return `https://api.telegram.org/bot${token()}/${method}`;
 }
 
+/** Translate Telegram's cryptic Business-API send errors into operator-readable
+ *  bilingual text (shown in the inbox send-failure toast). Shared by every
+ *  outbound path — text, photo, document/file — so a failure reads the same way
+ *  whatever was being sent. Pass-through for anything we don't have a friendly
+ *  phrasing for. */
+export function humanizeTelegramSendError(raw: string): string {
+  if (raw.includes("BUSINESS_PEER_INVALID")) {
+    return (
+      "Мижоз чатни ўчирган ёки бизнес аккаунтни блоклаган кўринади — бу чатга энди ёзиб бўлмайди · " +
+      "The customer appears to have deleted this chat or blocked the business account, so it can no longer receive messages."
+    );
+  }
+  if (raw.includes("PEER_ID_INVALID") || raw.includes("CHAT_WRITE_FORBIDDEN")) {
+    return (
+      "Бу чатнинг алоқаси узилган ёки эскирган — хабар етказилмади. Бошқа чат танланг · " +
+      "This chat's link is broken or stale, so the message couldn't be delivered — pick another chat."
+    );
+  }
+  return raw;
+}
+
+/** True when Telegram rejected the DESTINATION peer — the chat link is lost or
+ *  stale, the customer blocked the account, or the bot can't write there. The
+ *  inbox UI uses this to offer a conversation picker instead of dead-ending on
+ *  the error toast. */
+export function isPeerSendError(raw: string): boolean {
+  return (
+    raw.includes("PEER_ID_INVALID") ||
+    raw.includes("BUSINESS_PEER_INVALID") ||
+    raw.includes("CHAT_WRITE_FORBIDDEN")
+  );
+}
+
 /** Send a text message on behalf of the connected business account. */
 export async function tgSendBusinessMessage(
   businessConnectionId: string,

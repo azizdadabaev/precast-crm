@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { withInboxAccess } from "@/lib/inbox-auth";
-import { tgSendBusinessDocument, tgUploadDocumentGetFileId } from "@/lib/telegram/api";
+import { tgSendBusinessDocument, tgUploadDocumentGetFileId, humanizeTelegramSendError } from "@/lib/telegram/api";
 import { emitInbox } from "@/lib/inbox-bus";
 import { saveBufferToUploads } from "@/lib/uploads";
 
@@ -88,7 +88,7 @@ export const POST = withInboxAccess<{ id: string }>(async (req: NextRequest, { p
     } catch (err) {
       console.error("[inbox reply-file]", err);
       failed = true;
-      failReason = err instanceof Error ? err.message : String(err);
+      failReason = humanizeTelegramSendError(err instanceof Error ? err.message : String(err));
     }
   }
 

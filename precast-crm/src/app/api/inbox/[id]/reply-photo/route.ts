@@ -62,7 +62,8 @@ export const POST = withInboxAccess<{ id: string }>(async (req: NextRequest, { p
       return fail(
         result.detail ? `Юборилмади · Send failed — ${result.detail}` : "Юборилмади · Send failed",
         502,
-        { message: result.message, reason: result.detail },
+        // peerInvalid → the chat link is unreachable; the client offers a picker.
+        { message: result.message, reason: result.detail, peerInvalid: result.peerInvalid ?? false },
       );
   }
 });
