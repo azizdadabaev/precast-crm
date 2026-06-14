@@ -95,3 +95,34 @@ export function phoneMatches(stored: string, query: string): boolean {
   if (!q) return false;
   return digitsOnly(stored).endsWith(q);
 }
+
+// Operator+subscriber prefixes for UZ mobile numbers — used to tell a typed
+// phone apart from some other 9-digit run in a message (e.g. a list of room
+// counts), so a bare "901112233" is accepted but "345678912" is not.
+const UZ_MOBILE_PREFIXES = [
+  "20", "33", "50", "55", "77", "88", "90", "91", "93", "94", "95", "97", "98", "99",
+];
+
+/**
+ * Pull a single Uzbekistan phone number out of free-form chat text — the case
+ * where the customer TYPED their number ("raqamim 90 111 22 33") instead of
+ * sharing a Telegram contact card. Returns the normalized digits-only form
+ * (e.g. "998901112233"), or null when no phone-shaped token is present.
+ *
+ * Conservative by design: it accepts the 12-digit "+998…" form, or a bare
+ * 9-digit operator number that starts with a real UZ mobile prefix — so a
+ * dimensions/price message ("3.5 x 4.2", "2 347 500") is never misread as a
+ * phone. Literal space only in the token (never \s) so it can't merge two
+ * numbers across a line break.
+ */
+export function extractPhoneFromText(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const candidates = text.match(/[+\d][\d \-.()]{7,}/g);
+  if (!candidates) return null;
+  for (const c of candidates) {
+    const d = digitsOnly(c);
+    if (d.length === 12 && d.startsWith("998")) return d;
+    if (d.length === 9 && UZ_MOBILE_PREFIXES.includes(d.slice(0, 2))) return "998" + d;
+  }
+  return null;
+}

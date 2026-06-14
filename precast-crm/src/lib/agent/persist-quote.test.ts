@@ -137,6 +137,19 @@ describe('resolveDraftIdentity', () => {
     ).toEqual({ name: 'Aziz Dadabaev', phone: '998901112233' });
   });
 
+  it('uses a TYPED phone when no order/draft/shared-contact phone exists (the reported bug)', () => {
+    // Customer typed their number in chat; the profile name is all we have for the name.
+    expect(
+      resolveDraftIdentity({ profileName: 'Telegram', sharedPhone: null, typedPhone: '998934813330' }),
+    ).toEqual({ name: 'Telegram', phone: '998934813330' });
+  });
+
+  it('a shared-contact card still outranks a typed number', () => {
+    expect(
+      resolveDraftIdentity({ sharedPhone: '90 111 22 33', typedPhone: '998934813330' }),
+    ).toEqual({ name: null, phone: '998901112233' });
+  });
+
   it('returns nulls (not empty strings) when no source is usable', () => {
     expect(resolveDraftIdentity({ profileName: '   ', sharedPhone: ' - ' })).toEqual({ name: null, phone: null });
   });

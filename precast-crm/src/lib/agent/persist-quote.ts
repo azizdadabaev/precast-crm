@@ -18,7 +18,7 @@ import { calcResultToCreatePayload, type RoomInput } from '@/lib/calc-persistenc
 import { computeOrderTotals } from '@/lib/order-totals';
 import { loadPricingConfig } from '@/lib/pricing-config';
 import { nextDraftNumber } from '@/lib/draft-number';
-import { normalizePhone } from '@/lib/phone';
+import { normalizePhone, extractPhoneFromText } from '@/lib/phone';
 import { applyAgentPatternPolicy } from './pattern-policy';
 import { MAX_BEAM_LENGTH_M } from './tools/get-quote';
 import { DEFAULT_BEARING, type Pattern } from '@/services/calculation-engine';
@@ -225,20 +225,24 @@ export interface DraftIdentitySources {
   profileName?: string | null;
   /** Shared-contact phone from the conversation (digits-only). */
   sharedPhone?: string | null;
+  /** A phone the customer TYPED in chat (already normalized digits) — used when
+   *  no shared-contact card was sent, so a typed number still reaches the draft. */
+  typedPhone?: string | null;
 }
 
 /**
  * Resolve the draft's client identity per field: the real order Client (what the
- * customer said their name/phone is) > values already on the draft > the channel
- * profile. An Instagram username must never displace "Davron aka" once the
- * customer has identified themselves. Pure.
+ * customer said their name/phone is) > values already on the draft > a phone the
+ * customer shared or typed > the channel profile. An Instagram username must never
+ * displace "Davron aka" once the customer has identified themselves. Pure.
  */
 export function resolveDraftIdentity(s: DraftIdentitySources): { name: string | null; phone: string | null } {
   const name = s.orderedClient?.name ?? s.existingTentative?.name ?? (s.profileName?.trim() || null);
   const phone =
     s.orderedClient?.phone ??
     s.existingTentative?.phone ??
-    (s.sharedPhone ? normalizePhone(s.sharedPhone) || null : null);
+    (s.sharedPhone ? normalizePhone(s.sharedPhone) || null : null) ??
+    (s.typedPhone || null);
   return { name, phone };
 }
 
@@ -318,6 +322,21 @@ export async function persistConversationDraft(
       orderBy: { updatedAt: 'desc' },
       select: { client: { select: { name: true, phone: true } } },
     });
+    // A phone the customer TYPED in chat — sharedContactPhone only captures a
+    // shared CONTACT card, so a number written as text was otherwise invisible to
+    // the draft (live bug: the summary card showed a name but no number even
+    // though the customer had sent it). Scan recent inbound text newest-first.
+    const inbound = await tx.message.findMany({
+      where: { conversationId: conversation.id, direction: 'INBOUND', text: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+      select: { text: true },
+    });
+    let typedPhone: string | null = null;
+    for (const r of inbound) {
+      typedPhone = extractPhoneFromText(r.text);
+      if (typedPhone) break;
+    }
     const identity = resolveDraftIdentity({
       orderedClient: orderedProject?.client ?? null,
       existingTentative: existing
@@ -325,6 +344,7 @@ export async function persistConversationDraft(
         : null,
       profileName: conversation.displayName,
       sharedPhone: conversation.sharedContactPhone,
+      typedPhone,
     });
     const tentativeClientName = identity.name;
     const tentativeClientPhone = identity.phone;
