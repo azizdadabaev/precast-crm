@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { matchesSearch } from "@/lib/search-fold";
 import {
   composeAddress,
   findTumanByName,
@@ -211,7 +212,14 @@ function ViloyatCombobox({
   onChange,
 }: ViloyatComboboxProps) {
   const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
   const selected = viloyats.find((v) => v.name === value || v.nameUz === value);
+
+  // Reset the type-ahead query whenever the dropdown closes, so the next open
+  // starts from the full list.
+  React.useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -221,6 +229,20 @@ function ViloyatCombobox({
           type="button"
           role="combobox"
           aria-expanded={open}
+          // Keyboard-open like a native <select>: ArrowUp/Down opens; typing a
+          // character opens AND seeds the search so the first keystroke isn't
+          // lost (Tab → type to filter, arrows to cycle — cmdk handles the rest).
+          onKeyDown={(e) => {
+            if (open) return;
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setOpen(true);
+            } else if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              setSearch(e.key);
+              setOpen(true);
+            }
+          }}
           className={cn(
             "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm",
             "focus:outline-none focus:ring-2 focus:ring-primary/40",
@@ -263,12 +285,12 @@ function ViloyatCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
         <Command
-          filter={(itemValue, search) => {
-            if (!search) return 1;
-            return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-          }}
+          // Script-insensitive (Cyrillic/Latin), apostrophe- and diacritic-
+          // insensitive — itemValue carries both spellings, so "fargona",
+          // "Farg'ona" and "Фарғона" all match. See @/lib/search-fold.
+          filter={(itemValue, search) => (matchesSearch(itemValue, search) ? 1 : 0)}
         >
-          <CommandInput placeholder="Қидириш" />
+          <CommandInput placeholder="Қидириш" value={search} onValueChange={setSearch} />
           <CommandList>
             <CommandEmpty>Топилмади</CommandEmpty>
             <CommandGroup>
@@ -318,7 +340,13 @@ function TumanCombobox({
   onChange,
 }: TumanComboboxProps) {
   const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
   const selected = tumans.find((t) => t.name === value || t.nameUz === value);
+
+  // Reset the type-ahead query whenever the dropdown closes.
+  React.useEffect(() => {
+    if (!open) setSearch("");
+  }, [open]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -329,6 +357,19 @@ function TumanCombobox({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
+          // Keyboard-open like a native <select>: ArrowUp/Down opens; typing a
+          // character opens AND seeds the search so the first keystroke isn't lost.
+          onKeyDown={(e) => {
+            if (open) return;
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setOpen(true);
+            } else if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              setSearch(e.key);
+              setOpen(true);
+            }
+          }}
           className={cn(
             "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm",
             "focus:outline-none focus:ring-2 focus:ring-primary/40",
@@ -368,12 +409,12 @@ function TumanCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
         <Command
-          filter={(itemValue, search) => {
-            if (!search) return 1;
-            return itemValue.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
-          }}
+          // Script-insensitive (Cyrillic/Latin), apostrophe- and diacritic-
+          // insensitive — itemValue carries both spellings, so "fargona",
+          // "Farg'ona" and "Фарғона" all match. See @/lib/search-fold.
+          filter={(itemValue, search) => (matchesSearch(itemValue, search) ? 1 : 0)}
         >
-          <CommandInput placeholder="Қидириш" />
+          <CommandInput placeholder="Қидириш" value={search} onValueChange={setSearch} />
           <CommandList>
             <CommandEmpty>Топилмади</CommandEmpty>
             <CommandGroup>
