@@ -201,6 +201,26 @@ describe('extractQuotedRooms', () => {
     ]);
   });
 
+  it('expands count into that many identical rooms (the "3ta xona" draft bug)', () => {
+    const rooms = extractQuotedRooms(quoteTurn('t1', { inner_width: 4.5, inner_length: 3.5, count: 3 }));
+    expect(rooms).toHaveLength(3);
+    expect(rooms.every((r) => r.innerWidth === 4.5 && r.innerLength === 3.5)).toBe(true);
+  });
+
+  it('counts a mixed multi-size turn into the real total room count (3+2+1 → 6)', () => {
+    const msgs: LlmMessage[] = [
+      ...quoteTurn('a', { inner_width: 4.5, inner_length: 3.5, count: 3 }),
+      ...quoteTurn('b', { inner_width: 7, inner_length: 3.5, count: 2 }),
+      ...quoteTurn('c', { inner_width: 8.7, inner_length: 3 }), // corridor — count defaults to 1
+    ];
+    expect(extractQuotedRooms(msgs)).toHaveLength(6);
+  });
+
+  it('clamps an absurd count and treats a missing/invalid count as 1', () => {
+    expect(extractQuotedRooms(quoteTurn('t1', { inner_width: 4, inner_length: 5, count: 999 }))).toHaveLength(50);
+    expect(extractQuotedRooms(quoteTurn('t2', { inner_width: 4, inner_length: 5, count: 'lots' }))).toHaveLength(1);
+  });
+
   it('passes through optional inputs and the pattern override', () => {
     const rooms = extractQuotedRooms(
       quoteTurn('t1', { inner_width: 5, inner_length: 4, bearing: 0.2, extra_beams: 1, pattern: 'BGB', force_start_beam: true }),

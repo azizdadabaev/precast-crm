@@ -60,6 +60,32 @@ describe('runGetQuote', () => {
     expect(res.data.weight_kg).toBeGreaterThan(0);
   });
 
+  it('defaults count to 1 with line_total equal to the single-room subtotal', () => {
+    const res = runGetQuote({ inner_width: 4, inner_length: 5 }, deps());
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.count).toBe(1);
+    expect(res.data.line_total).toBe(res.data.subtotal);
+  });
+
+  it('count scales line_total but NOT the per-room subtotal or the signed quote_id', () => {
+    const one = runGetQuote({ inner_width: 4, inner_length: 5 }, deps());
+    const three = runGetQuote({ inner_width: 4, inner_length: 5, count: 3 }, deps());
+    expect(one.ok && three.ok).toBe(true);
+    if (!one.ok || !three.ok) return;
+    expect(three.data.count).toBe(3);
+    expect(three.data.subtotal).toBe(one.data.subtotal); // per-room price unchanged
+    expect(three.data.line_total).toBe(one.data.subtotal * 3); // the line covers all 3
+    // The token still represents ONE room's price — the order flow is untouched.
+    const verified = verifyQuoteToken<SlabQuotePayload>(three.data.quote_id, SECRET, { now: NOW });
+    expect(verified!.price).toBe(one.data.subtotal);
+  });
+
+  it('escalates on a count below 1 rather than persisting zero rooms', () => {
+    const res = runGetQuote({ inner_width: 4, inner_length: 5, count: 0 }, deps());
+    expect(res.ok).toBe(false);
+  });
+
   it('escalates (does not crash) when the signing secret is missing', () => {
     const res = runGetQuote({ inner_width: 4, inner_length: 5 }, deps({ secret: '' }));
     expect(res).toEqual({ ok: false, escalate: true, reason: expect.stringContaining('signing') });

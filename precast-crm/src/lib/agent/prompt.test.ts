@@ -114,6 +114,12 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('A tool result'); // the "tool number supersedes KB" rule
   });
 
+  it('tells the agent to count every room via the tool (the under-counted-draft bug)', () => {
+    // Identical rooms must be passed as `count`, or the saved draft holds one room
+    // per distinct size while the text shows the full multi-room total.
+    expect(buildSystemPrompt(base)).toContain('COUNT EVERY ROOM via the tool');
+  });
+
   it('pins the detected reply language', () => {
     expect(buildSystemPrompt({ ...base, language: 'ru' })).toContain('Reply in Russian');
     expect(buildSystemPrompt({ ...base, language: 'uz-cyrillic' })).toContain('Uzbek (Cyrillic script)');

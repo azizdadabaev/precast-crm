@@ -20,7 +20,7 @@ import { loadPricingConfig } from '@/lib/pricing-config';
 import { nextDraftNumber } from '@/lib/draft-number';
 import { normalizePhone, extractPhoneFromText } from '@/lib/phone';
 import { applyAgentPatternPolicy } from './pattern-policy';
-import { MAX_BEAM_LENGTH_M } from './tools/get-quote';
+import { MAX_BEAM_LENGTH_M, MAX_ROOM_COUNT } from './tools/get-quote';
 import { DEFAULT_BEARING, type Pattern } from '@/services/calculation-engine';
 
 /** Beam length a room would need = inner width + a bearing each side. Mirrors the
@@ -94,6 +94,18 @@ function toRoomInput(input: unknown): RoomInput | null {
   };
 }
 
+/** How many IDENTICAL rooms a get_quote call stands for — its `count` input,
+ *  clamped to 1..MAX_ROOM_COUNT. Lets one call with count:3 persist as three
+ *  draft rooms (the customer's "4.5×3.5 dan 3ta xona"), so the saved draft holds
+ *  the real room count, not one room per distinct size. */
+function roomCount(input: unknown): number {
+  if (!input || typeof input !== 'object') return 1;
+  const raw = (input as Record<string, unknown>).count;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(MAX_ROOM_COUNT, Math.max(1, Math.floor(n)));
+}
+
 /**
  * Pull the rooms the agent successfully priced via get_quote in THIS turn's
  * transcript. Pure. Each get_quote call whose matching tool_result was NOT an
@@ -119,7 +131,11 @@ export function extractQuotedRooms(turnMessages: ReadonlyArray<LlmMessage>): Roo
       if (call.name !== 'get_quote') continue; // slab only; gazoblok isn't a Calculation
       if (errored.get(call.id) === true) continue; // failed quote → don't persist
       const room = toRoomInput(call.input);
-      if (room) rooms.push(room);
+      if (!room) continue;
+      // One call may stand for several identical rooms (count) — persist each, so
+      // "3ta xona" saves three rooms, not one (the under-counted-draft bug).
+      const n = roomCount(call.input);
+      for (let k = 0; k < n; k++) rooms.push({ ...room });
     }
   }
   return rooms;

@@ -41,6 +41,10 @@ export const MAX_BEAM_LENGTH_M = 6.30;
 
 // Numeric min/max live in code, not the JSON schema, so the schema stays
 // strict-friendly (spec §4.2 layer 3 — plausibility checks run server-side).
+// Most identical rooms a single quote can stand for — guards the draft against a
+// runaway count while comfortably covering any real building.
+export const MAX_ROOM_COUNT = 50;
+
 export const GetQuoteInput = z.object({
   inner_width: z.coerce.number().positive(),
   inner_length: z.coerce.number().positive(),
@@ -49,11 +53,17 @@ export const GetQuoteInput = z.object({
   extra_beams: z.coerce.number().int().min(0).optional(),
   force_start_beam: z.coerce.boolean().optional(),
   pattern: z.enum(['GB', 'BGB', 'GBG']).optional(),
+  count: z.coerce.number().int().min(1).max(MAX_ROOM_COUNT).optional(),
 });
 export type GetQuoteInputType = z.infer<typeof GetQuoteInput>;
 
 export interface QuoteData {
   subtotal: number;
+  /** Number of IDENTICAL rooms this quote covers (the `count` input, ≥1). */
+  count: number;
+  /** subtotal × count — the total for all `count` identical rooms. The agent
+   *  sums line_total across calls for the combined multi-room total. */
+  line_total: number;
   m2_price: number;
   pattern: string;
   bill_of_materials: {
@@ -130,8 +140,14 @@ export function runGetQuote(raw: unknown, deps: GetQuoteDeps): ToolResult<QuoteD
     );
   }
   const weight_kg = Math.round(p.monolithArea * FLOOR_KG_PER_M2);
+  // count is a quantity of identical rooms — it does NOT enter the calculator or
+  // the signed quote_id (which stays per-room); it only scales line_total and,
+  // downstream, how many rooms the draft persists (see extractQuotedRooms).
+  const count = i.count ?? 1;
   return toolOk({
     subtotal: quote.price,
+    count,
+    line_total: quote.price * count,
     m2_price: p.m2Price,
     pattern: p.pattern,
     bill_of_materials: {
@@ -150,11 +166,14 @@ export function runGetQuote(raw: unknown, deps: GetQuoteDeps): ToolResult<QuoteD
 export const getQuoteDefinition: AgentToolDefinition = {
   name: 'get_quote',
   description:
-    'Price a beam-and-block (precast) FLOORING slab for one room and return a ' +
-    'binding quote_id. Input the inside-wall dimensions in METERS (wall-to-wall). ' +
-    'Returns subtotal, m²-price, pattern, a bill of materials, an approximate ' +
-    'delivered weight in kg (weight_kg — useful to volunteer for transport), and a ' +
-    'signed quote_id (UZS) — this quote_id is REQUIRED to later draft an order. ' +
+    'Price a beam-and-block (precast) FLOORING slab for a room — or several ' +
+    'IDENTICAL rooms at once via `count` — and return a binding quote_id. Input the ' +
+    'inside-wall dimensions in METERS (wall-to-wall). ' +
+    'Returns subtotal (ONE room), count, line_total (= subtotal × count, the total ' +
+    'for all the identical rooms), m²-price, pattern, a bill of materials, an ' +
+    'approximate delivered weight in kg (weight_kg — useful to volunteer for ' +
+    'transport), and a signed quote_id (UZS) — this quote_id is REQUIRED to later ' +
+    'draft an order. ' +
     'Does NOT cover: gazoblok wall blocks (use get_gazoblok_quote), delivery ' +
     'dates or costs, discounts, non-standard / irregular / multi-level shapes, or a ' +
     'beam longer than 6.30 m (room inner width + bearings) — those escalate. ' +
@@ -171,6 +190,7 @@ export const getQuoteDefinition: AgentToolDefinition = {
       extra_beams: { type: 'integer', description: 'Manual extra beams. Default 0.' },
       force_start_beam: { type: 'boolean', description: 'Force a starting beam (promotes GB→BGB). Default false.' },
       pattern: { type: 'string', enum: ['GB', 'BGB', 'GBG'], description: 'Explicit pattern override; omit to auto-pick.' },
+      count: { type: 'integer', description: 'Number of IDENTICAL rooms with these exact dimensions, e.g. "3ta xona" → 3. Default 1. Use this instead of repeating the call for the same size; line_total = subtotal × count covers them all. DIFFERENT dimensions need separate calls.' },
     },
   },
 };
