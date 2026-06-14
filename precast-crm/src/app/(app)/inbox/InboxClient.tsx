@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
-import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator, ArrowUp, ArrowDown, Bot, FlaskConical, X, AlertTriangle, Instagram as InstagramIcon, type LucideIcon } from "lucide-react";
+import { Check, Clock, Loader2, Lock, Send, MessageCircle, Trash2, Calculator, ArrowUp, ArrowDown, Bot, FlaskConical, X, AlertTriangle, Search, Instagram as InstagramIcon, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,6 +21,7 @@ import { AttachFileButton } from "@/components/inbox/AttachFileButton";
 import { ChatAvatar } from "@/components/inbox/ChatAvatar";
 import { ImageViewerProvider, useImageViewer } from "@/components/inbox/ImageViewer";
 import { formatDraftNumber } from "@/lib/draft-number";
+import { matchesSearch } from "@/lib/search-fold";
 
 interface ConversationSummary {
   id: string; channel?: string; displayName: string; username: string | null;
@@ -210,10 +211,15 @@ function Inbox() {
   // Legacy rows default to TELEGRAM. Counts are REAL DB totals (server groupBy),
   // not the length of the capped list — so they don't stall at 99 past 100 chats.
   const [channelFilter, setChannelFilter] = useState<string>("ALL");
+  const [convSearch, setConvSearch] = useState("");
   const channelCounts: Record<string, number> = data?.counts ?? {};
   const channelTabs = Array.from(new Set(["TELEGRAM", "INSTAGRAM", ...Object.keys(channelCounts)]));
+  // Channel tab + a script-insensitive (Cyrillic/Latin) search across name,
+  // username and last snippet — the same cross-alphabet matching as addresses.
   const visibleConversations = (conversations ?? []).filter(
-    (c) => channelFilter === "ALL" || (c.channel ?? "TELEGRAM") === channelFilter,
+    (c) =>
+      (channelFilter === "ALL" || (c.channel ?? "TELEGRAM") === channelFilter) &&
+      matchesSearch(`${c.displayName} ${c.username ?? ""} ${c.lastSnippet ?? ""}`, convSearch),
   );
 
   // Live updates: invalidate the list + the open thread on any inbox event.
@@ -319,6 +325,26 @@ function Inbox() {
       <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border shadow-sm">
         {/* Left: conversation list */}
         <div className="flex w-[340px] shrink-0 flex-col border-r border-[color:var(--tg-divider)] bg-[var(--tg-panel)]">
+          {/* Search — script-insensitive (Cyrillic/Latin) over name + snippet. */}
+          <div className="relative shrink-0 border-b border-[color:var(--tg-divider)] p-2">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--tg-text-dim)]" />
+            <input
+              value={convSearch}
+              onChange={(e) => setConvSearch(e.target.value)}
+              placeholder="Қидириш · Search"
+              className="w-full rounded-[18px] border border-transparent bg-[var(--tg-input-bg)] py-2 pl-9 pr-8 text-sm text-[var(--tg-text)] outline-none transition-colors focus:border-[color:var(--tg-accent)] focus:bg-[var(--tg-panel)]"
+            />
+            {convSearch && (
+              <button
+                type="button"
+                onClick={() => setConvSearch("")}
+                title="Тозалаш · Clear"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[color:var(--tg-text-dim)] hover:text-[var(--tg-text)]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
           <div className="flex-1 overflow-y-auto">
             {visibleConversations.map((c) => (
               <button
@@ -355,9 +381,11 @@ function Inbox() {
             ))}
             {conversations && visibleConversations.length === 0 && (
               <div className="p-6 text-center text-sm text-muted-foreground">
-                {channelFilter === "ALL"
-                  ? "Ҳозирча хабарлар йўқ · No messages yet"
-                  : `Бу каналда ҳозирча суҳбат йўқ · No ${CHANNEL_META[channelFilter]?.label ?? channelFilter} conversations yet`}
+                {convSearch.trim()
+                  ? "Қидирув бўйича натижа йўқ · No matches"
+                  : channelFilter === "ALL"
+                    ? "Ҳозирча хабарлар йўқ · No messages yet"
+                    : `Бу каналда ҳозирча суҳбат йўқ · No ${CHANNEL_META[channelFilter]?.label ?? channelFilter} conversations yet`}
               </div>
             )}
           </div>
