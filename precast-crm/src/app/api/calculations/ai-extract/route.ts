@@ -48,6 +48,9 @@ export const POST = withPermission("calculator.aiAssist", async (req: NextReques
     const apiKey = await resolveApiKey("google");
     const vision = createVisionProvider({ apiKey });
     dims = await vision.extractDimensions!({ data: imageBase64, mimeType: imageMime || "image/jpeg" });
+    // The vision reader doesn't surface token usage, so record the flat
+    // estimate — keeps image calls visible to the daily token budget.
+    limiter.record(user.id, EST_TOKENS);
   } else {
     const config = await loadAgentRuntimeConfig();
     const provider = await createProviderForModelKey(config.modelKey);
