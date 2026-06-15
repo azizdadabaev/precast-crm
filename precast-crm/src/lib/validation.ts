@@ -239,6 +239,11 @@ export const SaveProjectDraftSchema = z.object({
   shapeType: ShapeTypeEnum.default("RECTANGULAR"),
   dimensions: ProjectDimensionsSchema.optional().nullable(),
   rooms: z.array(RoomCalcInputSchema).default([]),
+  // Grand-total discount — two mutually-exclusive modes resolved with the
+  // same precedence as the engine (amount > 0 wins). Both default to 0 so
+  // legacy callers that don't send a discount keep saving at full price.
+  discountPercent: z.coerce.number().min(0).max(100).default(0),
+  discountAmount: z.coerce.number().min(0).default(0),
   // Link to the originating Telegram conversation. Honored only when the
   // caller has inbox.access (enforced in the route); otherwise dropped.
   conversationId: z.string().optional().nullable(),

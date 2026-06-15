@@ -380,6 +380,13 @@ model Project {
   dimensions  Json
   status      ProjectStatus @default(DRAFT)
 
+  // Grand-total discount carried on the draft so "Save as draft" doesn't
+  // drop it. Two mutually-exclusive modes, same precedence as the engine's
+  // projectTotal() (amount > 0 wins, else percent). Frozen into the Order's
+  // own discount columns at placement time.
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+
   // True when this draft was created automatically by the Telegram AI sales
   // agent (Auto mode). Drives the "AI" badge + "AI Agent" filter in /projects.
   aiGenerated Boolean       @default(false)

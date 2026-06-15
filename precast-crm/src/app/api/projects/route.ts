@@ -143,6 +143,8 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           shapeType: body.shapeType,
           dimensions: dim,
           status: "DRAFT",
+          discountPercent: body.discountPercent,
+          discountAmount: body.discountAmount,
           // Only set when a linkable conversationId is present; a plain
           // re-save (no link in the body) must not null out an existing link.
           ...(linkConversationId ? { conversationId: linkConversationId } : {}),
@@ -180,6 +182,8 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
         shapeType: body.shapeType,
         dimensions: dim,
         status: "DRAFT",
+        discountPercent: body.discountPercent,
+        discountAmount: body.discountAmount,
         conversationId: linkConversationId ?? null,
         clientId: existingClient?.id ?? null,
         tentativeClientName: existingClient ? null : body.clientName ?? null,

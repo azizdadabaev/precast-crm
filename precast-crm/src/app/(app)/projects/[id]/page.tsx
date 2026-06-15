@@ -18,6 +18,7 @@ import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
 import { formatDraftNumber } from "@/lib/draft-number";
 import { useT } from "@/lib/i18n";
 import { CommentThread } from "@/components/comments/CommentThread";
+import { projectTotal, type SlabResult } from "@/services/calculation-engine";
 
 interface Project {
   id: string;
@@ -26,6 +27,8 @@ interface Project {
   shapeType: string;
   status: "DRAFT" | "ORDERED" | "ARCHIVED";
   aiGenerated?: boolean;
+  discountPercent: string;
+  discountAmount: string;
   conversationId?: string | null;
   dimensions: { width?: number; length?: number; widths?: number[] };
   createdAt: string;
@@ -139,6 +142,17 @@ export default function ProjectDetailPage() {
       sum: acc.sum + Number(c.subtotal),
     }),
     { blocks: 0, beams: 0, monolithLength: 0, monolithArea: 0, concrete: 0, sum: 0 }
+  );
+
+  // Apply the draft's grand-total discount the same way the calculator and
+  // the engine do (projectTotal: amount > 0 wins, else percent). `totals.sum`
+  // is the rooms subtotal; `proj.total` is the discounted grand total shown
+  // as the headline "Total Sum". A single synthetic room carrying the whole
+  // subtotal reuses the engine's discount + rounding rule verbatim.
+  const proj = projectTotal(
+    [{ subtotal: totals.sum } as SlabResult],
+    Number(project.discountPercent),
+    Number(project.discountAmount),
   );
 
   // Caption sent with the quote image. This is the Saved Projects view, so the
@@ -315,7 +329,16 @@ export default function ProjectDetailPage() {
             </div>
             <div className="text-right">
               <div className="text-muted-foreground uppercase text-[10px] font-bold">{t("Жами сумма", "Total Sum")}</div>
-              <div className="text-2xl font-black text-success font-mono">{formatNumber(totals.sum, 0)}</div>
+              {proj.discount_amount > 0 && (
+                <div className="text-[11px] font-mono text-muted-foreground">
+                  <span className="line-through">{formatNumber(proj.rooms_subtotal, 0)}</span>
+                  <span className="ml-1.5 text-destructive">
+                    − {formatNumber(proj.discount_amount, 0)}
+                    {Number(project.discountAmount) > 0 ? ` (${formatNumber(proj.discount_percent, 1)}%)` : ` (${formatNumber(proj.discount_percent, 0)}%)`}
+                  </span>
+                </div>
+              )}
+              <div className="text-2xl font-black text-success font-mono">{formatNumber(proj.total, 0)}</div>
             </div>
           </div>
         </div>

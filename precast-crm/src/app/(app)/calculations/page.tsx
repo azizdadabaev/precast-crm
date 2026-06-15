@@ -465,6 +465,8 @@ function CalculationsInner() {
       const projects = await api<Array<{
         id: string;
         name: string | null;
+        discountPercent: string;
+        discountAmount: string;
         tentativeClientName: string | null;
         tentativeClientPhone: string | null;
         tentativeClientAddress: string | null;
@@ -504,6 +506,8 @@ function CalculationsInner() {
           consentGranted: p.client?.referenceConsent === "GRANTED",
         },
         matchedClientId: p.client?.id ?? null,
+        discountPercent: Number(p.discountPercent),
+        discountAmount: Number(p.discountAmount),
         rows: p.calculations.map((c) =>
           recomputeRow({
             id: Math.random().toString(36).slice(2, 9),
@@ -660,6 +664,8 @@ function CalculationsInner() {
           clientReferenceConsent: client.consentGranted ? "GRANTED" : null,
           shapeType: "RECTANGULAR",
           conversationId: sourceConversationId ?? undefined,
+          discountPercent,
+          discountAmount,
           rooms: validRooms.map((r) => ({
             name: r.name,
             innerWidth: r.innerWidth,
