@@ -10,6 +10,10 @@ describe("AiExtractBody", () => {
     expect(AiExtractBody.safeParse({ imageBase64: "abc", imageMime: "image/jpeg" }).success).toBe(true);
   });
 
+  it("accepts imagePath-only", () => {
+    expect(AiExtractBody.safeParse({ imagePath: "/uploads/drafts/u1/a.jpg" }).success).toBe(true);
+  });
+
   it("rejects an empty body", () => {
     expect(AiExtractBody.safeParse({}).success).toBe(false);
   });

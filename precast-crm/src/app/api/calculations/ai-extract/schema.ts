@@ -12,5 +12,8 @@ export const AiExtractBody = z
     text: z.string().min(1).max(4000).optional(),
     imageBase64: z.string().max(12_000_000).optional(),
     imageMime: z.string().max(60).optional(),
+    imagePath: z.string().max(500).optional(),
   })
-  .refine((b) => !!b.text || !!b.imageBase64, { message: "text or image is required" });
+  .refine((b) => !!b.text || !!b.imageBase64 || !!b.imagePath, {
+    message: "text or image is required",
+  });
