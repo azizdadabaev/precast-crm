@@ -35,6 +35,7 @@ import { useThemeStore } from "@/store/theme";
 import { addressToCyrillic } from "@/lib/regions";
 import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
 import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
+import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCard";
 import { CommentThread } from "@/components/comments/CommentThread";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import type { BeamGroup } from "@/lib/weight-distributor";
@@ -75,6 +76,10 @@ interface OrderDetail {
   cancelReason: string | null;
   deliveryProofUrl: string | null;
   deliveryProofUploadedAt: string | null;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  deliveryLocationUrl: string | null;
+  deliveryLocationLabel: string | null;
   loadedPhotoUrl: string | null;
   loadedAt: string | null;
   notes: string | null;
@@ -257,6 +262,14 @@ export default function OrderDetailPage() {
   });
   const canUseBlender = me?.permissions?.includes("blender.bridge") ?? false;
   const canUseInbox = me?.permissions?.includes("inbox.access") ?? false;
+  const canEditOrder = me?.permissions?.includes("order.edit") ?? false;
+
+  const deliveryLocation = useMutation({
+    mutationFn: (body: { lat: number | null; lng: number | null; url?: string | null; label?: string | null }) =>
+      api(`/api/orders/${params.id}/delivery-location`, { method: "PATCH", json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["order", params.id] }),
+    onError: (e: Error) => setError(e.message),
+  });
 
   const updateStatus = useMutation({
     mutationFn: (status: OrderDetail["status"]) =>
@@ -1249,6 +1262,17 @@ export default function OrderDetailPage() {
           )}
         </div>
       )}
+
+      {/* Delivery location — map card (graceful-degrades without a Maps key) */}
+      <DeliveryLocationCard
+        lat={order.deliveryLat}
+        lng={order.deliveryLng}
+        url={order.deliveryLocationUrl}
+        label={order.deliveryLocationLabel}
+        canEdit={canEditOrder}
+        onSave={(v) => deliveryLocation.mutateAsync(v).then(() => undefined)}
+        onClear={() => deliveryLocation.mutateAsync({ lat: null, lng: null }).then(() => undefined)}
+      />
 
       {/* Split-shipment tracking */}
       {order.shipments.length > 0 && (
