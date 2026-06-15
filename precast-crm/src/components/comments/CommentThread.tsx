@@ -6,6 +6,7 @@ import { MessageSquare, Send, Pencil, Trash2, Loader2 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { parseCommentTokens } from "./parse-comment";
 
 interface CommentThreadProps {
   orderId?: string;
@@ -55,23 +56,31 @@ function relativeTime(iso: string, t: (uz: string, en: string) => string): strin
 }
 
 function renderBody(body: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  const re = /@([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})|@([\w.+-]+)/g;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  let key = 0;
-  while ((m = re.exec(body)) !== null) {
-    if (m.index > last) parts.push(<span key={key++}>{body.slice(last, m.index)}</span>);
-    const tok = m[1] ?? m[2];
-    parts.push(
-      <span key={key++} className="text-primary font-medium">
-        @{tok}
-      </span>,
-    );
-    last = m.index + m[0].length;
-  }
-  if (last < body.length) parts.push(<span key={key++}>{body.slice(last)}</span>);
-  return parts.length ? parts : body;
+  const tokens = parseCommentTokens(body);
+  if (!tokens.length) return body;
+  return tokens.map((tok, i) => {
+    if (tok.type === "mention") {
+      return (
+        <span key={i} className="text-primary font-medium">
+          {tok.value}
+        </span>
+      );
+    }
+    if (tok.type === "link") {
+      return (
+        <a
+          key={i}
+          href={tok.value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline break-all"
+        >
+          {tok.value}
+        </a>
+      );
+    }
+    return <span key={i}>{tok.value}</span>;
+  });
 }
 
 /** Returns initials (up to 2 chars) from a display name. */
