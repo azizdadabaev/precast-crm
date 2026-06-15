@@ -22,6 +22,7 @@ export const ACTIONS = [
 
   // Calculator and orders
   "calculator.use",
+  "calculator.aiAssist", // AI assist in calculator: text/image → rooms (opt-in, owner-granted)
   "order.view",
   "order.viewAll", // see ALL orders, not just own
   "order.create",
@@ -102,6 +103,7 @@ export const PERMISSION_GROUPS: Array<{
     label: "Калькулятор · Calculator & Orders",
     actions: [
       "calculator.use",
+      "calculator.aiAssist",
       "order.view",
       "order.viewAll",
       "order.create",
@@ -181,6 +183,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "user.editPermissions": "Рухсатларни ўзгартириш · Edit user permissions",
   "user.disable": "Фойдаланувчини ўчириш · Disable users",
   "calculator.use": "Калькулятордан фойдаланиш · Use calculator",
+  "calculator.aiAssist": "Калькуляторда AI ёрдамчи · AI assist in calculator",
   "order.view": "Буюртмаларни кўриш · View orders",
   "order.viewAll": "Барча буюртмаларни кўриш · View ALL orders (not just own)",
   "order.create": "Янги буюртма яратиш · Create orders",
