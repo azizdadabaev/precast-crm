@@ -14,6 +14,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { AiAssistBox } from "@/components/calculation/AiAssistBox";
+import { aiRoomsToSlabRows } from "@/components/calculation/ai-rooms";
+import type { ExtractedRoom } from "@/lib/agent/llm/provider";
 import { ClientInfoBar } from "@/components/calculation/ClientInfoBar";
 import { DrawingDock } from "@/components/calculation/DrawingDock";
 import { PlaceOrderDialog } from "@/components/calculation/PlaceOrderDialog";
@@ -568,6 +571,15 @@ function CalculationsInner() {
     client.phone.length > 0 ||
     client.address.length > 0;
 
+  // AI assist → append parsed rooms to the table. The calculator prices them
+  // (recomputeRow already ran in aiRoomsToSlabRows; the live-pricing effect
+  // re-bills on the next /api/pricing payload). Operator reviews before saving.
+  function handleAiRooms(aiRooms: ExtractedRoom[]) {
+    const next = aiRoomsToSlabRows(aiRooms, rows.length);
+    setRows([...rows, ...next]);
+    setError(null);
+  }
+
   // ── Order summary ──
   const summary = useMemo(() => {
     const valid = validRooms
@@ -959,6 +971,9 @@ function CalculationsInner() {
           </button>
         </div>
       )}
+
+      {/* AI assist — text/image → rooms. Renders only for calculator.aiAssist holders. */}
+      <AiAssistBox onRooms={handleAiRooms} />
 
       {/* Client info — Name | Phone | Address */}
       <ClientInfoBar
