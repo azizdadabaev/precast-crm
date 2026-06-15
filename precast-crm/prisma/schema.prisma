@@ -398,6 +398,14 @@ model Project {
   tentativeClientPhone   String? // stored DIGITS-ONLY for dedup
   tentativeClientAddress String?
 
+  // Delivery location pin (geolocation). Captured from a pasted Google Maps
+  // link or the Telegram inbox; shared with the off-CRM driver. Coordinates are
+  // the source of truth; deliveryLocationUrl keeps the original link for Copy/Navigate.
+  deliveryLat           Float?
+  deliveryLng           Float?
+  deliveryLocationUrl   String?
+  deliveryLocationLabel String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -540,6 +548,14 @@ model Order {
   loadedAt       DateTime?
 
   notes String?
+
+  // Delivery location pin (geolocation). Captured from a pasted Google Maps
+  // link or the Telegram inbox; shared with the off-CRM driver. Coordinates are
+  // the source of truth; deliveryLocationUrl keeps the original link for Copy/Navigate.
+  deliveryLat           Float?
+  deliveryLng           Float?
+  deliveryLocationUrl   String?
+  deliveryLocationLabel String?
 
   project            Project          @relation(fields: [projectId], references: [id])
   client             Client           @relation(fields: [clientId], references: [id])
