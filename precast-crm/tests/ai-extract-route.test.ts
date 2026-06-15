@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { AiExtractBody } from "@/app/api/calculations/ai-extract/route";
+import { AiExtractBody } from "@/app/api/calculations/ai-extract/schema";
 
 describe("AiExtractBody", () => {
   it("accepts text-only", () => {

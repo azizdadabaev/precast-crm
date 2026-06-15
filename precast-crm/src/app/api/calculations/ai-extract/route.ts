@@ -2,7 +2,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
-import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { extractDimensionsFromText } from "@/lib/agent/extract-dimensions-text";
@@ -12,15 +11,7 @@ import { resolveApiKey } from "@/lib/agent/provider-keys";
 import { looksLikeImage, MAX_IMAGE_SIZE_BYTES } from "@/lib/uploads";
 import { RateLimiter } from "@/lib/agent/rate-limiter";
 import type { ExtractedDimensions } from "@/lib/agent/llm/provider";
-
-/** text OR image (raw base64, no data-URL prefix), like /api/agent/simulate-inbound. */
-export const AiExtractBody = z
-  .object({
-    text: z.string().min(1).max(4000).optional(),
-    imageBase64: z.string().max(12_000_000).optional(),
-    imageMime: z.string().max(60).optional(),
-  })
-  .refine((b) => !!b.text || !!b.imageBase64, { message: "text or image is required" });
+import { AiExtractBody } from "./schema";
 
 // Module-level limiter (per server instance). Conservative caps just to stop a
 // stuck loop running up model cost; a later plan swaps in a shared store.
