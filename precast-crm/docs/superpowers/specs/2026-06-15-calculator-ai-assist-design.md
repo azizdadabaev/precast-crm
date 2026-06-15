@@ -25,8 +25,9 @@ Saves/Places the order through the unchanged existing flows.
 Каридор
 ```
 
-→ AI returns 4 rooms (note: the 3rd room's label "Каридор" is on the next line; the model
-handles that). → 4 editable rows appear in the calculator, priced automatically.
+→ AI returns **3 rooms** (note: the 3rd room's dimensions are `Уз 4.30 × эни 1.70` and its
+label "Каридор" sits on the *next* line; the model must associate them). → 3 editable rows
+appear in the calculator, priced automatically.
 
 ## 2. Goals / Non-goals
 
