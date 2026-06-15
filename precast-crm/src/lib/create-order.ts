@@ -274,6 +274,12 @@ export async function createOrder(
         scheduledAt: input.scheduledAt,
         placedAt,
         notes: input.notes ?? null,
+        // Carry the source project's delivery pin (Phase 2) onto the order.
+        // When placed from inline rooms (no source draft) these stay null.
+        deliveryLat: projectWithCalcs.deliveryLat,
+        deliveryLng: projectWithCalcs.deliveryLng,
+        deliveryLocationUrl: projectWithCalcs.deliveryLocationUrl,
+        deliveryLocationLabel: projectWithCalcs.deliveryLocationLabel,
       },
       include: {
         client: true,

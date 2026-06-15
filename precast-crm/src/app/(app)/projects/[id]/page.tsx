@@ -15,6 +15,7 @@ import { ShareTarget, type ShareData } from "@/components/share/CalculationShare
 import { useTableDesign } from "@/hooks/useTableDesign";
 import { SendToBlenderButton } from "@/components/blender-bridge/SendToBlenderButton";
 import { DrawingsSection } from "@/components/blender-bridge/DrawingsSection";
+import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCard";
 import { formatDraftNumber } from "@/lib/draft-number";
 import { useT } from "@/lib/i18n";
 import { CommentThread } from "@/components/comments/CommentThread";
@@ -32,6 +33,11 @@ interface Project {
   conversationId?: string | null;
   dimensions: { width?: number; length?: number; widths?: number[] };
   createdAt: string;
+  // delivery pin (carried into the Order at placement)
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  deliveryLocationUrl: string | null;
+  deliveryLocationLabel: string | null;
   // tentative client info (when no Client linked yet)
   tentativeClientName: string | null;
   tentativeClientPhone: string | null;
@@ -85,6 +91,13 @@ export default function ProjectDetailPage() {
   });
   const canUseBlender = me?.permissions?.includes("blender.bridge") ?? false;
   const canUseInbox = me?.permissions?.includes("inbox.access") ?? false;
+  const canEditDelivery = me?.permissions?.includes("order.create") ?? false;
+
+  const deliveryLocation = useMutation({
+    mutationFn: (body: { lat: number | null; lng: number | null; url?: string | null; label?: string | null }) =>
+      api(`/api/projects/${params.id}/delivery-location`, { method: "PATCH", json: body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects-all"] }),
+  });
   /** Captured by ShareCalculationButton — wraps project header +
    *  calculation summary so operators can ship a one-shot image. */
   const shareRef = useRef<HTMLDivElement>(null);
@@ -545,6 +558,18 @@ export default function ProjectDetailPage() {
              </div>
           </CardContent>
         </Card>
+
+        {/* Delivery location — map card (graceful-degrades without a Maps key).
+            Captured here on the draft, carried into the Order at placement. */}
+        <DeliveryLocationCard
+          lat={project.deliveryLat}
+          lng={project.deliveryLng}
+          url={project.deliveryLocationUrl}
+          label={project.deliveryLocationLabel}
+          canEdit={canEditDelivery}
+          onSave={(v) => deliveryLocation.mutateAsync(v).then(() => undefined)}
+          onClear={() => deliveryLocation.mutateAsync({ lat: null, lng: null }).then(() => undefined)}
+        />
       </div>
     </div>
   );
