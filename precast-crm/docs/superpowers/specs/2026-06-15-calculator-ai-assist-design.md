@@ -240,3 +240,44 @@ text/image
 2. Ship the endpoint + UI behind the permission (no one has it by default).
 3. Owner grants it to themselves (owner2) first, validates quality + cost, then widens to
    chosen sales staff.
+
+## 12. Enhancement (2026-06-15) — extract from a drag-dropped drawing
+
+**Status:** Approved (design). Extends the shipped feature; no schema change.
+
+**Goal:** A drawing the operator drag-drops onto the calculator should be usable by the
+AI vision, not just for manual room-capture boxes. Per dropped image, the operator picks:
+(1) calculate manually (draw boxes — unchanged), or (2) one-tap AI-extract.
+
+**Key fact:** a dropped image is already uploaded server-side to
+`/uploads/drafts/<userId>/…` by `POST /api/calculations/upload-drawing`
+([route](../../../src/app/api/calculations/upload-drawing/route.ts)) and docked via
+`addDroppedImages`. So feeding it to AI means pointing the AI endpoint at that path — **no
+re-upload, no base64 round-trip.**
+
+**Changes:**
+
+1. **Endpoint — add an `imagePath` mode.** `/api/calculations/ai-extract` (and its
+   `schema.ts`) accept `{ imagePath: string }` in addition to `text` / `imageBase64`. The
+   handler:
+   - **Authz:** accept the path only when it resolves under the **caller's own**
+     `uploads/drafts/<user.id>/` folder (reject `..`/traversal and any other user's drafts).
+   - Read the file from `public/<imagePath>`, validate it's an image (`looksLikeImage`,
+     `MAX_IMAGE_SIZE_BYTES`), then run the **same** Gemini vision `extractDimensions` path
+     used by `imageBase64`. Same `{ rooms, confidence, note, isPlanLike }` response.
+   - Rate-limit + `record` exactly like the existing image branch.
+
+2. **Drawing dock — per-image "Extract with AI" button.** `DrawingDock`
+   ([component](../../../src/components/calculation/DrawingDock.tsx)) shows an
+   "✨ Extract with AI" action on each docked drawing, **only when the user holds
+   `calculator.aiAssist`** (passed in as a prop from the page). Clicking it POSTs
+   `{ imagePath: <that drawing's url> }` to `/api/calculations/ai-extract` and routes the
+   returned rooms through the existing `handleAiRooms` handler (append + price). A busy
+   spinner + the same "couldn't read / added N rooms" messaging as `AiAssistBox`.
+
+3. **Page wiring.** The calculations page passes an `onExtractAI(imagePath)` callback and an
+   `aiAssistEnabled` flag into `DrawingDock`; the callback calls the endpoint and feeds
+   `handleAiRooms`. The existing drop/dock/room-capture flow is otherwise untouched.
+
+**Out of scope:** no change to the drop/upload pipeline, no auto-extract on drop (operator
+chooses per image), no new permission (reuses `calculator.aiAssist`).
