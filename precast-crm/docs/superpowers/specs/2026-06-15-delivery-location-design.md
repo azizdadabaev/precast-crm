@@ -111,3 +111,44 @@ WhatsApp: when the parked Baileys integration ships, its location messages flow 
 3. **Phase 3 — Inbox + comments + client default.** Telegram inbox location card + "Use as delivery location" (Path B) · comment URL linkify + "Set as delivery location" promotion · optional Client last-location prefill.
 
 Each phase is independently shippable and useful on its own.
+
+## 12. Build status & remaining work (as of 2026-06-15)
+
+**Done + deployed (Phase 1) / committed (Phase 2 + comments):**
+- Phase 1 — schema fields on `Order`+`Project`; `parseMapLink` + `isGoogleShortLinkHost`
+  (`src/lib/geo/parse-map-link.ts`); SSRF-guarded resolver `POST /api/geo/resolve-link`;
+  `PATCH /api/orders/[id]/delivery-location`; `DeliveryLocationCard`
+  (`src/components/logistics/DeliveryLocationCard.tsx`) + `useGoogleMaps` loader (graceful
+  degrade when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is absent); card on the order detail page.
+- Phase 2 — `PATCH /api/projects/[id]/delivery-location`; card on the project detail page;
+  carry Project→Order in `src/lib/create-order.ts` (the canonical create path; the agent
+  place-order path inherits it).
+- Comments — URL linkify via `src/components/comments/parse-comment.ts` (used by
+  `CommentThread.renderBody`); pasted map links are now clickable.
+
+**Remaining (deferred to a fresh session — groundwork below):**
+
+1. **Telegram inbox "Use as delivery location" (Path B).** No schema change needed — location
+   coordinates are already persisted in `Message.mediaMeta` (`{ lat, lng, title? }`) by the
+   webhook, and `src/components/inbox/MediaRenderers.tsx` already renders the `LOCATION` case
+   (map texture + a maps link). To finish:
+   - Add an optional `onUseLocation?: (lat:number,lng:number) => void` prop to `MessageMedia`
+     and render a "Use as delivery location" button in the `LOCATION` case when provided.
+   - Thread the callback from the conversation view down to `MessageMedia`.
+   - New endpoint `POST /api/inbox/[conversationId]/use-location` (gate `inbox.access`):
+     read `{lat,lng}`, find the draft `Project` linked by `conversationId` (most recent
+     `status=DRAFT`), set its delivery pin (reuse the project delivery-location update); if an
+     order already exists for that project, set it there too. Returns the updated target.
+   - The "Set as delivery location" promotion on a comment that contains a maps link is a
+     small follow-on (parse-comment already classifies `link` tokens): pass an
+     `onUseLink?(url)` from the order/project page that resolves via `/api/geo/resolve-link`
+     and saves; show it only when no pin exists yet and the user can edit.
+
+2. **Client default prefill (optional, last).** Add `lastDeliveryLat Float?` /
+   `lastDeliveryLng Float?` to `Client` (additive `prisma db push`); on order placement, also
+   update the client's last location; prefill the `DeliveryLocationCard` capture UI from it
+   for repeat customers.
+
+**Operator setup (no code):** add a billing-enabled `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+(referrer-restricted to the prod domain + the Maps JavaScript API) so the interactive map
+renders; everything else (paste/parse/Copy/Navigate/save) works without it.
