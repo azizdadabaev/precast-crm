@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImageOff, X, CheckCircle2 } from "lucide-react";
+import { ImageOff, X, CheckCircle2, Sparkles, Loader2 } from "lucide-react";
 import { ImageViewerProvider, useImageViewer } from "@/components/inbox/ImageViewer";
 import { Bi } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,10 @@ interface DrawingDockProps {
   onHideDock: () => void;
   highlightRowId: string | null;
   onHighlightRow: (id: string | null) => void;
+  /** Show the per-drawing "Extract with AI" button (gated by permission). */
+  aiAssistEnabled?: boolean;
+  /** Send the active docked drawing to the AI extractor. */
+  onExtractAI?: (imagePath: string) => Promise<void>;
 }
 
 /**
@@ -110,9 +114,10 @@ export function DrawingDock(props: DrawingDockProps) {
   );
 }
 
-function DockBody({ images, error, rows, onCapture, onDeleteRow, onHideDock, highlightRowId, onHighlightRow }: DrawingDockProps) {
+function DockBody({ images, error, rows, onCapture, onDeleteRow, onHideDock, highlightRowId, onHighlightRow, aiAssistEnabled, onExtractAI }: DrawingDockProps) {
   const [reviewed, setReviewed] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
+  const [aiBusy, setAiBusy] = useState(false);
 
   if (error) {
     return (
@@ -216,6 +221,28 @@ function DockBody({ images, error, rows, onCapture, onDeleteRow, onHideDock, hig
         <p className="px-1 pt-2 text-center text-[11px] text-muted-foreground">
           <Bi uz="Хонани белгилаш учун чизинг · кўриш учун босинг" en="Drag to mark a room · click to zoom" />
         </p>
+        {aiAssistEnabled && onExtractAI && (
+          <button
+            type="button"
+            disabled={aiBusy}
+            onClick={async () => {
+              setAiBusy(true);
+              try {
+                await onExtractAI(active);
+              } finally {
+                setAiBusy(false);
+              }
+            }}
+            className="mt-2 mx-auto flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {aiBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            <Bi uz="AI билан ўлчаш" en="Extract with AI" />
+          </button>
+        )}
       </div>
     </div>
   );

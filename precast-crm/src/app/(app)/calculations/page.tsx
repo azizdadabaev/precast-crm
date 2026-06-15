@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Save, PackageCheck, Trash2, Loader2, Phone, PanelLeftOpen } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
@@ -580,6 +580,31 @@ function CalculationsInner() {
     setError(null);
   }
 
+  // ── Per-drawing "Extract with AI" (Drawing Dock) ──
+  // Gated by the `calculator.aiAssist` permission; the same ["me"] query key
+  // is used by AiAssistBox, so react-query dedupes the request.
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const aiAssistEnabled = me?.permissions?.includes("calculator.aiAssist") ?? false;
+
+  async function handleDockExtractAI(imagePath: string) {
+    try {
+      const res = await api<{ rooms: ExtractedRoom[]; confidence: "high" | "low"; note?: string }>(
+        "/api/calculations/ai-extract",
+        { method: "POST", json: { imagePath } },
+      );
+      if (!res.rooms.length) {
+        setError(t("Ўлчамларни ўқий олмадим — қўлда киритинг", "Couldn't read dimensions — please enter them manually"));
+        return;
+      }
+      handleAiRooms(res.rooms);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   // ── Order summary ──
   const summary = useMemo(() => {
     const valid = validRooms
@@ -885,6 +910,8 @@ function CalculationsInner() {
           onHideDock={() => setDockHidden(true)}
           highlightRowId={highlightRowId}
           onHighlightRow={setHighlightRowId}
+          aiAssistEnabled={aiAssistEnabled}
+          onExtractAI={handleDockExtractAI}
         />
       )}
       <div className={showDock ? "min-w-0 flex-1 space-y-5" : "space-y-5"}>
