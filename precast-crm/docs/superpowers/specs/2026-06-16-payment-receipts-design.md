@@ -110,9 +110,15 @@ message) that carries a **photo** + a **caption**:
    linked / not authorized" and stop. (This is the authz gate — no mapping, no attach.)
 2. Parse the **order number** from the caption. Order numbers are `YYYY-MM-NNNN` strings
    (e.g. `2026-06-0010`, monotonic per month — see `src/lib/order-number.ts`). A small pure
-   `parseOrderRef(caption)` extracts the first `\d{4}-\d{2}-\d{4}` token (tolerating a `№`/`#`
-   prefix and surrounding text), then validates it with the existing `parseOrderNumber()` helper,
-   returning the canonical order-number string. No valid token → reply asking for the order number.
+   `parseOrderRef(caption, currentYear)` (tolerating a `№`/`#` prefix and surrounding text):
+   - **Full form** — extracts the first `\d{4}-\d{2}-\d{4}` token and validates it via the existing
+     `parseOrderNumber()`.
+   - **Short form** — if no full token is present, accepts a bare `MM-NNNN` (e.g. `06-0010`) and
+     **prepends the current year** (`currentYear`, injected so the helper stays pure/testable) →
+     `2026-06-0010`, then validates the same way. So an operator can submit either the full
+     `2026-06-0010` or just `06-0010`.
+   Returns the canonical `YYYY-MM-NNNN` string, or null. No valid token → reply asking for the
+   order number. The webhook passes `new Date().getFullYear()` as `currentYear`.
 3. Find the `Order` by `orderNumber` (exact match). Not found → reply "Буюртма топилмади · Order not found".
 4. Download the largest photo size (reuse `tgGetFilePath` + `tgDownloadFile`), validate it's an
    image, save to `/uploads/receipts/order-<orderId>/<uuid>.<ext>`, create a `Receipt`
@@ -135,9 +141,10 @@ Telegram file unique id so a re-delivered update doesn't double-insert.
 
 ## 8. Testing
 
-- **Pure `parseOrderRef(caption)`** (Phase 2): extracts a `YYYY-MM-NNNN` order number from a
-  caption — `"чек 2026-06-0010"` / `"№2026-06-0010"` / `"2026-06-0010 to'lov"` → `"2026-06-0010"`;
-  a bare number, a bad month, or junk → null. Reuses `parseOrderNumber()` for validation.
+- **Pure `parseOrderRef(caption, currentYear)`** (Phase 2): full form
+  `"чек 2026-06-0010"` / `"№2026-06-0010"` → `"2026-06-0010"`; **short form** `"06-0010"`
+  with `currentYear=2026` → `"2026-06-0010"`; a bare number, a bad month (`13-0001`), or junk →
+  null. Reuses `parseOrderNumber()` for validation; the injected `currentYear` keeps it deterministic.
 - **Receipt-row creation**: recording a payment with receipt URLs creates linked `Receipt` rows;
   attach-to-existing creates an order+payment-linked row. (Unit where a harness exists; otherwise
   the upload endpoint's body schema + the pure mapping.)

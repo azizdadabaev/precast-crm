@@ -293,16 +293,25 @@ import { describe, it, expect } from "vitest";
 import { parseOrderRef } from "@/lib/order-receipt-ref";
 
 describe("parseOrderRef", () => {
-  it("extracts a YYYY-MM-NNNN order number from a caption", () => {
-    expect(parseOrderRef("чек 2026-06-0010")).toBe("2026-06-0010");
-    expect(parseOrderRef("№2026-06-0010")).toBe("2026-06-0010");
-    expect(parseOrderRef("2026-06-0010 to'lov")).toBe("2026-06-0010");
+  it("extracts a full YYYY-MM-NNNN order number from a caption", () => {
+    expect(parseOrderRef("чек 2026-06-0010", 2026)).toBe("2026-06-0010");
+    expect(parseOrderRef("№2026-06-0010", 2026)).toBe("2026-06-0010");
+    expect(parseOrderRef("2026-06-0010 to'lov", 2026)).toBe("2026-06-0010");
+  });
+  it("accepts a short MM-NNNN and fills in the current year", () => {
+    expect(parseOrderRef("06-0010", 2026)).toBe("2026-06-0010");
+    expect(parseOrderRef("чек 06-0010", 2026)).toBe("2026-06-0010");
+    expect(parseOrderRef("05-0004", 2027)).toBe("2027-05-0004");
+  });
+  it("prefers the full form when both could match (no double-count of YYYY-MM-NNNN)", () => {
+    expect(parseOrderRef("2026-06-0010", 2030)).toBe("2026-06-0010"); // year NOT overwritten
   });
   it("returns null for junk, a bare number, or a bad month", () => {
-    expect(parseOrderRef("hello")).toBeNull();
-    expect(parseOrderRef("123")).toBeNull();
-    expect(parseOrderRef("2026-13-0001")).toBeNull(); // month 13 invalid
-    expect(parseOrderRef("")).toBeNull();
+    expect(parseOrderRef("hello", 2026)).toBeNull();
+    expect(parseOrderRef("123", 2026)).toBeNull();
+    expect(parseOrderRef("2026-13-0001", 2026)).toBeNull(); // month 13 invalid
+    expect(parseOrderRef("13-0001", 2026)).toBeNull();       // short form, bad month
+    expect(parseOrderRef("", 2026)).toBeNull();
   });
 });
 ```
@@ -314,12 +323,22 @@ Run `npx vitest run tests/order-receipt-ref.test.ts` → FAIL.
 import { parseOrderNumber } from "./order-number";
 
 /** Extract a canonical order number (YYYY-MM-NNNN) from a free-text bot caption.
- *  Returns the order-number string (validated via parseOrderNumber), or null. */
-export function parseOrderRef(caption: string | null | undefined): string | null {
+ *  Accepts the full form OR a short `MM-NNNN`, filling in `currentYear` for the
+ *  short form so an operator needn't type the year. Returns the validated
+ *  order-number string, or null. `currentYear` is injected (not read from the
+ *  clock) so this stays pure/testable. */
+export function parseOrderRef(caption: string | null | undefined, currentYear: number): string | null {
   if (!caption) return null;
-  const m = caption.match(/\d{4}-\d{2}-\d{4}/);
-  if (!m) return null;
-  return parseOrderNumber(m[0]) ? m[0] : null;
+  // Full YYYY-MM-NNNN wins — try it first so its embedded MM-NNNN isn't re-yeared.
+  const full = caption.match(/\d{4}-\d{2}-\d{4}/);
+  if (full && parseOrderNumber(full[0])) return full[0];
+  // Short MM-NNNN (not part of a longer digit run) → prepend the current year.
+  const short = caption.match(/(?<!\d)(\d{2})-(\d{4})(?!\d)/);
+  if (short) {
+    const candidate = `${String(currentYear).padStart(4, "0")}-${short[1]}-${short[2]}`;
+    if (parseOrderNumber(candidate)) return candidate;
+  }
+  return null;
 }
 ```
 
@@ -379,7 +398,10 @@ Add a branch BEFORE `const parsed = update ? parseBusinessUpdate(update) : null;
 
 Then add `handleOperatorReceiptDm` (in this file or a sibling `src/lib/agent/receipt-dm.ts` — prefer a sibling for testability) that:
 1. `const fromId = String(dm.from?.id ?? "")` → `const operator = await prisma.user.findFirst({ where: { telegramUserId: fromId, isActive: true } })`. If none, or `!can(operator, "payment.record")` → `tgSendMessage(String(dm.chat.id), "⚠️ Сиз боғланмагансиз ёки рухсат йўқ · You're not linked / not authorized")` and return. (`can` from `@/lib/permissions`.)
-2. `const ref = parseOrderRef(dm.caption)`. If null → reply "⚠️ Буюртма рақамини ёзинг (масалан 2026-06-0010) · Add the order number (e.g. 2026-06-0010)" and return.
+2. `const ref = parseOrderRef(dm.caption, new Date().getFullYear())` — accepts the full
+   `2026-06-0010` OR a short `06-0010` (year auto-filled). If null → reply "⚠️ Буюртма рақамини
+   ёзинг (масалан 2026-06-0010 ёки 06-0010) · Add the order number (e.g. 2026-06-0010 or 06-0010)"
+   and return.
 3. `const order = await prisma.order.findFirst({ where: { orderNumber: ref }, select: { id: true, orderNumber: true } })`. If null → reply "⚠️ Буюртма топилмади: {ref} · Order not found" and return.
 4. Idempotency: the largest photo's `file_unique_id` (`dm.photo[dm.photo.length-1].file_unique_id`). Skip if a `Receipt` for this order already has it — store it as a suffix in the filename or add a `tgFileUniqueId` column; simplest: name the file `${file_unique_id}.${ext}` and `findFirst` a receipt whose `imageUrl` ends with it before inserting.
 5. Download: `const filePath = await tgGetFilePath(largest.file_id); const buf = await tgDownloadFile(filePath);` validate `looksLikeImage(buf)`; `const ext = imageExtFromBytes(buf)`; `const url = await saveBufferToUploads(buf, \`receipts/order-${order.id}\`, \`${file_unique_id}.${ext}\`);`
