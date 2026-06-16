@@ -99,6 +99,11 @@ enum PaymentMethod {
   OTHER
 }
 
+enum ReceiptSource {
+  CRM_UPLOAD
+  TELEGRAM_BOT
+}
+
 enum DiscrepancyStatus {
   OPEN // shortfall flagged, not yet resolved
   RESOLVED_RECOVERED // shortfall later collected (customer paid the rest)
@@ -198,6 +203,7 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   createdById        String?
+  telegramUserId     String?   @unique
 
   deals             Deal[]            @relation("AssignedDeals")
   orderEvents       OrderEvent[]
@@ -241,6 +247,9 @@ model User {
 
   // Gallery — photos this user uploaded
   uploadedPhotos GalleryPhoto[]
+
+  // Receipt uploads
+  uploadedReceipts Receipt[] @relation("ReceiptUploader")
 
   // Газоблок (aerated-block) line — back-relations
   gazoblokProductionEntries GazoblokProductionEntry[]
@@ -566,6 +575,7 @@ model Order {
   dispatch           Dispatch? // 0-or-1 active dispatch (orderId is @unique on Dispatch)
   payments           Payment[]
   discrepancies      Discrepancy[]
+  receipts           Receipt[]
   drawingRequests    DrawingRequest[]
   shipments          Shipment[]
   comments           Comment[]
@@ -740,10 +750,30 @@ model Payment {
   confirmedBy       User?         @relation("PaymentConfirmer", fields: [confirmedById], references: [id])
   rejectedBy        User?         @relation("PaymentRejecter", fields: [rejectedById], references: [id])
   discrepancies     Discrepancy[]
+  receipts          Receipt[]
 
   @@index([orderId])
   @@index([status, recordedAt])
   @@map("payments")
+}
+
+model Receipt {
+  id           String        @id @default(cuid())
+  orderId      String
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Optional link to a specific payment. Null = order-level (e.g. bot-forwarded
+  // before a payment row exists).
+  paymentId    String?
+  payment      Payment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  imageUrl     String
+  source       ReceiptSource @default(CRM_UPLOAD)
+  uploadedById String?
+  uploadedBy   User?         @relation("ReceiptUploader", fields: [uploadedById], references: [id])
+  createdAt    DateTime      @default(now())
+
+  @@index([orderId])
+  @@index([paymentId])
+  @@map("receipts")
 }
 
 model Discrepancy {
