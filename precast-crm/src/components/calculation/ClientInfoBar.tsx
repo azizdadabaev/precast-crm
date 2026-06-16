@@ -6,7 +6,6 @@ import {
   User,
   MapPin,
   CheckCircle2,
-  ShieldCheck,
   Pencil,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
@@ -18,14 +17,6 @@ export interface ClientDraft {
   name: string;
   phone: string;
   address: string;
-  /**
-   * `true` — operator confirmed during the call that the client is OK to
-   * be shared with prospects via the contact-export feature. Sent to the
-   * server as referenceConsent = GRANTED + a fresh consentUpdatedAt.
-   * `false` — leave the client's existing consent untouched. Operators
-   * use the client detail page to revoke or set DENIED.
-   */
-  consentGranted: boolean;
 }
 
 interface MatchedClient {
@@ -33,7 +24,6 @@ interface MatchedClient {
   name: string;
   phone: string;
   address: string | null;
-  referenceConsent: "NOT_ASKED" | "GRANTED" | "DENIED";
 }
 
 interface Props {
@@ -137,10 +127,6 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
       name: c.name,
       phone: formatPhone(c.phone),
       address: c.address ?? "",
-      // Pre-populate the consent toggle from the matched client so the
-      // operator sees the current state. Unchecking is a no-op on the
-      // server (it never downgrades), so this is purely informational.
-      consentGranted: c.referenceConsent === "GRANTED",
     });
     onMatch(c.id);
     setShowSuggestions(false);
@@ -262,26 +248,6 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
         </Field>
         </div>{/* close mobile Phone+Address wrapper (lg:contents on desktop) */}
       </div>
-
-      {/* Reference-consent checkbox — checked = "operator confirmed the
-          client is OK to share with future prospects". Unchecked never
-          downgrades an existing client's consent; that's a detail-page
-          action. */}
-      <label className="mt-3 flex items-center gap-2 cursor-pointer select-none w-fit">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-primary cursor-pointer"
-          checked={value.consentGranted}
-          onChange={(e) => onChange({ ...value, consentGranted: e.target.checked })}
-        />
-        <ShieldCheck
-          className={`h-4 w-4 ${value.consentGranted ? "text-emerald-600" : "text-muted-foreground"}`}
-        />
-        <span className="text-[12px]">
-          <span className="font-semibold">Розилик берди</span>
-          <span className="lang-en text-muted-foreground"> · Client agrees to share contact with future prospects</span>
-        </span>
-      </label>
 
       {matchedClientId && (
         <div className="text-[11px] text-success mt-2 flex items-center gap-1.5">

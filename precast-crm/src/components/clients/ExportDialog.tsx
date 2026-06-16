@@ -15,7 +15,6 @@ import { useT } from "@/lib/i18n";
 interface ExportResponse {
   text: string;
   exported: number;
-  excluded: number;
 }
 
 interface Props {
@@ -151,14 +150,6 @@ export function ExportDialog({ open, ids, onClose }: Props) {
               {t("мижоз", "clients")}
             </div>
           ) : null}
-          {data && data.excluded > 0 && (
-            <div className="flex items-center gap-1.5 text-xs text-warning bg-warning/10 border border-warning/30 rounded px-2 py-1">
-              <AlertCircle className="h-3 w-3" />
-              <span>
-                {data.excluded} {t("мижоз чиқарилди (розилик йўқ)", `client${data.excluded === 1 ? "" : "s"} excluded (no consent on file)`)}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Editable text block */}

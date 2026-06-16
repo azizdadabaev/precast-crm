@@ -42,7 +42,7 @@ beforeEach(() => {
   // Reset the store between tests — persist's rehydrate path can leave
   // state from a prior test's storage.
   useCalculatorStore.setState({
-    client: { name: "", phone: "", address: "", consentGranted: false },
+    client: { name: "", phone: "", address: "" },
     matchedClientId: null,
     rows: [],
     discountPercent: 0,
@@ -63,10 +63,8 @@ describe("calculator store — actions", () => {
       name: "Doston",
       phone: "+998 90 123 45 67",
       address: "Andijon",
-      consentGranted: true,
     });
     expect(useCalculatorStore.getState().client.name).toBe("Doston");
-    expect(useCalculatorStore.getState().client.consentGranted).toBe(true);
   });
 
   it("setRows replaces the entire rows array", () => {
@@ -109,7 +107,7 @@ describe("calculator store — actions", () => {
 describe("calculator store — clearAll", () => {
   it("resets session fields to defaults", () => {
     useCalculatorStore.setState({
-      client: { name: "X", phone: "+998 90", address: "Y", consentGranted: true },
+      client: { name: "X", phone: "+998 90", address: "Y" },
       matchedClientId: "c1",
       rows: [makeRoom("a", 3.0)],
       discountPercent: 10,
@@ -118,7 +116,7 @@ describe("calculator store — clearAll", () => {
     });
     useCalculatorStore.getState().clearAll();
     const s = useCalculatorStore.getState();
-    expect(s.client).toEqual({ name: "", phone: "", address: "", consentGranted: false });
+    expect(s.client).toEqual({ name: "", phone: "", address: "" });
     expect(s.matchedClientId).toBeNull();
     expect(s.rows).toEqual([]);
     expect(s.discountPercent).toBe(0);
@@ -137,7 +135,7 @@ describe("calculator store — loadFrom", () => {
     useCalculatorStore.setState({ matchedClientId: "leftover" });
     useCalculatorStore.getState().loadFrom({
       draftProjectId: "p1",
-      client: { name: "Bobur", phone: "x", address: "y", consentGranted: false },
+      client: { name: "Bobur", phone: "x", address: "y" },
       rows: [makeRoom("a", 3.5)],
     });
     const s = useCalculatorStore.getState();
@@ -151,7 +149,7 @@ describe("calculator store — loadFrom", () => {
   it("preserves roundingGrid through loadFrom (workspace preference)", () => {
     useCalculatorStore.getState().setRoundingGrid(0.05);
     useCalculatorStore.getState().loadFrom({
-      client: { name: "X", phone: "p", address: "a", consentGranted: false },
+      client: { name: "X", phone: "p", address: "a" },
     });
     expect(useCalculatorStore.getState().roundingGrid).toBe(0.05);
   });
@@ -182,7 +180,7 @@ describe("calculator store — persist", () => {
     memStorage.setItem(
       "calc:autosave:v1",
       JSON.stringify({
-        client: { name: "Legacy", phone: "p", address: "a", consentGranted: false },
+        client: { name: "Legacy", phone: "p", address: "a" },
         matchedClientId: null,
         rows: [],
         discountPercent: 22,
@@ -199,7 +197,7 @@ describe("calculator store — persist", () => {
     memStorage.setItem(
       "calc:autosave:v1",
       JSON.stringify({
-        client: { name: "Legacy2", phone: "p", address: "a", consentGranted: true },
+        client: { name: "Legacy2", phone: "p", address: "a" },
         matchedClientId: null,
         rows: [],
         discountPercent: 33,
@@ -217,7 +215,7 @@ describe("calculator store — persist", () => {
       "calculator-draft-u3",
       JSON.stringify({
         state: {
-          client: { name: "Existing", phone: "p", address: "a", consentGranted: false },
+          client: { name: "Existing", phone: "p", address: "a" },
           matchedClientId: null,
           rows: [],
           discountPercent: 5,
@@ -230,7 +228,7 @@ describe("calculator store — persist", () => {
     memStorage.setItem(
       "calc:autosave:v1",
       JSON.stringify({
-        client: { name: "Should not win", phone: "p", address: "a", consentGranted: false },
+        client: { name: "Should not win", phone: "p", address: "a" },
         matchedClientId: null,
         rows: [],
         discountPercent: 99,

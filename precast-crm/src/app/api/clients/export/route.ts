@@ -12,10 +12,7 @@ import { formatContactsForExport } from "@/lib/contact-export";
  *
  * Body: { ids: string[] }   selected client IDs (capped at 50)
  *
- * Server enforces the GRANTED-consent gate regardless of what the UI
- * sends — defense in depth so a buggy / malicious caller can't bypass
- * the privacy filter. Returns the formatted text + counts so the dialog
- * can warn when some IDs were dropped.
+ * Returns the formatted text + the exported count.
  *
  * Side effect: writes one ExportEvent row per call for the audit trail.
  * If the JWT's user no longer exists in the DB (stale cookie after a
@@ -25,20 +22,18 @@ import { formatContactsForExport } from "@/lib/contact-export";
 export const POST = withPermission("client.export", async (req: NextRequest, { user }) => {
   const body = ContactExportSchema.parse(await req.json());
 
-  // Load only the consenting clients. We DO load by id with the consent
-  // filter rather than loading all and filtering in JS so a request for
-  // 50 ids never pulls more than 50 rows.
-  const consenting = await prisma.client.findMany({
+  // Load the requested clients. Loading by id (capped at 50) means a
+  // request never pulls more than 50 rows.
+  const selected = await prisma.client.findMany({
     where: {
       id: { in: body.ids },
-      referenceConsent: "GRANTED",
     },
     select: { id: true, name: true, phone: true, address: true },
   });
 
   // Preserve the operator's selection ORDER (the table they see), not
   // the DB's row order. We do this by looking up each id in-order.
-  const byId = new Map(consenting.map((c) => [c.id, c]));
+  const byId = new Map(selected.map((c) => [c.id, c]));
   const ordered = body.ids
     .map((id) => byId.get(id))
     .filter((c): c is NonNullable<typeof c> => !!c);
@@ -56,6 +51,5 @@ export const POST = withPermission("client.export", async (req: NextRequest, { u
   return ok({
     text,
     exported: ordered.length,
-    excluded: body.ids.length - ordered.length,
   });
 });

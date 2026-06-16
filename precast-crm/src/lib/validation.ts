@@ -95,8 +95,6 @@ export const ChangePinSchema = z.object({
 });
 
 // ── Clients ─────────────────────────────────────────────────────
-export const ReferenceConsentEnum = z.enum(["NOT_ASKED", "GRANTED", "DENIED"]);
-
 export const ClientCreateSchema = z.object({
   name: z.string().min(1, "name is required").max(120),
   phone: z.string().min(5).max(40), // raw input; normalized at handler
@@ -106,17 +104,11 @@ export const ClientCreateSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
 });
 
-export const ClientUpdateSchema = ClientCreateSchema.partial().extend({
-  // Consent fields aren't part of Create (operators set them after the
-  // initial conversation), but Update accepts them.
-  referenceConsent: ReferenceConsentEnum.optional(),
-  consentNote: z.string().max(500).optional().nullable(),
-});
+export const ClientUpdateSchema = ClientCreateSchema.partial();
 
-// ── Contact export (privacy-gated) ──────────────────────────────
+// ── Contact export ──────────────────────────────────────────────
 // Capped at 50 to prevent accidental "export everyone" with a buggy
-// script. The endpoint also enforces the GRANTED-consent gate
-// server-side regardless of what the client sends.
+// script.
 export const ContactExportSchema = z.object({
   ids: z.array(z.string()).min(1).max(50),
 });
@@ -231,11 +223,6 @@ export const SaveProjectDraftSchema = z.object({
   clientName: z.string().max(120).optional().nullable(),
   clientPhone: z.string().min(3, "phone is required").max(40),
   clientAddress: z.string().max(200).optional().nullable(),
-  // Optional reference-consent capture during the call. Sent ONLY when the
-  // operator explicitly grants consent (checkbox toggled to GRANTED) — null
-  // means "leave existing consent untouched". The server never DOWNGRADES
-  // from this endpoint; revoking / denying happens on the client detail page.
-  clientReferenceConsent: ReferenceConsentEnum.optional().nullable(),
   shapeType: ShapeTypeEnum.default("RECTANGULAR"),
   dimensions: ProjectDimensionsSchema.optional().nullable(),
   rooms: z.array(RoomCalcInputSchema).default([]),
@@ -257,9 +244,6 @@ export const PlaceOrderSchema = z.object({
   clientName: z.string().min(1, "client name is required").max(120),
   clientPhone: z.string().min(5, "client phone is required").max(40),
   clientAddress: z.string().min(1, "client address is required").max(200),
-  // Optional reference-consent capture (see SaveProjectDraftSchema for
-  // the contract). null = leave existing untouched, never downgrades.
-  clientReferenceConsent: ReferenceConsentEnum.optional().nullable(),
   // When projectId is omitted, we create the project from the rooms below
   shapeType: ShapeTypeEnum.default("RECTANGULAR"),
   dimensions: ProjectDimensionsSchema.optional().nullable(),

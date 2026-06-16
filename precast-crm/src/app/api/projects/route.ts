@@ -99,23 +99,8 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   }));
 
   // If the phone matches an existing Client, attach to the Client up front;
-  // otherwise keep it as tentativeClientPhone until Place Order. We also
-  // capture consent here when the operator ticked the call-time checkbox
-  // and the matched client doesn't already have GRANTED.
+  // otherwise keep it as tentativeClientPhone until Place Order.
   const existingClient = await prisma.client.findUnique({ where: { phone: phoneNorm } });
-  if (
-    existingClient &&
-    body.clientReferenceConsent &&
-    body.clientReferenceConsent !== existingClient.referenceConsent
-  ) {
-    await prisma.client.update({
-      where: { id: existingClient.id },
-      data: {
-        referenceConsent: body.clientReferenceConsent,
-        consentUpdatedAt: new Date(),
-      },
-    });
-  }
 
   // Resolve dimensions snapshot
   const dim =

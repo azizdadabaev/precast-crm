@@ -101,7 +101,6 @@ const EMPTY_CLIENT: ClientDraft = {
   name: "",
   phone: "",
   address: "",
-  consentGranted: false,
 };
 
 const INITIAL_STATE = {

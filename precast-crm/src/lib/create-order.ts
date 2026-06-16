@@ -149,25 +149,12 @@ export async function createOrder(
           name: input.clientName,
           phone: phoneNorm,
           address: input.clientAddress,
-          ...(input.clientReferenceConsent
-            ? {
-                referenceConsent: input.clientReferenceConsent,
-                consentUpdatedAt: new Date(),
-              }
-            : {}),
         },
       });
     } else {
       const updates: Record<string, unknown> = {};
       if (client.name !== input.clientName) updates.name = input.clientName;
       if (client.address !== input.clientAddress) updates.address = input.clientAddress;
-      if (
-        input.clientReferenceConsent &&
-        input.clientReferenceConsent !== client.referenceConsent
-      ) {
-        updates.referenceConsent = input.clientReferenceConsent;
-        updates.consentUpdatedAt = new Date();
-      }
       if (Object.keys(updates).length) {
         client = await tx.client.update({ where: { id: client.id }, data: updates });
       }

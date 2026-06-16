@@ -285,7 +285,7 @@ function CalculationsInner() {
       const ctx = await api<ConversationContext>(`/api/inbox/${id}/context`);
       if (opts?.prefillClient) {
         loadFrom({
-          client: { name: ctx.displayName ?? "", phone: "", address: "", consentGranted: false },
+          client: { name: ctx.displayName ?? "", phone: "", address: "" },
         });
       }
       setSourceConversationId(id);
@@ -393,7 +393,6 @@ function CalculationsInner() {
           name: string;
           phone: string;
           address: string | null;
-          referenceConsent: "NOT_ASKED" | "GRANTED" | "DENIED";
         };
         project: {
           id: string;
@@ -431,7 +430,6 @@ function CalculationsInner() {
           name: order.client.name,
           phone: order.client.phone,
           address: order.client.address ?? "",
-          consentGranted: order.client.referenceConsent === "GRANTED",
         },
         matchedClientId: order.client.id,
         discountPercent: Number(order.discountPercent),
@@ -478,7 +476,6 @@ function CalculationsInner() {
           name: string;
           phone: string;
           address: string | null;
-          referenceConsent: "NOT_ASKED" | "GRANTED" | "DENIED";
         } | null;
         calculations: Array<{
           id: string;
@@ -506,7 +503,6 @@ function CalculationsInner() {
           name: p.client?.name ?? p.tentativeClientName ?? "",
           phone: p.client?.phone ?? p.tentativeClientPhone ?? "",
           address: p.client?.address ?? p.tentativeClientAddress ?? "",
-          consentGranted: p.client?.referenceConsent === "GRANTED",
         },
         matchedClientId: p.client?.id ?? null,
         discountPercent: Number(p.discountPercent),
@@ -696,9 +692,6 @@ function CalculationsInner() {
           clientName: client.name || null,
           clientPhone: client.phone,
           clientAddress: client.address || null,
-          // Only send when the operator actually checked the box. The server
-          // never downgrades from GRANTED — leaving it null is a no-op.
-          clientReferenceConsent: client.consentGranted ? "GRANTED" : null,
           shapeType: "RECTANGULAR",
           conversationId: sourceConversationId ?? undefined,
           discountPercent,
@@ -750,7 +743,6 @@ function CalculationsInner() {
           clientName: client.name,
           clientPhone: client.phone,
           clientAddress: client.address,
-          clientReferenceConsent: client.consentGranted ? "GRANTED" : null,
           shapeType: "RECTANGULAR",
           rooms: validRooms.map((r) => ({
             name: r.name,

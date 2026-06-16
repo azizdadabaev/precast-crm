@@ -31,7 +31,6 @@ interface Client {
   address: string | null;
   language: "UZ" | "RU";
   source: string | null;
-  referenceConsent: "NOT_ASKED" | "GRANTED" | "DENIED";
   createdAt: string;
   _count: { deals: number; orders: number };
 }
@@ -85,10 +84,7 @@ export default function ClientsPage() {
     setSelected(new Set());
   }, [q, language]);
 
-  const eligibleIds = useMemo(
-    () => clients.filter((c) => c.referenceConsent === "GRANTED").map((c) => c.id),
-    [clients],
-  );
+  const eligibleIds = useMemo(() => clients.map((c) => c.id), [clients]);
   const allEligibleSelected =
     eligibleIds.length > 0 && eligibleIds.every((id) => selected.has(id));
   const someEligibleSelected =
@@ -221,8 +217,8 @@ export default function ClientsPage() {
                       disabled={eligibleIds.length === 0}
                       title={
                         eligibleIds.length === 0
-                          ? t("Жорий кўринишда розилик берган мижоз йўқ", "No clients with consent on file in current view")
-                          : t("Розилик берган барча мижозларни танлаш", "Select all clients with consent on file")
+                          ? t("Жорий кўринишда мижоз йўқ", "No clients in current view")
+                          : t("Барча мижозларни танлаш", "Select all clients")
                       }
                     />
                   </th>
@@ -238,7 +234,6 @@ export default function ClientsPage() {
               </thead>
               <tbody>
                 {clients.map((c, i) => {
-                  const eligible = c.referenceConsent === "GRANTED";
                   const checked = selected.has(c.id);
                   return (
                     <tr
@@ -253,13 +248,8 @@ export default function ClientsPage() {
                           type="checkbox"
                           className="h-4 w-4 accent-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                           checked={checked}
-                          disabled={!eligible}
                           onChange={() => toggleOne(c.id)}
-                          title={
-                            eligible
-                              ? t("Танловни ўзгартириш", "Toggle selection")
-                              : t("Розилик берилмаган", "No consent on file")
-                          }
+                          title={t("Танловни ўзгартириш", "Toggle selection")}
                         />
                       </td>
                       <td className="px-3 py-2.5 font-medium">
