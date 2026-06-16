@@ -86,6 +86,9 @@ export const UpdateUserSchema = z.object({
   isActive: z.boolean().optional(),
   // Admin can reset another user's PIN; mustChangePassword is set to true.
   resetPin: z.string().regex(/^\d{4}$/).optional(),
+  // Telegram numeric user id for the receipt-forward bot. Owner-entered. Empty
+  // string clears it. Digits only.
+  telegramUserId: z.string().regex(/^\d{5,15}$/).or(z.literal("")).optional(),
 });
 
 // Self-service PIN change. currentPin is empty during forced-change flow.

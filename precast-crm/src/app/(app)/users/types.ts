@@ -12,4 +12,5 @@ export interface ManagedUser {
   lastLogin: string | null;
   createdAt: string;
   createdById: string | null;
+  telegramUserId: string | null;
 }

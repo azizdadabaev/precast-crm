@@ -30,6 +30,7 @@ export const GET = withPermission("user.view", async () => {
       lastLogin: true,
       createdAt: true,
       createdById: true,
+      telegramUserId: true,
     },
   });
   return ok(users);

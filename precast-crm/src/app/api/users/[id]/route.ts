@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { UpdateUserSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
@@ -124,6 +125,12 @@ export const PATCH = withPermission<{ id: string }>(
       audits.push({ action: "pin_reset" });
     }
 
+    if (data.telegramUserId !== undefined) {
+      // Empty string clears the link; otherwise set the owner-entered id.
+      updates.telegramUserId =
+        data.telegramUserId === "" ? null : data.telegramUserId;
+    }
+
     if (!Object.keys(updates).length) {
       // Nothing actually changed — return the current user.
       const u = await prisma.user.findUniqueOrThrow({
@@ -138,40 +145,59 @@ export const PATCH = withPermission<{ id: string }>(
           isActive: true,
           mustChangePassword: true,
           lastLogin: true,
+          telegramUserId: true,
         },
       });
       return ok(u);
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const u = await tx.user.update({
-        where: { id: target.id },
-        data: updates,
-        select: {
-          id: true,
-          loginName: true,
-          email: true,
-          name: true,
-          role: true,
-          permissions: true,
-          isActive: true,
-          mustChangePassword: true,
-          lastLogin: true,
-        },
-      });
-      if (audits.length) {
-        await tx.userAuditLog.createMany({
-          data: audits.map((a) => ({
-            userId: target.id,
-            actorId: actor.id,
-            action: a.action,
-            oldValue: a.oldValue ?? null,
-            newValue: a.newValue ?? null,
-          })),
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.update({
+          where: { id: target.id },
+          data: updates,
+          select: {
+            id: true,
+            loginName: true,
+            email: true,
+            name: true,
+            role: true,
+            permissions: true,
+            isActive: true,
+            mustChangePassword: true,
+            lastLogin: true,
+            telegramUserId: true,
+          },
         });
+        if (audits.length) {
+          await tx.userAuditLog.createMany({
+            data: audits.map((a) => ({
+              userId: target.id,
+              actorId: actor.id,
+              action: a.action,
+              oldValue: a.oldValue ?? null,
+              newValue: a.newValue ?? null,
+            })),
+          });
+        }
+        return u;
+      });
+    } catch (err) {
+      // telegramUserId is @unique — surface a clean 409 instead of the
+      // shared handler's generic "Unique constraint violation" message.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2002" &&
+        (err.meta?.target as string[] | undefined)?.includes("telegramUserId")
+      ) {
+        return fail(
+          "Бу Telegram ID бошқа фойдаланувчига боғланган · This Telegram ID is already linked to another user",
+          409,
+        );
       }
-      return u;
-    });
+      throw err;
+    }
 
     return ok(updated);
   },

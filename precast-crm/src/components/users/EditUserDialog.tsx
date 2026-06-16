@@ -43,6 +43,7 @@ export function EditUserDialog({
 }) {
   const t = useT();
   const [name, setName] = useState("");
+  const [telegramUserId, setTelegramUserId] = useState("");
   const [perms, setPerms] = useState<Set<Action>>(new Set());
   const [active, setActive] = useState(true);
   const [resetPin, setResetPin] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export function EditUserDialog({
   useEffect(() => {
     if (target) {
       setName(target.name);
+      setTelegramUserId(target.telegramUserId ?? "");
       setPerms(new Set(target.permissions as Action[]));
       setActive(target.isActive);
       setResetPin(null);
@@ -81,6 +83,9 @@ export function EditUserDialog({
     try {
       const body: Record<string, unknown> = {};
       if (name !== target?.name) body.name = name;
+      if (telegramUserId.trim() !== (target?.telegramUserId ?? "")) {
+        body.telegramUserId = telegramUserId.trim();
+      }
       if (canEditPermissions) {
         body.permissions = Array.from(perms);
       }
@@ -148,6 +153,19 @@ export function EditUserDialog({
                 <div className="text-xs text-muted-foreground">
                   Шаблон ўзгартирилмайди — рухсатларни қўлда мослаштиринг
                   <span className="lang-en"> · Template is read-only — adjust permissions manually.</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-telegram-id">Telegram ID</Label>
+                <Input
+                  id="edit-telegram-id"
+                  inputMode="numeric"
+                  value={telegramUserId}
+                  onChange={(e) => setTelegramUserId(e.target.value)}
+                />
+                <div className="text-xs text-muted-foreground">
+                  @userinfobot орқали олинади
+                  <span className="lang-en"> · get it from @userinfobot</span>
                 </div>
               </div>
             </div>
