@@ -41,6 +41,10 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
           rejectedBy: { select: { id: true, name: true } },
         },
       },
+      receipts: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, imageUrl: true, paymentId: true, source: true, createdAt: true },
+      },
       events: {
         orderBy: { createdAt: "desc" },
         take: 100,

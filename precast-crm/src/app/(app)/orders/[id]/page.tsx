@@ -17,9 +17,11 @@ import {
   Package,
   Split,
   MessageCircle,
+  Paperclip,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
+import { ReceiptStrip } from "@/components/payments/ReceiptStrip";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
@@ -163,6 +165,13 @@ interface OrderDetail {
     confirmedBy: { id: string; name: string } | null;
     rejectedBy: { id: string; name: string } | null;
   }>;
+  receipts: Array<{
+    id: string;
+    imageUrl: string;
+    paymentId: string | null;
+    source: string;
+    createdAt: string;
+  }>;
 }
 
 const STATUS_FLOW: Array<{ key: OrderDetail["status"]; uz: string; en: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -263,6 +272,35 @@ export default function OrderDetailPage() {
   const canUseBlender = me?.permissions?.includes("blender.bridge") ?? false;
   const canUseInbox = me?.permissions?.includes("inbox.access") ?? false;
   const canEditOrder = me?.permissions?.includes("order.edit") ?? false;
+  const canRecordPayment = me?.permissions?.includes("payment.record") ?? false;
+
+  // Which payment row is currently uploading a receipt (paymentId), so the
+  // per-row "+ чек" button can show a busy state without a shared flag.
+  const [receiptUploadingFor, setReceiptUploadingFor] = useState<string | null>(null);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
+  const receiptTargetPaymentId = useRef<string | null>(null);
+
+  /** Attach a receipt image to an existing payment row. */
+  async function attachReceipt(paymentId: string, file: File) {
+    setReceiptUploadingFor(paymentId);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/payments/${paymentId}/receipts`, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      const json = (await res.json()) as { ok?: boolean; id?: string; error?: string };
+      if (!res.ok || !json.id) throw new Error(json.error || `HTTP ${res.status}`);
+      qc.invalidateQueries({ queryKey: ["order", params.id] });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setReceiptUploadingFor(null);
+    }
+  }
 
   const deliveryLocation = useMutation({
     mutationFn: (body: { lat: number | null; lng: number | null; url?: string | null; label?: string | null }) =>
@@ -1381,33 +1419,90 @@ export default function OrderDetailPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {p.status === "PENDING_CONFIRMATION" && !p.handedOverToOfficeAt && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={handoverPayment.isPending}
-                        onClick={() => handoverPayment.mutate(p.id)}
-                      >
-                        {handoverPayment.isPending ? (
-                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                        ) : null}
-                        {t("Топшириш", "Hand over")}
-                      </Button>
-                    )}
-                    {p.status === "PENDING_CONFIRMATION" && p.handedOverToOfficeAt && (
-                      <Link
-                        href="/payments"
-                        className="text-xs text-muted-foreground underline hover:no-underline"
-                      >
-                        {t("Тасдиқлаш кутилмоқда →", "Awaiting confirm →")}
-                      </Link>
-                    )}
+                    <div className="flex flex-col items-end gap-1.5">
+                      {p.status === "PENDING_CONFIRMATION" && !p.handedOverToOfficeAt && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={handoverPayment.isPending}
+                          onClick={() => handoverPayment.mutate(p.id)}
+                        >
+                          {handoverPayment.isPending ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : null}
+                          {t("Топшириш", "Hand over")}
+                        </Button>
+                      )}
+                      {p.status === "PENDING_CONFIRMATION" && p.handedOverToOfficeAt && (
+                        <Link
+                          href="/payments"
+                          className="text-xs text-muted-foreground underline hover:no-underline"
+                        >
+                          {t("Тасдиқлаш кутилмоқда →", "Awaiting confirm →")}
+                        </Link>
+                      )}
+                      {(() => {
+                        const rcpts = order.receipts.filter((r) => r.paymentId === p.id);
+                        return rcpts.length > 0 ? (
+                          <ReceiptStrip urls={rcpts.map((r) => r.imageUrl)} />
+                        ) : null;
+                      })()}
+                      {canRecordPayment && (
+                        <button
+                          type="button"
+                          disabled={receiptUploadingFor === p.id}
+                          onClick={() => {
+                            receiptTargetPaymentId.current = p.id;
+                            receiptInputRef.current?.click();
+                          }}
+                          className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                        >
+                          {receiptUploadingFor === p.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Paperclip className="h-3 w-3" />
+                          )}
+                          {t("+ чек", "+ receipt")}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
           </div>
+
+          {/* Order-level receipts (paymentId === null) — e.g. bot-forwarded
+              before a payment row exists. Payment-linked receipts show in
+              their row above. */}
+          {(() => {
+            const orderLevel = order.receipts.filter((r) => r.paymentId === null);
+            return orderLevel.length > 0 ? (
+              <div className="border-t px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">
+                  Чеклар<span className="lang-en"> · Receipts</span>
+                </div>
+                <ReceiptStrip urls={orderLevel.map((r) => r.imageUrl)} />
+              </div>
+            ) : null;
+          })()}
+
+          {/* Shared hidden input — the per-row "+ чек" buttons route through
+              receiptTargetPaymentId so a single input serves every row. */}
+          <input
+            ref={receiptInputRef}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              const pid = receiptTargetPaymentId.current;
+              if (f && pid) void attachReceipt(pid, f);
+              receiptTargetPaymentId.current = null;
+              e.target.value = "";
+            }}
+          />
         </div>
       )}
 

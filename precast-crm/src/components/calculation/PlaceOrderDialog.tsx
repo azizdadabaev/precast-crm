@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { X, PackageCheck, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
+import { ReceiptPicker } from "@/components/payments/ReceiptPicker";
+import { api } from "@/lib/fetcher";
 import { formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -54,6 +57,7 @@ interface Props {
     scheduledAt: Date;
     paidAmount: number;
     paymentMethod: PaymentMethod;
+    receiptUrls: string[];
   }) => Promise<void>;
   /** Edit-mode flag. When true the dialog renames itself to "Save edits",
    *  hides the up-front payment section (existing payments are preserved
@@ -80,6 +84,13 @@ export function PlaceOrderDialog({
   const [error, setError] = useState<string | null>(null);
   const [paidAmount, setPaidAmount] = useState<number | "">(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
+
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canRecord = me?.permissions?.includes("payment.record") ?? false;
 
   // Sync the picker to a newly-arrived default (e.g. edit-mode loads
   // the order's scheduledAt after the dialog has already mounted).
@@ -114,6 +125,7 @@ export function PlaceOrderDialog({
         scheduledAt: date,
         paidAmount: editMode ? 0 : paidNum,
         paymentMethod: editMode ? "CASH" : paymentMethod,
+        receiptUrls: editMode ? [] : receiptUrls,
       });
     } catch (e) {
       setError((e as Error).message);
@@ -321,6 +333,18 @@ export function PlaceOrderDialog({
                   "Owner confirms it on the Payments page; only then does the order's confirmedPaid update.",
                 )}
               </p>
+              {canRecord && paidNum > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Чек<span className="lang-en"> · Receipt</span> ({t("ихтиёрий", "optional")})
+                  </span>
+                  <ReceiptPicker
+                    urls={receiptUrls}
+                    onChange={setReceiptUrls}
+                    disabled={submitting}
+                  />
+                </div>
+              )}
             </div>
             )}
           </aside>

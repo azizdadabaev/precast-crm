@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Wallet, Loader2, AlertCircle, AlertTriangle } from "lucide-react";
 import {
   Dialog,
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { ReceiptPicker } from "@/components/payments/ReceiptPicker";
 import { api } from "@/lib/fetcher";
 import { formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
@@ -63,8 +65,15 @@ export function AddPaymentDialog({
   const [source, setSource] = useState<PaymentSource>("IN_OFFICE_CASH");
   const [handOverNow, setHandOverNow] = useState(false);
   const [notes, setNotes] = useState("");
+  const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canRecord = me?.permissions?.includes("payment.record") ?? false;
 
   // Reset / pre-fill on open
   useEffect(() => {
@@ -74,6 +83,7 @@ export function AddPaymentDialog({
       setSource("IN_OFFICE_CASH");
       setHandOverNow(false);
       setNotes("");
+      setReceiptUrls([]);
       setError(null);
       setSubmitting(false);
     }
@@ -125,6 +135,7 @@ export function AddPaymentDialog({
           source,
           handOverNow: source === "IN_OFFICE_CASH" ? handOverNow : false,
           notes: notes.trim() || null,
+          receiptUrls,
         },
       });
       onSaved();
@@ -295,6 +306,20 @@ export function AddPaymentDialog({
               placeholder={t("Эслатма · Ихтиёрий", "Eslatma · Optional note")}
             />
           </div>
+
+          {/* Receipt picker — attach proof-of-payment images (optional) */}
+          {canRecord && (
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider font-bold">
+                Чек<span className="lang-en"> · Receipt</span> ({t("ихтиёрий", "optional")})
+              </Label>
+              <ReceiptPicker
+                urls={receiptUrls}
+                onChange={setReceiptUrls}
+                disabled={submitting}
+              />
+            </div>
+          )}
 
           {error && (
             <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">

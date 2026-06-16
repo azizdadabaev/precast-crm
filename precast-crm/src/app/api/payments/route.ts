@@ -46,6 +46,13 @@ export const GET = withPermission("payment.view", async (req: NextRequest) => {
               driver: { select: { id: true, name: true } },
             },
           },
+          // Order-level (unlinked) receipts so the confirm dialog can show
+          // bot-forwarded proof that predates any payment row.
+          receipts: {
+            where: { paymentId: null },
+            orderBy: { createdAt: "asc" },
+            select: { id: true, imageUrl: true },
+          },
         },
       },
       collectedByDriver: { select: { id: true, name: true, phone: true } },
@@ -53,6 +60,10 @@ export const GET = withPermission("payment.view", async (req: NextRequest) => {
       handedOverTo: { select: { id: true, name: true } },
       confirmedBy: { select: { id: true, name: true } },
       rejectedBy: { select: { id: true, name: true } },
+      receipts: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, imageUrl: true, paymentId: true },
+      },
     },
   });
   return ok(payments);

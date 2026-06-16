@@ -735,6 +735,7 @@ function CalculationsInner() {
       scheduledAt: Date;
       paidAmount: number;
       paymentMethod: "CASH" | "BANK_TRANSFER" | "CLICK" | "PAYME" | "OTHER";
+      receiptUrls: string[];
     }) =>
       api<{ id: string; orderNumber: string }>("/api/orders", {
         method: "POST",
@@ -764,6 +765,7 @@ function CalculationsInner() {
           scheduledAt: args.scheduledAt.toISOString(),
           paidAmount: args.paidAmount,
           paymentMethod: args.paidAmount > 0 ? args.paymentMethod : null,
+          receiptUrls: args.receiptUrls,
         },
       }),
     onSuccess: (order) => {
@@ -1133,11 +1135,11 @@ function CalculationsInner() {
         summary={summary}
         editMode={isEditingOrder}
         defaultScheduledAt={editingOrderInfo?.scheduledAt ?? null}
-        onConfirm={async ({ scheduledAt, paidAmount, paymentMethod }) => {
+        onConfirm={async ({ scheduledAt, paidAmount, paymentMethod, receiptUrls }) => {
           if (isEditingOrder) {
             await editOrder.mutateAsync({ scheduledAt });
           } else {
-            await placeOrder.mutateAsync({ scheduledAt, paidAmount, paymentMethod });
+            await placeOrder.mutateAsync({ scheduledAt, paidAmount, paymentMethod, receiptUrls });
           }
         }}
       />

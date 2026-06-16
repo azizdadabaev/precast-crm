@@ -17,6 +17,7 @@ import {
   DiscrepancyChoice,
   type DiscrepancyAction,
 } from "@/components/payments/DiscrepancyChoice";
+import { ReceiptStrip } from "@/components/payments/ReceiptStrip";
 import { formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -33,12 +34,16 @@ export interface PaymentForConfirm {
   handedOverToOfficeAt: string | null;
   confirmedBy: { id: string; name: string } | null;
   confirmedAt: string | null;
+  /** Receipts linked to this payment row. */
+  receipts?: Array<{ id: string; imageUrl: string }>;
   order: {
     id: string;
     orderNumber: string;
     totalPrice: string;
     confirmedPaid: string;
     dispatch: { expectedCollection: string; driver: { id: string; name: string } | null } | null;
+    /** Order-level (unlinked) receipts — bot-forwarded proof predating a row. */
+    receipts?: Array<{ id: string; imageUrl: string }>;
   };
 }
 
@@ -184,6 +189,23 @@ export function ConfirmPaymentDialog({ open, onClose, payment, onConfirmed }: Pr
         </DialogHeader>
 
         <ChainOfCustodyPanel payment={payment} />
+
+        {/* Receipt evidence — this payment's linked receipts plus any
+            order-level (unlinked) ones the owner should review before confirming. */}
+        {(() => {
+          const urls = [
+            ...(payment.receipts ?? []),
+            ...(payment.order.receipts ?? []),
+          ].map((r) => r.imageUrl);
+          return urls.length > 0 ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider font-bold">
+                Чек<span className="lang-en"> · Receipt</span>
+              </Label>
+              <ReceiptStrip urls={urls} />
+            </div>
+          ) : null;
+        })()}
 
         {!rejectMode && (
           <>
