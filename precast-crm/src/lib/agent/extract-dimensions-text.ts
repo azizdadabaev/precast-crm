@@ -35,6 +35,17 @@ export interface TextExtractResult {
   usage?: LlmUsage;
 }
 
+/** Pull the JSON object out of a model reply that may be wrapped in prose, a
+ *  ```json code fence, or a thinking-style preamble. Returns the substring from
+ *  the first `{` to the last `}`; parseDimensions then validates it. Null when no
+ *  brace pair is present (parseDimensions handles that as not-found). */
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) return null;
+  return text.slice(start, end + 1);
+}
+
 /** Run the operator's pasted text through the conversation model and validate
  *  with the shared parseDimensions(). Pure w.r.t. the injected provider, so it
  *  unit-tests with a fake provider. */
@@ -46,7 +57,22 @@ export async function extractDimensionsFromText(
     system: TEXT_DIMENSIONS_PROMPT,
     messages: [{ role: "user", content: text }],
     tools: [],
-    maxTokens: 1024,
+    // The conversation model may be a THINKING model (e.g. gemini-3.1-pro): its
+    // reasoning tokens count against the output budget, so a small cap gets
+    // exhausted before the JSON, truncating it to unparseable. Give it room —
+    // the vision path is likewise uncapped. The JSON itself is tiny.
+    maxTokens: 8192,
   });
-  return { dims: parseDimensions(result.text), usage: result.usage };
+  // Tolerate prose / code-fence / thinking-preamble wrapping around the JSON.
+  const dims = parseDimensions(extractJsonObject(result.text) ?? result.text);
+  if (!dims.found && dims.note === "could not parse vision output") {
+    // Surface the raw model output for diagnosis (staff log only, never shown to
+    // a customer) so a recurrence isn't a black box — see stopReason for MAX_TOKENS.
+    console.warn("[ai-extract:text] unparseable model output", {
+      stopReason: result.stopReason,
+      outputTokens: result.usage?.outputTokens,
+      sample: result.text.slice(0, 300),
+    });
+  }
+  return { dims, usage: result.usage };
 }
