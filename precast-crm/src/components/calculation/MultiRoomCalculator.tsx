@@ -563,6 +563,13 @@ export function MultiRoomCalculator({
     if (next <= 0) return;
     updateRow(id, { innerWidth: next });
   };
+  // Nudge a row's Correction by ±10 cm (0.1 m). Correction may be negative, so
+  // there's no clamp; round to 2dp to avoid float drift (0.1+0.2 = 0.3000…04).
+  const onNudgeCorrection = (id: string, delta: number) => {
+    const room = rows.find((r) => r.id === id);
+    if (!room) return;
+    updateRow(id, { correction: Math.round((room.correction + delta) * 100) / 100 });
+  };
   const onRoundAllUp = () => {
     onChange(
       rows.map((r) => {
@@ -842,14 +849,25 @@ export function MultiRoomCalculator({
                     />
                   </td>
                   <td className="grid-cell grid-tint-input grid-group-divider">
-                    <NumberInput
-                      step="0.01"
-                      className="grid-input is-numeric"
-                      value={row.correction}
-                      onChange={(n) => updateRow(row.id, { correction: n })}
-                      data-cell-row={rowIdx}
-                      data-cell-col={4}
-                    />
+                    <div className="flex items-center gap-1">
+                      <NumberInput
+                        step="0.01"
+                        className="grid-input is-numeric flex-1 min-w-0"
+                        value={row.correction}
+                        onChange={(n) => updateRow(row.id, { correction: n })}
+                        data-cell-row={rowIdx}
+                        data-cell-col={4}
+                      />
+                      {/* ±10 cm nudge — Correction can go negative, so no clamp. */}
+                      <div className="hidden lg:block">
+                        <RowRoundArrows
+                          onUp={() => onNudgeCorrection(row.id, 0.1)}
+                          onDown={() => onNudgeCorrection(row.id, -0.1)}
+                          upLabel="+10 см · +10 cm"
+                          downLabel="−10 см · −10 cm"
+                        />
+                      </div>
+                    </div>
                   </td>
 
                   {/* Slab L (monolith_length) — moved here from after
@@ -1426,10 +1444,14 @@ function RowRoundArrows({
   onUp,
   onDown,
   size = "sm",
+  upLabel = "Юқорилаштириш · Round up",
+  downLabel = "Тушириш · Round down",
 }: {
   onUp: () => void;
   onDown: () => void;
   size?: "sm" | "md";
+  upLabel?: string;
+  downLabel?: string;
 }) {
   const cls =
     size === "md"
@@ -1444,8 +1466,8 @@ function RowRoundArrows({
       <button
         type="button"
         tabIndex={-1}
-        aria-label="Юқорилаштириш · Round up"
-        title="Round up"
+        aria-label={upLabel}
+        title={upLabel}
         onClick={onUp}
         className={cls}
       >
@@ -1454,8 +1476,8 @@ function RowRoundArrows({
       <button
         type="button"
         tabIndex={-1}
-        aria-label="Тушириш · Round down"
-        title="Round down"
+        aria-label={downLabel}
+        title={downLabel}
         onClick={onDown}
         className={cls}
       >
