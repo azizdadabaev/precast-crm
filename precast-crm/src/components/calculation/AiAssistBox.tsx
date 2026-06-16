@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/fetcher";
 import { useT } from "@/lib/i18n";
-import { Sparkles, Loader2, ImagePlus } from "lucide-react";
+import { Sparkles, Loader2, ImagePlus, ChevronRight, ChevronDown } from "lucide-react";
 import type { ExtractedRoom } from "@/lib/agent/llm/provider";
 
 interface ExtractResponse {
@@ -26,6 +26,9 @@ export function AiAssistBox({
   });
   const allowed = me?.permissions?.includes("calculator.aiAssist") ?? false;
 
+  // Collapsed by default — the box is an occasional helper, so it shouldn't
+  // push the client bar + table down on every visit. Click the header to expand.
+  const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,10 +74,22 @@ export function AiAssistBox({
 
   return (
     <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
-      <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-primary">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-primary"
+      >
         <Sparkles className="h-3.5 w-3.5" />
         {t("AI ёрдамчи", "AI assist")}
-      </div>
+        {expanded ? (
+          <ChevronDown className="ml-auto h-4 w-4" />
+        ) : (
+          <ChevronRight className="ml-auto h-4 w-4" />
+        )}
+      </button>
+      {expanded && (
+      <>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -119,6 +134,8 @@ export function AiAssistBox({
       </div>
       {info && <p className="text-xs text-muted-foreground">{info}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
+      </>
+      )}
     </div>
   );
 }
