@@ -44,11 +44,11 @@ export function ReceiptPicker({
           body: fd,
           credentials: "include",
         });
-        const json = (await res.json()) as { ok?: boolean; url?: string; error?: string };
-        if (!res.ok || !json.url) {
+        const json = (await res.json()) as { ok?: boolean; data?: { url?: string }; error?: string };
+        if (!res.ok || !json.data?.url) {
           throw new Error(json.error || `HTTP ${res.status}`);
         }
-        added.push(json.url);
+        added.push(json.data.url);
       }
     } catch (e) {
       setError((e as Error).message);

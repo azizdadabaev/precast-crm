@@ -292,8 +292,8 @@ export default function OrderDetailPage() {
         body: fd,
         credentials: "include",
       });
-      const json = (await res.json()) as { ok?: boolean; id?: string; error?: string };
-      if (!res.ok || !json.id) throw new Error(json.error || `HTTP ${res.status}`);
+      const json = (await res.json()) as { ok?: boolean; data?: { id?: string }; error?: string };
+      if (!res.ok || !json.data?.id) throw new Error(json.error || `HTTP ${res.status}`);
       qc.invalidateQueries({ queryKey: ["order", params.id] });
     } catch (e) {
       setError((e as Error).message);
@@ -1343,8 +1343,9 @@ export default function OrderDetailPage() {
         />
       )}
 
-      {/* Payments — chain of custody view */}
-      {order.payments.length > 0 && (
+      {/* Payments — chain of custody view. Also renders when there are only
+          order-level (bot-forwarded) receipts and no payment rows yet. */}
+      {(order.payments.length > 0 || order.receipts.some((r) => r.paymentId === null)) && (
         <div className="rounded-lg border bg-background overflow-hidden">
           <div className="px-4 py-3 border-b flex items-baseline justify-between">
             <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -1354,6 +1355,7 @@ export default function OrderDetailPage() {
               {t("Тасдиқланган:", "Confirmed:")} {formatNumber(order.confirmedPaid, 0)} / {formatNumber(order.totalPrice, 0)}
             </div>
           </div>
+          {order.payments.length > 0 && (
           <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -1472,6 +1474,7 @@ export default function OrderDetailPage() {
             </tbody>
           </table>
           </div>
+          )}
 
           {/* Order-level receipts (paymentId === null) — e.g. bot-forwarded
               before a payment row exists. Payment-linked receipts show in
