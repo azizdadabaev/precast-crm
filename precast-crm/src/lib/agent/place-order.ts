@@ -136,6 +136,7 @@ export async function placeAgentOrderFromDraft(input: {
     deliveryCost: 0,
     otherCost: 0,
     paidAmount: 0,
+    receiptUrls: [],
     scheduledAt: new Date(),
     notes: input.notes ?? null,
   };

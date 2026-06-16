@@ -83,6 +83,7 @@ export function pendingOrderToCreateInput(
     scheduledAt: opts.scheduledAt,
     notes: payload.notes ?? null,
     paidAmount: 0,
+    receiptUrls: [],
   };
 }
 

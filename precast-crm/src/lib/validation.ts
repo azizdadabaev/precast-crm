@@ -266,6 +266,7 @@ export const PlaceOrderSchema = z.object({
   // route handler since totalPrice is computed server-side.
   paidAmount: z.coerce.number().min(0).default(0),
   paymentMethod: PaymentMethodEnum.optional().nullable(),
+  receiptUrls: z.array(z.string().max(500)).max(10).default([]),
 }).refine(
   (v) => !(v.paidAmount > 0) || !!v.paymentMethod,
   { path: ["paymentMethod"], message: "paymentMethod is required when paidAmount > 0" },
@@ -350,6 +351,7 @@ export const PaymentRecordSchema = z
     handOverNow: z.boolean().default(false),
     collectedByDriverId: z.string().optional().nullable(),
     notes: z.string().max(500).optional().nullable(),
+    receiptUrls: z.array(z.string().max(500)).max(10).default([]),
   })
   .refine(
     (d) => !(d.source === "FROM_DRIVER_AT_DELIVERY" && !d.collectedByDriverId),

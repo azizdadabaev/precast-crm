@@ -151,6 +151,17 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
         },
       },
     });
+    if (body.receiptUrls.length) {
+      await tx.receipt.createMany({
+        data: body.receiptUrls.map((url) => ({
+          orderId: body.orderId,
+          paymentId: p.id,
+          imageUrl: url,
+          source: "CRM_UPLOAD" as const,
+          uploadedById: user.id,
+        })),
+      });
+    }
     return p;
   });
 

@@ -318,6 +318,17 @@ export async function createOrder(
           },
         },
       });
+      if (input.receiptUrls?.length) {
+        await tx.receipt.createMany({
+          data: input.receiptUrls.map((url) => ({
+            orderId: createdOrder.id,
+            paymentId: payment.id,
+            imageUrl: url,
+            source: "CRM_UPLOAD" as const,
+            uploadedById: actor.userId,
+          })),
+        });
+      }
     }
 
     return createdOrder;
