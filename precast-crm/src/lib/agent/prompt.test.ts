@@ -114,6 +114,14 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('A tool result'); // the "tool number supersedes KB" rule
   });
 
+  it('includes the CONTACT section with the sales team phone numbers', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('# CONTACT — PHONE / CALLS');
+    expect(p).toContain('+998 93 481 33 30'); // Azizbek
+    expect(p).toContain('+998 94 306 09 70'); // Ulug'bek
+    expect(p).toContain('+998 93 676 15 88'); // Tursunboy
+  });
+
   it('tells the agent to count every room via the tool (the under-counted-draft bug)', () => {
     // Identical rooms must be passed as `count`, or the saved draft holds one room
     // per distinct size while the text shows the full multi-room total.
