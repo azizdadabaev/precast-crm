@@ -108,9 +108,12 @@ message) that carries a **photo** + a **caption**:
 1. Resolve the sender: `update.message.from.id` → find a `User` with matching `telegramUserId`
    that is active and has `payment.record`. If none → reply "Сиз боғланмагансиз · You're not
    linked / not authorized" and stop. (This is the authz gate — no mapping, no attach.)
-2. Parse the **order number** from the caption (accept `№123`, `#123`, `123`, or `order 123`;
-   a small pure `parseOrderRef(caption)` → number). No number → reply asking for the order number.
-3. Find the `Order` by `orderNumber`. Not found → reply "Буюртма топилмади · Order not found".
+2. Parse the **order number** from the caption. Order numbers are `YYYY-MM-NNNN` strings
+   (e.g. `2026-06-0010`, monotonic per month — see `src/lib/order-number.ts`). A small pure
+   `parseOrderRef(caption)` extracts the first `\d{4}-\d{2}-\d{4}` token (tolerating a `№`/`#`
+   prefix and surrounding text), then validates it with the existing `parseOrderNumber()` helper,
+   returning the canonical order-number string. No valid token → reply asking for the order number.
+3. Find the `Order` by `orderNumber` (exact match). Not found → reply "Буюртма топилмади · Order not found".
 4. Download the largest photo size (reuse `tgGetFilePath` + `tgDownloadFile`), validate it's an
    image, save to `/uploads/receipts/order-<orderId>/<uuid>.<ext>`, create a `Receipt`
    (`source: TELEGRAM_BOT`, `uploadedById` = the linked operator, `orderId`, `paymentId: null`).
@@ -132,7 +135,9 @@ Telegram file unique id so a re-delivered update doesn't double-insert.
 
 ## 8. Testing
 
-- **Pure `parseOrderRef(caption)`** (Phase 2): `№123`/`#123`/`123`/`order 123` → 123; junk → null.
+- **Pure `parseOrderRef(caption)`** (Phase 2): extracts a `YYYY-MM-NNNN` order number from a
+  caption — `"чек 2026-06-0010"` / `"№2026-06-0010"` / `"2026-06-0010 to'lov"` → `"2026-06-0010"`;
+  a bare number, a bad month, or junk → null. Reuses `parseOrderNumber()` for validation.
 - **Receipt-row creation**: recording a payment with receipt URLs creates linked `Receipt` rows;
   attach-to-existing creates an order+payment-linked row. (Unit where a harness exists; otherwise
   the upload endpoint's body schema + the pure mapping.)
