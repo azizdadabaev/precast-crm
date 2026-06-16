@@ -11,6 +11,7 @@ import { emitInbox } from "@/lib/inbox-bus";
 import { runAgentForInbound, runVisionForInbound, runVoiceForInbound } from "@/lib/agent/webhook-entry";
 import { enqueueInboundText } from "@/lib/agent/burst";
 import { handleApprovalCallback } from "@/lib/agent/approval-webhook";
+import { handleOperatorReceiptDm } from "@/lib/agent/receipt-dm";
 
 const EXT_BY_KIND: Record<string, string> = {
   IMAGE: ".jpg", VIDEO: ".mp4", VIDEO_NOTE: ".mp4", VOICE: ".ogg", AUDIO: ".mp3", DOCUMENT: "",
@@ -77,6 +78,15 @@ export async function POST(req: NextRequest) {
     void handleApprovalCallback(update.callback_query, {
       secret: process.env.QUOTE_SIGNING_SECRET ?? "",
     }).catch((err) => console.error("[telegram webhook callback]", err));
+    return new Response("ok");
+  }
+
+  // Operator forwards a payment receipt directly to the bot (a plain DM, not a
+  // business message). Authorize via telegramUserId; attach to the order in the
+  // caption. Fire-and-forget; always 200 so Telegram doesn't retry.
+  const dm = update?.message;
+  if (dm?.chat?.id != null && Array.isArray(dm.photo) && dm.photo.length > 0 && !update.business_connection_id) {
+    void handleOperatorReceiptDm(dm).catch((err) => console.error("[telegram receipt dm]", err));
     return new Response("ok");
   }
 
