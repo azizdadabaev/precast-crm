@@ -4,6 +4,7 @@ import * as React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Send, Pencil, Trash2, Loader2 } from "lucide-react";
 import { api } from "@/lib/fetcher";
+import { commentBase } from "./comment-endpoint";
 import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { parseCommentTokens } from "./parse-comment";
@@ -15,6 +16,10 @@ interface CommentThreadProps {
 
 interface CommentDTO {
   id: string;
+  // Where the comment is anchored — an order thread also shows its draft's
+  // (project) comments, so edit/delete must target the comment's own entity.
+  orderId: string | null;
+  projectId: string | null;
   body: string;
   createdAt: string;
   updatedAt: string;
@@ -261,9 +266,16 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
     },
   });
 
+  // Route edit/delete to the comment's OWN entity (it may be a draft/project
+  // comment shown inside an order thread), not the page's baseUrl.
+  const commentUrl = (id: string) => {
+    const c = comments.find((x) => x.id === id);
+    return `${c ? commentBase(c) : baseUrl}/${id}`;
+  };
+
   const editMut = useMutation({
     mutationFn: ({ id, body }: { id: string; body: string }) =>
-      api(`${baseUrl}/${id}`, { method: "PATCH", json: { body } }),
+      api(commentUrl(id), { method: "PATCH", json: { body } }),
     onSuccess: () => {
       setEditingId(null);
       setEditDraft("");
@@ -272,7 +284,7 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: string) => api(`${baseUrl}/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => api(commentUrl(id), { method: "DELETE" }),
     onSuccess: invalidate,
   });
 

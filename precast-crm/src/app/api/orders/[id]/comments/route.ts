@@ -19,12 +19,19 @@ export const GET = withPermission<Params>(
   async (_req: NextRequest, { params }) => {
     const order = await prisma.order.findUnique({
       where: { id: params.id },
-      select: { id: true },
+      select: { id: true, projectId: true },
     });
     if (!order) return fail("Order not found", 404);
 
+    // The order's thread is the WHOLE deal's conversation: comments on the order
+    // itself PLUS the ones left on its source draft (project) before it was placed
+    // (Order.projectId is @unique → exactly one draft per order). The comments stay
+    // anchored where they were created; edit/delete routes per-comment on the client.
     const comments = await prisma.comment.findMany({
-      where: { orderId: params.id, deletedAt: null },
+      where: {
+        deletedAt: null,
+        OR: [{ orderId: params.id }, { projectId: order.projectId }],
+      },
       orderBy: { createdAt: "asc" },
       include: {
         author: { select: authorSelect },
