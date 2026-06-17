@@ -18,6 +18,7 @@ import {
   Split,
   MessageCircle,
   Paperclip,
+  BadgeCheck,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
+import { SettleRemainingDialog } from "@/components/payments/SettleRemainingDialog";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { SendQuoteToChatButton } from "@/components/inbox/SendQuoteToChatButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
@@ -60,6 +62,9 @@ interface OrderDetail {
   status: "PLACED" | "IN_PRODUCTION" | "LOADED" | "DISPATCHED" | "DELIVERED" | "CANCELED";
   paymentState: "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
   confirmedPaid: string;
+  writeOffAmount: string;
+  writeOffNote: string | null;
+  writeOffAt: string | null;
   roomsSubtotal: string;
   discountPercent: string;
   discountAmount: string;
@@ -224,6 +229,7 @@ export default function OrderDetailPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [proofOpen, setProofOpen] = useState(false);
   const [addPaymentOpen, setAddPaymentOpen] = useState(false);
+  const [settleOpen, setSettleOpen] = useState(false);
   const [loadTruckOpen, setLoadTruckOpen] = useState(false);
   const [splitLoading, setSplitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -273,6 +279,7 @@ export default function OrderDetailPage() {
   const canUseInbox = me?.permissions?.includes("inbox.access") ?? false;
   const canEditOrder = me?.permissions?.includes("order.edit") ?? false;
   const canRecordPayment = me?.permissions?.includes("payment.record") ?? false;
+  const canConfirmPayment = me?.permissions?.includes("payment.confirm") ?? false;
 
   // Which payment row is currently uploading a receipt (paymentId), so the
   // per-row "+ чек" button can show a busy state without a shared flag.
@@ -385,8 +392,9 @@ export default function OrderDetailPage() {
   );
   const totalNum = Number(order.totalPrice) || Number(order.roomsSubtotal);
   const paidNum = Number(order.confirmedPaid);
-  const remainingNum = Math.max(0, totalNum - paidNum);
-  const fullyPaid = paidNum > 0 && remainingNum === 0;
+  const writeOffNum = Number(order.writeOffAmount ?? 0);
+  const remainingNum = Math.max(0, totalNum - paidNum - writeOffNum);
+  const fullyPaid = paidNum + writeOffNum > 0 && remainingNum === 0;
 
   // Build the share-card payload from the order. The offscreen
   // <ShareTarget> below renders this at 1100 px regardless of
@@ -525,8 +533,9 @@ export default function OrderDetailPage() {
             </div>
             {(() => {
               const paid = Number(order.confirmedPaid);
-              const remaining = Math.max(0, Number(order.totalPrice) - paid);
-              const fullyPaid = paid > 0 && remaining === 0;
+              const writeOff = Number(order.writeOffAmount ?? 0);
+              const remaining = Math.max(0, Number(order.totalPrice) - paid - writeOff);
+              const fullyPaid = paid + writeOff > 0 && remaining === 0;
               return (
                 <div className="mt-0.5 space-y-px text-xs">
                   <div className="flex items-baseline justify-between gap-3">
@@ -595,8 +604,9 @@ export default function OrderDetailPage() {
             {(() => {
               const total = Number(order.totalPrice);
               const paid = Number(order.confirmedPaid);
-              const remaining = Math.max(0, total - paid);
-              const fullyPaid = paid > 0 && remaining === 0;
+              const writeOff = Number(order.writeOffAmount ?? 0);
+              const remaining = Math.max(0, total - paid - writeOff);
+              const fullyPaid = paid + writeOff > 0 && remaining === 0;
               const pendingAmount = order.payments
                 .filter((p) => p.status === "PENDING_CONFIRMATION")
                 .reduce((s, p) => s + Number(p.amount), 0);
@@ -1028,10 +1038,12 @@ export default function OrderDetailPage() {
       {(() => {
         const total = Number(order.totalPrice);
         const confirmed = Number(order.confirmedPaid);
+        const writeOff = Number(order.writeOffAmount ?? 0);
         const pendingSum = order.payments
           .filter((p) => p.status === "PENDING_CONFIRMATION")
           .reduce((s, p) => s + Number(p.amount), 0);
-        const remaining = Math.max(0, total - confirmed - pendingSum);
+        const remaining = Math.max(0, total - confirmed - pendingSum - writeOff);
+        const canSettle = canConfirmPayment && remaining > 0 && order.status !== "CANCELED";
         const canAdd =
           order.status !== "CANCELED" &&
           !(order.status === "DELIVERED" && order.paymentState === "FULLY_PAID") &&
@@ -1136,6 +1148,24 @@ export default function OrderDetailPage() {
                   >
                     <Ban className="h-3.5 w-3.5 mr-1.5" />
                     {t("Буюртмани бекор қилиш", "Cancel order")}
+                  </Button>
+                )}
+
+                {/* Settle remaining (write-off) — owner-only, deliberate.
+                    Distinct outline style so it never reads as "money in". */}
+                {canSettle && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70"
+                    onClick={() => setSettleOpen(true)}
+                    title={t(
+                      "Қолган қолдиқни ҳисобдан чиқариш",
+                      "Write off the remaining balance",
+                    )}
+                  >
+                    <BadgeCheck className="h-3.5 w-3.5 mr-1.5" />
+                    Қолдиқни ёпиш<span className="lang-en"> · Settle remaining</span>
                   </Button>
                 )}
 
@@ -1622,7 +1652,12 @@ export default function OrderDetailPage() {
         expectedCollection={
           order.dispatch
             ? Number(order.dispatch.expectedCollection)
-            : Math.max(0, Number(order.totalPrice) - Number(order.confirmedPaid))
+            : Math.max(
+                0,
+                Number(order.totalPrice) -
+                  Number(order.confirmedPaid) -
+                  Number(order.writeOffAmount ?? 0),
+              )
         }
         onUpload={uploadDeliveryProof}
       />
@@ -1652,6 +1687,7 @@ export default function OrderDetailPage() {
           0,
           Number(order.totalPrice) -
             Number(order.confirmedPaid) -
+            Number(order.writeOffAmount ?? 0) -
             order.payments
               .filter((p) => p.status === "PENDING_CONFIRMATION")
               .reduce((s, p) => s + Number(p.amount), 0),
@@ -1660,6 +1696,19 @@ export default function OrderDetailPage() {
           .filter((p) => p.status === "PENDING_CONFIRMATION")
           .reduce((s, p) => s + Number(p.amount), 0)}
         onSaved={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
+      />
+
+      <SettleRemainingDialog
+        open={settleOpen}
+        onClose={() => setSettleOpen(false)}
+        orderId={order.id}
+        remaining={Math.max(
+          0,
+          Number(order.totalPrice) -
+            Number(order.confirmedPaid) -
+            Number(order.writeOffAmount ?? 0),
+        )}
+        onSettled={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
       />
 
       {/* Cancel modal */}

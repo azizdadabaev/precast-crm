@@ -117,7 +117,8 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
   // Remaining = total − confirmedPaid − sum(PENDING). Blocks double-recording
   // while a previous payment is still in the owner's queue.
   const pendingSum = order.payments.reduce((s, p) => s + Number(p.amount), 0);
-  const remaining = Number(order.totalPrice) - Number(order.confirmedPaid) - pendingSum;
+  const remaining =
+    Number(order.totalPrice) - Number(order.confirmedPaid) - pendingSum - Number(order.writeOffAmount);
   if (body.amount > remaining) {
     return fail(
       `Amount (${body.amount}) exceeds remaining balance (${remaining}). ` +

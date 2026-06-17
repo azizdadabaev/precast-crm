@@ -111,8 +111,9 @@ export const POST = withPermission<{ id: string }>(
     });
     const confirmedPaid = Number(sumAgg._sum.amount ?? 0);
     const total = Number(payment.order.totalPrice);
+    const writeOff = Number(payment.order.writeOffAmount);
     const paymentState =
-      confirmedPaid >= total
+      confirmedPaid + writeOff >= total
         ? "FULLY_PAID"
         : confirmedPaid > 0
           ? "PARTIALLY_PAID"

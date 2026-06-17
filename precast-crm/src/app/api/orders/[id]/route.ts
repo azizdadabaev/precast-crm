@@ -113,10 +113,13 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
   if (body.status === "DELIVERED" && existing.status !== "DELIVERED") {
     const orderWithShipments = await prisma.order.findUnique({
       where: { id: params.id },
-      select: { totalPrice: true, confirmedPaid: true, shipments: { select: { status: true } } },
+      select: { totalPrice: true, confirmedPaid: true, writeOffAmount: true, shipments: { select: { status: true } } },
     });
     if (orderWithShipments) {
-      const remaining = Number(orderWithShipments.totalPrice) - Number(orderWithShipments.confirmedPaid);
+      const remaining =
+        Number(orderWithShipments.totalPrice) -
+        Number(orderWithShipments.confirmedPaid) -
+        Number(orderWithShipments.writeOffAmount);
       if (remaining > 0) {
         return fail(
           `Тўлов тўлиқ эмас — қолди: ${Math.round(remaining).toLocaleString("ru-RU")} UZS · Payment incomplete`,

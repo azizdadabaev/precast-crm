@@ -214,7 +214,7 @@ export const GET = withPermissionAny(
         status: { not: "CANCELED" },
         paymentState: { in: ["AWAITING_PAYMENT", "PARTIALLY_PAID"] },
       },
-      select: { totalPrice: true, confirmedPaid: true },
+      select: { totalPrice: true, confirmedPaid: true, writeOffAmount: true },
     }),
     // Receivables a month ago — proxy for the trend. We capture orders
     // that were already-placed by `prevMonthEnd` AND were still
@@ -233,7 +233,7 @@ export const GET = withPermissionAny(
         paymentState: { in: ["AWAITING_PAYMENT", "PARTIALLY_PAID"] },
         placedAt: { lte: prevMonthEnd },
       },
-      select: { totalPrice: true, confirmedPaid: true },
+      select: { totalPrice: true, confirmedPaid: true, writeOffAmount: true },
     }),
     prisma.order.groupBy({
       by: ["clientId"],
@@ -318,7 +318,7 @@ export const GET = withPermissionAny(
   let receivablesTotal = 0;
   let receivablesOrders = 0;
   for (const o of receivablesAgg) {
-    const due = Number(o.totalPrice) - Number(o.confirmedPaid);
+    const due = Number(o.totalPrice) - Number(o.confirmedPaid) - Number(o.writeOffAmount);
     if (due > 0) {
       receivablesTotal += due;
       receivablesOrders += 1;
@@ -326,7 +326,7 @@ export const GET = withPermissionAny(
   }
   let receivablesPrev = 0;
   for (const o of receivablesPrevMonthAgg) {
-    const due = Number(o.totalPrice) - Number(o.confirmedPaid);
+    const due = Number(o.totalPrice) - Number(o.confirmedPaid) - Number(o.writeOffAmount);
     if (due > 0) receivablesPrev += due;
   }
   // Receivables: up = bad. Polarity NEGATIVE → up arrow renders red.

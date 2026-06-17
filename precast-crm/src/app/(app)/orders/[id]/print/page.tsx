@@ -14,6 +14,7 @@ interface OrderDetail {
   status: "PLACED" | "IN_PRODUCTION" | "DISPATCHED" | "DELIVERED" | "CANCELED";
   paymentState: "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
   confirmedPaid: string;
+  writeOffAmount: string;
   roomsSubtotal: string;
   discountPercent: string;
   discountAmount: string;
@@ -114,7 +115,7 @@ export default function OrderPrintPage() {
 
   const total = Number(order.totalPrice);
   const paid = Number(order.confirmedPaid);
-  const remaining = Math.max(0, total - paid);
+  const remaining = Math.max(0, total - paid - Number(order.writeOffAmount ?? 0));
   const paymentMeta = PAYMENT_STATE[order.paymentState];
   const isFullyPaid = order.paymentState === "FULLY_PAID";
 

@@ -101,7 +101,7 @@ export const GET = withPermission(
           .filter((p) => p.status === "PENDING_CONFIRMATION")
           .reduce((s, p) => s + Number(p.amount), 0);
         const total = Number(o.totalPrice);
-        const remaining = Math.max(0, total - confirmed - pending);
+        const remaining = Math.max(0, total - confirmed - pending - Number(o.writeOffAmount));
         sheet.addRow({
           orderNumber: o.orderNumber,
           status: o.status,

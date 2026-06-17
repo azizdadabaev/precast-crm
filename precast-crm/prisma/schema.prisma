@@ -524,6 +524,13 @@ model Order {
   // confirm/reject flows; never edited directly by the UI.
   confirmedPaid Decimal           @default(0) @db.Decimal(14, 2)
 
+  // Write-off of a small leftover balance ("settle remaining"). Order counts as
+  // FULLY_PAID when confirmedPaid + writeOffAmount >= totalPrice.
+  writeOffAmount Decimal   @default(0) @db.Decimal(14, 2)
+  writeOffById   String?
+  writeOffAt     DateTime?
+  writeOffNote   String?
+
   // Pricing snapshot — frozen at placement time
   roomsSubtotal   Decimal @db.Decimal(14, 2)
   discountPercent Decimal @default(0) @db.Decimal(5, 2)

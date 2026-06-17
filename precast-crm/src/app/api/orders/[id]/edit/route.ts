@@ -107,8 +107,9 @@ export const PATCH = withPermission<{ id: string }>(
     const confirmedPaid = existing.payments
       .filter((p) => p.status === "CONFIRMED")
       .reduce((s, p) => s + Number(p.amount), 0);
+    const writeOff = Number(existing.writeOffAmount);
     const newPaymentState =
-      confirmedPaid >= newTotal && newTotal > 0
+      confirmedPaid + writeOff >= newTotal && newTotal > 0
         ? "FULLY_PAID"
         : confirmedPaid > 0
           ? "PARTIALLY_PAID"
