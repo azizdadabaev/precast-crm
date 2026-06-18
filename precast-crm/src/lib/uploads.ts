@@ -133,6 +133,12 @@ export async function saveImageFromFormData(
 
   const filepath = path.join(dir, filename);
   const buffer = Buffer.from(await f.arrayBuffer());
+  // Don't trust the client-declared MIME — confirm the bytes really are a
+  // JPEG / PNG / WEBP before persisting, so a tampered client can't push a
+  // non-image (e.g. .svg/.html) past the type check above.
+  if (!imageExtFromBytes(buffer)) {
+    throw new UploadError("File does not appear to be a valid JPG, PNG, or WEBP image", 422);
+  }
   await fs.writeFile(filepath, buffer);
 
   // Posix-style URL even on Windows
