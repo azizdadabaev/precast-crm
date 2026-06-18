@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { PaymentRecordSchema } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { can } from "@/lib/permissions";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 
 /**
@@ -75,8 +76,11 @@ export const GET = withPermission("payment.view", async (req: NextRequest) => {
  *   - IN_OFFICE_CASH          customer pays at the office (placement, mid-order)
  *   - BANK_OR_ONLINE          bank transfer / Click / Payme / etc.
  *   - FROM_DRIVER_AT_DELIVERY driver collected on site
- * Always lands as PENDING_CONFIRMATION; an OWNER must confirm before it
- * counts toward Order.confirmedPaid.
+ * A recorder WITHOUT `payment.confirm` lands the payment as PENDING_CONFIRMATION;
+ * an owner must confirm before it counts toward Order.confirmedPaid. A recorder
+ * WHO HAS `payment.confirm` (owner/admin) is the confirming authority, so the
+ * payment is created already CONFIRMED in the same transaction — confirmedPaid /
+ * paymentState are recomputed immediately and no confirmation queue entry is made.
  *
  * Server enforces:
  *   - Order exists, is not CANCELED, is not (DELIVERED + FULLY_PAID)
@@ -127,6 +131,9 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
     );
   }
 
+  // Owner/admin (has payment.confirm) is the confirming authority — their own
+  // entries skip the queue and land CONFIRMED in one step.
+  const autoConfirm = can(user, "payment.confirm");
   const now = new Date();
   const payment = await prisma.$transaction(async (tx) => {
     const p = await tx.payment.create({
@@ -134,7 +141,8 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
         orderId: body.orderId,
         amount: body.amount,
         method: body.method,
-        status: "PENDING_CONFIRMATION",
+        status: autoConfirm ? "CONFIRMED" : "PENDING_CONFIRMATION",
+        ...(autoConfirm ? { confirmedById: user.id, confirmedAt: now } : {}),
         recordedById: user.id,
         recordedAt: now,
         // Driver chain: only when driver collected on site.
@@ -174,20 +182,60 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
         })),
       });
     }
+
+    // Auto-confirmed by an owner/admin — recompute the order's confirmed total +
+    // payment state now (same effect the /confirm route would have had), and log
+    // a PAYMENT_CONFIRMED event so the audit trail mirrors a manual confirm.
+    if (autoConfirm) {
+      const sumAgg = await tx.payment.aggregate({
+        _sum: { amount: true },
+        where: { orderId: body.orderId, status: "CONFIRMED" },
+      });
+      const confirmedPaid = Number(sumAgg._sum.amount ?? 0);
+      const total = Number(order.totalPrice);
+      const writeOff = Number(order.writeOffAmount);
+      const paymentState =
+        confirmedPaid + writeOff >= total
+          ? "FULLY_PAID"
+          : confirmedPaid > 0
+            ? "PARTIALLY_PAID"
+            : "AWAITING_PAYMENT";
+      await tx.order.update({
+        where: { id: body.orderId },
+        data: {
+          confirmedPaid,
+          paymentState,
+          ...(paymentState === "FULLY_PAID" && !order.paidAt ? { paidAt: now } : {}),
+        },
+      });
+      await tx.orderEvent.create({
+        data: {
+          orderId: body.orderId,
+          type: "PAYMENT_CONFIRMED",
+          actorId: user.id,
+          message: `Payment ${p.id.slice(-6)} auto-confirmed (recorder has confirm rights): ${body.amount}`,
+          payload: { paymentId: p.id, amount: Number(body.amount), autoConfirmed: true },
+        },
+      });
+    }
     return p;
   });
 
-  void (async () => {
-    const userIds = await usersWithPermission("payment.confirm");
-    void emitNotifications({
-      type: "PAYMENT_RECORDED",
-      userIds,
-      title: `Тўлов ${Math.round(body.amount).toLocaleString("ru-RU")} UZS · буюртма #${order.orderNumber}`,
-      body: `${body.method} · ${body.source}`,
-      paymentId: payment.id,
-      orderId: order.id,
-    });
-  })();
+  // Only a pending payment needs an owner to act — notify the confirmers. An
+  // auto-confirmed payment has nothing to confirm, so it raises no notification.
+  if (!autoConfirm) {
+    void (async () => {
+      const userIds = await usersWithPermission("payment.confirm");
+      void emitNotifications({
+        type: "PAYMENT_RECORDED",
+        userIds,
+        title: `Тўлов ${Math.round(body.amount).toLocaleString("ru-RU")} UZS · буюртма #${order.orderNumber}`,
+        body: `${body.method} · ${body.source}`,
+        paymentId: payment.id,
+        orderId: order.id,
+      });
+    })();
+  }
 
   return created(payment);
 });

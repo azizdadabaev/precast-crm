@@ -38,6 +38,9 @@ interface Props {
   currentRemaining: number;
   /** sum of PENDING_CONFIRMATION amounts on this order (for the advisory). */
   existingPendingTotal: number;
+  /** The current user has payment.confirm — their entry is confirmed instantly
+   *  (no pending step), so the copy reflects that. */
+  autoConfirm?: boolean;
   /** Refresh the order detail query on success. */
   onSaved: () => void;
 }
@@ -57,6 +60,7 @@ export function AddPaymentDialog({
   orderId,
   currentRemaining,
   existingPendingTotal,
+  autoConfirm = false,
   onSaved,
 }: Props) {
   const t = useT();
@@ -155,12 +159,21 @@ export function AddPaymentDialog({
             Тўлов қўшиш<span className="lang-en"> · Add Payment</span>
           </DialogTitle>
           <DialogDescription>
-            {t(
-              "Мижоз буюртма жойлаштириш ва етказиб бериш ўртасида тўлайди. Эга тасдиқлагунча",
-              "Customer paying between placement and delivery. Goes to",
-            )}{" "}
-            <span className="font-semibold">PENDING</span>
-            {t(" ҳолатида туради.", " until the owner confirms it.")}
+            {autoConfirm ? (
+              t(
+                "Мижоз буюртма жойлаштириш ва етказиб бериш ўртасида тўлайди. Сиз тасдиқлаш ҳуқуқига эга бўлганингиз учун тўлов дарҳол тасдиқланади.",
+                "Customer paying between placement and delivery. Because you have confirm rights, this is confirmed immediately.",
+              )
+            ) : (
+              <>
+                {t(
+                  "Мижоз буюртма жойлаштириш ва етказиб бериш ўртасида тўлайди. Эга тасдиқлагунча",
+                  "Customer paying between placement and delivery. Goes to",
+                )}{" "}
+                <span className="font-semibold">PENDING</span>
+                {t(" ҳолатида туради.", " until the owner confirms it.")}
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 

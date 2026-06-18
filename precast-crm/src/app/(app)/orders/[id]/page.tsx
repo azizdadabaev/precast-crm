@@ -1808,6 +1808,7 @@ export default function OrderDetailPage() {
         existingPendingTotal={order.payments
           .filter((p) => p.status === "PENDING_CONFIRMATION")
           .reduce((s, p) => s + Number(p.amount), 0)}
+        autoConfirm={canConfirmPayment}
         onSaved={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
       />
 
