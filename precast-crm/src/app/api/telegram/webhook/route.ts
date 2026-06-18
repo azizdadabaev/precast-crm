@@ -11,7 +11,12 @@ import { emitInbox } from "@/lib/inbox-bus";
 import { runAgentForInbound, runVisionForInbound, runVoiceForInbound } from "@/lib/agent/webhook-entry";
 import { enqueueInboundText } from "@/lib/agent/burst";
 import { handleApprovalCallback } from "@/lib/agent/approval-webhook";
-import { handleOperatorReceiptDm } from "@/lib/agent/receipt-dm";
+import {
+  handleOperatorPhotoDm,
+  handleOperatorPhotoNumber,
+  handleOperatorPhotoCallback,
+} from "@/lib/agent/operator-photo-dm";
+import { parsePhotoCallback } from "@/lib/agent/operator-photo-callback";
 
 const EXT_BY_KIND: Record<string, string> = {
   IMAGE: ".jpg", VIDEO: ".mp4", VIDEO_NOTE: ".mp4", VOICE: ".ogg", AUDIO: ".mp3", DOCUMENT: "",
@@ -72,22 +77,39 @@ export async function POST(req: NextRequest) {
     return new Response("ok");
   }
 
-  // Staff [Approve]/[Reject] tap on an Action Card arrives as a callback_query
-  // (not a business message). Commit/reject via the approval handler, ack fast.
+  // A tap on an inline-keyboard button arrives as a callback_query (not a
+  // business message). The operator-photo 🧾 Receipt / 🚚 Truck buttons carry an
+  // "op:" callback_data; everything else is a staff [Approve]/[Reject] tap. Ack
+  // fast either way.
   if (update?.callback_query) {
-    void handleApprovalCallback(update.callback_query, {
-      secret: process.env.QUOTE_SIGNING_SECRET ?? "",
-    }).catch((err) => console.error("[telegram webhook callback]", err));
+    if (parsePhotoCallback(update.callback_query.data)) {
+      void handleOperatorPhotoCallback(update.callback_query).catch((err) =>
+        console.error("[telegram webhook operator-photo callback]", err),
+      );
+    } else {
+      void handleApprovalCallback(update.callback_query, {
+        secret: process.env.QUOTE_SIGNING_SECRET ?? "",
+      }).catch((err) => console.error("[telegram webhook callback]", err));
+    }
     return new Response("ok");
   }
 
-  // Operator forwards a payment receipt directly to the bot (a plain DM, not a
-  // business message). Authorize via telegramUserId; attach to the order in the
-  // caption. Fire-and-forget; always 200 so Telegram doesn't retry.
+  // Operator/loading worker sends a photo directly to the bot (a plain DM, not a
+  // business message). We stash it and ask for the order number (if not in the
+  // caption) and the kind (🧾 Receipt / 🚚 Truck buttons). Fire-and-forget;
+  // always 200 so Telegram doesn't retry.
   const dm = update?.message;
   if (dm?.chat?.id != null && Array.isArray(dm.photo) && dm.photo.length > 0 && !update.business_connection_id) {
-    void handleOperatorReceiptDm(dm).catch((err) => console.error("[telegram receipt dm]", err));
+    void handleOperatorPhotoDm(dm).catch((err) => console.error("[telegram operator-photo dm]", err));
     return new Response("ok");
+  }
+
+  // Operator REPLIES with the order number after sending a photo whose caption
+  // had none (a Telegram forward strips the caption). Only intercepts senders
+  // with a pending photo session (a fast in-memory check); customers and
+  // everyone else fall through unchanged.
+  if (dm?.chat?.id != null && typeof dm.text === "string" && !update.business_connection_id) {
+    if (await handleOperatorPhotoNumber(dm)) return new Response("ok");
   }
 
   const parsed = update ? parseBusinessUpdate(update) : null;
