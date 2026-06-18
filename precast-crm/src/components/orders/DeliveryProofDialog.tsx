@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { X, Truck, Upload, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
+import { isHeic } from "@/lib/image/prepare-upload";
 
 export interface DeliveryFormPayload {
   file: File;
@@ -23,7 +24,7 @@ interface Props {
   onUpload: (payload: DeliveryFormPayload) => Promise<void>;
 }
 
-const ACCEPT = "image/jpeg,image/png,image/webp";
+const ACCEPT = "image/*,.heic,.heif";
 const MAX_BYTES = 8 * 1024 * 1024;
 
 /**
@@ -88,8 +89,8 @@ export function DeliveryProofDialog({ open, onClose, expectedCollection, onUploa
 
   function pickFile(f: File | null) {
     if (!f) return;
-    if (!ACCEPT.split(",").includes(f.type)) {
-      setError(t("Фақат JPG, PNG ёки WEBP расмлари қабул қилинади.", "Only JPG, PNG, or WEBP images are accepted."));
+    if (!f.type.startsWith("image/") && !isHeic(f)) {
+      setError(t("Фақат расм файллари қабул қилинади.", "Only image files are accepted."));
       return;
     }
     if (f.size > MAX_BYTES) {

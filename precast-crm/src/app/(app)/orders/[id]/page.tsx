@@ -38,6 +38,7 @@ import { useT } from "@/lib/i18n";
 import { useThemeStore } from "@/store/theme";
 import { addressToCyrillic } from "@/lib/regions";
 import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
+import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
 import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCard";
 import { CommentThread } from "@/components/comments/CommentThread";
@@ -328,8 +329,12 @@ export default function OrderDetailPage() {
 
   /** Upload the delivery photo + cash collection in one shot. */
   async function uploadDeliveryProof(payload: DeliveryFormPayload) {
+    const prepared = await prepareImageForUpload(payload.file).catch(() => null);
+    if (!prepared) {
+      throw new Error(t("Расмни ўқиб бўлмади, бошқа расм танланг", "Couldn't read this photo — pick another"));
+    }
     const fd = new FormData();
-    fd.append("file", payload.file);
+    fd.append("file", prepared);
     fd.append("cashAmount", String(payload.cashAmount));
     fd.append("noCashCollected", String(payload.noCashCollected));
     fd.append("noCashCollectedNote", payload.noCashCollectedNote ?? "");

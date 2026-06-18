@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Upload, Loader2, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
+import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 
 interface Props {
   orderId: string;
@@ -33,8 +34,10 @@ export function LoadTruckDialog({ orderId, open, onClose, onSuccess }: Props) {
     setLoading(true);
     setError(null);
     try {
+      const prepared = await prepareImageForUpload(file).catch(() => null);
+      if (!prepared) { setError(t("Расмни ўқиб бўлмади, бошқа расм танланг", "Couldn't read this photo — pick another")); setLoading(false); return; }
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", prepared);
       const res = await fetch(`/api/orders/${orderId}/load`, { method: "POST", body: fd });
       const json = await res.json() as { ok: boolean; error?: string };
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Upload failed");
@@ -81,7 +84,7 @@ export function LoadTruckDialog({ orderId, open, onClose, onSuccess }: Props) {
         <input
           ref={fileRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/*,.heic,.heif"
           className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f); }}
         />

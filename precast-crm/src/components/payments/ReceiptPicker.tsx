@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Paperclip, Loader2, X } from "lucide-react";
 import { ImageViewerProvider, useImageViewer } from "@/components/inbox/ImageViewer";
 import { useT } from "@/lib/i18n";
+import { isHeic, prepareImageForUpload } from "@/lib/image/prepare-upload";
 
 /**
  * Inline receipt picker for the payment dialogs. A "📎 Чек · Receipt" button
@@ -29,15 +30,16 @@ export function ReceiptPicker({
   const [error, setError] = useState<string | null>(null);
 
   async function onPick(files: FileList | null) {
-    const picked = Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
+    const picked = Array.from(files ?? []).filter((f) => f.type.startsWith("image/") || isHeic(f));
     if (picked.length === 0) return;
     setUploading(true);
     setError(null);
     const added: string[] = [];
     try {
       for (const file of picked) {
+        const prepared = await prepareImageForUpload(file);
         const fd = new FormData();
-        fd.append("file", file);
+        fd.append("file", prepared);
         // Raw fetch (not api()) — multipart must set its own boundary header.
         const res = await fetch("/api/payments/upload-receipt", {
           method: "POST",
@@ -76,7 +78,7 @@ export function ReceiptPicker({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         multiple
         hidden
         onChange={(e) => {

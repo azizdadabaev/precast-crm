@@ -4,6 +4,7 @@ import { useRef, useState, useMemo } from "react";
 import { Camera, Upload, Loader2, ChevronDown, ChevronUp, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
+import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 import {
   distributeLoad,
   calculateRemaining,
@@ -117,8 +118,10 @@ export function SplitShipmentLoadModal({
     setLoading(true);
     setError(null);
     try {
+      const prepared = await prepareImageForUpload(file).catch(() => null);
+      if (!prepared) { setError(t("Расмни ўқиб бўлмади, бошқа расм танланг", "Couldn't read this photo — pick another")); setLoading(false); return; }
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", prepared);
       fd.append("loadedBeams", JSON.stringify(beamInputs));
       fd.append("loadedBlocks", String(blockInput));
 
@@ -356,7 +359,7 @@ export function SplitShipmentLoadModal({
           <input
             ref={fileRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            accept="image/*,.heic,.heif"
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f); }}
           />
