@@ -91,6 +91,7 @@ interface OrderDetail {
   loadedPhotoUrl: string | null;
   loadedAt: string | null;
   notes: string | null;
+  galleryPhotos: Array<{ id: string; url: string; uploadedAt: string }>;
   shipments: Array<{
     id: string;
     number: number;

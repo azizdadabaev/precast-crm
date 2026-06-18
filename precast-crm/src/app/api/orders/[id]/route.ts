@@ -57,6 +57,11 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
           dispatchedBy: { select: { id: true, name: true } },
         },
       },
+      galleryPhotos: {
+        where: { kind: "LOADED" },
+        orderBy: { uploadedAt: "asc" },
+        select: { id: true, url: true, uploadedAt: true },
+      },
     },
   });
   if (!order) return fail("Order not found", 404);
