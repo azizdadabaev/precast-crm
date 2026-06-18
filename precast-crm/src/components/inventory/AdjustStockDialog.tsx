@@ -59,7 +59,7 @@ export function AdjustStockDialog({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-card rounded-lg shadow-2xl w-full max-w-md overflow-hidden border border-border">
+      <div className="bg-card rounded-lg shadow-2xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto border border-border">
         <div className="flex items-start justify-between px-5 py-3 border-b border-border">
           <div className="flex items-center gap-2">
             <Sliders className="h-5 w-5 text-primary" />

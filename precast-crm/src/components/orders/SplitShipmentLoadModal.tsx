@@ -142,7 +142,7 @@ export function SplitShipmentLoadModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-auto">
-      <div className="bg-background rounded-lg border shadow-xl w-full max-w-xl space-y-4 p-5 my-4">
+      <div className="bg-background rounded-lg border shadow-xl w-full max-w-xl space-y-4 p-5 my-4 max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="flex items-baseline justify-between">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             Жўнатма {shipmentNumber}<span className="lang-en"> · Shipment {shipmentNumber} — Load</span>

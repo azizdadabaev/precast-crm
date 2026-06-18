@@ -52,7 +52,7 @@ export function LoadTruckDialog({ orderId, open, onClose, onSuccess }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-background rounded-lg border shadow-xl w-full max-w-sm space-y-4 p-5">
+      <div className="bg-background rounded-lg border shadow-xl w-full max-w-sm space-y-4 p-5 max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
           Юкланди<span className="lang-en"> · Load truck</span>
         </div>
