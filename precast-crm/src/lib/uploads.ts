@@ -156,6 +156,12 @@ export async function saveBufferToUploads(
   return `/uploads/${subdir}/${filename}`.replace(/\\/g, "/");
 }
 
+/** Best-effort delete of an uploaded file by its public /uploads/... URL. */
+export async function deleteUpload(publicUrl: string): Promise<void> {
+  if (!publicUrl.startsWith("/uploads/")) return;
+  await fs.unlink(path.join(PUBLIC_ROOT, publicUrl));
+}
+
 /**
  * Copy an existing uploaded image (referenced by its `/uploads/...` URL)
  * into a project-owned folder so the project's visual record survives
