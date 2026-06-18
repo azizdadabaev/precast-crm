@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Paperclip,
   BadgeCheck,
+  X,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import { useThemeStore } from "@/store/theme";
 import { addressToCyrillic } from "@/lib/regions";
 import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
 import { prepareImageForUpload } from "@/lib/image/prepare-upload";
+import { canAddLoadedPhoto } from "@/lib/loaded-photos";
 import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
 import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCard";
 import { CommentThread } from "@/components/comments/CommentThread";
@@ -244,6 +246,9 @@ export default function OrderDetailPage() {
     url: string;
     caption: string;
   } | null>(null);
+  // Extra loaded-truck photos (added after the order is LOADED).
+  const loadedPhotoInputRef = useRef<HTMLInputElement>(null);
+  const [addLoadedBusy, setAddLoadedBusy] = useState(false);
   /** Captured by ShareCalculationButton — wraps the header card +
    *  calculation summary card so the operator can ship a one-shot
    *  image of the order to the customer. */
@@ -350,6 +355,37 @@ export default function OrderDetailPage() {
     }
     setProofOpen(false);
     qc.invalidateQueries({ queryKey: ["order", params.id] });
+  }
+
+  const deleteLoadedPhoto = useMutation({
+    mutationFn: (photoId: string) =>
+      api(`/api/orders/${params.id}/loaded-photos/${photoId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["order", params.id] }),
+    onError: (e: Error) => setError(e.message),
+  });
+
+  /** Append one more loaded-truck photo to an already-loaded order. */
+  async function addLoadedPhoto(file: File) {
+    setAddLoadedBusy(true);
+    setError(null);
+    try {
+      const prepared = await prepareImageForUpload(file).catch(() => null);
+      if (!prepared) {
+        throw new Error(t("Расмни ўқиб бўлмади, бошқа расм танланг", "Couldn't read this photo — pick another"));
+      }
+      const fd = new FormData();
+      fd.append("file", prepared);
+      const res = await fetch(`/api/orders/${params.id}/loaded-photos`, { method: "POST", body: fd });
+      const json = (await res.json()) as { ok: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? t("Юклаб бўлмади", "Upload failed"));
+      }
+      qc.invalidateQueries({ queryKey: ["order", params.id] });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAddLoadedBusy(false);
+    }
   }
 
   const handoverPayment = useMutation({
@@ -1545,34 +1581,105 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Loaded truck photo (single-truck flow) */}
-      {order.loadedPhotoUrl && (
-        <div className="rounded-lg border bg-background overflow-hidden">
-          <div className="px-4 py-3 border-b text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Юкланган машина<span className="lang-en"> · Loaded truck</span>
+      {/* Loaded truck photos — managed strip (multiple + delete). Falls back to
+          the legacy loadedPhotoUrl scalar for orders with no gallery rows. */}
+      {(() => {
+        const canAddLoaded = canEditOrder && canAddLoadedPhoto(order.status);
+        const photos = order.galleryPhotos;
+        // Legacy: an old order whose only loaded photo is the scalar (no gallery row).
+        const legacyOnly = photos.length === 0 && !!order.loadedPhotoUrl;
+        if (photos.length === 0 && !order.loadedPhotoUrl && !canAddLoaded) return null;
+        const caption = `${t("Юкланган машина", "Loaded truck")} · ${order.orderNumber}`;
+        return (
+          <div className="rounded-lg border bg-background overflow-hidden">
+            <div className="px-4 py-3 border-b text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Юкланган машина<span className="lang-en"> · Loaded truck</span>
+            </div>
+            <div className="p-4 flex flex-wrap gap-3">
+              {photos.map((p) => (
+                <div key={p.id} className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => setPhotoPreviewUrl({ url: p.url, caption })}
+                    className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                    aria-label={t("Расмни кенгайтириш", "Expand photo")}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={p.url}
+                      alt="Loaded truck"
+                      className="h-28 w-28 rounded border object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
+                    />
+                  </button>
+                  {canEditOrder && (
+                    <button
+                      type="button"
+                      disabled={deleteLoadedPhoto.isPending}
+                      onClick={() => {
+                        if (window.confirm(t("Бу расмни ўчирасизми?", "Delete this photo?"))) {
+                          deleteLoadedPhoto.mutate(p.id);
+                        }
+                      }}
+                      aria-label={t("Расмни ўчириш", "Delete photo")}
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-white shadow disabled:opacity-50"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {/* Legacy single photo (no gallery row to delete). */}
+              {legacyOnly && (
+                <button
+                  type="button"
+                  onClick={() => setPhotoPreviewUrl({ url: order.loadedPhotoUrl!, caption })}
+                  className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                  aria-label={t("Расмни кенгайтириш", "Expand photo")}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={order.loadedPhotoUrl!}
+                    alt="Loaded truck"
+                    className="h-28 w-28 rounded border object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
+                  />
+                </button>
+              )}
+
+              {canAddLoaded && (
+                <button
+                  type="button"
+                  disabled={addLoadedBusy}
+                  onClick={() => loadedPhotoInputRef.current?.click()}
+                  className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded border border-dashed text-muted-foreground transition-colors hover:bg-muted/40 disabled:opacity-50"
+                >
+                  {addLoadedBusy ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Plus className="h-5 w-5" />
+                      <span className="text-[10px] font-medium text-center leading-tight">
+                        {t("Расм қўшиш", "Add photo")}
+                      </span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+            <input
+              ref={loadedPhotoInputRef}
+              type="file"
+              accept="image/*,.heic,.heif"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void addLoadedPhoto(f);
+                e.target.value = "";
+              }}
+            />
           </div>
-          <div className="p-4">
-            <button
-              type="button"
-              onClick={() =>
-                setPhotoPreviewUrl({
-                  url: order.loadedPhotoUrl!,
-                  caption: `${t("Юкланган машина", "Loaded truck")} · ${order.orderNumber}`,
-                })
-              }
-              className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-              aria-label={t("Расмни кенгайтириш", "Expand photo")}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={order.loadedPhotoUrl}
-                alt="Loaded truck"
-                className="max-h-48 rounded border object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
-              />
-            </button>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Delivery proof — visible once uploaded */}
       {order.deliveryProofUrl && (
