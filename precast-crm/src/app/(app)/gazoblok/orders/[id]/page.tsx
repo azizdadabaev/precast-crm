@@ -24,6 +24,10 @@ import { formatPhone } from "@/lib/phone";
 import { useT } from "@/lib/i18n";
 import { CommentThread } from "@/components/comments/CommentThread";
 import { ReceiptPicker } from "@/components/payments/ReceiptPicker";
+import { GazoblokShipmentsSection } from "@/components/gazoblok/GazoblokShipmentsSection";
+import { blockWeightKg, type GazoblokLine } from "@/lib/gazoblok-weight";
+
+type GazoblokShipmentStatus = "PENDING" | "LOADED" | "DELIVERED";
 
 type Status = "PLACED" | "IN_PRODUCTION" | "DELIVERED" | "CANCELED";
 type PaymentState = "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
@@ -54,7 +58,17 @@ interface OrderDetail {
     unitPrice: string;
     quantity: number;
     lineTotal: string;
-    product: { id: string; label: string } | null;
+    product: { id: string; label: string; lengthM: string; heightM: string; thicknessM: string } | null;
+  }>;
+  shipments: Array<{
+    id: string;
+    number: number;
+    status: GazoblokShipmentStatus;
+    loadedLines: Record<string, number> | null;
+    loadedPhotoUrls: string[];
+    loadedAt: string | null;
+    deliveredAt: string | null;
+    notes: string | null;
   }>;
   payments: Array<{
     id: string;
@@ -187,6 +201,22 @@ export default function GazoblokOrderDetailPage() {
   const totalNum = Number(order.totalPrice);
   const paidNum = Number(order.confirmedPaid);
   const remainingNum = Math.max(0, totalNum - paidNum);
+
+  // Per-line weight for the split-shipment distributor. perBlockKg from the
+  // product dimensions; when the product was deleted, fall back to the order
+  // average (total volume / total blocks × NAAC density 611).
+  const totalBlocks = order.totalBlocks;
+  const avgPerBlockKg = totalBlocks > 0
+    ? (Number(order.totalVolumeM3) / totalBlocks) * 611
+    : 0;
+  const weightLines: GazoblokLine[] = order.lines.map((l) => ({
+    lineId: l.id,
+    label: l.productLabel,
+    quantity: l.quantity,
+    perBlockKg: l.product
+      ? blockWeightKg(Number(l.product.lengthM), Number(l.product.heightM), Number(l.product.thicknessM))
+      : avgPerBlockKg,
+  }));
 
   const isCanceled = order.status === "CANCELED";
   const canStartProduction = order.status === "PLACED";
@@ -518,6 +548,15 @@ export default function GazoblokOrderDetailPage() {
           </form>
         )}
       </div>
+
+      {/* Shipments — split-load the order across one or more trucks */}
+      <GazoblokShipmentsSection
+        orderId={order.id}
+        shipments={order.shipments}
+        lines={weightLines}
+        orderStatus={order.status}
+        onRefresh={refresh}
+      />
 
       {/* Comments — human conversation before the system activity log */}
       <CommentThread gazoblokOrderId={order.id} />

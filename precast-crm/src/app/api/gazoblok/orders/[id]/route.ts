@@ -28,11 +28,12 @@ export const GET = withAuth<{ id: string }>(
       where: { id: params.id },
       include: {
         client: true,
-        lines: { include: { product: { select: { id: true, label: true } } } },
+        lines: { include: { product: { select: { id: true, label: true, lengthM: true, heightM: true, thicknessM: true } } } },
         payments: {
           orderBy: { recordedAt: "desc" },
           include: { receipts: { orderBy: { createdAt: "asc" }, select: { id: true, imageUrl: true } } },
         },
+        shipments: { orderBy: { number: "asc" } },
         events: { orderBy: { createdAt: "desc" } },
       },
     });
