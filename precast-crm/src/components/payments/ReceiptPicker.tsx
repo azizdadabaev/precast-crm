@@ -19,10 +19,14 @@ export function ReceiptPicker({
   urls,
   onChange,
   disabled,
+  uploadUrl = "/api/payments/upload-receipt",
 }: {
   urls: string[];
   onChange: (urls: string[]) => void;
   disabled?: boolean;
+  /** Upload endpoint that stores the image and returns { data: { url } }.
+   *  Defaults to the floor-side receipt upload; gazoblok passes its own. */
+  uploadUrl?: string;
 }) {
   const t = useT();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -41,7 +45,7 @@ export function ReceiptPicker({
         const fd = new FormData();
         fd.append("file", prepared);
         // Raw fetch (not api()) — multipart must set its own boundary header.
-        const res = await fetch("/api/payments/upload-receipt", {
+        const res = await fetch(uploadUrl, {
           method: "POST",
           body: fd,
           credentials: "include",

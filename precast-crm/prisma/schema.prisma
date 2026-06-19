@@ -1464,6 +1464,7 @@ model GazoblokOrder {
   events         GazoblokOrderEvent[]
   stockMovements GazoblokStockMovement[]
   comments       Comment[]
+  receipts       GazoblokReceipt[]
 
   @@index([status])
   @@index([clientId])
@@ -1506,10 +1507,30 @@ model GazoblokPayment {
   order       GazoblokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   recordedBy  User?         @relation("GazoblokPaymentRecorder", fields: [recordedById], references: [id])
   confirmedBy User?         @relation("GazoblokPaymentConfirmer", fields: [confirmedById], references: [id])
+  receipts    GazoblokReceipt[]
 
   @@index([orderId])
   @@index([status, recordedAt])
   @@map("gazoblok_payments")
+}
+
+// Receipt image attached to a Gazoblok order/payment (CRM upload or Telegram
+// bot forward). Mirrors the floor-side Receipt; uploadedById is a plain column
+// (no User relation) to avoid widening the User model.
+model GazoblokReceipt {
+  id           String           @id @default(cuid())
+  orderId      String
+  order        GazoblokOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentId    String?
+  payment      GazoblokPayment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  imageUrl     String
+  source       ReceiptSource    @default(CRM_UPLOAD)
+  uploadedById String?
+  createdAt    DateTime         @default(now())
+
+  @@index([orderId])
+  @@index([paymentId])
+  @@map("gazoblok_receipts")
 }
 
 // Append-only activity log on a Gazoblok order.

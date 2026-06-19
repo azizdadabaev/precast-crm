@@ -70,6 +70,7 @@ export const GazoblokOrderActionSchema = z.discriminatedUnion("action", [
     amount: z.number().positive(),
     method: PaymentMethodEnum,
     notes: z.string().trim().optional(),
+    receiptUrls: z.array(z.string()).max(20).default([]),
   }),
   z.object({
     action: z.literal("confirm_payment"),

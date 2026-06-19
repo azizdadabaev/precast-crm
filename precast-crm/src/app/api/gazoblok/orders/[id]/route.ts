@@ -29,7 +29,10 @@ export const GET = withAuth<{ id: string }>(
       include: {
         client: true,
         lines: { include: { product: { select: { id: true, label: true } } } },
-        payments: { orderBy: { recordedAt: "desc" } },
+        payments: {
+          orderBy: { recordedAt: "desc" },
+          include: { receipts: { orderBy: { createdAt: "asc" }, select: { id: true, imageUrl: true } } },
+        },
         events: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -133,6 +136,17 @@ export const PATCH = withAuth<{ id: string }>(
             payload: { paymentId: p.id, amount: body.amount },
           },
         });
+        if (body.receiptUrls.length) {
+          await tx.gazoblokReceipt.createMany({
+            data: body.receiptUrls.map((url) => ({
+              orderId: order.id,
+              paymentId: p.id,
+              imageUrl: url,
+              source: "CRM_UPLOAD" as const,
+              uploadedById: user.id,
+            })),
+          });
+        }
         return p;
       });
       recordAudit({

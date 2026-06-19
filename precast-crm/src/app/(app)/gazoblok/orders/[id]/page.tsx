@@ -23,6 +23,7 @@ import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { useT } from "@/lib/i18n";
 import { CommentThread } from "@/components/comments/CommentThread";
+import { ReceiptPicker } from "@/components/payments/ReceiptPicker";
 
 type Status = "PLACED" | "IN_PRODUCTION" | "DELIVERED" | "CANCELED";
 type PaymentState = "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
@@ -63,6 +64,7 @@ interface OrderDetail {
     recordedAt: string | null;
     confirmedAt: string | null;
     notes: string | null;
+    receipts: Array<{ id: string; imageUrl: string }>;
   }>;
   events: Array<{ id: string; type: string; message: string | null; createdAt: string }>;
 }
@@ -96,6 +98,7 @@ export default function GazoblokOrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
+  const [payReceiptUrls, setPayReceiptUrls] = useState<string[]>([]);
 
   const { data: order, isLoading } = useQuery<OrderDetail>({
     queryKey: ["gazoblok-order", id],
@@ -125,13 +128,14 @@ export default function GazoblokOrderDetailPage() {
   });
 
   const recordPayment = useMutation({
-    mutationFn: (vars: { amount: number; method: PaymentMethod }) =>
+    mutationFn: (vars: { amount: number; method: PaymentMethod; receiptUrls: string[] }) =>
       api(`/api/gazoblok/orders/${id}`, {
         method: "PATCH",
-        json: { action: "record_payment", amount: vars.amount, method: vars.method },
+        json: { action: "record_payment", amount: vars.amount, method: vars.method, receiptUrls: vars.receiptUrls },
       }),
     onSuccess: () => {
       setPayAmount("");
+      setPayReceiptUrls([]);
       refresh();
     },
     onError: (e: Error) => setError(e.message),
@@ -171,7 +175,7 @@ export default function GazoblokOrderDetailPage() {
       setError(t("Тўғри сумма киритинг", "Enter a valid amount"));
       return;
     }
-    recordPayment.mutate({ amount, method: payMethod });
+    recordPayment.mutate({ amount, method: payMethod, receiptUrls: payReceiptUrls });
   }
 
   if (isLoading || !order) {
@@ -413,7 +417,26 @@ export default function GazoblokOrderDetailPage() {
                   const ps = PAYMENT_STATUS_META[p.status];
                   return (
                     <tr key={p.id} className="hover:bg-muted/20">
-                      <td className="px-3 py-2 text-xs uppercase tracking-wider">{p.method}</td>
+                      <td className="px-3 py-2 text-xs uppercase tracking-wider">
+                        <div>{p.method}</div>
+                        {p.receipts.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {p.receipts.map((r) => (
+                              <a
+                                key={r.id}
+                                href={r.imageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={t("Чекни очиш", "Open receipt")}
+                                className="block h-8 w-8 overflow-hidden rounded ring-1 ring-border hover:ring-primary"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={r.imageUrl} alt="receipt" className="h-full w-full object-cover" />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatNumber(Number(p.amount), 0)}</td>
                       <td className="px-3 py-2">
                         <Chip variant={ps.variant}>{t(ps.uz, ps.en)}</Chip>
@@ -488,6 +511,17 @@ export default function GazoblokOrderDetailPage() {
                   </option>
                 ))}
               </Select>
+            </div>
+            <div className="w-full">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                {t("Чек (ихтиёрий)", "Receipt (optional)")}
+              </label>
+              <ReceiptPicker
+                urls={payReceiptUrls}
+                onChange={setPayReceiptUrls}
+                disabled={recordPayment.isPending}
+                uploadUrl="/api/gazoblok/upload-receipt"
+              />
             </div>
             <Button type="submit" size="sm" disabled={recordPayment.isPending}>
               {recordPayment.isPending ? (
