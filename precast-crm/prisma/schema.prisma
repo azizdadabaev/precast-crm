@@ -1009,6 +1009,8 @@ model Comment {
   order     Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   projectId String?
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  gazoblokOrderId String?
+  gazoblokOrder   GazoblokOrder? @relation(fields: [gazoblokOrderId], references: [id], onDelete: Cascade)
 
   authorId String
   author   User   @relation("CommentAuthor", fields: [authorId], references: [id])
@@ -1031,6 +1033,7 @@ model Comment {
 
   @@index([orderId, createdAt])
   @@index([projectId, createdAt])
+  @@index([gazoblokOrderId, createdAt])
   @@index([authorId, createdAt])
   @@index([deletedAt, createdAt])
   @@map("comments")
@@ -1460,6 +1463,7 @@ model GazoblokOrder {
   payments       GazoblokPayment[]
   events         GazoblokOrderEvent[]
   stockMovements GazoblokStockMovement[]
+  comments       Comment[]
 
   @@index([status])
   @@index([clientId])

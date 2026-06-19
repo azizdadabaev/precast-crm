@@ -22,6 +22,7 @@ import { Chip } from "@/components/ui/chip";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { useT } from "@/lib/i18n";
+import { CommentThread } from "@/components/comments/CommentThread";
 
 type Status = "PLACED" | "IN_PRODUCTION" | "DELIVERED" | "CANCELED";
 type PaymentState = "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
@@ -499,6 +500,9 @@ export default function GazoblokOrderDetailPage() {
           </form>
         )}
       </div>
+
+      {/* Comments — human conversation before the system activity log */}
+      <CommentThread gazoblokOrderId={order.id} />
 
       {/* Activity */}
       <div className="rounded-lg border bg-background overflow-hidden">

@@ -12,6 +12,7 @@ import { parseCommentTokens } from "./parse-comment";
 interface CommentThreadProps {
   orderId?: string;
   projectId?: string;
+  gazoblokOrderId?: string;
 }
 
 interface CommentDTO {
@@ -105,14 +106,20 @@ function avatarHue(id: string): number {
   return h % 360;
 }
 
-export function CommentThread({ orderId, projectId }: CommentThreadProps) {
+export function CommentThread({ orderId, projectId, gazoblokOrderId }: CommentThreadProps) {
   const t = useT();
   const qc = useQueryClient();
 
   const baseUrl = orderId
     ? `/api/orders/${orderId}/comments`
-    : `/api/projects/${projectId}/comments`;
-  const queryKey = orderId ? ["comments", "order", orderId] : ["comments", "project", projectId];
+    : gazoblokOrderId
+      ? `/api/gazoblok/orders/${gazoblokOrderId}/comments`
+      : `/api/projects/${projectId}/comments`;
+  const queryKey = orderId
+    ? ["comments", "order", orderId]
+    : gazoblokOrderId
+      ? ["comments", "gazoblok", gazoblokOrderId]
+      : ["comments", "project", projectId];
 
   const { data: me } = useQuery<MeDTO>({
     queryKey: ["me"],
@@ -123,7 +130,7 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
   const { data: comments = [], isLoading } = useQuery<CommentDTO[]>({
     queryKey,
     queryFn: () => api<CommentDTO[]>(baseUrl),
-    enabled: Boolean(orderId || projectId),
+    enabled: Boolean(orderId || projectId || gazoblokOrderId),
   });
 
   // Mentionable users — lightweight list for the @picker
@@ -134,7 +141,7 @@ export function CommentThread({ orderId, projectId }: CommentThreadProps) {
   });
 
   const draftKey = me
-    ? `comment-draft:${me.id}:${orderId ? `o:${orderId}` : `p:${projectId}`}`
+    ? `comment-draft:${me.id}:${orderId ? `o:${orderId}` : gazoblokOrderId ? `g:${gazoblokOrderId}` : `p:${projectId}`}`
     : null;
 
   const [draft, setDraft] = React.useState("");
