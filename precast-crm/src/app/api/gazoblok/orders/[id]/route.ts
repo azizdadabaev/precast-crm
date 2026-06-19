@@ -44,7 +44,8 @@ export const GET = withAuth<{ id: string }>(
 /**
  * PATCH /api/gazoblok/orders/[id] — gazoblok.order. One of three actions:
  *   set_status      — move through PLACED → IN_PRODUCTION → DELIVERED / CANCELED.
- *                     DELIVERED decrements stock; CANCELED of a delivered order restocks.
+ *                     DELIVERED decrements stock and is TERMINAL (no cancel after
+ *                     delivery). CANCELED before delivery just closes the order.
  *   record_payment  — add a PENDING_CONFIRMATION payment.
  *   confirm_payment — confirm/reject a payment, recompute confirmedPaid + paymentState.
  */
@@ -62,12 +63,11 @@ export const PATCH = withAuth<{ id: string }>(
       if (order.status === "CANCELED") {
         return fail("Бекор қилинган буюртмани ўзгартириб бўлмайди · Cannot change a canceled order", 409);
       }
-      // A delivered order is terminal except for cancellation. Without this guard
-      // DELIVERED → IN_PRODUCTION → DELIVERED would decrement stock a second time,
-      // and DELIVERED → IN_PRODUCTION → CANCELED would skip the restock — both
-      // silently corrupt on-hand quantities. Keep the flow forward-only.
-      if (order.status === "DELIVERED" && body.status !== "DELIVERED" && body.status !== "CANCELED") {
-        return fail("Етказилган буюртмани фақат бекор қилиш мумкин · A delivered order can only be canceled", 409);
+      // A delivered order is TERMINAL — it can't be moved back or canceled (a
+      // completed, typically fully-paid order). This also prevents the stock
+      // corruption a back-and-forth transition would cause.
+      if (order.status === "DELIVERED" && body.status !== "DELIVERED") {
+        return fail("Етказилган буюртмани ўзгартириб бўлмайди · A delivered order can't be changed", 409);
       }
       const next = body.status;
       const lineMoves = order.lines.map((l) => ({ productId: l.productId, quantity: l.quantity }));

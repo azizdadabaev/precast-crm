@@ -189,7 +189,6 @@ export default function GazoblokOrderDetailPage() {
   const remainingNum = Math.max(0, totalNum - paidNum);
 
   const isCanceled = order.status === "CANCELED";
-  const isDelivered = order.status === "DELIVERED";
   const canStartProduction = order.status === "PLACED";
   const canDeliver = order.status === "PLACED" || order.status === "IN_PRODUCTION";
   const canRecordPayment = !isCanceled && remainingNum > 0;
@@ -371,21 +370,6 @@ export default function GazoblokOrderDetailPage() {
               Бекор қилиш<span className="lang-en font-normal"> · Cancel</span>
             </Button>
           </div>
-        </div>
-      )}
-      {/* Delivered orders can still be canceled (restocks server-side) */}
-      {isDelivered && (
-        <div className="rounded-lg border bg-background p-4 shadow-sm">
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive hover:text-white hover:border-destructive transition-colors"
-            disabled={setStatus.isPending}
-            onClick={() => advance("CANCELED", { reason: true })}
-          >
-            <Ban className="h-3.5 w-3.5 mr-1.5" />
-            Бекор қилиш<span className="lang-en font-normal"> · Cancel</span>
-          </Button>
         </div>
       )}
 
