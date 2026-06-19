@@ -7,13 +7,16 @@ import { withPermission } from "@/lib/api-auth";
 import { GalleryListSchema } from "@/lib/validation";
 import { phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms } from "@/lib/regions";
+import { assembleGalleryPosts, postKey, type GalleryPhotoView } from "@/lib/gallery-posts";
 
 /**
  * GET /api/gallery
  *
- * Paginated photo feed across all orders. Supports filtering by kind,
- * client, and uploaded-at date range. Each row is a flattened
- * GalleryPhoto with the order + client context the grid needs.
+ * Paginated feed across all orders, grouped into POSTS — one per
+ * (orderId, kind) — so an order's multiple same-kind uploads (e.g. several
+ * split-shipment photos) collapse into a single swipeable card. Pagination is
+ * by post; `photoTotal` is the underlying photo count for the header label.
+ * Supports filtering by kind, client, and uploaded-at date range.
  */
 export const GET = withPermission("order.view", async (req: NextRequest) => {
   const sp = Object.fromEntries(req.nextUrl.searchParams);
@@ -56,45 +59,68 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     ...(searchAnd.length ? { AND: searchAnd } : {}),
   };
 
-  const [total, photos] = await prisma.$transaction([
+  // Group into posts keyed by (orderId, kind). The page of groups is ordered by
+  // each group's most-recent upload; `groups` gives that page + order, `allGroups`
+  // gives the total post count, and the existing photo count is the header label.
+  const [photoTotal, allGroups, groups] = await prisma.$transaction([
     prisma.galleryPhoto.count({ where }),
-    prisma.galleryPhoto.findMany({
+    prisma.galleryPhoto.groupBy({ by: ["orderId", "kind"], where, orderBy: { orderId: "asc" } }),
+    prisma.galleryPhoto.groupBy({
+      by: ["orderId", "kind"],
       where,
-      orderBy: { uploadedAt: "desc" },
+      _max: { uploadedAt: true },
+      orderBy: { _max: { uploadedAt: "desc" } },
       skip: (params.page - 1) * params.pageSize,
       take: params.pageSize,
-      include: {
-        order: {
-          select: {
-            id: true,
-            orderNumber: true,
-            status: true,
-            client: { select: { id: true, name: true, phone: true, address: true } },
-          },
-        },
-        uploadedBy: { select: { id: true, name: true } },
-      },
     }),
   ]);
 
+  const postTotal = allGroups.length;
+  const orderedKeys = groups.map((g) => postKey(g.orderId, g.kind));
+
+  // Fetch every photo belonging to this page's groups (still honoring the base
+  // filter so a group's out-of-range photos aren't pulled in).
+  const photoRows = groups.length
+    ? await prisma.galleryPhoto.findMany({
+        where: { AND: [where, { OR: groups.map((g) => ({ orderId: g.orderId, kind: g.kind })) }] },
+        orderBy: { uploadedAt: "asc" },
+        include: {
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              client: { select: { id: true, name: true, phone: true, address: true } },
+            },
+          },
+          uploadedBy: { select: { id: true, name: true } },
+        },
+      })
+    : [];
+
+  const views: GalleryPhotoView[] = photoRows.map((p) => ({
+    id: p.id,
+    orderId: p.orderId,
+    orderNumber: p.order.orderNumber,
+    clientId: p.order.client.id,
+    clientName: p.order.client.name,
+    clientPhone: p.order.client.phone,
+    clientAddress: p.order.client.address,
+    kind: p.kind,
+    url: p.url,
+    uploadedAt: p.uploadedAt.toISOString(),
+    uploadedBy: p.uploadedBy,
+    orderStatus: p.order.status,
+  }));
+
+  const posts = assembleGalleryPosts(views, orderedKeys);
+
   return ok({
-    photos: photos.map((p) => ({
-      id: p.id,
-      orderId: p.orderId,
-      orderNumber: p.order.orderNumber,
-      clientId: p.order.client.id,
-      clientName: p.order.client.name,
-      clientPhone: p.order.client.phone,
-      clientAddress: p.order.client.address,
-      kind: p.kind,
-      url: p.url,
-      uploadedAt: p.uploadedAt.toISOString(),
-      uploadedBy: p.uploadedBy,
-      orderStatus: p.order.status,
-    })),
-    total,
+    posts,
+    total: postTotal,
+    photoTotal,
     page: params.page,
     pageSize: params.pageSize,
-    pageCount: Math.ceil(total / params.pageSize),
+    pageCount: Math.ceil(postTotal / params.pageSize),
   });
 });

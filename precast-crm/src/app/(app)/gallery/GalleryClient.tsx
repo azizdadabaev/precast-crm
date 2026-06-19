@@ -9,25 +9,16 @@ import { Camera, ChevronLeft, ChevronRight, ChevronUp, Search, X } from "lucide-
 import { useT } from "@/lib/i18n";
 import { GalleryCard } from "@/components/gallery/GalleryCard";
 import { GalleryLightbox } from "@/components/gallery/GalleryLightbox";
+import type { GalleryPost } from "@/lib/gallery-posts";
 
-interface GalleryPhoto {
-  id: string;
-  orderId: string;
-  orderNumber: string;
-  clientId: string;
-  clientName: string;
-  clientPhone: string | null;
-  clientAddress: string | null;
-  kind: "LOADED" | "DELIVERY_PROOF" | "SHIPMENT_LOADED";
-  url: string;
-  uploadedAt: string;
-  uploadedBy: { id: string; name: string } | null;
-  orderStatus: string;
-}
+type GalleryKind = GalleryPost["kind"];
 
 interface GalleryResponse {
-  photos: GalleryPhoto[];
+  posts: GalleryPost[];
+  /** Number of posts (groups) — drives pagination. */
   total: number;
+  /** Underlying photo count — drives the header "N photos" label. */
+  photoTotal: number;
   page: number;
   pageSize: number;
   pageCount: number;
@@ -38,7 +29,7 @@ const PAGE_SIZE = 24;
 export default function GalleryClient() {
   const t = useT();
   const [page, setPage] = useState(1);
-  const [kind, setKind] = useState<"" | GalleryPhoto["kind"]>("");
+  const [kind, setKind] = useState<"" | GalleryKind>("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   // Search input (raw) + debounced value (drives the query). 250 ms
@@ -56,7 +47,9 @@ export default function GalleryClient() {
   }, [searchInput]);
   const clientId = "";
 
-  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  // Lightbox tracks which post and which image within it (Instagram-style: prev/
+  // next swipe within the post).
+  const [lightbox, setLightbox] = useState<{ postIdx: number; imageIdx: number } | null>(null);
 
   const { data, isLoading } = useQuery<GalleryResponse>({
     queryKey: ["gallery", page, kind, clientId, fromDate, toDate, search],
@@ -73,8 +66,9 @@ export default function GalleryClient() {
     },
   });
 
-  const photos = data?.photos ?? [];
+  const posts = data?.posts ?? [];
   const total = data?.total ?? 0;
+  const photoTotal = data?.photoTotal ?? 0;
   const pageCount = data?.pageCount ?? 1;
 
   function resetFilters() {
@@ -94,10 +88,12 @@ export default function GalleryClient() {
     };
   }
 
-  const lightboxPhoto = useMemo(
-    () => (lightboxIdx === null ? null : photos[lightboxIdx] ?? null),
-    [lightboxIdx, photos],
+  const lightboxPost = useMemo(
+    () => (lightbox === null ? null : posts[lightbox.postIdx] ?? null),
+    [lightbox, posts],
   );
+  const lightboxImage =
+    lightbox === null || lightboxPost === null ? null : lightboxPost.images[lightbox.imageIdx] ?? null;
 
   return (
     <div className="space-y-5">
@@ -134,7 +130,7 @@ export default function GalleryClient() {
             <div className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">
               {!isLoading && (
                 <span>
-                  <span className="font-mono font-semibold text-foreground">{total}</span>{" "}
+                  <span className="font-mono font-semibold text-foreground">{photoTotal}</span>{" "}
                   {t("фото", "photos")}
                 </span>
               )}
@@ -172,7 +168,7 @@ export default function GalleryClient() {
               <div className="hidden sm:block text-xs text-muted-foreground shrink-0 whitespace-nowrap">
                 {!isLoading && (
                   <span>
-                    <span className="font-mono font-semibold text-foreground">{total}</span>{" "}
+                    <span className="font-mono font-semibold text-foreground">{photoTotal}</span>{" "}
                     {t("фото", "photos")}
                   </span>
                 )}
@@ -241,7 +237,7 @@ export default function GalleryClient() {
           {!isLoading && (
             <span>
               <span className="font-mono font-semibold text-foreground">
-                {total}
+                {photoTotal}
               </span>{" "}
               {t("фото", "photos")}
             </span>
@@ -270,7 +266,7 @@ export default function GalleryClient() {
             </div>
           ))}
         </div>
-      ) : photos.length === 0 ? (
+      ) : posts.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-8 sm:p-12 text-center text-muted-foreground">
           <Camera className="h-8 w-8 mx-auto mb-3 opacity-50" />
           {t(
@@ -280,11 +276,11 @@ export default function GalleryClient() {
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-4">
-          {photos.map((p, idx) => (
+          {posts.map((post, idx) => (
             <GalleryCard
-              key={p.id}
-              photo={p}
-              onClick={() => setLightboxIdx(idx)}
+              key={post.key}
+              post={post}
+              onOpen={(imageIdx) => setLightbox({ postIdx: idx, imageIdx })}
             />
           ))}
         </div>
@@ -326,19 +322,30 @@ export default function GalleryClient() {
         </div>
       )}
 
-      {/* Lightbox */}
-      {lightboxPhoto && lightboxIdx !== null && (
+      {/* Lightbox — swipes within the opened post's images (Instagram-style) */}
+      {lightbox && lightboxPost && lightboxImage && (
         <GalleryLightbox
-          photo={lightboxPhoto}
-          hasPrev={lightboxIdx > 0}
-          hasNext={lightboxIdx < photos.length - 1}
-          onPrev={() => setLightboxIdx((i) => (i === null ? null : Math.max(0, i - 1)))}
+          photo={{
+            id: lightboxImage.id,
+            orderId: lightboxPost.orderId,
+            orderNumber: lightboxPost.orderNumber,
+            clientName: lightboxPost.clientName,
+            clientPhone: lightboxPost.clientPhone,
+            kind: lightboxPost.kind,
+            url: lightboxImage.url,
+            uploadedAt: lightboxImage.uploadedAt,
+          }}
+          hasPrev={lightbox.imageIdx > 0}
+          hasNext={lightbox.imageIdx < lightboxPost.images.length - 1}
+          onPrev={() =>
+            setLightbox((s) => (s ? { ...s, imageIdx: Math.max(0, s.imageIdx - 1) } : s))
+          }
           onNext={() =>
-            setLightboxIdx((i) =>
-              i === null ? null : Math.min(photos.length - 1, i + 1),
+            setLightbox((s) =>
+              s ? { ...s, imageIdx: Math.min(lightboxPost.images.length - 1, s.imageIdx + 1) } : s,
             )
           }
-          onClose={() => setLightboxIdx(null)}
+          onClose={() => setLightbox(null)}
         />
       )}
     </div>

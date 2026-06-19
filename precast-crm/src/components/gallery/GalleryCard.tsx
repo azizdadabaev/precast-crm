@@ -5,29 +5,19 @@ import { Phone, MapPin } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { addressToCyrillic } from "@/lib/regions";
-
-interface GalleryPhoto {
-  id: string;
-  orderId: string;
-  orderNumber: string;
-  clientName: string;
-  clientPhone: string | null;
-  clientAddress: string | null;
-  kind: "LOADED" | "DELIVERY_PROOF" | "SHIPMENT_LOADED";
-  url: string;
-  uploadedAt: string;
-  uploadedBy: { id: string; name: string } | null;
-}
+import { GalleryCarousel } from "@/components/gallery/GalleryCarousel";
+import type { GalleryPost } from "@/lib/gallery-posts";
 
 interface GalleryCardProps {
-  photo: GalleryPhoto;
-  onClick: () => void;
+  post: GalleryPost;
+  /** Open the lightbox at the given image index within this post. */
+  onOpen: (imageIndex: number) => void;
 }
 
 // Kind labels are split into mobile-only (Uzbek primary) and full
 // bilingual (sm+) so the badge never wraps on a narrow phone card.
 const KIND_META: Record<
-  GalleryPhoto["kind"],
+  GalleryPost["kind"],
   { short: string; full: string; className: string }
 > = {
   LOADED: {
@@ -47,38 +37,44 @@ const KIND_META: Record<
   },
 };
 
-export function GalleryCard({ photo, onClick }: GalleryCardProps) {
-  const meta = KIND_META[photo.kind];
+export function GalleryCard({ post, onOpen }: GalleryCardProps) {
+  const meta = KIND_META[post.kind];
+  const alt = `${post.orderNumber} — ${post.clientName}`;
+  const multi = post.images.length > 1;
+
   return (
-    // Two clickable surfaces: the image opens the lightbox, the
-    // metadata block navigates to the order detail page in the same
-    // tab. Keeping them as separate elements (rather than nesting a
-    // <button> inside a <Link>, which is invalid HTML) avoids the
-    // hydration warnings and lets each region have its own focus ring.
+    // Two clickable surfaces: the image(s) open the lightbox, the metadata block
+    // navigates to the order detail page. Kept as separate elements (not a
+    // <button> nested in a <Link>, which is invalid HTML) so each has its own
+    // focus ring and there are no hydration warnings.
     <div className="rounded-xl border border-border bg-card overflow-hidden hover:shadow-md active:shadow-sm transition-shadow">
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label="Open photo"
-        className="block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] transition-transform"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.url}
-          alt={`${photo.orderNumber} — ${photo.clientName}`}
-          loading="lazy"
-          decoding="async"
-          className="aspect-[4/3] w-full object-cover bg-muted"
-        />
-      </button>
+      {multi ? (
+        <GalleryCarousel images={post.images} alt={alt} onImageClick={onOpen} />
+      ) : (
+        <button
+          type="button"
+          onClick={() => onOpen(0)}
+          aria-label="Open photo"
+          className="block w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] transition-transform"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={post.images[0].url}
+            alt={alt}
+            loading="lazy"
+            decoding="async"
+            className="aspect-[4/3] w-full object-cover bg-muted"
+          />
+        </button>
+      )}
       <Link
-        href={`/orders/${photo.orderId}`}
+        href={`/orders/${post.orderId}`}
         title="Буюртма саҳифасига ўтиш · Open order"
         className="block px-3 py-3 sm:p-3 space-y-1.5 hover:bg-accent/80 active:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       >
         <div className="flex items-center justify-between gap-2 min-w-0">
           <span className="font-mono font-bold text-xs text-primary tracking-tight truncate whitespace-nowrap">
-            {photo.orderNumber}
+            {post.orderNumber}
           </span>
           <span
             className={cn(
@@ -91,33 +87,33 @@ export function GalleryCard({ photo, onClick }: GalleryCardProps) {
           </span>
         </div>
         <div className="text-sm sm:text-[15px] font-semibold leading-tight truncate">
-          {photo.clientName}
+          {post.clientName}
         </div>
-        {photo.clientPhone && (
-          // Phone is its own action — stop propagation so the
-          // surrounding Link doesn't swallow the tap that should
-          // open the dialer. Negative margin + extra padding gives
-          // a ≥44px tap zone without throwing off the visual rhythm.
+        {post.clientPhone && (
+          // Phone is its own action — stop propagation so the surrounding Link
+          // doesn't swallow the tap that should open the dialer. Negative margin
+          // + extra padding gives a ≥44px tap zone without throwing off the
+          // visual rhythm.
           <a
-            href={`tel:+${photo.clientPhone}`}
+            href={`tel:+${post.clientPhone}`}
             onClick={(e) => e.stopPropagation()}
             title="Қўнғироқ қилиш · Call"
             className="-mx-1 -my-1 px-1.5 py-1.5 inline-flex items-center gap-1.5 rounded-md text-sm font-medium font-mono tabular-nums whitespace-nowrap hover:text-primary active:bg-primary/10 transition-colors"
           >
             <Phone className="h-3.5 w-3.5 shrink-0" />
-            {formatPhone(photo.clientPhone)}
+            {formatPhone(post.clientPhone)}
           </a>
         )}
-        {photo.clientAddress && (
+        {post.clientAddress && (
           <div className="flex items-start gap-1.5 text-xs sm:text-[13px] text-muted-foreground leading-snug">
             <MapPin className="h-3 w-3 mt-0.5 shrink-0" />
             <span className="line-clamp-2 break-words">
-              {addressToCyrillic(photo.clientAddress)}
+              {addressToCyrillic(post.clientAddress)}
             </span>
           </div>
         )}
         <div className="text-[11px] font-mono text-text-tertiary pt-0.5">
-          {formatDate(photo.uploadedAt)}
+          {formatDate(post.uploadedAt)}
         </div>
       </Link>
     </div>
