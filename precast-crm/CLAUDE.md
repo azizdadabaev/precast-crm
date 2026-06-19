@@ -1,5 +1,14 @@
 # Precast CRM — Claude Guidelines
 
+## Working style (ALWAYS)
+- **Reiterate the request as an engineering brief before implementing.** Restate
+  what the user means in a professional, coding-oriented tone — grounded in the
+  actual code (real file paths, components, data shapes) — so a coding agent could
+  pick it up unambiguously. Cover: objective, current vs desired behavior, the
+  components/files to touch, edge cases, and any decisions that need locking.
+  Then confirm before writing code. (The user is an ESL speaker; precise
+  restatement prevents wasted work.)
+
 ## Stack
 Next.js 14 App Router · Prisma + PostgreSQL · Tailwind · shadcn/ui · React Query · Docker + Caddy
 
