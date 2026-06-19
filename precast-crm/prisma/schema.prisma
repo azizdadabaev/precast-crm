@@ -1465,6 +1465,7 @@ model GazoblokOrder {
   stockMovements GazoblokStockMovement[]
   comments       Comment[]
   receipts       GazoblokReceipt[]
+  shipments      GazoblokShipment[]
 
   @@index([status])
   @@index([clientId])
@@ -1531,6 +1532,39 @@ model GazoblokReceipt {
   @@index([orderId])
   @@index([paymentId])
   @@map("gazoblok_receipts")
+}
+
+enum GazoblokShipmentStatus {
+  PENDING
+  LOADED
+  DELIVERED
+}
+
+// One shipment (truckload) of a gazoblok order. The order is loaded/delivered in
+// one or more of these; loadedLines records how many blocks of each order line
+// this shipment carries. Photo is optional. Simpler than the floor Shipment —
+// no driver/dispatch/cash-collection.
+model GazoblokShipment {
+  id      String                 @id @default(cuid())
+  orderId String
+  number  Int // 1-based sequence within the order
+  status  GazoblokShipmentStatus @default(PENDING)
+
+  // Per order line: { "<gazoblokOrderLineId>": blockCount }. Null until loaded.
+  loadedLines     Json?
+  loadedPhotoUrls String[]  @default([])
+  loadedAt        DateTime?
+  deliveredAt     DateTime?
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  order GazoblokOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, number])
+  @@index([orderId])
+  @@map("gazoblok_shipments")
 }
 
 // Append-only activity log on a Gazoblok order.
