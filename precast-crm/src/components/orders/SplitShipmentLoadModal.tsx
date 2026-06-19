@@ -67,6 +67,30 @@ export function SplitShipmentLoadModal({
     [beamGroups, totalBlocks, prevShipments, beamInputs, blockInput]
   );
 
+  // What's still loadable for THIS shipment = order total − what PRIOR shipments
+  // already loaded. This is the hard cap for each input; anything more over-loads
+  // the order across shipments.
+  const available = useMemo(
+    () => calculateRemaining(beamGroups, totalBlocks, prevShipments),
+    [beamGroups, totalBlocks, prevShipments],
+  );
+
+  // Signed remaining after this shipment's inputs (NEGATIVE = over-loaded). Unlike
+  // `remaining` (which clamps at 0 and hides over-loads) this is honest, so the UI
+  // can flag it red and block submit.
+  const signedRemaining = useMemo(() => {
+    const beams: Record<string, number> = {};
+    for (const g of beamGroups) {
+      beams[g.beamLength] = (available.remainingBeams[g.beamLength] ?? 0) - (beamInputs[g.beamLength] ?? 0);
+    }
+    return { beams, blocks: available.remainingBlocks - blockInput };
+  }, [beamGroups, available, beamInputs, blockInput]);
+
+  const isOverloaded = useMemo(
+    () => Object.values(signedRemaining.beams).some((v) => v < 0) || signedRemaining.blocks < 0,
+    [signedRemaining],
+  );
+
   const orderWeight = useMemo(
     () => calculateOrderWeight(beamGroups, totalBlocks),
     [beamGroups, totalBlocks]
@@ -266,7 +290,7 @@ export function SplitShipmentLoadModal({
             </thead>
             <tbody>
               {beamGroups.map((g) => {
-                const rem = remaining.remainingBeams[g.beamLength] ?? 0;
+                const rem = signedRemaining.beams[g.beamLength] ?? 0;
                 return (
                   <tr key={g.beamLength} className="border-t">
                     <td className="px-3 py-2 font-mono font-semibold">
@@ -279,7 +303,7 @@ export function SplitShipmentLoadModal({
                       <input
                         type="number"
                         min={0}
-                        max={g.totalCount}
+                        max={available.remainingBeams[g.beamLength] ?? 0}
                         value={beamInputs[g.beamLength] ?? 0}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) =>
@@ -288,10 +312,10 @@ export function SplitShipmentLoadModal({
                             [g.beamLength]: Math.max(0, parseInt(e.target.value) || 0),
                           }))
                         }
-                        className="w-20 border rounded px-2 py-1 text-right font-mono focus:ring-1 ring-primary"
+                        className={`w-20 border rounded px-2 py-1 text-right font-mono focus:ring-1 ring-primary ${rem < 0 ? "border-destructive ring-destructive" : ""}`}
                       />
                     </td>
-                    <td className={`px-3 py-2 text-right font-mono ${rem > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                    <td className={`px-3 py-2 text-right font-mono ${rem < 0 ? "text-destructive font-bold" : rem > 0 ? "text-amber-600" : "text-emerald-600"}`}>
                       {rem}
                     </td>
                   </tr>
@@ -306,15 +330,15 @@ export function SplitShipmentLoadModal({
                   <input
                     type="number"
                     min={0}
-                    max={totalBlocks}
+                    max={available.remainingBlocks}
                     value={blockInput}
                     onFocus={(e) => e.target.select()}
                     onChange={(e) => setBlockInput(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-20 border rounded px-2 py-1 text-right font-mono focus:ring-1 ring-primary"
+                    className={`w-20 border rounded px-2 py-1 text-right font-mono focus:ring-1 ring-primary ${signedRemaining.blocks < 0 ? "border-destructive ring-destructive" : ""}`}
                   />
                 </td>
-                <td className={`px-3 py-2 text-right font-mono ${remaining.remainingBlocks > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-                  {remaining.remainingBlocks}
+                <td className={`px-3 py-2 text-right font-mono ${signedRemaining.blocks < 0 ? "text-destructive font-bold" : signedRemaining.blocks > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                  {signedRemaining.blocks}
                 </td>
               </tr>
               {/* Weight summary row */}
@@ -365,6 +389,14 @@ export function SplitShipmentLoadModal({
           />
         </div>
 
+        {isOverloaded && (
+          <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+            {t(
+              "Миқдор буюртма қолдиғидан ошиб кетди (олдинги жўнатмалар ҳисобга олинган). Қизил қаторларни камайтиринг.",
+              "Quantity exceeds what's left on the order (prior shipments counted). Reduce the red rows.",
+            )}
+          </div>
+        )}
         {error && (
           <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
             {error}
@@ -375,7 +407,7 @@ export function SplitShipmentLoadModal({
           <Button variant="outline" size="sm" onClick={onClose} disabled={loading}>
             {t("Бекор", "Cancel")}
           </Button>
-          <Button size="sm" onClick={submit} disabled={!file || loading}>
+          <Button size="sm" onClick={submit} disabled={!file || loading || isOverloaded}>
             {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
             {t("Жўнатмани юклаш", "Save shipment load")}
           </Button>
