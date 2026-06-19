@@ -11,7 +11,7 @@ import {
 
 const T0 = 1_000_000;
 const photo = (n: number) => ({ fileId: `f${n}`, fileUniqueId: `u${n}` });
-const order = { id: "ord1", orderNumber: "2026-06-0020", status: "LOADED" };
+const order = { id: "ord1", orderNumber: "2026-06-0020", status: "LOADED", system: "FLOOR" as const };
 
 beforeEach(() => __resetSessionsForTest());
 

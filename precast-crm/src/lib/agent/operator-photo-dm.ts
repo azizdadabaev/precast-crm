@@ -20,6 +20,7 @@
 import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/permissions";
 import { parseOrderRef } from "@/lib/order-receipt-ref";
+import { parseGazoblokOrderRef } from "@/lib/gazoblok-receipt-ref";
 import { recordAudit } from "@/lib/audit";
 import { canAddLoadedPhoto } from "@/lib/loaded-photos";
 import {
@@ -41,6 +42,7 @@ import {
   clearSession,
   type PhotoRef,
   type PhotoSession,
+  type ResolvedOrder,
 } from "@/lib/agent/operator-photo-session";
 
 /** Subset of a Telegram plain-DM `message` we read. */
@@ -82,13 +84,43 @@ async function resolveSender(fromId: string) {
   return user;
 }
 
-function kindButtons(token: string): InlineButton[][] {
-  return [
-    [
-      { text: "🧾 Чек · Receipt", callback_data: encodePhotoCallback(token, "RECEIPT") },
-      { text: "🚚 Юк машина · Truck", callback_data: encodePhotoCallback(token, "LOADED") },
-    ],
-  ];
+type RefResult =
+  | { kind: "none" }
+  | { kind: "notfound"; ref: string }
+  | { kind: "found"; order: ResolvedOrder };
+
+/** Resolve a caption/text to a floor OR gazoblok order. Gazoblok ("B-…") is
+ *  tried FIRST so "B-06-0010" isn't mis-read as the floor number it embeds. */
+async function resolveRef(text: string | null | undefined): Promise<RefResult> {
+  const year = new Date().getFullYear();
+  const gref = parseGazoblokOrderRef(text, year);
+  if (gref) {
+    const o = await prisma.gazoblokOrder.findFirst({
+      where: { orderNumber: gref },
+      select: { id: true, orderNumber: true, status: true },
+    });
+    return o
+      ? { kind: "found", order: { id: o.id, orderNumber: o.orderNumber, status: o.status, system: "GAZOBLOK" } }
+      : { kind: "notfound", ref: gref };
+  }
+  const fref = parseOrderRef(text, year);
+  if (fref) {
+    const o = await prisma.order.findFirst({
+      where: { orderNumber: fref },
+      select: { id: true, orderNumber: true, status: true },
+    });
+    return o
+      ? { kind: "found", order: { id: o.id, orderNumber: o.orderNumber, status: o.status, system: "FLOOR" } }
+      : { kind: "notfound", ref: fref };
+  }
+  return { kind: "none" };
+}
+
+function kindButtons(token: string, system: ResolvedOrder["system"]): InlineButton[][] {
+  const receipt: InlineButton = { text: "🧾 Чек · Receipt", callback_data: encodePhotoCallback(token, "RECEIPT") };
+  // Gazoblok has no bot-side truck-loading, so it's receipt-only.
+  if (system === "GAZOBLOK") return [[receipt]];
+  return [[receipt, { text: "🚚 Юк машина · Truck", callback_data: encodePhotoCallback(token, "LOADED") }]];
 }
 
 /** Ask the operator which kind this photo is. Marks the session so an album of
@@ -102,7 +134,7 @@ async function promptKind(session: PhotoSession): Promise<void> {
   await tgSendMessageWithInlineKeyboard(
     session.chatId,
     `№${session.order.orderNumber} — расм тури? · Receipt or truck?`,
-    kindButtons(session.token),
+    kindButtons(session.token, session.order.system),
   );
 }
 
@@ -111,11 +143,29 @@ async function promptKind(session: PhotoSession): Promise<void> {
  *  file_unique_id is the same photo (Telegram redelivery / re-tap). */
 async function attachPhoto(
   operatorId: string,
-  orderId: string,
+  order: ResolvedOrder,
   photo: PhotoRef,
   kind: PhotoKind,
 ): Promise<AttachResult> {
+  const orderId = order.id;
   try {
+    // Gazoblok: receipts only (no truck button is shown for it).
+    if (order.system === "GAZOBLOK") {
+      const existing = await prisma.gazoblokReceipt.findFirst({
+        where: { orderId, imageUrl: { contains: photo.fileUniqueId } },
+      });
+      if (existing) return "duplicate";
+      const filePath = await tgGetFilePath(photo.fileId);
+      const buf = await tgDownloadFile(filePath);
+      if (!looksLikeImage(buf)) return "invalid_image";
+      const ext = imageExtFromBytes(buf) ?? "jpg";
+      const url = await saveBufferToUploads(buf, `receipts/gazoblok/order-${orderId}`, `${photo.fileUniqueId}.${ext}`);
+      await prisma.gazoblokReceipt.create({
+        data: { orderId, paymentId: null, imageUrl: url, source: "TELEGRAM_BOT", uploadedById: operatorId },
+      });
+      return "added";
+    }
+
     if (kind === "RECEIPT") {
       const existing = await prisma.receipt.findFirst({
         where: { orderId, imageUrl: { contains: photo.fileUniqueId } },
@@ -180,20 +230,13 @@ export async function handleOperatorPhotoDm(dm: OperatorPhotoDm): Promise<void> 
     const photos = dm.photo ?? [];
     const largest = photos[photos.length - 1];
     if (!largest) return;
-    const ref = parseOrderRef(dm.caption, new Date().getFullYear());
 
-    let order = null as PhotoSession["order"];
-    if (ref) {
-      const o = await prisma.order.findFirst({
-        where: { orderNumber: ref },
-        select: { id: true, orderNumber: true, status: true },
-      });
-      if (!o) {
-        await reply(chatId, `⚠️ Буюртма топилмади: ${ref} · Order not found`);
-        return;
-      }
-      order = { id: o.id, orderNumber: o.orderNumber, status: o.status };
+    const r = await resolveRef(dm.caption);
+    if (r.kind === "notfound") {
+      await reply(chatId, `⚠️ Буюртма топилмади: ${r.ref} · Order not found`);
+      return;
     }
+    const order: PhotoSession["order"] = r.kind === "found" ? r.order : null;
 
     const { session, isNew } = stashPhoto(
       fromId,
@@ -207,7 +250,7 @@ export async function handleOperatorPhotoDm(dm: OperatorPhotoDm): Promise<void> 
     } else if (isNew) {
       await reply(
         chatId,
-        "📎 Расм қабул қилинди. Буюртма рақамини юборинг (масалан 2026-06-0010 ёки 06-0010) · Photo received — send the order number (e.g. 2026-06-0010 or 06-0010)",
+        "📎 Расм қабул қилинди. Буюртма рақамини юборинг (масалан 06-0010 ёки газоблок учун B-06-0010) · Photo received — send the order number (e.g. 06-0010, or B-06-0010 for gazoblok)",
       );
     }
   } catch (err) {
@@ -242,21 +285,17 @@ export async function handleOperatorPhotoNumber(dm: OperatorPhotoDm): Promise<bo
     // Order already resolved (buttons are showing) — stop intercepting their text.
     if (!session || session.order) return false;
 
-    const ref = parseOrderRef(dm.text, new Date().getFullYear());
-    if (!ref) {
-      await reply(chatId, "⚠️ Буюртма рақамини юборинг (масалан 06-0010) · Send the order number (e.g. 06-0010)");
+    const r = await resolveRef(dm.text);
+    if (r.kind === "none") {
+      await reply(chatId, "⚠️ Буюртма рақамини юборинг (масалан 06-0010 ёки B-06-0010) · Send the order number (e.g. 06-0010 or B-06-0010)");
       return true; // keep pending — stay in the mini-flow
     }
-    const o = await prisma.order.findFirst({
-      where: { orderNumber: ref },
-      select: { id: true, orderNumber: true, status: true },
-    });
-    if (!o) {
-      await reply(chatId, `⚠️ Буюртма топилмади: ${ref} · Order not found`);
+    if (r.kind === "notfound") {
+      await reply(chatId, `⚠️ Буюртма топилмади: ${r.ref} · Order not found`);
       return true; // keep pending — let them retry
     }
 
-    const updated = setSessionOrder(fromId, { id: o.id, orderNumber: o.orderNumber, status: o.status });
+    const updated = setSessionOrder(fromId, r.order);
     if (updated) await promptKind(updated);
     return true;
   } catch (err) {
@@ -301,6 +340,12 @@ export async function handleOperatorPhotoCallback(cbq: OperatorPhotoCallbackQuer
     }
 
     if (parsed.kind === "LOADED") {
+      // Gazoblok is receipt-only over the bot (no truck button is offered);
+      // a LOADED tap here would only come from a stale/tampered client.
+      if (order.system === "GAZOBLOK") {
+        await tgAnswerCallbackQuery(cbq.id, { text: "⚠️ Газоблок учун эмас · Not supported for gazoblok" });
+        return;
+      }
       // Re-check status fresh — it may have changed since the photo arrived.
       const fresh = await prisma.order.findUnique({ where: { id: order.id }, select: { status: true } });
       if (!fresh || !canAddLoadedPhoto(fresh.status)) {
@@ -316,7 +361,7 @@ export async function handleOperatorPhotoCallback(cbq: OperatorPhotoCallbackQuer
     let dup = 0;
     let failed = 0;
     for (const p of session.photos) {
-      const res = await attachPhoto(sender.id, order.id, p, parsed.kind);
+      const res = await attachPhoto(sender.id, order, p, parsed.kind);
       if (res === "added") added++;
       else if (res === "duplicate") dup++;
       else failed++;

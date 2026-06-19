@@ -19,6 +19,9 @@ export interface ResolvedOrder {
   id: string;
   orderNumber: string;
   status: string;
+  /** Which order table this came from. Gazoblok receipts attach to a different
+   *  model and don't support the truck-photo kind. */
+  system: "FLOOR" | "GAZOBLOK";
 }
 
 export interface PhotoSession {
