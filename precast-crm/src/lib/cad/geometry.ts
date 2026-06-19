@@ -55,6 +55,56 @@ export function snapToGrid(p: Pt, step: number): Pt {
   return { x: Math.round(p.x / step) * step, y: Math.round(p.y / step) * step };
 }
 
+/**
+ * Set an axis-aligned edge `points[i] → points[(i+1)%n]` to an exact length (cm),
+ * keeping the "from" anchor `points[i]` fixed and the polygon closed + orthogonal.
+ *
+ * The "to" endpoint B = points[i+1] moves along the edge's own axis by the
+ * length delta. Because B's NEXT edge (B→C) is perpendicular, C = points[i+2]
+ * must shift by the same delta so that perpendicular edge stays axis-aligned;
+ * C's following edge is parallel to ours again, so it simply absorbs the delta
+ * as a length change and no further propagation is needed. Thus exactly two
+ * vertices (i+1 and i+2) translate rigidly. The edge's direction (sign) is
+ * preserved.
+ *
+ * Near-zero / non-axis-aligned edges snap to the dominant axis; a truly
+ * degenerate edge or invalid input returns the points unchanged.
+ */
+export function setEdgeLength(
+  points: Pt[],
+  edgeIndex: number,
+  newLengthCm: number,
+): Pt[] {
+  const n = points.length;
+  if (n < 3 || edgeIndex < 0 || edgeIndex >= n) return points;
+  if (!Number.isFinite(newLengthCm) || newLengthCm < 0) return points;
+
+  const a = points[edgeIndex];
+  const b = points[(edgeIndex + 1) % n];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+
+  // Pick the dominant axis (handles slightly-off or near-zero edges gracefully).
+  const horizontal = adx >= ady;
+  const curLen = horizontal ? adx : ady;
+  if (curLen < 1e-9) return points; // truly degenerate — no axis to scale along.
+
+  // Preserve direction: +1 if the edge currently goes in the positive axis dir.
+  const sign = horizontal ? Math.sign(dx) || 1 : Math.sign(dy) || 1;
+  const deltaX = horizontal ? sign * newLengthCm - dx : 0;
+  const deltaY = horizontal ? 0 : sign * newLengthCm - dy;
+
+  // Shift the "to" endpoint (i+1) and the following vertex (i+2) by the delta.
+  const i1 = (edgeIndex + 1) % n;
+  const i2 = (edgeIndex + 2) % n;
+  return points.map((p, idx) => {
+    if (idx === i1 || idx === i2) return { x: p.x + deltaX, y: p.y + deltaY };
+    return { ...p };
+  });
+}
+
 /** Force the segment prev→p to be axis-aligned, keeping the larger delta's axis. */
 export function snapOrtho(prev: Pt, p: Pt): Pt {
   const dx = Math.abs(p.x - prev.x);

@@ -4,6 +4,8 @@ import {
   bbox,
   snapOrtho,
   snapToGrid,
+  setEdgeLength,
+  edgeLengths,
   defaultBeamDir,
   decomposeToBays,
   bayToSlabInput,
@@ -50,6 +52,84 @@ describe("cad geometry — helpers", () => {
   it("default beam direction runs along the shorter side", () => {
     expect(defaultBeamDir({ x: 0, y: 0, w: 320, h: 500 })).toBe("H"); // shorter is horizontal
     expect(defaultBeamDir({ x: 0, y: 0, w: 600, h: 300 })).toBe("V");
+  });
+});
+
+describe("cad geometry — setEdgeLength", () => {
+  // Closed rectangle 320×500 (cm), CW in screen coords (y-down):
+  // edge0: top    (0,0)→(320,0)   horizontal, +x
+  // edge1: right  (320,0)→(320,500) vertical, +y
+  // edge2: bottom (320,500)→(0,500) horizontal, -x
+  // edge3: left   (0,500)→(0,0)     vertical, -y
+  const makeRect = (): Pt[] => [
+    { x: 0, y: 0 },
+    { x: 320, y: 0 },
+    { x: 320, y: 500 },
+    { x: 0, y: 500 },
+  ];
+
+  // Every edge of the result must remain axis-aligned (rectilinear).
+  const isOrthogonal = (pts: Pt[]) =>
+    pts.every((p, i) => {
+      const q = pts[(i + 1) % pts.length];
+      return p.x === q.x || p.y === q.y;
+    });
+
+  it("lengthens the top edge: rectangle grows, stays closed + orthogonal", () => {
+    const out = setEdgeLength(makeRect(), 0, 400);
+    // Anchor (0,0) fixed; to-endpoint moved +80 in x; vertex 2 shifts with it.
+    expect(out[0]).toEqual({ x: 0, y: 0 });
+    expect(out[1]).toEqual({ x: 400, y: 0 });
+    expect(out[2]).toEqual({ x: 400, y: 500 });
+    expect(out[3]).toEqual({ x: 0, y: 500 }); // left side untouched
+    expect(isOrthogonal(out)).toBe(true);
+    // Other edges stay consistent: it's a closed 400×500 rectangle now.
+    const lens = edgeLengths(out);
+    expect(lens[0]).toBe(400); // top — exactly the requested length
+    expect(lens[1]).toBe(500); // right
+    expect(lens[2]).toBe(400); // bottom mirrors top
+    expect(lens[3]).toBe(500); // left
+  });
+
+  it("shortens the right (vertical) edge, preserving +y direction", () => {
+    const out = setEdgeLength(makeRect(), 1, 300);
+    expect(out[1]).toEqual({ x: 320, y: 0 }); // anchor unchanged
+    expect(out[2]).toEqual({ x: 320, y: 300 }); // to-endpoint moved -200 in y
+    expect(out[3]).toEqual({ x: 0, y: 300 }); // following vertex shifts too
+    expect(isOrthogonal(out)).toBe(true);
+    expect(edgeLengths(out)[1]).toBe(300);
+  });
+
+  it("the closing edge (last) is also editable and stays closed", () => {
+    // edge3 wraps: to-endpoint = points[0], following vertex = points[1].
+    const out = setEdgeLength(makeRect(), 3, 300);
+    expect(isOrthogonal(out)).toBe(true);
+    expect(edgeLengths(out)[3]).toBe(300);
+  });
+
+  it("keeps an L-shape closed + orthogonal when an edge is resized", () => {
+    const out = setEdgeLength(lShape, 0, 400);
+    expect(isOrthogonal(out)).toBe(true);
+    expect(edgeLengths(out)[0]).toBe(400);
+  });
+
+  it("returns points unchanged for invalid edge index or negative length", () => {
+    const r = makeRect();
+    expect(setEdgeLength(r, 9, 100)).toEqual(r);
+    expect(setEdgeLength(r, 0, -5)).toEqual(r);
+  });
+
+  it("snaps a slightly-off edge to its dominant axis", () => {
+    // Near-horizontal edge (dy small). Setting length keeps it horizontal.
+    const pts: Pt[] = [
+      { x: 0, y: 0 },
+      { x: 200, y: 3 },
+      { x: 200, y: 400 },
+      { x: 0, y: 400 },
+    ];
+    const out = setEdgeLength(pts, 0, 250);
+    expect(out[1].x).toBe(250); // moved along x (dominant axis)
+    expect(out[1].y).toBe(3); // y untouched
   });
 });
 
