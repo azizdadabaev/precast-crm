@@ -10,6 +10,9 @@ import {
   defaultBeamDir,
   bayToSlabInput,
   beamLayout,
+  mergeBeamScheduleByKind,
+  formatLengthCm,
+  BEARING_CM,
 } from "@/lib/cad/geometry";
 import { calculateSlab, type SlabResult } from "@/services/calculation-engine";
 
@@ -53,15 +56,30 @@ export default function CadTestPage() {
 
   // Per-bay beam/block overlay, index-aligned with `bays`. Driven by the
   // engine's counts so the picture matches the numbers; empty layers for
-  // bays the engine couldn't compute. Updates live with the H/V toggle.
+  // bays the engine couldn't compute. Now PITCH-accurate and fed the real
+  // beam_length (cm) + blocks_per_row so the drawing == the schedule.
   const beamLayers = useMemo(
     () =>
       rows.map((r) =>
-        r.result
-          ? beamLayout({ rect: r.rect, beamDir: r.beamDir }, r.result.beam_count, r.result.block_rows)
-          : { beams: [], blockCells: [] },
+        beamLayout(
+          { rect: r.rect, beamDir: r.beamDir },
+          r.result?.beam_count ?? 0,
+          r.result?.block_rows ?? 0,
+          r.result?.blocks_per_row ?? 0,
+          r.result ? Math.round(r.result.beam_length * 100) : 0,
+          r.result?.pattern ?? "GB",
+          BEARING_CM,
+        ),
       ),
     [rows],
+  );
+
+  // Project-wide beam schedule (counts grouped by beam length AND kind), summed
+  // across bays — the factory cut-list, split structural vs manual-extra. Drawn
+  // from the SAME layers the overlay uses, so the numbers match the picture.
+  const schedule = useMemo(
+    () => mergeBeamScheduleByKind(beamLayers.map((l) => l.schedule)),
+    [beamLayers],
   );
 
   const totals = useMemo(() => {
@@ -194,6 +212,34 @@ export default function CadTestPage() {
                   </tr>
                 </tbody>
               </table>
+
+              {schedule.length > 0 && (
+                <div className="mt-3 border-t pt-2">
+                  <div className="mb-1 text-xs font-semibold text-slate-500">
+                    BEAM SCHEDULE (cut-list)
+                  </div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-slate-400">
+                        <td>Length</td>
+                        <td>Type</td>
+                        <td className="text-right">Qty</td>
+                      </tr>
+                    </thead>
+                    <tbody className="[&_td]:py-0.5">
+                      {schedule.map((e) => (
+                        <tr key={`${e.lengthCm}-${e.kind}`}>
+                          <td className="text-slate-600">{formatLengthCm(e.lengthCm)}</td>
+                          <td className={e.kind === "extra" ? "text-amber-600" : "text-slate-500"}>
+                            {e.kind === "extra" ? "extra" : "main"}
+                          </td>
+                          <td className="text-right font-medium">{e.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
         </div>

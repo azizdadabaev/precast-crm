@@ -1,14 +1,43 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type React from "react";
 import { Button } from "@/components/ui/button";
 import {
   type Pt,
   type Rect,
+  type BeamArrow,
+  type BeamDir,
+  type BeamKind,
+  bayLabelLines,
+  perpDimension,
+  blockCellBudget,
   snapToGrid,
   snapOrtho,
   setEdgeLength,
+  nearestEdge,
+  insertVertex,
+  deleteVertex,
+  wouldSelfIntersect,
+  wouldCollapseEdge,
+  drawStepWouldCross,
+  canClose,
+  orthoVertexMove,
+  snapToVertices,
+  isValidOutline,
+  fitView,
+  bbox,
+  edgeOutwardNormal,
+  dimStyleForEdge,
+  dimensionOffsetLevels,
+  overallDimensions,
+  perimeter,
+  floorAreaCm2,
+  formatLengthCm,
+  formatLengthDual,
+  formatAreaCm2,
+  bayPalette,
+  scaleBar,
 } from "@/lib/cad/geometry";
 
 interface RoomCanvasProps {
@@ -20,41 +49,110 @@ interface RoomCanvasProps {
   bays?: Rect[];
   /**
    * Optional per-bay beam/block visual (from `beamLayout`). Index-aligned
-   * with `bays`: beam strips render filled + distinct; block cells render as a
-   * thin grid. All rects are in cm inside their bay.
+   * with `bays`: beam strips render filled in the bay's palette colour, block
+   * cells render as a thin tinted grid, a centre arrow shows the beam-run
+   * direction, and a label chip shows the bay's beam count + length. All rects
+   * + arrow points are in cm inside their bay.
    */
-  beamLayers?: Array<{ beams: Rect[]; blockCells: Rect[] }>;
+  beamLayers?: Array<{
+    beams: Rect[];
+    /** Per-beam structural/extra kind, index-aligned with `beams`. Manual extras
+     *  render hatched so they read as add-on line items past the pitch grid. */
+    beamKinds?: BeamKind[];
+    /** Bearing seats (small rects at each beam end) — drawn hatched on top of
+     *  the strip ends so the wall-rest portion of the beam_length is visible. */
+    bearings?: Rect[];
+    blockCells: Rect[];
+    blockCellsCapped?: boolean;
+    arrow?: BeamArrow;
+    beamDir?: BeamDir;
+    beamCount?: number;
+    beamLengthCm?: number;
+    /** Engine pattern (GB/BGB/GBG) — shown in the legend. */
+    pattern?: string;
+    /** Total blocks in this bay (for the bay label tally). */
+    totalBlocks?: number;
+    /** Manual extra beams folded into beamCount (drawn past the run). */
+    extraBeams?: number;
+    /** Pitched-run depth (cm) the structural run fills — feeds the perp dimension. */
+    pitchExtentCm?: number;
+    /** True when the engine's pitch count didn't fit the drawn bay, so beams were
+     *  clamped (drawing not at true scale; counts unaffected). Flagged in the legend. */
+    pitchOverflow?: boolean;
+  }>;
 }
 
-// ── Fixed cm→px mapping. v1: a fixed scale + a small margin origin. ──
-const SCALE = 0.6; // px per cm
-const MARGIN = 24; // px padding around the origin
+// ── Base cm→px mapping. A view transform (zoom/pan) is applied on top. ──
+const BASE_SCALE = 0.6; // px per cm at zoom = 1
+const MARGIN = 24; // px padding around the cm origin (in world/base space)
 const SVG_W = 680;
 const SVG_H = 680;
 
-// Click-to-close / drag pick radius, in px.
+// Click-to-close / drag pick radius, in px (screen space).
 const HIT_PX = 12;
+// Edge-insert pick radius, in px.
+const EDGE_HIT_PX = 8;
+// Object-snap radius for landing a draw point / dragged vertex onto an existing
+// vertex, in px (screen space).
+const VERTEX_SNAP_PX = 10;
+
+// ── Dimensioning (CAD dimension lines), all in screen px ──
+// How far OUTSIDE the shape the dimension line sits, from the edge.
+const DIM_OFFSET_PX = 26;
+// Length of the little extension-line stub past the dimension line.
+const DIM_EXT_OVERSHOOT_PX = 6;
+// Small gap between the shape edge and where the extension line begins.
+const DIM_EXT_GAP_PX = 3;
+// Arrowhead size (length × half-width) for the dimension-line tips.
+const DIM_ARROW_LEN = 8;
+const DIM_ARROW_HALF = 3;
+// Dimension text font size (px) + the per-character half-width estimate used to
+// size the inline text gap / decide inline-vs-outside placement. ~6 px/char at
+// fontSize 12 is a safe over-estimate for the digits + "m"/"cm" glyphs we emit.
+const DIM_FONT_PX = 12;
+const DIM_CHAR_HALF_PX = 3.4;
+// Below this on-screen edge length we drop the dimension line and arrows and
+// just float a bare number, to avoid an unreadable tangle of overlapping marks.
+const DIM_MIN_EDGE_PX = 22;
+// How far apart (px) successive stacking LEVELS of parallel dimension lines sit.
+// dimensionOffsetLevels gives each edge a level; level k draws at
+// DIM_OFFSET_PX + k·DIM_LEVEL_STEP_PX so collinear/overlapping dims never overlap.
+const DIM_LEVEL_STEP_PX = 22;
+// Overall (extents) dimension line offset past the deepest per-edge dim band.
+const DIM_OVERALL_GAP_PX = 24;
+
+/** Approximate half the rendered width (px) of a dimension label string. */
+const dimTextHalfPx = (label: string) =>
+  Math.max(10, label.length * DIM_CHAR_HALF_PX);
+
+// Zoom limits + wheel sensitivity.
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 6;
+
+// Reject a draw step shorter than this (cm) so we never append a hairline edge.
+const MIN_DRAW_STEP_CM = 1;
 
 // Grid-size options offered in the controls bar (cm).
 const GRID_OPTIONS = [5, 10, 25, 50] as const;
 
-const BAY_COLORS = [
-  "#3b82f6",
-  "#10b981",
-  "#f59e0b",
-  "#ef4444",
-  "#8b5cf6",
-  "#ec4899",
-  "#14b8a6",
-  "#f97316",
-];
+interface View {
+  zoom: number;
+  /** Pan offset in screen/px (added after zoom). */
+  tx: number;
+  ty: number;
+}
+
+const IDENTITY: View = { zoom: 1, tx: 0, ty: 0 };
 
 /**
  * Controlled SVG drawing surface for a rectilinear room outline. Points are in
  * CENTIMETRES; screen uses y-down. Draw mode: click empty canvas to append an
  * ortho-snapped, (optionally) grid-snapped vertex. Close by clicking near the
- * first point or the Close button. Once closed, vertices are draggable handles
- * and edges are clickable to type an exact length.
+ * first point or the Close button. Once closed, vertices are draggable handles,
+ * edges are clickable to type an exact length, an edge body can be clicked to
+ * insert a vertex, and a selected vertex can be nudged with the arrow keys or
+ * deleted. The view supports mouse-wheel zoom and middle/space drag pan, and a
+ * local undo/redo history of all outline edits.
  */
 export function RoomCanvas({
   points,
@@ -67,86 +165,461 @@ export function RoomCanvas({
   // `closed` distinguishes draw-in-progress (open polyline) from a finished loop.
   const [closed, setClosed] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  // Selected vertex (for keyboard nudge / delete). Distinct from drag.
+  const [selVertex, setSelVertex] = useState<number | null>(null);
+  // Live cursor position in cm (for the in-progress rubber-band + readout).
+  const [cursor, setCursor] = useState<Pt | null>(null);
+  // Hover state: a vertex index, or a candidate edge-insert point.
+  const [hoverVertex, setHoverVertex] = useState<number | null>(null);
+  const [edgeInsert, setEdgeInsert] = useState<{ index: number; at: Pt } | null>(null);
 
   // CAD controls: live grid size + snap on/off. Seeded from the `gridCm` prop.
   const [grid, setGrid] = useState<number>(gridCm);
   const [snap, setSnap] = useState(true);
+  // Ortho mode keeps the outline rectilinear: a dragged/nudged vertex carries its
+  // two neighbours so both incident edges stay axis-aligned (the invariant the
+  // bay decomposition relies on). On by default; can be toggled off for free moves.
+  const [ortho, setOrtho] = useState(true);
   const step = grid; // grid step == snap step (they move together by design).
+  // Live object-snap marker: the existing vertex a draw point / drag is snapping
+  // onto (screen-px shown as a ring), or null.
+  const [snapTarget, setSnapTarget] = useState<Pt | null>(null);
 
   // Selected edge (index of points[i] → points[i+1]) + its draft length text.
   const [selEdge, setSelEdge] = useState<number | null>(null);
   const [lenInput, setLenInput] = useState("");
+  // Edge whose dimension the pointer is over — drives a visible hover affordance
+  // (the dim line + label brighten) so click-to-type-length is discoverable.
+  const [hoverEdge, setHoverEdge] = useState<number | null>(null);
+
+  // ── View transform (zoom + pan) ──
+  const [view, setView] = useState<View>(IDENTITY);
+  const panRef = useRef<{ sx: number; sy: number; tx: number; ty: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  // Space-held = pan-arm: left-drag pans (classic CAD), shown as a grab cursor.
+  const [spaceHeld, setSpaceHeld] = useState(false);
+
+  // ── Undo / redo history of the outline (points + closed). Local to the editor;
+  // the parent stays the single source of truth for the *current* value. ──
+  const undoStack = useRef<Array<{ points: Pt[]; closed: boolean }>>([]);
+  const redoStack = useRef<Array<{ points: Pt[]; closed: boolean }>>([]);
+  const [histTick, setHistTick] = useState(0); // re-render when stacks change
+
+  const pushHistory = useCallback(
+    (prevPoints: Pt[], prevClosed: boolean) => {
+      undoStack.current.push({ points: prevPoints, closed: prevClosed });
+      if (undoStack.current.length > 100) undoStack.current.shift();
+      redoStack.current = [];
+      setHistTick((t) => t + 1);
+    },
+    [],
+  );
+
+  /** Commit an outline change, recording the *previous* state for undo. */
+  const commit = useCallback(
+    (nextPoints: Pt[], nextClosed?: boolean) => {
+      pushHistory(points, closed);
+      if (nextClosed !== undefined) setClosed(nextClosed);
+      onChange(nextPoints);
+    },
+    [points, closed, onChange, pushHistory],
+  );
 
   const maybeSnap = (p: Pt): Pt => (snap ? snapToGrid(p, step) : p);
 
-  const cmToPx = (p: Pt): { x: number; y: number } => ({
-    x: MARGIN + p.x * SCALE,
-    y: MARGIN + p.y * SCALE,
-  });
+  // World (base) space → screen px applies the view transform last.
+  const cmToPx = useCallback(
+    (p: Pt): { x: number; y: number } => ({
+      x: (MARGIN + p.x * BASE_SCALE) * view.zoom + view.tx,
+      y: (MARGIN + p.y * BASE_SCALE) * view.zoom + view.ty,
+    }),
+    [view],
+  );
 
-  /** Convert a mouse event to cm coords in the SVG's user space. */
-  const eventToCm = (e: React.MouseEvent): Pt => {
-    const svg = svgRef.current!;
-    const rect = svg.getBoundingClientRect();
-    // viewBox maps 1:1 to SVG_W×SVG_H user units, so scale by the rendered size.
-    const ux = ((e.clientX - rect.left) / rect.width) * SVG_W;
-    const uy = ((e.clientY - rect.top) / rect.height) * SVG_H;
-    return { x: (ux - MARGIN) / SCALE, y: (uy - MARGIN) / SCALE };
-  };
+  /** Convert a mouse event to cm coords in the SVG's user space (inverts view). */
+  const eventToCm = useCallback(
+    (e: { clientX: number; clientY: number }): Pt => {
+      const svg = svgRef.current!;
+      const rect = svg.getBoundingClientRect();
+      // pointer → viewBox user units → world (un-zoom/pan) → cm.
+      const ux = ((e.clientX - rect.left) / rect.width) * SVG_W;
+      const uy = ((e.clientY - rect.top) / rect.height) * SVG_H;
+      const wx = (ux - view.tx) / view.zoom;
+      const wy = (uy - view.ty) / view.zoom;
+      return { x: (wx - MARGIN) / BASE_SCALE, y: (wy - MARGIN) / BASE_SCALE };
+    },
+    [view],
+  );
 
-  const distPx = (a: Pt, b: Pt): number => {
-    const pa = cmToPx(a);
-    const pb = cmToPx(b);
-    return Math.hypot(pa.x - pb.x, pa.y - pb.y);
-  };
+  const distPx = useCallback(
+    (a: Pt, b: Pt): number => {
+      const pa = cmToPx(a);
+      const pb = cmToPx(b);
+      return Math.hypot(pa.x - pb.x, pa.y - pb.y);
+    },
+    [cmToPx],
+  );
 
+  // pixels → cm at the current zoom, for converting hit radii into world tol.
+  const pxToCm = (px: number) => px / (BASE_SCALE * view.zoom);
+
+  // ── Click / draw ──
   const handleCanvasClick = (e: React.MouseEvent) => {
-    if (closed || dragIdx !== null) return;
+    if (panning || spaceHeld || dragIdx !== null) return;
     const raw = eventToCm(e);
 
-    // Close affordance: click near the first vertex finalizes the loop.
-    if (points.length >= 3 && distPx(raw, points[0]) <= HIT_PX) {
-      setClosed(true);
+    if (!closed) {
+      // Close affordance: click near the first vertex finalizes the loop —
+      // but only when the resulting loop is geometrically valid (non-degenerate
+      // closing edge + no self-crossing).
+      if (points.length >= 3 && distPx(raw, points[0]) <= HIT_PX) {
+        if (canClose(points)) {
+          commit(points, true);
+          setCursor(null);
+        }
+        return;
+      }
+      const prev = points[points.length - 1];
+      // Object-snap: if the raw click is near an existing vertex, land exactly on
+      // it (skips ortho/grid). Otherwise ortho-snap off the previous point.
+      const vSnap = snapToVertices(points, raw, pxToCm(VERTEX_SNAP_PX), points.length - 1);
+      const orthoP = prev ? snapOrtho(prev, raw) : raw;
+      const cand = vSnap ?? maybeSnap(orthoP);
+      // Reject a zero-length / hairline step (clicking on/at the last vertex).
+      if (prev && Math.hypot(cand.x - prev.x, cand.y - prev.y) < MIN_DRAW_STEP_CM) return;
+      // Reject a step that would fold the in-progress path over itself.
+      if (drawStepWouldCross(points, cand)) return;
+      commit([...points, cand]);
       return;
     }
 
-    const prev = points[points.length - 1];
-    const ortho = prev ? snapOrtho(prev, raw) : raw;
-    onChange([...points, maybeSnap(ortho)]);
+    // Closed: clicking an edge body inserts a vertex there.
+    if (edgeInsert) {
+      const at = maybeSnap(edgeInsert.at);
+      const next = insertVertex(points, edgeInsert.index, at);
+      commit(next);
+      setSelVertex(edgeInsert.index + 1);
+      setEdgeInsert(null);
+      return;
+    }
+    // Click on empty area clears selection.
+    setSelVertex(null);
+    setSelEdge(null);
   };
+
+  // ── Vertex drag ──
+  // Snapshot of the outline at drag-start, pushed to undo on the FIRST real move
+  // (so a click that doesn't move a vertex leaves no spurious undo entry).
+  const dragStart = useRef<{ points: Pt[]; closed: boolean } | null>(null);
+  const dragMoved = useRef(false);
 
   const handleVertexDown = (i: number) => (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (e.button !== 0) return;
     setDragIdx(i);
+    setSelVertex(i);
+    setSelEdge(null);
+    // Defer the undo snapshot to the first actual move (see handleMove).
+    dragStart.current = { points, closed };
+    dragMoved.current = false;
   };
 
   const handleMove = (e: React.MouseEvent) => {
-    if (dragIdx === null) return;
-    const next = points.slice();
-    next[dragIdx] = maybeSnap(eventToCm(e));
-    onChange(next);
+    // Pan takes priority.
+    if (panRef.current) {
+      const svg = svgRef.current!;
+      const rect = svg.getBoundingClientRect();
+      const sx = ((e.clientX - rect.left) / rect.width) * SVG_W;
+      const sy = ((e.clientY - rect.top) / rect.height) * SVG_H;
+      setView((v) => ({
+        ...v,
+        tx: panRef.current!.tx + (sx - panRef.current!.sx),
+        ty: panRef.current!.ty + (sy - panRef.current!.sy),
+      }));
+      return;
+    }
+
+    const cm = eventToCm(e);
+    setCursor(cm);
+
+    if (dragIdx !== null) {
+      // Object-snap the drag onto a sibling vertex (excluding self) before grid.
+      const vSnap = snapToVertices(points, cm, pxToCm(VERTEX_SNAP_PX), dragIdx);
+      const target = vSnap ?? maybeSnap(cm);
+      setSnapTarget(vSnap);
+      // Ortho move drags the two neighbours so both incident edges stay axis-
+      // aligned; validate the WHOLE candidate (it shifts >1 vertex). Free move
+      // checks just the single-vertex collapse/intersection guards.
+      let next: Pt[];
+      if (ortho) {
+        next = orthoVertexMove(points, dragIdx, target, closed);
+        if (!isValidOutline(next, closed)) return;
+      } else {
+        if (wouldCollapseEdge(points, dragIdx, target, closed)) return;
+        if (closed && wouldSelfIntersect(points, dragIdx, target, true)) return;
+        next = points.slice();
+        next[dragIdx] = target;
+      }
+      // No-op move (snapped to the same spot) → don't churn history or state.
+      const cur = points[dragIdx];
+      if (next[dragIdx].x === cur.x && next[dragIdx].y === cur.y && !dragMoved.current) {
+        return;
+      }
+      // Record the pre-drag state once, on the first real move.
+      if (!dragMoved.current && dragStart.current) {
+        pushHistory(dragStart.current.points, dragStart.current.closed);
+        dragMoved.current = true;
+      }
+      onChange(next); // live drag bypasses commit (history captured on first move)
+      return;
+    }
+
+    // Hover detection (closed only): vertex first, then edge body for insert.
+    if (closed) {
+      let hv: number | null = null;
+      for (let i = 0; i < points.length; i++) {
+        if (distPx(cm, points[i]) <= HIT_PX) {
+          hv = i;
+          break;
+        }
+      }
+      setHoverVertex(hv);
+      setEdgeInsert(hv === null ? nearestEdge(points, cm, pxToCm(EDGE_HIT_PX), true) : null);
+    } else if (points.length > 0) {
+      // While drawing, preview an object-snap onto an existing vertex.
+      const vSnap = snapToVertices(points, cm, pxToCm(VERTEX_SNAP_PX), points.length - 1);
+      setSnapTarget(vSnap);
+    }
   };
 
-  const endDrag = () => setDragIdx(null);
+  const endDrag = () => {
+    setDragIdx(null);
+    setSnapTarget(null);
+    if (panRef.current) {
+      panRef.current = null;
+      setPanning(false);
+    }
+  };
 
+  const handleLeave = () => {
+    endDrag();
+    setCursor(null);
+    setHoverVertex(null);
+    setEdgeInsert(null);
+    setSnapTarget(null);
+    setHoverEdge(null);
+  };
+
+  // ── Pan: middle-button, alt+left, or space-held left drag ──
+  const handleDown = (e: React.MouseEvent) => {
+    if (e.button === 1 || (e.button === 0 && (e.altKey || spaceHeld))) {
+      e.preventDefault();
+      const svg = svgRef.current!;
+      const rect = svg.getBoundingClientRect();
+      const sx = ((e.clientX - rect.left) / rect.width) * SVG_W;
+      const sy = ((e.clientY - rect.top) / rect.height) * SVG_H;
+      panRef.current = { sx, sy, tx: view.tx, ty: view.ty };
+      setPanning(true);
+    }
+  };
+
+  // ── Wheel zoom, centred on the cursor (keeps the point under the mouse fixed) ──
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const svg = svgRef.current!;
+    const rect = svg.getBoundingClientRect();
+    const sx = ((e.clientX - rect.left) / rect.width) * SVG_W;
+    const sy = ((e.clientY - rect.top) / rect.height) * SVG_H;
+    setView((v) => {
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, v.zoom * factor));
+      const k = zoom / v.zoom;
+      // Keep (sx,sy) anchored: s = world*zoom + t  ⇒  t' = s - (s - t)*k.
+      return { zoom, tx: sx - (sx - v.tx) * k, ty: sy - (sy - v.ty) * k };
+    });
+  };
+
+  const resetView = () => setView(IDENTITY);
+
+  // Zoom-to-fit: frame the drawn outline (its world-space bbox) in the viewport.
+  // World px = cm×BASE_SCALE + MARGIN; we hand fitView that box + the SVG size.
+  const fitToShape = () => {
+    if (points.length < 2) return;
+    const bb = bbox(points);
+    const worldBox = {
+      x: MARGIN + bb.x * BASE_SCALE,
+      y: MARGIN + bb.y * BASE_SCALE,
+      w: bb.w * BASE_SCALE,
+      h: bb.h * BASE_SCALE,
+    };
+    // Pad generously so the per-edge dimension band AND the overall (extents)
+    // dimensions outside it stay on-canvas after a fit.
+    setView(fitView(worldBox, SVG_W, SVG_H, 96, MIN_ZOOM, MAX_ZOOM));
+  };
+
+  // ── Toolbar actions ──
   const clear = () => {
+    if (!points.length && !closed) return;
+    pushHistory(points, closed);
     setClosed(false);
     setDragIdx(null);
     setSelEdge(null);
+    setSelVertex(null);
+    setCursor(null);
+    setEdgeInsert(null);
+    setHoverVertex(null);
+    setSnapTarget(null);
+    dragStart.current = null;
+    dragMoved.current = false;
     onChange([]);
   };
 
-  const undo = () => {
-    if (closed) {
-      setClosed(false);
-      return;
-    }
-    setSelEdge(null);
-    onChange(points.slice(0, -1));
+  // Robust close: only finalize a loop that is non-degenerate + non-crossing.
+  const closeOk = !closed && canClose(points);
+  const close = () => {
+    if (closeOk) commit(points, true);
   };
 
-  const close = () => {
-    if (points.length >= 3) setClosed(true);
+  // Remove the last placed point while drawing (in-draw step-back, like CAD).
+  const undoLastPoint = () => {
+    if (closed || points.length === 0) return;
+    commit(points.slice(0, -1));
+  };
+
+  const undo = () => {
+    const snap = undoStack.current.pop();
+    if (!snap) return;
+    redoStack.current.push({ points, closed });
+    setClosed(snap.closed);
+    setSelEdge(null);
+    setSelVertex(null);
+    setHistTick((t) => t + 1);
+    onChange(snap.points);
+  };
+
+  const redo = () => {
+    const snap = redoStack.current.pop();
+    if (!snap) return;
+    undoStack.current.push({ points, closed });
+    setClosed(snap.closed);
+    setSelEdge(null);
+    setSelVertex(null);
+    setHistTick((t) => t + 1);
+    onChange(snap.points);
+  };
+
+  const deleteSelected = () => {
+    if (selVertex === null) return;
+    const next = deleteVertex(points, selVertex, closed);
+    if (next === points) return; // refused (would drop below a valid loop)
+    commit(next);
+    setSelVertex(null);
+    setSelEdge(null);
+    setEdgeInsert(null);
+  };
+
+  // ── Keyboard: Escape, arrow nudge, delete, undo/redo, close ──
+  // Bound to the SVG (it is focusable via tabIndex) so it doesn't hijack the
+  // page; the length <input> handles its own keys and stops propagation.
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Space arms pan mode (left-drag pans). Don't scroll the page.
+    if (e.key === " " || e.code === "Space") {
+      e.preventDefault();
+      setSpaceHeld(true);
+      return;
+    }
+
+    const meta = e.ctrlKey || e.metaKey;
+    if (meta && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+      return;
+    }
+    if (meta && e.key.toLowerCase() === "y") {
+      e.preventDefault();
+      redo();
+      return;
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      if (!closed && points.length > 0) {
+        // Cancel the in-progress draw entirely.
+        clear();
+      } else {
+        setSelVertex(null);
+        setSelEdge(null);
+        setEdgeInsert(null);
+        setHoverVertex(null);
+      }
+      return;
+    }
+
+    // While drawing, Backspace steps back one placed point (Delete too, since
+    // there's no vertex selection during a draw). Once closed, Delete/Backspace
+    // removes the selected vertex.
+    if (!closed && (e.key === "Backspace" || e.key === "Delete")) {
+      e.preventDefault();
+      undoLastPoint();
+      return;
+    }
+    if (closed && (e.key === "Delete" || e.key === "Backspace") && selVertex !== null) {
+      e.preventDefault();
+      deleteSelected();
+      return;
+    }
+
+    if (e.key === "Enter" && closeOk) {
+      e.preventDefault();
+      close();
+      return;
+    }
+
+    // "F" frames the drawn shape; "0" resets the view (CAD view shortcuts).
+    if (!meta && (e.key === "f" || e.key === "F")) {
+      e.preventDefault();
+      fitToShape();
+      return;
+    }
+    if (!meta && e.key === "0") {
+      e.preventDefault();
+      resetView();
+      return;
+    }
+
+    // Arrow-key nudge of the selected vertex by one grid step.
+    if (selVertex !== null && e.key.startsWith("Arrow")) {
+      e.preventDefault();
+      const d = e.shiftKey ? step * 5 : step;
+      const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
+      const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
+      if (dx === 0 && dy === 0) return;
+      const p = points[selVertex];
+      const target = { x: p.x + dx, y: p.y + dy };
+      let next: Pt[];
+      if (ortho) {
+        next = orthoVertexMove(points, selVertex, target, closed);
+        if (!isValidOutline(next, closed)) return;
+      } else {
+        if (wouldCollapseEdge(points, selVertex, target, closed)) return;
+        if (closed && wouldSelfIntersect(points, selVertex, target, true)) return;
+        next = points.slice();
+        next[selVertex] = target;
+      }
+      commit(next);
+    }
+  };
+
+  // Release space → leave pan-arm (and end any in-flight pan).
+  const handleKeyUp = (e: React.KeyboardEvent) => {
+    if (e.key === " " || e.code === "Space") {
+      setSpaceHeld(false);
+      if (panRef.current) {
+        panRef.current = null;
+        setPanning(false);
+      }
+    }
   };
 
   // ── Edge selection + keyboard length entry ──
@@ -161,6 +634,7 @@ export function RoomCanvas({
   const selectEdge = (i: number) => (e: React.MouseEvent) => {
     e.stopPropagation();
     setSelEdge(i);
+    setSelVertex(null);
     setLenInput(String(edgeLenCm(i)));
   };
 
@@ -168,17 +642,21 @@ export function RoomCanvas({
     if (selEdge === null) return;
     const next = Number(lenInput);
     if (Number.isFinite(next) && next > 0) {
-      onChange(setEdgeLength(points, selEdge, next));
+      commit(setEdgeLength(points, selEdge, next));
     }
   };
 
+  const canUndo = undoStack.current.length > 0;
+  const canRedo = redoStack.current.length > 0;
+  void histTick; // referenced to tie re-render to history changes
+
   // ── Grid: minor lines every `grid` cm, major every 5×grid, axis emphasis. ──
-  const gridStepPx = grid * SCALE;
+  // Lines are emitted in WORLD space and the whole scene is wrapped in a single
+  // <g transform> so zoom/pan move everything together (cheaper + consistent).
+  const gridStepPx = grid * BASE_SCALE;
   const majorEvery = 5;
   const minor: React.ReactNode[] = [];
   const major: React.ReactNode[] = [];
-  // Index lines from the cm origin (MARGIN) so major/minor stay aligned as the
-  // grid size changes; bounded to the canvas extent so we never emit thousands.
   let col = 0;
   for (let x = MARGIN; x <= SVG_W; x += gridStepPx, col++) {
     const isMajor = col % majorEvery === 0;
@@ -209,7 +687,6 @@ export function RoomCanvas({
       />,
     );
   }
-  // Origin axes (the cm 0,0 lines) get a subtle stronger emphasis.
   const axes = (
     <>
       <line x1={MARGIN} y1={0} x2={MARGIN} y2={SVG_H} stroke="#c2ccd6" strokeWidth={1.5} />
@@ -217,42 +694,159 @@ export function RoomCanvas({
     </>
   );
 
-  // Polyline / polygon path string.
+  // World→screen helper for a single world coord (grid lives in world space).
+  const sceneTransform = `translate(${view.tx} ${view.ty}) scale(${view.zoom})`;
+
+  // Vertex/point screen positions (used for handles + close-band visuals).
   const pxPts = points.map(cmToPx);
   const pathPts = pxPts.map((p) => `${p.x},${p.y}`).join(" ");
 
-  // Edge midpoint dimension labels + invisible-wide click targets per edge.
-  const labels: React.ReactNode[] = [];
-  const edgeHits: React.ReactNode[] = [];
-  for (let i = 0; i < edgeCount; i++) {
-    const a = points[i];
-    const b = points[(i + 1) % points.length];
-    const len = Math.round(Math.hypot(b.x - a.x, b.y - a.y));
-    if (len === 0) continue;
-    const pa = cmToPx(a);
-    const pb = cmToPx(b);
-    const m = cmToPx({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-    const selected = selEdge === i;
-    // Fat transparent line as the click target (only when closed = editable).
-    if (closed) {
-      edgeHits.push(
+  // Rubber-band: preview the next ortho-snapped edge while drawing. Turns red
+  // when the step is invalid (would self-cross), and the snap-to-close ring
+  // glows green only when the loop can actually be closed here.
+  let rubber: React.ReactNode = null;
+  if (!closed && cursor && points.length > 0) {
+    const prev = points[points.length - 1];
+    const ortho = maybeSnap(snapOrtho(prev, cursor));
+    const pa = cmToPx(prev);
+    const pb = cmToPx(ortho);
+    const nearClose =
+      points.length >= 3 && distPx(cursor, points[0]) <= HIT_PX;
+    const closeValid = nearClose && canClose(points);
+    // Invalid if the proposed step crosses the path or is a hairline (but not
+    // while we're hovering the close target — that's a finalize, not a step).
+    const stepLen = Math.hypot(ortho.x - prev.x, ortho.y - prev.y);
+    const invalid =
+      !nearClose && (stepLen < MIN_DRAW_STEP_CM || drawStepWouldCross(points, ortho));
+    const stroke = invalid ? "#dc2626" : "#0284c7";
+    rubber = (
+      <g style={{ pointerEvents: "none" }}>
         <line
-          key={`hit${i}`}
           x1={pa.x}
           y1={pa.y}
           x2={pb.x}
           y2={pb.y}
+          stroke={stroke}
+          strokeWidth={1.5}
+          strokeDasharray="4 4"
+          opacity={0.7}
+        />
+        <circle cx={pb.x} cy={pb.y} r={3} fill={stroke} opacity={0.7} />
+        {nearClose && (
+          <circle
+            cx={pxPts[0].x}
+            cy={pxPts[0].y}
+            r={HIT_PX}
+            fill={closeValid ? "#16a34a" : "#dc2626"}
+            fillOpacity={0.14}
+            stroke={closeValid ? "#16a34a" : "#dc2626"}
+            strokeDasharray="3 3"
+          />
+        )}
+      </g>
+    );
+  }
+
+  // ── Per-edge CAD dimension lines ──
+  // For each edge we draw: two extension lines (from just outside each endpoint,
+  // perpendicular to the edge, out to the dimension line), the dimension line
+  // with arrowheads at both tips, and the length text. Placement is decided by
+  // `dimStyleForEdge` from the on-screen edge length:
+  //  - inline  : text in a gap punched in the line, arrows inward at the tips.
+  //  - outside : edge too short for inline text → arrows point INWARD from the
+  //              tips and the label is parked just past the right-hand tip, so
+  //              adjacent short-edge labels don't collide.
+  //  - bare    : edge tiny → a single floating number, no lines/arrows.
+  // The outward direction uses `edgeOutwardNormal` (point-in-polygon sampling)
+  // so a re-entrant notch wall dimensions INTO the notch void, never buried in
+  // the solid. A wide invisible hit-line keeps click-to-type-length discoverable.
+  const dims: React.ReactNode[] = [];
+  const edgeHits: React.ReactNode[] = [];
+  // Stacking levels so parallel/collinear dimensions on the SAME outward side
+  // (e.g. an L-shape's two short collinear walls, or a notch wall lined up with
+  // an outer wall) sit on distinct offset bands instead of overprinting.
+  const dimLevels = closed
+    ? dimensionOffsetLevels(points, (i) => edgeOutwardNormal(points, i))
+    : new Array<number>(edgeCount).fill(0);
+  // Deepest level reached — the overall (extents) dimensions sit just past it.
+  const maxDimLevel = dimLevels.reduce((m, l) => Math.max(m, l), 0);
+  for (let i = 0; i < edgeCount; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    const lenCm = Math.hypot(b.x - a.x, b.y - a.y);
+    if (lenCm < 1e-6) continue;
+    const label = formatLengthDual(lenCm);
+    const selected = selEdge === i;
+    const hovered = hoverEdge === i;
+    const pa = cmToPx(a);
+    const pb = cmToPx(b);
+    const edgePx = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+
+    // Outward normal in cm-space; we orient the on-screen edge perpendicular to
+    // agree with it. cmToPx applies the view scale, so we work in px-perp space.
+    const nCm = closed ? edgeOutwardNormal(points, i) : { x: 0, y: 0 };
+    const ux = (pb.x - pa.x) / edgePx;
+    const uy = (pb.y - pa.y) / edgePx;
+    let perpX = -uy;
+    let perpY = ux;
+    if (closed) {
+      // world y-down == screen y-down here; flip perp to match the world normal.
+      if (perpX * nCm.x + perpY * nCm.y < 0) {
+        perpX = -perpX;
+        perpY = -perpY;
+      }
+    } else if (perpY > 0) {
+      // Open polyline: push labels to one consistent side (above the edge).
+      perpX = -perpX;
+      perpY = -perpY;
+    }
+
+    const off = DIM_OFFSET_PX + dimLevels[i] * DIM_LEVEL_STEP_PX;
+    // Dimension-line endpoints (parallel to the edge, offset outward).
+    const d1 = { x: pa.x + perpX * off, y: pa.y + perpY * off };
+    const d2 = { x: pb.x + perpX * off, y: pb.y + perpY * off };
+    const mid = { x: (d1.x + d2.x) / 2, y: (d1.y + d2.y) / 2 };
+    // Unit vector along the dimension line (d1→d2).
+    const gx = (d2.x - d1.x) / edgePx;
+    const gy = (d2.y - d1.y) / edgePx;
+
+    const plan = dimStyleForEdge(
+      edgePx,
+      dimTextHalfPx(label),
+      DIM_ARROW_LEN,
+      DIM_MIN_EDGE_PX,
+    );
+
+    if (closed) {
+      // Click target spans the dimension line; for the "outside" case extend it
+      // past the right tip to cover the parked label so the number stays grabbable.
+      const h1 = d1;
+      const h2 =
+        plan.style === "outside"
+          ? { x: d2.x + gx * plan.textOffsetPx * 2, y: d2.y + gy * plan.textOffsetPx * 2 }
+          : d2;
+      edgeHits.push(
+        <line
+          key={`hit${i}`}
+          x1={h1.x}
+          y1={h1.y}
+          x2={h2.x}
+          y2={h2.y}
           stroke="transparent"
-          strokeWidth={14}
+          strokeWidth={18}
           style={{ cursor: "pointer" }}
           onClick={selectEdge(i)}
+          onMouseEnter={() => setHoverEdge(i)}
+          onMouseLeave={() => setHoverEdge((h) => (h === i ? null : h))}
         />,
       );
     }
+
+    // Highlight the actual edge when its dimension is selected.
     if (selected) {
-      labels.push(
+      dims.push(
         <line
-          key={`sel${i}`}
+          key={`seledge${i}`}
           x1={pa.x}
           y1={pa.y}
           x2={pb.x}
@@ -263,35 +857,512 @@ export function RoomCanvas({
         />,
       );
     }
-    labels.push(
-      <text
-        key={`lbl${i}`}
-        x={m.x}
-        y={m.y - 4}
-        fontSize={12}
-        fill={selected ? "#b45309" : "#475569"}
-        fontWeight={selected ? 700 : 400}
-        textAnchor="middle"
-        style={{ userSelect: "none", cursor: closed ? "pointer" : "default" }}
-        onClick={closed ? selectEdge(i) : undefined}
-      >
-        {len}
-      </text>,
+
+    // Selected (amber) > hovered (sky, the click-to-edit affordance) > resting.
+    const stroke = selected ? "#b45309" : hovered ? "#0284c7" : "#64748b";
+    const textFill = selected ? "#b45309" : hovered ? "#0369a1" : "#334155";
+    const textWeight = selected || hovered ? 700 : 500;
+    const textCursor = closed ? "pointer" : "default";
+
+    // Bare tiny edges: a single floating number, nudged outward off the edge.
+    if (plan.style === "bare") {
+      const m = { x: mid.x + perpX * 4, y: mid.y + perpY * 4 };
+      dims.push(
+        <text
+          key={`tlbl${i}`}
+          x={m.x}
+          y={m.y}
+          fontSize={11}
+          fill={textFill}
+          fontWeight={textWeight}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          style={{ userSelect: "none", cursor: textCursor, paintOrder: "stroke" }}
+          stroke="#ffffff"
+          strokeWidth={3}
+          onClick={closed ? selectEdge(i) : undefined}
+        >
+          {label}
+        </text>,
+      );
+      continue;
+    }
+
+    // Extension lines: a small gap off the edge endpoint, out past the dim line.
+    const extA = { x: pa.x + perpX * DIM_EXT_GAP_PX, y: pa.y + perpY * DIM_EXT_GAP_PX };
+    const extAOut = { x: pa.x + perpX * (off + DIM_EXT_OVERSHOOT_PX), y: pa.y + perpY * (off + DIM_EXT_OVERSHOOT_PX) };
+    const extB = { x: pb.x + perpX * DIM_EXT_GAP_PX, y: pb.y + perpY * DIM_EXT_GAP_PX };
+    const extBOut = { x: pb.x + perpX * (off + DIM_EXT_OVERSHOOT_PX), y: pb.y + perpY * (off + DIM_EXT_OVERSHOOT_PX) };
+
+    // Arrowhead at `tip`, pointing along (dirX,dirY). Filled triangle.
+    const arrow = (tip: Pt, dirX: number, dirY: number, key: string) => {
+      const bx = tip.x - dirX * DIM_ARROW_LEN;
+      const by = tip.y - dirY * DIM_ARROW_LEN;
+      const px = -dirY * DIM_ARROW_HALF;
+      const py = dirX * DIM_ARROW_HALF;
+      return (
+        <polygon
+          key={key}
+          points={`${tip.x},${tip.y} ${bx + px},${by + py} ${bx - px},${by - py}`}
+          fill={stroke}
+          style={{ pointerEvents: "none" }}
+        />
+      );
+    };
+
+    const lineW = selected ? 1.75 : hovered ? 1.6 : 1.25;
+
+    if (plan.style === "inline") {
+      // Punch a gap for the centred text; arrows point OUTWARD to the tips.
+      const g1 = { x: mid.x - gx * plan.gapHalfPx, y: mid.y - gy * plan.gapHalfPx };
+      const g2 = { x: mid.x + gx * plan.gapHalfPx, y: mid.y + gy * plan.gapHalfPx };
+      dims.push(
+        <g key={`dim${i}`} style={{ pointerEvents: "none" }}>
+          <line x1={extA.x} y1={extA.y} x2={extAOut.x} y2={extAOut.y} stroke={stroke} strokeWidth={1} opacity={0.8} />
+          <line x1={extB.x} y1={extB.y} x2={extBOut.x} y2={extBOut.y} stroke={stroke} strokeWidth={1} opacity={0.8} />
+          <line x1={d1.x} y1={d1.y} x2={g1.x} y2={g1.y} stroke={stroke} strokeWidth={lineW} />
+          <line x1={g2.x} y1={g2.y} x2={d2.x} y2={d2.y} stroke={stroke} strokeWidth={lineW} />
+          {arrow(d1, -gx, -gy, `a1${i}`)}
+          {arrow(d2, gx, gy, `a2${i}`)}
+        </g>,
+      );
+      dims.push(
+        <text
+          key={`lbl${i}`}
+          x={mid.x}
+          y={mid.y}
+          fontSize={DIM_FONT_PX}
+          fill={textFill}
+          fontWeight={textWeight}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          style={{ userSelect: "none", cursor: textCursor, paintOrder: "stroke" }}
+          stroke="#ffffff"
+          strokeWidth={3.5}
+          onClick={closed ? selectEdge(i) : undefined}
+        >
+          {label}
+        </text>,
+      );
+    } else {
+      // "outside": short edge. Solid dim line, arrows point INWARD from the
+      // tips (meeting in the middle), label parked just past the right tip.
+      const tx = { x: d2.x + gx * plan.textOffsetPx, y: d2.y + gy * plan.textOffsetPx };
+      dims.push(
+        <g key={`dim${i}`} style={{ pointerEvents: "none" }}>
+          <line x1={extA.x} y1={extA.y} x2={extAOut.x} y2={extAOut.y} stroke={stroke} strokeWidth={1} opacity={0.8} />
+          <line x1={extB.x} y1={extB.y} x2={extBOut.x} y2={extBOut.y} stroke={stroke} strokeWidth={1} opacity={0.8} />
+          <line x1={d1.x} y1={d1.y} x2={d2.x} y2={d2.y} stroke={stroke} strokeWidth={lineW} />
+          {arrow(d1, gx, gy, `a1${i}`)}
+          {arrow(d2, -gx, -gy, `a2${i}`)}
+        </g>,
+      );
+      dims.push(
+        <text
+          key={`lbl${i}`}
+          x={tx.x}
+          y={tx.y}
+          fontSize={DIM_FONT_PX}
+          fill={textFill}
+          fontWeight={textWeight}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          style={{ userSelect: "none", cursor: textCursor, paintOrder: "stroke" }}
+          stroke="#ffffff"
+          strokeWidth={3.5}
+          onClick={closed ? selectEdge(i) : undefined}
+        >
+          {label}
+        </text>,
+      );
+    }
+  }
+
+  // ── Overall (extents) dimensions: the total footprint W × H, drawn as a
+  // heavier dimension line OUTSIDE the per-edge band. For an L-shape these give
+  // the overall width/height no single edge spans. Only when closed + ≥3 pts. ──
+  const overallDimNodes: React.ReactNode[] = [];
+  if (closed && points.length >= 3) {
+    const ov = overallDimensions(points);
+    if (ov) {
+      // Push past the deepest per-edge level so the extents never overlap them.
+      const extOff = DIM_OFFSET_PX + maxDimLevel * DIM_LEVEL_STEP_PX + DIM_OVERALL_GAP_PX;
+      const drawOverall = (
+        dim: typeof ov.width,
+        cm: number,
+        key: string,
+      ) => {
+        const pa = cmToPx(dim.a);
+        const pb = cmToPx(dim.b);
+        const spanPx = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+        if (spanPx < DIM_MIN_EDGE_PX) return;
+        // Outward direction in screen px (world y-down == screen y-down here).
+        const ox = dim.outward.x;
+        const oy = dim.outward.y;
+        const d1 = { x: pa.x + ox * extOff, y: pa.y + oy * extOff };
+        const d2 = { x: pb.x + ox * extOff, y: pb.y + oy * extOff };
+        const mid = { x: (d1.x + d2.x) / 2, y: (d1.y + d2.y) / 2 };
+        const gx = (d2.x - d1.x) / spanPx;
+        const gy = (d2.y - d1.y) / spanPx;
+        // Extension lines run from just off each bbox corner out to the dim line.
+        const e1a = { x: pa.x + ox * DIM_EXT_GAP_PX, y: pa.y + oy * DIM_EXT_GAP_PX };
+        const e1b = { x: pa.x + ox * (extOff + DIM_EXT_OVERSHOOT_PX), y: pa.y + oy * (extOff + DIM_EXT_OVERSHOOT_PX) };
+        const e2a = { x: pb.x + ox * DIM_EXT_GAP_PX, y: pb.y + oy * DIM_EXT_GAP_PX };
+        const e2b = { x: pb.x + ox * (extOff + DIM_EXT_OVERSHOOT_PX), y: pb.y + oy * (extOff + DIM_EXT_OVERSHOOT_PX) };
+        const col = "#475569";
+        const ah = (tip: Pt, dx: number, dy: number, k: string) => {
+          const bx = tip.x - dx * DIM_ARROW_LEN;
+          const by = tip.y - dy * DIM_ARROW_LEN;
+          const px = -dy * DIM_ARROW_HALF;
+          const py = dx * DIM_ARROW_HALF;
+          return (
+            <polygon key={k} points={`${tip.x},${tip.y} ${bx + px},${by + py} ${bx - px},${by - py}`} fill={col} />
+          );
+        };
+        const label = formatLengthDual(cm);
+        const half = dimTextHalfPx(label) + 2;
+        const g1 = { x: mid.x - gx * half, y: mid.y - gy * half };
+        const g2 = { x: mid.x + gx * half, y: mid.y + gy * half };
+        overallDimNodes.push(
+          <g key={key} style={{ pointerEvents: "none" }}>
+            <line x1={e1a.x} y1={e1a.y} x2={e1b.x} y2={e1b.y} stroke={col} strokeWidth={1} opacity={0.7} />
+            <line x1={e2a.x} y1={e2a.y} x2={e2b.x} y2={e2b.y} stroke={col} strokeWidth={1} opacity={0.7} />
+            <line x1={d1.x} y1={d1.y} x2={g1.x} y2={g1.y} stroke={col} strokeWidth={1.5} />
+            <line x1={g2.x} y1={g2.y} x2={d2.x} y2={d2.y} stroke={col} strokeWidth={1.5} />
+            {ah(d1, -gx, -gy, `${key}a1`)}
+            {ah(d2, gx, gy, `${key}a2`)}
+            <text
+              x={mid.x}
+              y={mid.y}
+              fontSize={DIM_FONT_PX}
+              fill="#1e293b"
+              fontWeight={700}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              style={{ userSelect: "none", paintOrder: "stroke" }}
+              stroke="#ffffff"
+              strokeWidth={3.5}
+            >
+              {label}
+            </text>
+          </g>,
+        );
+      };
+      drawOverall(ov.width, ov.width.lengthCm, "ovw");
+      drawOverall(ov.height, ov.height.lengthCm, "ovh");
+    }
+  }
+
+  // Perimeter + floor-area readouts (closed only) — a CAD title-block style
+  // chip pinned to the canvas corner.
+  const perimCm = closed && points.length >= 3 ? perimeter(points, true) : 0;
+  const areaCm2 = closed && points.length >= 3 ? floorAreaCm2(points) : 0;
+
+  // Object-snap marker: a magenta ring on the existing vertex a draw point or
+  // dragged vertex is snapping onto, so the lock-on is visible.
+  let snapMarker: React.ReactNode = null;
+  if (snapTarget) {
+    const s = cmToPx(snapTarget);
+    snapMarker = (
+      <g style={{ pointerEvents: "none" }}>
+        <circle cx={s.x} cy={s.y} r={9} fill="none" stroke="#d946ef" strokeWidth={2} />
+        <line x1={s.x - 5} y1={s.y} x2={s.x + 5} y2={s.y} stroke="#d946ef" strokeWidth={1.5} />
+        <line x1={s.x} y1={s.y - 5} x2={s.x} y2={s.y + 5} stroke="#d946ef" strokeWidth={1.5} />
+      </g>
     );
   }
+
+  // Edge-insert affordance marker (a hollow "+" dot on the hovered edge body).
+  let insertMarker: React.ReactNode = null;
+  if (closed && edgeInsert && dragIdx === null) {
+    const m = cmToPx(edgeInsert.at);
+    insertMarker = (
+      <g style={{ pointerEvents: "none" }}>
+        <circle cx={m.x} cy={m.y} r={5} fill="#fff" stroke="#0ea5e9" strokeWidth={1.5} />
+        <line x1={m.x - 3} y1={m.y} x2={m.x + 3} y2={m.y} stroke="#0ea5e9" strokeWidth={1.5} />
+        <line x1={m.x} y1={m.y - 3} x2={m.x} y2={m.y + 3} stroke="#0ea5e9" strokeWidth={1.5} />
+      </g>
+    );
+  }
+
+  // Global block-cell budget: decide which bays may draw their per-cell grid so
+  // the SUM of rendered cells across ALL bays stays bounded (the per-bay cap
+  // alone can't stop a many-bay room from exploding the node count). Index-
+  // aligned with `beamLayers`; a bay not allowed falls back to a row-band tint.
+  const blockGridAllowed = beamLayers
+    ? blockCellBudget(beamLayers.map((l) => l.blockCells.length))
+    : [];
+
+  // ── Per-bay label chips (multi-line: beam count+length, pattern+blocks, and a
+  // scale/grid warning), a per-bay PITCHED-RUN DEPTH dimension tick (ties the
+  // drawing to the engine's pitch count), and a legend listing every bay's
+  // colour swatch + direction + counts. All driven by `beamLayers`/`bays`. ──
+  const bayLabels: React.ReactNode[] = [];
+  const perpDims: React.ReactNode[] = [];
+  const legendRows: Array<{ color: string; text: string }> = [];
+  if (bays && beamLayers) {
+    for (let i = 0; i < bays.length; i++) {
+      const b = bays[i];
+      const layer = beamLayers[i];
+      if (!layer || !layer.beamCount) continue;
+      const pal = bayPalette(i);
+      const c = cmToPx({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+      const dirGlyph = layer.beamDir === "H" ? "→" : "↓";
+      const gridShown = blockGridAllowed[i] !== false && !layer.blockCellsCapped;
+      // Pure, engine-consistent label content (one source of truth for chip+legend).
+      const lines = bayLabelLines(
+        {
+          beamCount: layer.beamCount ?? 0,
+          extraBeams: layer.extraBeams ?? 0,
+          beamLengthCm: layer.beamLengthCm ?? 0,
+          pattern: (layer.pattern as "GB" | "BGB" | "GBG") ?? "GB",
+          totalBlocks: layer.totalBlocks ?? 0,
+          blockCellsCapped: layer.blockCellsCapped ?? false,
+          pitchOverflow: layer.pitchOverflow ?? false,
+          beamDir: layer.beamDir ?? "H",
+        },
+        gridShown,
+      );
+      const widest = lines.reduce((m, l) => Math.max(m, l.text.length), 0);
+      const chipW = Math.max(84, widest * 6.0 + 18);
+      const chipH = lines.length * 14 + 8;
+      bayLabels.push(
+        <g key={`baylbl${i}`} style={{ pointerEvents: "none" }}>
+          <rect
+            x={c.x - chipW / 2}
+            y={c.y - chipH / 2}
+            width={chipW}
+            height={chipH}
+            rx={5}
+            fill="#ffffff"
+            fillOpacity={0.92}
+            stroke={pal.beam}
+            strokeWidth={1}
+          />
+          {lines.map((ln, li) => (
+            <text
+              key={`line${li}`}
+              x={c.x}
+              y={c.y - chipH / 2 + 11 + li * 14}
+              fontSize={ln.role === "primary" ? 11 : 10}
+              fontWeight={ln.role === "primary" ? 700 : 500}
+              fill={ln.role === "warn" ? "#b91c1c" : ln.role === "primary" ? pal.label : "#64748b"}
+              textAnchor="middle"
+              dominantBaseline="middle"
+            >
+              {ln.text}
+            </text>
+          ))}
+        </g>,
+      );
+
+      // Pitched-run depth dimension: a thin tick from the start wall to where the
+      // structural run actually ends (pitchExtentCm), parked just inside the near
+      // wall. Only drawn when it reads on screen (≥ DIM_MIN_EDGE_PX). This is the
+      // metric tie between the picture and the engine's pitch count.
+      const pd = perpDimension(
+        { rect: b, beamDir: layer.beamDir ?? "H" },
+        layer.pitchExtentCm ?? 0,
+        pxToCm(10),
+      );
+      if (pd) {
+        const pa = cmToPx(pd.a);
+        const pb = cmToPx(pd.b);
+        const spanPx = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+        if (spanPx >= DIM_MIN_EDGE_PX) {
+          const ux = (pb.x - pa.x) / spanPx;
+          const uy = (pb.y - pa.y) / spanPx;
+          // End caps perpendicular to the run, length 4px.
+          const capX = -uy * 4;
+          const capY = ux * 4;
+          const mid = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 };
+          // Label sits on the outward side (toward the near wall), rotated to run
+          // along the dimension so it never overlaps the beams.
+          const lx = mid.x + pd.outward.x * 9;
+          const ly = mid.y + pd.outward.y * 9;
+          const rot = layer.beamDir === "H" ? -90 : 0;
+          perpDims.push(
+            <g key={`perpdim${i}`} style={{ pointerEvents: "none" }}>
+              <line x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y} stroke={pal.label} strokeWidth={1} strokeOpacity={0.7} />
+              <line x1={pa.x + capX} y1={pa.y + capY} x2={pa.x - capX} y2={pa.y - capY} stroke={pal.label} strokeWidth={1} strokeOpacity={0.7} />
+              <line x1={pb.x + capX} y1={pb.y + capY} x2={pb.x - capX} y2={pb.y - capY} stroke={pal.label} strokeWidth={1} strokeOpacity={0.7} />
+              <text
+                x={lx}
+                y={ly}
+                fontSize={9.5}
+                fill={pal.label}
+                fontWeight={600}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                transform={`rotate(${rot} ${lx} ${ly})`}
+                style={{ paintOrder: "stroke" }}
+                stroke="#ffffff"
+                strokeWidth={2.5}
+              >
+                {formatLengthCm(pd.lengthCm)}
+              </text>
+            </g>,
+          );
+        }
+      }
+
+      const patTxt = layer.pattern ? ` ${layer.pattern}` : "";
+      const lenTxt = layer.beamLengthCm ? formatLengthCm(layer.beamLengthCm) : "";
+      const extraTxt = layer.extraBeams ? ` (+${layer.extraBeams})` : "";
+      const flags =
+        (!gridShown ? " (grid hidden)" : "") +
+        (layer.pitchOverflow ? " ⚠ not to scale" : "");
+      legendRows.push({
+        color: pal.beam,
+        text: `Bay ${i + 1} ${dirGlyph}${patTxt} ${layer.beamCount} beams${extraTxt} · ${lenTxt}${flags}`,
+      });
+    }
+  }
+
+  // Legend chip pinned to the bottom-left of the canvas. A colour-role KEY row
+  // (beam / bearing seat / block) tops a per-bay list so the drawing is
+  // self-describing. The key swatches use bay-1's palette as the exemplar.
+  const KEY_H = 16; // px height reserved for the role-key strip
+  const legend =
+    legendRows.length > 0 ? (
+      (() => {
+        const key0 = bayPalette(0);
+        const boxH = legendRows.length * 16 + 30 + KEY_H;
+        const top = SVG_H - 16 - boxH + 8;
+        return (
+          <g style={{ pointerEvents: "none" }}>
+            <rect
+              x={8}
+              y={top - 8}
+              width={244}
+              height={boxH}
+              rx={6}
+              fill="#ffffff"
+              fillOpacity={0.92}
+              stroke="#cbd5e1"
+              strokeWidth={1}
+            />
+            <text x={16} y={top + 6} fontSize={10} fontWeight={700} fill="#64748b">
+              BEAM LAYOUT
+            </text>
+            {/* Colour-role key: beam fill, extra (hatched), bearing seat, block tint. */}
+            <g transform={`translate(0 ${top + KEY_H})`}>
+              <rect x={16} y={2} width={10} height={9} rx={2} fill={key0.beam} fillOpacity={0.85} />
+              <text x={30} y={10} fontSize={9.5} fill="#475569">beam</text>
+              <g>
+                <rect x={64} y={2} width={10} height={9} rx={2} fill={key0.beam} fillOpacity={0.85} stroke={key0.label} strokeWidth={0.75} strokeDasharray="2 1.5" />
+                <rect x={64} y={2} width={10} height={9} rx={2} fill="url(#cad-extra-hatch)" />
+              </g>
+              <text x={78} y={10} fontSize={9.5} fill="#475569">extra</text>
+              <rect x={114} y={2} width={10} height={9} rx={1} fill={key0.label} fillOpacity={0.5} stroke={key0.label} strokeWidth={0.75} />
+              <text x={128} y={10} fontSize={9.5} fill="#475569">bearing</text>
+              <rect x={176} y={2} width={10} height={9} rx={1} fill={key0.block} fillOpacity={0.85} stroke={key0.beam} strokeOpacity={0.4} strokeWidth={0.5} />
+              <text x={190} y={10} fontSize={9.5} fill="#475569">block</text>
+            </g>
+            {legendRows.map((r, i) => {
+              const ly = top + KEY_H + 16 + i * 16 + 8;
+              return (
+                <g key={`leg${i}`}>
+                  <rect x={16} y={ly - 8} width={10} height={10} rx={2} fill={r.color} />
+                  <text x={32} y={ly + 1} fontSize={10.5} fill="#334155">
+                    {r.text}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        );
+      })()
+    ) : null;
+
+  // Metric scale bar pinned to the bottom-right: a "nice" round length whose
+  // pixel width reflects the live zoom, so the drawing reads as scaled.
+  const scaleBarNode = (() => {
+    const sb = scaleBar(BASE_SCALE * view.zoom, 140);
+    if (sb.px < 12) return null;
+    const x1 = SVG_W - 16 - sb.px;
+    const x2 = SVG_W - 16;
+    const yb = SVG_H - 18;
+    return (
+      <g style={{ pointerEvents: "none" }}>
+        <rect
+          x={x1 - 8}
+          y={yb - 16}
+          width={sb.px + 16}
+          height={30}
+          rx={5}
+          fill="#ffffff"
+          fillOpacity={0.9}
+          stroke="#cbd5e1"
+          strokeWidth={1}
+        />
+        <line x1={x1} y1={yb} x2={x2} y2={yb} stroke="#334155" strokeWidth={1.5} />
+        <line x1={x1} y1={yb - 4} x2={x1} y2={yb + 4} stroke="#334155" strokeWidth={1.5} />
+        <line x1={x2} y1={yb - 4} x2={x2} y2={yb + 4} stroke="#334155" strokeWidth={1.5} />
+        <text
+          x={(x1 + x2) / 2}
+          y={yb - 6}
+          fontSize={10}
+          fill="#334155"
+          fontWeight={600}
+          textAnchor="middle"
+        >
+          {sb.label}
+        </text>
+      </g>
+    );
+  })();
+
+  const cursorStyle = panning
+    ? "grabbing"
+    : spaceHeld
+      ? "grab"
+      : closed
+        ? edgeInsert
+          ? "copy"
+          : "default"
+        : "crosshair";
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={undo} disabled={!points.length && !closed}>
-          Undo last point
+        <Button type="button" variant="outline" size="sm" onClick={undo} disabled={!canUndo}>
+          Undo
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={close} disabled={closed || points.length < 3}>
+        <Button type="button" variant="outline" size="sm" onClick={redo} disabled={!canRedo}>
+          Redo
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={close} disabled={!closeOk}>
           Close loop
         </Button>
+        {!closed && points.length > 0 ? (
+          <Button type="button" variant="outline" size="sm" onClick={undoLastPoint}>
+            Step back
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={deleteSelected}
+            disabled={selVertex === null}
+          >
+            Delete vertex
+          </Button>
+        )}
         <Button type="button" variant="outline" size="sm" onClick={clear} disabled={!points.length}>
           Clear
         </Button>
+
+        <span className="mx-1 h-5 w-px bg-slate-200" />
+
+        <Button type="button" variant="outline" size="sm" onClick={fitToShape} disabled={points.length < 2}>
+          Fit
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={resetView} disabled={view.zoom === 1 && view.tx === 0 && view.ty === 0}>
+          Reset view
+        </Button>
+        <span className="text-xs tabular-nums text-slate-500">{Math.round(view.zoom * 100)}%</span>
 
         <span className="mx-1 h-5 w-px bg-slate-200" />
 
@@ -316,81 +1387,215 @@ export function RoomCanvas({
           <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
           Snap
         </label>
+
+        {/* Ortho (rectilinear-preserving) move toggle. */}
+        <label className="flex items-center gap-1 text-xs text-slate-600" title="Keep walls square: a moved vertex carries its neighbours so edges stay horizontal/vertical.">
+          <input type="checkbox" checked={ortho} onChange={(e) => setOrtho(e.target.checked)} />
+          Ortho
+        </label>
       </div>
 
       <svg
         ref={svgRef}
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        className="w-full max-w-[680px] rounded border bg-white"
-        style={{ touchAction: "none", cursor: closed ? "default" : "crosshair" }}
+        tabIndex={0}
+        className="w-full max-w-[680px] rounded border bg-white outline-none focus:ring-2 focus:ring-sky-300"
+        style={{ touchAction: "none", cursor: cursorStyle }}
         onClick={handleCanvasClick}
+        onMouseDown={handleDown}
         onMouseMove={handleMove}
         onMouseUp={endDrag}
-        onMouseLeave={endDrag}
+        onMouseLeave={handleLeave}
+        onWheel={handleWheel}
+        onKeyDown={handleKeyDown}
+        onKeyUp={handleKeyUp}
+        onBlur={() => setSpaceHeld(false)}
+        onContextMenu={(e) => e.preventDefault()}
       >
-        {minor}
-        {major}
-        {axes}
+        {/* Hatch pattern marking manual EXTRA beams, so they read distinctly from
+            the structural pitch grid. One white-on-colour diagonal per palette is
+            overkill; a single neutral hatch tinted by opacity over the beam fill
+            reads cleanly across every bay colour. */}
+        <defs>
+          <pattern
+            id="cad-extra-hatch"
+            width={6}
+            height={6}
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <rect width={6} height={6} fill="#ffffff" fillOpacity={0} />
+            <line x1={0} y1={0} x2={0} y2={6} stroke="#ffffff" strokeWidth={2} strokeOpacity={0.7} />
+          </pattern>
+        </defs>
 
-        {/* Bay overlays (decomposed rectangles). */}
+        {/* Grid lives in WORLD space → wrap in the scene transform. */}
+        <g transform={sceneTransform}>
+          {minor}
+          {major}
+          {axes}
+        </g>
+
+        {/* Bay overlays (decomposed rectangles). cmToPx already applies view. */}
         {bays?.map((b, i) => {
           const tl = cmToPx({ x: b.x, y: b.y });
-          const color = BAY_COLORS[i % BAY_COLORS.length];
+          const color = bayPalette(i).beam;
           return (
             <rect
               key={`bay${i}`}
               x={tl.x}
               y={tl.y}
-              width={b.w * SCALE}
-              height={b.h * SCALE}
+              width={b.w * BASE_SCALE * view.zoom}
+              height={b.h * BASE_SCALE * view.zoom}
               fill={color}
-              fillOpacity={0.14}
+              fillOpacity={0.06}
               stroke={color}
-              strokeOpacity={0.5}
+              strokeOpacity={0.4}
               strokeWidth={1}
+              style={{ pointerEvents: "none" }}
             />
           );
         })}
 
-        {/* Beam/block visual overlay (from beamLayout) — block cells as a
-            thin grid, then beam strips filled on top in a distinct color. */}
-        {beamLayers?.map((layer, bi) => (
-          <g key={`bl${bi}`}>
-            {layer.blockCells.map((c, ci) => {
-              const tl = cmToPx({ x: c.x, y: c.y });
-              return (
-                <rect
-                  key={`blk${bi}-${ci}`}
-                  x={tl.x}
-                  y={tl.y}
-                  width={c.w * SCALE}
-                  height={c.h * SCALE}
-                  fill="none"
-                  stroke="#cbd5e1"
-                  strokeWidth={0.5}
-                  style={{ pointerEvents: "none" }}
-                />
-              );
-            })}
-            {layer.beams.map((b, bmi) => {
-              const tl = cmToPx({ x: b.x, y: b.y });
-              return (
-                <rect
-                  key={`beam${bi}-${bmi}`}
-                  x={tl.x}
-                  y={tl.y}
-                  width={b.w * SCALE}
-                  height={b.h * SCALE}
-                  fill="#0f766e"
-                  fillOpacity={0.55}
-                  stroke="#0f766e"
-                  strokeWidth={0.5}
-                  style={{ pointerEvents: "none" }}
-                />
-              );
-            })}
-          </g>
-        ))}
+        {/* Beam/block visual overlay (from beamLayout). One <g> per bay, each in
+            its own palette colour, so adjacent bays read as distinct. Order:
+            block in-fill (palest) → beam strips (saturated) → extra-beam hatch →
+            run-direction arrow → bay label chip. */}
+        {beamLayers?.map((layer, bi) => {
+          const pal = bayPalette(bi);
+          const sc = BASE_SCALE * view.zoom; // cm → px scale (sans translate)
+          // Global budget: only bays the budget allows draw their per-cell grid,
+          // so a many-bay room can't blow the SVG node count. blockGridAllowed[bi]
+          // is false → fall back to a single row-band tint (cheap) + "grid hidden".
+          const drawGrid = blockGridAllowed[bi] !== false;
+          return (
+            <g key={`bl${bi}`} style={{ pointerEvents: "none" }}>
+              {/* Block cells: pale tinted fill + faint hairline so the module
+                  grid is visible without dominating the beams. */}
+              {drawGrid && layer.blockCells.map((c, ci) => {
+                const tl = cmToPx({ x: c.x, y: c.y });
+                return (
+                  <rect
+                    key={`blk${bi}-${ci}`}
+                    x={tl.x}
+                    y={tl.y}
+                    width={c.w * sc}
+                    height={c.h * sc}
+                    fill={pal.block}
+                    fillOpacity={0.55}
+                    stroke={pal.beam}
+                    strokeOpacity={0.25}
+                    strokeWidth={0.5}
+                  />
+                );
+              })}
+              {/* Budget fallback: when this bay's per-cell grid is suppressed, fill
+                  the whole bay with a single pale tint so the floor still reads as
+                  "blocked" (the legend flags "grid hidden"). One rect, not N. */}
+              {!drawGrid && layer.blockCells.length > 0 && bays?.[bi] && (() => {
+                const tl = cmToPx({ x: bays[bi].x, y: bays[bi].y });
+                return (
+                  <rect
+                    x={tl.x}
+                    y={tl.y}
+                    width={bays[bi].w * sc}
+                    height={bays[bi].h * sc}
+                    fill={pal.block}
+                    fillOpacity={0.4}
+                  />
+                );
+              })()}
+              {/* Beam strips: the saturated palette fill. Manual EXTRA beams get
+                  a white diagonal hatch overlaid so they read as add-on line
+                  items distinct from the structural pitch grid. */}
+              {layer.beams.map((b, bmi) => {
+                const tl = cmToPx({ x: b.x, y: b.y });
+                const isExtra = layer.beamKinds?.[bmi] === "extra";
+                const wpx = b.w * sc;
+                const hpx = b.h * sc;
+                return (
+                  <g key={`beam${bi}-${bmi}`}>
+                    <rect
+                      x={tl.x}
+                      y={tl.y}
+                      width={wpx}
+                      height={hpx}
+                      fill={pal.beam}
+                      fillOpacity={0.85}
+                      stroke={pal.label}
+                      strokeWidth={isExtra ? 0.9 : 0.5}
+                      strokeDasharray={isExtra ? "3 2" : undefined}
+                    />
+                    {isExtra && (
+                      <rect
+                        x={tl.x}
+                        y={tl.y}
+                        width={wpx}
+                        height={hpx}
+                        fill="url(#cad-extra-hatch)"
+                      />
+                    )}
+                  </g>
+                );
+              })}
+              {/* Bearing seats: a darker outlined band at each beam end marking
+                  the wall-rest portion of the beam_length. Only drawn when the
+                  seat is wide enough on screen to read (≥3px). */}
+              {layer.bearings?.map((b, bri) => {
+                const wpx = b.w * sc;
+                const hpx = b.h * sc;
+                if (Math.min(wpx, hpx) < 3) return null;
+                const tl = cmToPx({ x: b.x, y: b.y });
+                return (
+                  <rect
+                    key={`bear${bi}-${bri}`}
+                    x={tl.x}
+                    y={tl.y}
+                    width={wpx}
+                    height={hpx}
+                    fill={pal.label}
+                    fillOpacity={0.5}
+                    stroke={pal.label}
+                    strokeWidth={0.75}
+                  />
+                );
+              })}
+              {/* Beam-run direction arrow down the bay centre. */}
+              {layer.arrow && (layer.arrow.dir.x !== 0 || layer.arrow.dir.y !== 0) && (() => {
+                const t = cmToPx(layer.arrow!.tail);
+                const hd = cmToPx(layer.arrow!.head);
+                const len = Math.hypot(hd.x - t.x, hd.y - t.y);
+                if (len < 8) return null;
+                const ux = (hd.x - t.x) / len;
+                const uy = (hd.y - t.y) / len;
+                const ah = 7; // arrowhead length px
+                const aw = 4; // arrowhead half-width px
+                const bx = hd.x - ux * ah;
+                const by = hd.y - uy * ah;
+                const px = -uy * aw;
+                const py = ux * aw;
+                return (
+                  <g key={`arr${bi}`}>
+                    <line
+                      x1={t.x}
+                      y1={t.y}
+                      x2={bx}
+                      y2={by}
+                      stroke={pal.label}
+                      strokeWidth={1.75}
+                      strokeOpacity={0.85}
+                    />
+                    <polygon
+                      points={`${hd.x},${hd.y} ${bx + px},${by + py} ${bx - px},${by - py}`}
+                      fill={pal.label}
+                      fillOpacity={0.85}
+                    />
+                  </g>
+                );
+              })()}
+            </g>
+          );
+        })}
 
         {/* Closed polygon fill, or in-progress polyline. */}
         {closed && points.length >= 3 ? (
@@ -401,34 +1606,100 @@ export function RoomCanvas({
           )
         )}
 
-        {/* Per-edge click targets (closed only), under labels + handles. */}
+        {/* Rubber-band preview of the next edge while drawing. */}
+        {rubber}
+
+        {/* Per-edge click targets (closed only), under dimensions + handles. */}
         {edgeHits}
 
-        {labels}
+        {/* CAD dimension lines (extension lines + arrows + length text). */}
+        {dims}
+
+        {/* Overall (extents) dimensions — total W × H outside the per-edge band. */}
+        {overallDimNodes}
+
+        {/* Per-bay pitched-run depth dimension ticks (drawing ↔ engine pitch). */}
+        {perpDims}
+
+        {/* Per-bay label chips (beam count + length) at each bay centroid. */}
+        {bayLabels}
+
+        {/* Beam-layout legend (colour swatch + direction + counts per bay). */}
+        {legend}
+
+        {/* Metric scale bar (bottom-right), reflecting the live zoom. */}
+        {scaleBarNode}
+
+        {/* Perimeter + floor-area + overall-size title-block, pinned top-left.
+            Labelled, right-aligned values; area is the headline figure. */}
+        {closed && points.length >= 3 && (() => {
+          const bb = bbox(points);
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={8} y={8} width={188} height={76} rx={6} fill="#ffffff" fillOpacity={0.94} stroke="#cbd5e1" strokeWidth={1} />
+              <text x={16} y={22} fontSize={9.5} fill="#94a3b8" fontWeight={700} letterSpacing={0.5}>
+                ROOM
+              </text>
+              <text x={16} y={40} fontSize={11} fill="#64748b">
+                Floor area
+              </text>
+              <text x={188} y={40} fontSize={13} fill="#0f172a" fontWeight={700} textAnchor="end">
+                {formatAreaCm2(areaCm2)}
+              </text>
+              <text x={16} y={57} fontSize={11} fill="#64748b">
+                Overall
+              </text>
+              <text x={188} y={57} fontSize={12} fill="#334155" fontWeight={600} textAnchor="end">
+                {formatLengthCm(bb.w)} × {formatLengthCm(bb.h)}
+              </text>
+              <text x={16} y={74} fontSize={11} fill="#64748b">
+                Perimeter
+              </text>
+              <text x={188} y={74} fontSize={12} fill="#334155" fontWeight={600} textAnchor="end">
+                {formatLengthCm(perimCm)}
+              </text>
+            </g>
+          );
+        })()}
+
+        {/* Edge-insert affordance. */}
+        {insertMarker}
+
+        {/* Object-snap lock-on ring. */}
+        {snapMarker}
 
         {/* Vertex handles. */}
-        {pxPts.map((p, i) => (
-          <circle
-            key={`v${i}`}
-            cx={p.x}
-            cy={p.y}
-            r={6}
-            fill={i === 0 && !closed ? "#0284c7" : "#fff"}
-            stroke="#0284c7"
-            strokeWidth={2}
-            style={{ cursor: "grab" }}
-            onMouseDown={handleVertexDown(i)}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ))}
+        {pxPts.map((p, i) => {
+          const isStart = i === 0 && !closed;
+          const isSel = selVertex === i;
+          const isHover = hoverVertex === i;
+          return (
+            <circle
+              key={`v${i}`}
+              cx={p.x}
+              cy={p.y}
+              r={isSel ? 7 : isHover ? 6.5 : 6}
+              fill={isSel ? "#f59e0b" : isStart ? "#0284c7" : "#fff"}
+              stroke={isSel ? "#b45309" : "#0284c7"}
+              strokeWidth={isSel ? 2.5 : 2}
+              style={{ cursor: dragIdx === i ? "grabbing" : "grab" }}
+              onMouseDown={handleVertexDown(i)}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (closed) {
+                  setSelVertex(i);
+                  setSelEdge(null);
+                }
+              }}
+            />
+          );
+        })}
       </svg>
 
       {/* Inline numeric length editor for the selected edge. */}
       {closed && selEdge !== null && (
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-600">
-            Edge {selEdge + 1} length
-          </span>
+          <span className="text-slate-600">Edge {selEdge + 1} length</span>
           <input
             type="number"
             min={1}
@@ -438,6 +1709,7 @@ export function RoomCanvas({
             onChange={(e) => setLenInput(e.target.value)}
             onBlur={applyLen}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if (e.key === "Enter") {
                 e.preventDefault();
                 applyLen();
@@ -448,20 +1720,36 @@ export function RoomCanvas({
             }}
           />
           <span className="text-slate-500">cm</span>
+          {Number(lenInput) > 0 && (
+            <span className="tabular-nums text-slate-400">
+              = {formatLengthCm(Number(lenInput))} ({formatLengthDual(Number(lenInput))})
+            </span>
+          )}
           <Button type="button" variant="outline" size="sm" onClick={() => setSelEdge(null)}>
             Done
           </Button>
         </div>
       )}
 
-      <p className="text-xs text-slate-500">
-        {closed
-          ? "Loop closed. Drag vertices to move; click an edge (or its number) to type an exact length."
-          : points.length === 0
-            ? "Click on the canvas to start drawing. Each edge snaps orthogonal" +
-              (snap ? " + to grid." : ".")
-            : "Click to add points. Click the first vertex or “Close loop” to finish."}
-      </p>
+      <div className="flex items-center justify-between text-xs text-slate-500">
+        <p>
+          {closed
+            ? (ortho
+                ? "Loop closed. Drag a vertex — Ortho keeps walls square (neighbours follow). "
+                : "Loop closed. Drag vertices freely (Ortho off). ") +
+              "Click a dimension to type an exact length; click an edge body to insert a point; select a vertex then arrow-nudge or Delete it. F = fit, 0 = reset view."
+            : points.length === 0
+              ? "Click to start drawing. Edges snap orthogonal" +
+                (snap ? " + to grid" : "") +
+                "; click near an existing point to snap onto it. Wheel = zoom, middle / Alt-drag / Space-drag = pan, F = fit."
+              : "Click to add points. Click the first vertex or Enter to close (the ring turns green when valid). Backspace steps back a point; Esc cancels. Crossing edges are rejected."}
+        </p>
+        {cursor && (
+          <span className="ml-3 shrink-0 tabular-nums">
+            {Math.round(cursor.x)}, {Math.round(cursor.y)} cm
+          </span>
+        )}
+      </div>
     </div>
   );
 }

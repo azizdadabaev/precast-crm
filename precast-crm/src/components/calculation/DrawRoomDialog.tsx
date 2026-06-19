@@ -66,7 +66,14 @@ export function DrawRoomDialog({ open, onClose, onAddRooms }: Props) {
     () =>
       rows.map((r) =>
         r.result
-          ? beamLayout({ rect: r.rect, beamDir: r.beamDir }, r.result.beam_count, r.result.block_rows)
+          ? beamLayout(
+              { rect: r.rect, beamDir: r.beamDir },
+              r.result.beam_count,
+              r.result.block_rows,
+              r.result.blocks_per_row,
+              Math.round(r.result.beam_length * 100),
+              r.result.pattern,
+            )
           : { beams: [], blockCells: [] },
       ),
     [rows],
