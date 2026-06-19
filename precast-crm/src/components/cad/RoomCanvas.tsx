@@ -17,6 +17,12 @@ interface RoomCanvasProps {
   gridCm?: number;
   /** Optional decomposed bays to overlay (translucent). */
   bays?: Rect[];
+  /**
+   * Optional per-bay beam/block visual (from `beamLayout`). Index-aligned
+   * with `bays`: beam strips render filled + distinct; block cells render as a
+   * thin grid. All rects are in cm inside their bay.
+   */
+  beamLayers?: Array<{ beams: Rect[]; blockCells: Rect[] }>;
 }
 
 // ── Fixed cm→px mapping. v1: a fixed scale + a small margin origin. ──
@@ -50,6 +56,7 @@ export function RoomCanvas({
   onChange,
   gridCm = 10,
   bays,
+  beamLayers,
 }: RoomCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   // `closed` distinguishes draw-in-progress (open polyline) from a finished loop.
@@ -213,6 +220,46 @@ export function RoomCanvas({
             />
           );
         })}
+
+        {/* Beam/block visual overlay (from beamLayout) — block cells as a
+            thin grid, then beam strips filled on top in a distinct color. */}
+        {beamLayers?.map((layer, bi) => (
+          <g key={`bl${bi}`}>
+            {layer.blockCells.map((c, ci) => {
+              const tl = cmToPx({ x: c.x, y: c.y });
+              return (
+                <rect
+                  key={`blk${bi}-${ci}`}
+                  x={tl.x}
+                  y={tl.y}
+                  width={c.w * SCALE}
+                  height={c.h * SCALE}
+                  fill="none"
+                  stroke="#cbd5e1"
+                  strokeWidth={0.5}
+                  style={{ pointerEvents: "none" }}
+                />
+              );
+            })}
+            {layer.beams.map((b, bmi) => {
+              const tl = cmToPx({ x: b.x, y: b.y });
+              return (
+                <rect
+                  key={`beam${bi}-${bmi}`}
+                  x={tl.x}
+                  y={tl.y}
+                  width={b.w * SCALE}
+                  height={b.h * SCALE}
+                  fill="#0f766e"
+                  fillOpacity={0.55}
+                  stroke="#0f766e"
+                  strokeWidth={0.5}
+                  style={{ pointerEvents: "none" }}
+                />
+              );
+            })}
+          </g>
+        ))}
 
         {/* Closed polygon fill, or in-progress polyline. */}
         {closed && points.length >= 3 ? (

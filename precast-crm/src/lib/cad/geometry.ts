@@ -116,3 +116,73 @@ export function bayToSlabInput(bay: Bay): { inner_width: number; inner_length: n
     ? { inner_width: wM, inner_length: hM }
     : { inner_width: hM, inner_length: wM };
 }
+
+// Engine constants mirrored in CM for the visual overlay. Kept local (not
+// imported from the engine) so this module stays pure-geometry with no
+// service dependency; values match calculation-engine.ts BEAM_WIDTH / BLOCK_LENGTH.
+const BEAM_WIDTH_CM = 12; // BEAM_WIDTH 0.12 m
+const BLOCK_LENGTH_CM = 20; // BLOCK_LENGTH 0.20 m
+
+/**
+ * Build the geometric beam/block overlay for a bay, in CM, positioned inside
+ * `bay.rect`. The picture is driven by the ENGINE's counts (pass
+ * `result.beam_count` and `result.block_rows`) so the drawing matches the
+ * numbers. v1 is approximate-but-faithful: beams run ALONG `beamDir`, are each
+ * BEAM_WIDTH_CM thick, and are spaced EVENLY across the perpendicular extent;
+ * the gaps between them hold `blockRows` rows of block cells, each row
+ * subdivided along the run direction into ~BLOCK_LENGTH_CM cells.
+ *
+ * Geometry only — no pitch math here. The COUNT of beams returned always
+ * equals `beamCount`; all rects lie within `bay.rect`.
+ */
+export function beamLayout(
+  bay: Bay,
+  beamCount: number,
+  blockRows: number,
+): { beams: Rect[]; blockCells: Rect[] } {
+  const { x, y, w, h } = bay.rect;
+  const beams: Rect[] = [];
+  const blockCells: Rect[] = [];
+  if (beamCount <= 0 || w <= 0 || h <= 0) return { beams, blockCells };
+
+  // "perp" is the axis the beams are spaced along; "run" is the axis they span.
+  // H → beams run along x (span = w), spaced along y (perp = h).
+  // V → beams run along y (span = h), spaced along x (perp = w).
+  const horizontal = bay.beamDir === "H";
+  const runSpan = horizontal ? w : h;
+  const perpSpan = horizontal ? h : w;
+
+  // Evenly distribute `beamCount` strips of BEAM_WIDTH_CM across the perp extent.
+  // Slot centres at (i + 0.5) / beamCount of the span; clamp so a thick beam in
+  // a thin bay still lands fully inside.
+  const beamThick = Math.min(BEAM_WIDTH_CM, perpSpan);
+  for (let i = 0; i < beamCount; i++) {
+    const centre = ((i + 0.5) / beamCount) * perpSpan;
+    let off = centre - beamThick / 2;
+    off = Math.max(0, Math.min(off, perpSpan - beamThick));
+    beams.push(
+      horizontal
+        ? { x, y: y + off, w: runSpan, h: beamThick }
+        : { x: x + off, y, w: beamThick, h: runSpan },
+    );
+  }
+
+  // Block cells: `blockRows` rows evenly spaced across the perp extent, each
+  // subdivided into ceil(runSpan / BLOCK_LENGTH_CM) cells along the run axis.
+  const cols = Math.max(1, Math.ceil(runSpan / BLOCK_LENGTH_CM));
+  const cellRun = runSpan / cols;
+  const rowThick = perpSpan / Math.max(1, blockRows);
+  for (let r = 0; r < blockRows; r++) {
+    const perpOff = r * rowThick;
+    for (let c = 0; c < cols; c++) {
+      const runOff = c * cellRun;
+      blockCells.push(
+        horizontal
+          ? { x: x + runOff, y: y + perpOff, w: cellRun, h: rowThick }
+          : { x: x + perpOff, y: y + runOff, w: rowThick, h: cellRun },
+      );
+    }
+  }
+
+  return { beams, blockCells };
+}

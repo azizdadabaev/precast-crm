@@ -9,6 +9,7 @@ import {
   decomposeToBays,
   defaultBeamDir,
   bayToSlabInput,
+  beamLayout,
 } from "@/lib/cad/geometry";
 import { calculateSlab, type SlabResult } from "@/services/calculation-engine";
 
@@ -50,6 +51,19 @@ export default function CadTestPage() {
     });
   }, [bays, dirOverrides]);
 
+  // Per-bay beam/block overlay, index-aligned with `bays`. Driven by the
+  // engine's counts so the picture matches the numbers; empty layers for
+  // bays the engine couldn't compute. Updates live with the H/V toggle.
+  const beamLayers = useMemo(
+    () =>
+      rows.map((r) =>
+        r.result
+          ? beamLayout({ rect: r.rect, beamDir: r.beamDir }, r.result.beam_count, r.result.block_rows)
+          : { beams: [], blockCells: [] },
+      ),
+    [rows],
+  );
+
   const totals = useMemo(() => {
     return rows.reduce(
       (acc, r) => {
@@ -84,7 +98,7 @@ export default function CadTestPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Left: drawing surface */}
         <div>
-          <RoomCanvas points={points} onChange={setPoints} bays={bays} />
+          <RoomCanvas points={points} onChange={setPoints} bays={bays} beamLayers={beamLayers} />
         </div>
 
         {/* Right: results */}

@@ -7,6 +7,9 @@ import {
   defaultBeamDir,
   decomposeToBays,
   bayToSlabInput,
+  beamLayout,
+  type Bay,
+  type Rect,
   type Pt,
 } from "@/lib/cad/geometry";
 import { calculateSlab } from "@/services/calculation-engine";
@@ -62,6 +65,54 @@ describe("cad geometry — bay decomposition", () => {
     expect(bays.length).toBeGreaterThanOrEqual(2);
     const sum = bays.reduce((s, r) => s + r.w * r.h, 0);
     expect(sum).toBe(Math.abs(polygonArea(lShape)));
+  });
+});
+
+describe("cad geometry — beamLayout overlay", () => {
+  const within = (r: Rect, b: Rect) =>
+    r.x >= b.x - 1e-6 &&
+    r.y >= b.y - 1e-6 &&
+    r.x + r.w <= b.x + b.w + 1e-6 &&
+    r.y + r.h <= b.y + b.h + 1e-6;
+
+  it("draws exactly beamCount beams, all inside the bay (H)", () => {
+    const bay: Bay = { rect: { x: 0, y: 0, w: 320, h: 500 }, beamDir: "H" };
+    const { beams, blockCells } = beamLayout(bay, 8, 8);
+    expect(beams).toHaveLength(8);
+    // H beams run along x → span the full width.
+    for (const b of beams) {
+      expect(b.w).toBe(320);
+      expect(within(b, bay.rect)).toBe(true);
+    }
+    // 8 rows × ceil(320/20)=16 cols = 128 cells, all inside.
+    expect(blockCells).toHaveLength(8 * 16);
+    for (const c of blockCells) expect(within(c, bay.rect)).toBe(true);
+  });
+
+  it("beams run along the run axis when vertical (V)", () => {
+    const bay: Bay = { rect: { x: 10, y: 20, w: 600, h: 300 }, beamDir: "V" };
+    const { beams } = beamLayout(bay, 5, 5);
+    expect(beams).toHaveLength(5);
+    // V beams run along y → span the full height; thickness BEAM_WIDTH (12cm).
+    for (const b of beams) {
+      expect(b.h).toBe(300);
+      expect(b.w).toBe(12);
+      expect(within(b, bay.rect)).toBe(true);
+    }
+  });
+
+  it("matches the engine counts: drawing reflects beam_count / block_rows", () => {
+    const bays = decomposeToBays(rectLoop);
+    const beamDir = defaultBeamDir(bays[0]);
+    const input = bayToSlabInput({ rect: bays[0], beamDir });
+    const result = calculateSlab(input);
+    const { beams } = beamLayout({ rect: bays[0], beamDir }, result.beam_count, result.block_rows);
+    expect(beams).toHaveLength(result.beam_count);
+  });
+
+  it("degenerate inputs return empty layers", () => {
+    const bay: Bay = { rect: { x: 0, y: 0, w: 320, h: 500 }, beamDir: "H" };
+    expect(beamLayout(bay, 0, 0)).toEqual({ beams: [], blockCells: [] });
   });
 });
 

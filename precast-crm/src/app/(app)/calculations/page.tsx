@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Save, PackageCheck, Trash2, Loader2, Phone, PanelLeftOpen } from "lucide-react";
+import { Save, PackageCheck, Trash2, Loader2, Phone, PanelLeftOpen, PencilRuler } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,9 @@ import {
 } from "@/components/ui/dialog";
 import { AiAssistBox } from "@/components/calculation/AiAssistBox";
 import { aiRoomsToSlabRows } from "@/components/calculation/ai-rooms";
+import { baysToSlabRows } from "@/components/calculation/draw-rooms";
+import { DrawRoomDialog } from "@/components/calculation/DrawRoomDialog";
+import type { Bay } from "@/lib/cad/geometry";
 import type { ExtractedRoom } from "@/lib/agent/llm/provider";
 import { ClientInfoBar } from "@/components/calculation/ClientInfoBar";
 import { DrawingDock } from "@/components/calculation/DrawingDock";
@@ -84,6 +87,7 @@ function CalculationsInner() {
   const [orderOpen, setOrderOpen] = useState(false);
   const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [drawRoomOpen, setDrawRoomOpen] = useState(false);
   // ── Drawing-dock state (transient) — populated when the calculator is
   //    opened from an inbox chat (?fromConversation=). NOT persisted; the
   //    persisted sourceConversationId lets us re-fetch these on reload.
@@ -576,6 +580,15 @@ function CalculationsInner() {
     setError(null);
   }
 
+  // Draw room → decompose into bays → append as real rooms. Mirrors
+  // handleAiRooms: recomputeRow already ran in baysToSlabRows; the
+  // live-pricing effect re-bills on the next /api/pricing payload.
+  function handleDrawnRooms(bays: Bay[]) {
+    const next = baysToSlabRows(bays, rows.length);
+    setRows([...rows, ...next]);
+    setError(null);
+  }
+
   // ── Per-drawing "Extract with AI" (Drawing Dock) ──
   // Gated by the `calculator.aiAssist` permission; the same ["me"] query key
   // is used by AiAssistBox, so react-query dedupes the request.
@@ -995,6 +1008,27 @@ function CalculationsInner() {
 
       {/* AI assist — text/image → rooms. Renders only for calculator.aiAssist holders. */}
       <AiAssistBox onRooms={handleAiRooms} />
+
+      {/* Draw room — sketch a rectilinear outline → bays → rooms. The drawn
+          bays append to the table and save / place-order exactly like typed
+          rooms. */}
+      <div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setDrawRoomOpen(true)}
+          className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
+        >
+          <PencilRuler className="h-4 w-4 mr-2" />
+          <Bi uz="Хона чизиш" en="Draw room" enClassName="font-normal opacity-90" />
+        </Button>
+      </div>
+
+      <DrawRoomDialog
+        open={drawRoomOpen}
+        onClose={() => setDrawRoomOpen(false)}
+        onAddRooms={handleDrawnRooms}
+      />
 
       {/* Client info — Name | Phone | Address */}
       <ClientInfoBar
