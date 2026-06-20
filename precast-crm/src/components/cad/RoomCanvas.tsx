@@ -75,6 +75,10 @@ interface RoomCanvasProps {
     beamDir?: BeamDir;
     beamCount?: number;
     beamLengthCm?: number;
+    /** Per-beam length (cm), index-aligned with `beams`. When present each beam
+     *  is tagged with its own length (the varying tapered/scan case); otherwise
+     *  every beam falls back to the single `beamLengthCm`. */
+    beamLengthsCm?: number[];
     /** Engine pattern (GB/BGB/GBG) — shown in the legend. */
     pattern?: string;
     /** Total blocks in this bay (for the bay label tally). */
@@ -1759,6 +1763,40 @@ export function RoomCanvas({
                   </g>
                 );
               })()}
+
+              {/* Per-beam length tags: each beam labelled with its own (stock)
+                  length, running ALONG the strip (rotated for vertical beams),
+                  so the cut-list lengths map onto the drawn beams. Skipped when a
+                  beam is too short on screen to read, to avoid an overlap mush. */}
+              {layer.beams.map((b, i) => {
+                const lenCm = layer.beamLengthsCm?.[i] ?? layer.beamLengthCm ?? 0;
+                if (!(lenCm > 0)) return null;
+                const wpx = b.w * sc;
+                const hpx = b.h * sc;
+                if (Math.max(wpx, hpx) < 24) return null; // too short to read
+                const tl = cmToPx({ x: b.x, y: b.y });
+                const lx = tl.x + wpx / 2;
+                const ly = tl.y + hpx / 2;
+                const vertical = hpx > wpx;
+                return (
+                  <text
+                    key={`blen${bi}-${i}`}
+                    x={lx}
+                    y={ly}
+                    fontSize={9.5}
+                    fill="#ffffff"
+                    fontWeight={700}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    transform={vertical ? `rotate(-90 ${lx} ${ly})` : undefined}
+                    style={{ paintOrder: "stroke" }}
+                    stroke={pal.label}
+                    strokeWidth={2.75}
+                  >
+                    {formatLengthCm(lenCm)}
+                  </text>
+                );
+              })}
             </g>
           );
         })}

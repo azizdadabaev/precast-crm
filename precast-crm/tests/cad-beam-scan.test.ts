@@ -268,6 +268,7 @@ describe("beam-scan — scanBeamsToOverlay (canvas overlay)", () => {
       blockCells: [],
       bearings: [],
       blockKinds: [],
+      beamLengthsCm: [],
     });
   });
 });

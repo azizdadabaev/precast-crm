@@ -247,6 +247,10 @@ export interface ScanOverlay {
   /** Per-block-cell kind, index-aligned with `blockCells`: "cut" marks the
    *  partial make-up module clamped at the far end of a tiled row. */
   blockKinds: ("full" | "cut")[];
+  /** Per-beam STOCK length (cm), index-aligned with `beams` — each beam's
+   *  lengthCm rounded UP to the stock step, so a length tag drawn on a beam
+   *  reconciles exactly with the cut-list (`beamSchedule`). */
+  beamLengthsCm: number[];
 }
 
 /**
@@ -286,6 +290,11 @@ export function scanBeamsToOverlay(
       : { x: b.pos - half, y: b.spanStart, w: BEAM_WIDTH_CM, h: b.spanEnd - b.spanStart };
 
   const beams = scan.beams.map(stripOf);
+  // Per-beam stock length (cm), rounded UP to the stock step so a length tag on
+  // a beam matches the cut-list bucket it falls into.
+  const beamLengthsCm = scan.beams.map(
+    (b) => Math.ceil(b.lengthCm / BEAM_STOCK_STEP_CM - 1e-9) * BEAM_STOCK_STEP_CM,
+  );
 
   // Bearing seats: the wall-rest overrun at each end of a beam (the part that
   // lands on the ring beam). seat = (beam_length − clear span)/2; for a beam
@@ -331,5 +340,5 @@ export function scanBeamsToOverlay(
     }
   }
 
-  return { beams, blockCells, bearings, blockKinds };
+  return { beams, blockCells, bearings, blockKinds, beamLengthsCm };
 }
