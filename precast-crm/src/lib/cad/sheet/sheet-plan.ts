@@ -15,7 +15,19 @@ export interface RoomPlan { primitives: PlanPrimitive[]; scale: ArchScale; width
 /** A rectangular paper-space box (mm) the drawing is fitted/centered into. */
 export interface SheetRegion { xMm: number; yMm: number; wMm: number; hMm: number; }
 
-export function buildRoomPlan(room: RoomInput, opts: SheetOptions, region?: SheetRegion): RoomPlan {
+/** Lower-level builder: emit ALL of a room's primitives (outline, beams,
+ *  bearings, beam numbers, pitch chain, the two outer dims, the room name) at a
+ *  GIVEN mmPerCm and top-left paper-space offset — no internal scale pick, no
+ *  centering. Used by both the single-room path (buildRoomPlan) and the
+ *  multi-room shared-scale path (sheet-pack). Does NOT emit the scale stamp;
+ *  the caller owns that (one shared stamp for the whole sheet). */
+export function buildRoomPlanScaled(
+  room: RoomInput,
+  opts: SheetOptions,
+  mmPerCm: number,
+  offXMm: number,
+  offYMm: number,
+): { primitives: PlanPrimitive[]; drawnWMm: number; drawnHMm: number } {
   const iwCm = Math.round(room.calc.inner_width * 100);
   const ilCm = Math.round(room.calc.inner_length * 100);
   const rect = { x: 0, y: 0, w: iwCm, h: ilCm };
@@ -27,14 +39,11 @@ export function buildRoomPlan(room: RoomInput, opts: SheetOptions, region?: Shee
     Math.round(room.calc.bearing * 100),
   );
 
-  const usable = usableSheetMm(opts.page, opts.marginMm);
-  const reg: SheetRegion = region ?? { xMm: opts.marginMm, yMm: opts.marginMm, wMm: usable.wMm, hMm: usable.hMm };
-  const scale = pickArchScaleForBox(iwCm, ilCm, reg.wMm, reg.hMm);
-  const offX = reg.xMm + (reg.wMm - scale.drawWMm) / 2;
-  const offY = reg.yMm + (reg.hMm - scale.drawHMm) / 2;
-  const X = (cm: number) => offX + cm * scale.mmPerCm;
-  const Y = (cm: number) => offY + cm * scale.mmPerCm;
-  const S = (cm: number) => cm * scale.mmPerCm;
+  const offX = offXMm;
+  const offY = offYMm;
+  const X = (cm: number) => offX + cm * mmPerCm;
+  const Y = (cm: number) => offY + cm * mmPerCm;
+  const S = (cm: number) => cm * mmPerCm;
 
   const primitives: PlanPrimitive[] = [];
   primitives.push({ type: "rect", role: "outline", xMm: X(0), yMm: Y(0), wMm: S(iwCm), hMm: S(ilCm) });
@@ -82,7 +91,7 @@ export function buildRoomPlan(room: RoomInput, opts: SheetOptions, region?: Shee
         primitives.push({
           type: "text", role: "pitch",
           xMm: chainX, yMm: midY,
-          text: `${Math.round(spacing / scale.mmPerCm * 10)}`,
+          text: `${Math.round(spacing / mmPerCm * 10)}`,
           sizeMm: pitchSize, align: "C", angleDeg: -90,
         });
       }
@@ -101,7 +110,7 @@ export function buildRoomPlan(room: RoomInput, opts: SheetOptions, region?: Shee
         primitives.push({
           type: "text", role: "pitch",
           xMm: midX, yMm: chainY,
-          text: `${Math.round(spacing / scale.mmPerCm * 10)}`,
+          text: `${Math.round(spacing / mmPerCm * 10)}`,
           sizeMm: pitchSize, align: "C",
         });
       }
@@ -110,8 +119,26 @@ export function buildRoomPlan(room: RoomInput, opts: SheetOptions, region?: Shee
   const dimSize = 2.6 * opts.fontScale;
   primitives.push({ type: "text", role: "dim", xMm: X(iwCm / 2), yMm: Y(0) - 2, text: `${iwCm * 10}`, sizeMm: dimSize, align: "C" });
   primitives.push({ type: "text", role: "dim", xMm: X(0) - 2, yMm: Y(ilCm / 2), text: `${ilCm * 10}`, sizeMm: dimSize, align: "R" });
+  // Room name, anchored just above-left of the room's own outline so it travels
+  // with the room in the multi-room (shared-scale) layout.
+  primitives.push({ type: "text", role: "name", xMm: X(0), yMm: Y(0) - 5, text: room.name, sizeMm: 3.0 * opts.fontScale, align: "L" });
+
+  return { primitives, drawnWMm: S(iwCm), drawnHMm: S(ilCm) };
+}
+
+export function buildRoomPlan(room: RoomInput, opts: SheetOptions, region?: SheetRegion): RoomPlan {
+  const iwCm = Math.round(room.calc.inner_width * 100);
+  const ilCm = Math.round(room.calc.inner_length * 100);
+
+  const usable = usableSheetMm(opts.page, opts.marginMm);
+  const reg: SheetRegion = region ?? { xMm: opts.marginMm, yMm: opts.marginMm, wMm: usable.wMm, hMm: usable.hMm };
+  const scale = pickArchScaleForBox(iwCm, ilCm, reg.wMm, reg.hMm);
+  const offX = reg.xMm + (reg.wMm - scale.drawWMm) / 2;
+  const offY = reg.yMm + (reg.hMm - scale.drawHMm) / 2;
+
+  const { primitives } = buildRoomPlanScaled(room, opts, scale.mmPerCm, offX, offY);
+  // Single shared scale stamp, top-right of the region.
   primitives.push({ type: "text", role: "stamp", xMm: opts.page.wMm - opts.marginMm, yMm: reg.yMm + 3, text: `Миқёс 1:${scale.ratio}`, sizeMm: 3 * opts.fontScale, align: "R" });
-  primitives.push({ type: "text", role: "name", xMm: opts.marginMm, yMm: reg.yMm + 3, text: room.name, sizeMm: 3.4 * opts.fontScale, align: "L" });
 
   return { primitives, scale, widthMm: opts.page.wMm, heightMm: opts.page.hMm };
 }

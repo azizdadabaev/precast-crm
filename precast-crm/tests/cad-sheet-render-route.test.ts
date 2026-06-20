@@ -58,13 +58,22 @@ describe("POST /api/drawings/render", () => {
     expect(json.error).toBeTruthy();
   });
 
-  it("rejects >1 room with 400 (Phase 1 is one room per sheet)", async () => {
+  it("renders 2 rooms to a PDF (200, application/pdf) — multi-room project sheet", async () => {
     const res = await POST(
       postReq({ rooms: [{ inner_width: 3.2, inner_length: 5 }, { inner_width: 4, inner_length: 6 }] }),
       ctx,
     );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    const buf = Buffer.from(await res.arrayBuffer());
+    expect(buf.length).toBeGreaterThan(0);
+  });
+
+  it("rejects >12 rooms with 400 (too many rooms)", async () => {
+    const many = Array.from({ length: 13 }, () => ({ inner_width: 3.2, inner_length: 5 }));
+    const res = await POST(postReq({ rooms: many }), ctx);
     expect(res.status).toBe(400);
     const json = await res.json();
-    expect(json.error).toMatch(/one room/i);
+    expect(json.error).toMatch(/too many rooms/i);
   });
 });
