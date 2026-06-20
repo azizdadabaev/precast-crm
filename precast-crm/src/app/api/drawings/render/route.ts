@@ -6,12 +6,16 @@ import { SHEET_PRINT_TOKEN } from "@/lib/cad/sheet/print-token";
 /**
  * POST /api/drawings/render
  *
- * Renders one or more rooms as an A4-landscape CAD "drawing sheet" PDF by
- * driving the token-gated /print/sheet page through headless Chromium (same
- * Node process). Owner-only via the `blender.bridge` permission — the same
- * gate the Blender drawing request route uses.
+ * Renders ONE room as an A4-landscape CAD "drawing sheet" PDF by driving the
+ * token-gated /print/sheet page through headless Chromium (same Node process).
+ * Owner-only via the `blender.bridge` permission — the same gate the Blender
+ * drawing request route uses.
  *
- * Request body: { rooms: Array<{ name?, inner_width, inner_length, beamDir? }> }
+ * Phase 1 is one room per sheet; the multi-room (shelf-pack) sheet is a later
+ * phase. The body still takes a `rooms` array (forward-compatible), but >1 room
+ * is rejected for now rather than silently rendering only the first.
+ *
+ * Request body: { rooms: [{ name?, inner_width, inner_length, beamDir? }] }
  */
 
 interface RawRoom {
@@ -32,6 +36,14 @@ export const POST = withPermission("blender.bridge", async (req: NextRequest) =>
   const rooms = (body as { rooms?: unknown })?.rooms;
   if (!Array.isArray(rooms) || rooms.length === 0) {
     return NextResponse.json({ error: "rooms must be a non-empty array" }, { status: 400 });
+  }
+  if (rooms.length > 1) {
+    // Phase 1: one room per sheet. Reject rather than silently drop the rest;
+    // the multi-room sheet (shelf-pack) is a later phase.
+    return NextResponse.json(
+      { error: "one room per sheet for now (multi-room sheet is a later phase)" },
+      { status: 400 },
+    );
   }
   for (const r of rooms as RawRoom[]) {
     const w = Number(r?.inner_width);

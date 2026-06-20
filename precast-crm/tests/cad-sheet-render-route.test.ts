@@ -57,4 +57,14 @@ describe("POST /api/drawings/render", () => {
     const json = await res.json();
     expect(json.error).toBeTruthy();
   });
+
+  it("rejects >1 room with 400 (Phase 1 is one room per sheet)", async () => {
+    const res = await POST(
+      postReq({ rooms: [{ inner_width: 3.2, inner_length: 5 }, { inner_width: 4, inner_length: 6 }] }),
+      ctx,
+    );
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/one room/i);
+  });
 });
