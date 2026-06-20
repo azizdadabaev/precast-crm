@@ -513,15 +513,14 @@ export function RoomCanvas({
     setView(fitView(worldBox, SVG_W, SVG_H, 96, MIN_ZOOM, MAX_ZOOM));
   };
 
-  // ── Export the current drawing (dimensions + beam/block overlay) to a PNG and
-  // download it — a CAD-style sheet the operator can hand the client. We clone
-  // the live <svg>, give it an opaque white backdrop (the on-screen one relies on
-  // its CSS bg), serialize it, then rasterize at 2× through an off-screen canvas.
-  // The current zoom/pan is baked into the rendered nodes, so "Fit" first frames
-  // the whole room before exporting. ──
-  const exportPng = useCallback(() => {
+  // ── Export helpers ──
+  // Shared: clone the live <svg>, stamp it with explicit size + xmlns, insert an
+  // opaque white background rect, and serialize to an SVG string. Returns null
+  // if the SVG ref is not yet mounted. This string is the source for both the
+  // PNG rasterizer and the direct SVG download.
+  const buildSheetSvgString = useCallback((): string | null => {
     const svg = svgRef.current;
-    if (!svg) return;
+    if (!svg) return null;
     const clone = svg.cloneNode(true) as SVGSVGElement;
     clone.setAttribute("width", String(SVG_W));
     clone.setAttribute("height", String(SVG_H));
@@ -533,7 +532,16 @@ export function RoomCanvas({
     bg.setAttribute("height", String(SVG_H));
     bg.setAttribute("fill", "#ffffff");
     clone.insertBefore(bg, clone.firstChild);
-    const xml = new XMLSerializer().serializeToString(clone);
+    return new XMLSerializer().serializeToString(clone);
+  }, [SVG_W, SVG_H]);
+
+  // Export the current drawing (dimensions + beam/block overlay) to a PNG and
+  // download it — a CAD-style sheet the operator can hand the client. The
+  // current zoom/pan is baked into the rendered nodes, so "Fit" first frames
+  // the whole room before exporting.
+  const exportPng = useCallback(() => {
+    const xml = buildSheetSvgString();
+    if (!xml) return;
     const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const img = new Image();
@@ -560,7 +568,21 @@ export function RoomCanvas({
       URL.revokeObjectURL(url);
     };
     img.src = url;
-  }, [SVG_W, SVG_H]);
+  }, [buildSheetSvgString, SVG_W, SVG_H]);
+
+  // Export the current drawing as a vector SVG file — lossless and
+  // resolution-independent; useful for further editing in Inkscape / Illustrator.
+  const exportSvg = useCallback(() => {
+    const xml = buildSheetSvgString();
+    if (!xml) return;
+    const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "room-drawing.svg";
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [buildSheetSvgString]);
 
   // ── Toolbar actions ──
   const clear = () => {
@@ -1518,6 +1540,10 @@ export function RoomCanvas({
         {/* Export the dimensioned drawing as a PNG (CAD-style sheet). */}
         <Button type="button" variant="outline" size="sm" onClick={exportPng} disabled={points.length < 2}>
           Export PNG
+        </Button>
+        {/* Export the same drawing as a vector SVG (lossless, editable). */}
+        <Button type="button" variant="outline" size="sm" onClick={exportSvg} disabled={points.length < 2}>
+          Export SVG
         </Button>
       </div>
 
