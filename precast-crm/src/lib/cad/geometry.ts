@@ -366,6 +366,20 @@ export function setEdgeBearing(
 }
 
 /**
+ * Point at distance `distCm` and absolute bearing `bearingDeg` from `origin`, in
+ * the editor's y-DOWN screen convention (bearing 0 → +x, 90 → +y/down, −90 →
+ * −y/up, 180 → −x). The inverse of `edgeBearingDeg`; used by direct
+ * distance/angle entry (CAD "DDE") to place the next vertex precisely.
+ */
+export function pointFromPolar(origin: Pt, distCm: number, bearingDeg: number): Pt {
+  const rad = (bearingDeg * Math.PI) / 180;
+  return {
+    x: origin.x + Math.cos(rad) * distCm,
+    y: origin.y + Math.sin(rad) * distCm,
+  };
+}
+
+/**
  * Interior angle (deg, [0, 360)) at vertex i — the angle INSIDE the polygon
  * between the incoming edge (i−1, reversed) and the outgoing edge (i). Computed
  * from the unsigned angle between the two incident edge vectors, then flipped to

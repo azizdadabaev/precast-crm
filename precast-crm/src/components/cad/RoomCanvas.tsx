@@ -30,6 +30,7 @@ import {
   edgeOutwardNormal,
   edgeBearingDeg,
   setEdgeBearing,
+  pointFromPolar,
   interiorAngleDeg,
   dimStyleForEdge,
   dimLabelAngleDeg,
@@ -266,6 +267,16 @@ export function RoomCanvas({
   // wall + shows a square midpoint handle so "grab a wall and slide it" is
   // discoverable. Distinct from hoverEdge (which is the dimension line/label).
   const [hoverEdgeBody, setHoverEdgeBody] = useState<number | null>(null);
+  // ── Direct distance/angle entry (CAD "DDE") while drawing. The user types an
+  // exact Length (cm) and optionally an absolute Angle (deg); on Enter the next
+  // vertex is placed precisely — by the typed angle if given, else along the
+  // current snapped rubber-band direction. `ddeInvalid` flags a rejected entry
+  // (too short / would cross) so the field can show a subtle error state. ──
+  const [ddeLen, setDdeLen] = useState("");
+  const [ddeAngle, setDdeAngle] = useState("");
+  const [ddeInvalid, setDdeInvalid] = useState(false);
+  const ddeLenRef = useRef<HTMLInputElement>(null);
+
   // Edge currently being slid PARALLEL to itself (CAD wall-drag), or null.
   const [edgeDragIdx, setEdgeDragIdx] = useState<number | null>(null);
   // Live signed offset (cm) + new length of the wall being dragged, for the readout.
@@ -407,6 +418,81 @@ export function RoomCanvas({
     setSelVertex(null);
     setSelEdge(null);
     setEdgeInsert(null);
+  };
+
+  // ── Direct distance/angle entry (DDE) commit ──
+  // Resolve the next vertex from the typed Length (cm) + optional Angle (deg):
+  //  - Angle given → absolute bearing.
+  //  - Angle blank → the CURRENT rubber-band direction (cursor → prev), polar-
+  //    snapped exactly as the preview is, so "type a length, Enter" walks along
+  //    the direction the user is already aiming. Falls back to the previous edge's
+  //    bearing when the cursor hasn't moved off `prev` yet.
+  // Applies the same guards as a draw click; on success commits + clears, else
+  // flags an invalid state and keeps the field.
+  const commitDde = () => {
+    if (closed || points.length < 1) return;
+    const lengthCm = Number(ddeLen);
+    if (!Number.isFinite(lengthCm) || lengthCm < MIN_DRAW_STEP_CM) {
+      setDdeInvalid(true);
+      return;
+    }
+    const prev = points[points.length - 1];
+    const angleTxt = ddeAngle.trim();
+    let bearingDeg: number;
+    if (angleTxt !== "") {
+      const a = Number(angleTxt);
+      if (!Number.isFinite(a)) {
+        setDdeInvalid(true);
+        return;
+      }
+      bearingDeg = a;
+    } else {
+      // Use the current snapped rubber-band direction (polar-snapped if polar on).
+      const dir = ddeDirectionBearing(prev);
+      if (dir === null) {
+        setDdeInvalid(true);
+        return;
+      }
+      bearingDeg = dir;
+    }
+    const p = pointFromPolar(prev, lengthCm, bearingDeg);
+    if (drawStepWouldCross(points, p)) {
+      setDdeInvalid(true);
+      return;
+    }
+    commit([...points, p]);
+    setDdeLen("");
+    setDdeAngle("");
+    setDdeInvalid(false);
+    // Return focus to the canvas so drawing continues with keyboard/mouse.
+    svgRef.current?.focus();
+  };
+
+  // Current draw DIRECTION as an absolute bearing (deg), polar-snapped the same
+  // way the rubber-band preview is. Returns null when there's no cursor and no
+  // previous edge to fall back to.
+  const ddeDirectionBearing = (prev: Pt): number | null => {
+    if (cursor) {
+      const dx = cursor.x - prev.x;
+      const dy = cursor.y - prev.y;
+      if (Math.hypot(dx, dy) > 1e-6) {
+        let ang = Math.atan2(dy, dx);
+        // Mirror the snap engine's polar tracking: round to the polar step.
+        if (snapSettings.polar && snapSettings.polarStepDeg > 0) {
+          const stepRad = (snapSettings.polarStepDeg * Math.PI) / 180;
+          ang = Math.round(ang / stepRad) * stepRad;
+        }
+        return (ang * 180) / Math.PI;
+      }
+    }
+    // No live direction yet: fall back to the previous edge's bearing.
+    if (points.length >= 2) {
+      const p0 = points[points.length - 2];
+      if (Math.hypot(prev.x - p0.x, prev.y - p0.y) > 1e-6) {
+        return (Math.atan2(prev.y - p0.y, prev.x - p0.x) * 180) / Math.PI;
+      }
+    }
+    return null;
   };
 
   // ── Vertex drag ──
@@ -731,6 +817,9 @@ export function RoomCanvas({
     setEdgeInsert(null);
     setHoverVertex(null);
     setSnapResult(null);
+    setDdeLen("");
+    setDdeAngle("");
+    setDdeInvalid(false);
     dragStart.current = null;
     dragMoved.current = false;
     onChange([]);
@@ -870,6 +959,34 @@ export function RoomCanvas({
         next[selVertex] = target;
       }
       commit(next);
+      return;
+    }
+
+    // ── DDE auto-activate: while DRAWING with a previous point, typing a digit or
+    // "." (when no input is focused) starts the distance entry CAD-style: focus
+    // the Length field and seed it with that character. Reached only AFTER all
+    // existing shortcuts (Esc/Backspace/arrows/f/0/Ctrl+Z/Space/Enter) have had
+    // their turn and returned, so none are clobbered. ──
+    if (
+      !closed &&
+      points.length >= 1 &&
+      !meta &&
+      !e.altKey &&
+      (/^[0-9]$/.test(e.key) || e.key === ".")
+    ) {
+      e.preventDefault();
+      const seed = e.key;
+      setDdeInvalid(false);
+      setDdeLen(seed);
+      // Focus + move the caret to the end after React paints the seeded value.
+      requestAnimationFrame(() => {
+        const el = ddeLenRef.current;
+        if (el) {
+          el.focus();
+          const end = el.value.length;
+          el.setSelectionRange(end, end);
+        }
+      });
     }
   };
 
@@ -1071,7 +1188,7 @@ export function RoomCanvas({
     const prev = points[points.length - 1];
     // Preview the SAME candidate the click would place (snap engine), so the
     // rubber-band line ends exactly where the next vertex lands.
-    const cand = computeSnap({
+    let cand = computeSnap({
       cursor,
       points,
       closed,
@@ -1080,6 +1197,21 @@ export function RoomCanvas({
       tolCm: pxToCm(10),
       settings: snapSettings,
     }).point;
+    // DDE preview: when a Length is typed, place the preview tip at that exact
+    // distance — along the typed Angle if given, else along the snapped cursor
+    // direction — so the rubber-band shows where Enter will commit.
+    const ddeLenNum = Number(ddeLen);
+    if (ddeLen.trim() !== "" && Number.isFinite(ddeLenNum) && ddeLenNum >= MIN_DRAW_STEP_CM) {
+      const angleTxt = ddeAngle.trim();
+      let bearing: number | null;
+      if (angleTxt !== "") {
+        const a = Number(angleTxt);
+        bearing = Number.isFinite(a) ? a : null;
+      } else {
+        bearing = ddeDirectionBearing(prev);
+      }
+      if (bearing !== null) cand = pointFromPolar(prev, ddeLenNum, bearing);
+    }
     const pa = cmToPx(prev);
     const pb = cmToPx(cand);
     const nearClose =
@@ -2038,7 +2170,7 @@ export function RoomCanvas({
         </Button>
       </div>
 
-      <div ref={wrapRef} className={fill ? "relative min-h-0 w-full flex-1" : undefined}>
+      <div ref={wrapRef} className={fill ? "relative min-h-0 w-full flex-1" : "relative"}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
@@ -2423,6 +2555,80 @@ export function RoomCanvas({
           );
         })}
       </svg>
+
+      {/* ── Direct distance/angle entry (DDE) overlay: appears at the top-left of
+          the canvas while DRAWING with a previous point. Type an exact Length
+          (cm) + optional Angle (deg) and press Enter to place the next vertex
+          precisely. Auto-activates when the user just starts typing a digit. The
+          inputs stop key propagation so they don't trigger canvas shortcuts. ── */}
+      {!closed && points.length >= 1 && (
+        <div
+          className="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-md border border-slate-300 bg-white/95 px-2 py-1 text-xs shadow-sm"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="font-semibold text-slate-500">Len</span>
+          <input
+            ref={ddeLenRef}
+            type="number"
+            min={1}
+            step="any"
+            inputMode="decimal"
+            placeholder="cm"
+            className={
+              "w-16 rounded border px-1.5 py-0.5 tabular-nums " +
+              (ddeInvalid ? "border-red-400 bg-red-50 text-red-700" : "border-slate-300")
+            }
+            value={ddeLen}
+            onChange={(e) => {
+              setDdeLen(e.target.value);
+              setDdeInvalid(false);
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitDde();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setDdeLen("");
+                setDdeAngle("");
+                setDdeInvalid(false);
+                svgRef.current?.focus();
+              }
+            }}
+          />
+          <span className="font-semibold text-slate-500">∠</span>
+          <input
+            type="number"
+            step="any"
+            placeholder="°"
+            className={
+              "w-14 rounded border px-1.5 py-0.5 tabular-nums " +
+              (ddeInvalid ? "border-red-400 bg-red-50" : "border-slate-300")
+            }
+            value={ddeAngle}
+            onChange={(e) => {
+              setDdeAngle(e.target.value);
+              setDdeInvalid(false);
+            }}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitDde();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setDdeLen("");
+                setDdeAngle("");
+                setDdeInvalid(false);
+                svgRef.current?.focus();
+              }
+            }}
+          />
+          <span className="text-slate-400">type a length, Enter</span>
+        </div>
+      )}
       </div>
 
       {/* Inline numeric length editor for the selected edge (dimension select only). */}
