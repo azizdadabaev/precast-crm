@@ -324,6 +324,33 @@ export function dimStyleForEdge(
 }
 
 /**
+ * Screen-rotation (degrees, clockwise — SVG convention) to align a dimension
+ * label with the edge a→b so an angled wall's number reads ALONG its dimension
+ * line, exactly like a straight wall's. The raw edge angle is atan2(dy,dx); we
+ * fold it into (-90°, 90°] by flipping 180° when it would render the text
+ * upside-down, so labels always stay upright/readable regardless of edge
+ * direction. A horizontal edge returns 0 (matching the existing straight-wall
+ * look); a vertical edge returns 0 too so its label stays horizontal exactly as
+ * the current straight-wall rendering draws it — only genuinely DIAGONAL edges
+ * get a non-zero tilt. Pure — operates on screen-space points the renderer
+ * already has.
+ */
+export function dimLabelAngleDeg(a: Pt, b: Pt): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (Math.hypot(dx, dy) < 1e-9) return 0;
+  let deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  // Keep upright: collapse to the (-90, 90] half so text never reads inverted.
+  if (deg > 90) deg -= 180;
+  else if (deg <= -90) deg += 180;
+  // Axis-aligned edges keep the existing horizontal label (H ≈ 0, V folds to
+  // ±90 → snap to 0) so straight-wall dimensions render byte-identically; only
+  // diagonal edges tilt. ~1° tolerance absorbs hand-drawn near-axis wobble.
+  if (Math.abs(deg) < 1 || Math.abs(Math.abs(deg) - 90) < 1) return 0;
+  return deg;
+}
+
+/**
  * Overall (extents) dimensions of the outline: the bounding-box width and
  * height in cm, with the world-space spans they should be drawn against. A real
  * CAD drawing stacks these OUTSIDE the per-edge dimensions so the reader gets

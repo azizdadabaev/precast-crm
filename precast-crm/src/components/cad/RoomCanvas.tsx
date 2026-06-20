@@ -29,6 +29,7 @@ import {
   bbox,
   edgeOutwardNormal,
   dimStyleForEdge,
+  dimLabelAngleDeg,
   dimensionOffsetLevels,
   overallDimensions,
   perimeter,
@@ -809,6 +810,10 @@ export function RoomCanvas({
     // Unit vector along the dimension line (d1→d2).
     const gx = (d2.x - d1.x) / edgePx;
     const gy = (d2.y - d1.y) / edgePx;
+    // Tilt the LABEL to run along the (rotated) dimension line for diagonal
+    // edges so a chamfer wall's number reads ALONG its dim line exactly like a
+    // straight wall's; axis-aligned edges return 0 → identical to before.
+    const labelDeg = dimLabelAngleDeg(d1, d2);
 
     const plan = dimStyleForEdge(
       edgePx,
@@ -936,6 +941,7 @@ export function RoomCanvas({
           fontWeight={textWeight}
           textAnchor="middle"
           dominantBaseline="middle"
+          transform={labelDeg ? `rotate(${labelDeg} ${mid.x} ${mid.y})` : undefined}
           style={{ userSelect: "none", cursor: textCursor, paintOrder: "stroke" }}
           stroke="#ffffff"
           strokeWidth={3.5}
@@ -967,6 +973,7 @@ export function RoomCanvas({
           fontWeight={textWeight}
           textAnchor="middle"
           dominantBaseline="middle"
+          transform={labelDeg ? `rotate(${labelDeg} ${tx.x} ${tx.y})` : undefined}
           style={{ userSelect: "none", cursor: textCursor, paintOrder: "stroke" }}
           stroke="#ffffff"
           strokeWidth={3.5}

@@ -56,6 +56,7 @@ import {
   edgeOutwardNormal,
   pointInPolygon,
   dimStyleForEdge,
+  dimLabelAngleDeg,
   overallDimensions,
   dimensionOffsetLevels,
   type Bay,
@@ -563,6 +564,27 @@ describe("cad geometry — dimensioning", () => {
     const thresh = 2 * 22 + 2 * 8 + 4;
     expect(dimStyleForEdge(thresh, 22, 8, 22).style).toBe("inline");
     expect(dimStyleForEdge(thresh - 1, 22, 8, 22).style).toBe("outside");
+  });
+
+  it("dimLabelAngleDeg tilts diagonal edges but leaves H/V labels horizontal", () => {
+    // Axis-aligned edges keep the existing horizontal label (return 0), so
+    // straight-wall dimensions render identically to before.
+    expect(dimLabelAngleDeg({ x: 0, y: 0 }, { x: 100, y: 0 })).toBe(0); // horizontal
+    expect(dimLabelAngleDeg({ x: 0, y: 0 }, { x: -100, y: 0 })).toBe(0); // horizontal, reversed
+    expect(dimLabelAngleDeg({ x: 0, y: 0 }, { x: 0, y: 100 })).toBe(0); // vertical → folds to 0
+    expect(dimLabelAngleDeg({ x: 0, y: 0 }, { x: 0, y: -100 })).toBe(0); // vertical, reversed
+    // A 45° diagonal (screen y-down) tilts the label to run along the edge.
+    expect(dimLabelAngleDeg({ x: 0, y: 0 }, { x: 100, y: 100 })).toBeCloseTo(45, 6);
+    // Reversing the SAME edge gives the same upright label angle (no 180° flip):
+    // the number never reads inverted regardless of edge winding.
+    expect(dimLabelAngleDeg({ x: 100, y: 100 }, { x: 0, y: 0 })).toBeCloseTo(45, 6);
+    // A steep chamfer (the tapered-room case): mostly vertical, slight tilt.
+    // This edge runs left+down → atan2(500,-80)≈99° folds to ≈-81° (upright).
+    const steep = dimLabelAngleDeg({ x: 320, y: 0 }, { x: 240, y: 500 });
+    expect(Math.abs(steep)).toBeGreaterThan(80);
+    expect(Math.abs(steep)).toBeLessThan(90);
+    // Degenerate edge → 0.
+    expect(dimLabelAngleDeg({ x: 5, y: 5 }, { x: 5, y: 5 })).toBe(0);
   });
 
   it("overallDimensions reports bbox width/height with outward-pushed spans", () => {
