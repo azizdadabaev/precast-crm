@@ -263,7 +263,12 @@ describe("beam-scan — scanBeamsToOverlay (canvas overlay)", () => {
   });
 
   it("empty scan yields empty overlay", () => {
-    expect(scanBeamsToOverlay({ beams: [] }, "H")).toEqual({ beams: [], blockCells: [] });
+    expect(scanBeamsToOverlay({ beams: [] }, "H")).toEqual({
+      beams: [],
+      blockCells: [],
+      bearings: [],
+      blockKinds: [],
+    });
   });
 });
 

@@ -1208,6 +1208,10 @@ export interface BayLayout {
   /** Block cells (cm rects). Empty when the true grid would exceed
    *  `MAX_BLOCK_CELLS_PER_BAY` (see `blockCellsCapped`). */
   blockCells: Rect[];
+  /** Per-block-cell kind, index-aligned with `blockCells`: "cut" marks a partial
+   *  (make-up) module shorter than BLOCK_LENGTH_CM at the far end of a row, so the
+   *  renderer can flag cut filler pieces distinctly. */
+  blockKinds: ("full" | "cut")[];
   /** True when `blockCells` was suppressed because the full grid was too dense
    *  to draw; `totalBlocks` still reports the real material count. */
   blockCellsCapped: boolean;
@@ -1317,6 +1321,7 @@ export function beamLayout(
   const beamKinds: BeamKind[] = [];
   const bearings: Rect[] = [];
   const blockCells: Rect[] = [];
+  const blockKinds: ("full" | "cut")[] = [];
   // A degenerate arrow (zero-length) so the field is always present.
   const cx = x + w / 2;
   const cy = y + h / 2;
@@ -1331,6 +1336,7 @@ export function beamLayout(
     beamKinds,
     bearings,
     blockCells,
+    blockKinds,
     blockCellsCapped: false,
     schedule: [],
     totalBlocks: 0,
@@ -1439,6 +1445,10 @@ export function beamLayout(
       if (!trueModules) return cellRun;
       return c === cols - 1 ? stripLen - BLOCK_LENGTH_CM * (cols - 1) : BLOCK_LENGTH_CM;
     };
+    // The last column is a CUT (make-up) piece when true-module tiling leaves a
+    // remainder shorter than a full block at the far end of the row.
+    const lastIsCut =
+      trueModules && cols > 0 && stripLen - BLOCK_LENGTH_CM * (cols - 1) < BLOCK_LENGTH_CM - 1e-6;
     for (const span of spans.rowSpans) {
       // Clamp the row to the perp extent (e.g. a GBG leading wall row).
       let perpOff = span.start;
@@ -1457,6 +1467,7 @@ export function beamLayout(
             ? { x: x + runOff, y: y + perpOff, w: cw, h: rowThick }
             : { x: x + perpOff, y: y + runOff, w: rowThick, h: cw },
         );
+        blockKinds.push(c === cols - 1 && lastIsCut ? "cut" : "full");
       }
     }
   }
@@ -1509,6 +1520,7 @@ export function beamLayout(
     beamKinds,
     bearings,
     blockCells,
+    blockKinds,
     blockCellsCapped,
     schedule,
     totalBlocks,

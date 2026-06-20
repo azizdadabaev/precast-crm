@@ -240,6 +240,13 @@ export const SCAN_BLOCK_VISIBLE_CM = BLOCK_VISIBLE_CM;
 export interface ScanOverlay {
   beams: Rect[];
   blockCells: Rect[];
+  /** Bearing seats: two rects per beam, the `bearingCm` the beam overruns past
+   *  each clear-span end onto the ring beam/wall. Extend BEYOND the room outline
+   *  (onto the ring-beam band), so they read as the beam resting on concrete. */
+  bearings: Rect[];
+  /** Per-block-cell kind, index-aligned with `blockCells`: "cut" marks the
+   *  partial make-up module clamped at the far end of a tiled row. */
+  blockKinds: ("full" | "cut")[];
 }
 
 /**
@@ -280,10 +287,28 @@ export function scanBeamsToOverlay(
 
   const beams = scan.beams.map(stripOf);
 
+  // Bearing seats: the wall-rest overrun at each end of a beam (the part that
+  // lands on the ring beam). seat = (beam_length − clear span)/2; for a beam
+  // computed by `scanBeams` this is the bearingCm used there. The seats extend
+  // PAST the clear span (onto the ring-beam band the canvas draws).
+  const bearings: Rect[] = [];
+  for (const b of scan.beams) {
+    const seat = Math.max(0, (b.lengthCm - (b.spanEnd - b.spanStart)) / 2);
+    if (seat <= 1e-6) continue;
+    if (horizontal) {
+      bearings.push({ x: b.spanStart - seat, y: b.pos - half, w: seat, h: BEAM_WIDTH_CM });
+      bearings.push({ x: b.spanEnd, y: b.pos - half, w: seat, h: BEAM_WIDTH_CM });
+    } else {
+      bearings.push({ x: b.pos - half, y: b.spanStart - seat, w: BEAM_WIDTH_CM, h: seat });
+      bearings.push({ x: b.pos - half, y: b.spanEnd, w: BEAM_WIDTH_CM, h: seat });
+    }
+  }
+
   // Block cells fill the gap between each adjacent (pos-sorted) beam pair, over
   // the run interval the two beams share. Mirrors `blockEstimate`'s assumptions.
   const ordered = [...scan.beams].sort((a, b) => a.pos - b.pos);
   const blockCells: Rect[] = [];
+  const blockKinds: ("full" | "cut")[] = [];
   for (let i = 0; i + 1 < ordered.length; i++) {
     const a = ordered[i];
     const b = ordered[i + 1];
@@ -302,8 +327,9 @@ export function scanBeamsToOverlay(
           ? { x, y: gapStart, w: len, h: gapDepth }
           : { x: gapStart, y: x, w: gapDepth, h: len },
       );
+      blockKinds.push(len < BLOCK_LENGTH_CM - 1e-6 ? "cut" : "full");
     }
   }
 
-  return { beams, blockCells };
+  return { beams, blockCells, bearings, blockKinds };
 }

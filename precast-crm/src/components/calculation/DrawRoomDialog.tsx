@@ -63,6 +63,10 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
   const [points, setPoints] = useState<Pt[]>([]);
   // Per-bay beam-direction overrides, keyed by bay index (absent → default).
   const [dirOverrides, setDirOverrides] = useState<Record<number, BeamDir>>({});
+  // Global beam-direction choice for the whole drawing (null = Auto/short-side).
+  // Drives the scanline (tapered) path and the default for every bay; a per-bay
+  // override still wins on the rectilinear path.
+  const [globalDir, setGlobalDir] = useState<BeamDir | null>(null);
 
   // HYBRID ROUTING. A closed outline with ANY angled edge → scanline; every edge
   // H/V → the exact bay path. <4 points (still drawing) is treated as rectilinear.
@@ -81,7 +85,7 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
   const scan = useMemo(() => {
     if (points.length < 4 || rectilinear) return null;
     const box = bbox(points);
-    const beamDir: BeamDir = box.w <= box.h ? "H" : "V";
+    const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
     const { beams } = scanBeams(points, beamDir);
     const schedule = beamSchedule(beams);
     const blocks = blockEstimate(beams);
@@ -94,13 +98,13 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
       minLenCm: lengths.length ? Math.min(...lengths) : 0,
       maxLenCm: lengths.length ? Math.max(...lengths) : 0,
     };
-  }, [points, rectilinear]);
+  }, [points, rectilinear, globalDir]);
 
   // Per-bay: resolved direction + engine result (rectilinear path only).
   const rows = useMemo(
     () =>
       bays.map((rect, i) => {
-        const beamDir = dirOverrides[i] ?? defaultBeamDir(rect);
+        const beamDir = dirOverrides[i] ?? globalDir ?? defaultBeamDir(rect);
         let result = null;
         try {
           result = calculateSlab(bayToSlabInput({ rect, beamDir }));
@@ -109,7 +113,7 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
         }
         return { rect, beamDir, result };
       }),
-    [bays, dirOverrides],
+    [bays, dirOverrides, globalDir],
   );
 
   const beamLayers = useMemo(
@@ -140,6 +144,7 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
   const reset = () => {
     setPoints([]);
     setDirOverrides({});
+    setGlobalDir(null);
   };
 
   const handleClose = () => {
@@ -188,17 +193,47 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
-          <div className="flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-auto">
+          {/* Drawing surface ≈ 70% of the pop-up; it fills its column. */}
+          <div className="flex min-h-0 min-w-0 flex-[7]">
             <RoomCanvas
               points={points}
               onChange={setPoints}
               bays={bays}
               beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
-              svgClassName="h-[62vh] w-auto max-w-full"
+              fill
             />
           </div>
 
-          <div className="w-full space-y-2 overflow-y-auto lg:w-72 lg:shrink-0">
+          <div className="flex min-h-0 w-full flex-[3] flex-col gap-2 overflow-y-auto lg:min-w-[15rem]">
+            {/* Persistent beam-direction control (Auto / H / V) — drives the
+                scanline path and the default for every bay. */}
+            {points.length >= 4 && (
+              <div className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
+                <span className="font-medium">{t("Балка йўналиши", "Beam direction")}</span>
+                <span className="inline-flex overflow-hidden rounded border">
+                  {([
+                    [null, t("Авто", "Auto")],
+                    ["H", "H →"],
+                    ["V", "V ↓"],
+                  ] as Array<[BeamDir | null, string]>).map(([d, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setGlobalDir(d)}
+                      className={
+                        "px-2 py-0.5 " +
+                        (globalDir === d
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background text-muted-foreground")
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </span>
+              </div>
+            )}
+
             <div className="text-sm text-muted-foreground">
               {scan
                 ? t(

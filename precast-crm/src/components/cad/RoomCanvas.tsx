@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +39,10 @@ import {
   formatAreaCm2,
   bayPalette,
   scaleBar,
+  BEARING_CM,
 } from "@/lib/cad/geometry";
+import { visibleGridLines } from "@/lib/cad/grid";
+import { offsetPolygonOutward } from "@/lib/cad/offset";
 
 interface RoomCanvasProps {
   points: Pt[];
@@ -64,6 +67,9 @@ interface RoomCanvasProps {
      *  the strip ends so the wall-rest portion of the beam_length is visible. */
     bearings?: Rect[];
     blockCells: Rect[];
+    /** Per-block-cell kind, index-aligned with `blockCells`: "cut" filler is
+     *  drawn hatched so partial make-up modules read distinctly from full ones. */
+    blockKinds?: ("full" | "cut")[];
     blockCellsCapped?: boolean;
     arrow?: BeamArrow;
     beamDir?: BeamDir;
@@ -84,13 +90,19 @@ interface RoomCanvasProps {
   /** Override the <svg> sizing classes (default `w-full max-w-[680px]`). The
    *  calculator's full-view dialog passes a larger size to enlarge the surface. */
   svgClassName?: string;
+  /** Fill mode: the canvas grows to fill its parent column (responsive viewBox,
+   *  measured via ResizeObserver) instead of the fixed 680px square. Used by the
+   *  calculator's full-view dialog so the grid occupies the whole drawing area. */
+  fill?: boolean;
 }
 
 // ── Base cm→px mapping. A view transform (zoom/pan) is applied on top. ──
 const BASE_SCALE = 0.6; // px per cm at zoom = 1
 const MARGIN = 24; // px padding around the cm origin (in world/base space)
-const SVG_W = 680;
-const SVG_H = 680;
+// Default (non-fill) canvas size. In `fill` mode the viewBox is sized to the
+// measured container so the drawing surface occupies the whole column.
+const INIT_W = 680;
+const INIT_H = 680;
 
 // Click-to-close / drag pick radius, in px (screen space).
 const HIT_PX = 12;
@@ -165,8 +177,30 @@ export function RoomCanvas({
   bays,
   beamLayers,
   svgClassName,
+  fill = false,
 }: RoomCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  // In fill mode the viewBox tracks the measured container so the surface is
+  // never letterboxed; otherwise it's the fixed square.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [measured, setMeasured] = useState<{ w: number; h: number }>({ w: INIT_W, h: INIT_H });
+  useEffect(() => {
+    if (!fill) return;
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const { width, height } = e.contentRect;
+        if (width > 1 && height > 1) {
+          setMeasured({ w: Math.round(width), h: Math.round(height) });
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fill]);
+  const SVG_W = fill ? measured.w : INIT_W;
+  const SVG_H = fill ? measured.h : INIT_H;
   // `closed` distinguishes draw-in-progress (open polyline) from a finished loop.
   const [closed, setClosed] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -253,7 +287,7 @@ export function RoomCanvas({
       const wy = (uy - view.ty) / view.zoom;
       return { x: (wx - MARGIN) / BASE_SCALE, y: (wy - MARGIN) / BASE_SCALE };
     },
-    [view],
+    [view, SVG_W, SVG_H],
   );
 
   const distPx = useCallback(
@@ -283,6 +317,16 @@ export function RoomCanvas({
           setCursor(null);
         }
         return;
+      }
+      // Re-anchor: clicking a vertex you already placed (other than the first —
+      // which closes — and the current tip) rewinds the chain to it and continues
+      // drawing from there, instead of dropping a duplicate/invisible point on top.
+      for (let k = 1; k < points.length - 1; k++) {
+        if (distPx(raw, points[k]) <= HIT_PX) {
+          commit(points.slice(0, k + 1));
+          setCursor(null);
+          return;
+        }
       }
       const prev = points[points.length - 1];
       // Object-snap: if the raw click is near an existing vertex, land exactly on
@@ -487,7 +531,8 @@ export function RoomCanvas({
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      const scale = 2; // 2× for a crisp raster
+      // Target ~4K on the long edge for a crisp, print-ready CAD sheet.
+      const scale = Math.max(2, Math.ceil(3840 / Math.max(SVG_W, SVG_H)));
       const canvas = document.createElement("canvas");
       canvas.width = SVG_W * scale;
       canvas.height = SVG_H * scale;
@@ -508,7 +553,7 @@ export function RoomCanvas({
       URL.revokeObjectURL(url);
     };
     img.src = url;
-  }, []);
+  }, [SVG_W, SVG_H]);
 
   // ── Toolbar actions ──
   const clear = () => {
@@ -703,52 +748,56 @@ export function RoomCanvas({
   const canRedo = redoStack.current.length > 0;
   void histTick; // referenced to tie re-render to history changes
 
-  // ── Grid: minor lines every `grid` cm, major every 5×grid, axis emphasis. ──
-  // Lines are emitted in WORLD space and the whole scene is wrapped in a single
-  // <g transform> so zoom/pan move everything together (cheaper + consistent).
-  const gridStepPx = grid * BASE_SCALE;
-  const majorEvery = 5;
-  const minor: React.ReactNode[] = [];
-  const major: React.ReactNode[] = [];
-  let col = 0;
-  for (let x = MARGIN; x <= SVG_W; x += gridStepPx, col++) {
-    const isMajor = col % majorEvery === 0;
-    (isMajor ? major : minor).push(
-      <line
-        key={`gx${x}`}
-        x1={x}
-        y1={0}
-        x2={x}
-        y2={SVG_H}
-        stroke={isMajor ? "#dbe2ea" : "#eef2f7"}
-        strokeWidth={isMajor ? 1.25 : 1}
-      />,
-    );
-  }
-  let row = 0;
-  for (let y = MARGIN; y <= SVG_H; y += gridStepPx, row++) {
-    const isMajor = row % majorEvery === 0;
-    (isMajor ? major : minor).push(
-      <line
-        key={`gy${y}`}
-        x1={0}
-        y1={y}
-        x2={SVG_W}
-        y2={y}
-        stroke={isMajor ? "#dbe2ea" : "#eef2f7"}
-        strokeWidth={isMajor ? 1.25 : 1}
-      />,
-    );
-  }
-  const axes = (
-    <>
-      <line x1={MARGIN} y1={0} x2={MARGIN} y2={SVG_H} stroke="#c2ccd6" strokeWidth={1.5} />
-      <line x1={0} y1={MARGIN} x2={SVG_W} y2={MARGIN} stroke="#c2ccd6" strokeWidth={1.5} />
-    </>
+  // ── Infinite CAD grid: recomputed every render from the live view so it ALWAYS
+  // fills the whole viewport at any zoom/pan (no bare bands). visibleGridLines
+  // returns SCREEN-px segments (the view transform is baked in), so they render
+  // directly — NOT inside a scene <g transform>. ──
+  const vg = visibleGridLines({
+    zoom: view.zoom,
+    tx: view.tx,
+    ty: view.ty,
+    wPx: SVG_W,
+    hPx: SVG_H,
+    baseScale: BASE_SCALE,
+    marginPx: MARGIN,
+    stepCm: grid,
+    majorEvery: 5,
+  });
+  const gridNodes = (
+    <g style={{ pointerEvents: "none" }}>
+      {vg.minor.map((l, i) => (
+        <line key={`gn${i}`} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#eef2f7" strokeWidth={1} />
+      ))}
+      {vg.major.map((l, i) => (
+        <line key={`gm${i}`} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#dbe2ea" strokeWidth={1.25} />
+      ))}
+      {vg.axisX !== null && (
+        <line x1={vg.axisX} y1={0} x2={vg.axisX} y2={SVG_H} stroke="#c2ccd6" strokeWidth={1.5} />
+      )}
+      {vg.axisY !== null && (
+        <line x1={0} y1={vg.axisY} x2={SVG_W} y2={vg.axisY} stroke="#c2ccd6" strokeWidth={1.5} />
+      )}
+    </g>
   );
 
-  // World→screen helper for a single world coord (grid lives in world space).
-  const sceneTransform = `translate(${view.tx} ${view.ty}) scale(${view.zoom})`;
+  // ── Ring-beam band: the drawn outline is the INNER clear span; beams overrun
+  // ~BEARING_CM onto a concrete ring beam / foundation around it. Offset the
+  // outline outward and fill the ring (even-odd: outer path minus inner path)
+  // with a concrete hatch so the bearing seats visibly rest on it. ──
+  const ringBeamPts =
+    closed && points.length >= 3 ? offsetPolygonOutward(points, BEARING_CM) : null;
+  const ringBandPath = ringBeamPts
+    ? (() => {
+        const toPath = (pts: Pt[]) =>
+          pts
+            .map((p, i) => {
+              const s = cmToPx(p);
+              return `${i === 0 ? "M" : "L"}${s.x},${s.y}`;
+            })
+            .join(" ") + " Z";
+        return `${toPath(ringBeamPts)} ${toPath(points)}`;
+      })()
+    : null;
 
   // Vertex/point screen positions (used for handles + close-band visuals).
   const pxPts = points.map(cmToPx);
@@ -1387,7 +1436,7 @@ export function RoomCanvas({
         : "crosshair";
 
   return (
-    <div className="space-y-2">
+    <div className={fill ? "flex h-full min-h-0 flex-col gap-2" : "space-y-2"}>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" size="sm" onClick={undo} disabled={!canUndo}>
           Undo
@@ -1465,11 +1514,16 @@ export function RoomCanvas({
         </Button>
       </div>
 
+      <div ref={wrapRef} className={fill ? "relative min-h-0 w-full flex-1" : undefined}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+        preserveAspectRatio="xMidYMid meet"
         tabIndex={0}
-        className={`rounded border bg-white outline-none focus:ring-2 focus:ring-sky-300 ${svgClassName ?? "w-full max-w-[680px]"}`}
+        className={
+          "rounded border bg-white outline-none focus:ring-2 focus:ring-sky-300 " +
+          (fill ? "absolute inset-0 h-full w-full" : (svgClassName ?? "w-full max-w-[680px]"))
+        }
         style={{ touchAction: "none", cursor: cursorStyle }}
         onClick={handleCanvasClick}
         onMouseDown={handleDown}
@@ -1497,14 +1551,44 @@ export function RoomCanvas({
             <rect width={6} height={6} fill="#ffffff" fillOpacity={0} />
             <line x1={0} y1={0} x2={0} y2={6} stroke="#ffffff" strokeWidth={2} strokeOpacity={0.7} />
           </pattern>
+          {/* Concrete hatch for the ring-beam / foundation band. */}
+          <pattern
+            id="cad-concrete-hatch"
+            width={7}
+            height={7}
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <rect width={7} height={7} fill="#e2e8f0" />
+            <line x1={0} y1={0} x2={0} y2={7} stroke="#94a3b8" strokeWidth={1} />
+          </pattern>
+          {/* Diagonal hatch marking CUT (partial make-up) filler blocks. */}
+          <pattern
+            id="cad-cut-hatch"
+            width={5}
+            height={5}
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <line x1={0} y1={0} x2={0} y2={5} stroke="#ea580c" strokeWidth={1.2} strokeOpacity={0.85} />
+          </pattern>
         </defs>
 
-        {/* Grid lives in WORLD space → wrap in the scene transform. */}
-        <g transform={sceneTransform}>
-          {minor}
-          {major}
-          {axes}
-        </g>
+        {/* Infinite CAD grid (screen-space; recomputed from the live view). */}
+        {gridNodes}
+
+        {/* Ring-beam / foundation band around the inner outline (concrete hatch),
+            drawn behind the room so bearing seats read as resting on it. */}
+        {ringBandPath && (
+          <path
+            d={ringBandPath}
+            fillRule="evenodd"
+            fill="url(#cad-concrete-hatch)"
+            stroke="#94a3b8"
+            strokeWidth={1}
+            style={{ pointerEvents: "none" }}
+          />
+        )}
 
         {/* Bay overlays (decomposed rectangles). cmToPx already applies view. */}
         {bays?.map((b, i) => {
@@ -1544,19 +1628,28 @@ export function RoomCanvas({
                   grid is visible without dominating the beams. */}
               {drawGrid && layer.blockCells.map((c, ci) => {
                 const tl = cmToPx({ x: c.x, y: c.y });
+                const isCut = layer.blockKinds?.[ci] === "cut";
+                const wpx = c.w * sc;
+                const hpx = c.h * sc;
                 return (
-                  <rect
-                    key={`blk${bi}-${ci}`}
-                    x={tl.x}
-                    y={tl.y}
-                    width={c.w * sc}
-                    height={c.h * sc}
-                    fill={pal.block}
-                    fillOpacity={0.55}
-                    stroke={pal.beam}
-                    strokeOpacity={0.25}
-                    strokeWidth={0.5}
-                  />
+                  <g key={`blk${bi}-${ci}`}>
+                    <rect
+                      x={tl.x}
+                      y={tl.y}
+                      width={wpx}
+                      height={hpx}
+                      fill={isCut ? "#fff7ed" : pal.block}
+                      fillOpacity={isCut ? 0.9 : 0.55}
+                      stroke={isCut ? "#ea580c" : pal.beam}
+                      strokeOpacity={isCut ? 0.7 : 0.25}
+                      strokeWidth={isCut ? 0.75 : 0.5}
+                    />
+                    {/* Cut (partial make-up) module: diagonal hatch so it reads as
+                        a non-standard piece distinct from full 20-cm blocks. */}
+                    {isCut && (
+                      <rect x={tl.x} y={tl.y} width={wpx} height={hpx} fill="url(#cad-cut-hatch)" />
+                    )}
+                  </g>
                 );
               })}
               {/* Budget fallback: when this bay's per-cell grid is suppressed, fill
@@ -1765,6 +1858,7 @@ export function RoomCanvas({
           );
         })}
       </svg>
+      </div>
 
       {/* Inline numeric length editor for the selected edge. */}
       {closed && selEdge !== null && (
