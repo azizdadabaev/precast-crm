@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildBomBlock } from "@/lib/cad/sheet/sheet-bom";
 import { calculateSlab, projectTotal } from "@/services/calculation-engine";
+import { estimateProjectWeight } from "@/lib/cad/sheet/weight";
 import type { SheetRegion } from "@/lib/cad/sheet/sheet-plan";
 import { DEFAULT_SHEET_OPTIONS } from "@/lib/cad/sheet/sheet-scale";
 
@@ -44,6 +45,13 @@ describe("sheet-bom", () => {
     const t = projectTotal([calc], 10);
     expect(withDisc.some((p) => p.type === "text" && p.text === `-${grp(t.discount_amount)}`)).toBe(true);
     expect(withDisc.some((p) => p.type === "text" && p.text === grp(t.total))).toBe(true);
+  });
+
+  it("emits a weight text primitive containing the kg total", () => {
+    const weight = estimateProjectWeight([calc]);
+    const texts = prims.filter((p) => p.type === "text") as Extract<typeof prims[number], { type: "text" }>[];
+    const kgStr = weight.totalKg.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    expect(texts.some((t) => t.text.includes(kgStr) && t.text.includes("kg"))).toBe(true);
   });
 
   it("keeps every primitive within the region box", () => {

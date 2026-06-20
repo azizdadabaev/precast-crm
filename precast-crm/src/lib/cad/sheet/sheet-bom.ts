@@ -4,6 +4,7 @@
 import { projectTotal, type SlabResult, type Pattern } from "@/services/calculation-engine";
 import type { SheetOptions } from "@/lib/cad/sheet/sheet-scale";
 import type { PlanPrimitive, SheetRegion } from "@/lib/cad/sheet/sheet-plan";
+import { estimateProjectWeight } from "@/lib/cad/sheet/weight";
 
 export interface BomRoom { name: string; calc: SlabResult; }
 
@@ -116,6 +117,22 @@ export function buildBomBlock(
   hline(rowYTop(row));
   labelCell(row, "УМУМИЙ СУММА", true);
   valueCell(row, grp(totals.total), true);
+  row += 1;
+
+  // WEIGHT LINE — as-delivered precast only (topping concrete excluded).
+  const weight = estimateProjectWeight(rooms.map((r) => r.calc));
+  const kgStr = grp(weight.totalKg);
+  const tStr = (weight.totalKg / 1000).toFixed(1);
+  const weightText = `ЖАМИ ОҒИРЛИК: ${kgStr} kg (${tStr} t)`;
+  out.push({
+    type: "text",
+    role: "bom",
+    xMm: colX(0) + 1,
+    yMm: rowYMid(row),
+    text: weightText,
+    sizeMm: cellSize,
+    align: "L",
+  });
 
   return out;
 }
