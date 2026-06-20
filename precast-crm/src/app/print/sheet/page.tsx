@@ -2,6 +2,7 @@ import { calculateSlab } from "@/services/calculation-engine";
 import { buildRoomPlan } from "@/lib/cad/sheet/sheet-plan";
 import { DEFAULT_SHEET_OPTIONS } from "@/lib/cad/sheet/sheet-scale";
 import { SheetSvg } from "@/lib/cad/sheet/SheetSvg";
+import { SHEET_PRINT_TOKEN } from "@/lib/cad/sheet/print-token";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,8 @@ function decodeRooms(payload: string | undefined): RawRoom[] | null {
   }
 }
 
-export default function PrintSheetPage({ searchParams }: { searchParams: { payload?: string } }) {
+export default function PrintSheetPage({ searchParams }: { searchParams: { payload?: string; k?: string } }) {
+  if (searchParams.k !== SHEET_PRINT_TOKEN) return <div>Forbidden</div>;
   const rooms = decodeRooms(searchParams.payload);
   if (!rooms || rooms.length === 0) {
     return <div style={{ padding: 24, fontFamily: "sans-serif" }}>No rooms to render.</div>;
