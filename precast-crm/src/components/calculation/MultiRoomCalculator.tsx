@@ -29,6 +29,7 @@ import { RateOverrideDialog } from "@/components/calculation/RateOverrideDialog"
 import { NumberInput } from "@/components/calculation/NumberInput";
 import { handleCellNavKeyDown } from "@/lib/cell-nav";
 import { Bi, useT } from "@/lib/i18n";
+import { SheetPdfButton } from "@/components/cad/SheetPdfButton";
 import { useLivePricing } from "@/hooks/useLivePricing";
 import type { NormBox } from "@/lib/annotation-box";
 
@@ -1184,6 +1185,7 @@ export function MultiRoomCalculator({
                 Shift + Enter
               </kbd>
             </Button>
+            <SheetPdfButton rows={rows} />
             {actions}
           </div>
         </div>
