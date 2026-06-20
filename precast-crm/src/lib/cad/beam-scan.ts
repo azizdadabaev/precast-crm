@@ -12,7 +12,7 @@
 // (a notch yields two beams on one line; a taper yields gradually changing
 // lengths). Pure + unit-testable — no rendering, no engine dependency.
 
-import type { Pt } from "./geometry";
+import type { Pt, Rect } from "./geometry";
 import {
   PITCH_CM,
   BEAM_WIDTH_CM,
@@ -233,3 +233,77 @@ export function blockEstimate(beams: ScanBeam[]): BlockEstimate {
 
 /** Block visible depth re-export for callers documenting the row depth. */
 export const SCAN_BLOCK_VISIBLE_CM = BLOCK_VISIBLE_CM;
+
+/** Beam strips + block cells (WORLD-cm Rects) for the canvas overlay. Same shape
+ *  the rectilinear `beamLayout` feeds `<RoomCanvas beamLayers={…}>`, so the
+ *  tapered drawing reuses the exact strip/cell rendering + styling. */
+export interface ScanOverlay {
+  beams: Rect[];
+  blockCells: Rect[];
+}
+
+/**
+ * Turn a `scanBeams` result into drawable WORLD-cm Rects so the tapered/angled
+ * path can render on the canvas the same way the rectilinear path does.
+ *
+ * COORDINATE MAPPING (mirrors `scanBeams`):
+ *  - "H": beams RUN along x, spaced along y → a scan beam at `pos` (world y),
+ *    spanning `spanStart…spanEnd` (world x), is a horizontal strip of thickness
+ *    BEAM_WIDTH_CM centred on `pos`:
+ *      { x: spanStart, y: pos − w/2, w: span, h: BEAM_WIDTH_CM }.
+ *  - "V": `scanBeams` transposed the loop, so the returned `pos` is along world x
+ *    and the span is along world y → a vertical strip of width BEAM_WIDTH_CM
+ *    centred on `pos`:
+ *      { x: pos − w/2, y: spanStart, w: BEAM_WIDTH_CM, h: span }.
+ * Either way the strip lands inside the real (un-transposed) polygon.
+ *
+ * BLOCK CELLS: between each adjacent pair of beams (in `pos` order) we fill the
+ * OVERLAPPING run interval — `[max(start), min(end)]` — with cells ≈
+ * BLOCK_LENGTH_CM long along the run × the inter-beam GAP deep (the clear gap
+ * between the two facing strip edges). Pairs with no run overlap (e.g. across an
+ * L-/U-notch) are skipped, matching `blockEstimate`'s "neighbour on the same
+ * band" rule so the picture agrees with the tally. The last cell in a row is
+ * clamped to the interval end (no overhang past the narrower beam).
+ */
+export function scanBeamsToOverlay(
+  scan: ScanResult,
+  beamDir: "H" | "V",
+): ScanOverlay {
+  const half = BEAM_WIDTH_CM / 2;
+  const horizontal = beamDir === "H";
+
+  // Strip Rect for one scan beam, oriented by beamDir back to world coords.
+  const stripOf = (b: ScanBeam): Rect =>
+    horizontal
+      ? { x: b.spanStart, y: b.pos - half, w: b.spanEnd - b.spanStart, h: BEAM_WIDTH_CM }
+      : { x: b.pos - half, y: b.spanStart, w: BEAM_WIDTH_CM, h: b.spanEnd - b.spanStart };
+
+  const beams = scan.beams.map(stripOf);
+
+  // Block cells fill the gap between each adjacent (pos-sorted) beam pair, over
+  // the run interval the two beams share. Mirrors `blockEstimate`'s assumptions.
+  const ordered = [...scan.beams].sort((a, b) => a.pos - b.pos);
+  const blockCells: Rect[] = [];
+  for (let i = 0; i + 1 < ordered.length; i++) {
+    const a = ordered[i];
+    const b = ordered[i + 1];
+    const runStart = Math.max(a.spanStart, b.spanStart);
+    const runEnd = Math.min(a.spanEnd, b.spanEnd);
+    if (runEnd - runStart <= 1e-6) continue; // no shared run band → skip (notch)
+    // The clear gap between the two facing strip edges (perp/spacing axis).
+    const gapStart = a.pos + half;
+    const gapDepth = b.pos - half - gapStart;
+    if (gapDepth <= 1e-6) continue;
+    // Tile the run interval in ~BLOCK_LENGTH_CM steps, clamping the last cell.
+    for (let x = runStart; x < runEnd - 1e-6; x += BLOCK_LENGTH_CM) {
+      const len = Math.min(BLOCK_LENGTH_CM, runEnd - x);
+      blockCells.push(
+        horizontal
+          ? { x, y: gapStart, w: len, h: gapDepth }
+          : { x: gapStart, y: x, w: gapDepth, h: len },
+      );
+    }
+  }
+
+  return { beams, blockCells };
+}

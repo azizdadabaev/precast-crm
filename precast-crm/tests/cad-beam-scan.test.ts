@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   scanBeams,
+  scanBeamsToOverlay,
   beamSchedule,
   blockEstimate,
   isRectilinear,
@@ -10,6 +11,8 @@ import {
   decomposeToBays,
   defaultBeamDir,
   bayToSlabInput,
+  bbox,
+  BEAM_WIDTH_CM,
   BEARING_CM,
   PITCH_CM,
   type Pt,
@@ -182,6 +185,85 @@ describe("beam-scan — schedule & block estimate", () => {
     const est = blockEstimate(beams);
     expect(est.rows).toBeLessThan(beams.length - 1);
     expect(est.totalBlocks).toBeGreaterThan(0);
+  });
+});
+
+describe("beam-scan — scanBeamsToOverlay (canvas overlay)", () => {
+  it("H taper: beam Rects have DECREASING width, all inside the bbox, count matches", () => {
+    const scan = scanBeams(chamfer, "H", PITCH_CM, BEARING_CM);
+    const overlay = scanBeamsToOverlay(scan, "H");
+    const box = bbox(chamfer);
+
+    // One Rect per scan beam.
+    expect(overlay.beams.length).toBe(scan.beams.length);
+    expect(overlay.beams.length).toBeGreaterThan(2);
+
+    // Widths shrink from the wide (top) end to the narrow (bottom) end.
+    const widths = overlay.beams.map((r) => r.w);
+    for (let i = 1; i < widths.length; i++) {
+      expect(widths[i]).toBeLessThan(widths[i - 1] + 1e-6);
+    }
+    expect(Math.max(...widths)).toBeGreaterThan(Math.min(...widths) + 50);
+
+    // Each beam strip lies within the polygon bbox.
+    for (const r of overlay.beams) {
+      expect(r.h).toBeCloseTo(BEAM_WIDTH_CM, 6);
+      expect(r.x).toBeGreaterThanOrEqual(box.x - 1e-6);
+      expect(r.x + r.w).toBeLessThanOrEqual(box.x + box.w + 1e-6);
+      expect(r.y).toBeGreaterThanOrEqual(box.y - 1e-6);
+      expect(r.y + r.h).toBeLessThanOrEqual(box.y + box.h + 1e-6);
+    }
+
+    // Block cells were emitted and stay inside the bbox.
+    expect(overlay.blockCells.length).toBeGreaterThan(0);
+    for (const c of overlay.blockCells) {
+      expect(c.x).toBeGreaterThanOrEqual(box.x - 1e-6);
+      expect(c.x + c.w).toBeLessThanOrEqual(box.x + box.w + 1e-6);
+      expect(c.y).toBeGreaterThanOrEqual(box.y - 1e-6);
+      expect(c.y + c.h).toBeLessThanOrEqual(box.y + box.h + 1e-6);
+    }
+  });
+
+  it("V taper: beam Rects have DECREASING height, all inside the bbox, count matches", () => {
+    // Rotate the chamfer so it tapers along x; beams run vertically.
+    const sideways: Pt[] = chamfer.map((p) => ({ x: p.y, y: p.x }));
+    const scan = scanBeams(sideways, "V", PITCH_CM, BEARING_CM);
+    const overlay = scanBeamsToOverlay(scan, "V");
+    const box = bbox(sideways);
+
+    expect(overlay.beams.length).toBe(scan.beams.length);
+    expect(overlay.beams.length).toBeGreaterThan(2);
+
+    const heights = overlay.beams.map((r) => r.h);
+    for (let i = 1; i < heights.length; i++) {
+      expect(heights[i]).toBeLessThan(heights[i - 1] + 1e-6);
+    }
+    expect(Math.max(...heights)).toBeGreaterThan(Math.min(...heights) + 50);
+
+    for (const r of overlay.beams) {
+      expect(r.w).toBeCloseTo(BEAM_WIDTH_CM, 6);
+      expect(r.x).toBeGreaterThanOrEqual(box.x - 1e-6);
+      expect(r.x + r.w).toBeLessThanOrEqual(box.x + box.w + 1e-6);
+      expect(r.y).toBeGreaterThanOrEqual(box.y - 1e-6);
+      expect(r.y + r.h).toBeLessThanOrEqual(box.y + box.h + 1e-6);
+    }
+  });
+
+  it("U-shape notch: a block-cell row is skipped where beams share no run overlap", () => {
+    const scan = scanBeams(uShape, "H");
+    const overlay = scanBeamsToOverlay(scan, "H");
+    // Cells exist, and (like blockEstimate) no row bridges the notch void —
+    // every cell sits within the room's bbox.
+    expect(overlay.blockCells.length).toBeGreaterThan(0);
+    const box = bbox(uShape);
+    for (const c of overlay.blockCells) {
+      expect(c.x).toBeGreaterThanOrEqual(box.x - 1e-6);
+      expect(c.x + c.w).toBeLessThanOrEqual(box.x + box.w + 1e-6);
+    }
+  });
+
+  it("empty scan yields empty overlay", () => {
+    expect(scanBeamsToOverlay({ beams: [] }, "H")).toEqual({ beams: [], blockCells: [] });
   });
 });
 

@@ -18,6 +18,7 @@ import {
 import {
   isRectilinear,
   scanBeams,
+  scanBeamsToOverlay,
   beamSchedule,
   blockEstimate,
 } from "@/lib/cad/beam-scan";
@@ -126,6 +127,14 @@ export default function CadTestPage() {
     [rows],
   );
 
+  // Tapered/angled path: turn the scanline beams into the SAME beam/block Rect
+  // overlay the rectilinear path feeds RoomCanvas, so the angled drawing renders
+  // its beams (tapering across the room) + block infill instead of nothing.
+  const scanOverlay = useMemo(
+    () => (scan ? scanBeamsToOverlay({ beams: scan.beams }, scan.beamDir) : null),
+    [scan],
+  );
+
   // Project-wide beam schedule (counts grouped by beam length AND kind), summed
   // across bays — the factory cut-list, split structural vs manual-extra. Drawn
   // from the SAME layers the overlay uses, so the numbers match the picture.
@@ -178,7 +187,12 @@ export default function CadTestPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Left: drawing surface */}
         <div>
-          <RoomCanvas points={points} onChange={setPoints} bays={bays} beamLayers={beamLayers} />
+          <RoomCanvas
+            points={points}
+            onChange={setPoints}
+            bays={bays}
+            beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
+          />
         </div>
 
         {/* Right: results */}
