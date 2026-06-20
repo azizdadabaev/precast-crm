@@ -42,6 +42,53 @@ export function bbox(pts: Pt[]): Rect {
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }
 
+/** Centre of the bounding box of `pts` (the default pivot for the room transforms). */
+function bboxCentre(pts: Pt[]): Pt {
+  const b = bbox(pts);
+  return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+}
+
+/** Translate all points by (dxCm, dyCm). Returns a NEW array; does not mutate. */
+export function translatePolygon(points: Pt[], dxCm: number, dyCm: number): Pt[] {
+  return points.map((p) => ({ x: p.x + dxCm, y: p.y + dyCm }));
+}
+
+/**
+ * Rotate all points by `deg` about `center` (default = bbox centre). The angle is
+ * CLOCKWISE-POSITIVE in the editor's y-DOWN screen space: a +90° turn sends +x
+ * (right) toward +y (down). In a y-down frame the standard math rotation matrix
+ * [[cos,-sin],[sin,cos]] is ALREADY clockwise on screen (because +y points down),
+ * so no sign flip is needed. Returns a NEW array; does not mutate.
+ */
+export function rotatePolygon(points: Pt[], deg: number, center?: Pt): Pt[] {
+  const c = center ?? bboxCentre(points);
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return points.map((p) => {
+    const dx = p.x - c.x;
+    const dy = p.y - c.y;
+    return {
+      x: c.x + dx * cos - dy * sin,
+      y: c.y + dx * sin + dy * cos,
+    };
+  });
+}
+
+/** Mirror all points horizontally (x → 2·cx − x) about `center`.x (default bbox
+ *  centre). Returns a NEW array; does not mutate. */
+export function mirrorPolygonX(points: Pt[], center?: Pt): Pt[] {
+  const cx = (center ?? bboxCentre(points)).x;
+  return points.map((p) => ({ x: 2 * cx - p.x, y: p.y }));
+}
+
+/** Mirror all points vertically (y → 2·cy − y) about `center`.y (default bbox
+ *  centre). Returns a NEW array; does not mutate. */
+export function mirrorPolygonY(points: Pt[], center?: Pt): Pt[] {
+  const cy = (center ?? bboxCentre(points)).y;
+  return points.map((p) => ({ x: p.x, y: 2 * cy - p.y }));
+}
+
 /** Length of each edge (pts[i] → pts[i+1], closing back to 0). */
 export function edgeLengths(pts: Pt[]): number[] {
   return pts.map((p, i) => {

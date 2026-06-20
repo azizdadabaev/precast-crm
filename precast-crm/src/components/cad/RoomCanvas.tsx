@@ -33,6 +33,11 @@ import {
   rectFromCorners,
   pointFromPolar,
   interiorAngleDeg,
+  translatePolygon,
+  rotatePolygon,
+  mirrorPolygonX,
+  mirrorPolygonY,
+  pointInPolygon,
   dimStyleForEdge,
   dimLabelAngleDeg,
   dimensionOffsetLevels,
@@ -302,6 +307,18 @@ export function RoomCanvas({
   // Live signed offset (cm) + new length of the wall being dragged, for the readout.
   const [edgeDragInfo, setEdgeDragInfo] = useState<{ offset: number; lenCm: number } | null>(null);
 
+  // ── Whole-room MOVE drag (Transform → Move): press inside the polygon interior
+  // (not on a vertex/edge handle) and drag to translate the entire room. Active
+  // while `shapeDragIdx` is set (a sentinel — there's only one room). The live
+  // snapped offset (cm) drives the readout; `cursor` is the SVG-level interior
+  // hover that flips the cursor to "move". ──
+  const [shapeDragIdx, setShapeDragIdx] = useState<boolean>(false);
+  const [shapeDragInfo, setShapeDragInfo] = useState<{ dx: number; dy: number } | null>(null);
+  // Pointer over the room interior (drives the "move" cursor when idle in draw mode).
+  const [hoverInterior, setHoverInterior] = useState(false);
+  // Typed rotation angle (deg) for the "Apply" rotate-by field.
+  const [rotInput, setRotInput] = useState("");
+
   // ── View transform (zoom + pan) ──
   const [view, setView] = useState<View>(IDENTITY);
   const panRef = useRef<{ sx: number; sy: number; tx: number; ty: number } | null>(null);
@@ -563,6 +580,12 @@ export function RoomCanvas({
   const edgeDragStart = useRef<{ points: Pt[]; closed: boolean; cursor: Pt } | null>(null);
   const edgeDragMoved = useRef(false);
 
+  // Whole-room move: snapshot of the outline + the press cursor (cm) at drag-start.
+  // History is pushed on the FIRST real (non-zero) move (mirrors the vertex/edge
+  // pattern), so a press that doesn't move leaves no spurious undo entry.
+  const moveDragStart = useRef<{ points: Pt[]; closed: boolean; cursor: Pt } | null>(null);
+  const moveDragMoved = useRef(false);
+
   // Grid step in cm the offset snaps to while edge-dragging (when Grid snap is on).
   // mousedown on an edge body / its midpoint handle starts sliding that wall.
   const handleEdgeDown = (i: number) => (e: React.MouseEvent) => {
@@ -640,6 +663,29 @@ export function RoomCanvas({
     // ── Tape measure: just track the snapped cursor for the rubber-band + marker.
     if (tool === "measure") {
       setSnapResult(snapPoint(cm));
+      return;
+    }
+
+    // ── Whole-room MOVE drag: translate the entire room by the snapped cursor
+    // delta from the press point. Live via onChange; history captured on the first
+    // real move (mirrors the vertex/edge-drag pattern). ──
+    if (shapeDragIdx && moveDragStart.current) {
+      const base = moveDragStart.current;
+      let dx = cm.x - base.cursor.x;
+      let dy = cm.y - base.cursor.y;
+      // Snap the translation to the grid step so the moved room lands clean.
+      if (snapSettings.grid && step > 0) {
+        dx = Math.round(dx / step) * step;
+        dy = Math.round(dy / step) * step;
+      }
+      setShapeDragInfo({ dx, dy });
+      // No-op move (snapped delta 0) on the first frame → don't churn history.
+      if (dx === 0 && dy === 0 && !moveDragMoved.current) return;
+      if (!moveDragMoved.current) {
+        pushHistory(base.points, base.closed);
+        moveDragMoved.current = true;
+      }
+      onChange(translatePolygon(base.points, dx, dy)); // live; history already captured
       return;
     }
 
@@ -724,6 +770,8 @@ export function RoomCanvas({
       const ne = hv === null ? nearestEdge(points, cm, pxToCm(EDGE_HIT_PX), true) : null;
       setHoverEdgeBody(ne ? ne.index : null);
       setEdgeInsert(ne && e.altKey ? ne : null);
+      // Interior (clear of vertex/edge handles) → "move" cursor affordance.
+      setHoverInterior(tool === "draw" && isInteriorPress(cm));
     } else if (points.length > 0) {
       // While drawing, preview the snap (marker + polar/alignment guides) for the
       // next point, anchored at the last placed vertex.
@@ -765,6 +813,11 @@ export function RoomCanvas({
     setEdgeDragInfo(null);
     edgeDragStart.current = null;
     edgeDragMoved.current = false;
+    // End a whole-room move drag.
+    setShapeDragIdx(false);
+    setShapeDragInfo(null);
+    moveDragStart.current = null;
+    moveDragMoved.current = false;
     setSnapResult(null);
     if (panRef.current) {
       panRef.current = null;
@@ -785,6 +838,7 @@ export function RoomCanvas({
     setEdgeInsert(null);
     setSnapResult(null);
     setHoverEdge(null);
+    setHoverInterior(false);
   };
 
   // ── Pan: middle-button, alt+left, or space-held left drag ──
@@ -805,7 +859,44 @@ export function RoomCanvas({
       const a = snapPoint(eventToCm(e)).point;
       setRectStart(a);
       setRectEnd(a);
+      return;
     }
+
+    // ── Whole-room MOVE drag (draw mode, closed room). A left-press that REACHES
+    // the SVG has already fallen through the vertex-handle / edge-body grab lines
+    // (they stopPropagation). To be safe we re-confirm the press is clearly in the
+    // interior AND not within a vertex / edge-body pick radius, then start dragging
+    // the whole room. Hit ordering: vertex handle > edge body > interior move. ──
+    if (
+      tool === "draw" &&
+      e.button === 0 &&
+      closed &&
+      points.length >= 3 &&
+      isInteriorPress(eventToCm(e))
+    ) {
+      setShapeDragIdx(true);
+      setSelVertex(null);
+      setSelEdge(null);
+      setEdgeInsert(null);
+      moveDragStart.current = { points, closed, cursor: eventToCm(e) };
+      moveDragMoved.current = false;
+      setShapeDragInfo({ dx: 0, dy: 0 });
+    }
+  };
+
+  // True when a press at cm `p` lands clearly inside the room interior and is NOT
+  // within the vertex-handle or edge-body pick radius — the condition for starting
+  // a whole-room move instead of clobbering a vertex/edge interaction.
+  const isInteriorPress = (p: Pt): boolean => {
+    if (!closed || points.length < 3) return false;
+    if (!pointInPolygon(p, points)) return false;
+    // Within a vertex handle? (vertex > everything)
+    for (const v of points) {
+      if (distPx(p, v) <= HIT_PX) return false;
+    }
+    // Within an edge body's grab band? (edge body > interior move)
+    if (nearestEdge(points, p, pxToCm(EDGE_BODY_HIT_PX / 2), true)) return false;
+    return true;
   };
 
   // ── Wheel zoom, centred on the cursor (keeps the point under the mouse fixed) ──
@@ -1185,6 +1276,30 @@ export function RoomCanvas({
   const mirrorV = () => {
     if (selEdge === null) return;
     applyBearing(-edgeBearingDeg(points, selEdge, closed));
+  };
+
+  // ── Whole-room TRANSFORM actions (Transform toolbar group). All operate on the
+  // CLOSED room about its bbox centre, so the shape stays in place on screen, and
+  // go through commit() for undo. Enabled only when `canTransform`. ──
+  const canTransform = closed && points.length >= 3;
+
+  // Rotate the whole room by `deg` (clockwise-positive) about the bbox centre.
+  const rotateRoom = (deg: number) => {
+    if (!canTransform || !Number.isFinite(deg)) return;
+    commit(rotatePolygon(points, deg));
+  };
+  const applyRotInput = () => {
+    const deg = Number(rotInput);
+    if (Number.isFinite(deg) && deg !== 0) rotateRoom(deg);
+  };
+  // Mirror the whole room horizontally / vertically about the bbox centre.
+  const mirrorRoomX = () => {
+    if (!canTransform) return;
+    commit(mirrorPolygonX(points));
+  };
+  const mirrorRoomY = () => {
+    if (!canTransform) return;
+    commit(mirrorPolygonY(points));
   };
 
   const canUndo = undoStack.current.length > 0;
@@ -2297,12 +2412,14 @@ export function RoomCanvas({
       ? "grab"
       : tool === "rect" || tool === "measure"
         ? "crosshair"
-        : edgeDragIdx !== null
+        : edgeDragIdx !== null || shapeDragIdx
           ? "grabbing"
           : closed
             ? edgeInsert
               ? "copy"
-              : "default"
+              : hoverInterior && hoverVertex === null && hoverEdgeBody === null
+                ? "move"
+                : "default"
             : "crosshair";
 
   return (
@@ -2466,6 +2583,85 @@ export function RoomCanvas({
           <input type="checkbox" checked={showAngles} onChange={(e) => setShowAngles(e.target.checked)} />
           Angles
         </label>
+
+        <span className="mx-1 h-5 w-px bg-slate-200" />
+
+        {/* TRANSFORM group: rotate / mirror the WHOLE room about its bbox centre
+            (so it stays in place on screen). Drag inside the room to MOVE it.
+            Enabled only on a finished loop. */}
+        <span
+          className="flex items-center gap-1 rounded border bg-slate-50 px-1.5 py-1 text-xs text-slate-600"
+          title="Transform the whole room. Rotate/Mirror pivot on the bounding-box centre; drag inside the room to move it."
+        >
+          <span className="font-semibold text-slate-500">Transform</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => rotateRoom(-90)}
+            disabled={!canTransform}
+            title="Rotate 90° counter-clockwise"
+          >
+            ⟲ 90°
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => rotateRoom(90)}
+            disabled={!canTransform}
+            title="Rotate 90° clockwise"
+          >
+            ⟳ 90°
+          </Button>
+          <input
+            type="number"
+            className="w-14 rounded border bg-white px-1 py-0.5 text-xs disabled:opacity-50"
+            placeholder="deg"
+            value={rotInput}
+            disabled={!canTransform}
+            onChange={(e) => setRotInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                applyRotInput();
+              }
+              e.stopPropagation();
+            }}
+            title="Rotate by a typed angle (clockwise-positive) about the bbox centre"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={applyRotInput}
+            disabled={!canTransform || rotInput.trim() === ""}
+            title="Apply the typed rotation"
+          >
+            Apply
+          </Button>
+          <span className="mx-0.5 h-4 w-px bg-slate-200" />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={mirrorRoomX}
+            disabled={!canTransform}
+            title="Mirror the room horizontally (about the bbox centre)"
+          >
+            Mirror ↔
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={mirrorRoomY}
+            disabled={!canTransform}
+            title="Mirror the room vertically (about the bbox centre)"
+          >
+            Mirror ↕
+          </Button>
+        </span>
 
         <span className="mx-1 h-5 w-px bg-slate-200" />
 
@@ -3037,7 +3233,13 @@ export function RoomCanvas({
                 ". Wheel = zoom, middle / Alt-drag / Space-drag = pan, F = fit."
               : "Click to add points. Click the first vertex or Enter to close (the ring turns green when valid). Backspace steps back a point; Esc cancels. Crossing edges are rejected."}
         </p>
-        {edgeDragInfo ? (
+        {shapeDragInfo ? (
+          <span className="ml-3 shrink-0 tabular-nums font-semibold text-sky-700">
+            move {shapeDragInfo.dx >= 0 ? "+" : ""}
+            {Math.round(shapeDragInfo.dx)}, {shapeDragInfo.dy >= 0 ? "+" : ""}
+            {Math.round(shapeDragInfo.dy)} cm
+          </span>
+        ) : edgeDragInfo ? (
           <span className="ml-3 shrink-0 tabular-nums font-semibold text-sky-700">
             wall {formatLengthDual(edgeDragInfo.lenCm)} · {edgeDragInfo.offset >= 0 ? "+" : ""}
             {Math.round(edgeDragInfo.offset)} cm
