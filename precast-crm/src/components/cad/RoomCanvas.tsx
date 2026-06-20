@@ -13,7 +13,6 @@ import {
   perpDimension,
   blockCellBudget,
   snapToGrid,
-  snapOrtho,
   setEdgeLength,
   nearestEdge,
   insertVertex,
@@ -23,7 +22,6 @@ import {
   drawStepWouldCross,
   canClose,
   orthoVertexMove,
-  snapToVertices,
   isValidOutline,
   fitView,
   bbox,
@@ -43,6 +41,13 @@ import {
 } from "@/lib/cad/geometry";
 import { visibleGridLines } from "@/lib/cad/grid";
 import { offsetPolygonOutward } from "@/lib/cad/offset";
+import {
+  computeSnap,
+  DEFAULT_SNAP_SETTINGS,
+  type SnapSettings,
+  type SnapResult,
+  type SnapType,
+} from "@/lib/cad/snap";
 
 interface RoomCanvasProps {
   points: Pt[];
@@ -112,10 +117,6 @@ const INIT_H = 680;
 const HIT_PX = 12;
 // Edge-insert pick radius, in px.
 const EDGE_HIT_PX = 8;
-// Object-snap radius for landing a draw point / dragged vertex onto an existing
-// vertex, in px (screen space).
-const VERTEX_SNAP_PX = 10;
-
 // ── Dimensioning (CAD dimension lines), all in screen px ──
 // How far OUTSIDE the shape the dimension line sits, from the edge.
 const DIM_OFFSET_PX = 26;
@@ -216,17 +217,28 @@ export function RoomCanvas({
   const [hoverVertex, setHoverVertex] = useState<number | null>(null);
   const [edgeInsert, setEdgeInsert] = useState<{ index: number; at: Pt } | null>(null);
 
-  // CAD controls: live grid size + snap on/off. Seeded from the `gridCm` prop.
+  // CAD controls: live grid size + the CAD snap engine's per-type settings.
+  // Seeded from the `gridCm` prop; the grid-size select keeps driving gridStepCm.
   const [grid, setGrid] = useState<number>(gridCm);
-  const [snap, setSnap] = useState(true);
+  const [snapSettings, setSnapSettings] = useState<SnapSettings>({
+    ...DEFAULT_SNAP_SETTINGS,
+    gridStepCm: gridCm,
+  });
   // Ortho mode keeps the outline rectilinear: a dragged/nudged vertex carries its
   // two neighbours so both incident edges stay axis-aligned (the invariant the
   // bay decomposition relies on). On by default; can be toggled off for free moves.
   const [ortho, setOrtho] = useState(true);
   const step = grid; // grid step == snap step (they move together by design).
-  // Live object-snap marker: the existing vertex a draw point / drag is snapping
-  // onto (screen-px shown as a ring), or null.
-  const [snapTarget, setSnapTarget] = useState<Pt | null>(null);
+  // Keep the snap engine's grid step locked to the visible grid-size select.
+  useEffect(() => {
+    setSnapSettings((s) => (s.gridStepCm === grid ? s : { ...s, gridStepCm: grid }));
+  }, [grid]);
+  // Live snap result (point + type + guides) for the current draw/drag, rendered
+  // as a typed marker + dashed guide lines. Null when nothing is snapping.
+  const [snapResult, setSnapResult] = useState<SnapResult | null>(null);
+  // Toggle one snap type in the toolbar.
+  const toggleSnap = (key: keyof SnapSettings) => (checked: boolean) =>
+    setSnapSettings((s) => ({ ...s, [key]: checked }));
 
   // Selected edge (index of points[i] → points[i+1]) + its draft length text.
   const [selEdge, setSelEdge] = useState<number | null>(null);
@@ -268,7 +280,8 @@ export function RoomCanvas({
     [points, closed, onChange, pushHistory],
   );
 
-  const maybeSnap = (p: Pt): Pt => (snap ? snapToGrid(p, step) : p);
+  // Grid-snap a point when the Grid snap toggle is on (used for edge-insert).
+  const maybeSnap = (p: Pt): Pt => (snapSettings.grid ? snapToGrid(p, step) : p);
 
   // World (base) space → screen px applies the view transform last.
   const cmToPx = useCallback(
@@ -333,11 +346,19 @@ export function RoomCanvas({
         }
       }
       const prev = points[points.length - 1];
-      // Object-snap: if the raw click is near an existing vertex, land exactly on
-      // it (skips ortho/grid). Otherwise ortho-snap off the previous point.
-      const vSnap = snapToVertices(points, raw, pxToCm(VERTEX_SNAP_PX), points.length - 1);
-      const orthoP = prev ? snapOrtho(prev, raw) : raw;
-      const cand = vSnap ?? maybeSnap(orthoP);
+      // CAD snap engine: hard object snaps (endpoint/mid/edge/perp/intersection)
+      // beat soft constraints (polar tracking off `prev`, axis alignment), then
+      // grid. `prev` is the polar anchor while drawing.
+      const result = computeSnap({
+        cursor: raw,
+        points,
+        closed,
+        origin: prev ?? null,
+        excludeIndex: null,
+        tolCm: pxToCm(10),
+        settings: snapSettings,
+      });
+      const cand = result.point;
       // Reject a zero-length / hairline step (clicking on/at the last vertex).
       if (prev && Math.hypot(cand.x - prev.x, cand.y - prev.y) < MIN_DRAW_STEP_CM) return;
       // Reject a step that would fold the in-progress path over itself.
@@ -399,10 +420,19 @@ export function RoomCanvas({
     setCursor(cm);
 
     if (dragIdx !== null) {
-      // Object-snap the drag onto a sibling vertex (excluding self) before grid.
-      const vSnap = snapToVertices(points, cm, pxToCm(VERTEX_SNAP_PX), dragIdx);
-      const target = vSnap ?? maybeSnap(cm);
-      setSnapTarget(vSnap);
+      // CAD snap engine for the drag: object snaps + alignment guides off the
+      // OTHER vertices (the dragged one is excluded), then grid. No polar anchor.
+      const result = computeSnap({
+        cursor: cm,
+        points,
+        closed,
+        origin: null,
+        excludeIndex: dragIdx,
+        tolCm: pxToCm(10),
+        settings: snapSettings,
+      });
+      const target = result.point;
+      setSnapResult(result);
       // Ortho move drags the two neighbours so both incident edges stay axis-
       // aligned; validate the WHOLE candidate (it shifts >1 vertex). Free move
       // checks just the single-vertex collapse/intersection guards.
@@ -442,15 +472,26 @@ export function RoomCanvas({
       setHoverVertex(hv);
       setEdgeInsert(hv === null ? nearestEdge(points, cm, pxToCm(EDGE_HIT_PX), true) : null);
     } else if (points.length > 0) {
-      // While drawing, preview an object-snap onto an existing vertex.
-      const vSnap = snapToVertices(points, cm, pxToCm(VERTEX_SNAP_PX), points.length - 1);
-      setSnapTarget(vSnap);
+      // While drawing, preview the snap (marker + polar/alignment guides) for the
+      // next point, anchored at the last placed vertex.
+      const prev = points[points.length - 1];
+      setSnapResult(
+        computeSnap({
+          cursor: cm,
+          points,
+          closed,
+          origin: prev ?? null,
+          excludeIndex: null,
+          tolCm: pxToCm(10),
+          settings: snapSettings,
+        }),
+      );
     }
   };
 
   const endDrag = () => {
     setDragIdx(null);
-    setSnapTarget(null);
+    setSnapResult(null);
     if (panRef.current) {
       panRef.current = null;
       setPanning(false);
@@ -462,7 +503,7 @@ export function RoomCanvas({
     setCursor(null);
     setHoverVertex(null);
     setEdgeInsert(null);
-    setSnapTarget(null);
+    setSnapResult(null);
     setHoverEdge(null);
   };
 
@@ -595,7 +636,7 @@ export function RoomCanvas({
     setCursor(null);
     setEdgeInsert(null);
     setHoverVertex(null);
-    setSnapTarget(null);
+    setSnapResult(null);
     dragStart.current = null;
     dragMoved.current = false;
     onChange([]);
@@ -838,17 +879,27 @@ export function RoomCanvas({
   let rubber: React.ReactNode = null;
   if (!closed && cursor && points.length > 0) {
     const prev = points[points.length - 1];
-    const ortho = maybeSnap(snapOrtho(prev, cursor));
+    // Preview the SAME candidate the click would place (snap engine), so the
+    // rubber-band line ends exactly where the next vertex lands.
+    const cand = computeSnap({
+      cursor,
+      points,
+      closed,
+      origin: prev ?? null,
+      excludeIndex: null,
+      tolCm: pxToCm(10),
+      settings: snapSettings,
+    }).point;
     const pa = cmToPx(prev);
-    const pb = cmToPx(ortho);
+    const pb = cmToPx(cand);
     const nearClose =
       points.length >= 3 && distPx(cursor, points[0]) <= HIT_PX;
     const closeValid = nearClose && canClose(points);
     // Invalid if the proposed step crosses the path or is a hairline (but not
     // while we're hovering the close target — that's a finalize, not a step).
-    const stepLen = Math.hypot(ortho.x - prev.x, ortho.y - prev.y);
+    const stepLen = Math.hypot(cand.x - prev.x, cand.y - prev.y);
     const invalid =
-      !nearClose && (stepLen < MIN_DRAW_STEP_CM || drawStepWouldCross(points, ortho));
+      !nearClose && (stepLen < MIN_DRAW_STEP_CM || drawStepWouldCross(points, cand));
     const stroke = invalid ? "#dc2626" : "#0284c7";
     rubber = (
       <g style={{ pointerEvents: "none" }}>
@@ -1199,16 +1250,103 @@ export function RoomCanvas({
   const perimCm = closed && points.length >= 3 ? perimeter(points, true) : 0;
   const areaCm2 = closed && points.length >= 3 ? floorAreaCm2(points) : 0;
 
-  // Object-snap marker: a magenta ring on the existing vertex a draw point or
-  // dragged vertex is snapping onto, so the lock-on is visible.
+  // CAD snap visuals: dashed guide lines (alignment = magenta, polar = sky) plus
+  // a glyph at the snapped point keyed by snap type (square=endpoint,
+  // triangle=midpoint, ◇=intersection, ⊥=perpendicular, ○=edge, +=soft) and a
+  // tiny type label near the cursor. Replaces the old single magenta ring.
   let snapMarker: React.ReactNode = null;
-  if (snapTarget) {
-    const s = cmToPx(snapTarget);
+  if (snapResult && snapResult.type) {
+    const s = cmToPx(snapResult.point);
+    const SNAP_LABEL: Record<SnapType, string> = {
+      endpoint: "END",
+      midpoint: "MID",
+      edge: "EDGE",
+      perpendicular: "PERP",
+      intersection: "INT",
+      alignment: "ALIGN",
+      polar: "POLAR",
+      grid: "GRID",
+    };
+    const t = snapResult.type;
+    // Hard snaps use the magenta object-snap colour; soft snaps (polar/grid)
+    // use sky to match their guide colour.
+    const isSoft = t === "polar" || t === "alignment" || t === "grid";
+    const col = t === "polar" ? "#0ea5e9" : t === "alignment" ? "#d946ef" : isSoft ? "#0ea5e9" : "#d946ef";
+    const glyph = (() => {
+      const r = 6;
+      switch (t) {
+        case "endpoint":
+          return <rect x={s.x - r} y={s.y - r} width={r * 2} height={r * 2} fill="none" stroke={col} strokeWidth={2} />;
+        case "midpoint":
+          return (
+            <polygon
+              points={`${s.x},${s.y - r} ${s.x + r},${s.y + r} ${s.x - r},${s.y + r}`}
+              fill="none"
+              stroke={col}
+              strokeWidth={2}
+            />
+          );
+        case "intersection":
+          return (
+            <polygon
+              points={`${s.x},${s.y - r} ${s.x + r},${s.y} ${s.x},${s.y + r} ${s.x - r},${s.y}`}
+              fill="none"
+              stroke={col}
+              strokeWidth={2}
+            />
+          );
+        case "perpendicular":
+          return (
+            <g>
+              <line x1={s.x - r} y1={s.y + r} x2={s.x + r} y2={s.y + r} stroke={col} strokeWidth={2} />
+              <line x1={s.x} y1={s.y - r} x2={s.x} y2={s.y + r} stroke={col} strokeWidth={2} />
+            </g>
+          );
+        case "edge":
+          return <circle cx={s.x} cy={s.y} r={r} fill="none" stroke={col} strokeWidth={2} />;
+        default:
+          // Soft snaps (polar / alignment / grid): a small cross.
+          return (
+            <g>
+              <line x1={s.x - r} y1={s.y} x2={s.x + r} y2={s.y} stroke={col} strokeWidth={1.75} />
+              <line x1={s.x} y1={s.y - r} x2={s.x} y2={s.y + r} stroke={col} strokeWidth={1.75} />
+            </g>
+          );
+      }
+    })();
     snapMarker = (
       <g style={{ pointerEvents: "none" }}>
-        <circle cx={s.x} cy={s.y} r={9} fill="none" stroke="#d946ef" strokeWidth={2} />
-        <line x1={s.x - 5} y1={s.y} x2={s.x + 5} y2={s.y} stroke="#d946ef" strokeWidth={1.5} />
-        <line x1={s.x} y1={s.y - 5} x2={s.x} y2={s.y + 5} stroke="#d946ef" strokeWidth={1.5} />
+        {/* Soft-constraint guide lines (cm-space segments mapped to px). */}
+        {snapResult.guides.map((gd, gi) => {
+          const ga = cmToPx(gd.a);
+          const gb = cmToPx(gd.b);
+          return (
+            <line
+              key={`guide${gi}`}
+              x1={ga.x}
+              y1={ga.y}
+              x2={gb.x}
+              y2={gb.y}
+              stroke={gd.kind === "polar" ? "#0ea5e9" : "#d946ef"}
+              strokeWidth={1}
+              strokeDasharray="5 4"
+              opacity={0.8}
+            />
+          );
+        })}
+        {glyph}
+        <text
+          x={s.x + 10}
+          y={s.y - 10}
+          fontSize={9}
+          fontWeight={700}
+          fill={col}
+          style={{ paintOrder: "stroke", userSelect: "none" }}
+          stroke="#ffffff"
+          strokeWidth={2.5}
+        >
+          {SNAP_LABEL[t]}
+        </text>
       </g>
     );
   }
@@ -1523,11 +1661,50 @@ export function RoomCanvas({
           </select>
         </label>
 
-        {/* Snap on/off toggle. */}
-        <label className="flex items-center gap-1 text-xs text-slate-600">
-          <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
-          Snap
-        </label>
+        {/* SNAP toolbar: per-type object-snap toggles + polar-step selector. The
+            engine resolves the best snap by priority; each toggle gates one type. */}
+        <span
+          className="flex items-center gap-1.5 rounded border bg-slate-50 px-1.5 py-1 text-xs text-slate-600"
+          title="Object snaps: End=vertex, Mid=edge midpoint, Edge=on a wall, Perp=perpendicular foot, Align=share a vertex's x/y, Polar=angle tracking, Grid=snap to grid."
+        >
+          <span className="font-semibold text-slate-500">Snap</span>
+          {(
+            [
+              ["endpoint", "End"],
+              ["midpoint", "Mid"],
+              ["edge", "Edge"],
+              ["perpendicular", "Perp"],
+              ["alignment", "Align"],
+              ["polar", "Polar"],
+              ["grid", "Grid"],
+            ] as [keyof SnapSettings, string][]
+          ).map(([key, label]) => (
+            <label key={key} className="flex items-center gap-0.5" title={label}>
+              <input
+                type="checkbox"
+                checked={Boolean(snapSettings[key])}
+                onChange={(e) => toggleSnap(key)(e.target.checked)}
+              />
+              {label}
+            </label>
+          ))}
+          {/* Polar tracking increment. */}
+          <select
+            className="ml-0.5 rounded border bg-white px-1 py-0.5 text-xs disabled:opacity-50"
+            value={snapSettings.polarStepDeg}
+            disabled={!snapSettings.polar}
+            onChange={(e) =>
+              setSnapSettings((s) => ({ ...s, polarStepDeg: Number(e.target.value) }))
+            }
+            title="Polar tracking angle increment"
+          >
+            {[15, 45, 90].map((d) => (
+              <option key={d} value={d}>
+                {d}°
+              </option>
+            ))}
+          </select>
+        </span>
 
         {/* Ortho (rectilinear-preserving) move toggle. */}
         <label className="flex items-center gap-1 text-xs text-slate-600" title="Keep walls square: a moved vertex carries its neighbours so edges stay horizontal/vertical.">
@@ -1895,7 +2072,7 @@ export function RoomCanvas({
         {/* Edge-insert affordance. */}
         {insertMarker}
 
-        {/* Object-snap lock-on ring. */}
+        {/* CAD snap marker (typed glyph) + alignment/polar guide lines. */}
         {snapMarker}
 
         {/* Vertex handles. */}
@@ -1970,9 +2147,9 @@ export function RoomCanvas({
                 : "Loop closed. Drag vertices freely (Ortho off). ") +
               "Double-click a dimension to type an exact length (e.g. 61 cm); click an edge body to insert a point; select a vertex then arrow-nudge or Delete it. F = fit, 0 = reset view. Export PNG saves the dimensioned drawing."
             : points.length === 0
-              ? "Click to start drawing. Edges snap orthogonal" +
-                (snap ? " + to grid" : "") +
-                "; click near an existing point to snap onto it. Wheel = zoom, middle / Alt-drag / Space-drag = pan, F = fit."
+              ? "Click to start drawing. Snaps: vertices, midpoints, edges, polar angles" +
+                (snapSettings.grid ? " + grid" : "") +
+                ". Wheel = zoom, middle / Alt-drag / Space-drag = pan, F = fit."
               : "Click to add points. Click the first vertex or Enter to close (the ring turns green when valid). Backspace steps back a point; Esc cancels. Crossing edges are rejected."}
         </p>
         {cursor && (
