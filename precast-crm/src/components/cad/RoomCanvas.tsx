@@ -28,6 +28,9 @@ import {
   fitView,
   bbox,
   edgeOutwardNormal,
+  edgeBearingDeg,
+  setEdgeBearing,
+  interiorAngleDeg,
   dimStyleForEdge,
   dimLabelAngleDeg,
   dimensionOffsetLevels,
@@ -232,6 +235,9 @@ export function RoomCanvas({
   // two neighbours so both incident edges stay axis-aligned (the invariant the
   // bay decomposition relies on). On by default; can be toggled off for free moves.
   const [ortho, setOrtho] = useState(true);
+  // Show interior-angle dimension arcs at each vertex when the loop is closed.
+  // Tapered/angled corners read their exact degrees; on by default.
+  const [showAngles, setShowAngles] = useState(true);
   const step = grid; // grid step == snap step (they move together by design).
   // Keep the snap engine's grid step locked to the visible grid-size select.
   useEffect(() => {
@@ -247,6 +253,8 @@ export function RoomCanvas({
   // Selected edge (index of points[i] → points[i+1]) + its draft length text.
   const [selEdge, setSelEdge] = useState<number | null>(null);
   const [lenInput, setLenInput] = useState("");
+  // Draft bearing (deg) text for the selected edge's exact-angle field.
+  const [angleInput, setAngleInput] = useState("");
   // True only when the selection came from the DIMENSION (click/double-click) — the
   // inline length editor opens then. Selecting via the edge BODY (for a slide) sets
   // this false, so the body-select highlights the wall without popping the editor.
@@ -885,11 +893,16 @@ export function RoomCanvas({
     return Math.round(Math.hypot(b.x - a.x, b.y - a.y));
   };
 
+  // Current bearing (deg, 1-decimal) of edge i, for seeding the angle field.
+  const edgeBearing = (i: number): number =>
+    Math.round(edgeBearingDeg(points, i, closed) * 10) / 10;
+
   const selectEdge = (i: number) => (e: React.MouseEvent) => {
     e.stopPropagation();
     setSelEdge(i);
     setSelVertex(null);
     setLenInput(String(edgeLenCm(i)));
+    setAngleInput(String(edgeBearing(i)));
     setLenEditing(true); // dimension click → open the inline length editor
   };
 
@@ -899,6 +912,35 @@ export function RoomCanvas({
     if (Number.isFinite(next) && next > 0) {
       commit(setEdgeLength(points, selEdge, next));
     }
+  };
+
+  // Rotate the selected edge to an absolute bearing (deg), rejecting a result
+  // that self-intersects or collapses an edge. Used by the Angle field + mirrors.
+  const applyBearing = (deg: number) => {
+    if (selEdge === null || !Number.isFinite(deg)) return;
+    const next = setEdgeBearing(points, selEdge, deg, closed);
+    if (next === points) return;
+    if (!isValidOutline(next, closed)) return; // would fold / collapse — reject
+    commit(next);
+    setAngleInput(String(Math.round(deg * 10) / 10));
+  };
+
+  const applyAngle = () => {
+    if (selEdge === null) return;
+    const deg = Number(angleInput);
+    if (Number.isFinite(deg)) applyBearing(deg);
+  };
+
+  // Mirror ↔ : reflect the edge's bearing about the VERTICAL axis (180 − b);
+  // Mirror ↕ : reflect about the HORIZONTAL axis (−b). Both turn one chamfer
+  // into its mirror so a tapered room's two slants can be made symmetric.
+  const mirrorH = () => {
+    if (selEdge === null) return;
+    applyBearing(180 - edgeBearingDeg(points, selEdge, closed));
+  };
+  const mirrorV = () => {
+    if (selEdge === null) return;
+    applyBearing(-edgeBearingDeg(points, selEdge, closed));
   };
 
   const canUndo = undoStack.current.length > 0;
@@ -1049,6 +1091,28 @@ export function RoomCanvas({
     const invalid =
       !nearClose && (stepLen < MIN_DRAW_STEP_CM || drawStepWouldCross(points, cand));
     const stroke = invalid ? "#dc2626" : "#0284c7";
+    // Live length + angle readout for the segment being drawn (prev → cand).
+    // Bearing uses the same y-down screen convention as edgeBearingDeg; we also
+    // surface the TURN from the previous edge when there is one, so the user sees
+    // e.g. "2.40 m · 45° (↱90°)" as polar snapping locks the direction.
+    const segBearing =
+      stepLen > 1e-6
+        ? ((Math.atan2(cand.y - prev.y, cand.x - prev.x) * 180) / Math.PI)
+        : 0;
+    let turnTxt = "";
+    if (points.length >= 2 && stepLen > 1e-6) {
+      const p0 = points[points.length - 2];
+      const prevBear = (Math.atan2(prev.y - p0.y, prev.x - p0.x) * 180) / Math.PI;
+      let turn = segBearing - prevBear;
+      while (turn > 180) turn -= 360;
+      while (turn <= -180) turn += 360;
+      if (Math.abs(turn) > 0.5) turnTxt = ` (${Math.round(Math.abs(turn))}°)`;
+    }
+    const readout = `${formatLengthCm(stepLen)} · ${Math.round(segBearing)}°${turnTxt}`;
+    // Park the label just past the moving tip, nudged off the line so it doesn't
+    // sit on the cursor.
+    const lblX = pb.x + 12;
+    const lblY = pb.y - 12;
     rubber = (
       <g style={{ pointerEvents: "none" }}>
         <line
@@ -1062,6 +1126,22 @@ export function RoomCanvas({
           opacity={0.7}
         />
         <circle cx={pb.x} cy={pb.y} r={3} fill={stroke} opacity={0.7} />
+        {!nearClose && stepLen > 1e-6 && (
+          <text
+            x={lblX}
+            y={lblY}
+            fontSize={11}
+            fontWeight={700}
+            fill={stroke}
+            textAnchor="start"
+            dominantBaseline="middle"
+            stroke="#ffffff"
+            strokeWidth={3}
+            style={{ paintOrder: "stroke", userSelect: "none" }}
+          >
+            {readout}
+          </text>
+        )}
         {nearClose && (
           <circle
             cx={pxPts[0].x}
@@ -1314,6 +1394,84 @@ export function RoomCanvas({
         >
           {label}
         </text>,
+      );
+    }
+  }
+
+  // ── Interior-angle dimension arcs (closed only, "Angles" toggle on): a small
+  // arc + degree label inside each corner, so tapered/angled walls read their
+  // exact angle. ~90° corners are skipped (they're implied by the square look) to
+  // keep clutter down; everything off-square — the chamfers — is labelled. ──
+  const ANGLE_ARC_PX = 14; // arc radius in screen px
+  const angleNodes: React.ReactNode[] = [];
+  if (closed && showAngles && points.length >= 3) {
+    const n = points.length;
+    for (let i = 0; i < n; i++) {
+      const ang = interiorAngleDeg(points, i);
+      if (ang <= 0) continue;
+      // Skip near-square corners (90° ± 1°) — they're obvious from the drawing.
+      if (Math.abs(ang - 90) < 1) continue;
+      const cur = cmToPx(points[i]);
+      const prev = cmToPx(points[(i - 1 + n) % n]);
+      const next = cmToPx(points[(i + 1) % n]);
+      // Unit screen directions from the corner toward each neighbour.
+      const du = { x: prev.x - cur.x, y: prev.y - cur.y };
+      const dv = { x: next.x - cur.x, y: next.y - cur.y };
+      const lu = Math.hypot(du.x, du.y);
+      const lv = Math.hypot(dv.x, dv.y);
+      if (lu < 1e-6 || lv < 1e-6) continue;
+      const u = { x: du.x / lu, y: du.y / lu };
+      const v = { x: dv.x / lv, y: dv.y / lv };
+      // Arc start/end points on the two edges, `ANGLE_ARC_PX` from the corner.
+      const a1 = { x: cur.x + u.x * ANGLE_ARC_PX, y: cur.y + u.y * ANGLE_ARC_PX };
+      const a2 = { x: cur.x + v.x * ANGLE_ARC_PX, y: cur.y + v.y * ANGLE_ARC_PX };
+      // SVG arc: large-arc flag set for a reflex (>180°) interior corner; sweep
+      // direction chosen so the arc bows INTO the interior (between the edges).
+      const largeArc = ang > 180 ? 1 : 0;
+      const crossScreen = u.x * v.y - u.y * v.x; // sweep sign from edge turn
+      const sweep = crossScreen > 0 ? 1 : 0;
+      // Bisector direction (into the interior) for placing the label just outside
+      // the arc. For a reflex corner the interior bisector flips outward.
+      let bx = u.x + v.x;
+      let by = u.y + v.y;
+      const bl = Math.hypot(bx, by);
+      if (bl < 1e-6) {
+        // Edges are nearly opposite (≈180°): use the arc-chord perpendicular.
+        bx = -u.y;
+        by = u.x;
+      } else {
+        bx /= bl;
+        by /= bl;
+      }
+      if (ang > 180) {
+        bx = -bx;
+        by = -by;
+      }
+      const lr = ANGLE_ARC_PX + 9;
+      const lp = { x: cur.x + bx * lr, y: cur.y + by * lr };
+      angleNodes.push(
+        <g key={`ang${i}`} style={{ pointerEvents: "none" }}>
+          <path
+            d={`M ${a1.x} ${a1.y} A ${ANGLE_ARC_PX} ${ANGLE_ARC_PX} 0 ${largeArc} ${sweep} ${a2.x} ${a2.y}`}
+            fill="none"
+            stroke="#7c3aed"
+            strokeWidth={1.25}
+          />
+          <text
+            x={lp.x}
+            y={lp.y}
+            fontSize={10}
+            fill="#7c3aed"
+            fontWeight={700}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            stroke="#ffffff"
+            strokeWidth={2.75}
+            style={{ paintOrder: "stroke", userSelect: "none" }}
+          >
+            {`${Math.round(ang)}°`}
+          </text>
+        </g>,
       );
     }
   }
@@ -1862,6 +2020,12 @@ export function RoomCanvas({
           Ortho
         </label>
 
+        {/* Interior-angle dimension arcs toggle (off-square corners). */}
+        <label className="flex items-center gap-1 text-xs text-slate-600" title="Show interior angle (degrees) at each corner — tapered/angled walls read their exact angle.">
+          <input type="checkbox" checked={showAngles} onChange={(e) => setShowAngles(e.target.checked)} />
+          Angles
+        </label>
+
         <span className="mx-1 h-5 w-px bg-slate-200" />
 
         {/* Export the dimensioned drawing as a PNG (CAD-style sheet). */}
@@ -2175,6 +2339,9 @@ export function RoomCanvas({
         {/* Overall (extents) dimensions — total W × H outside the per-edge band. */}
         {overallDimNodes}
 
+        {/* Interior-angle arcs + degree labels at off-square corners (Angles on). */}
+        {angleNodes}
+
         {/* Per-bay pitched-run depth dimension ticks (drawing ↔ engine pitch). */}
         {perpDims}
 
@@ -2287,6 +2454,38 @@ export function RoomCanvas({
               = {formatLengthCm(Number(lenInput))} ({formatLengthDual(Number(lenInput))})
             </span>
           )}
+
+          <span className="mx-1 h-5 w-px bg-slate-200" />
+
+          {/* Exact bearing entry for the selected edge (deg, y-down screen space). */}
+          <span className="text-slate-600">Burchak / Angle °</span>
+          <input
+            type="number"
+            step="any"
+            autoFocus={false}
+            className="w-20 rounded border px-2 py-1"
+            value={angleInput}
+            onChange={(e) => setAngleInput(e.target.value)}
+            onBlur={applyAngle}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                applyAngle();
+                (e.target as HTMLInputElement).blur();
+              } else if (e.key === "Escape") {
+                setSelEdge(null);
+              }
+            }}
+          />
+          {/* Mirror the selected edge's bearing about the vertical / horizontal axis. */}
+          <Button type="button" variant="outline" size="sm" onClick={mirrorH} title="Reflect this wall's angle about the vertical axis (180 − angle)">
+            Mirror ↔
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={mirrorV} title="Reflect this wall's angle about the horizontal axis (− angle)">
+            Mirror ↕
+          </Button>
+
           <Button type="button" variant="outline" size="sm" onClick={() => setSelEdge(null)}>
             Done
           </Button>

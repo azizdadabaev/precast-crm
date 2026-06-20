@@ -310,6 +310,100 @@ export function edgeDragOffset(
   return deltaCm.x * nrm.x + deltaCm.y * nrm.y;
 }
 
+// ── Angle control: edge bearings + interior angles for tapered/angled walls ──
+//
+// ANGLE CONVENTION (single source of truth): the bearing of edge i is the
+// direction of points[i] → points[(i+1)%n] as atan2(dy, dx) in DEGREES, in
+// y-DOWN screen space, normalized to (−180, 180]. So in screen space a bearing
+// of 0 points +x (right), 90 points +y (DOWN), 180 points −x (left), and −90
+// points −y (UP). The interior angle at a vertex is measured INSIDE the polygon
+// in [0, 360); for a convex corner it is < 180.
+
+/** Bearing (deg, (−180,180]) of edge i in y-down screen space. Returns 0 for a
+ *  degenerate (zero-length) edge. `closed` is accepted for symmetry with the
+ *  rest of the API; the bearing of an existing edge i is independent of it. */
+export function edgeBearingDeg(points: Pt[], i: number, closed: boolean): number {
+  const n = points.length;
+  void closed;
+  if (n < 2 || i < 0 || i >= n) return 0;
+  const a = points[i];
+  const b = points[(i + 1) % n];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (Math.hypot(dx, dy) < 1e-9) return 0;
+  let deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  // Normalize to (−180, 180]: atan2 already yields [−180, 180], fold −180 → 180.
+  if (deg <= -180) deg += 360;
+  return deg;
+}
+
+/**
+ * Rotate edge i about its START vertex (points[i]) to the absolute bearing `deg`,
+ * keeping the edge's current length; only the END vertex (points[i+1]) moves, so
+ * the two neighbouring edges stretch to follow. Returns a NEW points array (does
+ * not mutate). A no-op (returns a copy of `points`) for an out-of-range index, a
+ * degenerate edge, or the non-existent closing edge of an OPEN loop.
+ */
+export function setEdgeBearing(
+  points: Pt[],
+  i: number,
+  deg: number,
+  closed: boolean,
+): Pt[] {
+  const n = points.length;
+  if (n < 2 || i < 0 || i >= n) return points.map((p) => ({ ...p }));
+  // The closing edge (last → first) only exists for a closed loop.
+  if (!closed && i === n - 1) return points.map((p) => ({ ...p }));
+  if (!Number.isFinite(deg)) return points.map((p) => ({ ...p }));
+  const a = points[i];
+  const b = points[(i + 1) % n];
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len < 1e-9) return points.map((p) => ({ ...p }));
+  const rad = (deg * Math.PI) / 180;
+  const nb = { x: a.x + Math.cos(rad) * len, y: a.y + Math.sin(rad) * len };
+  const i1 = (i + 1) % n;
+  return points.map((p, idx) => (idx === i1 ? nb : { ...p }));
+}
+
+/**
+ * Interior angle (deg, [0, 360)) at vertex i — the angle INSIDE the polygon
+ * between the incoming edge (i−1, reversed) and the outgoing edge (i). Computed
+ * from the unsigned angle between the two incident edge vectors, then flipped to
+ * the reflex side when the corner turns against the polygon's winding (so a
+ * re-entrant notch reads > 180). Returns 0 for a degenerate corner.
+ */
+export function interiorAngleDeg(points: Pt[], i: number): number {
+  const n = points.length;
+  if (n < 3 || i < 0 || i >= n) return 0;
+  const prev = points[(i - 1 + n) % n];
+  const cur = points[i];
+  const next = points[(i + 1) % n];
+  // Vectors from the corner to each neighbour.
+  const ux = prev.x - cur.x;
+  const uy = prev.y - cur.y;
+  const vx = next.x - cur.x;
+  const vy = next.y - cur.y;
+  const lu = Math.hypot(ux, uy);
+  const lv = Math.hypot(vx, vy);
+  if (lu < 1e-9 || lv < 1e-9) return 0;
+  // Unsigned angle between the two edge vectors, in [0, 180].
+  let cos = (ux * vx + uy * vy) / (lu * lv);
+  cos = Math.max(-1, Math.min(1, cos));
+  const between = (Math.acos(cos) * 180) / Math.PI;
+  // Decide which side (the ≤180 or the reflex >180) is the interior. The signed
+  // cross of (cur→next) about (cur→prev) tells us the turn direction at this
+  // corner; comparing it to the polygon's winding (shoelace sign) reveals a
+  // re-entrant (reflex) corner, whose interior angle is 360 − between.
+  const cross = ux * vy - uy * vx; // (cur→prev) × (cur→next)
+  const winding = Math.sign(polygonArea(points)) || 1;
+  // At a CONVEX corner the turn (cross sign) runs OPPOSITE to the polygon's
+  // winding sign, so the unsigned `between` is already the interior angle; when
+  // they MATCH the corner is re-entrant (reflex) and the interior is 360 −
+  // between. (Verified against the test square + trapezoid.)
+  if (Math.sign(cross) === winding) return 360 - between;
+  return between;
+}
+
 /** Force the segment prev→p to be axis-aligned, keeping the larger delta's axis. */
 export function snapOrtho(prev: Pt, p: Pt): Pt {
   const dx = Math.abs(p.x - prev.x);
