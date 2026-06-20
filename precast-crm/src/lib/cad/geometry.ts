@@ -265,6 +265,51 @@ export function setEdgeLength(
   });
 }
 
+/**
+ * Offset edge `i` (points[i] → points[(i+1)%n]) PARALLEL to itself by `offsetCm`
+ * along its OUTWARD normal (positive = outward). Moves BOTH endpoints by the same
+ * normal vector; the two adjacent edges stretch to follow. This is the CAD
+ * "grab a wall and slide it" move: the wall keeps its direction (stays parallel),
+ * it just shifts perpendicular to itself. Returns a NEW points array (same
+ * length); does NOT mutate. A degenerate edge (zero-length normal) is a no-op.
+ */
+export function moveEdgeParallel(
+  points: Pt[],
+  i: number,
+  offsetCm: number,
+  closed: boolean,
+): Pt[] {
+  const n = points.length;
+  if (n < 2 || i < 0 || i >= n) return points.map((p) => ({ ...p }));
+  // The closing edge only exists for a closed loop.
+  if (!closed && i === n - 1) return points.map((p) => ({ ...p }));
+  const nrm = edgeOutwardNormal(points, i);
+  const dx = nrm.x * offsetCm;
+  const dy = nrm.y * offsetCm;
+  const i1 = (i + 1) % n;
+  return points.map((p, idx) =>
+    idx === i || idx === i1 ? { x: p.x + dx, y: p.y + dy } : { ...p },
+  );
+}
+
+/**
+ * Signed offset (cm) of a free cursor delta projected onto edge `i`'s outward
+ * normal — the natural "how far did I drag the wall" scalar (positive = the wall
+ * moved outward). Feed this back into `moveEdgeParallel` to slide the edge.
+ */
+export function edgeDragOffset(
+  points: Pt[],
+  i: number,
+  deltaCm: Pt,
+  closed: boolean,
+): number {
+  const n = points.length;
+  if (n < 2 || i < 0 || i >= n) return 0;
+  if (!closed && i === n - 1) return 0;
+  const nrm = edgeOutwardNormal(points, i);
+  return deltaCm.x * nrm.x + deltaCm.y * nrm.y;
+}
+
 /** Force the segment prev→p to be axis-aligned, keeping the larger delta's axis. */
 export function snapOrtho(prev: Pt, p: Pt): Pt {
   const dx = Math.abs(p.x - prev.x);

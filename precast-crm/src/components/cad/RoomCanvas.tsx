@@ -17,6 +17,8 @@ import {
   nearestEdge,
   insertVertex,
   deleteVertex,
+  moveEdgeParallel,
+  edgeDragOffset,
   wouldSelfIntersect,
   wouldCollapseEdge,
   drawStepWouldCross,
@@ -117,6 +119,8 @@ const INIT_H = 680;
 const HIT_PX = 12;
 // Edge-insert pick radius, in px.
 const EDGE_HIT_PX = 8;
+// Width (px) of the transparent grab line along each wall body (select + slide).
+const EDGE_BODY_HIT_PX = 14;
 // ── Dimensioning (CAD dimension lines), all in screen px ──
 // How far OUTSIDE the shape the dimension line sits, from the edge.
 const DIM_OFFSET_PX = 26;
@@ -243,9 +247,21 @@ export function RoomCanvas({
   // Selected edge (index of points[i] → points[i+1]) + its draft length text.
   const [selEdge, setSelEdge] = useState<number | null>(null);
   const [lenInput, setLenInput] = useState("");
+  // True only when the selection came from the DIMENSION (click/double-click) — the
+  // inline length editor opens then. Selecting via the edge BODY (for a slide) sets
+  // this false, so the body-select highlights the wall without popping the editor.
+  const [lenEditing, setLenEditing] = useState(false);
   // Edge whose dimension the pointer is over — drives a visible hover affordance
   // (the dim line + label brighten) so click-to-type-length is discoverable.
   const [hoverEdge, setHoverEdge] = useState<number | null>(null);
+  // Edge whose BODY (the wall segment itself) the pointer is over — highlights the
+  // wall + shows a square midpoint handle so "grab a wall and slide it" is
+  // discoverable. Distinct from hoverEdge (which is the dimension line/label).
+  const [hoverEdgeBody, setHoverEdgeBody] = useState<number | null>(null);
+  // Edge currently being slid PARALLEL to itself (CAD wall-drag), or null.
+  const [edgeDragIdx, setEdgeDragIdx] = useState<number | null>(null);
+  // Live signed offset (cm) + new length of the wall being dragged, for the readout.
+  const [edgeDragInfo, setEdgeDragInfo] = useState<{ offset: number; lenCm: number } | null>(null);
 
   // ── View transform (zoom + pan) ──
   const [view, setView] = useState<View>(IDENTITY);
@@ -319,9 +335,19 @@ export function RoomCanvas({
   // pixels → cm at the current zoom, for converting hit radii into world tol.
   const pxToCm = (px: number) => px / (BASE_SCALE * view.zoom);
 
+  // Set when a mousedown lands on an edge-body grab line, so the subsequent
+  // bubbled click on the SVG is swallowed (it would otherwise clear the selection).
+  const edgeClickGuard = useRef(false);
+
   // ── Click / draw ──
   const handleCanvasClick = (e: React.MouseEvent) => {
     if (panning || spaceHeld || dragIdx !== null) return;
+    // A click that began on an edge-body grab line bubbles up to the SVG; swallow
+    // it here so selecting/sliding a wall doesn't immediately clear the selection.
+    if (edgeClickGuard.current) {
+      edgeClickGuard.current = false;
+      return;
+    }
     const raw = eventToCm(e);
 
     if (!closed) {
@@ -367,18 +393,12 @@ export function RoomCanvas({
       return;
     }
 
-    // Closed: clicking an edge body inserts a vertex there.
-    if (edgeInsert) {
-      const at = maybeSnap(edgeInsert.at);
-      const next = insertVertex(points, edgeInsert.index, at);
-      commit(next);
-      setSelVertex(edgeInsert.index + 1);
-      setEdgeInsert(null);
-      return;
-    }
-    // Click on empty area clears selection.
+    // Closed: edge-body interactions (select / slide / Alt-insert) are handled on
+    // the edge-body hit lines (which stopPropagation). A click reaching the canvas
+    // is therefore empty space → clear the current selection.
     setSelVertex(null);
     setSelEdge(null);
+    setEdgeInsert(null);
   };
 
   // ── Vertex drag ──
@@ -386,6 +406,38 @@ export function RoomCanvas({
   // (so a click that doesn't move a vertex leaves no spurious undo entry).
   const dragStart = useRef<{ points: Pt[]; closed: boolean } | null>(null);
   const dragMoved = useRef(false);
+
+  // Edge (parallel) drag: snapshot of the outline + the cursor (cm) at drag-start.
+  // History is pushed on the FIRST real move (mirrors the vertex-drag pattern).
+  const edgeDragStart = useRef<{ points: Pt[]; closed: boolean; cursor: Pt } | null>(null);
+  const edgeDragMoved = useRef(false);
+
+  // Grid step in cm the offset snaps to while edge-dragging (when Grid snap is on).
+  // mousedown on an edge body / its midpoint handle starts sliding that wall.
+  const handleEdgeDown = (i: number) => (e: React.MouseEvent) => {
+    if (e.button !== 0 || spaceHeld) return;
+    e.stopPropagation(); // never let an edge-body grab fall through to canvas pan
+    edgeClickGuard.current = true; // swallow the bubbled click on the SVG below
+    // Alt-click on the edge body INSERTS a vertex (plain click/drag = select/slide).
+    if (e.altKey) {
+      const at = maybeSnap(eventToCm(e));
+      const next = insertVertex(points, i, at);
+      if (next !== points) {
+        commit(next);
+        setSelVertex(i + 1);
+        setSelEdge(null);
+      }
+      setEdgeInsert(null);
+      return;
+    }
+    setEdgeDragIdx(i);
+    setSelEdge(i);
+    setSelVertex(null);
+    setLenEditing(false); // body-select highlights the wall; no length editor
+    setEdgeInsert(null);
+    edgeDragStart.current = { points, closed, cursor: eventToCm(e) };
+    edgeDragMoved.current = false;
+  };
 
   const handleVertexDown = (i: number) => (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -418,6 +470,31 @@ export function RoomCanvas({
 
     const cm = eventToCm(e);
     setCursor(cm);
+
+    // ── Parallel edge (wall) drag: slide the edge along its outward normal. ──
+    if (edgeDragIdx !== null && edgeDragStart.current) {
+      const base = edgeDragStart.current;
+      const i = edgeDragIdx;
+      const delta = { x: cm.x - base.cursor.x, y: cm.y - base.cursor.y };
+      let offset = edgeDragOffset(base.points, i, delta, base.closed);
+      // Snap the slide distance to the grid step so a dragged wall lands clean.
+      if (snapSettings.grid && step > 0) offset = Math.round(offset / step) * step;
+      const next = moveEdgeParallel(base.points, i, offset, base.closed);
+      // Reject a slide that collapses an edge or folds the outline over itself.
+      if (!isValidOutline(next, base.closed)) return;
+      // Live length readout for the dragged edge.
+      const a = next[i];
+      const b = next[(i + 1) % next.length];
+      setEdgeDragInfo({ offset, lenCm: Math.hypot(b.x - a.x, b.y - a.y) });
+      // No-op move (snapped offset 0) on the very first frame → don't churn history.
+      if (offset === 0 && !edgeDragMoved.current) return;
+      if (!edgeDragMoved.current) {
+        pushHistory(base.points, base.closed);
+        edgeDragMoved.current = true;
+      }
+      onChange(next); // live drag bypasses commit (history captured on first move)
+      return;
+    }
 
     if (dragIdx !== null) {
       // CAD snap engine for the drag: object snaps + alignment guides off the
@@ -470,7 +547,11 @@ export function RoomCanvas({
         }
       }
       setHoverVertex(hv);
-      setEdgeInsert(hv === null ? nearestEdge(points, cm, pxToCm(EDGE_HIT_PX), true) : null);
+      // Nearest edge body under the cursor: drives the wall-slide hover highlight
+      // + midpoint handle, and (only while Alt is held) the insert-vertex "+".
+      const ne = hv === null ? nearestEdge(points, cm, pxToCm(EDGE_HIT_PX), true) : null;
+      setHoverEdgeBody(ne ? ne.index : null);
+      setEdgeInsert(ne && e.altKey ? ne : null);
     } else if (points.length > 0) {
       // While drawing, preview the snap (marker + polar/alignment guides) for the
       // next point, anchored at the last placed vertex.
@@ -491,6 +572,10 @@ export function RoomCanvas({
 
   const endDrag = () => {
     setDragIdx(null);
+    setEdgeDragIdx(null);
+    setEdgeDragInfo(null);
+    edgeDragStart.current = null;
+    edgeDragMoved.current = false;
     setSnapResult(null);
     if (panRef.current) {
       panRef.current = null;
@@ -502,6 +587,7 @@ export function RoomCanvas({
     endDrag();
     setCursor(null);
     setHoverVertex(null);
+    setHoverEdgeBody(null);
     setEdgeInsert(null);
     setSnapResult(null);
     setHoverEdge(null);
@@ -804,6 +890,7 @@ export function RoomCanvas({
     setSelEdge(i);
     setSelVertex(null);
     setLenInput(String(edgeLenCm(i)));
+    setLenEditing(true); // dimension click → open the inline length editor
   };
 
   const applyLen = () => {
@@ -872,6 +959,67 @@ export function RoomCanvas({
   // Vertex/point screen positions (used for handles + close-band visuals).
   const pxPts = points.map(cmToPx);
   const pathPts = pxPts.map((p) => `${p.x},${p.y}`).join(" ");
+
+  // ── Edge-body interaction layer (closed only): a transparent thick hit line
+  // ALONG each actual wall segment. Click selects the edge; drag (or grab the
+  // square midpoint handle) slides the wall parallel to itself; Alt-click inserts
+  // a vertex. Hover highlights the wall (sky) + reveals the midpoint handle so the
+  // "grab a wall and slide it" affordance is discoverable. ──
+  const edgeBodyNodes: React.ReactNode[] = [];
+  if (closed && points.length >= 3 && dragIdx === null) {
+    for (let i = 0; i < points.length; i++) {
+      const pa = pxPts[i];
+      const pb = pxPts[(i + 1) % points.length];
+      const active = edgeDragIdx === i;
+      const hot = active || hoverEdgeBody === i || selEdge === i;
+      const mid = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 };
+      edgeBodyNodes.push(
+        <g key={`ebody${i}`}>
+          {/* Visible highlight of the wall when hovered / selected / dragging. */}
+          {hot && (
+            <line
+              x1={pa.x}
+              y1={pa.y}
+              x2={pb.x}
+              y2={pb.y}
+              stroke={active ? "#0369a1" : "#38bdf8"}
+              strokeWidth={active ? 3.5 : 3}
+              strokeLinecap="round"
+              style={{ pointerEvents: "none" }}
+            />
+          )}
+          {/* Transparent grab line along the wall: click=select, drag=slide. */}
+          <line
+            x1={pa.x}
+            y1={pa.y}
+            x2={pb.x}
+            y2={pb.y}
+            stroke="transparent"
+            strokeWidth={EDGE_BODY_HIT_PX}
+            style={{ cursor: edgeDragIdx !== null ? "grabbing" : "move" }}
+            onMouseDown={handleEdgeDown(i)}
+            onMouseEnter={() => setHoverEdgeBody(i)}
+            onMouseLeave={() => setHoverEdgeBody((h) => (h === i ? null : h))}
+          />
+          {/* Square midpoint handle — the explicit "slide this wall" grip. */}
+          {hot && (
+            <rect
+              x={mid.x - 4}
+              y={mid.y - 4}
+              width={8}
+              height={8}
+              rx={1}
+              fill={active ? "#0369a1" : "#fff"}
+              stroke={active ? "#0369a1" : "#0284c7"}
+              strokeWidth={1.5}
+              style={{ cursor: edgeDragIdx !== null ? "grabbing" : "move" }}
+              onMouseDown={handleEdgeDown(i)}
+            />
+          )}
+        </g>,
+      );
+    }
+  }
 
   // Rubber-band: preview the next ortho-snapped edge while drawing. Turns red
   // when the step is invalid (would self-cross), and the snap-to-close ring
@@ -1596,11 +1744,13 @@ export function RoomCanvas({
     ? "grabbing"
     : spaceHeld
       ? "grab"
-      : closed
-        ? edgeInsert
-          ? "copy"
-          : "default"
-        : "crosshair";
+      : edgeDragIdx !== null
+        ? "grabbing"
+        : closed
+          ? edgeInsert
+            ? "copy"
+            : "default"
+          : "crosshair";
 
   return (
     <div className={fill ? "flex h-full min-h-0 flex-col gap-2" : "space-y-2"}>
@@ -2069,6 +2219,10 @@ export function RoomCanvas({
           );
         })()}
 
+        {/* Edge-body interaction layer: wall-highlight + slide grab lines +
+            midpoint handles (click=select, drag=slide parallel, Alt-click=insert). */}
+        {edgeBodyNodes}
+
         {/* Edge-insert affordance. */}
         {insertMarker}
 
@@ -2104,8 +2258,8 @@ export function RoomCanvas({
       </svg>
       </div>
 
-      {/* Inline numeric length editor for the selected edge. */}
-      {closed && selEdge !== null && (
+      {/* Inline numeric length editor for the selected edge (dimension select only). */}
+      {closed && selEdge !== null && lenEditing && (
         <div className="flex items-center gap-2 text-sm">
           <span className="text-slate-600">Edge {selEdge + 1} length</span>
           <input
@@ -2145,17 +2299,24 @@ export function RoomCanvas({
             ? (ortho
                 ? "Loop closed. Drag a vertex — Ortho keeps walls square (neighbours follow). "
                 : "Loop closed. Drag vertices freely (Ortho off). ") +
-              "Double-click a dimension to type an exact length (e.g. 61 cm); click an edge body to insert a point; select a vertex then arrow-nudge or Delete it. F = fit, 0 = reset view. Export PNG saves the dimensioned drawing."
+              "Double-click a dimension to type an exact length (e.g. 61 cm); click a wall to select it and drag it (or its square handle) to slide it parallel; Alt-click a wall to insert a point; select a vertex then arrow-nudge or Delete it. F = fit, 0 = reset view. Export PNG saves the dimensioned drawing."
             : points.length === 0
               ? "Click to start drawing. Snaps: vertices, midpoints, edges, polar angles" +
                 (snapSettings.grid ? " + grid" : "") +
                 ". Wheel = zoom, middle / Alt-drag / Space-drag = pan, F = fit."
               : "Click to add points. Click the first vertex or Enter to close (the ring turns green when valid). Backspace steps back a point; Esc cancels. Crossing edges are rejected."}
         </p>
-        {cursor && (
-          <span className="ml-3 shrink-0 tabular-nums">
-            {Math.round(cursor.x)}, {Math.round(cursor.y)} cm
+        {edgeDragInfo ? (
+          <span className="ml-3 shrink-0 tabular-nums font-semibold text-sky-700">
+            wall {formatLengthDual(edgeDragInfo.lenCm)} · {edgeDragInfo.offset >= 0 ? "+" : ""}
+            {Math.round(edgeDragInfo.offset)} cm
           </span>
+        ) : (
+          cursor && (
+            <span className="ml-3 shrink-0 tabular-nums">
+              {Math.round(cursor.x)}, {Math.round(cursor.y)} cm
+            </span>
+          )
         )}
       </div>
     </div>
