@@ -374,16 +374,19 @@ export function RoomCanvas({
   };
 
   const handleMove = (e: React.MouseEvent) => {
-    // Pan takes priority.
-    if (panRef.current) {
+    // Pan takes priority. Capture the pan anchor into a LOCAL before setView so
+    // the functional updater never dereferences panRef.current — React may replay
+    // the update after the pan ended (endDrag nulls the ref), which would throw.
+    const pan = panRef.current;
+    if (pan) {
       const svg = svgRef.current!;
       const rect = svg.getBoundingClientRect();
       const sx = ((e.clientX - rect.left) / rect.width) * SVG_W;
       const sy = ((e.clientY - rect.top) / rect.height) * SVG_H;
       setView((v) => ({
         ...v,
-        tx: panRef.current!.tx + (sx - panRef.current!.sx),
-        ty: panRef.current!.ty + (sy - panRef.current!.sy),
+        tx: pan.tx + (sx - pan.sx),
+        ty: pan.ty + (sy - pan.sy),
       }));
       return;
     }
