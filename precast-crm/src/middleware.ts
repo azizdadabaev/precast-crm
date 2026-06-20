@@ -15,7 +15,6 @@ const PUBLIC_PATHS = [
   "/terms",
   "/data-deletion",
   "/internal/quote-card", // agent's headless quote-card render target — gated by an in-process token, not the session
-  "/print", // headless CAD-sheet PDF render target (/print/sheet) — gated by SHEET_PRINT_TOKEN, not the session
   "/_next",
   "/favicon.ico",
   "/opus", // static opus-recorder encoder worker (voice recording)
