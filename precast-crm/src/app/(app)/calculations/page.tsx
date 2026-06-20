@@ -16,9 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { AiAssistBox } from "@/components/calculation/AiAssistBox";
 import { aiRoomsToSlabRows } from "@/components/calculation/ai-rooms";
-import { baysToSlabRows } from "@/components/calculation/draw-rooms";
 import { DrawRoomDialog } from "@/components/calculation/DrawRoomDialog";
-import type { Bay } from "@/lib/cad/geometry";
 import type { ExtractedRoom } from "@/lib/agent/llm/provider";
 import { ClientInfoBar } from "@/components/calculation/ClientInfoBar";
 import { DrawingDock } from "@/components/calculation/DrawingDock";
@@ -580,11 +578,11 @@ function CalculationsInner() {
     setError(null);
   }
 
-  // Draw room → decompose into bays → append as real rooms. Mirrors
-  // handleAiRooms: recomputeRow already ran in baysToSlabRows; the
-  // live-pricing effect re-bills on the next /api/pricing payload.
-  function handleDrawnRooms(bays: Bay[]) {
-    const next = baysToSlabRows(bays, rows.length);
+  // Draw room → append as real rooms. The dialog already mapped the drawn
+  // outline to priced SlabRows (exact bays for a rectilinear room, or tapered
+  // estimate rows for an angled one); the live-pricing effect re-bills on the
+  // next /api/pricing payload, matching handleAiRooms.
+  function handleDrawnRooms(next: SlabRow[]) {
     setRows([...rows, ...next]);
     setError(null);
   }
@@ -1027,6 +1025,7 @@ function CalculationsInner() {
       <DrawRoomDialog
         open={drawRoomOpen}
         onClose={() => setDrawRoomOpen(false)}
+        startSeq={rows.length}
         onAddRooms={handleDrawnRooms}
       />
 
