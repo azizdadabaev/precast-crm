@@ -13,7 +13,22 @@ export function SheetSvg({ widthMm, heightMm, primitives }: { widthMm: number; h
           return <rect key={i} x={p.xMm} y={p.yMm} width={p.wMm} height={p.hMm} fill={fill} fillOpacity={fillOpacity} stroke={stroke} strokeWidth={p.role === "outline" ? 0.35 : p.role === "bom" ? 0.15 : 0.12} />;
         }
         if (p.type === "line") return <line key={i} x1={p.x1Mm} y1={p.y1Mm} x2={p.x2Mm} y2={p.y2Mm} stroke="#475569" strokeWidth={0.18} />;
-        return <text key={i} x={p.xMm} y={p.yMm} fontSize={p.sizeMm} fontFamily="Helvetica, Arial, sans-serif" fontWeight={p.role === "name" ? 700 : 500} fill="#0f172a" textAnchor={anchor(p.align)} dominantBaseline="middle">{p.text}</text>;
+        return (
+          <text
+            key={i}
+            x={p.xMm}
+            y={p.yMm}
+            fontSize={p.sizeMm}
+            fontFamily="Helvetica, Arial, sans-serif"
+            fontWeight={p.role === "name" ? 700 : 500}
+            fill={p.role === "beamnum" ? "#ffffff" : "#0f172a"}
+            textAnchor={anchor(p.align)}
+            dominantBaseline="middle"
+            transform={p.angleDeg ? `rotate(${p.angleDeg} ${p.xMm} ${p.yMm})` : undefined}
+          >
+            {p.text}
+          </text>
+        );
       })}
     </svg>
   );

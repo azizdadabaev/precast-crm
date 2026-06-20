@@ -7,8 +7,8 @@ export interface RoomInput { name: string; calc: SlabResult; beamDir?: BeamDir; 
 
 export type PlanPrimitive =
   | { type: "rect"; role: "outline" | "beam" | "bearing" | "block" | "bom"; xMm: number; yMm: number; wMm: number; hMm: number }
-  | { type: "line"; role: "dim" | "witness" | "bom"; x1Mm: number; y1Mm: number; x2Mm: number; y2Mm: number }
-  | { type: "text"; role: "dim" | "stamp" | "name" | "bom"; xMm: number; yMm: number; text: string; sizeMm: number; align: "L" | "C" | "R" };
+  | { type: "line"; role: "dim" | "witness" | "bom" | "pitch"; x1Mm: number; y1Mm: number; x2Mm: number; y2Mm: number }
+  | { type: "text"; role: "dim" | "stamp" | "name" | "bom" | "beamnum" | "pitch"; xMm: number; yMm: number; text: string; sizeMm: number; align: "L" | "C" | "R"; angleDeg?: number };
 
 export interface RoomPlan { primitives: PlanPrimitive[]; scale: ArchScale; widthMm: number; heightMm: number; }
 
@@ -38,8 +38,75 @@ export function buildRoomPlan(room: RoomInput, opts: SheetOptions, region?: Shee
 
   const primitives: PlanPrimitive[] = [];
   primitives.push({ type: "rect", role: "outline", xMm: X(0), yMm: Y(0), wMm: S(iwCm), hMm: S(ilCm) });
-  for (const b of layout.beams) primitives.push({ type: "rect", role: "beam", xMm: X(b.x), yMm: Y(b.y), wMm: S(b.w), hMm: S(b.h) });
+  // Beam rects in paper space (mm); keep them so the labels + pitch chain derive
+  // their geometry from the SAME rects the renderer draws (single source).
+  const beamRects = layout.beams.map((b) => ({ xMm: X(b.x), yMm: Y(b.y), wMm: S(b.w), hMm: S(b.h) }));
+  for (const r of beamRects) primitives.push({ type: "rect", role: "beam", xMm: r.xMm, yMm: r.yMm, wMm: r.wMm, hMm: r.hMm });
   for (const b of layout.bearings) primitives.push({ type: "rect", role: "bearing", xMm: X(b.x), yMm: Y(b.y), wMm: S(b.w), hMm: S(b.h) });
+
+  // Beam numbers B1..Bn, centred on each beam rect. For "V" beams the strip is
+  // tall+narrow, so rotate the label −90° to run along it.
+  const isV = beamDir === "V";
+  const beamNumSize = 2.0 * opts.fontScale;
+  const MIN_LABEL_MM = 1.5; // skip a label if the strip's short side is mush
+  beamRects.forEach((r, i) => {
+    const shortMm = Math.min(r.wMm, r.hMm);
+    if (shortMm < MIN_LABEL_MM) return;
+    primitives.push({
+      type: "text", role: "beamnum",
+      xMm: r.xMm + r.wMm / 2, yMm: r.yMm + r.hMm / 2,
+      text: `B${i + 1}`, sizeMm: beamNumSize, align: "C",
+      ...(isV ? { angleDeg: -90 } : {}),
+    });
+  });
+
+  // Pitch chain: prove the 58 cm module along the SPACING axis (perpendicular to
+  // the beams), just outside the outline. Centres come from the beam rects.
+  if (beamRects.length >= 1) {
+    const pitchSize = 2.2 * opts.fontScale;
+    const tickMm = 2.5; // tick half-length off the chain line
+    if (!isV) {
+      // "H" beams: spaced along y → vertical chain to the left of the plan.
+      const centresY = beamRects.map((r) => r.yMm + r.hMm / 2).sort((a, b) => a - b);
+      // Park the chain just left of the outline; if that overflows the page, put
+      // it just inside the left wall instead.
+      const outLeft = X(0);
+      let chainX = outLeft - 6;
+      if (chainX - tickMm < 0) chainX = outLeft + 6;
+      for (const cy of centresY) {
+        primitives.push({ type: "line", role: "pitch", x1Mm: chainX - tickMm, y1Mm: cy, x2Mm: chainX + tickMm, y2Mm: cy });
+      }
+      for (let i = 0; i + 1 < centresY.length; i++) {
+        const spacing = centresY[i + 1] - centresY[i];
+        const midY = (centresY[i] + centresY[i + 1]) / 2;
+        primitives.push({
+          type: "text", role: "pitch",
+          xMm: chainX, yMm: midY,
+          text: `${Math.round(spacing / scale.mmPerCm * 10)}`,
+          sizeMm: pitchSize, align: "C", angleDeg: -90,
+        });
+      }
+    } else {
+      // "V" beams: spaced along x → horizontal chain below the plan.
+      const centresX = beamRects.map((r) => r.xMm + r.wMm / 2).sort((a, b) => a - b);
+      const outBottom = Y(ilCm);
+      let chainY = outBottom + 6;
+      if (chainY + tickMm > opts.page.hMm) chainY = outBottom - 6;
+      for (const cx of centresX) {
+        primitives.push({ type: "line", role: "pitch", x1Mm: cx, y1Mm: chainY - tickMm, x2Mm: cx, y2Mm: chainY + tickMm });
+      }
+      for (let i = 0; i + 1 < centresX.length; i++) {
+        const spacing = centresX[i + 1] - centresX[i];
+        const midX = (centresX[i] + centresX[i + 1]) / 2;
+        primitives.push({
+          type: "text", role: "pitch",
+          xMm: midX, yMm: chainY,
+          text: `${Math.round(spacing / scale.mmPerCm * 10)}`,
+          sizeMm: pitchSize, align: "C",
+        });
+      }
+    }
+  }
   const dimSize = 2.6 * opts.fontScale;
   primitives.push({ type: "text", role: "dim", xMm: X(iwCm / 2), yMm: Y(0) - 2, text: `${iwCm * 10}`, sizeMm: dimSize, align: "C" });
   primitives.push({ type: "text", role: "dim", xMm: X(0) - 2, yMm: Y(ilCm / 2), text: `${ilCm * 10}`, sizeMm: dimSize, align: "R" });
