@@ -4,6 +4,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { Button } from "@/components/ui/button";
 import {
+  Undo2,
+  Redo2,
+  Maximize2,
+  Crosshair,
+  Eraser,
+  Trash2,
+  CornerUpLeft,
+  PenLine,
+  Square as SquareIcon,
+  Ruler,
+  RotateCcw,
+  RotateCw,
+  FlipHorizontal2,
+  FlipVertical2,
+  ImageDown,
+  FileDown,
+} from "lucide-react";
+import {
   type Pt,
   type Rect,
   type BeamArrow,
@@ -194,6 +212,65 @@ const IDENTITY: View = { zoom: 1, tx: 0, ty: 0 };
  * deleted. The view supports mouse-wheel zoom and middle/space drag pan, and a
  * local undo/redo history of all outline edits.
  */
+
+// ── Toolbar presentation primitives (the "drafting console" chrome). Pure
+// presentational; all behaviour stays in RoomCanvas. ──
+const TB_SEP = "mx-1 h-6 w-px shrink-0 bg-slate-200/70";
+
+function TbIcon({
+  onClick,
+  disabled,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-35"
+    >
+      {children}
+    </button>
+  );
+}
+
+function TbChip({
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-pressed={active}
+      className={
+        "rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-none transition-colors " +
+        (active
+          ? "bg-sky-600 text-white shadow-sm"
+          : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 hover:text-slate-700")
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
 export function RoomCanvas({
   points,
   onChange,
@@ -1324,16 +1401,16 @@ export function RoomCanvas({
   const gridNodes = (
     <g style={{ pointerEvents: "none" }}>
       {vg.minor.map((l, i) => (
-        <line key={`gn${i}`} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#eef2f7" strokeWidth={1} />
+        <line key={`gn${i}`} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#e9eff6" strokeWidth={1} />
       ))}
       {vg.major.map((l, i) => (
-        <line key={`gm${i}`} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#dbe2ea" strokeWidth={1.25} />
+        <line key={`gm${i}`} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="#d4e0ec" strokeWidth={1.25} />
       ))}
       {vg.axisX !== null && (
-        <line x1={vg.axisX} y1={0} x2={vg.axisX} y2={SVG_H} stroke="#c2ccd6" strokeWidth={1.5} />
+        <line x1={vg.axisX} y1={0} x2={vg.axisX} y2={SVG_H} stroke="#a9bccd" strokeWidth={1.5} />
       )}
       {vg.axisY !== null && (
-        <line x1={0} y1={vg.axisY} x2={SVG_W} y2={vg.axisY} stroke="#c2ccd6" strokeWidth={1.5} />
+        <line x1={0} y1={vg.axisY} x2={SVG_W} y2={vg.axisY} stroke="#a9bccd" strokeWidth={1.5} />
       )}
     </g>
   );
@@ -2424,30 +2501,30 @@ export function RoomCanvas({
 
   return (
     <div className={fill ? "flex h-full min-h-0 flex-col gap-2" : "space-y-2"}>
-      <div className="flex flex-wrap items-center gap-2">
-        {/* Tool-mode selector: Draw (freeform) · Rectangle (drag a box) · Measure
-            (display-only tape). The active mode is highlighted. */}
-        <div className="inline-flex overflow-hidden rounded-md border border-slate-300" role="group" aria-label="Drawing tool">
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5 rounded-xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50 px-2.5 py-2 shadow-sm">
+        {/* Tool-mode selector: Draw · Rectangle · Measure. Active mode highlighted. */}
+        <div className="inline-flex overflow-hidden rounded-lg border border-slate-300/80 shadow-inner" role="group" aria-label="Drawing tool">
           {(
             [
-              ["draw", "Draw"],
-              ["rect", "Rectangle"],
-              ["measure", "Measure"],
-            ] as [Tool, string][]
-          ).map(([key, label], i) => (
+              ["draw", "Draw", PenLine],
+              ["rect", "Rect", SquareIcon],
+              ["measure", "Measure", Ruler],
+            ] as [Tool, string, typeof PenLine][]
+          ).map(([key, label, Icon], i) => (
             <button
               key={key}
               type="button"
               onClick={() => switchTool(key)}
               aria-pressed={tool === key}
               className={
-                "px-2.5 py-1 text-xs font-medium " +
-                (i > 0 ? "border-l border-slate-300 " : "") +
+                "inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium transition-colors " +
+                (i > 0 ? "border-l border-slate-300/70 " : "") +
                 (tool === key
                   ? "bg-sky-600 text-white"
                   : "bg-white text-slate-600 hover:bg-slate-50")
               }
             >
+              <Icon className="h-3.5 w-3.5" strokeWidth={2} />
               {label}
             </button>
           ))}
@@ -2455,67 +2532,79 @@ export function RoomCanvas({
 
         {/* Clear the tape measurement (Measure mode only). */}
         {tool === "measure" && (
-          <Button
+          <button
             type="button"
-            variant="outline"
-            size="sm"
             onClick={() => {
               setMeasurePts([]);
               setMeasureDone(false);
             }}
             disabled={measurePts.length === 0}
+            className="rounded-md px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-200 transition-colors hover:bg-amber-50 disabled:opacity-40"
           >
-            Clear measure
-          </Button>
+            Clear tape
+          </button>
         )}
 
-        <span className="mx-1 h-5 w-px bg-slate-200" />
+        <span className={TB_SEP} aria-hidden />
 
-        <Button type="button" variant="outline" size="sm" onClick={undo} disabled={!canUndo}>
-          Undo
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={redo} disabled={!canRedo}>
-          Redo
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={close} disabled={!closeOk}>
-          Close loop
-        </Button>
-        {!closed && points.length > 0 ? (
-          <Button type="button" variant="outline" size="sm" onClick={undoLastPoint}>
-            Step back
-          </Button>
-        ) : (
-          <Button
+        {/* Edit actions */}
+        <div className="flex items-center gap-0.5">
+          <TbIcon onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+            <Undo2 className="h-4 w-4" />
+          </TbIcon>
+          <TbIcon onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
+            <Redo2 className="h-4 w-4" />
+          </TbIcon>
+          {!closed && points.length > 0 ? (
+            <TbIcon onClick={undoLastPoint} title="Step back one point (Backspace)">
+              <CornerUpLeft className="h-4 w-4" />
+            </TbIcon>
+          ) : (
+            <TbIcon onClick={deleteSelected} disabled={selVertex === null} title="Delete selected vertex (Del)">
+              <Trash2 className="h-4 w-4" />
+            </TbIcon>
+          )}
+          <TbIcon onClick={clear} disabled={!points.length} title="Clear drawing">
+            <Eraser className="h-4 w-4" />
+          </TbIcon>
+        </div>
+        {closeOk && (
+          <button
             type="button"
-            variant="outline"
-            size="sm"
-            onClick={deleteSelected}
-            disabled={selVertex === null}
+            onClick={close}
+            title="Close the loop (Enter)"
+            className="inline-flex items-center rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
           >
-            Delete vertex
-          </Button>
+            Close loop
+          </button>
         )}
-        <Button type="button" variant="outline" size="sm" onClick={clear} disabled={!points.length}>
-          Clear
-        </Button>
 
-        <span className="mx-1 h-5 w-px bg-slate-200" />
+        <span className={TB_SEP} aria-hidden />
 
-        <Button type="button" variant="outline" size="sm" onClick={fitToShape} disabled={points.length < 2}>
-          Fit
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={resetView} disabled={view.zoom === 1 && view.tx === 0 && view.ty === 0}>
-          Reset view
-        </Button>
-        <span className="text-xs tabular-nums text-slate-500">{Math.round(view.zoom * 100)}%</span>
+        {/* View */}
+        <div className="flex items-center gap-0.5">
+          <TbIcon onClick={fitToShape} disabled={points.length < 2} title="Fit drawing to view (F)">
+            <Maximize2 className="h-4 w-4" />
+          </TbIcon>
+          <TbIcon
+            onClick={resetView}
+            disabled={view.zoom === 1 && view.tx === 0 && view.ty === 0}
+            title="Reset view (0)"
+          >
+            <Crosshair className="h-4 w-4" />
+          </TbIcon>
+          <span className="ml-0.5 min-w-[2.75rem] text-center font-mono text-[11px] tabular-nums text-slate-500">
+            {Math.round(view.zoom * 100)}%
+          </span>
+        </div>
 
-        <span className="mx-1 h-5 w-px bg-slate-200" />
+        <span className={TB_SEP} aria-hidden />
 
         {/* Grid-size selector — drives both the visible grid and the snap step. */}
-        <label className="flex items-center gap-1 text-xs text-slate-600">
-          Grid
+        <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
+          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">Grid</span>
           <select
-            className="rounded border bg-white px-1.5 py-1 text-xs"
+            className="rounded-md border border-slate-200 bg-white px-1.5 py-1 font-mono text-[11px] text-slate-600 outline-none focus:ring-2 focus:ring-sky-300"
             value={grid}
             onChange={(e) => setGrid(Number(e.target.value))}
           >
@@ -2527,13 +2616,13 @@ export function RoomCanvas({
           </select>
         </label>
 
-        {/* SNAP toolbar: per-type object-snap toggles + polar-step selector. The
-            engine resolves the best snap by priority; each toggle gates one type. */}
-        <span
-          className="flex items-center gap-1.5 rounded border bg-slate-50 px-1.5 py-1 text-xs text-slate-600"
+        {/* SNAP group: per-type object-snap pills + polar-step selector. The engine
+            resolves the best snap by priority; each pill gates one type. */}
+        <div
+          className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1"
           title="Object snaps: End=vertex, Mid=edge midpoint, Edge=on a wall, Perp=perpendicular foot, Align=share a vertex's x/y, Polar=angle tracking, Grid=snap to grid."
         >
-          <span className="font-semibold text-slate-500">Snap</span>
+          <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">Snap</span>
           {(
             [
               ["endpoint", "End"],
@@ -2545,18 +2634,18 @@ export function RoomCanvas({
               ["grid", "Grid"],
             ] as [keyof SnapSettings, string][]
           ).map(([key, label]) => (
-            <label key={key} className="flex items-center gap-0.5" title={label}>
-              <input
-                type="checkbox"
-                checked={Boolean(snapSettings[key])}
-                onChange={(e) => toggleSnap(key)(e.target.checked)}
-              />
+            <TbChip
+              key={key}
+              active={Boolean(snapSettings[key])}
+              onClick={() => toggleSnap(key)(!snapSettings[key])}
+              title={label}
+            >
               {label}
-            </label>
+            </TbChip>
           ))}
           {/* Polar tracking increment. */}
           <select
-            className="ml-0.5 rounded border bg-white px-1 py-0.5 text-xs disabled:opacity-50"
+            className="ml-0.5 rounded-md border border-slate-200 bg-white px-1 py-0.5 font-mono text-[11px] text-slate-600 disabled:opacity-50"
             value={snapSettings.polarStepDeg}
             disabled={!snapSettings.polar}
             onChange={(e) =>
@@ -2570,53 +2659,42 @@ export function RoomCanvas({
               </option>
             ))}
           </select>
-        </span>
+        </div>
 
-        {/* Ortho (rectilinear-preserving) move toggle. */}
-        <label className="flex items-center gap-1 text-xs text-slate-600" title="Keep walls square: a moved vertex carries its neighbours so edges stay horizontal/vertical.">
-          <input type="checkbox" checked={ortho} onChange={(e) => setOrtho(e.target.checked)} />
+        {/* Ortho + angle-dimension toggles as pills. */}
+        <TbChip
+          active={ortho}
+          onClick={() => setOrtho(!ortho)}
+          title="Ortho: keep walls square — a moved vertex carries its neighbours so edges stay horizontal/vertical."
+        >
           Ortho
-        </label>
+        </TbChip>
+        <TbChip
+          active={showAngles}
+          onClick={() => setShowAngles(!showAngles)}
+          title="Angles: show the interior angle (degrees) at each corner."
+        >
+          ∠ Angles
+        </TbChip>
 
-        {/* Interior-angle dimension arcs toggle (off-square corners). */}
-        <label className="flex items-center gap-1 text-xs text-slate-600" title="Show interior angle (degrees) at each corner — tapered/angled walls read their exact angle.">
-          <input type="checkbox" checked={showAngles} onChange={(e) => setShowAngles(e.target.checked)} />
-          Angles
-        </label>
+        <span className={TB_SEP} aria-hidden />
 
-        <span className="mx-1 h-5 w-px bg-slate-200" />
-
-        {/* TRANSFORM group: rotate / mirror the WHOLE room about its bbox centre
-            (so it stays in place on screen). Drag inside the room to MOVE it.
-            Enabled only on a finished loop. */}
-        <span
-          className="flex items-center gap-1 rounded border bg-slate-50 px-1.5 py-1 text-xs text-slate-600"
+        {/* TRANSFORM group: rotate / mirror the WHOLE room about its bbox centre;
+            drag inside the room to MOVE it. Enabled only on a finished loop. */}
+        <div
+          className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1"
           title="Transform the whole room. Rotate/Mirror pivot on the bounding-box centre; drag inside the room to move it."
         >
-          <span className="font-semibold text-slate-500">Transform</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => rotateRoom(-90)}
-            disabled={!canTransform}
-            title="Rotate 90° counter-clockwise"
-          >
-            ⟲ 90°
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => rotateRoom(90)}
-            disabled={!canTransform}
-            title="Rotate 90° clockwise"
-          >
-            ⟳ 90°
-          </Button>
+          <span className="mr-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">Move</span>
+          <TbIcon onClick={() => rotateRoom(-90)} disabled={!canTransform} title="Rotate 90° counter-clockwise">
+            <RotateCcw className="h-4 w-4" />
+          </TbIcon>
+          <TbIcon onClick={() => rotateRoom(90)} disabled={!canTransform} title="Rotate 90° clockwise">
+            <RotateCw className="h-4 w-4" />
+          </TbIcon>
           <input
             type="number"
-            className="w-14 rounded border bg-white px-1 py-0.5 text-xs disabled:opacity-50"
+            className="w-12 rounded-md border border-slate-200 bg-white px-1 py-0.5 font-mono text-[11px] text-slate-600 disabled:opacity-50"
             placeholder="deg"
             value={rotInput}
             disabled={!canTransform}
@@ -2630,49 +2708,35 @@ export function RoomCanvas({
             }}
             title="Rotate by a typed angle (clockwise-positive) about the bbox centre"
           />
-          <Button
+          <button
             type="button"
-            variant="outline"
-            size="sm"
             onClick={applyRotInput}
             disabled={!canTransform || rotInput.trim() === ""}
             title="Apply the typed rotation"
+            className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-inset ring-slate-200 transition-colors hover:bg-white disabled:opacity-40"
           >
             Apply
-          </Button>
-          <span className="mx-0.5 h-4 w-px bg-slate-200" />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={mirrorRoomX}
-            disabled={!canTransform}
-            title="Mirror the room horizontally (about the bbox centre)"
-          >
-            Mirror ↔
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={mirrorRoomY}
-            disabled={!canTransform}
-            title="Mirror the room vertically (about the bbox centre)"
-          >
-            Mirror ↕
-          </Button>
-        </span>
+          </button>
+          <span className="mx-0.5 h-4 w-px bg-slate-200" aria-hidden />
+          <TbIcon onClick={mirrorRoomX} disabled={!canTransform} title="Mirror horizontally (about the bbox centre)">
+            <FlipHorizontal2 className="h-4 w-4" />
+          </TbIcon>
+          <TbIcon onClick={mirrorRoomY} disabled={!canTransform} title="Mirror vertically (about the bbox centre)">
+            <FlipVertical2 className="h-4 w-4" />
+          </TbIcon>
+        </div>
 
-        <span className="mx-1 h-5 w-px bg-slate-200" />
+        <span className={TB_SEP} aria-hidden />
 
-        {/* Export the dimensioned drawing as a PNG (CAD-style sheet). */}
-        <Button type="button" variant="outline" size="sm" onClick={exportPng} disabled={points.length < 2}>
-          Export PNG
-        </Button>
-        {/* Export the same drawing as a vector SVG (lossless, editable). */}
-        <Button type="button" variant="outline" size="sm" onClick={exportSvg} disabled={points.length < 2}>
-          Export SVG
-        </Button>
+        {/* Export */}
+        <div className="flex items-center gap-0.5">
+          <TbIcon onClick={exportPng} disabled={points.length < 2} title="Export PNG (raster)">
+            <ImageDown className="h-4 w-4" />
+          </TbIcon>
+          <TbIcon onClick={exportSvg} disabled={points.length < 2} title="Export SVG (vector, editable)">
+            <FileDown className="h-4 w-4" />
+          </TbIcon>
+        </div>
       </div>
 
       <div ref={wrapRef} className={fill ? "relative min-h-0 w-full flex-1" : "relative"}>
@@ -2682,10 +2746,16 @@ export function RoomCanvas({
         preserveAspectRatio="xMidYMid meet"
         tabIndex={0}
         className={
-          "rounded border bg-white outline-none focus:ring-2 focus:ring-sky-300 " +
+          "rounded-xl bg-[#fbfcfe] shadow-sm ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-sky-400/70 " +
           (fill ? "absolute inset-0 h-full w-full" : (svgClassName ?? "w-full max-w-[680px]"))
         }
-        style={{ touchAction: "none", cursor: cursorStyle }}
+        style={{
+          touchAction: "none",
+          cursor: cursorStyle,
+          // Monospaced technical type across the whole canvas — every dimension,
+          // angle, beam tag and readout reads as engineering drafting.
+          fontFamily: "ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace",
+        }}
         onClick={handleCanvasClick}
         onDoubleClick={() => {
           // Double-click finishes the tape-measure chain (freezes the rubber-band).
@@ -3216,7 +3286,7 @@ export function RoomCanvas({
         </div>
       )}
 
-      <div className="flex items-center justify-between text-xs text-slate-500">
+      <div className="flex items-center justify-between gap-3 text-[11px] leading-relaxed text-slate-500">
         <p>
           {tool === "rect"
             ? "Rectangle: press and drag to draw an axis-aligned room box; release to place it (replaces the current room). Corners snap to the grid/vertices. Returns to Draw after."
@@ -3234,19 +3304,19 @@ export function RoomCanvas({
               : "Click to add points. Click the first vertex or Enter to close (the ring turns green when valid). Backspace steps back a point; Esc cancels. Crossing edges are rejected."}
         </p>
         {shapeDragInfo ? (
-          <span className="ml-3 shrink-0 tabular-nums font-semibold text-sky-700">
+          <span className="shrink-0 rounded-md bg-sky-50 px-2 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-sky-700 ring-1 ring-inset ring-sky-100">
             move {shapeDragInfo.dx >= 0 ? "+" : ""}
             {Math.round(shapeDragInfo.dx)}, {shapeDragInfo.dy >= 0 ? "+" : ""}
             {Math.round(shapeDragInfo.dy)} cm
           </span>
         ) : edgeDragInfo ? (
-          <span className="ml-3 shrink-0 tabular-nums font-semibold text-sky-700">
+          <span className="shrink-0 rounded-md bg-sky-50 px-2 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-sky-700 ring-1 ring-inset ring-sky-100">
             wall {formatLengthDual(edgeDragInfo.lenCm)} · {edgeDragInfo.offset >= 0 ? "+" : ""}
             {Math.round(edgeDragInfo.offset)} cm
           </span>
         ) : (
           cursor && (
-            <span className="ml-3 shrink-0 tabular-nums">
+            <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] tabular-nums text-slate-500">
               {Math.round(cursor.x)}, {Math.round(cursor.y)} cm
             </span>
           )
