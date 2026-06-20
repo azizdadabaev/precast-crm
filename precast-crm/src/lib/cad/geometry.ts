@@ -426,6 +426,24 @@ export function snapOrtho(prev: Pt, p: Pt): Pt {
 }
 
 /**
+ * Axis-aligned rectangle from two OPPOSITE corners `a` and `b`, returned as 4
+ * CM points in closed-loop order: A, (B.x, A.y), B, (A.x, B.y). The corners may
+ * be given in any order / direction (a negative span normalizes to the same
+ * rectangle, since each output corner is taken from a's or b's own coordinate).
+ * Returns [] when the rectangle is degenerate — |w| < minCm or |h| < minCm
+ * (default 1 cm) — so the rect tool ignores a near-zero drag.
+ */
+export function rectFromCorners(a: Pt, b: Pt, minCm = MIN_EDGE_CM): Pt[] {
+  if (Math.abs(b.x - a.x) < minCm || Math.abs(b.y - a.y) < minCm) return [];
+  return [
+    { x: a.x, y: a.y },
+    { x: b.x, y: a.y },
+    { x: b.x, y: b.y },
+    { x: a.x, y: b.y },
+  ];
+}
+
+/**
  * One edge's resolved dimension rendering, in the abstract (unit-agnostic) terms
  * the renderer turns into px. Computed purely from the on-screen edge length so
  * it is testable without a DOM:

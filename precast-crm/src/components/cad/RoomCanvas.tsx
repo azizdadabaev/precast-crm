@@ -30,6 +30,7 @@ import {
   edgeOutwardNormal,
   edgeBearingDeg,
   setEdgeBearing,
+  rectFromCorners,
   pointFromPolar,
   interiorAngleDeg,
   dimStyleForEdge,
@@ -171,6 +172,11 @@ interface View {
   ty: number;
 }
 
+// ── Drawing tool mode. "draw" is the original freeform/edit behaviour; "rect"
+// click-drags an axis-aligned room box; "measure" is a display-only tape that
+// never touches the room outline. ──
+type Tool = "draw" | "rect" | "measure";
+
 const IDENTITY: View = { zoom: 1, tx: 0, ty: 0 };
 
 /**
@@ -214,8 +220,22 @@ export function RoomCanvas({
   }, [fill]);
   const SVG_W = fill ? measured.w : INIT_W;
   const SVG_H = fill ? measured.h : INIT_H;
+  // Active tool: freeform draw/edit (default), rectangle-room, or tape measure.
+  const [tool, setTool] = useState<Tool>("draw");
   // `closed` distinguishes draw-in-progress (open polyline) from a finished loop.
   const [closed, setClosed] = useState(false);
+
+  // ── Rectangle tool: press-drag corner A → release corner B. `rectStart` holds
+  // the snapped first corner (cm) during the drag; `rectEnd` the live snapped
+  // second corner (for the dashed preview + W×H readout). Null when idle. ──
+  const [rectStart, setRectStart] = useState<Pt | null>(null);
+  const [rectEnd, setRectEnd] = useState<Pt | null>(null);
+
+  // ── Tape measure: a display-only chain of snapped points (cm). NEVER mutates
+  // `points`. `measureDone` freezes the rubber-band after a double-click/Enter
+  // finish, keeping the chain visible until cleared. ──
+  const [measurePts, setMeasurePts] = useState<Pt[]>([]);
+  const [measureDone, setMeasureDone] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   // Selected vertex (for keyboard nudge / delete). Distinct from drag.
   const [selVertex, setSelVertex] = useState<number | null>(null);
@@ -318,6 +338,30 @@ export function RoomCanvas({
   // Grid-snap a point when the Grid snap toggle is on (used for edge-insert).
   const maybeSnap = (p: Pt): Pt => (snapSettings.grid ? snapToGrid(p, step) : p);
 
+  // Switch the active tool. Non-destructive (keeps `points`), but always cancels
+  // any in-flight rect drag and clears the tape measurement so a stale chain
+  // never lingers under a different tool.
+  const switchTool = (next: Tool) => {
+    setTool(next);
+    setRectStart(null);
+    setRectEnd(null);
+    setMeasurePts([]);
+    setMeasureDone(false);
+  };
+
+  // Snap a free cm point through the full CAD snap engine (object/grid/align),
+  // without a polar anchor — used by the rect corners + the measure chain.
+  const snapPoint = (raw: Pt): SnapResult =>
+    computeSnap({
+      cursor: raw,
+      points,
+      closed,
+      origin: null,
+      excludeIndex: null,
+      tolCm: pxToCm(10),
+      settings: snapSettings,
+    });
+
   // World (base) space → screen px applies the view transform last.
   const cmToPx = useCallback(
     (p: Pt): { x: number; y: number } => ({
@@ -367,6 +411,19 @@ export function RoomCanvas({
       edgeClickGuard.current = false;
       return;
     }
+
+    // ── Tape measure: append a snapped point to the (display-only) chain. ──
+    if (tool === "measure") {
+      const at = snapPoint(eventToCm(e)).point;
+      setMeasurePts((pts) => (measureDone ? [at] : [...pts, at]));
+      setMeasureDone(false);
+      return;
+    }
+
+    // The rectangle tool is driven entirely by press-drag-release (handleDown /
+    // handleMove / endDrag); a stray click does nothing to the outline.
+    if (tool === "rect") return;
+
     const raw = eventToCm(e);
 
     if (!closed) {
@@ -510,6 +567,8 @@ export function RoomCanvas({
   // mousedown on an edge body / its midpoint handle starts sliding that wall.
   const handleEdgeDown = (i: number) => (e: React.MouseEvent) => {
     if (e.button !== 0 || spaceHeld) return;
+    // Wall select/slide/insert is a draw-mode (edit) interaction only.
+    if (tool !== "draw") return;
     e.stopPropagation(); // never let an edge-body grab fall through to canvas pan
     edgeClickGuard.current = true; // swallow the bubbled click on the SVG below
     // Alt-click on the edge body INSERTS a vertex (plain click/drag = select/slide).
@@ -534,6 +593,10 @@ export function RoomCanvas({
   };
 
   const handleVertexDown = (i: number) => (e: React.MouseEvent) => {
+    // Vertex dragging is a draw-mode (edit) interaction only. In rect/measure
+    // mode DON'T stop propagation — let the press reach the canvas so the rect
+    // drag starts / the measure click registers even over a vertex handle.
+    if (tool !== "draw") return;
     e.stopPropagation();
     if (e.button !== 0) return;
     setDragIdx(i);
@@ -564,6 +627,21 @@ export function RoomCanvas({
 
     const cm = eventToCm(e);
     setCursor(cm);
+
+    // ── Rectangle tool: live preview of corner B (snapped) while dragging, plus
+    // the snap marker so the corner lands on grid/vertices cleanly. ──
+    if (tool === "rect") {
+      const res = snapPoint(cm);
+      setSnapResult(res);
+      if (rectStart) setRectEnd(res.point);
+      return;
+    }
+
+    // ── Tape measure: just track the snapped cursor for the rubber-band + marker.
+    if (tool === "measure") {
+      setSnapResult(snapPoint(cm));
+      return;
+    }
 
     // ── Parallel edge (wall) drag: slide the edge along its outward normal. ──
     if (edgeDragIdx !== null && edgeDragStart.current) {
@@ -665,6 +743,23 @@ export function RoomCanvas({
   };
 
   const endDrag = () => {
+    // ── Rectangle tool: release builds the 4-corner box and REPLACES the room
+    // (one polygon). commit() records undo, so it's reversible. A degenerate
+    // (near-zero) drag yields [] and is ignored. After creating we return to
+    // "draw" so the new room is immediately editable. ──
+    if (tool === "rect" && rectStart && rectEnd) {
+      const rect = rectFromCorners(rectStart, rectEnd);
+      setRectStart(null);
+      setRectEnd(null);
+      setSnapResult(null);
+      if (rect.length === 4) {
+        commit(rect, true);
+        setSelEdge(null);
+        setSelVertex(null);
+        setTool("draw");
+      }
+      return;
+    }
     setDragIdx(null);
     setEdgeDragIdx(null);
     setEdgeDragInfo(null);
@@ -678,6 +773,11 @@ export function RoomCanvas({
   };
 
   const handleLeave = () => {
+    // Cancel an in-flight rectangle drag without committing (pointer left canvas).
+    if (tool === "rect") {
+      setRectStart(null);
+      setRectEnd(null);
+    }
     endDrag();
     setCursor(null);
     setHoverVertex(null);
@@ -697,6 +797,14 @@ export function RoomCanvas({
       const sy = ((e.clientY - rect.top) / rect.height) * SVG_H;
       panRef.current = { sx, sy, tx: view.tx, ty: view.ty };
       setPanning(true);
+      return;
+    }
+    // ── Rectangle tool: a plain left-press anchors corner A (snapped). The drag
+    // builds the box; release commits it. Pan (handled above) still wins. ──
+    if (tool === "rect" && e.button === 0) {
+      const a = snapPoint(eventToCm(e)).point;
+      setRectStart(a);
+      setRectEnd(a);
     }
   };
 
@@ -893,6 +1001,22 @@ export function RoomCanvas({
       return;
     }
 
+    // ── Tape measure keys: Esc clears the chain; Enter finishes it (freezes the
+    // rubber-band, keeps the marks visible until cleared). ──
+    if (tool === "measure" && measurePts.length > 0) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMeasurePts([]);
+        setMeasureDone(false);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        setMeasureDone(true);
+        return;
+      }
+    }
+
     if (e.key === "Escape") {
       e.preventDefault();
       if (!closed && points.length > 0) {
@@ -1015,6 +1139,9 @@ export function RoomCanvas({
     Math.round(edgeBearingDeg(points, i, closed) * 10) / 10;
 
   const selectEdge = (i: number) => (e: React.MouseEvent) => {
+    // Edge-length editing is a draw-mode interaction; in rect/measure mode let
+    // the click fall through to the canvas (measure point / rect ignore).
+    if (tool !== "draw") return;
     e.stopPropagation();
     setSelEdge(i);
     setSelVertex(null);
@@ -1284,6 +1411,140 @@ export function RoomCanvas({
             stroke={closeValid ? "#16a34a" : "#dc2626"}
             strokeDasharray="3 3"
           />
+        )}
+      </g>
+    );
+  }
+
+  // ── Rectangle-tool preview: a dashed axis-aligned box A→B with corner markers
+  // and a live W × H (m) readout while dragging. ──
+  let rectPreview: React.ReactNode = null;
+  if (tool === "rect" && rectStart && rectEnd) {
+    const a = cmToPx(rectStart);
+    const b = cmToPx(rectEnd);
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    const w = Math.abs(b.x - a.x);
+    const h = Math.abs(b.y - a.y);
+    const wCm = Math.abs(rectEnd.x - rectStart.x);
+    const hCm = Math.abs(rectEnd.y - rectStart.y);
+    const readout = `${formatLengthCm(wCm)} × ${formatLengthCm(hCm)}`;
+    rectPreview = (
+      <g style={{ pointerEvents: "none" }}>
+        <rect
+          x={x}
+          y={y}
+          width={w}
+          height={h}
+          fill="#0ea5e9"
+          fillOpacity={0.06}
+          stroke="#0284c7"
+          strokeWidth={1.5}
+          strokeDasharray="5 4"
+        />
+        {/* Corner markers at A and the live B. */}
+        <circle cx={a.x} cy={a.y} r={3.5} fill="#0284c7" />
+        <circle cx={b.x} cy={b.y} r={3.5} fill="#0284c7" />
+        <text
+          x={b.x + 12}
+          y={b.y - 12}
+          fontSize={12}
+          fontWeight={700}
+          fill="#0369a1"
+          textAnchor="start"
+          dominantBaseline="middle"
+          stroke="#ffffff"
+          strokeWidth={3.5}
+          style={{ paintOrder: "stroke", userSelect: "none" }}
+        >
+          {readout}
+        </text>
+      </g>
+    );
+  }
+
+  // ── Tape-measure overlay (display-only): the amber polyline with round nodes,
+  // each segment labelled with its length + bearing, a live rubber-band segment
+  // to the cursor (until the chain is finished), and a running-total chip near
+  // the last point. NEVER reads or writes `points`. ──
+  let measureOverlay: React.ReactNode = null;
+  if (tool === "measure" && measurePts.length > 0) {
+    const AMBER = "#d97706";
+    // Bearing (deg, y-down) of a→b — same convention as edgeBearingDeg.
+    const bearing = (a: Pt, b: Pt) =>
+      Math.round((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI);
+    // The placed segments plus (when still measuring) a live segment to cursor.
+    const chain: Pt[] =
+      !measureDone && cursor
+        ? [...measurePts, snapPoint(cursor).point]
+        : measurePts;
+    const pxChain = chain.map(cmToPx);
+    const segNodes: React.ReactNode[] = [];
+    let running = 0;
+    for (let i = 0; i + 1 < chain.length; i++) {
+      const a = chain[i];
+      const b = chain[i + 1];
+      const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+      running += segLen;
+      const pa = pxChain[i];
+      const pb = pxChain[i + 1];
+      const live = i === chain.length - 2 && !measureDone && cursor;
+      const mid = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 };
+      const label = `${formatLengthCm(segLen)} · ${bearing(a, b)}°`;
+      segNodes.push(
+        <g key={`mseg${i}`}>
+          <line
+            x1={pa.x}
+            y1={pa.y}
+            x2={pb.x}
+            y2={pb.y}
+            stroke={AMBER}
+            strokeWidth={1.75}
+            strokeDasharray={live ? "5 4" : undefined}
+            opacity={live ? 0.8 : 1}
+          />
+          {segLen > 1e-6 && (
+            <text
+              x={mid.x}
+              y={mid.y - 8}
+              fontSize={10.5}
+              fontWeight={700}
+              fill={AMBER}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              stroke="#ffffff"
+              strokeWidth={3}
+              style={{ paintOrder: "stroke", userSelect: "none" }}
+            >
+              {label}
+            </text>
+          )}
+        </g>,
+      );
+    }
+    const last = pxChain[pxChain.length - 1];
+    measureOverlay = (
+      <g style={{ pointerEvents: "none" }}>
+        {segNodes}
+        {pxChain.map((p, i) => (
+          <circle key={`mnode${i}`} cx={p.x} cy={p.y} r={3.5} fill="#fff" stroke={AMBER} strokeWidth={1.75} />
+        ))}
+        {/* Running total near the last point. */}
+        {chain.length >= 2 && (
+          <text
+            x={last.x + 12}
+            y={last.y + 14}
+            fontSize={11}
+            fontWeight={800}
+            fill={AMBER}
+            textAnchor="start"
+            dominantBaseline="middle"
+            stroke="#ffffff"
+            strokeWidth={3.25}
+            style={{ paintOrder: "stroke", userSelect: "none" }}
+          >
+            {`Σ ${formatLengthCm(running)}`}
+          </text>
         )}
       </g>
     );
@@ -2034,17 +2295,65 @@ export function RoomCanvas({
     ? "grabbing"
     : spaceHeld
       ? "grab"
-      : edgeDragIdx !== null
-        ? "grabbing"
-        : closed
-          ? edgeInsert
-            ? "copy"
-            : "default"
-          : "crosshair";
+      : tool === "rect" || tool === "measure"
+        ? "crosshair"
+        : edgeDragIdx !== null
+          ? "grabbing"
+          : closed
+            ? edgeInsert
+              ? "copy"
+              : "default"
+            : "crosshair";
 
   return (
     <div className={fill ? "flex h-full min-h-0 flex-col gap-2" : "space-y-2"}>
       <div className="flex flex-wrap items-center gap-2">
+        {/* Tool-mode selector: Draw (freeform) · Rectangle (drag a box) · Measure
+            (display-only tape). The active mode is highlighted. */}
+        <div className="inline-flex overflow-hidden rounded-md border border-slate-300" role="group" aria-label="Drawing tool">
+          {(
+            [
+              ["draw", "Draw"],
+              ["rect", "Rectangle"],
+              ["measure", "Measure"],
+            ] as [Tool, string][]
+          ).map(([key, label], i) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => switchTool(key)}
+              aria-pressed={tool === key}
+              className={
+                "px-2.5 py-1 text-xs font-medium " +
+                (i > 0 ? "border-l border-slate-300 " : "") +
+                (tool === key
+                  ? "bg-sky-600 text-white"
+                  : "bg-white text-slate-600 hover:bg-slate-50")
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Clear the tape measurement (Measure mode only). */}
+        {tool === "measure" && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setMeasurePts([]);
+              setMeasureDone(false);
+            }}
+            disabled={measurePts.length === 0}
+          >
+            Clear measure
+          </Button>
+        )}
+
+        <span className="mx-1 h-5 w-px bg-slate-200" />
+
         <Button type="button" variant="outline" size="sm" onClick={undo} disabled={!canUndo}>
           Undo
         </Button>
@@ -2182,6 +2491,10 @@ export function RoomCanvas({
         }
         style={{ touchAction: "none", cursor: cursorStyle }}
         onClick={handleCanvasClick}
+        onDoubleClick={() => {
+          // Double-click finishes the tape-measure chain (freezes the rubber-band).
+          if (tool === "measure" && measurePts.length > 0) setMeasureDone(true);
+        }}
         onMouseDown={handleDown}
         onMouseMove={handleMove}
         onMouseUp={endDrag}
@@ -2462,6 +2775,12 @@ export function RoomCanvas({
         {/* Rubber-band preview of the next edge while drawing. */}
         {rubber}
 
+        {/* Rectangle-tool dashed preview box + W×H readout. */}
+        {rectPreview}
+
+        {/* Tape-measure overlay (amber polyline, segment + total labels). */}
+        {measureOverlay}
+
         {/* Per-edge click targets (closed only), under dimensions + handles. */}
         {edgeHits}
 
@@ -2545,6 +2864,9 @@ export function RoomCanvas({
               style={{ cursor: dragIdx === i ? "grabbing" : "grab" }}
               onMouseDown={handleVertexDown(i)}
               onClick={(e) => {
+                // Only intercept vertex-select clicks in draw (edit) mode; in
+                // rect/measure mode let the click reach the canvas.
+                if (tool !== "draw") return;
                 e.stopPropagation();
                 if (closed) {
                   setSelVertex(i);
@@ -2561,7 +2883,7 @@ export function RoomCanvas({
           (cm) + optional Angle (deg) and press Enter to place the next vertex
           precisely. Auto-activates when the user just starts typing a digit. The
           inputs stop key propagation so they don't trigger canvas shortcuts. ── */}
-      {!closed && points.length >= 1 && (
+      {tool === "draw" && !closed && points.length >= 1 && (
         <div
           className="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-md border border-slate-300 bg-white/95 px-2 py-1 text-xs shadow-sm"
           onMouseDown={(e) => e.stopPropagation()}
@@ -2700,7 +3022,11 @@ export function RoomCanvas({
 
       <div className="flex items-center justify-between text-xs text-slate-500">
         <p>
-          {closed
+          {tool === "rect"
+            ? "Rectangle: press and drag to draw an axis-aligned room box; release to place it (replaces the current room). Corners snap to the grid/vertices. Returns to Draw after."
+            : tool === "measure"
+            ? "Measure (display-only): click to drop tape points — each segment shows its length + angle, with a running total. Double-click or Enter finishes; Esc or Clear empties it."
+            : closed
             ? (ortho
                 ? "Loop closed. Drag a vertex — Ortho keeps walls square (neighbours follow). "
                 : "Loop closed. Drag vertices freely (Ortho off). ") +
