@@ -81,6 +81,9 @@ interface RoomCanvasProps {
      *  clamped (drawing not at true scale; counts unaffected). Flagged in the legend. */
     pitchOverflow?: boolean;
   }>;
+  /** Override the <svg> sizing classes (default `w-full max-w-[680px]`). The
+   *  calculator's full-view dialog passes a larger size to enlarge the surface. */
+  svgClassName?: string;
 }
 
 // ── Base cm→px mapping. A view transform (zoom/pan) is applied on top. ──
@@ -161,6 +164,7 @@ export function RoomCanvas({
   gridCm = 10,
   bays,
   beamLayers,
+  svgClassName,
 }: RoomCanvasProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   // `closed` distinguishes draw-in-progress (open polyline) from a finished loop.
@@ -457,6 +461,54 @@ export function RoomCanvas({
     // dimensions outside it stay on-canvas after a fit.
     setView(fitView(worldBox, SVG_W, SVG_H, 96, MIN_ZOOM, MAX_ZOOM));
   };
+
+  // ── Export the current drawing (dimensions + beam/block overlay) to a PNG and
+  // download it — a CAD-style sheet the operator can hand the client. We clone
+  // the live <svg>, give it an opaque white backdrop (the on-screen one relies on
+  // its CSS bg), serialize it, then rasterize at 2× through an off-screen canvas.
+  // The current zoom/pan is baked into the rendered nodes, so "Fit" first frames
+  // the whole room before exporting. ──
+  const exportPng = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("width", String(SVG_W));
+    clone.setAttribute("height", String(SVG_H));
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", "0");
+    bg.setAttribute("y", "0");
+    bg.setAttribute("width", String(SVG_W));
+    bg.setAttribute("height", String(SVG_H));
+    bg.setAttribute("fill", "#ffffff");
+    clone.insertBefore(bg, clone.firstChild);
+    const xml = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const scale = 2; // 2× for a crisp raster
+      const canvas = document.createElement("canvas");
+      canvas.width = SVG_W * scale;
+      canvas.height = SVG_H * scale;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((png) => {
+          if (png) {
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(png);
+            a.download = "room-drawing.png";
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }
+        }, "image/png");
+      }
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  }, []);
 
   // ── Toolbar actions ──
   const clear = () => {
@@ -841,6 +893,7 @@ export function RoomCanvas({
           strokeWidth={18}
           style={{ cursor: "pointer" }}
           onClick={selectEdge(i)}
+          onDoubleClick={selectEdge(i)}
           onMouseEnter={() => setHoverEdge(i)}
           onMouseLeave={() => setHoverEdge((h) => (h === i ? null : h))}
         />,
@@ -886,6 +939,7 @@ export function RoomCanvas({
           stroke="#ffffff"
           strokeWidth={3}
           onClick={closed ? selectEdge(i) : undefined}
+          onDoubleClick={closed ? selectEdge(i) : undefined}
         >
           {label}
         </text>,
@@ -946,6 +1000,7 @@ export function RoomCanvas({
           stroke="#ffffff"
           strokeWidth={3.5}
           onClick={closed ? selectEdge(i) : undefined}
+          onDoubleClick={closed ? selectEdge(i) : undefined}
         >
           {label}
         </text>,
@@ -978,6 +1033,7 @@ export function RoomCanvas({
           stroke="#ffffff"
           strokeWidth={3.5}
           onClick={closed ? selectEdge(i) : undefined}
+          onDoubleClick={closed ? selectEdge(i) : undefined}
         >
           {label}
         </text>,
@@ -1400,13 +1456,20 @@ export function RoomCanvas({
           <input type="checkbox" checked={ortho} onChange={(e) => setOrtho(e.target.checked)} />
           Ortho
         </label>
+
+        <span className="mx-1 h-5 w-px bg-slate-200" />
+
+        {/* Export the dimensioned drawing as a PNG (CAD-style sheet). */}
+        <Button type="button" variant="outline" size="sm" onClick={exportPng} disabled={points.length < 2}>
+          Export PNG
+        </Button>
       </div>
 
       <svg
         ref={svgRef}
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
         tabIndex={0}
-        className="w-full max-w-[680px] rounded border bg-white outline-none focus:ring-2 focus:ring-sky-300"
+        className={`rounded border bg-white outline-none focus:ring-2 focus:ring-sky-300 ${svgClassName ?? "w-full max-w-[680px]"}`}
         style={{ touchAction: "none", cursor: cursorStyle }}
         onClick={handleCanvasClick}
         onMouseDown={handleDown}
@@ -1744,7 +1807,7 @@ export function RoomCanvas({
             ? (ortho
                 ? "Loop closed. Drag a vertex — Ortho keeps walls square (neighbours follow). "
                 : "Loop closed. Drag vertices freely (Ortho off). ") +
-              "Click a dimension to type an exact length; click an edge body to insert a point; select a vertex then arrow-nudge or Delete it. F = fit, 0 = reset view."
+              "Double-click a dimension to type an exact length (e.g. 61 cm); click an edge body to insert a point; select a vertex then arrow-nudge or Delete it. F = fit, 0 = reset view. Export PNG saves the dimensioned drawing."
             : points.length === 0
               ? "Click to start drawing. Edges snap orthogonal" +
                 (snap ? " + to grid" : "") +

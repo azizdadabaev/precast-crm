@@ -174,7 +174,7 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-[860px]">
+      <DialogContent className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-3 sm:max-w-[1400px]">
         <DialogHeader>
           <DialogTitle>
             <Bi uz="Хона чизиш" en="Draw room" />
@@ -187,15 +187,18 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-          <RoomCanvas
-            points={points}
-            onChange={setPoints}
-            bays={bays}
-            beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
-          />
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
+          <div className="flex min-h-0 min-w-0 flex-1 items-start justify-center overflow-auto">
+            <RoomCanvas
+              points={points}
+              onChange={setPoints}
+              bays={bays}
+              beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
+              svgClassName="h-[62vh] w-auto max-w-full"
+            />
+          </div>
 
-          <div className="space-y-2 lg:w-64">
+          <div className="w-full space-y-2 overflow-y-auto lg:w-72 lg:shrink-0">
             <div className="text-sm text-muted-foreground">
               {scan
                 ? t(
@@ -308,7 +311,7 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex justify-end gap-2 border-t pt-3">
           <Button variant="ghost" size="sm" onClick={handleClose}>
             <Bi uz="Бекор қилиш" en="Cancel" />
           </Button>
