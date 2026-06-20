@@ -40,6 +40,17 @@ export function pickArchScale(
   marginMm: number,
 ): ArchScale {
   const { wMm, hMm } = usableSheetMm(page, marginMm);
+  return pickArchScaleForBox(worldWcm, worldHcm, wMm, hMm);
+}
+
+/** Pick the FIRST (finest) ratio whose world box fits an explicit paper-space
+ *  box (wMm × hMm). Used to fit a drawing into a sub-region of the sheet. */
+export function pickArchScaleForBox(
+  worldWcm: number,
+  worldHcm: number,
+  wMm: number,
+  hMm: number,
+): ArchScale {
   for (const ratio of SCALE_RATIOS) {
     const mmPerCm = 10 / ratio;
     const drawWMm = worldWcm * mmPerCm;

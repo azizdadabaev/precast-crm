@@ -1,18 +1,21 @@
 import type { SlabResult } from "@/services/calculation-engine";
 import type { BeamDir } from "@/lib/cad/geometry";
 import { beamLayout, defaultBeamDir } from "@/lib/cad/geometry";
-import { pickArchScale, usableSheetMm, type ArchScale, type SheetOptions } from "@/lib/cad/sheet/sheet-scale";
+import { pickArchScaleForBox, usableSheetMm, type ArchScale, type SheetOptions } from "@/lib/cad/sheet/sheet-scale";
 
 export interface RoomInput { name: string; calc: SlabResult; beamDir?: BeamDir; }
 
 export type PlanPrimitive =
-  | { type: "rect"; role: "outline" | "beam" | "bearing" | "block"; xMm: number; yMm: number; wMm: number; hMm: number }
-  | { type: "line"; role: "dim" | "witness"; x1Mm: number; y1Mm: number; x2Mm: number; y2Mm: number }
-  | { type: "text"; role: "dim" | "stamp" | "name"; xMm: number; yMm: number; text: string; sizeMm: number; align: "L" | "C" | "R" };
+  | { type: "rect"; role: "outline" | "beam" | "bearing" | "block" | "bom"; xMm: number; yMm: number; wMm: number; hMm: number }
+  | { type: "line"; role: "dim" | "witness" | "bom"; x1Mm: number; y1Mm: number; x2Mm: number; y2Mm: number }
+  | { type: "text"; role: "dim" | "stamp" | "name" | "bom"; xMm: number; yMm: number; text: string; sizeMm: number; align: "L" | "C" | "R" };
 
 export interface RoomPlan { primitives: PlanPrimitive[]; scale: ArchScale; widthMm: number; heightMm: number; }
 
-export function buildRoomPlan(room: RoomInput, opts: SheetOptions): RoomPlan {
+/** A rectangular paper-space box (mm) the drawing is fitted/centered into. */
+export interface SheetRegion { xMm: number; yMm: number; wMm: number; hMm: number; }
+
+export function buildRoomPlan(room: RoomInput, opts: SheetOptions, region?: SheetRegion): RoomPlan {
   const iwCm = Math.round(room.calc.inner_width * 100);
   const ilCm = Math.round(room.calc.inner_length * 100);
   const rect = { x: 0, y: 0, w: iwCm, h: ilCm };
@@ -24,10 +27,11 @@ export function buildRoomPlan(room: RoomInput, opts: SheetOptions): RoomPlan {
     Math.round(room.calc.bearing * 100),
   );
 
-  const scale = pickArchScale(iwCm, ilCm, opts.page, opts.marginMm);
-  const { wMm, hMm } = usableSheetMm(opts.page, opts.marginMm);
-  const offX = opts.marginMm + (wMm - scale.drawWMm) / 2;
-  const offY = opts.marginMm + (hMm - scale.drawHMm) / 2;
+  const usable = usableSheetMm(opts.page, opts.marginMm);
+  const reg: SheetRegion = region ?? { xMm: opts.marginMm, yMm: opts.marginMm, wMm: usable.wMm, hMm: usable.hMm };
+  const scale = pickArchScaleForBox(iwCm, ilCm, reg.wMm, reg.hMm);
+  const offX = reg.xMm + (reg.wMm - scale.drawWMm) / 2;
+  const offY = reg.yMm + (reg.hMm - scale.drawHMm) / 2;
   const X = (cm: number) => offX + cm * scale.mmPerCm;
   const Y = (cm: number) => offY + cm * scale.mmPerCm;
   const S = (cm: number) => cm * scale.mmPerCm;
