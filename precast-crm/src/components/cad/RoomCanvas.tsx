@@ -90,9 +90,14 @@ interface RoomCanvasProps {
   closed: boolean;
   /** Atomic update of the active room's outline + closed state. */
   onActiveChange: (points: Pt[], closed: boolean) => void;
-  /** The active room index. Changing it resets the local undo/redo history so a
-   *  stale snapshot can't be applied to a different room. */
-  activeKey?: number;
+  /** Checkpoint the current floor plan onto the parent-owned GLOBAL undo stack —
+   *  called before a discrete edit, or on the first move of a drag. */
+  onPushUndo: () => void;
+  /** Global undo / redo (owned by the parent; spans all rooms). */
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
   /** Other rooms of the floor plan, rendered as a read-only backdrop and
    *  clickable to make one active. `index` is its position in the parent's
    *  rooms[]; `label` is its display number. */
@@ -297,7 +302,11 @@ export function RoomCanvas({
   points,
   closed,
   onActiveChange,
-  activeKey,
+  onPushUndo,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   backgroundRooms,
   onPickBackgroundRoom,
   onRequestNewRoom,
@@ -434,38 +443,19 @@ export function RoomCanvas({
   // Space-held = pan-arm: left-drag pans (classic CAD), shown as a grab cursor.
   const [spaceHeld, setSpaceHeld] = useState(false);
 
-  // ── Undo / redo history of the outline (points + closed). Local to the editor;
-  // the parent stays the single source of truth for the *current* value. ──
-  const undoStack = useRef<Array<{ points: Pt[]; closed: boolean }>>([]);
-  const redoStack = useRef<Array<{ points: Pt[]; closed: boolean }>>([]);
-  const [histTick, setHistTick] = useState(0); // re-render when stacks change
+  // ── Undo / redo is now GLOBAL and owned by the parent (spans every room and
+  // survives switching the active room). RoomCanvas just signals checkpoints via
+  // onPushUndo() and triggers onUndo/onRedo. ──
 
-  const pushHistory = useCallback(
-    (prevPoints: Pt[], prevClosed: boolean) => {
-      undoStack.current.push({ points: prevPoints, closed: prevClosed });
-      if (undoStack.current.length > 100) undoStack.current.shift();
-      redoStack.current = [];
-      setHistTick((t) => t + 1);
-    },
-    [],
-  );
-
-  /** Commit an outline change, recording the *previous* state for undo. */
+  /** Commit an outline change, checkpointing the previous floor plan for global
+   *  undo first (the parent owns the stack). */
   const commit = useCallback(
     (nextPoints: Pt[], nextClosed?: boolean) => {
-      pushHistory(points, closed);
+      onPushUndo();
       onActiveChange(nextPoints, nextClosed ?? closed);
     },
-    [points, closed, onActiveChange, pushHistory],
+    [closed, onActiveChange, onPushUndo],
   );
-
-  // Switching the active room must drop the local undo/redo history so an undo
-  // can't apply a snapshot from a different room.
-  useEffect(() => {
-    undoStack.current = [];
-    redoStack.current = [];
-    setHistTick((t) => t + 1);
-  }, [activeKey]);
 
   // Grid-snap a point when the Grid snap toggle is on (used for edge-insert).
   const maybeSnap = (p: Pt): Pt => (snapSettings.grid ? snapToGrid(p, step) : p);
@@ -824,7 +814,7 @@ export function RoomCanvas({
       // No-op move (snapped delta 0) on the first frame → don't churn history.
       if (dx === 0 && dy === 0 && !moveDragMoved.current) return;
       if (!moveDragMoved.current) {
-        pushHistory(base.points, base.closed);
+        onPushUndo();
         moveDragMoved.current = true;
       }
       onActiveChange(translatePolygon(base.points, dx, dy), closed); // live; history already captured
@@ -849,7 +839,7 @@ export function RoomCanvas({
       // No-op move (snapped offset 0) on the very first frame → don't churn history.
       if (offset === 0 && !edgeDragMoved.current) return;
       if (!edgeDragMoved.current) {
-        pushHistory(base.points, base.closed);
+        onPushUndo();
         edgeDragMoved.current = true;
       }
       onActiveChange(next, closed); // live drag bypasses commit (history captured on first move)
@@ -891,7 +881,7 @@ export function RoomCanvas({
       }
       // Record the pre-drag state once, on the first real move.
       if (!dragMoved.current && dragStart.current) {
-        pushHistory(dragStart.current.points, dragStart.current.closed);
+        onPushUndo();
         dragMoved.current = true;
       }
       onActiveChange(next, closed); // live drag bypasses commit (history captured on first move)
@@ -1171,7 +1161,7 @@ export function RoomCanvas({
   // ── Toolbar actions ──
   const clear = () => {
     if (!points.length && !closed) return;
-    pushHistory(points, closed);
+    onPushUndo();
     setDragIdx(null);
     setSelEdge(null);
     setSelVertex(null);
@@ -1199,24 +1189,17 @@ export function RoomCanvas({
     commit(points.slice(0, -1));
   };
 
-  const undo = () => {
-    const snap = undoStack.current.pop();
-    if (!snap) return;
-    redoStack.current.push({ points, closed });
+  // Clear any in-room selection alongside a global undo/redo so a stale vertex/
+  // edge selection can't point past the restored geometry.
+  const handleUndo = () => {
     setSelEdge(null);
     setSelVertex(null);
-    setHistTick((t) => t + 1);
-    onActiveChange(snap.points, snap.closed);
+    onUndo();
   };
-
-  const redo = () => {
-    const snap = redoStack.current.pop();
-    if (!snap) return;
-    undoStack.current.push({ points, closed });
+  const handleRedo = () => {
     setSelEdge(null);
     setSelVertex(null);
-    setHistTick((t) => t + 1);
-    onActiveChange(snap.points, snap.closed);
+    onRedo();
   };
 
   const deleteSelected = () => {
@@ -1243,13 +1226,13 @@ export function RoomCanvas({
     const meta = e.ctrlKey || e.metaKey;
     if (meta && e.key.toLowerCase() === "z") {
       e.preventDefault();
-      if (e.shiftKey) redo();
-      else undo();
+      if (e.shiftKey) handleRedo();
+      else handleUndo();
       return;
     }
     if (meta && e.key.toLowerCase() === "y") {
       e.preventDefault();
-      redo();
+      handleRedo();
       return;
     }
 
@@ -1463,9 +1446,6 @@ export function RoomCanvas({
     commit(mirrorPolygonY(points));
   };
 
-  const canUndo = undoStack.current.length > 0;
-  const canRedo = redoStack.current.length > 0;
-  void histTick; // referenced to tie re-render to history changes
 
   // ── Infinite CAD grid: recomputed every render from the live view so it ALWAYS
   // fills the whole viewport at any zoom/pan (no bare bands). visibleGridLines
@@ -2672,10 +2652,10 @@ export function RoomCanvas({
 
         {/* Edit actions */}
         <div className="flex items-center gap-0.5">
-          <TbIcon onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+          <TbIcon onClick={handleUndo} disabled={!canUndo} title="Undo (Ctrl+Z)">
             <Undo2 className="h-4 w-4" />
           </TbIcon>
-          <TbIcon onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
+          <TbIcon onClick={handleRedo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
             <Redo2 className="h-4 w-4" />
           </TbIcon>
           {!closed && points.length > 0 ? (

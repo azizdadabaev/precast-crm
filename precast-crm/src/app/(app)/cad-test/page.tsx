@@ -197,6 +197,11 @@ export default function CadTestPage() {
               setPoints(pts);
               setClosed(c);
             }}
+            onPushUndo={() => {}}
+            onUndo={() => {}}
+            onRedo={() => {}}
+            canUndo={false}
+            canRedo={false}
             bays={bays}
             beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
           />

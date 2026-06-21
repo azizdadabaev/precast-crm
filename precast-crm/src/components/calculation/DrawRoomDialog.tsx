@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -93,6 +93,37 @@ export function DrawRoomDialog({
   // ── Writers ──────────────────────────────────────────────────
   const writeDrawing = (next: CalculatorDrawing) => onDrawingChange(next);
 
+  // ── Global undo/redo: document-level snapshots of the WHOLE floor plan, so
+  // undo crosses rooms and survives switching the active room. Snapshots are
+  // safe to store by reference — every write builds new arrays/objects, so a
+  // captured `dr` is never mutated in place. ──
+  const undoStack = useRef<CalculatorDrawing[]>([]);
+  const redoStack = useRef<CalculatorDrawing[]>([]);
+  const [histTick, setHistTick] = useState(0);
+  const pushUndo = () => {
+    undoStack.current.push(dr);
+    if (undoStack.current.length > 100) undoStack.current.shift();
+    redoStack.current = [];
+    setHistTick((t) => t + 1);
+  };
+  const undo = () => {
+    const prev = undoStack.current.pop();
+    if (prev === undefined) return;
+    redoStack.current.push(dr);
+    setHistTick((t) => t + 1);
+    onDrawingChange(prev.rooms.length ? prev : null);
+  };
+  const redo = () => {
+    const nxt = redoStack.current.pop();
+    if (nxt === undefined) return;
+    undoStack.current.push(dr);
+    setHistTick((t) => t + 1);
+    onDrawingChange(nxt.rooms.length ? nxt : null);
+  };
+  const canUndo = undoStack.current.length > 0;
+  const canRedo = redoStack.current.length > 0;
+  void histTick;
+
   // Active room outline + closed (atomic) — feeds RoomCanvas.onActiveChange.
   // Preserves the room's stable id (minting one on the first edit of an empty
   // slot) so identity survives every edit.
@@ -116,6 +147,7 @@ export function DrawRoomDialog({
   // Start a NEW room. Reuse the active slot if it's still empty (no litter),
   // else append + activate. A seed places the first point / a preset outline.
   const requestNewRoom = (seed?: Omit<RoomShape, "id">) => {
+    pushUndo();
     const room: RoomShape = {
       id: newRoomId(),
       points: seed?.points ?? [],
@@ -134,6 +166,7 @@ export function DrawRoomDialog({
   };
 
   const deleteRoom = (i: number) => {
+    pushUndo();
     const next = rooms.filter((_, k) => k !== i);
     writeDrawing({ ...dr, rooms: next.length ? next : [EMPTY_ROOM] });
     setActiveIndex((cur) => {
@@ -258,6 +291,9 @@ export function DrawRoomDialog({
   const reset = () => {
     onDrawingChange(null);
     setActiveIndex(0);
+    undoStack.current = [];
+    redoStack.current = [];
+    setHistTick((t) => t + 1);
   };
 
   const handleClose = () => {
@@ -295,7 +331,11 @@ export function DrawRoomDialog({
               points={points}
               closed={activeClosed}
               onActiveChange={onActiveChange}
-              activeKey={safeActive}
+              onPushUndo={pushUndo}
+              onUndo={undo}
+              onRedo={redo}
+              canUndo={canUndo}
+              canRedo={canRedo}
               backgroundRooms={backgroundRooms}
               onPickBackgroundRoom={(i) => setActiveIndex(i)}
               onRequestNewRoom={requestNewRoom}
