@@ -26,6 +26,7 @@ import {
 } from "@/lib/cad/geometry";
 import { offsetPolygonInward } from "@/lib/cad/offset";
 import { unionShapes, subtractShapes, intersectShapes } from "@/lib/cad/boolean";
+import { rectify } from "@/lib/cad/constraints";
 import {
   isRectilinear,
   scanBeams,
@@ -241,6 +242,18 @@ export function DrawRoomDialog({
     const next = rooms.slice();
     next[safeActive] = { ...cur, holes: [] };
     writeDrawing({ ...dr, rooms: next });
+  };
+
+  // Square up the active room: constraint-solve every edge to exactly H/V, then
+  // round to whole cm. Turns a hand-drawn almost-orthogonal outline into a clean
+  // rectilinear one (which the exact bay engine prefers). Undoable; ignored if
+  // the result self-intersects.
+  const squareUp = () => {
+    if (!activeClosed || points.length < 4) return;
+    const next = rectify(points).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+    if (!isValidOutline(next, true)) return;
+    pushUndo();
+    onActiveChange(next, true);
   };
 
   // Construction guides (infinite reference lines), global across the plan.
@@ -628,14 +641,29 @@ export function DrawRoomDialog({
               </span>
             </div>
 
-            {/* 3D preview toggle. */}
-            <button
-              type="button"
-              onClick={() => setShow3D((v) => !v)}
-              className="self-start rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
-            >
-              {show3D ? t("2D га қайтиш", "Back to 2D") : t("3D да кўриш", "View in 3D")}
-            </button>
+            {/* 3D preview + Square-up (constraint solver). */}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShow3D((v) => !v)}
+                className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              >
+                {show3D ? t("2D га қайтиш", "Back to 2D") : t("3D да кўриш", "View in 3D")}
+              </button>
+              {activeClosed && points.length >= 4 && (
+                <button
+                  type="button"
+                  onClick={squareUp}
+                  title={t(
+                    "Деворларни аниқ горизонтал/вертикал қилиш",
+                    "Constraint-solve every wall to exactly horizontal/vertical",
+                  )}
+                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                >
+                  {t("Тўғрилаш", "Square up")}
+                </button>
+              )}
+            </div>
 
             {/* Floor voids: the Void tool draws a stairwell/shaft that deducts
                 from the slab. Shown when the active room has any. */}
