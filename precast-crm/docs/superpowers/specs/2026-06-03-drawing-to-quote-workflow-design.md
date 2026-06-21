@@ -1,4 +1,4 @@
-# Drawing → Quote → Chat Workflow — Design
+not# Drawing → Quote → Chat Workflow — Design
 
 **Date:** 2026-06-03
 **Branch:** `feat/drawing-to-quote` (off `feat/telegram-business-inbox`, which is itself unmerged)

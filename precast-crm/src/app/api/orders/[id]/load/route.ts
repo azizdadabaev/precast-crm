@@ -6,6 +6,7 @@ import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import { recordAudit } from "@/lib/audit";
+import { loadOrderWithPhoto } from "@/lib/order-load";
 
 /**
  * POST /api/orders/[id]/load
@@ -56,61 +57,11 @@ export const POST = withPermission<{ id: string }>(
       throw e;
     }
 
-    const startingStatus = order.status;
-    const now = new Date();
-
-    await prisma.$transaction(async (tx) => {
-      await tx.order.update({
-        where: { id: params.id },
-        data: {
-          status: "LOADED",
-          loadedPhotoUrl: uploadUrl,
-          loadedAt: now,
-          // Stamp productionStartedAt when skipping the IN_PRODUCTION
-          // step so the audit trail still records when production
-          // (implicitly) began.
-          ...(startingStatus === "PLACED"
-            ? { productionStartedAt: now }
-            : {}),
-        },
-      });
-
-      // Record the implicit PLACED → IN_PRODUCTION transition as its
-      // own event so the activity log is complete and the dashboard
-      // KPIs (which count IN_PRODUCTION transitions) still fire.
-      if (startingStatus === "PLACED") {
-        await tx.orderEvent.create({
-          data: {
-            orderId: params.id,
-            type: "STATUS_CHANGED",
-            actorId: user.id,
-            message: "Ишлаб чиқаришга ўтказилди",
-            payload: { from: "PLACED", to: "IN_PRODUCTION", implicit: true },
-          },
-        });
-      }
-
-      await tx.orderEvent.create({
-        data: {
-          orderId: params.id,
-          type: "ORDER_LOADED",
-          actorId: user.id,
-          message: "Юк машинасига юкланди",
-          payload: {
-            from: startingStatus === "PLACED" ? "IN_PRODUCTION" : startingStatus,
-            to: "LOADED",
-            photoUrl: uploadUrl,
-          },
-        },
-      });
-      await tx.galleryPhoto.create({
-        data: {
-          orderId: params.id,
-          kind: "LOADED",
-          url: uploadUrl,
-          uploadedById: user.id,
-        },
-      });
+    await loadOrderWithPhoto({
+      orderId: params.id,
+      uploadUrl,
+      userId: user.id,
+      startingStatus: order.status,
     });
 
     recordAudit({

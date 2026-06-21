@@ -22,7 +22,9 @@ import { can } from "@/lib/permissions";
 import { parseOrderRef } from "@/lib/order-receipt-ref";
 import { parseGazoblokOrderRef } from "@/lib/gazoblok-receipt-ref";
 import { recordAudit } from "@/lib/audit";
-import { canAddLoadedPhoto } from "@/lib/loaded-photos";
+import { botTruckPhotoAction } from "@/lib/loaded-photos";
+import { loadOrderWithPhoto } from "@/lib/order-load";
+import type { OrderStatus } from "@prisma/client";
 import {
   tgGetFilePath,
   tgDownloadFile,
@@ -201,6 +203,26 @@ async function attachPhoto(
   }
 }
 
+/** Download + magic-byte-validate + save a truck photo to uploads, WITHOUT
+ *  creating the GalleryPhoto row (the caller's `loadOrderWithPhoto` writes both
+ *  the GalleryPhoto and `loadedPhotoUrl` as part of the status transition). */
+async function downloadAndSaveLoaded(
+  orderId: string,
+  photo: PhotoRef,
+): Promise<{ ok: true; url: string } | { ok: false }> {
+  try {
+    const filePath = await tgGetFilePath(photo.fileId);
+    const buf = await tgDownloadFile(filePath);
+    if (!looksLikeImage(buf)) return { ok: false };
+    const ext = imageExtFromBytes(buf) ?? "jpg";
+    const url = await saveBufferToUploads(buf, `orders/${orderId}`, `loaded-${photo.fileUniqueId}.${ext}`);
+    return { ok: true, url };
+  } catch (err) {
+    console.error("[operator-photo save loaded]", err);
+    return { ok: false };
+  }
+}
+
 function attachSummary(orderNumber: string, kind: PhotoKind, added: number, dup: number, failed: number): string {
   const what = kind === "RECEIPT" ? "чек · receipt" : "юк расми · truck photo";
   if (added === 0 && failed === 0 && dup > 0) {
@@ -339,6 +361,10 @@ export async function handleOperatorPhotoCallback(cbq: OperatorPhotoCallbackQuer
       return;
     }
 
+    // For a truck photo, decide fresh whether this tap should FLIP the order to
+    // LOADED (single-truck order not yet loaded) or just attach the photo (already
+    // loaded → extra; or a split order → operator links it to a truck in the CRM).
+    let transitionStatus: OrderStatus | null = null;
     if (parsed.kind === "LOADED") {
       // Gazoblok is receipt-only over the bot (no truck button is offered);
       // a LOADED tap here would only come from a stale/tampered client.
@@ -346,21 +372,57 @@ export async function handleOperatorPhotoCallback(cbq: OperatorPhotoCallbackQuer
         await tgAnswerCallbackQuery(cbq.id, { text: "⚠️ Газоблок учун эмас · Not supported for gazoblok" });
         return;
       }
-      // Re-check status fresh — it may have changed since the photo arrived.
-      const fresh = await prisma.order.findUnique({ where: { id: order.id }, select: { status: true } });
-      if (!fresh || !canAddLoadedPhoto(fresh.status)) {
+      // Re-read status + shipment count fresh — they may have changed since the
+      // photo arrived.
+      const fresh = await prisma.order.findUnique({
+        where: { id: order.id },
+        select: { status: true, _count: { select: { shipments: true } } },
+      });
+      if (!fresh) {
+        await tgAnswerCallbackQuery(cbq.id, { text: "⚠️ Буюртма топилмади · Order not found" });
+        return;
+      }
+      const action = botTruckPhotoAction(fresh.status, fresh._count.shipments > 0);
+      if (!action) {
         await tgAnswerCallbackQuery(cbq.id, {
-          text: "⚠️ Буюртма ҳали юкланмаган · Order isn't loaded yet",
+          text: "⚠️ Бу буюртмага юк расми қўшиб бўлмайди · Can't add a truck photo to this order",
           showAlert: true,
         });
         return;
       }
+      if (action === "transition") transitionStatus = fresh.status as OrderStatus;
     }
 
     let added = 0;
     let dup = 0;
     let failed = 0;
-    for (const p of session.photos) {
+    let didTransition = false;
+    for (let i = 0; i < session.photos.length; i++) {
+      const p = session.photos[i];
+      // First truck photo on a not-yet-loaded single-truck order flips it to
+      // LOADED (same writes as the in-CRM "Load" button); the rest attach as
+      // extra loaded photos.
+      if (transitionStatus && i === 0) {
+        const saved = await downloadAndSaveLoaded(order.id, p);
+        if (!saved.ok) {
+          failed++;
+          continue;
+        }
+        try {
+          await loadOrderWithPhoto({
+            orderId: order.id,
+            uploadUrl: saved.url,
+            userId: sender.id,
+            startingStatus: transitionStatus,
+          });
+          added++;
+          didTransition = true;
+        } catch (err) {
+          console.error("[operator-photo transition]", err);
+          failed++;
+        }
+        continue;
+      }
       const res = await attachPhoto(sender.id, order, p, parsed.kind);
       if (res === "added") added++;
       else if (res === "duplicate") dup++;
@@ -370,14 +432,17 @@ export async function handleOperatorPhotoCallback(cbq: OperatorPhotoCallbackQuer
     if (parsed.kind === "LOADED" && added > 0) {
       recordAudit({
         userId: sender.id,
-        action: "order.loadedPhotoAdded",
+        action: didTransition ? "order.loaded" : "order.loadedPhotoAdded",
         targetType: "order",
         targetId: order.id,
-        message: `Loaded photo(s) added to ${order.orderNumber} via bot (${added})`,
+        message: didTransition
+          ? `Order ${order.orderNumber} loaded onto truck via bot`
+          : `Loaded photo(s) added to ${order.orderNumber} via bot (${added})`,
       });
     }
 
-    const summary = attachSummary(order.orderNumber, parsed.kind, added, dup, failed);
+    let summary = attachSummary(order.orderNumber, parsed.kind, added, dup, failed);
+    if (didTransition) summary += " · 📦 юкланди → LOADED";
     await tgAnswerCallbackQuery(cbq.id, { text: summary });
     if (chatId && messageId) {
       await tgEditMessageText(chatId, messageId, summary, { inlineKeyboard: [] }).catch(() => {});
