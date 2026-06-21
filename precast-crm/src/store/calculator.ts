@@ -40,6 +40,9 @@ export interface CalculatorDrawing {
    *  the slab engine bills the clear INNER face (outline offset inward). 0/absent
    *  = single-line slab (unchanged). */
   wallThickCm?: number;
+  /** Infinite construction guides (non-printing reference lines), each defined
+   *  by two points on it. Snap targets only; never part of a room outline. */
+  guides?: Array<{ a: Pt; b: Pt }>;
 }
 
 /** Mint a stable, unique room id. Kept here (not in the pure geometry module)
@@ -74,6 +77,9 @@ export function normalizeDrawing(d: unknown): CalculatorDrawing | null {
       globalDir,
       dirOverrides: (obj.dirOverrides as Record<string, BeamDir>) ?? {},
       wallThickCm: typeof obj.wallThickCm === "number" ? obj.wallThickCm : 0,
+      guides: Array.isArray(obj.guides)
+        ? (obj.guides as Array<{ a: Pt; b: Pt }>)
+        : undefined,
     };
   }
   // Legacy single-outline shape → wrap as one closed room.

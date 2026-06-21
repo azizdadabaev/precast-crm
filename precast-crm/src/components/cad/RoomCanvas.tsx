@@ -15,6 +15,7 @@ import {
   MousePointer2,
   Square as SquareIcon,
   SquareDashed,
+  Slash,
   Ruler,
   RotateCcw,
   RotateCw,
@@ -127,6 +128,10 @@ interface RoomCanvasProps {
   holes?: Pt[][];
   /** Add a void to the active room (Void tool: drag a rect inside the room). */
   onAddVoid?: (pts: Pt[]) => void;
+  /** Construction guides (infinite reference lines) — snap targets + rendered. */
+  guides?: Array<{ a: Pt; b: Pt }>;
+  /** Add a construction guide (Guide tool: click two points on the line). */
+  onAddGuide?: (g: { a: Pt; b: Pt }) => void;
   /** Initial grid step in cm (default 10). User can change it via the controls. */
   gridCm?: number;
   /** Optional decomposed bays to overlay (translucent). */
@@ -244,7 +249,7 @@ interface View {
 // CAD arrow tool — select / move / edit existing rooms without drawing new
 // geometry; "rect" click-drags an axis-aligned room box; "measure" is a
 // display-only tape that never touches the room outline. ──
-type Tool = "draw" | "select" | "rect" | "measure" | "void";
+type Tool = "draw" | "select" | "rect" | "measure" | "void" | "guide";
 
 const IDENTITY: View = { zoom: 1, tx: 0, ty: 0 };
 
@@ -336,6 +341,8 @@ export function RoomCanvas({
   wallThickCm,
   holes,
   onAddVoid,
+  guides,
+  onAddGuide,
   gridCm = 10,
   bays,
   beamLayers,
@@ -495,6 +502,7 @@ export function RoomCanvas({
     setRectEnd(null);
     setMeasurePts([]);
     setMeasureDone(false);
+    setGuideStart(null);
   };
 
   // Other rooms of the floor plan, as snap sources so the active room's
@@ -503,6 +511,8 @@ export function RoomCanvas({
     points: r.points,
     closed: r.closed,
   }));
+  // Construction guides (infinite lines) — snap sources + render data.
+  const cguides = guides ?? [];
 
   // ── Multi-select (marquee + selection highlight + group bbox) ──
   const selected = selectedIndices ?? [];
@@ -513,6 +523,8 @@ export function RoomCanvas({
   // Swallow the click that fires right after a marquee drag, so it doesn't clear
   // the just-made selection (mirrors edgeClickGuard).
   const marqueeGuard = useRef(false);
+  // Guide tool: the first clicked point of a 2-click construction line.
+  const [guideStart, setGuideStart] = useState<Pt | null>(null);
   // Every room (active + background) tagged with its parent index — for marquee
   // hit-tests, selection highlight, and the group bounding box.
   const allRooms = (): Array<{ index: number; points: Pt[]; closed: boolean }> => {
@@ -579,6 +591,7 @@ export function RoomCanvas({
       tolCm: pxToCm(10),
       settings: snapSettings,
       extraLoops,
+      extraLines: cguides,
     });
 
   // World (base) space → screen px applies the view transform last.
@@ -644,6 +657,20 @@ export function RoomCanvas({
       return;
     }
 
+    // ── Guide tool: two clicks define an infinite construction line. ──
+    if (tool === "guide") {
+      const at = snapPoint(eventToCm(e)).point;
+      if (guideStart) {
+        if (Math.hypot(at.x - guideStart.x, at.y - guideStart.y) > 1) {
+          onAddGuide?.({ a: guideStart, b: at });
+        }
+        setGuideStart(null);
+      } else {
+        setGuideStart(at);
+      }
+      return;
+    }
+
     // The rectangle + void tools are driven entirely by press-drag-release
     // (handleDown / handleMove / endDrag); a stray click does nothing.
     if (tool === "rect" || tool === "void") return;
@@ -695,6 +722,7 @@ export function RoomCanvas({
         tolCm: pxToCm(10),
         settings: snapSettings,
         extraLoops,
+        extraLines: cguides,
       });
       const cand = result.point;
       // Reject a zero-length / hairline step (clicking on/at the last vertex).
@@ -1012,6 +1040,7 @@ export function RoomCanvas({
         tolCm: pxToCm(10),
         settings: snapSettings,
         extraLoops,
+        extraLines: cguides,
       });
       const target = result.point;
       setSnapResult(result);
@@ -1073,6 +1102,7 @@ export function RoomCanvas({
           tolCm: pxToCm(10),
           settings: snapSettings,
           extraLoops,
+          extraLines: cguides,
         }),
       );
     }
@@ -1805,6 +1835,7 @@ export function RoomCanvas({
       tolCm: pxToCm(10),
       settings: snapSettings,
       extraLoops,
+      extraLines: cguides,
     }).point;
     // DDE preview: when a Length is typed, place the preview tip at that exact
     // distance — along the typed Angle if given, else along the snapped cursor
@@ -2777,7 +2808,7 @@ export function RoomCanvas({
     ? "grabbing"
     : spaceHeld
       ? "grab"
-      : tool === "rect" || tool === "measure" || tool === "void"
+      : tool === "rect" || tool === "measure" || tool === "void" || tool === "guide"
         ? "crosshair"
         : edgeDragIdx !== null || shapeDragIdx
           ? "grabbing"
@@ -2800,6 +2831,7 @@ export function RoomCanvas({
               ["select", "Select", MousePointer2],
               ["rect", "Rect", SquareIcon],
               ["void", "Void", SquareDashed],
+              ["guide", "Guide", Slash],
               ["measure", "Measure", Ruler],
             ] as [Tool, string, typeof PenLine][]
           ).map(([key, label, Icon], i) => (
@@ -3140,6 +3172,57 @@ export function RoomCanvas({
 
         {/* Infinite CAD grid (screen-space; recomputed from the live view). */}
         {gridNodes}
+
+        {/* Construction guides (infinite reference lines), drawn far past the
+            viewport so SVG clips them; plus the in-progress 2-click preview. */}
+        {cguides.map((g, i) => {
+          const dx = g.b.x - g.a.x;
+          const dy = g.b.y - g.a.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const ux = (dx / len) * 100000;
+          const uy = (dy / len) * 100000;
+          const p1 = cmToPx({ x: g.a.x - ux, y: g.a.y - uy });
+          const p2 = cmToPx({ x: g.a.x + ux, y: g.a.y + uy });
+          return (
+            <line
+              key={`guide${i}`}
+              x1={p1.x}
+              y1={p1.y}
+              x2={p2.x}
+              y2={p2.y}
+              stroke="#a855f7"
+              strokeWidth={1}
+              strokeDasharray="2 5"
+              strokeOpacity={0.85}
+              style={{ pointerEvents: "none" }}
+            />
+          );
+        })}
+        {tool === "guide" && guideStart && (
+          <circle
+            cx={cmToPx(guideStart).x}
+            cy={cmToPx(guideStart).y}
+            r={4}
+            fill="#a855f7"
+            style={{ pointerEvents: "none" }}
+          />
+        )}
+        {tool === "guide" && guideStart && cursor && (() => {
+          const a = cmToPx(guideStart);
+          const b = cmToPx(cursor);
+          return (
+            <line
+              x1={a.x}
+              y1={a.y}
+              x2={b.x}
+              y2={b.y}
+              stroke="#a855f7"
+              strokeWidth={1}
+              strokeDasharray="2 5"
+              style={{ pointerEvents: "none" }}
+            />
+          );
+        })()}
 
         {/* Other rooms of the floor plan — read-only backdrop, clickable to edit.
             Pointer events are disabled while the active room is mid-draw so a

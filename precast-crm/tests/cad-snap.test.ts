@@ -246,3 +246,53 @@ describe("computeSnap — cross-room (extraLoops)", () => {
     expect(r.point.x).toBe(400);
   });
 });
+
+describe("computeSnap — construction guides (extraLines)", () => {
+  it("snaps ONTO a guide line (edge)", () => {
+    const r = computeSnap(
+      makeInput({
+        cursor: { x: 303, y: 50 },
+        settings: only("edge"),
+        extraLines: [{ a: { x: 300, y: 0 }, b: { x: 300, y: 400 } }], // vertical x=300
+      }),
+    );
+    expect(r.type).toBe("edge");
+    expect(r.point.x).toBeCloseTo(300, 6);
+    expect(r.point.y).toBeCloseTo(50, 6);
+  });
+
+  it("snaps to a guide ∩ wall intersection", () => {
+    // Infinite horizontal guide y=100 crosses SQUARE's left wall (x=0) at (0,100).
+    const r = computeSnap(
+      makeInput({
+        cursor: { x: 3, y: 103 },
+        settings: only("intersection"),
+        extraLines: [{ a: { x: -50, y: 100 }, b: { x: 50, y: 100 } }],
+      }),
+    );
+    expect(r.type).toBe("intersection");
+    expect(r.point.x).toBeCloseTo(0, 6);
+    expect(r.point.y).toBeCloseTo(100, 6);
+  });
+
+  it("snaps to a guide ∩ guide VIRTUAL intersection (no geometry there)", () => {
+    const r = computeSnap(
+      makeInput({
+        cursor: { x: 303, y: 503 },
+        settings: only("intersection"),
+        extraLines: [
+          { a: { x: 300, y: 0 }, b: { x: 300, y: 10 } }, // infinite vertical x=300
+          { a: { x: 0, y: 500 }, b: { x: 10, y: 500 } }, // infinite horizontal y=500
+        ],
+      }),
+    );
+    expect(r.type).toBe("intersection");
+    expect(r.point.x).toBeCloseTo(300, 6);
+    expect(r.point.y).toBeCloseTo(500, 6);
+  });
+
+  it("no guides → no effect (control)", () => {
+    const r = computeSnap(makeInput({ cursor: { x: 303, y: 50 }, settings: only("edge") }));
+    expect(r.type).toBeNull();
+  });
+});

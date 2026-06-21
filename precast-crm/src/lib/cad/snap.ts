@@ -69,6 +69,10 @@ export interface SnapInput {
    *  sources so adjacent rooms lock together at shared walls. Omitted/empty →
    *  single-room behaviour (byte-identical to before). */
   extraLoops?: Array<{ points: Pt[]; closed: boolean }>;
+  /** Infinite construction guides (each defined by two points on the line) to
+   *  also snap to: ONTO the guide (edge), and to guide∩wall / guide∩guide
+   *  intersections. Omitted/empty → no effect. */
+  extraLines?: Array<{ a: Pt; b: Pt }>;
 }
 
 export const DEFAULT_SNAP_SETTINGS: SnapSettings = {
@@ -241,6 +245,49 @@ export function computeSnap(input: SnapInput): SnapResult {
       for (const [ai, bi] of edgeList) {
         const { dist: d, closest } = pointSegment(cursor, sp[ai], sp[bi]);
         if (d <= tolCm) candidates.push({ point: closest, type: "edge", dist: d });
+      }
+    }
+  }
+
+  // Construction guides (infinite lines): snap ONTO a guide (edge), and to its
+  // intersections with walls and other guides.
+  const clines = input.extraLines ?? [];
+  if (clines.length > 0) {
+    const projOnLine = (p: Pt, a: Pt, b: Pt): Pt => {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 1e-12) return { x: a.x, y: a.y };
+      const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+      return { x: a.x + t * dx, y: a.y + t * dy };
+    };
+    for (let gi = 0; gi < clines.length; gi++) {
+      const g = clines[gi];
+      // snap ONTO the guide line (perpendicular foot from the cursor).
+      if (settings.edge) {
+        const foot = projOnLine(cursor, g.a, g.b);
+        const d = dist(cursor, foot);
+        if (d <= tolCm) candidates.push({ point: foot, type: "edge", dist: d });
+      }
+      if (settings.intersection) {
+        // guide ∩ every wall segment (intersection must lie ON the wall).
+        for (const src of sources) {
+          const sp = src.points;
+          for (const [ai, bi] of edges(sp, src.closed)) {
+            const x = lineIntersection(g.a, g.b, sp[ai], sp[bi]);
+            if (!x || !onSegment(x, sp[ai], sp[bi], 1e-6)) continue;
+            const d = dist(cursor, x);
+            if (d <= tolCm) candidates.push({ point: x, type: "intersection", dist: d });
+          }
+        }
+        // guide ∩ every OTHER guide.
+        for (let gj = gi + 1; gj < clines.length; gj++) {
+          const h = clines[gj];
+          const x = lineIntersection(g.a, g.b, h.a, h.b);
+          if (!x) continue;
+          const d = dist(cursor, x);
+          if (d <= tolCm) candidates.push({ point: x, type: "intersection", dist: d });
+        }
       }
     }
   }

@@ -86,6 +86,7 @@ export function DrawRoomDialog({
   const globalDir = dr.globalDir;
   const dirOverrides = dr.dirOverrides;
   const wallThickCm = dr.wallThickCm ?? 0;
+  const guides = dr.guides ?? [];
 
   // With walls, the slab engine bills the CLEAR INNER face: the drawn outline is
   // the outer wall face, offset inward by the thickness. Falls back to the outer
@@ -232,6 +233,17 @@ export function DrawRoomDialog({
     const next = rooms.slice();
     next[safeActive] = { ...cur, holes: [] };
     writeDrawing({ ...dr, rooms: next });
+  };
+
+  // Construction guides (infinite reference lines), global across the plan.
+  const addGuide = (g: { a: Pt; b: Pt }) => {
+    pushUndo();
+    writeDrawing({ ...dr, rooms, guides: [...(dr.guides ?? []), g] });
+  };
+  const clearGuides = () => {
+    if (!dr.guides?.length) return;
+    pushUndo();
+    writeDrawing({ ...dr, rooms, guides: [] });
   };
 
   // Live group transform from the gizmo: write each room's new points. Undo is
@@ -427,6 +439,8 @@ export function DrawRoomDialog({
               wallThickCm={wallThickCm}
               holes={activeHoles}
               onAddVoid={addVoid}
+              guides={guides}
+              onAddGuide={addGuide}
               bays={bays}
               beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
               fill
@@ -539,6 +553,19 @@ export function DrawRoomDialog({
                 {t(
                   `${activeHoles.length} та бўшлиқ — тозалаш`,
                   `${activeHoles.length} void${activeHoles.length > 1 ? "s" : ""} — clear`,
+                )}
+              </button>
+            )}
+
+            {guides.length > 0 && (
+              <button
+                type="button"
+                onClick={clearGuides}
+                className="self-start rounded border border-purple-300 bg-purple-50 px-2 py-1 text-xs text-purple-800 transition-colors hover:bg-purple-100"
+              >
+                {t(
+                  `${guides.length} та йўналтирувчи — тозалаш`,
+                  `${guides.length} guide${guides.length > 1 ? "s" : ""} — clear`,
                 )}
               </button>
             )}
