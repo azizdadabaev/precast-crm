@@ -5,7 +5,7 @@ import {
   type SlabRow,
 } from "@/components/calculation/MultiRoomCalculator";
 import type { ClientDraft } from "@/components/calculation/ClientInfoBar";
-import type { Pt, BeamDir } from "@/lib/cad/geometry";
+import type { Pt, BeamDir, RoomShape } from "@/lib/cad/geometry";
 
 /**
  * Calculator state — auto-saved to localStorage so in-app navigation,
@@ -24,18 +24,46 @@ import type { Pt, BeamDir } from "@/lib/cad/geometry";
 export type RoundingGrid = 0.05 | 0.1;
 
 /**
- * In-progress room sketch from the Draw-room dialog. Persisted alongside the
+ * In-progress floor plan from the Draw-room dialog. Persisted alongside the
  * rest of the draft so closing the dialog (or a refresh) before "Add rooms"
- * doesn't lose the outline, and reopening "Draw room" restores it. Cleared on
- * a successful Add (the outline became calculator rows) and by Clear.
- *  - `points`: the rectilinear outline in cm (single source of truth).
+ * doesn't lose the outlines, and reopening "Draw room" restores them. Cleared on
+ * a successful Add (the outlines became calculator rows) and by Clear.
+ *  - `rooms`: every room outline on the canvas (one priced room each).
  *  - `globalDir`: whole-drawing beam-direction choice (null = Auto/short-side).
- *  - `dirOverrides`: per-bay beam-direction overrides, keyed by bay index.
+ *  - `dirOverrides`: per-bay beam-direction overrides, keyed "roomIndex:bayIndex".
  */
 export interface CalculatorDrawing {
-  points: Pt[];
+  rooms: RoomShape[];
   globalDir: BeamDir | null;
-  dirOverrides: Record<number, BeamDir>;
+  dirOverrides: Record<string, BeamDir>;
+}
+
+/**
+ * Coerce a persisted/loaded drawing value into the current rooms[] shape. An
+ * earlier build stored a single `points` outline; convert any such legacy value
+ * into one closed room so old drafts still open. Returns null for empty/garbage.
+ */
+export function normalizeDrawing(d: unknown): CalculatorDrawing | null {
+  if (!d || typeof d !== "object") return null;
+  const obj = d as Record<string, unknown>;
+  const globalDir = (obj.globalDir as BeamDir | null) ?? null;
+  if (Array.isArray(obj.rooms)) {
+    const rooms = (obj.rooms as RoomShape[]).filter(
+      (r) => r && Array.isArray(r.points),
+    );
+    if (!rooms.length) return null;
+    return {
+      rooms,
+      globalDir,
+      dirOverrides: (obj.dirOverrides as Record<string, BeamDir>) ?? {},
+    };
+  }
+  // Legacy single-outline shape → wrap as one closed room.
+  if (Array.isArray(obj.points)) {
+    if (!(obj.points as Pt[]).length) return null;
+    return { rooms: [{ points: obj.points as Pt[], closed: true }], globalDir, dirOverrides: {} };
+  }
+  return null;
 }
 
 export const ANON_PERSIST_KEY = "calculator-draft-anon";
@@ -328,6 +356,8 @@ export const useCalculatorStore = create<CalculatorState>()(
             name: r.name.replace(/^Row\s+(\d+)$/i, "Хона $1"),
           }));
         }
+        // Coerce a legacy single-outline drawing into the rooms[] shape.
+        if (state.drawing) state.drawing = normalizeDrawing(state.drawing);
       },
     },
   ),

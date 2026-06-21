@@ -31,7 +31,7 @@ import type { NormBox } from "@/lib/annotation-box";
 import { projectTotal } from "@/services/calculation-engine";
 import { TaperedPrefillSchema } from "@/lib/validation";
 import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-bridge";
-import { useCalculatorStore, type CalculatorDrawing } from "@/store/calculator";
+import { useCalculatorStore, normalizeDrawing } from "@/store/calculator";
 import { useHydrateCalculator } from "@/store/useHydrateCalculator";
 import { Bi, useT } from "@/lib/i18n";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
@@ -475,7 +475,7 @@ function CalculationsInner() {
         tentativeClientName: string | null;
         tentativeClientPhone: string | null;
         tentativeClientAddress: string | null;
-        drawingJson: CalculatorDrawing | null;
+        drawingJson: unknown;
         client: {
           id: string;
           name: string;
@@ -512,8 +512,8 @@ function CalculationsInner() {
         matchedClientId: p.client?.id ?? null,
         discountPercent: Number(p.discountPercent),
         discountAmount: Number(p.discountAmount),
-        // Restore the drawn outline so "Draw room" reopens the saved sketch.
-        drawing: p.drawingJson ?? null,
+        // Restore the drawn floor plan so "Draw room" reopens the saved rooms.
+        drawing: normalizeDrawing(p.drawingJson),
         rows: p.calculations.map((c) =>
           recomputeRow({
             id: Math.random().toString(36).slice(2, 9),

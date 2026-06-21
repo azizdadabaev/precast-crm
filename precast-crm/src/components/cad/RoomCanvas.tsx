@@ -24,6 +24,7 @@ import {
 import {
   type Pt,
   type Rect,
+  type RoomShape,
   type BeamArrow,
   type BeamDir,
   type BeamKind,
@@ -81,8 +82,26 @@ import {
 } from "@/lib/cad/snap";
 
 interface RoomCanvasProps {
+  /** The ACTIVE room's outline (cm). The canvas edits one room at a time. */
   points: Pt[];
-  onChange: (points: Pt[]) => void;
+  /** Whether the active room's loop is closed (controlled by the parent so it
+   *  can manage the rooms list). */
+  closed: boolean;
+  /** Atomic update of the active room's outline + closed state. */
+  onActiveChange: (points: Pt[], closed: boolean) => void;
+  /** The active room index. Changing it resets the local undo/redo history so a
+   *  stale snapshot can't be applied to a different room. */
+  activeKey?: number;
+  /** Other rooms of the floor plan, rendered as a read-only backdrop and
+   *  clickable to make one active. `index` is its position in the parent's
+   *  rooms[]; `label` is its display number. */
+  backgroundRooms?: Array<{ points: Pt[]; closed: boolean; label: string; index: number }>;
+  /** Activate a background room (the operator clicked it to edit it). */
+  onPickBackgroundRoom?: (roomsIndex: number) => void;
+  /** Start a NEW room of the floor plan (＋ Room button, a preset, or a click on
+   *  empty grid once the active room is closed). The optional seed places the
+   *  first point or drops a preset outline. */
+  onRequestNewRoom?: (seed?: RoomShape) => void;
   /** Initial grid step in cm (default 10). User can change it via the controls. */
   gridCm?: number;
   /** Optional decomposed bays to overlay (translucent). */
@@ -274,7 +293,12 @@ function TbChip({
 
 export function RoomCanvas({
   points,
-  onChange,
+  closed,
+  onActiveChange,
+  activeKey,
+  backgroundRooms,
+  onPickBackgroundRoom,
+  onRequestNewRoom,
   gridCm = 10,
   bays,
   beamLayers,
@@ -305,8 +329,8 @@ export function RoomCanvas({
   const SVG_H = fill ? measured.h : INIT_H;
   // Active tool: freeform draw/edit (default), rectangle-room, or tape measure.
   const [tool, setTool] = useState<Tool>("draw");
-  // `closed` distinguishes draw-in-progress (open polyline) from a finished loop.
-  const [closed, setClosed] = useState(false);
+  // `closed` (the active room's loop state) is controlled by the parent now, so
+  // the canvas can manage a whole floor plan of rooms. It arrives via props.
 
   // ── Rectangle tool: press-drag corner A → release corner B. `rectStart` holds
   // the snapped first corner (cm) during the drag; `rectEnd` the live snapped
@@ -424,11 +448,18 @@ export function RoomCanvas({
   const commit = useCallback(
     (nextPoints: Pt[], nextClosed?: boolean) => {
       pushHistory(points, closed);
-      if (nextClosed !== undefined) setClosed(nextClosed);
-      onChange(nextPoints);
+      onActiveChange(nextPoints, nextClosed ?? closed);
     },
-    [points, closed, onChange, pushHistory],
+    [points, closed, onActiveChange, pushHistory],
   );
+
+  // Switching the active room must drop the local undo/redo history so an undo
+  // can't apply a snapshot from a different room.
+  useEffect(() => {
+    undoStack.current = [];
+    redoStack.current = [];
+    setHistTick((t) => t + 1);
+  }, [activeKey]);
 
   // Grid-snap a point when the Grid snap toggle is on (used for edge-insert).
   const maybeSnap = (p: Pt): Pt => (snapSettings.grid ? snapToGrid(p, step) : p);
@@ -564,12 +595,17 @@ export function RoomCanvas({
       return;
     }
 
-    // Closed: edge-body interactions (select / slide / Alt-insert) are handled on
-    // the edge-body hit lines (which stopPropagation). A click reaching the canvas
-    // is therefore empty space → clear the current selection.
+    // Closed active room: edge-body / vertex / background-room clicks are handled
+    // by their own handlers (stopPropagation). A click reaching the canvas is
+    // empty grid. Outside the active room → start a NEW room of the floor plan,
+    // seeded with this snapped point so the operator just keeps drawing; inside
+    // the active room → just clear the selection.
     setSelVertex(null);
     setSelEdge(null);
     setEdgeInsert(null);
+    if (onRequestNewRoom && tool === "draw" && !pointInPolygon(raw, points)) {
+      onRequestNewRoom({ points: [snapPoint(raw).point], closed: false });
+    }
   };
 
   // ── Direct distance/angle entry (DDE) commit ──
@@ -763,7 +799,7 @@ export function RoomCanvas({
         pushHistory(base.points, base.closed);
         moveDragMoved.current = true;
       }
-      onChange(translatePolygon(base.points, dx, dy)); // live; history already captured
+      onActiveChange(translatePolygon(base.points, dx, dy), closed); // live; history already captured
       return;
     }
 
@@ -788,7 +824,7 @@ export function RoomCanvas({
         pushHistory(base.points, base.closed);
         edgeDragMoved.current = true;
       }
-      onChange(next); // live drag bypasses commit (history captured on first move)
+      onActiveChange(next, closed); // live drag bypasses commit (history captured on first move)
       return;
     }
 
@@ -829,7 +865,7 @@ export function RoomCanvas({
         pushHistory(dragStart.current.points, dragStart.current.closed);
         dragMoved.current = true;
       }
-      onChange(next); // live drag bypasses commit (history captured on first move)
+      onActiveChange(next, closed); // live drag bypasses commit (history captured on first move)
       return;
     }
 
@@ -1021,10 +1057,13 @@ export function RoomCanvas({
   // vertices + walls are interactive at once, and frames the new shape.
   const insertPreset = (pts: Pt[]) => {
     switchTool("draw");
-    commit(pts, true);
     setSelEdge(null);
     setSelVertex(null);
     setEdgeInsert(null);
+    // In the multi-room floor plan a preset is a NEW room; fall back to replacing
+    // the active outline if the parent doesn't manage a rooms list.
+    if (onRequestNewRoom) onRequestNewRoom({ points: pts, closed: true });
+    else commit(pts, true);
     framePoints(pts);
   };
 
@@ -1103,7 +1142,6 @@ export function RoomCanvas({
   const clear = () => {
     if (!points.length && !closed) return;
     pushHistory(points, closed);
-    setClosed(false);
     setDragIdx(null);
     setSelEdge(null);
     setSelVertex(null);
@@ -1116,7 +1154,7 @@ export function RoomCanvas({
     setDdeInvalid(false);
     dragStart.current = null;
     dragMoved.current = false;
-    onChange([]);
+    onActiveChange([], false);
   };
 
   // Robust close: only finalize a loop that is non-degenerate + non-crossing.
@@ -1135,22 +1173,20 @@ export function RoomCanvas({
     const snap = undoStack.current.pop();
     if (!snap) return;
     redoStack.current.push({ points, closed });
-    setClosed(snap.closed);
     setSelEdge(null);
     setSelVertex(null);
     setHistTick((t) => t + 1);
-    onChange(snap.points);
+    onActiveChange(snap.points, snap.closed);
   };
 
   const redo = () => {
     const snap = redoStack.current.pop();
     if (!snap) return;
     undoStack.current.push({ points, closed });
-    setClosed(snap.closed);
     setSelEdge(null);
     setSelVertex(null);
     setHistTick((t) => t + 1);
-    onChange(snap.points);
+    onActiveChange(snap.points, snap.closed);
   };
 
   const deleteSelected = () => {
@@ -2570,6 +2606,18 @@ export function RoomCanvas({
           ))}
         </div>
 
+        {/* Start a fresh room of the floor plan (draw it next to the others). */}
+        {onRequestNewRoom && (
+          <button
+            type="button"
+            onClick={() => onRequestNewRoom()}
+            title="Start a new room — draw it next to the others"
+            className="inline-flex items-center gap-1 rounded-md bg-slate-700 px-2 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-slate-800"
+          >
+            + Room
+          </button>
+        )}
+
         {/* Clear the tape measurement (Measure mode only). */}
         {tool === "measure" && (
           <button
@@ -2851,6 +2899,84 @@ export function RoomCanvas({
 
         {/* Infinite CAD grid (screen-space; recomputed from the live view). */}
         {gridNodes}
+
+        {/* Other rooms of the floor plan — read-only backdrop, clickable to edit.
+            Pointer events are disabled while the active room is mid-draw so a
+            click places a vertex instead of switching rooms. */}
+        {backgroundRooms?.map((room) => {
+          const pts = room.points;
+          if (pts.length < 2) return null;
+          const px = pts.map(cmToPx);
+          const midDraw = !closed && points.length > 0;
+          const pe = midDraw ? "none" : "auto";
+          const bb = bbox(pts);
+          const ctr = cmToPx({ x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 });
+          const activate = (e: React.MouseEvent) => {
+            e.stopPropagation();
+            if (!midDraw) onPickBackgroundRoom?.(room.index);
+          };
+          return (
+            <g key={`room${room.index}`}>
+              {room.closed ? (
+                <polygon
+                  points={px.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="#64748b"
+                  fillOpacity={0.05}
+                  stroke="#94a3b8"
+                  strokeWidth={1.25}
+                  style={{ cursor: "pointer", pointerEvents: pe }}
+                  onClick={activate}
+                />
+              ) : (
+                <polyline
+                  points={px.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="none"
+                  stroke="#cbd5e1"
+                  strokeWidth={1.25}
+                  strokeDasharray="4 3"
+                  style={{ cursor: "pointer", pointerEvents: midDraw ? "none" : "stroke" }}
+                  onClick={activate}
+                />
+              )}
+              {/* Wall-length labels (closed rooms only). */}
+              {room.closed &&
+                pts.map((a, k) => {
+                  const b = pts[(k + 1) % pts.length];
+                  const lenCm = Math.hypot(b.x - a.x, b.y - a.y);
+                  if (lenCm < 1) return null;
+                  const mid = cmToPx({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+                  const nrm = edgeOutwardNormal(pts, k);
+                  return (
+                    <text
+                      key={`rl${room.index}-${k}`}
+                      x={mid.x + nrm.x * 9}
+                      y={mid.y + nrm.y * 9}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={9.5}
+                      fill="#64748b"
+                      style={{ pointerEvents: "none" }}
+                    >
+                      {formatLengthDual(lenCm)}
+                    </text>
+                  );
+                })}
+              {/* Room number chip at the centroid. */}
+              <text
+                x={ctr.x}
+                y={ctr.y}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={12}
+                fontWeight={600}
+                fill="#94a3b8"
+                style={{ pointerEvents: "none" }}
+              >
+                {room.label}
+              </text>
+            </g>
+          );
+        })}
 
         {/* Ring-beam / foundation band around the inner outline (concrete hatch),
             drawn behind the room so bearing seats read as resting on it. */}

@@ -49,6 +49,7 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 
 export default function CadTestPage() {
   const [points, setPoints] = useState<Pt[]>([]);
+  const [closed, setClosed] = useState(false);
   // Per-bay beam-direction overrides, keyed by bay index. Absent → use default.
   const [dirOverrides, setDirOverrides] = useState<Record<number, BeamDir>>({});
 
@@ -160,11 +161,13 @@ export default function CadTestPage() {
   const loadExample = () => {
     setDirOverrides({});
     setPoints(L_SHAPE);
+    setClosed(true);
   };
 
   const loadChamfer = () => {
     setDirOverrides({});
     setPoints(CHAMFER);
+    setClosed(true);
   };
 
   const setDir = (i: number, dir: BeamDir) =>
@@ -189,7 +192,11 @@ export default function CadTestPage() {
         <div>
           <RoomCanvas
             points={points}
-            onChange={setPoints}
+            closed={closed}
+            onActiveChange={(pts, c) => {
+              setPoints(pts);
+              setClosed(c);
+            }}
             bays={bays}
             beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
           />

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +14,7 @@ import { RoomCanvas } from "@/components/cad/RoomCanvas";
 import {
   type Pt,
   type BeamDir,
+  type RoomShape,
   decomposeToBays,
   defaultBeamDir,
   bayToSlabInput,
@@ -43,29 +45,28 @@ interface Props {
   startSeq: number;
   /** Finalized calculator rows (already priced) → appended to the calculator. */
   onAddRooms: (rows: SlabRow[]) => void;
-  /** Persisted in-progress sketch (from the calculator store), so the outline
-   *  survives closing the dialog or a refresh. null = nothing drawn yet. */
+  /** Persisted floor plan (from the calculator store), so the outlines survive
+   *  closing the dialog or a refresh. null = nothing drawn yet. */
   drawing: CalculatorDrawing | null;
-  /** Write the sketch back to the store; null clears it. */
+  /** Write the floor plan back to the store; null clears it. */
   onDrawingChange: (drawing: CalculatorDrawing | null) => void;
 }
 
-/** Neutral working value when no sketch is in progress yet. */
-const EMPTY_DRAWING: CalculatorDrawing = { points: [], globalDir: null, dirOverrides: {} };
+const EMPTY_DRAWING: CalculatorDrawing = { rooms: [], globalDir: null, dirOverrides: {} };
+const EMPTY_ROOM: RoomShape = { points: [], closed: false };
 
 /**
- * Draw-a-room modal — HYBRID, mirroring the cad-test page.
+ * Draw-a-floor-plan modal — MULTI-ROOM.
  *
- * A drawn outline takes one of two paths:
+ * The canvas edits one ACTIVE room at a time (full CAD tools); the other rooms
+ * render as a read-only backdrop and are clickable to edit. Each closed room
+ * takes one of two paths:
  *  - RECTILINEAR (every wall H/V): the proven `decompose → bay → calculateSlab`
- *    path. Bays overlay the canvas with the engine-driven beam/block picture;
- *    confirming appends one exact calculator row per bay (`baysToSlabRows`).
- *  - TAPERED / IRREGULAR (any angled wall): the bay decomposer can't represent
- *    it, so we run the scanline beam engine (`scanBeams`), which casts beams at
- *    the pitch and follows the room's true width at each position. We show the
- *    beam count / length RANGE / cut-list / est. blocks, draw the tapering beams
- *    via `scanBeamsToOverlay`, and on confirm append one ESTIMATE row per
- *    beam-length bucket (`scanScheduleToSlabRows`).
+ *    path; one exact calculator row per bay (`baysToSlabRows`).
+ *  - TAPERED / IRREGULAR (any angled wall): the scanline beam engine
+ *    (`scanBeams`); one ESTIMATE row per beam-length bucket
+ *    (`scanScheduleToSlabRows`).
+ * "Add rooms" appends the priced rows for EVERY room, numbered continuously.
  */
 export function DrawRoomDialog({
   open,
@@ -76,22 +77,70 @@ export function DrawRoomDialog({
   onDrawingChange,
 }: Props) {
   const t = useT();
-  // The in-progress sketch lives in the calculator store (persisted), so it
-  // survives closing the dialog / a refresh. Derive the working values from it
-  // and write every change back through onDrawingChange.
   const dr = drawing ?? EMPTY_DRAWING;
-  const points = dr.points;
-  // Per-bay beam-direction overrides, keyed by bay index (absent → default).
-  const dirOverrides = dr.dirOverrides;
-  // Global beam-direction choice for the whole drawing (null = Auto/short-side).
-  // Drives the scanline (tapered) path and the default for every bay; a per-bay
-  // override still wins on the rectilinear path.
+  // Always present at least one (possibly empty) room so the canvas has an
+  // active target to draw into.
+  const rooms: RoomShape[] = dr.rooms.length ? dr.rooms : [EMPTY_ROOM];
   const globalDir = dr.globalDir;
-  const setPoints = (next: Pt[]) => onDrawingChange({ ...dr, points: next });
-  const setGlobalDir = (dir: BeamDir | null) => onDrawingChange({ ...dr, globalDir: dir });
+  const dirOverrides = dr.dirOverrides;
 
-  // HYBRID ROUTING. A closed outline with ANY angled edge → scanline; every edge
-  // H/V → the exact bay path. <4 points (still drawing) is treated as rectilinear.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const safeActive = Math.min(Math.max(0, activeIndex), rooms.length - 1);
+  const activeRoom = rooms[safeActive] ?? EMPTY_ROOM;
+  const points = activeRoom.points;
+  const activeClosed = activeRoom.closed;
+
+  // ── Writers ──────────────────────────────────────────────────
+  const writeDrawing = (next: CalculatorDrawing) => onDrawingChange(next);
+
+  // Active room outline + closed (atomic) — feeds RoomCanvas.onActiveChange.
+  const onActiveChange = (pts: Pt[], closed: boolean) => {
+    const next = rooms.slice();
+    next[safeActive] = { points: pts, closed };
+    writeDrawing({ ...dr, rooms: next });
+  };
+
+  const setGlobalDir = (d: BeamDir | null) =>
+    writeDrawing({ ...dr, rooms, globalDir: d });
+
+  const setDir = (roomI: number, bayI: number, d: BeamDir) =>
+    writeDrawing({
+      ...dr,
+      rooms,
+      dirOverrides: { ...dirOverrides, [`${roomI}:${bayI}`]: d },
+    });
+
+  // Start a NEW room. Reuse the active slot if it's still empty (no litter),
+  // else append + activate. A seed places the first point / a preset outline.
+  const requestNewRoom = (seed?: RoomShape) => {
+    const room = seed ?? { points: [], closed: false };
+    const active = rooms[safeActive];
+    if (active && active.points.length === 0) {
+      const next = rooms.slice();
+      next[safeActive] = room;
+      writeDrawing({ ...dr, rooms: next });
+    } else {
+      const next = [...rooms, room];
+      writeDrawing({ ...dr, rooms: next });
+      setActiveIndex(next.length - 1);
+    }
+  };
+
+  const deleteRoom = (i: number) => {
+    const next = rooms.filter((_, k) => k !== i);
+    writeDrawing({ ...dr, rooms: next.length ? next : [EMPTY_ROOM] });
+    setActiveIndex((cur) => {
+      const c = cur > i ? cur - 1 : cur;
+      return Math.min(Math.max(0, c), Math.max(0, next.length - 1));
+    });
+  };
+
+  // Backdrop = every room but the active one, with at least one point.
+  const backgroundRooms = rooms
+    .map((r, i) => ({ points: r.points, closed: r.closed, label: String(i + 1), index: i }))
+    .filter((r) => r.index !== safeActive && r.points.length >= 1);
+
+  // ── Active room derivations (interactive overlay) ─────────────
   const rectilinear = useMemo(
     () => (points.length >= 4 ? isRectilinear(points) : true),
     [points],
@@ -102,8 +151,6 @@ export function DrawRoomDialog({
     [points, rectilinear],
   );
 
-  // Scanline result for an angled outline. Beams run across the SHORTER bbox
-  // dimension by default (same heuristic as `defaultBeamDir`).
   const scan = useMemo(() => {
     if (points.length < 4 || rectilinear) return null;
     const box = bbox(points);
@@ -122,11 +169,12 @@ export function DrawRoomDialog({
     };
   }, [points, rectilinear, globalDir]);
 
-  // Per-bay: resolved direction + engine result (rectilinear path only).
-  const rows = useMemo(
+  // Per-bay: resolved direction + engine result for the ACTIVE room (overlay).
+  const activeBayRows = useMemo(
     () =>
       bays.map((rect, i) => {
-        const beamDir = dirOverrides[i] ?? globalDir ?? defaultBeamDir(rect);
+        const beamDir =
+          dirOverrides[`${safeActive}:${i}`] ?? globalDir ?? defaultBeamDir(rect);
         let result = null;
         try {
           result = calculateSlab(bayToSlabInput({ rect, beamDir }));
@@ -135,12 +183,12 @@ export function DrawRoomDialog({
         }
         return { rect, beamDir, result };
       }),
-    [bays, dirOverrides, globalDir],
+    [bays, dirOverrides, globalDir, safeActive],
   );
 
   const beamLayers = useMemo(
     () =>
-      rows.map((r) =>
+      activeBayRows.map((r) =>
         r.result
           ? beamLayout(
               { rect: r.rect, beamDir: r.beamDir },
@@ -152,48 +200,68 @@ export function DrawRoomDialog({
             )
           : { beams: [], blockCells: [] },
       ),
-    [rows],
+    [activeBayRows],
   );
 
-  // Tapered/angled overlay: turn the scanline beams into the SAME beam/block Rect
-  // overlay the rectilinear path feeds RoomCanvas, so the angled drawing renders
-  // its (tapering) beams instead of one wrong uniform bay.
   const scanOverlay = useMemo(
     () => (scan ? scanBeamsToOverlay({ beams: scan.beams }, scan.beamDir) : null),
     [scan],
   );
 
-  // Wipe the persisted sketch entirely (after a successful Add). Closing the
-  // dialog does NOT call this — the sketch is retained.
-  const reset = () => onDrawingChange(null);
+  // ── All closed rooms → priced rows, numbered continuously ─────
+  const allRows = useMemo(() => {
+    const out: SlabRow[] = [];
+    rooms.forEach((room, ri) => {
+      if (!room.closed || room.points.length < 4) return;
+      if (isRectilinear(room.points)) {
+        const rbays = decomposeToBays(room.points);
+        const rws = rbays.map((rect, bi) => ({
+          rect,
+          beamDir: dirOverrides[`${ri}:${bi}`] ?? globalDir ?? defaultBeamDir(rect),
+        }));
+        out.push(...baysToSlabRows(rws, startSeq + out.length));
+      } else {
+        const box = bbox(room.points);
+        const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
+        const { beams } = scanBeams(room.points, beamDir);
+        out.push(...scanScheduleToSlabRows(beamSchedule(beams), startSeq + out.length));
+      }
+    });
+    return out;
+  }, [rooms, dirOverrides, globalDir, startSeq]);
+
+  const closedRoomCount = rooms.filter(
+    (r) => r.closed && r.points.length >= 4,
+  ).length;
+  const canAdd = allRows.length > 0;
+
+  const totals = useMemo(() => {
+    let beams = 0;
+    let blocks = 0;
+    for (const r of allRows) {
+      if (r.result) {
+        beams += r.result.beam_count;
+        blocks += r.result.total_blocks;
+      }
+    }
+    return { beams, blocks };
+  }, [allRows]);
+
+  // Wipe the persisted floor plan entirely (after a successful Add).
+  const reset = () => {
+    onDrawingChange(null);
+    setActiveIndex(0);
+  };
 
   const handleClose = () => {
-    // Retain the in-progress sketch (it's persisted) so closing the dialog or a
-    // refresh doesn't lose the outline. Only a successful Add or Clear wipes it.
+    // Retain the in-progress floor plan (it's persisted) so closing the dialog
+    // or a refresh doesn't lose it. Only a successful Add or Clear wipes it.
     onClose();
   };
 
-  const setDir = (i: number, dir: BeamDir) =>
-    onDrawingChange({ ...dr, dirOverrides: { ...dr.dirOverrides, [i]: dir } });
-
-  const canAdd = rectilinear ? rows.length > 0 : !!scan && scan.beams.length > 0;
-
   const handleAdd = () => {
-    let next: SlabRow[];
-    if (rectilinear) {
-      if (!rows.length) return;
-      // Exact path: one priced calculator row per bay.
-      next = baysToSlabRows(
-        rows.map((r) => ({ rect: r.rect, beamDir: r.beamDir })),
-        startSeq,
-      );
-    } else {
-      if (!scan || !scan.beams.length) return;
-      // Estimate path: one row per beam-length bucket from the cut-list.
-      next = scanScheduleToSlabRows(scan.schedule, startSeq);
-    }
-    if (!next.length) return;
-    onAddRooms(next);
+    if (!allRows.length) return;
+    onAddRooms(allRows);
     reset();
     onClose();
   };
@@ -203,12 +271,12 @@ export function DrawRoomDialog({
       <DialogContent className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-3 sm:max-w-[1400px]">
         <DialogHeader>
           <DialogTitle>
-            <Bi uz="Хона чизиш" en="Draw room" />
+            <Bi uz="Хоналар чизиш" en="Draw floor plan" />
           </DialogTitle>
           <DialogDescription>
             {t(
-              "Хона контурини чизинг — тўғри тўртбурчак хоналар аниқ ҳисобланади; қийшиқ деворли хоналар скан-усулда тахминий ҳисобланади.",
-              "Sketch the room outline — rectangular rooms compute exactly; rooms with angled walls are estimated via the scanline engine.",
+              "Бир нечта хона чизинг — биттасини ёпгач, грид бўйлаб кейингисини чизаверинг. Тўғри тўртбурчак хоналар аниқ, қийшиқ деворли хоналар скан-усулда ҳисобланади.",
+              "Draw several rooms — close one, then keep drawing the next anywhere on the grid. Rectangular rooms compute exactly; rooms with angled walls are estimated via the scanline engine.",
             )}
           </DialogDescription>
         </DialogHeader>
@@ -218,7 +286,12 @@ export function DrawRoomDialog({
           <div className="flex min-h-0 min-w-0 flex-[7]">
             <RoomCanvas
               points={points}
-              onChange={setPoints}
+              closed={activeClosed}
+              onActiveChange={onActiveChange}
+              activeKey={safeActive}
+              backgroundRooms={backgroundRooms}
+              onPickBackgroundRoom={(i) => setActiveIndex(i)}
+              onRequestNewRoom={requestNewRoom}
               bays={bays}
               beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
               fill
@@ -226,8 +299,54 @@ export function DrawRoomDialog({
           </div>
 
           <div className="flex min-h-0 w-full flex-[3] flex-col gap-2 overflow-y-auto lg:min-w-[15rem]">
+            {/* Rooms list — switch active room, delete, or add a new one. */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {rooms.map((room, i) => (
+                <div
+                  key={i}
+                  className={
+                    "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs " +
+                    (i === safeActive
+                      ? "border-sky-500 bg-sky-50 text-sky-700"
+                      : "border-slate-200 bg-white text-slate-600")
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveIndex(i)}
+                    className="font-medium"
+                  >
+                    {t(`Хона ${i + 1}`, `Room ${i + 1}`)}
+                    {!room.closed && room.points.length > 0 && (
+                      <span className="ml-1 text-[10px] text-amber-600">
+                        {t("чизилмоқда", "drawing")}
+                      </span>
+                    )}
+                  </button>
+                  {rooms.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => deleteRoom(i)}
+                      title={t("Хонани ўчириш", "Delete room")}
+                      className="text-slate-400 transition-colors hover:text-destructive"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => requestNewRoom()}
+                className="inline-flex items-center gap-1 rounded-md border border-dashed border-slate-300 px-2 py-1 text-xs text-slate-500 transition-colors hover:bg-slate-50"
+              >
+                <Plus className="h-3 w-3" />
+                {t("Хона", "Room")}
+              </button>
+            </div>
+
             {/* Persistent beam-direction control (Auto / H / V) — drives the
-                scanline path and the default for every bay. */}
+                scanline path and the default for every bay of the active room. */}
             {points.length >= 4 && (
               <div className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
                 <span className="font-medium">{t("Балка йўналиши", "Beam direction")}</span>
@@ -255,6 +374,10 @@ export function DrawRoomDialog({
               </div>
             )}
 
+            <div className="text-sm font-medium text-foreground">
+              {t(`Фаол: Хона ${safeActive + 1}`, `Editing: Room ${safeActive + 1}`)}
+            </div>
+
             <div className="text-sm text-muted-foreground">
               {scan
                 ? t(
@@ -266,7 +389,7 @@ export function DrawRoomDialog({
                   : t("Ёпиқ хона чизинг (≥4 нуқта)", "Draw a closed room (≥4 points)")}
             </div>
 
-            {/* Tapered / irregular: scanline summary + cut-list (mirrors cad-test). */}
+            {/* Tapered / irregular: scanline summary + cut-list (active room). */}
             {scan && (
               <div className="rounded border-2 border-amber-300 bg-amber-50/40 p-2 text-xs">
                 <div className="mb-1 font-semibold text-amber-800">
@@ -300,45 +423,15 @@ export function DrawRoomDialog({
                     </tr>
                   </tbody>
                 </table>
-
-                {scan.schedule.length > 0 && (
-                  <div className="mt-2 border-t border-amber-200 pt-1.5">
-                    <div className="mb-1 text-[11px] font-semibold text-muted-foreground">
-                      {t("БАЛКА КЕСИШ РЎЙХАТИ", "BEAM CUT-LIST")}
-                    </div>
-                    <table className="w-full tabular-nums text-[11px]">
-                      <thead>
-                        <tr className="text-muted-foreground">
-                          <td>{t("Узунлик", "Length")}</td>
-                          <td className="text-right">{t("Сони", "Qty")}</td>
-                        </tr>
-                      </thead>
-                      <tbody className="[&_td]:py-0.5">
-                        {scan.schedule.map((e) => (
-                          <tr key={e.lengthCm}>
-                            <td className="text-muted-foreground">{formatLengthCm(e.lengthCm)}</td>
-                            <td className="text-right font-medium">{e.qty}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div className="mt-1.5 text-[10px] text-muted-foreground">
-                      {t(
-                        "«Қўшиш» ҳар бир узунлик гуруҳи учун битта тахминий «(tapered)» хона қўшади.",
-                        "“Add” appends one estimate “(tapered)” room per length group.",
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Rectilinear: per-bay summary + direction toggle (unchanged). */}
-            {rows.map((r, i) => (
+            {/* Rectilinear: per-bay summary + direction toggle (active room). */}
+            {activeBayRows.map((r, i) => (
               <div key={i} className="rounded border p-2 text-xs">
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <span className="font-medium">
-                    {t(`Хона ${i + 1}`, `Bay ${i + 1}`)} —{" "}
+                    {t(`Қисм ${i + 1}`, `Bay ${i + 1}`)} —{" "}
                     {(r.rect.w / 100).toFixed(2)}×{(r.rect.h / 100).toFixed(2)} m
                   </span>
                   <span className="inline-flex overflow-hidden rounded border">
@@ -346,7 +439,7 @@ export function DrawRoomDialog({
                       <button
                         key={d}
                         type="button"
-                        onClick={() => setDir(i, d)}
+                        onClick={() => setDir(safeActive, i, d)}
                         className={
                           "px-2 py-0.5 " +
                           (r.beamDir === d ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground")
@@ -364,16 +457,51 @@ export function DrawRoomDialog({
                 )}
               </div>
             ))}
+
+            {/* Grand total across all drawn rooms. */}
+            {closedRoomCount > 0 && (
+              <div className="mt-auto rounded-md border border-slate-300 bg-slate-50 p-2 text-xs">
+                <div className="mb-1 font-semibold text-slate-700">
+                  {t("Жами (барча хоналар)", "Total (all rooms)")}
+                </div>
+                <table className="w-full tabular-nums">
+                  <tbody className="[&_td]:py-0.5 [&_td:first-child]:text-muted-foreground">
+                    <tr>
+                      <td>{t("Хоналар", "Rooms")}</td>
+                      <td className="text-right font-medium">{closedRoomCount}</td>
+                    </tr>
+                    <tr>
+                      <td>{t("Балка", "Beams")}</td>
+                      <td className="text-right font-medium">{totals.beams}</td>
+                    </tr>
+                    <tr>
+                      <td>{t("Ғишт", "Blocks")}</td>
+                      <td className="text-right font-medium">{totals.blocks}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t pt-3">
-          <Button variant="ghost" size="sm" onClick={handleClose}>
-            <Bi uz="Бекор қилиш" en="Cancel" />
-          </Button>
-          <Button size="sm" disabled={!canAdd} onClick={handleAdd}>
-            <Bi uz="Хоналарни қўшиш" en="Add rooms" enClassName="font-normal opacity-90" />
-          </Button>
+        <div className="flex items-center justify-between gap-2 border-t pt-3">
+          <span className="text-xs text-muted-foreground">
+            {closedRoomCount > 0
+              ? t(
+                  `${closedRoomCount} та хона · ${allRows.length} қатор қўшилади`,
+                  `${closedRoomCount} room${closedRoomCount > 1 ? "s" : ""} · ${allRows.length} row${allRows.length > 1 ? "s" : ""} will be added`,
+                )
+              : ""}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={handleClose}>
+              <Bi uz="Бекор қилиш" en="Cancel" />
+            </Button>
+            <Button size="sm" disabled={!canAdd} onClick={handleAdd}>
+              <Bi uz="Хоналарни қўшиш" en="Add rooms" enClassName="font-normal opacity-90" />
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

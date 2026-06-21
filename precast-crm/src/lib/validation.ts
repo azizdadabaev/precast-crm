@@ -217,14 +217,16 @@ export const CalculateRequestSchema = RoomCalcInputBaseSchema.extend({
   projectId: z.string().optional(),
 });
 
-// ── Drawn room outline (CAD sketch) ─────────────────────────────
+// ── Drawn floor plan (CAD sketch) ───────────────────────────────
 // Mirrors `CalculatorDrawing` in the calculator store. Persisted as JSON on
-// Project.drawingJson so reopening a saved draft restores the exact outline.
-// JSON object keys are strings on the wire; the client indexes dirOverrides
-// by bay number (number→string coercion is a no-op at property-access time).
+// Project.drawingJson so reopening a saved draft restores the exact outlines.
+// dirOverrides is keyed "roomIndex:bayIndex" (string on the wire).
 const BeamDirEnum = z.enum(["H", "V"]);
+const PtSchema = z.object({ x: z.number(), y: z.number() });
 export const CalculatorDrawingSchema = z.object({
-  points: z.array(z.object({ x: z.number(), y: z.number() })),
+  rooms: z.array(
+    z.object({ points: z.array(PtSchema), closed: z.boolean() }),
+  ),
   globalDir: BeamDirEnum.nullable(),
   dirOverrides: z.record(z.string(), BeamDirEnum).default({}),
 });

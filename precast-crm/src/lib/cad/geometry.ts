@@ -24,6 +24,16 @@ export interface Bay {
   beamDir: BeamDir;
 }
 
+/**
+ * One room outline on the floor-plan canvas: a polygon (cm) + whether its loop
+ * is closed. The canvas edits one "active" room at a time; the others render as
+ * a read-only backdrop. A floor plan is an array of these.
+ */
+export interface RoomShape {
+  points: Pt[];
+  closed: boolean;
+}
+
 /** Signed polygon area (shoelace). Positive = counter-clockwise in math coords. */
 export function polygonArea(pts: Pt[]): number {
   let a = 0;
