@@ -104,6 +104,7 @@ export function DrawRoomDialog({
   const activeRoom = rooms[safeActive] ?? EMPTY_ROOM;
   const points = activeRoom.points;
   const activeClosed = activeRoom.closed;
+  const activeHoles = activeRoom.holes ?? [];
 
   // ── Writers ──────────────────────────────────────────────────
   const writeDrawing = (next: CalculatorDrawing) => onDrawingChange(next);
@@ -215,6 +216,24 @@ export function DrawRoomDialog({
     if (indices.length) setActiveIndex(indices[0]);
   };
 
+  // Add a floor void (hole) to the active room, deducted from its slab BoM.
+  const addVoid = (voidPts: Pt[]) => {
+    const cur = rooms[safeActive];
+    if (!cur) return;
+    pushUndo();
+    const next = rooms.slice();
+    next[safeActive] = { ...cur, holes: [...(cur.holes ?? []), voidPts] };
+    writeDrawing({ ...dr, rooms: next });
+  };
+  const clearVoids = () => {
+    const cur = rooms[safeActive];
+    if (!cur || !cur.holes?.length) return;
+    pushUndo();
+    const next = rooms.slice();
+    next[safeActive] = { ...cur, holes: [] };
+    writeDrawing({ ...dr, rooms: next });
+  };
+
   // Live group transform from the gizmo: write each room's new points. Undo is
   // checkpointed once per gesture by the canvas (onPushUndo on first move).
   const applyGroupTransform = (updates: Array<{ index: number; points: Pt[] }>) => {
@@ -234,9 +253,13 @@ export function DrawRoomDialog({
   // Engine outline = the clear INNER face when walls are on (else the drawn one).
   const enginePoints = useMemo(() => innerOf(points), [points, wallThickCm]);
 
+  // A room with floor voids can't use the exact bay path → route to scanline.
   const rectilinear = useMemo(
-    () => (enginePoints.length >= 4 ? isRectilinear(enginePoints) : true),
-    [enginePoints],
+    () =>
+      enginePoints.length >= 4
+        ? isRectilinear(enginePoints) && activeHoles.length === 0
+        : true,
+    [enginePoints, activeHoles],
   );
 
   const bays = useMemo(
@@ -248,7 +271,7 @@ export function DrawRoomDialog({
     if (enginePoints.length < 4 || rectilinear) return null;
     const box = bbox(enginePoints);
     const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
-    const { beams } = scanBeams(enginePoints, beamDir);
+    const { beams } = scanBeams(enginePoints, beamDir, undefined, undefined, activeHoles);
     const schedule = beamSchedule(beams);
     const blocks = blockEstimate(beams);
     const lengths = beams.map((b) => b.lengthCm);
@@ -260,7 +283,8 @@ export function DrawRoomDialog({
       minLenCm: lengths.length ? Math.min(...lengths) : 0,
       maxLenCm: lengths.length ? Math.max(...lengths) : 0,
     };
-  }, [points, rectilinear, globalDir]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enginePoints, rectilinear, globalDir, activeHoles]);
 
   // Per-bay: resolved direction + engine result for the ACTIVE room (overlay).
   const activeBayRows = useMemo(
@@ -306,9 +330,10 @@ export function DrawRoomDialog({
     const out: SlabRow[] = [];
     rooms.forEach((room, ri) => {
       if (!room.closed || room.points.length < 4) return;
-      // Bill the clear inner face when walls are on.
+      // Bill the clear inner face when walls are on; voids route to scanline.
       const inner = innerOf(room.points);
-      if (isRectilinear(inner)) {
+      const rHoles = room.holes ?? [];
+      if (isRectilinear(inner) && rHoles.length === 0) {
         const rbays = decomposeToBays(inner);
         const rws = rbays.map((rect, bi) => ({
           rect,
@@ -318,7 +343,7 @@ export function DrawRoomDialog({
       } else {
         const box = bbox(inner);
         const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
-        const { beams } = scanBeams(inner, beamDir);
+        const { beams } = scanBeams(inner, beamDir, undefined, undefined, rHoles);
         out.push(...scanScheduleToSlabRows(beamSchedule(beams), startSeq + out.length));
       }
     });
@@ -400,6 +425,8 @@ export function DrawRoomDialog({
               onSelectRooms={(indices) => onSelectRooms(indices)}
               onGroupTransform={applyGroupTransform}
               wallThickCm={wallThickCm}
+              holes={activeHoles}
+              onAddVoid={addVoid}
               bays={bays}
               beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
               fill
@@ -500,6 +527,21 @@ export function DrawRoomDialog({
                 <span className="text-muted-foreground">{t("см", "cm")}</span>
               </span>
             </div>
+
+            {/* Floor voids: the Void tool draws a stairwell/shaft that deducts
+                from the slab. Shown when the active room has any. */}
+            {activeHoles.length > 0 && (
+              <button
+                type="button"
+                onClick={clearVoids}
+                className="self-start rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 transition-colors hover:bg-amber-100"
+              >
+                {t(
+                  `${activeHoles.length} та бўшлиқ — тозалаш`,
+                  `${activeHoles.length} void${activeHoles.length > 1 ? "s" : ""} — clear`,
+                )}
+              </button>
+            )}
 
             <div className="text-sm font-medium text-foreground">
               {t(`Фаол: Хона ${safeActive + 1}`, `Editing: Room ${safeActive + 1}`)}

@@ -66,6 +66,7 @@ export function normalizeDrawing(d: unknown): CalculatorDrawing | null {
         id: r.id || newRoomId(),
         points: r.points as Pt[],
         closed: !!r.closed,
+        holes: Array.isArray(r.holes) ? (r.holes as Pt[][]) : undefined,
       }));
     if (!rooms.length) return null;
     return {

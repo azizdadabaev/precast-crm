@@ -37,6 +37,9 @@ export interface RoomShape {
   id: string;
   points: Pt[];
   closed: boolean;
+  /** Floor voids (stairwell / shaft / light-well) — inner hole loops (cm),
+   *  each strictly inside `points`, deducted from the slab BoM. Absent = solid. */
+  holes?: Pt[][];
 }
 
 /** Signed polygon area (shoelace). Positive = counter-clockwise in math coords. */

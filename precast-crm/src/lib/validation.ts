@@ -229,6 +229,7 @@ export const CalculatorDrawingSchema = z.object({
       id: z.string().optional(),
       points: z.array(PtSchema),
       closed: z.boolean(),
+      holes: z.array(z.array(PtSchema)).optional(),
     }),
   ),
   globalDir: BeamDirEnum.nullable(),

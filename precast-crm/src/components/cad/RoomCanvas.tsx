@@ -14,6 +14,7 @@ import {
   PenLine,
   MousePointer2,
   Square as SquareIcon,
+  SquareDashed,
   Ruler,
   RotateCcw,
   RotateCw,
@@ -122,6 +123,10 @@ interface RoomCanvasProps {
   /** Wall thickness (cm). When > 0, render the wall poché band between the drawn
    *  outer outline and the inward-offset inner (clear) face. */
   wallThickCm?: number;
+  /** Active room's floor voids (holes), rendered dashed. */
+  holes?: Pt[][];
+  /** Add a void to the active room (Void tool: drag a rect inside the room). */
+  onAddVoid?: (pts: Pt[]) => void;
   /** Initial grid step in cm (default 10). User can change it via the controls. */
   gridCm?: number;
   /** Optional decomposed bays to overlay (translucent). */
@@ -239,7 +244,7 @@ interface View {
 // CAD arrow tool — select / move / edit existing rooms without drawing new
 // geometry; "rect" click-drags an axis-aligned room box; "measure" is a
 // display-only tape that never touches the room outline. ──
-type Tool = "draw" | "select" | "rect" | "measure";
+type Tool = "draw" | "select" | "rect" | "measure" | "void";
 
 const IDENTITY: View = { zoom: 1, tx: 0, ty: 0 };
 
@@ -329,6 +334,8 @@ export function RoomCanvas({
   onSelectRooms,
   onGroupTransform,
   wallThickCm,
+  holes,
+  onAddVoid,
   gridCm = 10,
   bays,
   beamLayers,
@@ -637,9 +644,9 @@ export function RoomCanvas({
       return;
     }
 
-    // The rectangle tool is driven entirely by press-drag-release (handleDown /
-    // handleMove / endDrag); a stray click does nothing to the outline.
-    if (tool === "rect") return;
+    // The rectangle + void tools are driven entirely by press-drag-release
+    // (handleDown / handleMove / endDrag); a stray click does nothing.
+    if (tool === "rect" || tool === "void") return;
 
     // SELECT (CAD arrow) mode never draws: a click reaching the canvas is empty
     // space, so clear the selection. Vertex / edge / room interactions are
@@ -930,9 +937,9 @@ export function RoomCanvas({
       return;
     }
 
-    // ── Rectangle tool: live preview of corner B (snapped) while dragging, plus
-    // the snap marker so the corner lands on grid/vertices cleanly. ──
-    if (tool === "rect") {
+    // ── Rectangle / Void tool: live preview of corner B (snapped) while
+    // dragging, plus the snap marker so the corner lands on grid/vertices. ──
+    if (tool === "rect" || tool === "void") {
       const res = snapPoint(cm);
       setSnapResult(res);
       if (rectStart) setRectEnd(res.point);
@@ -1098,6 +1105,25 @@ export function RoomCanvas({
       return;
     }
 
+    // ── Void tool: release punches a rectangular floor void into the active
+    // room — but only if all 4 corners land inside it. Reversible (parent
+    // checkpoints undo). ──
+    if (tool === "void" && rectStart && rectEnd) {
+      const rect = rectFromCorners(rectStart, rectEnd);
+      setRectStart(null);
+      setRectEnd(null);
+      setSnapResult(null);
+      if (
+        rect.length === 4 &&
+        closed &&
+        points.length >= 3 &&
+        rect.every((p) => pointInPolygon(p, points))
+      ) {
+        onAddVoid?.(rect);
+      }
+      return;
+    }
+
     // ── Rectangle tool: release builds the 4-corner box and REPLACES the room
     // (one polygon). commit() records undo, so it's reversible. A degenerate
     // (near-zero) drag yields [] and is ignored. After creating we return to
@@ -1136,8 +1162,8 @@ export function RoomCanvas({
   };
 
   const handleLeave = () => {
-    // Cancel an in-flight rectangle drag without committing (pointer left canvas).
-    if (tool === "rect") {
+    // Cancel an in-flight rectangle / void drag without committing.
+    if (tool === "rect" || tool === "void") {
       setRectStart(null);
       setRectEnd(null);
     }
@@ -1166,9 +1192,10 @@ export function RoomCanvas({
       setPanning(true);
       return;
     }
-    // ── Rectangle tool: a plain left-press anchors corner A (snapped). The drag
-    // builds the box; release commits it. Pan (handled above) still wins. ──
-    if (tool === "rect" && e.button === 0) {
+    // ── Rectangle / Void tool: a plain left-press anchors corner A (snapped).
+    // The drag builds the box; release commits a room (rect) or punches a floor
+    // void (void). Pan (handled above) still wins. ──
+    if ((tool === "rect" || tool === "void") && e.button === 0) {
       const a = snapPoint(eventToCm(e)).point;
       setRectStart(a);
       setRectEnd(a);
@@ -2750,7 +2777,7 @@ export function RoomCanvas({
     ? "grabbing"
     : spaceHeld
       ? "grab"
-      : tool === "rect" || tool === "measure"
+      : tool === "rect" || tool === "measure" || tool === "void"
         ? "crosshair"
         : edgeDragIdx !== null || shapeDragIdx
           ? "grabbing"
@@ -2772,6 +2799,7 @@ export function RoomCanvas({
               ["draw", "Draw", PenLine],
               ["select", "Select", MousePointer2],
               ["rect", "Rect", SquareIcon],
+              ["void", "Void", SquareDashed],
               ["measure", "Measure", Ruler],
             ] as [Tool, string, typeof PenLine][]
           ).map(([key, label, Icon], i) => (
@@ -3494,6 +3522,25 @@ export function RoomCanvas({
             <polyline points={pathPts} fill="none" stroke="#0284c7" strokeWidth={2} />
           )
         )}
+
+        {/* Active room floor voids (holes) — white fill over the slab + amber
+            dashed outline so a stairwell/shaft reads as removed material. */}
+        {holes?.map((h, i) => {
+          if (h.length < 3) return null;
+          const hp = h.map(cmToPx);
+          return (
+            <polygon
+              key={`void${i}`}
+              points={hp.map((p) => `${p.x},${p.y}`).join(" ")}
+              fill="#ffffff"
+              fillOpacity={0.9}
+              stroke="#f59e0b"
+              strokeWidth={1.5}
+              strokeDasharray="5 3"
+              style={{ pointerEvents: "none" }}
+            />
+          );
+        })}
 
         {/* Rubber-band preview of the next edge while drawing. */}
         {rubber}
