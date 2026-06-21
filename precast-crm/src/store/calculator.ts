@@ -36,9 +36,10 @@ export interface CalculatorDrawing {
   rooms: RoomShape[];
   globalDir: BeamDir | null;
   dirOverrides: Record<string, BeamDir>;
-  /** Wall thickness (cm). When > 0 the drawn outline is the OUTER wall face and
-   *  the slab engine bills the clear INNER face (outline offset inward). 0/absent
-   *  = single-line slab (unchanged). */
+  /** Wall thickness (cm). The drawn outline is the TRUE INNER (clear) dimension —
+   *  beam/block counts come from it and are NOT affected by the thickness. When
+   *  > 0 the wall renders as a band OUTWARD around the room (visual only); beams
+   *  seat onto it by the bearing. 0/absent = single-line slab. */
   wallThickCm?: number;
   /** Infinite construction guides (non-printing reference lines), each defined
    *  by two points on it. Snap targets only; never part of a room outline. */

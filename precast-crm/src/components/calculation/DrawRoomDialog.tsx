@@ -24,7 +24,6 @@ import {
   bbox,
   isValidOutline,
 } from "@/lib/cad/geometry";
-import { offsetPolygonInward } from "@/lib/cad/offset";
 import { unionShapes, subtractShapes, intersectShapes } from "@/lib/cad/boolean";
 import { rectify } from "@/lib/cad/constraints";
 import {
@@ -95,15 +94,10 @@ export function DrawRoomDialog({
   const dirOverrides = dr.dirOverrides;
   const wallThickCm = dr.wallThickCm ?? 0;
   const guides = dr.guides ?? [];
-
-  // With walls, the slab engine bills the CLEAR INNER face: the drawn outline is
-  // the outer wall face, offset inward by the thickness. Falls back to the outer
-  // loop if the inset would self-intersect (a too-thick wall in a tight notch).
-  const innerOf = (pts: Pt[]): Pt[] => {
-    if (wallThickCm <= 0 || pts.length < 4) return pts;
-    const inner = offsetPolygonInward(pts, wallThickCm);
-    return isValidOutline(inner, true) ? inner : pts;
-  };
+  // The drawn outline IS the true inner (clear) dimension the user gives — the
+  // beam/block engine always uses it, unaffected by wall thickness. Walls are a
+  // visual band drawn OUTWARD (see RoomCanvas); beams seat onto them by the
+  // bearing parameter.
 
   const [activeIndex, setActiveIndex] = useState(0);
   // Multi-selection (room indices) for group operations. The active room is the
@@ -317,8 +311,8 @@ export function DrawRoomDialog({
     .filter((r) => r.index !== safeActive && r.points.length >= 1);
 
   // ── Active room derivations (interactive overlay) ─────────────
-  // Engine outline = the clear INNER face when walls are on (else the drawn one).
-  const enginePoints = useMemo(() => innerOf(points), [points, wallThickCm]);
+  // Engine outline = the drawn outline (the user's true inner/clear dimension).
+  const enginePoints = points;
 
   // A room with floor voids can't use the exact bay path → route to scanline.
   const rectilinear = useMemo(
@@ -398,7 +392,7 @@ export function DrawRoomDialog({
     rooms.forEach((room, ri) => {
       if (!room.closed || room.points.length < 4) return;
       // Bill the clear inner face when walls are on; voids route to scanline.
-      const inner = innerOf(room.points);
+      const inner = room.points;
       const rHoles = room.holes ?? [];
       if (isRectilinear(inner) && rHoles.length === 0) {
         const rbays = decomposeToBays(inner);
@@ -426,7 +420,7 @@ export function DrawRoomDialog({
     return rooms
       .filter((r) => r.closed && r.points.length >= 4)
       .map((room) => {
-        const inner = innerOf(room.points);
+        const inner = room.points;
         const box = bbox(inner);
         const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
         const { beams } = scanBeams(inner, beamDir, undefined, undefined, room.holes ?? []);
@@ -640,8 +634,8 @@ export function DrawRoomDialog({
               </div>
             )}
 
-            {/* Wall thickness — when > 0 the drawn outline is the OUTER face and
-                the slab bills the clear inner span. 0 = single-line slab. */}
+            {/* Wall thickness — drawn outline is the TRUE inner dimension; the
+                wall renders OUTWARD (visual). Does NOT change beam/block counts. */}
             <div className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
               <span className="font-medium">{t("Девор қалинлиги", "Wall thickness")}</span>
               <span className="inline-flex items-center gap-1">

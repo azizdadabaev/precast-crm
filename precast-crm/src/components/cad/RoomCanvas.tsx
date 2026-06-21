@@ -76,7 +76,7 @@ import {
   BEARING_CM,
 } from "@/lib/cad/geometry";
 import { visibleGridLines } from "@/lib/cad/grid";
-import { offsetPolygonOutward, offsetPolygonInward } from "@/lib/cad/offset";
+import { offsetPolygonOutward } from "@/lib/cad/offset";
 import { ROOM_PRESETS } from "@/lib/cad/presets";
 import {
   computeSnap,
@@ -3344,15 +3344,17 @@ export function RoomCanvas({
           );
         })}
 
-        {/* Wall poché band (double-line walls): drawn OUTER outline minus the
-            inward-offset inner face, hatched. Rendered under the beam overlay. */}
+        {/* Wall poché band (double-line walls): the drawn outline is the TRUE
+            INNER (clear) face the user gives; the wall is the band OUTWARD from
+            it (outer face = inner offset outward by the thickness). Hatched,
+            under the beams — beams seat onto it by the bearing. */}
         {!!wallThickCm && wallThickCm > 0 &&
           allRooms().map((r) => {
             if (!r.closed || r.points.length < 4) return null;
-            const inner = offsetPolygonInward(r.points, wallThickCm);
-            if (!isValidOutline(inner, true)) return null;
-            const op = r.points.map(cmToPx);
-            const ip = inner.map(cmToPx);
+            const outer = offsetPolygonOutward(r.points, wallThickCm);
+            if (!isValidOutline(outer, true)) return null;
+            const op = outer.map(cmToPx);
+            const ip = r.points.map(cmToPx);
             const d =
               op.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") +
               " Z " +
