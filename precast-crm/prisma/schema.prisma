@@ -387,6 +387,11 @@ model Project {
   draftNumber Int?          @unique
   shapeType   ShapeType     @default(RECTANGULAR)
   dimensions  Json
+  // Drawn room outline (CAD sketch) from the calculator's "Draw room" tool,
+  // stored so reopening a saved draft restores the exact polygon + beam-
+  // direction choices. Shape mirrors `CalculatorDrawing` in the calculator
+  // store: { points: {x,y}[], globalDir, dirOverrides }. Null for typed rooms.
+  drawingJson Json?
   status      ProjectStatus @default(DRAFT)
 
   // Grand-total discount carried on the draft so "Save as draft" doesn't

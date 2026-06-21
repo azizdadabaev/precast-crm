@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { SaveProjectDraftSchema, ProjectStatusEnum } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
@@ -127,6 +128,11 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           name: body.name ?? null,
           shapeType: body.shapeType,
           dimensions: dim,
+          // Absent in the body → leave any existing drawing untouched; explicit
+          // null → clear it; object → replace it.
+          ...(body.drawing !== undefined
+            ? { drawingJson: body.drawing ?? Prisma.DbNull }
+            : {}),
           status: "DRAFT",
           discountPercent: body.discountPercent,
           discountAmount: body.discountAmount,
@@ -166,6 +172,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
         draftNumber,
         shapeType: body.shapeType,
         dimensions: dim,
+        drawingJson: body.drawing ?? Prisma.DbNull,
         status: "DRAFT",
         discountPercent: body.discountPercent,
         discountAmount: body.discountAmount,

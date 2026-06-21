@@ -217,6 +217,18 @@ export const CalculateRequestSchema = RoomCalcInputBaseSchema.extend({
   projectId: z.string().optional(),
 });
 
+// ── Drawn room outline (CAD sketch) ─────────────────────────────
+// Mirrors `CalculatorDrawing` in the calculator store. Persisted as JSON on
+// Project.drawingJson so reopening a saved draft restores the exact outline.
+// JSON object keys are strings on the wire; the client indexes dirOverrides
+// by bay number (number→string coercion is a no-op at property-access time).
+const BeamDirEnum = z.enum(["H", "V"]);
+export const CalculatorDrawingSchema = z.object({
+  points: z.array(z.object({ x: z.number(), y: z.number() })),
+  globalDir: BeamDirEnum.nullable(),
+  dirOverrides: z.record(z.string(), BeamDirEnum).default({}),
+});
+
 // ── Save Project (Draft) ────────────────────────────────────────
 // Phone-only is required at save time; Name + Address are optional drafts.
 export const SaveProjectDraftSchema = z.object({
@@ -237,6 +249,10 @@ export const SaveProjectDraftSchema = z.object({
   // Link to the originating Telegram conversation. Honored only when the
   // caller has inbox.access (enforced in the route); otherwise dropped.
   conversationId: z.string().optional().nullable(),
+  // Drawn room outline (CAD sketch). Persisted so reopening the draft restores
+  // the exact outline. Absent → leave any existing drawing untouched; explicit
+  // null → clear it; object → set it.
+  drawing: CalculatorDrawingSchema.nullish(),
 });
 
 // ── Place Order (commits the deal) ──────────────────────────────
