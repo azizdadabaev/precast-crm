@@ -102,12 +102,19 @@ interface RoomCanvasProps {
    *  clickable to make one active. `index` is its position in the parent's
    *  rooms[]; `label` is its display number. */
   backgroundRooms?: Array<{ points: Pt[]; closed: boolean; label: string; index: number }>;
-  /** Activate a background room (the operator clicked it to edit it). */
-  onPickBackgroundRoom?: (roomsIndex: number) => void;
+  /** Click a room: select it (and make it active). `additive` (shift) toggles it
+   *  in/out of the multi-selection instead of replacing it. */
+  onPickBackgroundRoom?: (roomsIndex: number, additive: boolean) => void;
   /** Start a NEW room of the floor plan (＋ Room button, a preset, or a click on
    *  empty grid once the active room is closed). The optional seed places the
    *  first point or drops a preset outline; the parent mints the room id. */
   onRequestNewRoom?: (seed?: Omit<RoomShape, "id">) => void;
+  /** Indices (into the parent's rooms[]) currently selected for group ops. */
+  selectedIndices?: number[];
+  /** The active room's own index, so the canvas knows which room `points` is. */
+  activeIndexValue?: number;
+  /** Replace the selection with `indices` (marquee). additive = shift held. */
+  onSelectRooms?: (indices: number[], additive: boolean) => void;
   /** Initial grid step in cm (default 10). User can change it via the controls. */
   gridCm?: number;
   /** Optional decomposed bays to overlay (translucent). */
@@ -310,6 +317,9 @@ export function RoomCanvas({
   backgroundRooms,
   onPickBackgroundRoom,
   onRequestNewRoom,
+  selectedIndices,
+  activeIndexValue,
+  onSelectRooms,
   gridCm = 10,
   bays,
   beamLayers,
@@ -478,6 +488,26 @@ export function RoomCanvas({
     closed: r.closed,
   }));
 
+  // ── Multi-select (marquee + selection highlight + group bbox) ──
+  const selected = selectedIndices ?? [];
+  const groupMode = selected.length > 1;
+  // Marquee selection box (Select tool, drag over empty grid). cm coords.
+  const [marqueeStart, setMarqueeStart] = useState<Pt | null>(null);
+  const [marqueeEnd, setMarqueeEnd] = useState<Pt | null>(null);
+  // Swallow the click that fires right after a marquee drag, so it doesn't clear
+  // the just-made selection (mirrors edgeClickGuard).
+  const marqueeGuard = useRef(false);
+  // Every room (active + background) tagged with its parent index — for marquee
+  // hit-tests, selection highlight, and the group bounding box.
+  const allRooms = (): Array<{ index: number; points: Pt[]; closed: boolean }> => {
+    const out: Array<{ index: number; points: Pt[]; closed: boolean }> = [];
+    if (activeIndexValue !== undefined) out.push({ index: activeIndexValue, points, closed });
+    for (const r of backgroundRooms ?? []) out.push({ index: r.index, points: r.points, closed: r.closed });
+    return out;
+  };
+  const isInsideAnyRoom = (p: Pt): boolean =>
+    allRooms().some((r) => r.points.length >= 3 && pointInPolygon(p, r.points));
+
   // Snap a free cm point through the full CAD snap engine (object/grid/align),
   // without a polar anchor — used by the rect corners + the measure chain.
   const snapPoint = (raw: Pt): SnapResult =>
@@ -541,6 +571,11 @@ export function RoomCanvas({
       edgeClickGuard.current = false;
       return;
     }
+    // A click right after a marquee selection must not clear it.
+    if (marqueeGuard.current) {
+      marqueeGuard.current = false;
+      return;
+    }
 
     // ── Tape measure: append a snapped point to the (display-only) chain. ──
     if (tool === "measure") {
@@ -555,12 +590,13 @@ export function RoomCanvas({
     if (tool === "rect") return;
 
     // SELECT (CAD arrow) mode never draws: a click reaching the canvas is empty
-    // space, so just clear the selection. Vertex / edge / room interactions are
+    // space, so clear the selection. Vertex / edge / room interactions are
     // handled by their own elements (which stopPropagation).
     if (tool === "select") {
       setSelVertex(null);
       setSelEdge(null);
       setEdgeInsert(null);
+      onSelectRooms?.([], false);
       return;
     }
 
@@ -783,6 +819,12 @@ export function RoomCanvas({
     const cm = eventToCm(e);
     setCursor(cm);
 
+    // ── Marquee selection box: track the moving corner (raw cm, no snap). ──
+    if (marqueeStart) {
+      setMarqueeEnd(cm);
+      return;
+    }
+
     // ── Rectangle tool: live preview of corner B (snapped) while dragging, plus
     // the snap marker so the corner lands on grid/vertices cleanly. ──
     if (tool === "rect") {
@@ -925,6 +967,32 @@ export function RoomCanvas({
   };
 
   const endDrag = () => {
+    // ── Marquee select: release selects every room whose bbox the box touches.
+    // A near-zero box (a plain click) selects nothing extra (handled by the
+    // click → deselect path). ──
+    if (marqueeStart && marqueeEnd) {
+      const x0 = Math.min(marqueeStart.x, marqueeEnd.x);
+      const x1 = Math.max(marqueeStart.x, marqueeEnd.x);
+      const y0 = Math.min(marqueeStart.y, marqueeEnd.y);
+      const y1 = Math.max(marqueeStart.y, marqueeEnd.y);
+      setMarqueeStart(null);
+      setMarqueeEnd(null);
+      // Ignore a degenerate box (a click) — let the canvas click deselect.
+      if (x1 - x0 > 2 || y1 - y0 > 2) {
+        const hit = allRooms()
+          .filter((r) => {
+            if (r.points.length < 2) return false;
+            const bb = bbox(r.points);
+            // bbox-intersect test (touching counts).
+            return bb.x <= x1 && bb.x + bb.w >= x0 && bb.y <= y1 && bb.y + bb.h >= y0;
+          })
+          .map((r) => r.index);
+        onSelectRooms?.(hit, false);
+        marqueeGuard.current = true; // swallow the trailing click
+      }
+      return;
+    }
+
     // ── Rectangle tool: release builds the 4-corner box and REPLACES the room
     // (one polygon). commit() records undo, so it's reversible. A degenerate
     // (near-zero) drag yields [] and is ignored. After creating we return to
@@ -965,6 +1033,9 @@ export function RoomCanvas({
       setRectStart(null);
       setRectEnd(null);
     }
+    // Cancel an in-flight marquee without selecting.
+    setMarqueeStart(null);
+    setMarqueeEnd(null);
     endDrag();
     setCursor(null);
     setHoverVertex(null);
@@ -1015,6 +1086,16 @@ export function RoomCanvas({
       moveDragStart.current = { points, closed, cursor: eventToCm(e) };
       moveDragMoved.current = false;
       setShapeDragInfo({ dx: 0, dy: 0 });
+      return;
+    }
+
+    // ── Marquee select (Select tool): a press on EMPTY grid starts a selection
+    // box; drag to sweep, release to select the rooms it touches. Presses inside
+    // a room fall through so the click selects/activates that room. ──
+    if (tool === "select" && e.button === 0 && !isInsideAnyRoom(eventToCm(e))) {
+      const at = eventToCm(e);
+      setMarqueeStart(at);
+      setMarqueeEnd(at);
     }
   };
 
@@ -2928,17 +3009,18 @@ export function RoomCanvas({
           const ctr = cmToPx({ x: bb.x + bb.w / 2, y: bb.y + bb.h / 2 });
           const activate = (e: React.MouseEvent) => {
             e.stopPropagation();
-            if (!midDraw) onPickBackgroundRoom?.(room.index);
+            if (!midDraw) onPickBackgroundRoom?.(room.index, e.shiftKey);
           };
+          const isSelected = selected.includes(room.index);
           return (
             <g key={`room${room.index}`}>
               {room.closed ? (
                 <polygon
                   points={px.map((p) => `${p.x},${p.y}`).join(" ")}
-                  fill="#64748b"
-                  fillOpacity={0.05}
-                  stroke="#94a3b8"
-                  strokeWidth={1.25}
+                  fill={isSelected ? "#6366f1" : "#64748b"}
+                  fillOpacity={isSelected ? 0.08 : 0.05}
+                  stroke={isSelected ? "#6366f1" : "#94a3b8"}
+                  strokeWidth={isSelected ? 2.25 : 1.25}
                   style={{ cursor: "pointer", pointerEvents: pe }}
                   onClick={activate}
                 />
@@ -2946,8 +3028,8 @@ export function RoomCanvas({
                 <polyline
                   points={px.map((p) => `${p.x},${p.y}`).join(" ")}
                   fill="none"
-                  stroke="#cbd5e1"
-                  strokeWidth={1.25}
+                  stroke={isSelected ? "#6366f1" : "#cbd5e1"}
+                  strokeWidth={isSelected ? 2.25 : 1.25}
                   strokeDasharray="4 3"
                   style={{ cursor: "pointer", pointerEvents: midDraw ? "none" : "stroke" }}
                   onClick={activate}
@@ -2992,6 +3074,56 @@ export function RoomCanvas({
             </g>
           );
         })}
+
+        {/* Group bounding box around a 2+ room selection (dashed indigo). */}
+        {groupMode && (() => {
+          const sel = allRooms().filter((r) => selected.includes(r.index) && r.points.length >= 2);
+          if (sel.length < 2) return null;
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          for (const r of sel) {
+            const bb = bbox(r.points);
+            minX = Math.min(minX, bb.x);
+            minY = Math.min(minY, bb.y);
+            maxX = Math.max(maxX, bb.x + bb.w);
+            maxY = Math.max(maxY, bb.y + bb.h);
+          }
+          const tl = cmToPx({ x: minX, y: minY });
+          const br = cmToPx({ x: maxX, y: maxY });
+          return (
+            <rect
+              x={tl.x}
+              y={tl.y}
+              width={br.x - tl.x}
+              height={br.y - tl.y}
+              fill="#6366f1"
+              fillOpacity={0.04}
+              stroke="#6366f1"
+              strokeWidth={1.25}
+              strokeDasharray="6 4"
+              style={{ pointerEvents: "none" }}
+            />
+          );
+        })()}
+
+        {/* Marquee selection box (Select tool, drag over empty grid). */}
+        {marqueeStart && marqueeEnd && (() => {
+          const a = cmToPx(marqueeStart);
+          const b = cmToPx(marqueeEnd);
+          return (
+            <rect
+              x={Math.min(a.x, b.x)}
+              y={Math.min(a.y, b.y)}
+              width={Math.abs(b.x - a.x)}
+              height={Math.abs(b.y - a.y)}
+              fill="#0ea5e9"
+              fillOpacity={0.08}
+              stroke="#0ea5e9"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+              style={{ pointerEvents: "none" }}
+            />
+          );
+        })()}
 
         {/* Ring-beam / foundation band around the inner outline (concrete hatch),
             drawn behind the room so bearing seats read as resting on it. */}

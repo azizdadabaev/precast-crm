@@ -85,6 +85,9 @@ export function DrawRoomDialog({
   const dirOverrides = dr.dirOverrides;
 
   const [activeIndex, setActiveIndex] = useState(0);
+  // Multi-selection (room indices) for group operations. The active room is the
+  // primary; shift-click / marquee add others.
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const safeActive = Math.min(Math.max(0, activeIndex), rooms.length - 1);
   const activeRoom = rooms[safeActive] ?? EMPTY_ROOM;
   const points = activeRoom.points;
@@ -158,10 +161,12 @@ export function DrawRoomDialog({
       const next = rooms.slice();
       next[safeActive] = room;
       writeDrawing({ ...dr, rooms: next });
+      setSelectedIndices([safeActive]);
     } else {
       const next = [...rooms, room];
       writeDrawing({ ...dr, rooms: next });
       setActiveIndex(next.length - 1);
+      setSelectedIndices([next.length - 1]);
     }
   };
 
@@ -169,10 +174,30 @@ export function DrawRoomDialog({
     pushUndo();
     const next = rooms.filter((_, k) => k !== i);
     writeDrawing({ ...dr, rooms: next.length ? next : [EMPTY_ROOM] });
+    setSelectedIndices([]);
     setActiveIndex((cur) => {
       const c = cur > i ? cur - 1 : cur;
       return Math.min(Math.max(0, c), Math.max(0, next.length - 1));
     });
+  };
+
+  // Click a room: make it active. additive (shift) toggles it in/out of the
+  // multi-selection; plain replaces the selection with just this room.
+  const selectRoom = (i: number, additive: boolean) => {
+    setActiveIndex(i);
+    setSelectedIndices((prev) =>
+      additive
+        ? prev.includes(i)
+          ? prev.filter((x) => x !== i)
+          : [...prev, i]
+        : [i],
+    );
+  };
+
+  // Marquee finished: replace the selection with the swept rooms.
+  const onSelectRooms = (indices: number[]) => {
+    setSelectedIndices(indices);
+    if (indices.length) setActiveIndex(indices[0]);
   };
 
   // Backdrop = every room but the active one, with at least one point.
@@ -337,8 +362,11 @@ export function DrawRoomDialog({
               canUndo={canUndo}
               canRedo={canRedo}
               backgroundRooms={backgroundRooms}
-              onPickBackgroundRoom={(i) => setActiveIndex(i)}
+              onPickBackgroundRoom={(i, additive) => selectRoom(i, additive)}
               onRequestNewRoom={requestNewRoom}
+              selectedIndices={selectedIndices}
+              activeIndexValue={safeActive}
+              onSelectRooms={(indices) => onSelectRooms(indices)}
               bays={bays}
               beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
               fill
