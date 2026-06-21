@@ -12,6 +12,7 @@ import {
   Trash2,
   CornerUpLeft,
   PenLine,
+  MousePointer2,
   Square as SquareIcon,
   Ruler,
   RotateCcw,
@@ -215,10 +216,11 @@ interface View {
   ty: number;
 }
 
-// ── Drawing tool mode. "draw" is the original freeform/edit behaviour; "rect"
-// click-drags an axis-aligned room box; "measure" is a display-only tape that
-// never touches the room outline. ──
-type Tool = "draw" | "rect" | "measure";
+// ── Drawing tool mode. "draw" appends vertices + closes loops; "select" is the
+// CAD arrow tool — select / move / edit existing rooms without drawing new
+// geometry; "rect" click-drags an axis-aligned room box; "measure" is a
+// display-only tape that never touches the room outline. ──
+type Tool = "draw" | "select" | "rect" | "measure";
 
 const IDENTITY: View = { zoom: 1, tx: 0, ty: 0 };
 
@@ -327,8 +329,12 @@ export function RoomCanvas({
   }, [fill]);
   const SVG_W = fill ? measured.w : INIT_W;
   const SVG_H = fill ? measured.h : INIT_H;
-  // Active tool: freeform draw/edit (default), rectangle-room, or tape measure.
+  // Active tool: draw (append vertices), select (CAD arrow — edit existing
+  // rooms), rectangle-room, or tape measure.
   const [tool, setTool] = useState<Tool>("draw");
+  // Draw + select share the room-editing interactions (drag vertex, slide wall,
+  // move room, select edge/vertex). Only `draw` also appends new geometry.
+  const isEditTool = tool === "draw" || tool === "select";
   // `closed` (the active room's loop state) is controlled by the parent now, so
   // the canvas can manage a whole floor plan of rooms. It arrives via props.
 
@@ -475,6 +481,13 @@ export function RoomCanvas({
     setMeasureDone(false);
   };
 
+  // Other rooms of the floor plan, as snap sources so the active room's
+  // vertices/edges lock onto adjacent rooms' corners + walls (cross-room snap).
+  const extraLoops = (backgroundRooms ?? []).map((r) => ({
+    points: r.points,
+    closed: r.closed,
+  }));
+
   // Snap a free cm point through the full CAD snap engine (object/grid/align),
   // without a polar anchor — used by the rect corners + the measure chain.
   const snapPoint = (raw: Pt): SnapResult =>
@@ -486,6 +499,7 @@ export function RoomCanvas({
       excludeIndex: null,
       tolCm: pxToCm(10),
       settings: snapSettings,
+      extraLoops,
     });
 
   // World (base) space → screen px applies the view transform last.
@@ -550,6 +564,16 @@ export function RoomCanvas({
     // handleMove / endDrag); a stray click does nothing to the outline.
     if (tool === "rect") return;
 
+    // SELECT (CAD arrow) mode never draws: a click reaching the canvas is empty
+    // space, so just clear the selection. Vertex / edge / room interactions are
+    // handled by their own elements (which stopPropagation).
+    if (tool === "select") {
+      setSelVertex(null);
+      setSelEdge(null);
+      setEdgeInsert(null);
+      return;
+    }
+
     const raw = eventToCm(e);
 
     if (!closed) {
@@ -585,6 +609,7 @@ export function RoomCanvas({
         excludeIndex: null,
         tolCm: pxToCm(10),
         settings: snapSettings,
+        extraLoops,
       });
       const cand = result.point;
       // Reject a zero-length / hairline step (clicking on/at the last vertex).
@@ -704,8 +729,8 @@ export function RoomCanvas({
   // mousedown on an edge body / its midpoint handle starts sliding that wall.
   const handleEdgeDown = (i: number) => (e: React.MouseEvent) => {
     if (e.button !== 0 || spaceHeld) return;
-    // Wall select/slide/insert is a draw-mode (edit) interaction only.
-    if (tool !== "draw") return;
+    // Wall select/slide/insert is an edit interaction (draw or select tool).
+    if (!isEditTool) return;
     e.stopPropagation(); // never let an edge-body grab fall through to canvas pan
     edgeClickGuard.current = true; // swallow the bubbled click on the SVG below
     // Alt-click on the edge body INSERTS a vertex (plain click/drag = select/slide).
@@ -730,10 +755,13 @@ export function RoomCanvas({
   };
 
   const handleVertexDown = (i: number) => (e: React.MouseEvent) => {
-    // Vertex dragging is a draw-mode (edit) interaction only. In rect/measure
-    // mode DON'T stop propagation — let the press reach the canvas so the rect
-    // drag starts / the measure click registers even over a vertex handle.
-    if (tool !== "draw") return;
+    // Vertex dragging is an edit interaction (draw or select tool). In
+    // rect/measure mode DON'T stop propagation — let the press reach the canvas
+    // so the rect drag starts / the measure click registers over a handle.
+    if (!isEditTool) return;
+    // While drawing (open loop), the START vertex is the CLOSE target — never
+    // grab it as a drag handle, so the press/click reaches the close affordance.
+    if (!closed && i === 0 && points.length >= 3) return;
     e.stopPropagation();
     if (e.button !== 0) return;
     setDragIdx(i);
@@ -839,6 +867,7 @@ export function RoomCanvas({
         excludeIndex: dragIdx,
         tolCm: pxToCm(10),
         settings: snapSettings,
+        extraLoops,
       });
       const target = result.point;
       setSnapResult(result);
@@ -885,8 +914,8 @@ export function RoomCanvas({
       setHoverEdgeBody(ne ? ne.index : null);
       setEdgeInsert(ne && e.altKey ? ne : null);
       // Interior (clear of vertex/edge handles) → "move" cursor affordance.
-      setHoverInterior(tool === "draw" && isInteriorPress(cm));
-    } else if (points.length > 0) {
+      setHoverInterior(isEditTool && isInteriorPress(cm));
+    } else if (tool === "draw" && points.length > 0) {
       // While drawing, preview the snap (marker + polar/alignment guides) for the
       // next point, anchored at the last placed vertex.
       const prev = points[points.length - 1];
@@ -899,6 +928,7 @@ export function RoomCanvas({
           excludeIndex: null,
           tolCm: pxToCm(10),
           settings: snapSettings,
+          extraLoops,
         }),
       );
     }
@@ -982,7 +1012,7 @@ export function RoomCanvas({
     // interior AND not within a vertex / edge-body pick radius, then start dragging
     // the whole room. Hit ordering: vertex handle > edge body > interior move. ──
     if (
-      tool === "draw" &&
+      isEditTool &&
       e.button === 0 &&
       closed &&
       points.length >= 3 &&
@@ -1361,9 +1391,9 @@ export function RoomCanvas({
     Math.round(edgeBearingDeg(points, i, closed) * 10) / 10;
 
   const selectEdge = (i: number) => (e: React.MouseEvent) => {
-    // Edge-length editing is a draw-mode interaction; in rect/measure mode let
-    // the click fall through to the canvas (measure point / rect ignore).
-    if (tool !== "draw") return;
+    // Edge-length editing is an edit interaction (draw or select tool); in
+    // rect/measure mode let the click fall through to the canvas.
+    if (!isEditTool) return;
     e.stopPropagation();
     setSelEdge(i);
     setSelVertex(null);
@@ -1569,6 +1599,7 @@ export function RoomCanvas({
       excludeIndex: null,
       tolCm: pxToCm(10),
       settings: snapSettings,
+      extraLoops,
     }).point;
     // DDE preview: when a Length is typed, place the preview tip at that exact
     // distance — along the typed Angle if given, else along the snapped cursor
@@ -2545,7 +2576,7 @@ export function RoomCanvas({
         ? "crosshair"
         : edgeDragIdx !== null || shapeDragIdx
           ? "grabbing"
-          : closed
+          : closed || tool === "select"
             ? edgeInsert
               ? "copy"
               : hoverInterior && hoverVertex === null && hoverEdgeBody === null
@@ -2561,6 +2592,7 @@ export function RoomCanvas({
           {(
             [
               ["draw", "Draw", PenLine],
+              ["select", "Select", MousePointer2],
               ["rect", "Rect", SquareIcon],
               ["measure", "Measure", Ruler],
             ] as [Tool, string, typeof PenLine][]
@@ -2610,7 +2642,10 @@ export function RoomCanvas({
         {onRequestNewRoom && (
           <button
             type="button"
-            onClick={() => onRequestNewRoom()}
+            onClick={() => {
+              switchTool("draw");
+              onRequestNewRoom();
+            }}
             title="Start a new room — draw it next to the others"
             className="inline-flex items-center gap-1 rounded-md bg-slate-700 px-2 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-slate-800"
           >
@@ -3289,21 +3324,29 @@ export function RoomCanvas({
               key={`v${i}`}
               cx={p.x}
               cy={p.y}
-              r={isSel ? 7 : isHover ? 6.5 : 6}
+              r={isSel ? 7 : isStart ? 7 : isHover ? 6.5 : 6}
               fill={isSel ? "#f59e0b" : isStart ? "#0284c7" : "#fff"}
               stroke={isSel ? "#b45309" : "#0284c7"}
               strokeWidth={isSel ? 2.5 : 2}
-              style={{ cursor: dragIdx === i ? "grabbing" : "grab" }}
+              style={{ cursor: isStart ? "pointer" : dragIdx === i ? "grabbing" : "grab" }}
               onMouseDown={handleVertexDown(i)}
               onClick={(e) => {
-                // Only intercept vertex-select clicks in draw (edit) mode; in
-                // rect/measure mode let the click reach the canvas.
-                if (tool !== "draw") return;
-                e.stopPropagation();
-                if (closed) {
-                  setSelVertex(i);
-                  setSelEdge(null);
+                // Only intercept vertex clicks in an edit tool (draw/select);
+                // in rect/measure mode let the click reach the canvas.
+                if (!isEditTool) return;
+                if (!closed) {
+                  // While drawing, clicking the START vertex closes the loop;
+                  // earlier vertices fall through so the canvas re-anchors the
+                  // chain to them.
+                  if (i === 0 && closeOk) {
+                    e.stopPropagation();
+                    close();
+                  }
+                  return;
                 }
+                e.stopPropagation();
+                setSelVertex(i);
+                setSelEdge(null);
               }}
             />
           );
