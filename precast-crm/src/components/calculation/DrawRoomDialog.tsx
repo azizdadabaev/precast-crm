@@ -24,6 +24,7 @@ import {
   isValidOutline,
 } from "@/lib/cad/geometry";
 import { offsetPolygonInward } from "@/lib/cad/offset";
+import { unionShapes, subtractShapes, intersectShapes } from "@/lib/cad/boolean";
 import {
   isRectilinear,
   scanBeams,
@@ -244,6 +245,40 @@ export function DrawRoomDialog({
     if (!dr.guides?.length) return;
     pushUndo();
     writeDrawing({ ...dr, rooms, guides: [] });
+  };
+
+  // Boolean ops on the 2+ room selection: union / subtract (active − rest) /
+  // intersect. Replaces the selected rooms with the result (one undo). Subtract
+  // can yield a room with holes (a courtyard), which the void engine handles.
+  const applyBoolean = (op: "union" | "subtract" | "intersect") => {
+    const sel = selectedIndices.filter(
+      (i) => rooms[i]?.closed && rooms[i].points.length >= 3,
+    );
+    if (sel.length < 2) return;
+    const shapeOf = (i: number) => ({ points: rooms[i].points, holes: rooms[i].holes });
+    let results;
+    if (op === "union") results = unionShapes(sel.map(shapeOf));
+    else if (op === "intersect") results = intersectShapes(sel.map(shapeOf));
+    else {
+      const baseIdx = sel.includes(safeActive) ? safeActive : sel[0];
+      results = subtractShapes(
+        shapeOf(baseIdx),
+        sel.filter((i) => i !== baseIdx).map(shapeOf),
+      );
+    }
+    if (!results.length) return;
+    pushUndo();
+    const kept = rooms.filter((_, i) => !sel.includes(i));
+    const created: RoomShape[] = results.map((s) => ({
+      id: newRoomId(),
+      points: s.points,
+      closed: true,
+      holes: s.holes.length ? s.holes : undefined,
+    }));
+    const next = [...kept, ...created];
+    writeDrawing({ ...dr, rooms: next.length ? next : [EMPTY_ROOM] });
+    setSelectedIndices([]);
+    setActiveIndex(kept.length); // first created room
   };
 
   // Live group transform from the gizmo: write each room's new points. Undo is
@@ -493,6 +528,33 @@ export function DrawRoomDialog({
                 {t("Хона", "Room")}
               </button>
             </div>
+
+            {/* Boolean combine — shown when 2+ rooms are selected. */}
+            {selectedIndices.length >= 2 && (
+              <div className="flex flex-wrap items-center gap-1.5 rounded border border-indigo-200 bg-indigo-50/50 p-2 text-xs">
+                <span className="font-medium text-indigo-700">
+                  {t("Бирлаштириш", "Combine")} ({selectedIndices.length})
+                </span>
+                {([
+                  ["union", "∪", t("Бирлашма", "Union")],
+                  ["subtract", "−", t("Айириш", "Subtract")],
+                  ["intersect", "∩", t("Кесишма", "Intersect")],
+                ] as Array<["union" | "subtract" | "intersect", string, string]>).map(
+                  ([op, sym, label]) => (
+                    <button
+                      key={op}
+                      type="button"
+                      onClick={() => applyBoolean(op)}
+                      title={label}
+                      className="rounded border bg-white px-2 py-0.5 text-slate-700 transition-colors hover:bg-indigo-100"
+                    >
+                      <span className="mr-1 font-semibold">{sym}</span>
+                      {label}
+                    </button>
+                  ),
+                )}
+              </div>
+            )}
 
             {/* Persistent beam-direction control (Auto / H / V) — drives the
                 scanline path and the default for every bay of the active room. */}

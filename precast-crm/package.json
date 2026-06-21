@@ -46,6 +46,7 @@
     "next": "14.2.15",
     "openai": "^6.42.0",
     "opus-recorder": "^8.0.5",
+    "polygon-clipping": "^0.15.7",
     "puppeteer-core": "^25.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
