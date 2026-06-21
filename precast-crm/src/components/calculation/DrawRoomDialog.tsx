@@ -418,6 +418,24 @@ export function DrawRoomDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rooms, dirOverrides, globalDir, startSeq, wallThickCm]);
 
+  // Per-room beam + block rects (world cm) for the 3D preview — computed via the
+  // scanline overlay so it covers rectilinear AND tapered rooms (+ voids), and
+  // only while the 3D view is open.
+  const room3dData = useMemo(() => {
+    if (!show3D) return [];
+    return rooms
+      .filter((r) => r.closed && r.points.length >= 4)
+      .map((room) => {
+        const inner = innerOf(room.points);
+        const box = bbox(inner);
+        const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
+        const { beams } = scanBeams(inner, beamDir, undefined, undefined, room.holes ?? []);
+        const overlay = scanBeamsToOverlay({ beams }, beamDir);
+        return { beams: overlay.beams, blocks: overlay.blockCells };
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show3D, rooms, globalDir, wallThickCm]);
+
   const closedRoomCount = rooms.filter(
     (r) => r.closed && r.points.length >= 4,
   ).length;
@@ -488,7 +506,7 @@ export function DrawRoomDialog({
                   </button>
                 </div>
                 <div className="min-h-0 flex-1">
-                  <Room3D rooms={rooms} wallThickCm={wallThickCm} />
+                  <Room3D data={room3dData} />
                 </div>
               </div>
             )}
