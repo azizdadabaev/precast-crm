@@ -19,6 +19,7 @@ import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCar
 import { formatDraftNumber } from "@/lib/draft-number";
 import { useT } from "@/lib/i18n";
 import { CommentThread } from "@/components/comments/CommentThread";
+import { DrawingHistory } from "@/components/projects/DrawingHistory";
 import { projectTotal, type SlabResult } from "@/services/calculation-engine";
 
 interface Project {
@@ -525,6 +526,9 @@ export default function ProjectDetailPage() {
           }}
         />
       )}
+
+      {/* Floor-plan version history — captured on each Save; restore a prior. */}
+      <DrawingHistory projectId={project.id} />
 
       {/* Comments thread — human conversation goes first, reference
           totals (Logistics Summary) below. */}

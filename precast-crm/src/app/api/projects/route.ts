@@ -117,9 +117,42 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   const project = await prisma.$transaction(async (tx) => {
     if (body.projectId) {
       // Update existing draft
-      const existing = await tx.project.findUnique({ where: { id: body.projectId } });
+      const existing = await tx.project.findUnique({
+        where: { id: body.projectId },
+        include: { calculations: { orderBy: { seq: "asc" } } },
+      });
       if (!existing) throw new Error("PROJECT_NOT_FOUND");
       if (existing.status === "ORDERED") throw new Error("PROJECT_ORDERED");
+
+      // Snapshot the PRE-save floor plan + priced rooms into an append-only
+      // DrawingVersion BEFORE the deleteMany below would destroy them — so a
+      // prior quote is never silently lost on an edit.
+      if (existing.drawingJson != null || existing.calculations.length > 0) {
+        await tx.drawingVersion.create({
+          data: {
+            projectId: existing.id,
+            drawingJson:
+              existing.drawingJson === null
+                ? Prisma.DbNull
+                : (existing.drawingJson as Prisma.InputJsonValue),
+            roomsJson: existing.calculations.map((c) => ({
+              name: c.name,
+              innerWidth: Number(c.innerWidth),
+              innerLength: Number(c.innerLength),
+              bearing: Number(c.bearing),
+              correction: Number(c.correction),
+              extraBeams: c.extraBeams,
+              forceStartBeam: c.forceStartBeam,
+              patternOverride: c.patternOverride,
+              m2PriceOverride: c.m2PriceOverride,
+              m2Price: Number(c.m2Price),
+              m2PriceReason: c.m2PriceReason,
+              subtotal: Number(c.subtotal),
+            })) as Prisma.InputJsonValue,
+            createdById: user.id,
+          },
+        });
+      }
 
       await tx.calculation.deleteMany({ where: { projectId: existing.id } });
       const updated = await tx.project.update({

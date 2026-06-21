@@ -429,6 +429,7 @@ model Project {
   calculations    Calculation[]
   orders          Order[]
   drawingRequests DrawingRequest[]
+  drawingVersions DrawingVersion[]
   comments        Comment[]
 
   @@index([status])
@@ -437,6 +438,24 @@ model Project {
   @@index([conversationId])
   @@index([tentativeClientPhone])
   @@map("projects")
+}
+
+/// Append-only snapshot of a project's floor plan + priced rooms, captured on
+/// each Save BEFORE the calculations are deleted-and-recreated. Gives the
+/// operator a version timeline + restore, so a prior quote is never silently
+/// lost on an edit.
+model DrawingVersion {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label       String?
+  drawingJson Json? // the floor-plan outline (CalculatorDrawing) at save time
+  roomsJson   Json // snapshot of the priced Calculation rows at save time
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@map("drawing_versions")
 }
 
 model Calculation {
