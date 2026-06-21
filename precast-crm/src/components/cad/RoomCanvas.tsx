@@ -23,6 +23,7 @@ import {
   FlipVertical2,
   ImageDown,
   FileDown,
+  FileText,
 } from "lucide-react";
 import {
   type Pt,
@@ -1412,6 +1413,43 @@ export function RoomCanvas({
     a.click();
     URL.revokeObjectURL(url);
   }, [buildSheetSvgString]);
+
+  // Export a true VECTOR PDF sheet (selectable, infinite-resolution linework) —
+  // the drawing fitted onto an A4 page with a small title strip. jsPDF +
+  // svg2pdf are lazy-loaded so they stay out of the main bundle.
+  const exportPdf = useCallback(async () => {
+    const xml = buildSheetSvgString();
+    if (!xml) return;
+    const [{ jsPDF }, { svg2pdf }] = await Promise.all([
+      import("jspdf"),
+      import("svg2pdf.js"),
+    ]);
+    const svgEl = new DOMParser().parseFromString(xml, "image/svg+xml")
+      .documentElement as unknown as SVGSVGElement;
+    const landscape = SVG_W >= SVG_H;
+    const pdf = new jsPDF({ orientation: landscape ? "landscape" : "portrait", unit: "pt", format: "a4" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 28;
+    const titleH = 22;
+    const availW = pageW - 2 * margin;
+    const availH = pageH - 2 * margin - titleH;
+    const scale = Math.min(availW / SVG_W, availH / SVG_H);
+    await svg2pdf(svgEl, pdf, {
+      x: margin + (availW - SVG_W * scale) / 2,
+      y: margin + titleH,
+      width: SVG_W * scale,
+      height: SVG_H * scale,
+    });
+    // Title strip.
+    pdf.setFontSize(11);
+    pdf.text("Floor plan", margin, margin + 12);
+    pdf.setFontSize(8);
+    pdf.text(new Date().toLocaleString(), pageW - margin, margin + 12, { align: "right" });
+    pdf.setDrawColor(180);
+    pdf.line(margin, margin + titleH - 4, pageW - margin, margin + titleH - 4);
+    pdf.save("room-drawing.pdf");
+  }, [buildSheetSvgString, SVG_W, SVG_H]);
 
   // ── Toolbar actions ──
   const clear = () => {
@@ -3096,6 +3134,9 @@ export function RoomCanvas({
           </TbIcon>
           <TbIcon onClick={exportSvg} disabled={points.length < 2} title="Export SVG (vector, editable)">
             <FileDown className="h-4 w-4" />
+          </TbIcon>
+          <TbIcon onClick={() => void exportPdf()} disabled={points.length < 2} title="Export PDF (vector sheet)">
+            <FileText className="h-4 w-4" />
           </TbIcon>
         </div>
       </div>
