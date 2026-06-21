@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +59,11 @@ interface Props {
 const EMPTY_DRAWING: CalculatorDrawing = { rooms: [], globalDir: null, dirOverrides: {} };
 const EMPTY_ROOM: RoomShape = { id: "", points: [], closed: false };
 
+// three.js is heavy — load the 3D preview only when the operator opens it.
+const Room3D = dynamic(() => import("@/components/cad/Room3D").then((m) => m.Room3D), {
+  ssr: false,
+});
+
 /**
  * Draw-a-floor-plan modal — MULTI-ROOM.
  *
@@ -102,6 +108,7 @@ export function DrawRoomDialog({
   // Multi-selection (room indices) for group operations. The active room is the
   // primary; shift-click / marquee add others.
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  const [show3D, setShow3D] = useState(false);
   const safeActive = Math.min(Math.max(0, activeIndex), rooms.length - 1);
   const activeRoom = rooms[safeActive] ?? EMPTY_ROOM;
   const points = activeRoom.points;
@@ -454,7 +461,24 @@ export function DrawRoomDialog({
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
           {/* Drawing surface ≈ 70% of the pop-up; it fills its column. */}
-          <div className="flex min-h-0 min-w-0 flex-[7]">
+          <div className="relative flex min-h-0 min-w-0 flex-[7]">
+            {show3D && (
+              <div className="absolute inset-0 z-20 flex flex-col rounded-md bg-slate-100">
+                <div className="flex items-center justify-between border-b bg-white px-2 py-1 text-xs">
+                  <span className="font-medium">{t("3D кўриниш", "3D preview")}</span>
+                  <button
+                    type="button"
+                    onClick={() => setShow3D(false)}
+                    className="rounded border px-2 py-0.5 text-slate-600 hover:bg-slate-50"
+                  >
+                    {t("2D га қайтиш", "Back to 2D")}
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1">
+                  <Room3D rooms={rooms} wallThickCm={wallThickCm} />
+                </div>
+              </div>
+            )}
             <RoomCanvas
               points={points}
               closed={activeClosed}
@@ -603,6 +627,15 @@ export function DrawRoomDialog({
                 <span className="text-muted-foreground">{t("см", "cm")}</span>
               </span>
             </div>
+
+            {/* 3D preview toggle. */}
+            <button
+              type="button"
+              onClick={() => setShow3D((v) => !v)}
+              className="self-start rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              {show3D ? t("2D га қайтиш", "Back to 2D") : t("3D да кўриш", "View in 3D")}
+            </button>
 
             {/* Floor voids: the Void tool draws a stairwell/shaft that deducts
                 from the slab. Shown when the active room has any. */}
