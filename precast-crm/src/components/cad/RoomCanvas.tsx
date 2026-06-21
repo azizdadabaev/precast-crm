@@ -55,6 +55,7 @@ import {
   interiorAngleDeg,
   translatePolygon,
   rotatePolygon,
+  scalePolygon,
   mirrorPolygonX,
   mirrorPolygonY,
   pointInPolygon,
@@ -115,6 +116,9 @@ interface RoomCanvasProps {
   activeIndexValue?: number;
   /** Replace the selection with `indices` (marquee). additive = shift held. */
   onSelectRooms?: (indices: number[], additive: boolean) => void;
+  /** Apply a live group transform: new points for each selected room. The parent
+   *  writes them; the canvas checkpoints undo once per gesture via onPushUndo. */
+  onGroupTransform?: (updates: Array<{ index: number; points: Pt[] }>) => void;
   /** Initial grid step in cm (default 10). User can change it via the controls. */
   gridCm?: number;
   /** Optional decomposed bays to overlay (translucent). */
@@ -320,6 +324,7 @@ export function RoomCanvas({
   selectedIndices,
   activeIndexValue,
   onSelectRooms,
+  onGroupTransform,
   gridCm = 10,
   bays,
   beamLayers,
@@ -507,6 +512,49 @@ export function RoomCanvas({
   };
   const isInsideAnyRoom = (p: Pt): boolean =>
     allRooms().some((r) => r.points.length >= 3 && pointInPolygon(p, r.points));
+
+  // ── Group transform gizmo (move / scale / rotate the whole 2+ selection) ──
+  type GizmoHandle = "move" | "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w" | "rotate";
+  const gizmoDrag = useRef<{
+    handle: GizmoHandle;
+    start: Pt;
+    box: { minX: number; minY: number; maxX: number; maxY: number };
+    base: Array<{ index: number; points: Pt[] }>;
+  } | null>(null);
+  const gizmoMoved = useRef(false);
+
+  /** Union bbox (cm) of the current 2+ room selection, or null. */
+  const groupBox = (): { minX: number; minY: number; maxX: number; maxY: number } | null => {
+    const sel = allRooms().filter((r) => selected.includes(r.index) && r.points.length >= 2);
+    if (sel.length < 2) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const r of sel) {
+      const bb = bbox(r.points);
+      minX = Math.min(minX, bb.x);
+      minY = Math.min(minY, bb.y);
+      maxX = Math.max(maxX, bb.x + bb.w);
+      maxY = Math.max(maxY, bb.y + bb.h);
+    }
+    return { minX, minY, maxX, maxY };
+  };
+
+  const beginGizmo = (handle: GizmoHandle, e: React.MouseEvent) => {
+    const box = groupBox();
+    if (!box) return;
+    const sel = allRooms().filter((r) => selected.includes(r.index) && r.points.length >= 1);
+    gizmoDrag.current = {
+      handle,
+      start: eventToCm(e),
+      box,
+      base: sel.map((r) => ({ index: r.index, points: r.points })),
+    };
+    gizmoMoved.current = false;
+  };
+  const startGizmo = (handle: GizmoHandle) => (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    beginGizmo(handle, e);
+  };
 
   // Snap a free cm point through the full CAD snap engine (object/grid/align),
   // without a polar anchor — used by the rect corners + the measure chain.
@@ -819,6 +867,59 @@ export function RoomCanvas({
     const cm = eventToCm(e);
     setCursor(cm);
 
+    // ── Group transform gizmo: move / scale / rotate the whole selection. ──
+    if (gizmoDrag.current) {
+      const g = gizmoDrag.current;
+      const { box, handle, start, base } = g;
+      // Ignore a click with no real movement (don't churn undo on a tap).
+      if (!gizmoMoved.current && Math.hypot(cm.x - start.x, cm.y - start.y) < 0.5) return;
+      const W = box.maxX - box.minX;
+      const H = box.maxY - box.minY;
+      let xf: (pts: Pt[]) => Pt[];
+      if (handle === "move") {
+        let dx = cm.x - start.x;
+        let dy = cm.y - start.y;
+        if (snapSettings.grid && step > 0) {
+          dx = Math.round(dx / step) * step;
+          dy = Math.round(dy / step) * step;
+        }
+        xf = (pts) => translatePolygon(pts, dx, dy);
+      } else if (handle === "rotate") {
+        const cx = (box.minX + box.maxX) / 2;
+        const cy = (box.minY + box.maxY) / 2;
+        const a0 = Math.atan2(start.y - cy, start.x - cx);
+        const a1 = Math.atan2(cm.y - cy, cm.x - cx);
+        let deg = ((a1 - a0) * 180) / Math.PI;
+        // Snap to 15° steps when polar tracking is on (90° keeps rooms square).
+        if (snapSettings.polar) deg = Math.round(deg / 15) * 15;
+        xf = (pts) => rotatePolygon(pts, deg, { x: cx, y: cy });
+      } else {
+        const hasW = handle.includes("w");
+        const hasE = handle.includes("e");
+        const hasN = handle.includes("n");
+        const hasS = handle.includes("s");
+        let pivotX = (box.minX + box.maxX) / 2;
+        let pivotY = (box.minY + box.maxY) / 2;
+        let sx = 1;
+        let sy = 1;
+        if (hasE) { pivotX = box.minX; sx = W !== 0 ? (cm.x - box.minX) / W : 1; }
+        else if (hasW) { pivotX = box.maxX; sx = W !== 0 ? (box.maxX - cm.x) / W : 1; }
+        if (hasS) { pivotY = box.minY; sy = H !== 0 ? (cm.y - box.minY) / H : 1; }
+        else if (hasN) { pivotY = box.maxY; sy = H !== 0 ? (box.maxY - cm.y) / H : 1; }
+        // Clamp tiny magnitudes so a room can't collapse to zero.
+        if (Math.abs(sx) < 0.05) sx = sx < 0 ? -0.05 : 0.05;
+        if (Math.abs(sy) < 0.05) sy = sy < 0 ? -0.05 : 0.05;
+        const pivot = { x: pivotX, y: pivotY };
+        xf = (pts) => scalePolygon(pts, sx, sy, pivot);
+      }
+      if (!gizmoMoved.current) {
+        onPushUndo();
+        gizmoMoved.current = true;
+      }
+      onGroupTransform?.(base.map((b) => ({ index: b.index, points: xf(b.points) })));
+      return;
+    }
+
     // ── Marquee selection box: track the moving corner (raw cm, no snap). ──
     if (marqueeStart) {
       setMarqueeEnd(cm);
@@ -1020,6 +1121,9 @@ export function RoomCanvas({
     setShapeDragInfo(null);
     moveDragStart.current = null;
     moveDragMoved.current = false;
+    // End a group-transform gizmo drag.
+    gizmoDrag.current = null;
+    gizmoMoved.current = false;
     setSnapResult(null);
     if (panRef.current) {
       panRef.current = null;
@@ -1079,6 +1183,15 @@ export function RoomCanvas({
       points.length >= 3 &&
       isInteriorPress(eventToCm(e))
     ) {
+      // Group mode: pressing inside the (active, selected) room drags the WHOLE
+      // selection via the gizmo "move" path instead of just this room.
+      if (groupMode && activeIndexValue !== undefined && selected.includes(activeIndexValue)) {
+        setSelVertex(null);
+        setSelEdge(null);
+        setEdgeInsert(null);
+        beginGizmo("move", e);
+        return;
+      }
       setShapeDragIdx(true);
       setSelVertex(null);
       setSelEdge(null);
@@ -3463,6 +3576,61 @@ export function RoomCanvas({
             />
           );
         })}
+
+        {/* Group transform gizmo handles (Select tool, 2+ selected) — rendered
+            last so they sit on top and stay clickable. Drag a square to scale
+            about the opposite edge/corner, or the knob above to rotate; drag a
+            selected room's body to move the whole group. */}
+        {groupMode && tool === "select" && (() => {
+          const box = groupBox();
+          if (!box) return null;
+          const cx = (box.minX + box.maxX) / 2;
+          const cy = (box.minY + box.maxY) / 2;
+          const handles: Array<{ key: GizmoHandle; cm: Pt; cursor: string }> = [
+            { key: "nw", cm: { x: box.minX, y: box.minY }, cursor: "nwse-resize" },
+            { key: "ne", cm: { x: box.maxX, y: box.minY }, cursor: "nesw-resize" },
+            { key: "se", cm: { x: box.maxX, y: box.maxY }, cursor: "nwse-resize" },
+            { key: "sw", cm: { x: box.minX, y: box.maxY }, cursor: "nesw-resize" },
+            { key: "n", cm: { x: cx, y: box.minY }, cursor: "ns-resize" },
+            { key: "s", cm: { x: cx, y: box.maxY }, cursor: "ns-resize" },
+            { key: "e", cm: { x: box.maxX, y: cy }, cursor: "ew-resize" },
+            { key: "w", cm: { x: box.minX, y: cy }, cursor: "ew-resize" },
+          ];
+          const topMid = cmToPx({ x: cx, y: box.minY });
+          const rot = { x: topMid.x, y: topMid.y - 26 };
+          return (
+            <g>
+              <line x1={topMid.x} y1={topMid.y} x2={rot.x} y2={rot.y} stroke="#6366f1" strokeWidth={1} />
+              <circle
+                cx={rot.x}
+                cy={rot.y}
+                r={6}
+                fill="#fff"
+                stroke="#6366f1"
+                strokeWidth={2}
+                style={{ cursor: "grab" }}
+                onMouseDown={startGizmo("rotate")}
+              />
+              {handles.map((h) => {
+                const p = cmToPx(h.cm);
+                return (
+                  <rect
+                    key={`gz${h.key}`}
+                    x={p.x - 4.5}
+                    y={p.y - 4.5}
+                    width={9}
+                    height={9}
+                    fill="#fff"
+                    stroke="#6366f1"
+                    strokeWidth={2}
+                    style={{ cursor: h.cursor }}
+                    onMouseDown={startGizmo(h.key)}
+                  />
+                );
+              })}
+            </g>
+          );
+        })()}
       </svg>
 
       {/* ── Direct distance/angle entry (DDE) overlay: appears at the top-left of

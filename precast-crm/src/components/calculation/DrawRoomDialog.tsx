@@ -200,6 +200,16 @@ export function DrawRoomDialog({
     if (indices.length) setActiveIndex(indices[0]);
   };
 
+  // Live group transform from the gizmo: write each room's new points. Undo is
+  // checkpointed once per gesture by the canvas (onPushUndo on first move).
+  const applyGroupTransform = (updates: Array<{ index: number; points: Pt[] }>) => {
+    const next = rooms.slice();
+    for (const u of updates) {
+      if (next[u.index]) next[u.index] = { ...next[u.index], points: u.points };
+    }
+    writeDrawing({ ...dr, rooms: next });
+  };
+
   // Backdrop = every room but the active one, with at least one point.
   const backgroundRooms = rooms
     .map((r, i) => ({ points: r.points, closed: r.closed, label: String(i + 1), index: i }))
@@ -367,6 +377,7 @@ export function DrawRoomDialog({
               selectedIndices={selectedIndices}
               activeIndexValue={safeActive}
               onSelectRooms={(indices) => onSelectRooms(indices)}
+              onGroupTransform={applyGroupTransform}
               bays={bays}
               beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
               fill

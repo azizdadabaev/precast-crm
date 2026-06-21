@@ -104,6 +104,19 @@ export function mirrorPolygonY(points: Pt[], center?: Pt): Pt[] {
   return points.map((p) => ({ x: p.x, y: 2 * cy - p.y }));
 }
 
+/**
+ * Scale all points by (sx, sy) about `center` (default = bbox centre). Negative
+ * factors mirror across that axis. Returns a NEW array; does not mutate — the
+ * group-transform gizmo uses this to scale a whole selection about a pivot.
+ */
+export function scalePolygon(points: Pt[], sx: number, sy: number, center?: Pt): Pt[] {
+  const c = center ?? bboxCentre(points);
+  return points.map((p) => ({
+    x: c.x + (p.x - c.x) * sx,
+    y: c.y + (p.y - c.y) * sy,
+  }));
+}
+
 /** Length of each edge (pts[i] → pts[i+1], closing back to 0). */
 export function edgeLengths(pts: Pt[]): number[] {
   return pts.map((p, i) => {

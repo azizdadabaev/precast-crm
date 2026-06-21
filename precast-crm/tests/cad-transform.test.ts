@@ -4,6 +4,7 @@ import {
   rotatePolygon,
   mirrorPolygonX,
   mirrorPolygonY,
+  scalePolygon,
   bbox,
   type Pt,
 } from "@/lib/cad/geometry";
@@ -167,6 +168,42 @@ describe("mirrorPolygonX / mirrorPolygonY", () => {
     const p = rect();
     const outX = mirrorPolygonX(p, { x: 0, y: 0 });
     outX.forEach((q, i) => expect(q.x).toBeCloseTo(-p[i].x, 9));
+    expect(p).toEqual(rect());
+  });
+});
+
+describe("scalePolygon", () => {
+  it("scales about the bbox centre by default, area = sx·sy·orig", () => {
+    const p = rect();
+    const out = scalePolygon(p, 2, 0.5);
+    expect(area(out)).toBeCloseTo(area(p) * 2 * 0.5, 6);
+    // bbox centre is fixed under the scale.
+    expect(centre(out)).toEqual(centre(p));
+  });
+
+  it("scales about an explicit pivot (corner stays put)", () => {
+    const p = rect(); // bbox (0,0)-(200,100)
+    const pivot = { x: 0, y: 0 };
+    const out = scalePolygon(p, 2, 3, pivot);
+    // the pivot corner (0,0) is unchanged; the opposite corner doubles/triples.
+    expect(out[0]).toEqual({ x: 0, y: 0 });
+    expect(out[2]).toEqual({ x: 400, y: 300 });
+  });
+
+  it("negative factor mirrors across the centre", () => {
+    const p = rect();
+    const c = centre(p);
+    const out = scalePolygon(p, -1, 1, c);
+    const m = mirrorPolygonX(p, c);
+    out.forEach((q, i) => {
+      expect(q.x).toBeCloseTo(m[i].x, 6);
+      expect(q.y).toBeCloseTo(m[i].y, 6);
+    });
+  });
+
+  it("does not mutate the input", () => {
+    const p = rect();
+    scalePolygon(p, 1.5, 1.5);
     expect(p).toEqual(rect());
   });
 });
