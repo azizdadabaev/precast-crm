@@ -69,22 +69,27 @@ export function isRectilinear(loop: Pt[]): boolean {
  * vertex shared by two edges. The crossings come in pairs that bound the
  * inside intervals (even-odd fill).
  */
-function scanCrossingsX(loop: Pt[], yScan: number): number[] {
-  const n = loop.length;
+function scanCrossingsX(loops: Pt[][], yScan: number): number[] {
   const xs: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = loop[i];
-    const b = loop[(i + 1) % n];
-    const y0 = a.y;
-    const y1 = b.y;
-    if (y0 === y1) continue; // horizontal edge — no single crossing
-    const lo = Math.min(y0, y1);
-    const hi = Math.max(y0, y1);
-    // Half-open: include the lower y, exclude the upper y.
-    if (yScan < lo || yScan >= hi) continue;
-    const t = (yScan - y0) / (y1 - y0);
-    xs.push(a.x + t * (b.x - a.x));
+  for (const loop of loops) {
+    const n = loop.length;
+    for (let i = 0; i < n; i++) {
+      const a = loop[i];
+      const b = loop[(i + 1) % n];
+      const y0 = a.y;
+      const y1 = b.y;
+      if (y0 === y1) continue; // horizontal edge — no single crossing
+      const lo = Math.min(y0, y1);
+      const hi = Math.max(y0, y1);
+      // Half-open: include the lower y, exclude the upper y.
+      if (yScan < lo || yScan >= hi) continue;
+      const t = (yScan - y0) / (y1 - y0);
+      xs.push(a.x + t * (b.x - a.x));
+    }
   }
+  // Crossings from the OUTER loop and any HOLE loops, sorted together: the
+  // even-odd pairing then bounds the SOLID spans and skips the voids — a scan
+  // line through a hole yields 4 crossings → two beam segments either side.
   xs.sort((p, q) => p - q);
   return xs;
 }
@@ -127,11 +132,18 @@ export function scanBeams(
   beamDir: "H" | "V",
   pitchCm: number = PITCH_CM,
   bearingCm: number = BEARING_CM,
+  holes: Pt[][] = [],
 ): ScanResult {
   if (loop.length < 3 || !(pitchCm > 0)) return { beams: [] };
 
   // Transpose for vertical beams so the core always scans horizontal lines.
-  const work = beamDir === "V" ? loop.map((p) => ({ x: p.y, y: p.x })) : loop;
+  const tx = (p: Pt) => ({ x: p.y, y: p.x });
+  const work = beamDir === "V" ? loop.map(tx) : loop;
+  // Holes (floor voids) cast into the SAME scan so beams skip them.
+  const holesWork = (beamDir === "V" ? holes.map((h) => h.map(tx)) : holes).filter(
+    (h) => h.length >= 3,
+  );
+  const allLoops = [work, ...holesWork];
   const { minY, maxY } = extent(work);
   if (!(maxY > minY)) return { beams: [] };
 
@@ -143,7 +155,7 @@ export function scanBeams(
   for (let i = 0; i <= maxLines; i++) {
     const yScan = minY + half + i * pitchCm;
     if (yScan >= maxY) break;
-    const xs = scanCrossingsX(work, yScan);
+    const xs = scanCrossingsX(allLoops, yScan);
     // Crossings pair up into inside intervals (even-odd).
     for (let k = 0; k + 1 < xs.length; k += 2) {
       const x0 = xs[k];

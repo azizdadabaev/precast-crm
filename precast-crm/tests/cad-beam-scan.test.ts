@@ -290,3 +290,53 @@ describe("beam-scan — degenerate inputs", () => {
     expect(blockEstimate([])).toEqual({ totalBlocks: 0, rows: 0 });
   });
 });
+
+describe("beam-scan — floor voids (holes)", () => {
+  // 400×400 room; beams run H (along x), spaced along y.
+  const room: Pt[] = [
+    { x: 0, y: 0 },
+    { x: 400, y: 0 },
+    { x: 400, y: 400 },
+    { x: 0, y: 400 },
+  ];
+  // Centered 100×100 void (a stairwell / shaft).
+  const hole: Pt[] = [
+    { x: 150, y: 150 },
+    { x: 250, y: 150 },
+    { x: 250, y: 250 },
+    { x: 150, y: 250 },
+  ];
+  const sumSpan = (r: { beams: { spanStart: number; spanEnd: number }[] }) =>
+    r.beams.reduce((s, b) => s + (b.spanEnd - b.spanStart), 0);
+
+  it("no holes (or []) → identical to the bare scan (backward compatible)", () => {
+    const bare = scanBeams(room, "H");
+    expect(scanBeams(room, "H", PITCH_CM, BEARING_CM, []).beams).toEqual(bare.beams);
+  });
+
+  it("a centered void splits the beams that cross it into two segments", () => {
+    const withHole = scanBeams(room, "H", PITCH_CM, BEARING_CM, [hole]);
+    const noHole = scanBeams(room, "H");
+    // Each scan line through the void band becomes two beams instead of one.
+    expect(withHole.beams.length).toBeGreaterThan(noHole.beams.length);
+    // Some beams are shorter than the full 400 cm width (cut by the void).
+    expect(withHole.beams.some((b) => b.spanEnd - b.spanStart < 399)).toBe(true);
+    // A scan line inside the void band yields exactly 2 segments.
+    const byPos = new Map<number, number>();
+    for (const b of withHole.beams) byPos.set(b.pos, (byPos.get(b.pos) ?? 0) + 1);
+    expect(Math.max(...byPos.values())).toBe(2);
+  });
+
+  it("removes material — total clear beam metres drop vs no void", () => {
+    expect(sumSpan(scanBeams(room, "H", PITCH_CM, BEARING_CM, [hole]))).toBeLessThan(
+      sumSpan(scanBeams(room, "H")),
+    );
+  });
+
+  it("transposes the hole correctly for vertical beams", () => {
+    const withHole = scanBeams(room, "V", PITCH_CM, BEARING_CM, [hole]);
+    const noHole = scanBeams(room, "V");
+    expect(sumSpan(withHole)).toBeLessThan(sumSpan(noHole));
+    expect(withHole.beams.length).toBeGreaterThan(noHole.beams.length);
+  });
+});
