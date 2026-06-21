@@ -225,7 +225,11 @@ const BeamDirEnum = z.enum(["H", "V"]);
 const PtSchema = z.object({ x: z.number(), y: z.number() });
 export const CalculatorDrawingSchema = z.object({
   rooms: z.array(
-    z.object({ points: z.array(PtSchema), closed: z.boolean() }),
+    z.object({
+      id: z.string().optional(),
+      points: z.array(PtSchema),
+      closed: z.boolean(),
+    }),
   ),
   globalDir: BeamDirEnum.nullable(),
   dirOverrides: z.record(z.string(), BeamDirEnum).default({}),

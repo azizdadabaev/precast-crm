@@ -38,19 +38,31 @@ export interface CalculatorDrawing {
   dirOverrides: Record<string, BeamDir>;
 }
 
+/** Mint a stable, unique room id. Kept here (not in the pure geometry module)
+ *  because it uses randomness; preserved across edits for diff/identity. */
+export function newRoomId(): string {
+  return "r" + Math.random().toString(36).slice(2, 10);
+}
+
 /**
  * Coerce a persisted/loaded drawing value into the current rooms[] shape. An
  * earlier build stored a single `points` outline; convert any such legacy value
- * into one closed room so old drafts still open. Returns null for empty/garbage.
+ * into one closed room so old drafts still open. Ensures every room has a stable
+ * `id` (preserving existing ids, minting only for legacy id-less rooms). Returns
+ * null for empty/garbage.
  */
 export function normalizeDrawing(d: unknown): CalculatorDrawing | null {
   if (!d || typeof d !== "object") return null;
   const obj = d as Record<string, unknown>;
   const globalDir = (obj.globalDir as BeamDir | null) ?? null;
   if (Array.isArray(obj.rooms)) {
-    const rooms = (obj.rooms as RoomShape[]).filter(
-      (r) => r && Array.isArray(r.points),
-    );
+    const rooms = (obj.rooms as Partial<RoomShape>[])
+      .filter((r) => r && Array.isArray(r.points))
+      .map((r) => ({
+        id: r.id || newRoomId(),
+        points: r.points as Pt[],
+        closed: !!r.closed,
+      }));
     if (!rooms.length) return null;
     return {
       rooms,
@@ -61,7 +73,11 @@ export function normalizeDrawing(d: unknown): CalculatorDrawing | null {
   // Legacy single-outline shape → wrap as one closed room.
   if (Array.isArray(obj.points)) {
     if (!(obj.points as Pt[]).length) return null;
-    return { rooms: [{ points: obj.points as Pt[], closed: true }], globalDir, dirOverrides: {} };
+    return {
+      rooms: [{ id: newRoomId(), points: obj.points as Pt[], closed: true }],
+      globalDir,
+      dirOverrides: {},
+    };
   }
   return null;
 }

@@ -28,8 +28,13 @@ export interface Bay {
  * One room outline on the floor-plan canvas: a polygon (cm) + whether its loop
  * is closed. The canvas edits one "active" room at a time; the others render as
  * a read-only backdrop. A floor plan is an array of these.
+ *
+ * `id` is a stable identity preserved across edits — used for version diff,
+ * multi-select, components, and pinned comments. Mint it with `newRoomId()`
+ * (kept out of this pure module so geometry stays deterministic).
  */
 export interface RoomShape {
+  id: string;
   points: Pt[];
   closed: boolean;
 }

@@ -35,7 +35,7 @@ import {
   scanScheduleToSlabRows,
 } from "@/components/calculation/draw-rooms";
 import type { SlabRow } from "@/components/calculation/MultiRoomCalculator";
-import { type CalculatorDrawing } from "@/store/calculator";
+import { type CalculatorDrawing, newRoomId } from "@/store/calculator";
 import { Bi, useT } from "@/lib/i18n";
 
 interface Props {
@@ -53,7 +53,7 @@ interface Props {
 }
 
 const EMPTY_DRAWING: CalculatorDrawing = { rooms: [], globalDir: null, dirOverrides: {} };
-const EMPTY_ROOM: RoomShape = { points: [], closed: false };
+const EMPTY_ROOM: RoomShape = { id: "", points: [], closed: false };
 
 /**
  * Draw-a-floor-plan modal — MULTI-ROOM.
@@ -94,9 +94,12 @@ export function DrawRoomDialog({
   const writeDrawing = (next: CalculatorDrawing) => onDrawingChange(next);
 
   // Active room outline + closed (atomic) — feeds RoomCanvas.onActiveChange.
+  // Preserves the room's stable id (minting one on the first edit of an empty
+  // slot) so identity survives every edit.
   const onActiveChange = (pts: Pt[], closed: boolean) => {
+    const cur = rooms[safeActive] ?? EMPTY_ROOM;
     const next = rooms.slice();
-    next[safeActive] = { points: pts, closed };
+    next[safeActive] = { ...cur, id: cur.id || newRoomId(), points: pts, closed };
     writeDrawing({ ...dr, rooms: next });
   };
 
@@ -112,8 +115,12 @@ export function DrawRoomDialog({
 
   // Start a NEW room. Reuse the active slot if it's still empty (no litter),
   // else append + activate. A seed places the first point / a preset outline.
-  const requestNewRoom = (seed?: RoomShape) => {
-    const room = seed ?? { points: [], closed: false };
+  const requestNewRoom = (seed?: Omit<RoomShape, "id">) => {
+    const room: RoomShape = {
+      id: newRoomId(),
+      points: seed?.points ?? [],
+      closed: seed?.closed ?? false,
+    };
     const active = rooms[safeActive];
     if (active && active.points.length === 0) {
       const next = rooms.slice();

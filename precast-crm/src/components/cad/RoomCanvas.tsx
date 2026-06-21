@@ -101,8 +101,8 @@ interface RoomCanvasProps {
   onPickBackgroundRoom?: (roomsIndex: number) => void;
   /** Start a NEW room of the floor plan (＋ Room button, a preset, or a click on
    *  empty grid once the active room is closed). The optional seed places the
-   *  first point or drops a preset outline. */
-  onRequestNewRoom?: (seed?: RoomShape) => void;
+   *  first point or drops a preset outline; the parent mints the room id. */
+  onRequestNewRoom?: (seed?: Omit<RoomShape, "id">) => void;
   /** Initial grid step in cm (default 10). User can change it via the controls. */
   gridCm?: number;
   /** Optional decomposed bays to overlay (translucent). */
