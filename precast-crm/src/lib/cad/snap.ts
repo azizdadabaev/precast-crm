@@ -64,6 +64,11 @@ export interface SnapInput {
   /** Pick radius in cm (caller passes pxToCm(~10px)). */
   tolCm: number;
   settings: SnapSettings;
+  /** OTHER rooms' outlines to also snap to (cross-room snapping). Their
+   *  vertices, midpoints and edges become hard snap candidates and alignment
+   *  sources so adjacent rooms lock together at shared walls. Omitted/empty →
+   *  single-room behaviour (byte-identical to before). */
+  extraLoops?: Array<{ points: Pt[]; closed: boolean }>;
 }
 
 export const DEFAULT_SNAP_SETTINGS: SnapSettings = {
@@ -144,82 +149,99 @@ export function computeSnap(input: SnapInput): SnapResult {
   const { cursor, points, closed, origin, excludeIndex, tolCm, settings } =
     input;
 
+  // Snap sources: the active room (its dragged vertex excluded) plus any other
+  // rooms of the floor plan (no excluded vertex). Single source → behaviour is
+  // identical to the original single-room engine.
+  const sources: Array<{ points: Pt[]; closed: boolean; exclude: number | null }> = [
+    { points, closed, exclude: excludeIndex },
+    ...(input.extraLoops ?? []).map((l) => ({
+      points: l.points,
+      closed: l.closed,
+      exclude: null,
+    })),
+  ];
+
   // ── Tier 1: HARD point snaps ──────────────────────────────────────────────
   const candidates: Candidate[] = [];
 
-  // endpoint: any vertex ≠ excludeIndex.
-  if (settings.endpoint) {
-    for (let i = 0; i < points.length; i++) {
-      if (i === excludeIndex) continue;
-      const d = dist(cursor, points[i]);
-      if (d <= tolCm) {
-        candidates.push({ point: { ...points[i] }, type: "endpoint", dist: d });
-      }
-    }
-  }
+  for (const src of sources) {
+    const sp = src.points;
+    const exclude = src.exclude;
 
-  const edgeList = edges(points, closed);
-
-  // intersection: crossing of two NON-ADJACENT edges, near the cursor.
-  if (settings.intersection) {
-    for (let i = 0; i < edgeList.length; i++) {
-      for (let j = i + 1; j < edgeList.length; j++) {
-        const e1 = edgeList[i];
-        const e2 = edgeList[j];
-        if (adjacent(e1, e2)) continue;
-        const a = points[e1[0]];
-        const b = points[e1[1]];
-        const c = points[e2[0]];
-        const dd = points[e2[1]];
-        const x = lineIntersection(a, b, c, dd);
-        if (!x) continue;
-        // Must lie on BOTH segments (a real crossing, not an extension).
-        if (!onSegment(x, a, b, 1e-6) || !onSegment(x, c, dd, 1e-6)) continue;
-        const d = dist(cursor, x);
+    // endpoint: any vertex ≠ excluded.
+    if (settings.endpoint) {
+      for (let i = 0; i < sp.length; i++) {
+        if (i === exclude) continue;
+        const d = dist(cursor, sp[i]);
         if (d <= tolCm) {
-          candidates.push({ point: x, type: "intersection", dist: d });
+          candidates.push({ point: { ...sp[i] }, type: "endpoint", dist: d });
         }
       }
     }
-  }
 
-  // midpoint: midpoint of each edge.
-  if (settings.midpoint) {
-    for (const [ai, bi] of edgeList) {
-      const m = {
-        x: (points[ai].x + points[bi].x) / 2,
-        y: (points[ai].y + points[bi].y) / 2,
-      };
-      const d = dist(cursor, m);
-      if (d <= tolCm) candidates.push({ point: m, type: "midpoint", dist: d });
-    }
-  }
+    const edgeList = edges(sp, src.closed);
 
-  // perpendicular: foot of the perpendicular from `origin` onto an edge LINE,
-  // if the foot lands on the segment.
-  if (settings.perpendicular && origin) {
-    for (const [ai, bi] of edgeList) {
-      const a = points[ai];
-      const b = points[bi];
-      const abx = b.x - a.x;
-      const aby = b.y - a.y;
-      const len2 = abx * abx + aby * aby;
-      if (len2 < 1e-12) continue;
-      const t = ((origin.x - a.x) * abx + (origin.y - a.y) * aby) / len2;
-      if (t < 0 || t > 1) continue; // foot off the segment
-      const foot = { x: a.x + t * abx, y: a.y + t * aby };
-      const d = dist(cursor, foot);
-      if (d <= tolCm) {
-        candidates.push({ point: foot, type: "perpendicular", dist: d });
+    // intersection: crossing of two NON-ADJACENT edges of this room, near cursor.
+    if (settings.intersection) {
+      for (let i = 0; i < edgeList.length; i++) {
+        for (let j = i + 1; j < edgeList.length; j++) {
+          const e1 = edgeList[i];
+          const e2 = edgeList[j];
+          if (adjacent(e1, e2)) continue;
+          const a = sp[e1[0]];
+          const b = sp[e1[1]];
+          const c = sp[e2[0]];
+          const dd = sp[e2[1]];
+          const x = lineIntersection(a, b, c, dd);
+          if (!x) continue;
+          // Must lie on BOTH segments (a real crossing, not an extension).
+          if (!onSegment(x, a, b, 1e-6) || !onSegment(x, c, dd, 1e-6)) continue;
+          const d = dist(cursor, x);
+          if (d <= tolCm) {
+            candidates.push({ point: x, type: "intersection", dist: d });
+          }
+        }
       }
     }
-  }
 
-  // edge: nearest point on any edge segment.
-  if (settings.edge) {
-    for (const [ai, bi] of edgeList) {
-      const { dist: d, closest } = pointSegment(cursor, points[ai], points[bi]);
-      if (d <= tolCm) candidates.push({ point: closest, type: "edge", dist: d });
+    // midpoint: midpoint of each edge.
+    if (settings.midpoint) {
+      for (const [ai, bi] of edgeList) {
+        const m = {
+          x: (sp[ai].x + sp[bi].x) / 2,
+          y: (sp[ai].y + sp[bi].y) / 2,
+        };
+        const d = dist(cursor, m);
+        if (d <= tolCm) candidates.push({ point: m, type: "midpoint", dist: d });
+      }
+    }
+
+    // perpendicular: foot of the perpendicular from `origin` onto an edge LINE,
+    // if the foot lands on the segment.
+    if (settings.perpendicular && origin) {
+      for (const [ai, bi] of edgeList) {
+        const a = sp[ai];
+        const b = sp[bi];
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const len2 = abx * abx + aby * aby;
+        if (len2 < 1e-12) continue;
+        const t = ((origin.x - a.x) * abx + (origin.y - a.y) * aby) / len2;
+        if (t < 0 || t > 1) continue; // foot off the segment
+        const foot = { x: a.x + t * abx, y: a.y + t * aby };
+        const d = dist(cursor, foot);
+        if (d <= tolCm) {
+          candidates.push({ point: foot, type: "perpendicular", dist: d });
+        }
+      }
+    }
+
+    // edge: nearest point on any edge segment.
+    if (settings.edge) {
+      for (const [ai, bi] of edgeList) {
+        const { dist: d, closest } = pointSegment(cursor, sp[ai], sp[bi]);
+        if (d <= tolCm) candidates.push({ point: closest, type: "edge", dist: d });
+      }
     }
   }
 
@@ -273,18 +295,20 @@ export function computeSnap(input: SnapInput): SnapResult {
     let alignY: Pt | null = null; // vertex supplying the shared y
     let bestDX = tolCm;
     let bestDY = tolCm;
-    for (let i = 0; i < points.length; i++) {
-      if (i === excludeIndex) continue;
-      const v = points[i];
-      const ddx = Math.abs(v.x - point.x);
-      if (ddx <= bestDX) {
-        bestDX = ddx;
-        alignX = v;
-      }
-      const ddy = Math.abs(v.y - point.y);
-      if (ddy <= bestDY) {
-        bestDY = ddy;
-        alignY = v;
+    for (const src of sources) {
+      for (let i = 0; i < src.points.length; i++) {
+        if (i === src.exclude) continue;
+        const v = src.points[i];
+        const ddx = Math.abs(v.x - point.x);
+        if (ddx <= bestDX) {
+          bestDX = ddx;
+          alignX = v;
+        }
+        const ddy = Math.abs(v.y - point.y);
+        if (ddy <= bestDY) {
+          bestDY = ddy;
+          alignY = v;
+        }
       }
     }
     if (alignX) {

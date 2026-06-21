@@ -189,3 +189,60 @@ describe("computeSnap — grid fallback", () => {
     expect(r.point).toEqual({ x: 47, y: 13 });
   });
 });
+
+describe("computeSnap — cross-room (extraLoops)", () => {
+  // A second room sitting to the RIGHT of SQUARE, sharing the x=200 wall:
+  // 200,0 → 400,0 → 400,200 → 200,200.
+  const OTHER: Pt[] = [
+    { x: 200, y: 0 },
+    { x: 400, y: 0 },
+    { x: 400, y: 200 },
+    { x: 200, y: 200 },
+  ];
+
+  it("snaps to another room's corner (endpoint) when extraLoops is provided", () => {
+    const r = computeSnap(
+      makeInput({
+        cursor: { x: 403, y: 4 }, // near OTHER's top-right corner
+        settings: only("endpoint"),
+        extraLoops: [{ points: OTHER, closed: true }],
+      }),
+    );
+    expect(r.type).toBe("endpoint");
+    expect(r.point).toEqual({ x: 400, y: 0 });
+  });
+
+  it("does NOT snap to that corner without extraLoops (control)", () => {
+    const r = computeSnap(
+      makeInput({ cursor: { x: 403, y: 4 }, settings: only("endpoint") }),
+    );
+    // The active SQUARE has no vertex near (403,4) → no endpoint snap.
+    expect(r.type).toBeNull();
+  });
+
+  it("snaps onto another room's wall (edge)", () => {
+    const r = computeSnap(
+      makeInput({
+        cursor: { x: 300, y: 4 }, // just inside OTHER's top wall (y=0)
+        settings: only("edge"),
+        extraLoops: [{ points: OTHER, closed: true }],
+      }),
+    );
+    expect(r.type).toBe("edge");
+    expect(r.point).toEqual({ x: 300, y: 0 });
+  });
+
+  it("aligns the active point to another room's vertex (shared axis)", () => {
+    // Cursor near x=400 (OTHER's right edge x) but far from any vertex/edge of
+    // either room in y — only alignment should fire, sharing x=400.
+    const r = computeSnap(
+      makeInput({
+        cursor: { x: 398, y: 1000 },
+        settings: only("alignment"),
+        extraLoops: [{ points: OTHER, closed: true }],
+      }),
+    );
+    expect(r.type).toBe("alignment");
+    expect(r.point.x).toBe(400);
+  });
+});
