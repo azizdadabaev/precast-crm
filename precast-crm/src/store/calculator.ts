@@ -36,6 +36,10 @@ export interface CalculatorDrawing {
   rooms: RoomShape[];
   globalDir: BeamDir | null;
   dirOverrides: Record<string, BeamDir>;
+  /** Wall thickness (cm). When > 0 the drawn outline is the OUTER wall face and
+   *  the slab engine bills the clear INNER face (outline offset inward). 0/absent
+   *  = single-line slab (unchanged). */
+  wallThickCm?: number;
 }
 
 /** Mint a stable, unique room id. Kept here (not in the pure geometry module)
@@ -68,6 +72,7 @@ export function normalizeDrawing(d: unknown): CalculatorDrawing | null {
       rooms,
       globalDir,
       dirOverrides: (obj.dirOverrides as Record<string, BeamDir>) ?? {},
+      wallThickCm: typeof obj.wallThickCm === "number" ? obj.wallThickCm : 0,
     };
   }
   // Legacy single-outline shape → wrap as one closed room.

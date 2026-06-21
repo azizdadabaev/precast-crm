@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { offsetPolygonOutward } from "@/lib/cad/offset";
+import { offsetPolygonOutward, offsetPolygonInward } from "@/lib/cad/offset";
 import type { Pt } from "@/lib/cad/geometry";
 
 // Tiny shoelace helper (absolute area in cm²) so the tests don't depend on the
@@ -149,5 +149,35 @@ describe("offsetPolygonOutward — degenerate + numeric edge cases", () => {
       expect(Number.isFinite(p.x)).toBe(true);
       expect(Number.isFinite(p.y)).toBe(true);
     }
+  });
+});
+
+describe("offsetPolygonInward — clear inner wall face", () => {
+  const rect: Pt[] = [
+    { x: 0, y: 0 },
+    { x: 400, y: 0 },
+    { x: 400, y: 300 },
+    { x: 0, y: 300 },
+  ];
+
+  it("shrinks the rectangle inward by exactly the thickness on every side", () => {
+    const inner = offsetPolygonInward(rect, 20);
+    expect(inner[0].x).toBeCloseTo(20, 6);
+    expect(inner[0].y).toBeCloseTo(20, 6);
+    expect(inner[1].x).toBeCloseTo(380, 6);
+    expect(inner[2].y).toBeCloseTo(280, 6);
+    // Inner clear area is the (W-2t)(H-2t) rectangle.
+    expect(area(inner)).toBeCloseTo((400 - 40) * (300 - 40), 4);
+    // Smaller than the outer footprint.
+    expect(area(inner)).toBeLessThan(area(rect));
+  });
+
+  it("is the inverse of an outward offset by the same distance", () => {
+    const inner = offsetPolygonInward(rect, 25);
+    const out = offsetPolygonOutward(rect, -25);
+    inner.forEach((p, i) => {
+      expect(p.x).toBeCloseTo(out[i].x, 9);
+      expect(p.y).toBeCloseTo(out[i].y, 9);
+    });
   });
 });

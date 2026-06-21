@@ -88,3 +88,14 @@ export function offsetPolygonOutward(loop: Pt[], distCm: number): Pt[] {
   }
   return out;
 }
+
+/**
+ * Offset a simple closed polygon INWARD by `distCm` (the clear inner face of a
+ * wall whose outer face is `loop`, thickness distCm). Just the outward offset by
+ * a negative distance. For a tight notch + a large thickness the result can
+ * self-intersect — callers should validate (isValidOutline) and fall back to the
+ * outer loop if so.
+ */
+export function offsetPolygonInward(loop: Pt[], distCm: number): Pt[] {
+  return offsetPolygonOutward(loop, -distCm);
+}

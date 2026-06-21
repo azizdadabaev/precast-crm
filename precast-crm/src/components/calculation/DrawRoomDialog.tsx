@@ -21,7 +21,9 @@ import {
   beamLayout,
   formatLengthCm,
   bbox,
+  isValidOutline,
 } from "@/lib/cad/geometry";
+import { offsetPolygonInward } from "@/lib/cad/offset";
 import {
   isRectilinear,
   scanBeams,
@@ -83,6 +85,16 @@ export function DrawRoomDialog({
   const rooms: RoomShape[] = dr.rooms.length ? dr.rooms : [EMPTY_ROOM];
   const globalDir = dr.globalDir;
   const dirOverrides = dr.dirOverrides;
+  const wallThickCm = dr.wallThickCm ?? 0;
+
+  // With walls, the slab engine bills the CLEAR INNER face: the drawn outline is
+  // the outer wall face, offset inward by the thickness. Falls back to the outer
+  // loop if the inset would self-intersect (a too-thick wall in a tight notch).
+  const innerOf = (pts: Pt[]): Pt[] => {
+    if (wallThickCm <= 0 || pts.length < 4) return pts;
+    const inner = offsetPolygonInward(pts, wallThickCm);
+    return isValidOutline(inner, true) ? inner : pts;
+  };
 
   const [activeIndex, setActiveIndex] = useState(0);
   // Multi-selection (room indices) for group operations. The active room is the
@@ -146,6 +158,9 @@ export function DrawRoomDialog({
       rooms,
       dirOverrides: { ...dirOverrides, [`${roomI}:${bayI}`]: d },
     });
+
+  const setWallThick = (v: number) =>
+    writeDrawing({ ...dr, rooms, wallThickCm: Math.max(0, Math.min(100, v || 0)) });
 
   // Start a NEW room. Reuse the active slot if it's still empty (no litter),
   // else append + activate. A seed places the first point / a preset outline.
@@ -216,21 +231,24 @@ export function DrawRoomDialog({
     .filter((r) => r.index !== safeActive && r.points.length >= 1);
 
   // ── Active room derivations (interactive overlay) ─────────────
+  // Engine outline = the clear INNER face when walls are on (else the drawn one).
+  const enginePoints = useMemo(() => innerOf(points), [points, wallThickCm]);
+
   const rectilinear = useMemo(
-    () => (points.length >= 4 ? isRectilinear(points) : true),
-    [points],
+    () => (enginePoints.length >= 4 ? isRectilinear(enginePoints) : true),
+    [enginePoints],
   );
 
   const bays = useMemo(
-    () => (points.length >= 4 && rectilinear ? decomposeToBays(points) : []),
-    [points, rectilinear],
+    () => (enginePoints.length >= 4 && rectilinear ? decomposeToBays(enginePoints) : []),
+    [enginePoints, rectilinear],
   );
 
   const scan = useMemo(() => {
-    if (points.length < 4 || rectilinear) return null;
-    const box = bbox(points);
+    if (enginePoints.length < 4 || rectilinear) return null;
+    const box = bbox(enginePoints);
     const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
-    const { beams } = scanBeams(points, beamDir);
+    const { beams } = scanBeams(enginePoints, beamDir);
     const schedule = beamSchedule(beams);
     const blocks = blockEstimate(beams);
     const lengths = beams.map((b) => b.lengthCm);
@@ -288,22 +306,25 @@ export function DrawRoomDialog({
     const out: SlabRow[] = [];
     rooms.forEach((room, ri) => {
       if (!room.closed || room.points.length < 4) return;
-      if (isRectilinear(room.points)) {
-        const rbays = decomposeToBays(room.points);
+      // Bill the clear inner face when walls are on.
+      const inner = innerOf(room.points);
+      if (isRectilinear(inner)) {
+        const rbays = decomposeToBays(inner);
         const rws = rbays.map((rect, bi) => ({
           rect,
           beamDir: dirOverrides[`${ri}:${bi}`] ?? globalDir ?? defaultBeamDir(rect),
         }));
         out.push(...baysToSlabRows(rws, startSeq + out.length));
       } else {
-        const box = bbox(room.points);
+        const box = bbox(inner);
         const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
-        const { beams } = scanBeams(room.points, beamDir);
+        const { beams } = scanBeams(inner, beamDir);
         out.push(...scanScheduleToSlabRows(beamSchedule(beams), startSeq + out.length));
       }
     });
     return out;
-  }, [rooms, dirOverrides, globalDir, startSeq]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rooms, dirOverrides, globalDir, startSeq, wallThickCm]);
 
   const closedRoomCount = rooms.filter(
     (r) => r.closed && r.points.length >= 4,
@@ -378,6 +399,7 @@ export function DrawRoomDialog({
               activeIndexValue={safeActive}
               onSelectRooms={(indices) => onSelectRooms(indices)}
               onGroupTransform={applyGroupTransform}
+              wallThickCm={wallThickCm}
               bays={bays}
               beamLayers={scanOverlay ? [scanOverlay] : beamLayers}
               fill
@@ -459,6 +481,25 @@ export function DrawRoomDialog({
                 </span>
               </div>
             )}
+
+            {/* Wall thickness — when > 0 the drawn outline is the OUTER face and
+                the slab bills the clear inner span. 0 = single-line slab. */}
+            <div className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
+              <span className="font-medium">{t("Девор қалинлиги", "Wall thickness")}</span>
+              <span className="inline-flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={wallThickCm || ""}
+                  onChange={(e) => setWallThick(Number(e.target.value))}
+                  placeholder="0"
+                  className="w-14 rounded border px-1.5 py-0.5 text-right tabular-nums"
+                />
+                <span className="text-muted-foreground">{t("см", "cm")}</span>
+              </span>
+            </div>
 
             <div className="text-sm font-medium text-foreground">
               {t(`Фаол: Хона ${safeActive + 1}`, `Editing: Room ${safeActive + 1}`)}

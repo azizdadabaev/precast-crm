@@ -233,6 +233,7 @@ export const CalculatorDrawingSchema = z.object({
   ),
   globalDir: BeamDirEnum.nullable(),
   dirOverrides: z.record(z.string(), BeamDirEnum).default({}),
+  wallThickCm: z.number().min(0).max(100).optional(),
 });
 
 // ── Save Project (Draft) ────────────────────────────────────────

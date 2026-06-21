@@ -73,7 +73,7 @@ import {
   BEARING_CM,
 } from "@/lib/cad/geometry";
 import { visibleGridLines } from "@/lib/cad/grid";
-import { offsetPolygonOutward } from "@/lib/cad/offset";
+import { offsetPolygonOutward, offsetPolygonInward } from "@/lib/cad/offset";
 import { ROOM_PRESETS } from "@/lib/cad/presets";
 import {
   computeSnap,
@@ -119,6 +119,9 @@ interface RoomCanvasProps {
   /** Apply a live group transform: new points for each selected room. The parent
    *  writes them; the canvas checkpoints undo once per gesture via onPushUndo. */
   onGroupTransform?: (updates: Array<{ index: number; points: Pt[] }>) => void;
+  /** Wall thickness (cm). When > 0, render the wall poché band between the drawn
+   *  outer outline and the inward-offset inner (clear) face. */
+  wallThickCm?: number;
   /** Initial grid step in cm (default 10). User can change it via the controls. */
   gridCm?: number;
   /** Optional decomposed bays to overlay (translucent). */
@@ -325,6 +328,7 @@ export function RoomCanvas({
   activeIndexValue,
   onSelectRooms,
   onGroupTransform,
+  wallThickCm,
   gridCm = 10,
   bays,
   beamLayers,
@@ -3187,6 +3191,33 @@ export function RoomCanvas({
             </g>
           );
         })}
+
+        {/* Wall poché band (double-line walls): drawn OUTER outline minus the
+            inward-offset inner face, hatched. Rendered under the beam overlay. */}
+        {!!wallThickCm && wallThickCm > 0 &&
+          allRooms().map((r) => {
+            if (!r.closed || r.points.length < 4) return null;
+            const inner = offsetPolygonInward(r.points, wallThickCm);
+            if (!isValidOutline(inner, true)) return null;
+            const op = r.points.map(cmToPx);
+            const ip = inner.map(cmToPx);
+            const d =
+              op.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") +
+              " Z " +
+              ip.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ") +
+              " Z";
+            return (
+              <path
+                key={`wall${r.index}`}
+                d={d}
+                fillRule="evenodd"
+                fill="url(#cad-concrete-hatch)"
+                stroke="#94a3b8"
+                strokeWidth={0.75}
+                style={{ pointerEvents: "none" }}
+              />
+            );
+          })}
 
         {/* Group bounding box around a 2+ room selection (dashed indigo). */}
         {groupMode && (() => {
