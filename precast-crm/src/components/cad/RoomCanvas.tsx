@@ -71,6 +71,7 @@ import {
 } from "@/lib/cad/geometry";
 import { visibleGridLines } from "@/lib/cad/grid";
 import { offsetPolygonOutward } from "@/lib/cad/offset";
+import { ROOM_PRESETS } from "@/lib/cad/presets";
 import {
   computeSnap,
   DEFAULT_SNAP_SETTINGS,
@@ -994,11 +995,11 @@ export function RoomCanvas({
 
   const resetView = () => setView(IDENTITY);
 
-  // Zoom-to-fit: frame the drawn outline (its world-space bbox) in the viewport.
+  // Frame an arbitrary outline (its world-space bbox) in the viewport.
   // World px = cm×BASE_SCALE + MARGIN; we hand fitView that box + the SVG size.
-  const fitToShape = () => {
-    if (points.length < 2) return;
-    const bb = bbox(points);
+  const framePoints = (pts: Pt[]) => {
+    if (pts.length < 2) return;
+    const bb = bbox(pts);
     const worldBox = {
       x: MARGIN + bb.x * BASE_SCALE,
       y: MARGIN + bb.y * BASE_SCALE,
@@ -1008,6 +1009,23 @@ export function RoomCanvas({
     // Pad generously so the per-edge dimension band AND the overall (extents)
     // dimensions outside it stay on-canvas after a fit.
     setView(fitView(worldBox, SVG_W, SVG_H, 96, MIN_ZOOM, MAX_ZOOM));
+  };
+
+  // Zoom-to-fit the current drawn outline.
+  const fitToShape = () => framePoints(points);
+
+  // ── Room-shape presets ──
+  // Drop a ready-made rectilinear outline (L / T / U / notch) the operator can
+  // edit immediately — far faster than hand-placing every vertex. Replaces the
+  // current outline (recorded for undo via commit), lands in draw/edit mode so
+  // vertices + walls are interactive at once, and frames the new shape.
+  const insertPreset = (pts: Pt[]) => {
+    switchTool("draw");
+    commit(pts, true);
+    setSelEdge(null);
+    setSelVertex(null);
+    setEdgeInsert(null);
+    framePoints(pts);
   };
 
   // ── Export helpers ──
@@ -2526,6 +2544,28 @@ export function RoomCanvas({
             >
               <Icon className="h-3.5 w-3.5" strokeWidth={2} />
               {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Room-shape presets: drop a ready-made L/T/U/notch outline to edit
+            (slide walls / type lengths) instead of hand-placing each vertex.
+            Each replaces the current outline and is undoable. */}
+        <div className="inline-flex items-center gap-0.5" role="group" aria-label="Insert room shape">
+          <span className="px-1 text-[11px] font-medium text-slate-400">Shapes</span>
+          {ROOM_PRESETS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => insertPreset(p.make())}
+              title={
+                p.key === "Notch"
+                  ? "Notched rectangle — drop & edit"
+                  : `${p.key}-shaped room — drop & edit`
+              }
+              className="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded-md px-1.5 text-xs font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            >
+              {p.key}
             </button>
           ))}
         </div>
