@@ -5,6 +5,7 @@ import {
   type SlabRow,
 } from "@/components/calculation/MultiRoomCalculator";
 import type { ClientDraft } from "@/components/calculation/ClientInfoBar";
+import type { Pt, BeamDir } from "@/lib/cad/geometry";
 
 /**
  * Calculator state — auto-saved to localStorage so in-app navigation,
@@ -21,6 +22,21 @@ import type { ClientDraft } from "@/components/calculation/ClientInfoBar";
  */
 
 export type RoundingGrid = 0.05 | 0.1;
+
+/**
+ * In-progress room sketch from the Draw-room dialog. Persisted alongside the
+ * rest of the draft so closing the dialog (or a refresh) before "Add rooms"
+ * doesn't lose the outline, and reopening "Draw room" restores it. Cleared on
+ * a successful Add (the outline became calculator rows) and by Clear.
+ *  - `points`: the rectilinear outline in cm (single source of truth).
+ *  - `globalDir`: whole-drawing beam-direction choice (null = Auto/short-side).
+ *  - `dirOverrides`: per-bay beam-direction overrides, keyed by bay index.
+ */
+export interface CalculatorDrawing {
+  points: Pt[];
+  globalDir: BeamDir | null;
+  dirOverrides: Record<number, BeamDir>;
+}
 
 export const ANON_PERSIST_KEY = "calculator-draft-anon";
 /** The pre-Zustand autosave key. Migrated on first rehydrate, then deleted. */
@@ -71,6 +87,10 @@ interface CalculatorState {
    *  button. Order is fixed; only widths are user-customizable. */
   columnWidths: Record<string, number> | null;
   roundingGrid: RoundingGrid;
+  /** In-progress Draw-room sketch (outline + beam-direction choices). null when
+   *  nothing is being drawn. Persisted like the rest of the draft so it survives
+   *  closing the dialog and a refresh. Reset by loadFrom/clearAll. */
+  drawing: CalculatorDrawing | null;
 
   // ── Actions ────────────────────────────────────────────────
   setClient: (next: ClientDraft) => void;
@@ -86,12 +106,13 @@ interface CalculatorState {
   addDroppedImages: (urls: string[]) => void;
   setColumnWidths: (widths: Record<string, number> | null) => void;
   setRoundingGrid: (grid: RoundingGrid) => void;
+  setDrawing: (drawing: CalculatorDrawing | null) => void;
   /**
    * Replace the entire calculator session. Used by /projects "open draft"
    * and by hydration migration. Pass partial state; everything else
    * resets to defaults so a draft load can't leak prior session bits.
    */
-  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDiscountAmount" | "setDraftProjectId" | "setEditingOrderId" | "setSourceConversationId" | "setDockHidden" | "addDroppedImages" | "setColumnWidths" | "setRoundingGrid">>) => void;
+  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDiscountAmount" | "setDraftProjectId" | "setEditingOrderId" | "setSourceConversationId" | "setDockHidden" | "addDroppedImages" | "setColumnWidths" | "setRoundingGrid" | "setDrawing">>) => void;
   /** Wipe all draft state. Called from the Clear button and after a
    *  successful Place Order. */
   clearAll: () => void;
@@ -116,6 +137,7 @@ const INITIAL_STATE = {
   droppedImages: [] as string[],
   columnWidths: null as Record<string, number> | null,
   roundingGrid: 0.1 as RoundingGrid,
+  drawing: null as CalculatorDrawing | null,
 };
 
 interface PersistedShape {
@@ -131,6 +153,7 @@ interface PersistedShape {
   droppedImages: string[];
   columnWidths: Record<string, number> | null;
   roundingGrid: RoundingGrid;
+  drawing: CalculatorDrawing | null;
 }
 
 /**
@@ -245,6 +268,7 @@ export const useCalculatorStore = create<CalculatorState>()(
         })),
       setColumnWidths: (widths) => set({ columnWidths: widths }),
       setRoundingGrid: (grid) => set({ roundingGrid: grid }),
+      setDrawing: (drawing) => set({ drawing }),
 
       loadFrom: (next) =>
         set((s) => ({
@@ -287,6 +311,7 @@ export const useCalculatorStore = create<CalculatorState>()(
         droppedImages: s.droppedImages,
         columnWidths: s.columnWidths,
         roundingGrid: s.roundingGrid,
+        drawing: s.drawing,
       }),
       // Re-run the engine on each row after rehydrating. Defends against
       // a calculation rule changing between sessions (rare in production

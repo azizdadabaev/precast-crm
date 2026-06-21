@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,6 +33,7 @@ import {
   scanScheduleToSlabRows,
 } from "@/components/calculation/draw-rooms";
 import type { SlabRow } from "@/components/calculation/MultiRoomCalculator";
+import { type CalculatorDrawing } from "@/store/calculator";
 import { Bi, useT } from "@/lib/i18n";
 
 interface Props {
@@ -42,7 +43,15 @@ interface Props {
   startSeq: number;
   /** Finalized calculator rows (already priced) → appended to the calculator. */
   onAddRooms: (rows: SlabRow[]) => void;
+  /** Persisted in-progress sketch (from the calculator store), so the outline
+   *  survives closing the dialog or a refresh. null = nothing drawn yet. */
+  drawing: CalculatorDrawing | null;
+  /** Write the sketch back to the store; null clears it. */
+  onDrawingChange: (drawing: CalculatorDrawing | null) => void;
 }
+
+/** Neutral working value when no sketch is in progress yet. */
+const EMPTY_DRAWING: CalculatorDrawing = { points: [], globalDir: null, dirOverrides: {} };
 
 /**
  * Draw-a-room modal — HYBRID, mirroring the cad-test page.
@@ -58,15 +67,28 @@ interface Props {
  *    via `scanBeamsToOverlay`, and on confirm append one ESTIMATE row per
  *    beam-length bucket (`scanScheduleToSlabRows`).
  */
-export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
+export function DrawRoomDialog({
+  open,
+  onClose,
+  startSeq,
+  onAddRooms,
+  drawing,
+  onDrawingChange,
+}: Props) {
   const t = useT();
-  const [points, setPoints] = useState<Pt[]>([]);
+  // The in-progress sketch lives in the calculator store (persisted), so it
+  // survives closing the dialog / a refresh. Derive the working values from it
+  // and write every change back through onDrawingChange.
+  const dr = drawing ?? EMPTY_DRAWING;
+  const points = dr.points;
   // Per-bay beam-direction overrides, keyed by bay index (absent → default).
-  const [dirOverrides, setDirOverrides] = useState<Record<number, BeamDir>>({});
+  const dirOverrides = dr.dirOverrides;
   // Global beam-direction choice for the whole drawing (null = Auto/short-side).
   // Drives the scanline (tapered) path and the default for every bay; a per-bay
   // override still wins on the rectilinear path.
-  const [globalDir, setGlobalDir] = useState<BeamDir | null>(null);
+  const globalDir = dr.globalDir;
+  const setPoints = (next: Pt[]) => onDrawingChange({ ...dr, points: next });
+  const setGlobalDir = (dir: BeamDir | null) => onDrawingChange({ ...dr, globalDir: dir });
 
   // HYBRID ROUTING. A closed outline with ANY angled edge → scanline; every edge
   // H/V → the exact bay path. <4 points (still drawing) is treated as rectilinear.
@@ -141,19 +163,18 @@ export function DrawRoomDialog({ open, onClose, startSeq, onAddRooms }: Props) {
     [scan],
   );
 
-  const reset = () => {
-    setPoints([]);
-    setDirOverrides({});
-    setGlobalDir(null);
-  };
+  // Wipe the persisted sketch entirely (after a successful Add). Closing the
+  // dialog does NOT call this — the sketch is retained.
+  const reset = () => onDrawingChange(null);
 
   const handleClose = () => {
-    reset();
+    // Retain the in-progress sketch (it's persisted) so closing the dialog or a
+    // refresh doesn't lose the outline. Only a successful Add or Clear wipes it.
     onClose();
   };
 
   const setDir = (i: number, dir: BeamDir) =>
-    setDirOverrides((prev) => ({ ...prev, [i]: dir }));
+    onDrawingChange({ ...dr, dirOverrides: { ...dr.dirOverrides, [i]: dir } });
 
   const canAdd = rectilinear ? rows.length > 0 : !!scan && scan.beams.length > 0;
 

@@ -77,6 +77,8 @@ function CalculationsInner() {
   const setDockHidden = useCalculatorStore((s) => s.setDockHidden);
   const droppedImages = useCalculatorStore((s) => s.droppedImages);
   const addDroppedImages = useCalculatorStore((s) => s.addDroppedImages);
+  const drawing = useCalculatorStore((s) => s.drawing);
+  const setDrawing = useCalculatorStore((s) => s.setDrawing);
   const loadFrom = useCalculatorStore((s) => s.loadFrom);
   const clearAll = useCalculatorStore((s) => s.clearAll);
 
@@ -1027,6 +1029,8 @@ function CalculationsInner() {
         onClose={() => setDrawRoomOpen(false)}
         startSeq={rows.length}
         onAddRooms={handleDrawnRooms}
+        drawing={drawing}
+        onDrawingChange={setDrawing}
       />
 
       {/* Client info — Name | Phone | Address */}
