@@ -316,6 +316,11 @@ export const EditOrderSchema = z.object({
   otherCost: z.coerce.number().min(0).default(0),
   scheduledAt: z.coerce.date(),
   notes: z.string().max(2000).optional().nullable(),
+  // Correct the client's contact on the placed order. Address/name live on the
+  // shared Client, so saving updates them everywhere (orders + Clients tab).
+  // Phone is the client's unique identity — edit it on the Clients page.
+  clientName: z.string().max(200).optional(),
+  clientAddress: z.string().max(500).optional().nullable(),
 });
 
 // ── Cancel order ────────────────────────────────────────────────

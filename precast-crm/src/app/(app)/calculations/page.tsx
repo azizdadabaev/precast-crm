@@ -828,6 +828,9 @@ function CalculationsInner() {
             deliveryCost: 0,
             otherCost: 0,
             scheduledAt: args.scheduledAt.toISOString(),
+            // Persist any contact correction to the shared Client (address/name).
+            clientName: client.name,
+            clientAddress: client.address,
           },
         },
       );

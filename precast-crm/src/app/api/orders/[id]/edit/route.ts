@@ -46,6 +46,7 @@ export const PATCH = withPermission<{ id: string }>(
       include: {
         project: { include: { calculations: true } },
         payments: { select: { status: true, amount: true } },
+        client: { select: { id: true, name: true, address: true } },
       },
     });
     if (!existing) return fail("Order not found", 404);
@@ -215,6 +216,38 @@ export const PATCH = withPermission<{ id: string }>(
             },
           },
         });
+      }
+
+      // Persist any client-contact correction (address/name) to the SHARED
+      // Client row — this is what a placed order displays (order.client.address),
+      // and it reflects on the Clients tab + every other order for this client.
+      // Phone is the client's unique identity; it's edited on the Clients page.
+      if (existing.client) {
+        const clientData: { name?: string; address?: string | null } = {};
+        const newName = body.clientName?.trim();
+        if (newName && newName !== existing.client.name) clientData.name = newName;
+        if (body.clientAddress !== undefined) {
+          const newAddr = body.clientAddress?.trim() ? body.clientAddress.trim() : null;
+          if (newAddr !== existing.client.address) clientData.address = newAddr;
+        }
+        if (Object.keys(clientData).length) {
+          await tx.client.update({ where: { id: existing.client.id }, data: clientData });
+          await tx.orderEvent.create({
+            data: {
+              orderId: existing.id,
+              type: "NOTE_ADDED",
+              actorId: user.id,
+              message:
+                "Client contact corrected" +
+                (clientData.name ? ` · name → ${clientData.name}` : "") +
+                (clientData.address !== undefined ? ` · address → ${clientData.address ?? "—"}` : ""),
+              payload: {
+                before: { name: existing.client.name, address: existing.client.address },
+                after: { ...existing.client, ...clientData },
+              },
+            },
+          });
+        }
       }
 
       return o;
