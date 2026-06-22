@@ -588,7 +588,9 @@ function CalculationsInner() {
   // estimate rows for an angled one); the live-pricing effect re-bills on the
   // next /api/pricing payload, matching handleAiRooms.
   function handleDrawnRooms(next: SlabRow[]) {
-    setRows([...rows, ...next]);
+    // Drawing-sourced rows replace any previously-added drawn rows (so editing
+    // the sketch and re-adding doesn't duplicate); hand-typed rows are kept.
+    setRows([...rows.filter((r) => !r.fromDrawing), ...next]);
     setError(null);
   }
 
@@ -1026,7 +1028,15 @@ function CalculationsInner() {
           className="border-primary/30 bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary"
         >
           <PencilRuler className="h-4 w-4 mr-2" />
-          <Bi uz="Хона чизиш" en="Draw room" enClassName="font-normal opacity-90" />
+          {drawing && drawing.rooms.length > 0 ? (
+            <Bi
+              uz={`Чизмани таҳрирлаш · ${drawing.rooms.length} хона`}
+              en={`Edit drawing · ${drawing.rooms.length} ${drawing.rooms.length === 1 ? "room" : "rooms"}`}
+              enClassName="font-normal opacity-90"
+            />
+          ) : (
+            <Bi uz="Хона чизиш" en="Draw room" enClassName="font-normal opacity-90" />
+          )}
         </Button>
       </div>
 

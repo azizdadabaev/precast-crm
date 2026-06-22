@@ -70,6 +70,15 @@ export interface SlabRow {
    * recomputeRow passes it through via the `...row` spread.
    */
   box?: ({ imagePath: string } & NormBox) | null;
+  /**
+   * Provenance: true when this row was generated from the Draw-room sketch
+   * (vs. hand-typed / AI). Lets "Add rooms" REPLACE the previously-added drawn
+   * rows on a re-add (so editing the sketch + re-adding doesn't duplicate),
+   * while leaving hand-typed rows untouched. Session-local — not persisted to
+   * the DB, so it's lost on a draft reopen (full cross-reload resync would need
+   * a Calculation column).
+   */
+  fromDrawing?: boolean;
 }
 
 interface Props {

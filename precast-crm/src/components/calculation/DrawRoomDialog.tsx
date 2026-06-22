@@ -447,9 +447,10 @@ export function DrawRoomDialog({
     return { beams, blocks };
   }, [allRows]);
 
-  // Wipe the persisted floor plan entirely (after a successful Add).
+  // After a successful Add we KEEP the floor plan in the store (so Save Draft
+  // persists it and reopening "Draw room" restores the exact outlines) — only
+  // reset the dialog-local undo/active state. The page-level Clear wipes it.
   const reset = () => {
-    onDrawingChange(null);
     setActiveIndex(0);
     undoStack.current = [];
     redoStack.current = [];
@@ -464,7 +465,9 @@ export function DrawRoomDialog({
 
   const handleAdd = () => {
     if (!allRows.length) return;
-    onAddRooms(allRows);
+    // Tag the rows as drawing-sourced so re-adding after an edit REPLACES the
+    // prior drawn rows (handleDrawnRooms) instead of duplicating them.
+    onAddRooms(allRows.map((r) => ({ ...r, fromDrawing: true })));
     reset();
     onClose();
   };
