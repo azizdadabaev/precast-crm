@@ -6,6 +6,8 @@
 export interface RateLimitConfig {
   perMinute: number; // messages per user per minute
   perHour: number; // messages per user per hour
+  perUserDailyMessages: number; // messages per user per day (Meta volume guard)
+  globalDailyMessages: number; // org-wide messages per day (outbound circuit-breaker)
   userDailyTokens: number; // model tokens per user per day
   globalDailyTokens: number; // org-wide model tokens per day
 }
@@ -30,6 +32,8 @@ export class RateLimiter {
   // a later plan swaps this for a shared (Redis/Postgres) store.
   private perMinute = new Map<string, CountWindow>();
   private perHour = new Map<string, CountWindow>();
+  private perUserDayMsg = new Map<string, CountWindow>();
+  private globalDayMsg: CountWindow = { start: 0, count: 0 };
   private userTokensDay = new Map<string, CountWindow>();
   private globalTokensDay: CountWindow = { start: 0, count: 0 };
 
@@ -58,6 +62,16 @@ export class RateLimiter {
     const hour = this.bump(this.perHour, userId, t, HOUR);
     if (hour.count > this.cfg.perHour)
       return deny('per-hour message cap', remaining(hour, t, HOUR));
+
+    // Daily MESSAGE caps (Meta "high-frequency machine activity" guard) — counted
+    // here with the other message windows, before the token budgets.
+    const userDayMsg = this.bump(this.perUserDayMsg, userId, t, DAY);
+    if (userDayMsg.count > this.cfg.perUserDailyMessages)
+      return deny('per-user daily message cap', remaining(userDayMsg, t, DAY));
+
+    const globalDayMsg = this.bumpGlobalMsg(t);
+    if (globalDayMsg.count > this.cfg.globalDailyMessages)
+      return deny('global daily message ceiling', remaining(globalDayMsg, t, DAY));
 
     const userDay = this.window(this.userTokensDay, userId, t, DAY);
     if (userDay.count + estTokens > this.cfg.userDailyTokens)
@@ -95,6 +109,13 @@ export class RateLimiter {
   private globalWindow(t: number): CountWindow {
     if (t - this.globalTokensDay.start >= DAY) this.globalTokensDay = { start: t, count: 0 };
     return this.globalTokensDay;
+  }
+
+  /** Org-wide daily message window — rolls each DAY and increments once per call. */
+  private bumpGlobalMsg(t: number): CountWindow {
+    if (t - this.globalDayMsg.start >= DAY) this.globalDayMsg = { start: t, count: 0 };
+    this.globalDayMsg.count += 1;
+    return this.globalDayMsg;
   }
 }
 

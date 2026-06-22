@@ -4,6 +4,8 @@ import { RateLimiter, type RateLimitConfig } from './rate-limiter';
 const CFG: RateLimitConfig = {
   perMinute: 3,
   perHour: 10,
+  perUserDailyMessages: 1000,
+  globalDailyMessages: 5000,
   userDailyTokens: 1000,
   globalDailyTokens: 5000,
 };
@@ -80,7 +82,7 @@ describe('RateLimiter', () => {
     const clock = fakeClock();
     // High per-minute + big token budgets so ONLY the per-hour cap can fire.
     const rl = new RateLimiter(
-      { perMinute: 1000, perHour: 10, userDailyTokens: 1_000_000, globalDailyTokens: 1_000_000 },
+      { perMinute: 1000, perHour: 10, perUserDailyMessages: 1_000_000, globalDailyMessages: 1_000_000, userDailyTokens: 1_000_000, globalDailyTokens: 1_000_000 },
       clock.now,
     );
     for (let i = 0; i < 10; i++) {
@@ -90,5 +92,38 @@ describe('RateLimiter', () => {
     expect(denied.allowed).toBe(false);
     expect(denied.reason).toContain('hour');
     expect(denied.retryAfterSec).toBeGreaterThan(0);
+  });
+
+  it('denies when the per-user daily MESSAGE cap is exceeded, and resets after 24h', () => {
+    const clock = fakeClock();
+    // High minute/hour + big token budgets so ONLY the daily message cap can fire.
+    const cfg: RateLimitConfig = {
+      perMinute: 1000, perHour: 1000, perUserDailyMessages: 3, globalDailyMessages: 1_000_000,
+      userDailyTokens: 1_000_000, globalDailyTokens: 1_000_000,
+    };
+    const rl = new RateLimiter(cfg, clock.now);
+    expect(rl.check('u1', 0).allowed).toBe(true);
+    expect(rl.check('u1', 0).allowed).toBe(true);
+    expect(rl.check('u1', 0).allowed).toBe(true);
+    const denied = rl.check('u1', 0); // 4th in the day
+    expect(denied.allowed).toBe(false);
+    expect(denied.reason).toContain('per-user daily message');
+    clock.advance(86_400_000); // +24h
+    expect(rl.check('u1', 0).allowed).toBe(true); // window reset
+  });
+
+  it('denies when the GLOBAL daily message ceiling is exceeded (across users)', () => {
+    const clock = fakeClock();
+    const cfg: RateLimitConfig = {
+      perMinute: 1000, perHour: 1000, perUserDailyMessages: 1_000_000, globalDailyMessages: 3,
+      userDailyTokens: 1_000_000, globalDailyTokens: 1_000_000,
+    };
+    const rl = new RateLimiter(cfg, clock.now);
+    expect(rl.check('u1', 0).allowed).toBe(true);
+    expect(rl.check('u2', 0).allowed).toBe(true);
+    expect(rl.check('u3', 0).allowed).toBe(true);
+    const denied = rl.check('u4', 0); // 4th org-wide, different user
+    expect(denied.allowed).toBe(false);
+    expect(denied.reason).toContain('global daily message');
   });
 });

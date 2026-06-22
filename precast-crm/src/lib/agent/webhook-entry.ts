@@ -12,7 +12,8 @@ import { createProviderForModelKey, createVisionProvider, createTranscriptionPro
 import { createToolRegistry } from './tools/registry';
 import { runAgentShadow, toLlmHistory, type HistoryRow, type ShadowOutcome } from './shadow';
 import { saveAgentProposal, saveAgentProposalRow } from './proposal';
-import { applyAutoMode, defaultAutoModeDeps } from './auto-mode';
+import { applyAutoMode, defaultAutoModeDeps, routeToHuman } from './auto-mode';
+import { agentSendLimiter } from './agent-rate-limit';
 import { detectConversationLanguage, type ReplyLanguage } from './prompt';
 import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote } from './vision';
 import { detectLocationIntent, locationReplyText, COMPANY_LOCATION } from './location';
@@ -272,23 +273,34 @@ export async function runAgentForInbound(
       // human. Orders are NEVER auto-placed — request_approval escalates to the
       // operator who places it in /inbox. shadow/suggest do nothing here.
       if (config.mode === 'auto') {
-        await applyAutoMode(
-          outcome,
-          { conversationId: conversation.id, inboundMessageId: lastMessageId },
-          defaultAutoModeDeps(conversation.channel),
-        );
-        // Auto only: once the short price has been sent, save the operator-side
-        // draft Project and send the calculation-summary image after it.
-        if (outcome.decision.action === 'reply' && quotedRooms.length > 0) {
-          await saveDraftAndSendSummary(conversation, quotedRooms, {
-            source,
-            language: outcome.language as ReplyLanguage,
-          });
-        }
-        // Auto only: the agent asked to show proof this turn → send the clips after
-        // its line. (PROOF stage — the strongest buying signal, delivered instantly.)
-        if (outcome.decision.action === 'reply' && proofTopics.length > 0) {
-          await sendProofForTurn(conversation, proofTopics);
+        // Outbound-volume guard (Meta account-integrity): never let the machine
+        // exceed a human-plausible message rate. Over the cap → hand to a human
+        // (notified via PENDING_HUMAN), never silently drop the customer.
+        const gate = agentSendLimiter.check(conversation.id, 0);
+        if (!gate.allowed) {
+          await routeToHuman(
+            conversation.id,
+            `Xabar chastotasi cheklovi (${gate.reason}) — qo'lda javob bering · message-rate cap reached, reply manually`,
+          );
+        } else {
+          await applyAutoMode(
+            outcome,
+            { conversationId: conversation.id, inboundMessageId: lastMessageId },
+            defaultAutoModeDeps(conversation.channel),
+          );
+          // Auto only: once the short price has been sent, save the operator-side
+          // draft Project and send the calculation-summary image after it.
+          if (outcome.decision.action === 'reply' && quotedRooms.length > 0) {
+            await saveDraftAndSendSummary(conversation, quotedRooms, {
+              source,
+              language: outcome.language as ReplyLanguage,
+            });
+          }
+          // Auto only: the agent asked to show proof this turn → send the clips
+          // after its line. (PROOF — strongest buying signal, delivered instantly.)
+          if (outcome.decision.action === 'reply' && proofTopics.length > 0) {
+            await sendProofForTurn(conversation, proofTopics);
+          }
         }
       }
     } finally {

@@ -20,6 +20,8 @@ import { resolveOwnDraftImagePath } from "./resolve-image-path";
 const limiter = new RateLimiter({
   perMinute: 12,
   perHour: 120,
+  perUserDailyMessages: 300,
+  globalDailyMessages: 3_000,
   userDailyTokens: 300_000,
   globalDailyTokens: 3_000_000,
 });
