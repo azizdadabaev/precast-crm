@@ -97,6 +97,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         aiState: conversation.aiState,
         aiPaused: conversation.aiPaused,
         sharedContactPhone: conversation.sharedContactPhone,
+        channel: "INSTAGRAM" as const,
       };
       if (m.text && m.text.trim()) {
         // Bursts coalesce per conversation — one consolidated reply (burst.ts).

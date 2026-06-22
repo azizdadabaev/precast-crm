@@ -63,6 +63,7 @@ export const POST = withPermission("inbox.access", async (req: NextRequest) => {
     aiState: conversation.aiState,
     aiPaused: conversation.aiPaused,
     sharedContactPhone: conversation.sharedContactPhone,
+    channel: conversation.channel,
   };
 
   // 2. Image path (vision) ────────────────────────────────────────────────

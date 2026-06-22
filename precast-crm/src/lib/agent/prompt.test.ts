@@ -167,6 +167,33 @@ describe('buildSystemPrompt', () => {
   it('omits the starting-rate section when no tier is provided', () => {
     expect(buildSystemPrompt(base)).not.toContain('# STARTING RATE');
   });
+
+  it('Telegram (default) keeps the no-disclosure identity rule and adds no IG block', () => {
+    expect(buildSystemPrompt(base)).not.toContain('# INSTAGRAM CHANNEL');
+    expect(buildSystemPrompt({ ...base, channel: 'TELEGRAM' })).not.toContain('# INSTAGRAM CHANNEL');
+    // The Telegram concealment rule is untouched.
+    expect(buildSystemPrompt(base)).toContain("Never announce you're an assistant or bot");
+  });
+
+  it('Instagram appends the identity-disclosure override (Meta no-mimicry rule)', () => {
+    const p = buildSystemPrompt({ ...base, channel: 'INSTAGRAM' });
+    expect(p).toContain('# INSTAGRAM CHANNEL — IDENTITY');
+    expect(p).toContain("EtalonSlabs's automated assistant");
+  });
+
+  it('Instagram leads the FIRST reply with the assistant disclosure line, not later ones', () => {
+    const first = buildSystemPrompt({ ...base, channel: 'INSTAGRAM', isFirstReply: true });
+    expect(first).toContain('This is your FIRST reply');
+    expect(first).toContain('avtomatik yordamchisiman');
+    const later = buildSystemPrompt({ ...base, channel: 'INSTAGRAM', isFirstReply: false });
+    expect(later).toContain('# INSTAGRAM CHANNEL'); // identity still enforced
+    expect(later).not.toContain('This is your FIRST reply'); // but no lead-disclosure
+  });
+
+  it('stays deterministic per channel (cache-safe)', () => {
+    const a = buildSystemPrompt({ ...base, channel: 'INSTAGRAM', isFirstReply: true });
+    expect(a).toBe(buildSystemPrompt({ ...base, channel: 'INSTAGRAM', isFirstReply: true }));
+  });
 });
 
 describe('prompt source safety', () => {

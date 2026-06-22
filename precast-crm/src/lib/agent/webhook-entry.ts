@@ -31,6 +31,7 @@ export interface InboundConversation {
   aiState: string;
   aiPaused: boolean;
   sharedContactPhone: string | null;
+  channel: 'TELEGRAM' | 'INSTAGRAM';
 }
 
 /** Shared core: load recent history, build prompt + KB, run the agent, and
@@ -64,7 +65,7 @@ async function generateAndPersistProposal(
   // resolves from UI-saved DB keys → env.
   const provider = await createProviderForModelKey(config.modelKey);
   const outcome = await runAgentShadow(
-    { conversationId: conversation.id, history, inboundRaw: inboundText },
+    { conversationId: conversation.id, history, inboundRaw: inboundText, channel: conversation.channel },
     { provider, tools: createToolRegistry(), kbContent, fewShot, startingTier, ctx: { sharedContactPhone: conversation.sharedContactPhone } },
   );
   await saveAgentProposal(outcome, { conversationId: conversation.id, inboundMessageId, modelKey: config.modelKey });
@@ -254,7 +255,11 @@ export async function runAgentForInbound(
     // Show the customer a live "typing…" indicator while we prepare an auto reply.
     // Only the direct TEXT path starts it here; for image/voice the vision/voice
     // handler already started one covering its transcription/extraction too.
-    const typing = config.mode === 'auto' && source === 'text' ? startTyping(conversation.id) : null;
+    // No simulated "typing…" on Instagram — Meta bars human-mimicry. Telegram only.
+    const typing =
+      config.mode === 'auto' && source === 'text' && conversation.channel === 'TELEGRAM'
+        ? startTyping(conversation.id)
+        : null;
     try {
       const { outcome, quotedRooms, proofTopics } = await generateAndPersistProposal(
         conversation,
@@ -270,7 +275,7 @@ export async function runAgentForInbound(
         await applyAutoMode(
           outcome,
           { conversationId: conversation.id, inboundMessageId: lastMessageId },
-          defaultAutoModeDeps(),
+          defaultAutoModeDeps(conversation.channel),
         );
         // Auto only: once the short price has been sent, save the operator-side
         // draft Project and send the calculation-summary image after it.
@@ -318,7 +323,7 @@ export async function runVisionForInbound(
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
     // "typing…" across the whole prepare window — Gemini read + quote + image.
-    if (config.mode === 'auto') typing = startTyping(conversation.id);
+    if (config.mode === 'auto' && conversation.channel === 'TELEGRAM') typing = startTyping(conversation.id);
 
     // Vision is fixed to Gemini (spec §3/§4.5), regardless of the brain model.
     const { resolveApiKey } = await import('./provider-keys');
@@ -420,7 +425,7 @@ export async function runVoiceForInbound(
     const config = await loadAgentRuntimeConfig();
     if (!shouldAgentHandle(conversation, config)) return;
     // "typing…" across transcription + quote + image.
-    if (config.mode === 'auto') typing = startTyping(conversation.id);
+    if (config.mode === 'auto' && conversation.channel === 'TELEGRAM') typing = startTyping(conversation.id);
 
     const { resolveApiKey } = await import('./provider-keys');
     const apiKey = await resolveApiKey('google');

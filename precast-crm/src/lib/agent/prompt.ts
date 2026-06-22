@@ -125,6 +125,13 @@ export interface BuildSystemPromptInput {
   fewShot?: string;
   /** Live starting rate (lowest m² tier) — enables the no-dimensions price answer. */
   startingTier?: StartingTier;
+  /** Conversation channel. On INSTAGRAM the agent MUST identify as an automated
+   *  assistant (Meta platform rule — no human-mimicry/concealment). TELEGRAM is
+   *  unchanged. Undefined behaves like TELEGRAM. */
+  channel?: 'TELEGRAM' | 'INSTAGRAM';
+  /** True when we have never replied in this chat — used on INSTAGRAM to lead the
+   *  first reply with a one-line assistant disclosure. */
+  isFirstReply?: boolean;
 }
 
 /** "140000" → "140 000" (deterministic, locale-independent — cache-safe). */
@@ -320,5 +327,21 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
   parts.push(
     `# REPLY LANGUAGE\nReply in ${LANGUAGE_LABEL[input.language]} — match the language the customer uses across THIS whole chat, not just their last word. Uzbek written in Cyrillic is normal here; a lone Russian loanword (dostavka, zakaz, remont) is NOT Russian — never switch to Russian over it. (The calculation summary is sent separately as an image by the system — never type a price table yourself.)`,
   );
+  // Instagram identity override (Meta platform rule): on IG the agent must be
+  // openly an automated assistant — the IDENTITY & DISCLOSURE "never announce
+  // you're a bot" rule above does NOT apply here. Telegram is untouched.
+  if (input.channel === 'INSTAGRAM') {
+    const lines = [
+      '# INSTAGRAM CHANNEL — IDENTITY (OVERRIDES "IDENTITY & DISCLOSURE" ABOVE)',
+      "You are on Instagram. Being clear that you are an automated assistant is REQUIRED here — the rule above about never announcing you're a bot does NOT apply on this channel.",
+      "- You are EtalonSlabs's automated assistant. If asked whether you're a bot or automated, say so plainly and honestly — never deny it, never claim to be a person.",
+    ];
+    if (input.isFirstReply) {
+      lines.push(
+        "- This is your FIRST reply in this chat: open with ONE short line identifying yourself (in the customer's language/script) before answering. Render this in their language — don't copy it verbatim: \"Assalomu alaykum! Men EtalonSlabs kompaniyasining avtomatik yordamchisiman — savollaringizga shu yerda javob beraman, kerak bo'lsa mutaxassisimizga ulayman.\"",
+      );
+    }
+    parts.push(lines.join('\n'));
+  }
   return parts.join('\n\n');
 }

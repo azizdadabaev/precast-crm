@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { enqueueInboundText, _resetBurstsForTest, type BurstConversation } from './burst';
 
-const conv = (id = 'c1'): BurstConversation => ({ id, aiState: 'AI_HANDLING', aiPaused: false, sharedContactPhone: null });
+const conv = (id = 'c1'): BurstConversation => ({ id, aiState: 'AI_HANDLING', aiPaused: false, sharedContactPhone: null, channel: 'TELEGRAM' });
 
 describe('enqueueInboundText (burst coalescing)', () => {
   beforeEach(() => {

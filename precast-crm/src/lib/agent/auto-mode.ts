@@ -82,16 +82,37 @@ export async function routeToHuman(conversationId: string, reason: string): Prom
   });
 }
 
+/** Human-ish pre-send pause on Instagram (10–40s, jittered): removes the
+ *  sub-second machine cadence without losing the lead. On top of the ~12–30s
+ *  burst-coalescing wait. Math.random is fine here (live server path). */
+function instagramReplyDelayMs(): number {
+  return 10_000 + Math.floor(Math.random() * 30_000);
+}
+
 /** Real deps for the webhook: send via the inbox outbound path (system actor),
- *  escalate via routeToHuman, mark the proposal SENT. */
-export function defaultAutoModeDeps(): AutoModeDeps {
+ *  escalate via routeToHuman, mark the proposal SENT.
+ *
+ *  Channel-aware send: TELEGRAM keeps the human-style multi-bubble reply with a
+ *  typing pause between. INSTAGRAM sends ONE plain message after a short jittered
+ *  pause and shows no "typing…" — Meta's platform rules bar automations that
+ *  mimic human activity, so the IG agent neither fakes typing nor splits a reply
+ *  into person-like bursts. */
+export function defaultAutoModeDeps(channel: 'TELEGRAM' | 'INSTAGRAM' = 'TELEGRAM'): AutoModeDeps {
   return {
     send: async (conversationId, text) => {
       const { sendBusinessReply, sendBusinessTyping } = await import('@/lib/inbox-send');
-      const { splitIntoBubbles, bubbleDelayMs } = await import('./bubbles');
-      // Text like a person: send the reply as 1–3 short bubbles with a typing
-      // pause between. The first bubble's failure routes to a human; a later
-      // bubble failing is logged but the customer already has the substance.
+      const { splitIntoBubbles, bubbleDelayMs, stripMarkdown } = await import('./bubbles');
+
+      // Instagram: one plain message, no typing, after a small human-like pause.
+      if (channel === 'INSTAGRAM') {
+        await new Promise((r) => setTimeout(r, instagramReplyDelayMs()));
+        const r = await sendBusinessReply({ conversationId, text: stripMarkdown(text).trim(), userId: null });
+        return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+      }
+
+      // Telegram: text like a person — send the reply as 1–3 short bubbles with a
+      // typing pause between. The first bubble's failure routes to a human; a
+      // later bubble failing is logged but the customer already has the substance.
       const bubbles = splitIntoBubbles(text);
       for (let idx = 0; idx < bubbles.length; idx++) {
         if (idx > 0) {

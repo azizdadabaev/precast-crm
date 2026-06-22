@@ -21,6 +21,7 @@ export interface BurstConversation {
   aiState: string;
   aiPaused: boolean;
   sharedContactPhone: string | null;
+  channel: 'TELEGRAM' | 'INSTAGRAM';
 }
 
 export type BurstRunFn = (

@@ -65,6 +65,9 @@ export interface ShadowInput {
   history: LlmMessage[];
   /** Raw inbound customer text (pre-screen). */
   inboundRaw: string;
+  /** Conversation channel — drives the Instagram identity-disclosure rule in the
+   *  prompt. Undefined behaves like TELEGRAM. */
+  channel?: 'TELEGRAM' | 'INSTAGRAM';
 }
 
 export interface ShadowOutcome {
@@ -115,7 +118,17 @@ export async function runAgentShadow(input: ShadowInput, deps: ShadowDeps): Prom
     return { screened, language, escalatedEarly: true, decision, entry };
   }
 
-  const system = buildSystemPrompt({ kbContent: deps.kbContent, language, fewShot: deps.fewShot, startingTier: deps.startingTier });
+  // On Instagram, lead the FIRST reply with an assistant disclosure (we've never
+  // replied yet → no assistant turn in history). Telegram is unaffected.
+  const isFirstReply = !input.history.some((m) => m.role === 'assistant');
+  const system = buildSystemPrompt({
+    kbContent: deps.kbContent,
+    language,
+    fewShot: deps.fewShot,
+    startingTier: deps.startingTier,
+    channel: input.channel,
+    isFirstReply,
+  });
   // Force a quote tool only when the price question carries NUMBERS (dimensions/
   // quantities to compute on). A bare "Narxi qancha?" is answered from the
   // injected STARTING RATE — forcing a tool there has nothing to compute.
