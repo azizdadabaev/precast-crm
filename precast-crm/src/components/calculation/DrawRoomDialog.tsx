@@ -474,7 +474,7 @@ export function DrawRoomDialog({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-3 sm:max-w-[1400px]">
+      <DialogContent className="flex h-[95vh] w-[98vw] max-w-[1800px] flex-col gap-3 sm:max-w-[1800px]">
         <DialogHeader>
           <DialogTitle>
             <Bi uz="Хоналар чизиш" en="Draw floor plan" />
@@ -488,8 +488,8 @@ export function DrawRoomDialog({
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:flex-row">
-          {/* Drawing surface ≈ 70% of the pop-up; it fills its column. */}
-          <div className="relative flex min-h-0 min-w-0 flex-[7]">
+          {/* Drawing surface — the larger share of the pop-up; it fills its column. */}
+          <div className="relative flex min-h-0 min-w-0 flex-[8]">
             {show3D && (
               <div className="absolute inset-0 z-20 flex flex-col rounded-md bg-slate-100">
                 <div className="flex items-center justify-between border-b bg-white px-2 py-1 text-xs">
@@ -534,7 +534,7 @@ export function DrawRoomDialog({
             />
           </div>
 
-          <div className="flex min-h-0 w-full flex-[3] flex-col gap-2 overflow-y-auto lg:min-w-[15rem]">
+          <div className="flex min-h-0 w-full flex-[2] flex-col gap-2 overflow-y-auto lg:min-w-[15rem]">
             {/* Rooms list — switch active room, delete, or add a new one. */}
             <div className="flex flex-wrap items-center gap-1.5">
               {rooms.map((room, i) => (
