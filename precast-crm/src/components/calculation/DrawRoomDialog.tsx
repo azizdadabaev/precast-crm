@@ -154,8 +154,16 @@ export function DrawRoomDialog({
     writeDrawing({ ...dr, rooms: next });
   };
 
-  const setGlobalDir = (d: BeamDir | null) =>
-    writeDrawing({ ...dr, rooms, globalDir: d });
+  // Beam direction is stored PER ROOM (on the active RoomShape) so each room
+  // keeps its own independently. "Auto" (null) clears it back to the short-side
+  // default. (The legacy drawing-level `globalDir` is still read as a fallback
+  // for older saved plans, but the button no longer writes it.)
+  const setRoomDir = (d: BeamDir | null) => {
+    const cur = rooms[safeActive] ?? EMPTY_ROOM;
+    const next = rooms.slice();
+    next[safeActive] = { ...cur, id: cur.id || newRoomId(), beamDir: d ?? undefined };
+    writeDrawing({ ...dr, rooms: next });
+  };
 
   const setDir = (roomI: number, bayI: number, d: BeamDir) =>
     writeDrawing({
@@ -331,7 +339,7 @@ export function DrawRoomDialog({
   const scan = useMemo(() => {
     if (enginePoints.length < 4 || rectilinear) return null;
     const box = bbox(enginePoints);
-    const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
+    const beamDir: BeamDir = activeRoom.beamDir ?? globalDir ?? (box.w <= box.h ? "H" : "V");
     const { beams } = scanBeams(enginePoints, beamDir, undefined, undefined, activeHoles);
     const schedule = beamSchedule(beams);
     const blocks = blockEstimate(beams);
@@ -345,14 +353,14 @@ export function DrawRoomDialog({
       maxLenCm: lengths.length ? Math.max(...lengths) : 0,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enginePoints, rectilinear, globalDir, activeHoles]);
+  }, [enginePoints, rectilinear, activeRoom.beamDir, globalDir, activeHoles]);
 
   // Per-bay: resolved direction + engine result for the ACTIVE room (overlay).
   const activeBayRows = useMemo(
     () =>
       bays.map((rect, i) => {
         const beamDir =
-          dirOverrides[`${safeActive}:${i}`] ?? globalDir ?? defaultBeamDir(rect);
+          dirOverrides[`${safeActive}:${i}`] ?? activeRoom.beamDir ?? globalDir ?? defaultBeamDir(rect);
         let result = null;
         try {
           result = calculateSlab(bayToSlabInput({ rect, beamDir }));
@@ -361,7 +369,7 @@ export function DrawRoomDialog({
         }
         return { rect, beamDir, result };
       }),
-    [bays, dirOverrides, globalDir, safeActive],
+    [bays, dirOverrides, activeRoom.beamDir, globalDir, safeActive],
   );
 
   const beamLayers = useMemo(
@@ -398,12 +406,12 @@ export function DrawRoomDialog({
         const rbays = decomposeToBays(inner);
         const rws = rbays.map((rect, bi) => ({
           rect,
-          beamDir: dirOverrides[`${ri}:${bi}`] ?? globalDir ?? defaultBeamDir(rect),
+          beamDir: dirOverrides[`${ri}:${bi}`] ?? room.beamDir ?? globalDir ?? defaultBeamDir(rect),
         }));
         out.push(...baysToSlabRows(rws, startSeq + out.length));
       } else {
         const box = bbox(inner);
-        const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
+        const beamDir: BeamDir = room.beamDir ?? globalDir ?? (box.w <= box.h ? "H" : "V");
         const { beams } = scanBeams(inner, beamDir, undefined, undefined, rHoles);
         out.push(...scanScheduleToSlabRows(beamSchedule(beams), startSeq + out.length));
       }
@@ -422,7 +430,7 @@ export function DrawRoomDialog({
       .map((room) => {
         const inner = room.points;
         const box = bbox(inner);
-        const beamDir: BeamDir = globalDir ?? (box.w <= box.h ? "H" : "V");
+        const beamDir: BeamDir = room.beamDir ?? globalDir ?? (box.w <= box.h ? "H" : "V");
         const { beams } = scanBeams(inner, beamDir, undefined, undefined, room.holes ?? []);
         const overlay = scanBeamsToOverlay({ beams }, beamDir);
         return { beams: overlay.beams, blocks: overlay.blockCells };
@@ -608,8 +616,9 @@ export function DrawRoomDialog({
               </div>
             )}
 
-            {/* Persistent beam-direction control (Auto / H / V) — drives the
-                scanline path and the default for every bay of the active room. */}
+            {/* Per-room beam-direction control (Auto / H / V) — applies to the
+                ACTIVE room only and is stored on it, so each room keeps its own
+                direction as you draw the others. */}
             {points.length >= 4 && (
               <div className="flex items-center justify-between gap-2 rounded border p-2 text-xs">
                 <span className="font-medium">{t("Балка йўналиши", "Beam direction")}</span>
@@ -622,10 +631,10 @@ export function DrawRoomDialog({
                     <button
                       key={label}
                       type="button"
-                      onClick={() => setGlobalDir(d)}
+                      onClick={() => setRoomDir(d)}
                       className={
                         "px-2 py-0.5 " +
-                        (globalDir === d
+                        ((activeRoom.beamDir ?? null) === d
                           ? "bg-primary text-primary-foreground"
                           : "bg-background text-muted-foreground")
                       }

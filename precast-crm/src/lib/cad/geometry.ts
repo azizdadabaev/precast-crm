@@ -40,6 +40,10 @@ export interface RoomShape {
   /** Floor voids (stairwell / shaft / light-well) — inner hole loops (cm),
    *  each strictly inside `points`, deducted from the slab BoM. Absent = solid. */
   holes?: Pt[][];
+  /** Beam-span direction chosen for THIS room ("H" = along x, "V" = along y).
+   *  Stored per-room so each room keeps its own direction independently of the
+   *  others. Absent = auto (beams span the shorter side). */
+  beamDir?: BeamDir;
 }
 
 /** Signed polygon area (shoelace). Positive = counter-clockwise in math coords. */
