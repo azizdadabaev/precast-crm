@@ -30,6 +30,11 @@ export interface OrderActor {
    *  Payment.recordedById — which is only written when paidAmount > 0, a
    *  human-route-only path where actor.userId is always non-null. */
   userId: string | null;
+  /** True when the actor holds `payment.confirm` (owner/admin) — the confirming
+   *  authority. Mirrors POST /api/payments: their own up-front payment recorded
+   *  at placement is CONFIRMED immediately, not left PENDING. Defaults to false
+   *  (operators, AI-agent / approval service-account). */
+  autoConfirmPayment?: boolean;
 }
 
 export type CreateOrderInput = z.infer<typeof PlaceOrderSchema>;
@@ -105,6 +110,13 @@ export async function createOrder(
   }
 
   const placedAt = new Date();
+
+  // Owner/admin (holds payment.confirm) is the confirming authority, so an
+  // up-front payment they record AT PLACEMENT is auto-confirmed — mirroring the
+  // POST /api/payments behaviour. Operators / AI-agent leave it PENDING.
+  const autoConfirmInitialPayment =
+    paidAmount > 0 && !!input.paymentMethod && actor.autoConfirmPayment === true;
+  const paymentFullyCovers = autoConfirmInitialPayment && paidAmount >= totalPrice;
   const year = placedAt.getFullYear();
   const month = placedAt.getMonth() + 1;
   const monthPrefix = orderNumberMonthPrefix(year, month);
@@ -261,6 +273,16 @@ export async function createOrder(
         scheduledAt: input.scheduledAt,
         placedAt,
         notes: input.notes ?? null,
+        // When the owner's up-front payment auto-confirms, the order's denormalized
+        // payment aggregate must reflect it (otherwise it'd read AWAITING with a
+        // CONFIRMED payment). Non-auto-confirm keeps the schema defaults.
+        ...(autoConfirmInitialPayment
+          ? {
+              confirmedPaid: paidAmount,
+              paymentState: paymentFullyCovers ? "FULLY_PAID" : "PARTIALLY_PAID",
+              ...(paymentFullyCovers ? { paidAt: placedAt } : {}),
+            }
+          : {}),
         // Carry the source project's delivery pin (Phase 2) onto the order.
         // When placed from inline rooms (no source draft) these stay null.
         deliveryLat: projectWithCalcs.deliveryLat,
@@ -297,11 +319,15 @@ export async function createOrder(
           orderId: createdOrder.id,
           amount: paidAmount,
           method: input.paymentMethod,
-          status: "PENDING_CONFIRMATION",
+          status: autoConfirmInitialPayment ? "CONFIRMED" : "PENDING_CONFIRMATION",
           recordedById: actor.userId as string,
           recordedAt: new Date(),
           collectedById: null,
           collectedAt: null,
+          // Owner-recorded payment is its own confirming authority.
+          ...(autoConfirmInitialPayment
+            ? { confirmedById: actor.userId as string, confirmedAt: new Date() }
+            : {}),
         },
       });
       await tx.orderEvent.create({
@@ -309,12 +335,15 @@ export async function createOrder(
           orderId: createdOrder.id,
           type: "PAYMENT_RECORDED",
           actorId: actor.userId,
-          message: `Payment of ${paidAmount} recorded at placement (${input.paymentMethod}). Awaiting confirmation.`,
+          message: autoConfirmInitialPayment
+            ? `Payment of ${paidAmount} recorded + auto-confirmed at placement (${input.paymentMethod}).`
+            : `Payment of ${paidAmount} recorded at placement (${input.paymentMethod}). Awaiting confirmation.`,
           payload: {
             paymentId: payment.id,
             amount: paidAmount,
             method: input.paymentMethod,
             recordedAtPlacement: true,
+            autoConfirmed: autoConfirmInitialPayment,
           },
         },
       });

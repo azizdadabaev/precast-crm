@@ -121,7 +121,12 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
     );
   }
 
-  const result = await createOrder(body, { userId: user.id });
+  const result = await createOrder(body, {
+    userId: user.id,
+    // Owner/admin (payment.confirm) is the confirming authority, so their
+    // up-front payment at placement auto-confirms — same as POST /api/payments.
+    autoConfirmPayment: can(user, "payment.confirm"),
+  });
   if (!result.ok) {
     return fail(result.error.message, result.error.status, result.error.details);
   }
