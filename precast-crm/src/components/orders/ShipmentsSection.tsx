@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { SplitShipmentLoadModal } from "./SplitShipmentLoadModal";
+import { ImageLightbox } from "@/components/ImageLightbox";
 import type { BeamGroup } from "@/lib/weight-distributor";
 
 type ShipmentStatus = "PENDING" | "LOADED" | "DISPATCHED" | "DELIVERED";
@@ -70,6 +71,7 @@ export function ShipmentsSection({
   const [creatingNew, setCreatingNew] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
+  const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null);
 
   const prevLoaded = shipments
     .filter((s) => s.loadedBeams !== null && s.status !== "PENDING")
@@ -274,13 +276,17 @@ export function ShipmentsSection({
               </div>
 
               {s.loadedPhotoUrl && (
-                <a href={s.loadedPhotoUrl} target="_blank" rel="noreferrer">
+                <button
+                  type="button"
+                  onClick={() => setLightboxPhoto(s.loadedPhotoUrl)}
+                  className="block"
+                >
                   <img
                     src={s.loadedPhotoUrl}
                     alt={`Shipment ${s.number} photo`}
-                    className="max-h-24 rounded border object-cover hover:opacity-90 transition-opacity"
+                    className="max-h-24 rounded border object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
                   />
-                </a>
+                </button>
               )}
             </div>
           );
@@ -307,6 +313,14 @@ export function ShipmentsSection({
         <div className="border-t px-4 py-2 text-sm text-destructive bg-destructive/10">
           {error}
         </div>
+      )}
+
+      {lightboxPhoto && (
+        <ImageLightbox
+          url={lightboxPhoto}
+          alt="Юкланган юк расми"
+          onClose={() => setLightboxPhoto(null)}
+        />
       )}
 
       {loadModalShipment && (
