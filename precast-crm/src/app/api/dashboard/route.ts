@@ -89,6 +89,16 @@ interface DashboardPayload {
     utilizationPct: number;
     days: Array<{ date: string; bookedM2: number; capacityM2: number }>;
   };
+  revenueByMonth: Array<{ month: string; revenue: number }>;
+  ordersByMonth: Array<{ month: string; count: number }>;
+  recentOrders: Array<{
+    orderNumber: string;
+    clientName: string;
+    primaryProductLabel: string;
+    totalArea: number;
+    totalPrice: number;
+    paymentState: "FULLY_PAID" | "PARTIALLY_PAID" | "AWAITING_PAYMENT";
+  }>;
 }
 
 /** Asia/Tashkent calendar-day key for a Date (server is already in that zone). */
@@ -148,6 +158,8 @@ export const GET = withPermissionAny(
   async () => {
 
   const now = new Date();
+  // Rolling 12-month window — start of the month 11 months ago
+  const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0, 0);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
   // Previous calendar month — for "vs last month" trend pills.
@@ -184,6 +196,8 @@ export const GET = withPermissionAny(
     weekOrders,
     cityRows,
     topClientsRows,
+    rollingOrders,
+    recentOrdersRaw,
   ] = await Promise.all([
     prisma.order.aggregate({
       _sum: { confirmedPaid: true },
@@ -296,6 +310,29 @@ export const GET = withPermissionAny(
       where: { status: { not: "CANCELED" } },
       orderBy: { _sum: { confirmedPaid: "desc" } },
       take: 5,
+    }),
+    // Rolling-12-month orders for hero chart
+    prisma.order.findMany({
+      where: {
+        status: { notIn: ["CANCELED", "DRAFT"] },
+        placedAt: { gte: twelveMonthsAgo },
+      },
+      select: { placedAt: true, confirmedPaid: true },
+    }),
+    // Recent 6 orders for the bottom widget
+    prisma.order.findMany({
+      where: { status: { notIn: ["CANCELED", "DRAFT"] } },
+      orderBy: { placedAt: "desc" },
+      take: 6,
+      select: {
+        orderNumber: true,
+        totalArea: true,
+        totalPrice: true,
+        totalBeams: true,
+        totalBlocks: true,
+        paymentState: true,
+        client: { select: { name: true } },
+      },
     }),
   ]);
 
@@ -421,6 +458,43 @@ export const GET = withPermissionAny(
       ? Math.round((totalBooked / totalCapacity) * 100)
       : 0;
 
+  // ── Rolling 12-month revenue + order count arrays ──────────────────
+  const MONTH_UZ = ["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"] as const;
+
+  const monthMap = new Map<string, { revenue: number; count: number }>();
+  for (const o of rollingOrders) {
+    const d = new Date(o.placedAt);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const cur = monthMap.get(key) ?? { revenue: 0, count: 0 };
+    cur.revenue += Number(o.confirmedPaid ?? 0);
+    cur.count += 1;
+    monthMap.set(key, cur);
+  }
+
+  const revenueByMonth: Array<{ month: string; revenue: number }> = [];
+  const ordersByMonth: Array<{ month: string; count: number }> = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const agg = monthMap.get(key) ?? { revenue: 0, count: 0 };
+    const label = MONTH_UZ[d.getMonth()]!;
+    revenueByMonth.push({ month: label, revenue: Math.round(agg.revenue) });
+    ordersByMonth.push({ month: label, count: agg.count });
+  }
+
+  // ── Recent 6 orders ────────────────────────────────────────────────
+  const recentOrders = recentOrdersRaw.map((r) => ({
+    orderNumber: r.orderNumber,
+    clientName: r.client.name,
+    primaryProductLabel:
+      r.totalBeams > 0
+        ? `${r.totalBeams} та балка · ${r.totalBlocks} та блок`
+        : "Преcaст",
+    totalArea: Math.round(Number(r.totalArea) * 10) / 10,
+    totalPrice: Math.round(Number(r.totalPrice)),
+    paymentState: r.paymentState as "FULLY_PAID" | "PARTIALLY_PAID" | "AWAITING_PAYMENT",
+  }));
+
   const payload: DashboardPayload = {
     revenueThisMonth: {
       total: Math.round(totalThisMonth),
@@ -473,6 +547,9 @@ export const GET = withPermissionAny(
     customersByCity,
     topCustomers,
     weekCapacity: { utilizationPct, days: weekDays },
+    revenueByMonth,
+    ordersByMonth,
+    recentOrders,
   };
 
   return ok(payload);

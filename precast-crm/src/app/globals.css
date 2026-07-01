@@ -178,6 +178,35 @@
     --dash-shadow-md: 0 1px 3px 0 rgb(0 0 0 / 0.40);
   }
 
+  /* ── Эталон dashboard palette — scoped to .dashboard-root ──────── */
+  .dashboard-root {
+    --dash-bg:       #F4F3EE;
+    --dash-surface:  #FFFFFF;
+    --dash-surface2: #F6F5F0;
+    --dash-ink:      #15181D;
+    --dash-muted:    #6E7682;
+    --dash-line:     #E6E4DC;
+    --dash-accent:   #0E7C5A;
+    --dash-accent2:  #C0492F;
+    --dash-pos:      #0E7C5A;
+    --dash-neg:      #C0492F;
+    --dash-radius:   14px;
+  }
+
+  html[data-theme="dark"] .dashboard-root {
+    --dash-bg:       #0E1311;
+    --dash-surface:  #161D1A;
+    --dash-surface2: #1B2421;
+    --dash-ink:      #ECEFEA;
+    --dash-muted:    #8A958D;
+    --dash-line:     #27302C;
+    --dash-accent:   #34D39A;
+    --dash-accent2:  #F08A6E;
+    --dash-pos:      #34D39A;
+    --dash-neg:      #F08A6E;
+    --dash-radius:   14px;
+  }
+
   /* ──────────────────────────────────────────────────────────────
      Calculator dark-mode refinements.
      The light-mode design uses amber / sky / emerald wash colors to

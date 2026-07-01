@@ -67,4 +67,14 @@ export interface DashboardData {
     utilizationPct: number;
     days: Array<{ date: string; bookedM2: number; capacityM2: number }>;
   };
+  revenueByMonth: Array<{ month: string; revenue: number }>;
+  ordersByMonth: Array<{ month: string; count: number }>;
+  recentOrders: Array<{
+    orderNumber: string;
+    clientName: string;
+    primaryProductLabel: string;
+    totalArea: number;
+    totalPrice: number;
+    paymentState: "FULLY_PAID" | "PARTIALLY_PAID" | "AWAITING_PAYMENT";
+  }>;
 }
