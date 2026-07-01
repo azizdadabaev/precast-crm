@@ -32,7 +32,7 @@ export function MainContainer({ children }: { children: React.ReactNode }) {
           ? "h-full px-4 py-4 lg:px-6 lg:py-6"
           : isWide
             ? "px-4 py-4 lg:px-6 lg:py-6"
-            : "px-4 py-4 lg:px-6 lg:py-6 max-w-[1400px] w-full mx-auto"
+            : "px-4 py-4 lg:px-6 lg:py-6 max-w-[1920px] w-full mx-auto"
       }
     >
       {children}

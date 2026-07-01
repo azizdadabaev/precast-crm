@@ -48,7 +48,7 @@ export default function DashboardPage() {
       background: 'var(--dash-bg)', minHeight: '100%',
       fontFamily: 'var(--font-body-alt)',
     }}>
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: '34px 28px 64px' }}>
+      <div style={{ padding: '34px 28px 64px' }}>
 
         {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, marginBottom: 26 }}>
