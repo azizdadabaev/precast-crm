@@ -30,8 +30,8 @@ Five new fields added to the existing payload. All computed in the same Prisma q
 
 | Field | Type | Description |
 |---|---|---|
-| `revenueByMonth` | `{ month: string; revenue: number }[]` | 12 entries, rolling 12 months, sum of `totalPrice` for FULLY_PAID orders, grouped by `placedAt` month |
-| `ordersByMonth` | `{ month: string; count: number }[]` | Same 12-month window, order count per month |
+| `revenueByMonth` | `{ month: string; revenue: number }[]` | 12 entries, the 12 calendar months ending with the current month (e.g. Aug 2025 → Jul 2026), oldest-first, sum of `totalPrice` for FULLY_PAID orders grouped by `placedAt` month. `month` is a 3-letter Uzbek abbreviation (Авг, Сен … Июл). |
+| `ordersByMonth` | `{ month: string; count: number }[]` | Same 12-month window and ordering, total order count per month (all non-CANCELED, non-DRAFT orders). |
 | `topClients` | `TopClientRow[]` | Top 5 clients by sum of `totalPrice` in the 12-month window |
 | `recentOrders` | `RecentOrderRow[]` | Last 6 orders by `placedAt desc`, with client name, material label, area, price, paymentState |
 | `paymentStateCounts` | `{ fullyPaid: number; partiallyPaid: number; awaitingPayment: number }` | Count of orders by `paymentState` (all-time, active orders only — exclude CANCELED/DRAFT) |
@@ -51,8 +51,8 @@ Five new fields added to the existing payload. All computed in the same Prisma q
 {
   orderNumber: string
   clientName: string
-  materialLabel: string  // from Calculation → rooms[0].beamType or primary product label
-  totalArea: number      // totalArea in m²
+  primaryProductLabel: string  // order.primaryCalculation exists → use its first room's beam type label; otherwise fall back to "Precast"
+  totalArea: number            // totalArea in m²
   totalPrice: number
   paymentState: 'FULLY_PAID' | 'PARTIALLY_PAID' | 'AWAITING_PAYMENT'
 }
@@ -319,7 +319,7 @@ Replaces current skeleton. Matches the new layout: one tall skeleton block (hero
 | `src/components/dashboard/PaymentDonut.tsx` | **New** |
 | `src/components/dashboard/DashboardSkeleton.tsx` | **Rewrite** |
 
-Existing dashboard card components (`MonthlyRevenueChart.tsx`, individual KPI card files) are deleted once the new components are verified working.
+Existing dashboard card components (`MonthlyRevenueChart.tsx`, individual KPI card files) are deleted in the same PR as the new components are introduced — not deferred.
 
 ---
 
