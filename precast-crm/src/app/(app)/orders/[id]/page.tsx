@@ -25,7 +25,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { ReceiptStrip } from "@/components/payments/ReceiptStrip";
 import { formatDate, formatNumber } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { SettleRemainingDialog } from "@/components/payments/SettleRemainingDialog";
@@ -555,7 +555,7 @@ export default function OrderDetailPage() {
                 {order.client.name}
               </Link>
               {" · "}
-              <span className="tabular-nums">{formatPhone(order.client.phone)}</span>
+              <PhoneLink phone={order.client.phone} />
             </div>
             {order.client.address && (
               <div className="text-xs text-muted-foreground truncate">{addressToCyrillic(order.client.address)}</div>
@@ -616,7 +616,7 @@ export default function OrderDetailPage() {
                 {order.client.name}
               </Link>
               {" · "}
-              <span className="tabular-nums">{formatPhone(order.client.phone)}</span>
+              <PhoneLink phone={order.client.phone} />
               {order.client.address && <> · {addressToCyrillic(order.client.address)}</>}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">

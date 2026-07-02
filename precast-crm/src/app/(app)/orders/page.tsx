@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ChevronLeft, ChevronRight, Search, X, Download, Trash2, Loader2 } from "lucide-react";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { paidVariant } from "@/lib/order-display";
 import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 import { useT } from "@/lib/i18n";
@@ -371,7 +371,7 @@ function OrdersList() {
                         <div className="font-medium">{o.client.name}</div>
                       </td>
                       <td className="px-3 py-2.5 font-mono font-medium text-foreground">
-                        {formatPhone(o.client.phone)}
+                        <PhoneLink phone={o.client.phone} />
                       </td>
                       <td className="px-3 py-2.5 font-medium text-foreground max-w-[14rem]">
                         {o.client.address ? (

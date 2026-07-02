@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Chip } from "@/components/ui/chip";
 import { formatDate, formatNumber } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { useT } from "@/lib/i18n";
 import { CommentThread } from "@/components/comments/CommentThread";
 import { ReceiptPicker } from "@/components/payments/ReceiptPicker";
@@ -256,7 +256,7 @@ export default function GazoblokOrderDetailPage() {
                 {order.client.name}
               </Link>
               {" · "}
-              <span className="tabular-nums">{formatPhone(order.client.phone)}</span>
+              <PhoneLink phone={order.client.phone} />
               {order.client.address && <> · {order.client.address}</>}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">

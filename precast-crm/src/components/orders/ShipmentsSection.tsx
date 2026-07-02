@@ -5,7 +5,7 @@ import { Plus, Truck, Package, CheckCircle2, Clock, Loader2, Trash2 } from "luci
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
 import { formatDate, formatNumber } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { SplitShipmentLoadModal } from "./SplitShipmentLoadModal";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import type { BeamGroup } from "@/lib/weight-distributor";
@@ -255,7 +255,7 @@ export function ShipmentsSection({
               {s.driver && (
                 <div className="text-xs text-muted-foreground">
                   {t("Ҳайдовчи:", "Driver:")} <span className="font-medium text-foreground">{s.driver.name}</span>
-                  {" "}{formatPhone(s.driver.phone)}
+                  {" "}<PhoneLink phone={s.driver.phone} />
                   {s.driverWillCollectCash && s.cashToCollect && (
                     <span className="ml-2 text-amber-600 font-semibold">
                       · {formatNumber(s.cashToCollect, 0)} UZS {t("олиб келади", "expected to collect")}

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Boxes, Plus, Search } from "lucide-react";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { useT } from "@/lib/i18n";
 
 type Status = "PLACED" | "IN_PRODUCTION" | "DELIVERED" | "CANCELED";
@@ -187,7 +187,7 @@ export default function GazoblokOrdersPage() {
                         <div className="font-medium">{o.client.name}</div>
                       </td>
                       <td className="px-3 py-2.5 font-mono font-medium text-foreground">
-                        {formatPhone(o.client.phone)}
+                        <PhoneLink phone={o.client.phone} />
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <Chip variant={meta.variant}>{t(meta.uz, meta.en)}</Chip>

@@ -20,7 +20,7 @@ import {
 import { Plus, Search, Send, X, Trash2, Loader2 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { AddressInput } from "@/components/address/AddressInput";
 import { ExportDialog } from "@/components/clients/ExportDialog";
 
@@ -261,7 +261,7 @@ export default function ClientsPage() {
                         </Link>
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-text-tertiary">
-                        {formatPhone(c.phone)}
+                        <PhoneLink phone={c.phone} />
                       </td>
                       <td className="px-3 py-2.5 text-xs text-text-tertiary max-w-[14rem]">
                         {c.address ? <span className="line-clamp-2">{c.address}</span> : "—"}

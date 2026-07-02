@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { formatDate, formatNumber } from "@/lib/utils";
 
 interface DriverDetail {
@@ -55,7 +55,7 @@ export default function DriverDetailPage() {
 
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{driver.name}</h1>
-        <p className="text-sm text-muted-foreground tabular-nums">{formatPhone(driver.phone)}</p>
+        <p className="text-sm text-muted-foreground"><PhoneLink phone={driver.phone} /></p>
         {driver.notes && <p className="text-xs text-muted-foreground italic mt-1">{driver.notes}</p>}
       </div>
 

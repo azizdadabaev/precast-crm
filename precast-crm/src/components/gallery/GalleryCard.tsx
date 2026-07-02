@@ -98,7 +98,7 @@ export function GalleryCard({ post, onOpen }: GalleryCardProps) {
             href={`tel:+${post.clientPhone}`}
             onClick={(e) => e.stopPropagation()}
             title="Қўнғироқ қилиш · Call"
-            className="-mx-1 -my-1 px-1.5 py-1.5 inline-flex items-center gap-1.5 rounded-md text-sm font-medium font-mono tabular-nums whitespace-nowrap hover:text-primary active:bg-primary/10 transition-colors"
+            className="-mx-1 -my-1 px-1.5 py-1.5 inline-flex items-center gap-1.5 rounded-md text-sm font-medium font-mono tabular-nums whitespace-nowrap text-primary hover:underline active:bg-primary/10 transition-colors"
           >
             <Phone className="h-3.5 w-3.5 shrink-0" />
             {formatPhone(post.clientPhone)}

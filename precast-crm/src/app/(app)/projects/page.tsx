@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Trash2, Loader2 } from "lucide-react";
 import { formatDate, formatNumber } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { useT } from "@/lib/i18n";
 
 type ProjectFilter = "DRAFT" | "ALL" | "AGENT";
@@ -366,7 +366,7 @@ export default function ProjectsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2 tabular-nums text-xs">
-                      {clientPhone ? formatPhone(clientPhone) : "—"}
+                      {clientPhone ? <PhoneLink phone={clientPhone} /> : "—"}
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
                       {clientAddress || "—"}

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Plus } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 
 type OrderStatus = "DRAFT" | "PLACED" | "IN_PRODUCTION" | "LOADED" | "DISPATCHED" | "DELIVERED" | "CANCELED";
 type PaymentState = "FULLY_PAID" | "PARTIALLY_PAID" | "AWAITING_PAYMENT";
@@ -86,8 +86,8 @@ export default function ClientDetailPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{client.name}</h1>
-          <p className="text-sm text-muted-foreground tabular-nums">
-            {formatPhone(client.phone)}
+          <p className="text-sm text-muted-foreground">
+            <PhoneLink phone={client.phone} />
           </p>
         </div>
         <Button onClick={() => createDeal.mutate()}>
@@ -101,7 +101,7 @@ export default function ClientDetailPage() {
             <CardTitle>Contact</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label="Phone" value={formatPhone(client.phone)} />
+            <Row label="Phone" value={<PhoneLink phone={client.phone} />} />
             <Row label="Address · Манзил" value={client.address ?? "—"} />
             <Row label="Language" value={client.language} />
             <Row label="Source" value={client.source ?? "—"} />
@@ -237,7 +237,7 @@ export default function ClientDetailPage() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4">
       <span className="text-muted-foreground">{label}</span>

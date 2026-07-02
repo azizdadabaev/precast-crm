@@ -8,7 +8,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { DriverFormDialog } from "@/components/dispatch/DriverFormDialog";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { formatDate, cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -127,7 +127,7 @@ export default function DriversPage() {
                         )}
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-text-tertiary">
-                        {formatPhone(d.phone)}
+                        <PhoneLink phone={d.phone} />
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono">
                         {d.activeDispatchCount}

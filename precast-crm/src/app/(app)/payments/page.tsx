@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ConfirmPaymentDialog, type PaymentForConfirm } from "@/components/payments/ConfirmPaymentDialog";
 import { formatDate, formatNumber } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
+import { PhoneLink } from "@/components/PhoneLink";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -189,9 +189,7 @@ export default function PaymentsPage() {
                           {(p as PaymentForConfirm & { order: { client?: { name?: string } } }).order.client?.name ?? "—"}
                         </div>
                         <div className="text-xs font-mono text-text-tertiary">
-                          {(p as PaymentForConfirm & { order: { client?: { phone?: string } } }).order.client?.phone
-                            ? formatPhone((p as PaymentForConfirm & { order: { client?: { phone: string } } }).order.client!.phone)
-                            : ""}
+                          <PhoneLink phone={(p as PaymentForConfirm & { order: { client?: { phone?: string } } }).order.client?.phone} />
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-xs text-text-tertiary max-w-[14rem]">
