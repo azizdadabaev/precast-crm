@@ -11,6 +11,25 @@ import { ArrowLeft, Plus } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 
+type OrderStatus = "DRAFT" | "PLACED" | "IN_PRODUCTION" | "LOADED" | "DISPATCHED" | "DELIVERED" | "CANCELED";
+type PaymentState = "FULLY_PAID" | "PARTIALLY_PAID" | "AWAITING_PAYMENT";
+
+const ORDER_STATUS_UZ: Record<OrderStatus, string> = {
+  DRAFT:         "Қоралама",
+  PLACED:        "Қабул қилинди",
+  IN_PRODUCTION: "Ишлаб чиқарилмоқда",
+  LOADED:        "Юкланган",
+  DISPATCHED:    "Жўнатилди",
+  DELIVERED:     "Етказилди",
+  CANCELED:      "Бекор қилинди",
+};
+
+const PAYMENT_STATE_UZ: Record<PaymentState, string> = {
+  FULLY_PAID:      "Тўланган",
+  PARTIALLY_PAID:  "Қисман",
+  AWAITING_PAYMENT:"Кутилмоқда",
+};
+
 interface ClientDetail {
   id: string;
   name: string;
@@ -27,6 +46,14 @@ interface ClientDetail {
     value: string;
     createdAt: string;
     projects: Array<{ id: string }>;
+  }>;
+  orders: Array<{
+    id: string;
+    orderNumber: string;
+    status: OrderStatus;
+    paymentState: PaymentState;
+    totalPrice: string;
+    placedAt: string;
   }>;
 }
 
@@ -134,6 +161,71 @@ export default function ClientDetailPage() {
                     <td className="text-right">{formatMoney(d.value)}</td>
                     <td className="text-center">{d.projects.length}</td>
                     <td className="text-muted-foreground">{formatDate(d.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Буюртмалар ({client.orders.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {client.orders.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Буюртмалар йўқ</p>
+          ) : (
+            <table className="excel-table">
+              <thead>
+                <tr>
+                  <th>Буюртма №</th>
+                  <th>Ҳолат</th>
+                  <th>Тўлов</th>
+                  <th className="text-right">Сумма</th>
+                  <th>Сана</th>
+                </tr>
+              </thead>
+              <tbody>
+                {client.orders.map((o) => (
+                  <tr key={o.id}>
+                    <td>
+                      <Link
+                        href={`/orders/${o.id}`}
+                        className="font-mono text-sm font-semibold text-primary hover:underline"
+                      >
+                        {o.orderNumber}
+                      </Link>
+                    </td>
+                    <td>
+                      <Badge
+                        variant={
+                          o.status === "DELIVERED"
+                            ? "success"
+                            : o.status === "CANCELED"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                      >
+                        {ORDER_STATUS_UZ[o.status] ?? o.status}
+                      </Badge>
+                    </td>
+                    <td>
+                      <Badge
+                        variant={
+                          o.paymentState === "FULLY_PAID"
+                            ? "success"
+                            : o.paymentState === "AWAITING_PAYMENT"
+                              ? "outline"
+                              : "secondary"
+                        }
+                      >
+                        {PAYMENT_STATE_UZ[o.paymentState] ?? o.paymentState}
+                      </Badge>
+                    </td>
+                    <td className="text-right tabular-nums">{formatMoney(o.totalPrice)}</td>
+                    <td className="text-muted-foreground">{formatDate(o.placedAt)}</td>
                   </tr>
                 ))}
               </tbody>
