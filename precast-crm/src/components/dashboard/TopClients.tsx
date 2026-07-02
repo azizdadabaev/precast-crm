@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 interface ClientRow {
   id: string;
   name: string;
@@ -63,11 +65,12 @@ export function TopClients({ clients }: Props) {
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <span style={{
+                <Link href={`/clients/${c.id}`} style={{
                   fontFamily: 'var(--font-body-alt)', fontWeight: 600, fontSize: 13.5,
                   color: 'var(--dash-ink)', whiteSpace: 'nowrap',
                   overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>{c.name}</span>
+                  textDecoration: 'none',
+                }}>{c.name}</Link>
                 <span style={{
                   fontFamily: 'var(--font-num)', fontSize: 12.5, fontWeight: 600,
                   color: 'var(--dash-ink)', whiteSpace: 'nowrap',

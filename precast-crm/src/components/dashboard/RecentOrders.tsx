@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { DashboardData } from './types';
 
 type Order = DashboardData['recentOrders'][number];
@@ -81,16 +82,18 @@ export function RecentOrders({ orders }: Props) {
           {/* Client + material */}
           <div style={{ flex: '1.6', minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{
+              <Link href={`/orders/${o.id}`} style={{
                 fontFamily: 'var(--font-body-alt)', fontWeight: 600, fontSize: 13,
                 color: 'var(--dash-ink)', whiteSpace: 'nowrap',
                 overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{o.clientName}</span>
+                textDecoration: 'none',
+              }}>{o.clientName}</Link>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
-              <span style={{
-                fontFamily: 'var(--font-num)', fontSize: 10.5, color: 'var(--dash-muted)',
-              }}>{o.orderNumber}</span>
+              <Link href={`/orders/${o.id}`} style={{
+                fontFamily: 'var(--font-num)', fontSize: 10.5, color: 'var(--dash-accent)',
+                textDecoration: 'none',
+              }}>{o.orderNumber}</Link>
               <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--dash-muted)', flexShrink: 0 }} />
               <span style={{
                 fontFamily: 'var(--font-body-alt)', fontSize: 11.5, color: 'var(--dash-muted)',

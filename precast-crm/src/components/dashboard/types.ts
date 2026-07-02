@@ -70,6 +70,7 @@ export interface DashboardData {
   revenueByMonth: Array<{ month: string; revenue: number }>;
   ordersByMonth: Array<{ month: string; count: number }>;
   recentOrders: Array<{
+    id: string;
     orderNumber: string;
     clientName: string;
     primaryProductLabel: string;

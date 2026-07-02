@@ -92,6 +92,7 @@ interface DashboardPayload {
   revenueByMonth: Array<{ month: string; revenue: number }>;
   ordersByMonth: Array<{ month: string; count: number }>;
   recentOrders: Array<{
+    id: string;
     orderNumber: string;
     clientName: string;
     primaryProductLabel: string;
@@ -325,6 +326,7 @@ export const GET = withPermissionAny(
       orderBy: { placedAt: "desc" },
       take: 6,
       select: {
+        id: true,
         orderNumber: true,
         totalArea: true,
         totalPrice: true,
@@ -484,6 +486,7 @@ export const GET = withPermissionAny(
 
   // ── Recent 6 orders ────────────────────────────────────────────────
   const recentOrders = recentOrdersRaw.map((r) => ({
+    id: r.id,
     orderNumber: r.orderNumber,
     clientName: r.client.name,
     primaryProductLabel:
