@@ -1050,6 +1050,7 @@ function CalculationsInner() {
         onAddRooms={handleDrawnRooms}
         drawing={drawing}
         onDrawingChange={setDrawing}
+        projectId={draftProjectId ?? undefined}
       />
 
       {/* Client info — Name | Phone | Address */}

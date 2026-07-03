@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Boxes, Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +23,8 @@ import {
   formatLengthCm,
   bbox,
   isValidOutline,
+  PITCH_CM,
+  BEARING_CM,
 } from "@/lib/cad/geometry";
 import { unionShapes, subtractShapes, intersectShapes } from "@/lib/cad/boolean";
 import { rectify } from "@/lib/cad/constraints";
@@ -54,6 +56,10 @@ interface Props {
   drawing: CalculatorDrawing | null;
   /** Write the floor plan back to the store; null clears it. */
   onDrawingChange: (drawing: CalculatorDrawing | null) => void;
+  /** When provided, a "CAD → Blender" button appears that sends the raw polygon
+   *  outlines directly to Blender (bypassing the rectangular decomposition path). */
+  orderId?: string;
+  projectId?: string;
 }
 
 const EMPTY_DRAWING: CalculatorDrawing = { rooms: [], globalDir: null, dirOverrides: {} };
@@ -84,6 +90,8 @@ export function DrawRoomDialog({
   onAddRooms,
   drawing,
   onDrawingChange,
+  orderId,
+  projectId,
 }: Props) {
   const t = useT();
   const dr = drawing ?? EMPTY_DRAWING;
@@ -480,6 +488,127 @@ export function DrawRoomDialog({
     onClose();
   };
 
+  // ── CAD → Blender direct path ─────────────────────────────────
+  const [blenderState, setBlenderState] = useState<
+    "idle" | "sending" | "sent" | "failed"
+  >("idle");
+  const [blenderError, setBlenderError] = useState<string | null>(null);
+
+  const sendToBlender = async () => {
+    setBlenderError(null);
+    setBlenderState("sending");
+    try {
+      const cadRooms = rooms
+        .filter((r) => r.closed && r.points.length >= 4)
+        .map((room, ri) => {
+          const box = bbox(room.points);
+          const beamDir: BeamDir =
+            room.beamDir ?? globalDir ?? (box.w <= box.h ? "H" : "V");
+          const inner = room.points;
+          const rHoles = room.holes ?? [];
+
+          const toM = (pts: Pt[]) =>
+            pts.map((p) => ({
+              x: +(p.x / 100).toFixed(4),
+              y: +(p.y / 100).toFixed(4),
+            }));
+
+          let beamSched: Array<{ slab_length_m: number; count: number }> = [];
+          let totalBeams = 0;
+          let totalBlocks = 0;
+
+          if (isRectilinear(inner) && rHoles.length === 0) {
+            const rbays = decomposeToBays(inner);
+            const baysWithDir = rbays.map((rect, bi) => ({
+              rect,
+              beamDir:
+                dirOverrides[`${ri}:${bi}`] ?? room.beamDir ?? globalDir ?? defaultBeamDir(rect),
+            }));
+            const bRows = baysToSlabRows(baysWithDir, 0);
+            beamSched = bRows
+              .filter((r) => r.result && r.result.beam_count > 0)
+              .map((r) => ({
+                slab_length_m: +(r.result!.beam_length).toFixed(3),
+                count: r.result!.beam_count,
+              }));
+            totalBeams = bRows.reduce(
+              (s, r) => s + (r.result?.beam_count ?? 0),
+              0,
+            );
+            totalBlocks = bRows.reduce(
+              (s, r) => s + (r.result?.total_blocks ?? 0),
+              0,
+            );
+          } else {
+            const { beams } = scanBeams(
+              inner,
+              beamDir,
+              undefined,
+              undefined,
+              rHoles,
+            );
+            beamSched = beamSchedule(beams)
+              .filter((b) => b.qty > 0)
+              .map((b) => ({
+                slab_length_m: +(b.lengthCm / 100).toFixed(3),
+                count: b.qty,
+              }));
+            totalBeams = beams.length;
+            totalBlocks = blockEstimate(beams).totalBlocks;
+          }
+
+          return {
+            name: `Хона ${ri + 1}`,
+            points: toM(room.points),
+            ...(rHoles.length > 0 ? { holes: rHoles.map(toM) } : {}),
+            beam_dir: beamDir,
+            bearing_m: BEARING_CM / 100,
+            pitch_m: PITCH_CM / 100,
+            beam_section: { w: 0.12, h: 0.22 },
+            block_dims: { l: 0.38, w: 0.60, h: 0.22 },
+            total_beams: totalBeams,
+            total_blocks: totalBlocks,
+            beam_schedule: beamSched,
+          };
+        });
+
+      if (cadRooms.length === 0) {
+        setBlenderError(t("Ёпиқ хона йўқ", "No closed rooms to send"));
+        setBlenderState("failed");
+        return;
+      }
+
+      const res = await fetch("/api/drawings/request-cad", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId, projectId, rooms: cadRooms }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as {
+          error?: string;
+          code?: string;
+        };
+        setBlenderError(
+          json.code === "BLENDER_OFFLINE"
+            ? t(
+                "Blender ulanmagan",
+                "Blender is not connected",
+              )
+            : (json.error ?? t("Yuborib bo'lmadi", "Failed to send")),
+        );
+        setBlenderState("failed");
+        return;
+      }
+
+      setBlenderState("sent");
+      setTimeout(() => setBlenderState("idle"), 3000);
+    } catch {
+      setBlenderError(t("Tarmoq xatosi", "Network error"));
+      setBlenderState("failed");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent className="flex h-[95vh] w-[98vw] max-w-[1800px] flex-col gap-3 sm:max-w-[1800px]">
@@ -829,14 +958,45 @@ export function DrawRoomDialog({
         </div>
 
         <div className="flex items-center justify-between gap-2 border-t pt-3">
-          <span className="text-xs text-muted-foreground">
-            {closedRoomCount > 0
-              ? t(
-                  `${closedRoomCount} та хона · ${allRows.length} қатор қўшилади`,
-                  `${closedRoomCount} room${closedRoomCount > 1 ? "s" : ""} · ${allRows.length} row${allRows.length > 1 ? "s" : ""} will be added`,
-                )
-              : ""}
-          </span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs text-muted-foreground">
+              {closedRoomCount > 0
+                ? t(
+                    `${closedRoomCount} та хона · ${allRows.length} қатор қўшилади`,
+                    `${closedRoomCount} room${closedRoomCount > 1 ? "s" : ""} · ${allRows.length} row${allRows.length > 1 ? "s" : ""} will be added`,
+                  )
+                : ""}
+            </span>
+            {/* CAD → Blender: send polygon outlines directly, bypassing rectangular decomposition */}
+            {(orderId || projectId) && closedRoomCount > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={blenderState === "sending"}
+                  onClick={
+                    blenderState === "failed"
+                      ? () => { setBlenderState("idle"); setBlenderError(null); }
+                      : sendToBlender
+                  }
+                  className="inline-flex items-center gap-1.5 rounded border border-primary/30 px-2.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/5 disabled:opacity-50"
+                >
+                  {blenderState === "idle"    && <Boxes className="h-3.5 w-3.5" />}
+                  {blenderState === "sending" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {blenderState === "sent"    && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
+                  {blenderState === "failed"  && <XCircle className="h-3.5 w-3.5 text-destructive" />}
+                  {blenderState === "idle"    && t("CAD → Blender", "CAD → Blender")}
+                  {blenderState === "sending" && t("Юборилмоқда…", "Sending…")}
+                  {blenderState === "sent"    && t("Юборилди ✓", "Sent ✓")}
+                  {blenderState === "failed"  && t("Қайта уриниш", "Retry")}
+                </button>
+                {blenderState === "failed" && blenderError && (
+                  <span className="max-w-[180px] truncate text-[11px] text-destructive">
+                    {blenderError}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={handleClose}>
               <Bi uz="Бекор қилиш" en="Cancel" />
