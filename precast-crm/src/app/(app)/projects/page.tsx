@@ -270,7 +270,8 @@ export default function ProjectsPage() {
                 )}
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 {canDelete && (
@@ -411,6 +412,7 @@ export default function ProjectsPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
