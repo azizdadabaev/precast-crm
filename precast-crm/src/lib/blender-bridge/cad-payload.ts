@@ -22,7 +22,11 @@ export interface CadRoomPolygon {
   pitch_m: number;
   /** Precast beam cross-section in metres. */
   beam_section: { w: number; h: number };
-  /** Filler block dimensions in metres (l = along beam, w = between beams, h = height). */
+  /**
+   * Filler block dimensions in metres.
+   * l = 0.20 (length along beam span), w = 0.46 (width between beams = pitch − beam_w),
+   * h = 0.22 (height matching beam). Addon should use its own constants — this is informational.
+   */
   block_dims: { l: number; w: number; h: number };
   /** CRM-computed total beam count across all bays/buckets of this room. */
   total_beams: number;

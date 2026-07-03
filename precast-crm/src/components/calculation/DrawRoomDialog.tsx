@@ -565,7 +565,7 @@ export function DrawRoomDialog({
             bearing_m: BEARING_CM / 100,
             pitch_m: PITCH_CM / 100,
             beam_section: { w: 0.12, h: 0.22 },
-            block_dims: { l: 0.38, w: 0.60, h: 0.22 },
+            block_dims: { l: 0.20, w: 0.46, h: 0.22 },
             total_beams: totalBeams,
             total_blocks: totalBlocks,
             beam_schedule: beamSched,
