@@ -23,8 +23,26 @@ export const GET = withPermission(
       );
     }
 
+    // When querying by orderId, also include drawings created during the draft
+    // phase (which are linked to the project, not the order).
+    let where: Parameters<typeof prisma.drawingRequest.findMany>[0]["where"];
+    if (orderId) {
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { projectId: true },
+      });
+      where = {
+        OR: [
+          { orderId },
+          ...(order?.projectId ? [{ projectId: order.projectId }] : []),
+        ],
+      };
+    } else {
+      where = { projectId: projectId! };
+    }
+
     const rows = await prisma.drawingRequest.findMany({
-      where: orderId ? { orderId } : { projectId: projectId! },
+      where,
       orderBy: { createdAt: "desc" },
       select: {
         id:           true,

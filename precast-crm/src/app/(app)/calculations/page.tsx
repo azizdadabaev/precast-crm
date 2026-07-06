@@ -400,6 +400,7 @@ function CalculationsInner() {
         };
         project: {
           id: string;
+          drawingJson: unknown;
           calculations: Array<{
             id: string;
             name: string | null;
@@ -430,6 +431,7 @@ function CalculationsInner() {
 
       loadFrom({
         editingOrderId: order.id,
+        drawing: normalizeDrawing(order.project.drawingJson),
         client: {
           name: order.client.name,
           phone: order.client.phone,
