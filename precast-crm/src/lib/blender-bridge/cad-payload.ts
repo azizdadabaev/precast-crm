@@ -44,6 +44,27 @@ export interface CadRoomPolygon {
     /** Number of beams of this length. */
     count: number;
   }>;
+  /**
+   * Per-beam positions as computed by the CRM scanline engine.
+   * Present for tapered/irregular rooms (any angled wall or hole).
+   * Omitted for axis-aligned rectilinear rooms (addon handles those via
+   * rectangular decomposition).
+   *
+   * Coordinate axes match the polygon `points[]` coordinate space:
+   *   beam_dir "H" → pos_m is Y, span is along X.
+   *   beam_dir "V" → pos_m is X, span is along Y.
+   * Y increases downward (screen/canvas convention, same as `points[]`).
+   */
+  beams?: Array<{
+    /** Scan-line position in metres (Y for H beams, X for V beams). */
+    pos_m: number;
+    /** Clear span start in metres (run axis). */
+    span_start_m: number;
+    /** Clear span end in metres (run axis). */
+    span_end_m: number;
+    /** Full beam length = (span_end − span_start) + 2 × bearing_m. */
+    length_m: number;
+  }>;
 }
 
 /** Top-level payload stored in DrawingRequest.roomsJson for CAD-drawing requests. */

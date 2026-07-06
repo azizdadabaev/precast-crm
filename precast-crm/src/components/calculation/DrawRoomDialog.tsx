@@ -516,6 +516,7 @@ export function DrawRoomDialog({
           let beamSched: Array<{ slab_length_m: number; count: number }> = [];
           let totalBeams = 0;
           let totalBlocks = 0;
+          let beamPositions: Array<{ pos_m: number; span_start_m: number; span_end_m: number; length_m: number }> | undefined;
 
           if (isRectilinear(inner) && rHoles.length === 0) {
             const rbays = decomposeToBays(inner);
@@ -539,6 +540,7 @@ export function DrawRoomDialog({
               (s, r) => s + (r.result?.total_blocks ?? 0),
               0,
             );
+            // beamPositions omitted for rectilinear rooms — addon uses rectangular decomposition
           } else {
             const { beams } = scanBeams(
               inner,
@@ -555,6 +557,13 @@ export function DrawRoomDialog({
               }));
             totalBeams = beams.length;
             totalBlocks = blockEstimate(beams).totalBlocks;
+            // Include exact scan-line positions so addon draws the same beams as the canvas
+            beamPositions = beams.map((b) => ({
+              pos_m: +(b.pos / 100).toFixed(4),
+              span_start_m: +(b.spanStart / 100).toFixed(4),
+              span_end_m: +(b.spanEnd / 100).toFixed(4),
+              length_m: +(b.lengthCm / 100).toFixed(4),
+            }));
           }
 
           return {
@@ -569,6 +578,7 @@ export function DrawRoomDialog({
             total_beams: totalBeams,
             total_blocks: totalBlocks,
             beam_schedule: beamSched,
+            ...(beamPositions ? { beams: beamPositions } : {}),
           };
         });
 
