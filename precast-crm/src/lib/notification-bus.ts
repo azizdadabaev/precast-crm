@@ -16,3 +16,10 @@ if (!global.__notificationBus) {
 }
 
 export const notificationBus = bus;
+
+// Reserved broadcast channel (userIds are cuids, never contain ":").
+// Emitted on order placement; the notifications SSE stream forwards it
+// to every connected client as a named `orders` event so the orders
+// list refetches immediately instead of waiting out its poll interval.
+// Not persisted — purely a "refresh now" nudge.
+export const ORDERS_CHANGED_CHANNEL = "broadcast:orders";

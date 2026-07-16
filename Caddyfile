@@ -1,53 +1,56 @@
 # Caddy reverse proxy for Precast CRM.
+# HTTPS via sslip.io: 207-154-218-194.sslip.io -> the droplet IP, real
+# Let's Encrypt cert. The bare IP is kept on plain HTTP as a fallback.
+# Primary domain: etalontbm.uz.
 #
-# Default: HTTP-only on :80, suitable for "deploy on a VPS IP, no domain yet".
-#
-# To enable HTTPS once you have a domain:
-#   1. Point an A record at the VPS IP.
-#   2. Replace the ":80 {" line below with "crm.example.com {"  (your real host).
-#   3. Set NEXT_PUBLIC_APP_URL=https://crm.example.com and remove COOKIE_SECURE
-#      (or set it to true) in .env.
-#   4. `docker compose up -d` — Caddy auto-issues a Let's Encrypt cert on first request.
+# NOTE: this file is bind-mounted into the caddy container
+# (./Caddyfile:/etc/caddy/Caddyfile). git pull replaces the file inode,
+# so after changing it run `docker compose up -d --force-recreate caddy`
+# — a plain restart keeps serving the OLD content.
 
-:80 {
-	encode zstd gzip
+(site) {
+  encode zstd gzip
 
-	# Larger upload ceiling for delivery-proof photos (8 MB cap is enforced in the app).
-	request_body {
-		max_size 16MB
-	}
+  # JSON access log to stdout (docker logs). Includes per-request
+  # `duration` — this is the data we lacked when diagnosing the
+  # 2026-07 slowness; keep it on so slow endpoints are measurable.
+  log {
+    output stdout
+    format json
+  }
 
-	# Blender Bridge — WebSocket route. The owner's local Blender
-	# connects to wss://<host>/ws?secret=<BRIDGE_SECRET>. Caddy
-	# transparently handles the WebSocket upgrade so no extra config
-	# is needed beyond the reverse_proxy directive. The /ws* glob
-	# forwards query strings (?secret=…) correctly.
-	#
-	# IMPORTANT: both reverse_proxies must be inside `handle` blocks.
-	# A bare `reverse_proxy` directive at site level runs on every
-	# request, which catches /ws before the matcher can fire. With
-	# both wrapped in `handle`, exactly one block executes per
-	# request and /ws goes to ws-bridge as intended.
-	handle /ws* {
-		reverse_proxy ws-bridge:8765
-	}
+  request_body {
+    max_size 64MB
+  }
+  handle /ws* {
+    reverse_proxy ws-bridge:8765
+  }
+  handle /uploads/* {
+    root * /srv
+    file_server
+  }
+  handle {
+    reverse_proxy app:3000 {
+      header_up Host {host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+}
 
-	# Uploaded photos (truck load photos, etc.) are written into the
-	# `uploads` Docker volume at /app/public/uploads inside the app
-	# container. The Next.js standalone server.js does not serve public/
-	# files at runtime, so Caddy serves this path directly from the
-	# shared volume (mounted read-only at /srv/uploads).
-	handle /uploads/* {
-		root * /srv
-		file_server
-	}
+207-154-218-194.sslip.io {
+  import site
+}
 
-	handle {
-		reverse_proxy app:3000 {
-			header_up Host {host}
-			header_up X-Real-IP {remote_host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-		}
-	}
+http://207.154.218.194 {
+  import site
+}
+
+etalontbm.uz {
+  import site
+}
+
+www.etalontbm.uz {
+  redir https://etalontbm.uz{uri} permanent
 }

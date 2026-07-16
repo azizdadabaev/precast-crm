@@ -28,6 +28,65 @@ function resolveExecutable(): string | undefined {
   return candidates.find((p) => existsSync(p));
 }
 
+// Shared browser instance, reused across renders within a burst.
+//
+// Launching Chromium is the expensive part on the 1-vCPU prod host —
+// several seconds of 100% CPU plus a ~300MB RSS spike that stalls every
+// CRM user mid-click. A customer conversation typically produces a few
+// quote cards in quick succession, so we keep one browser alive between
+// renders and close it after BROWSER_IDLE_MS of inactivity to give the
+// memory back (the host swaps under sustained pressure).
+const BROWSER_IDLE_MS = 3 * 60 * 1000;
+
+type Browser = Awaited<ReturnType<typeof import('puppeteer-core')['default']['launch']>>;
+
+let browserPromise: Promise<Browser> | null = null;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleIdleClose() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    const p = browserPromise;
+    browserPromise = null;
+    idleTimer = null;
+    void p?.then((b) => b.close()).catch(() => {});
+  }, BROWSER_IDLE_MS);
+  // Don't keep the process alive just to close an idle browser.
+  idleTimer.unref?.();
+}
+
+async function getBrowser(executablePath: string): Promise<Browser> {
+  if (browserPromise) {
+    try {
+      const existing = await browserPromise;
+      if (existing.connected) return existing;
+    } catch {
+      /* previous launch failed — fall through to relaunch */
+    }
+    browserPromise = null;
+  }
+  // Stored before awaiting so concurrent renders share one launch
+  // instead of racing two Chromiums onto the single core.
+  browserPromise = (async () => {
+    const { default: puppeteer } = await import('puppeteer-core');
+    const browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+    });
+    browser.once('disconnected', () => {
+      browserPromise = null;
+    });
+    return browser;
+  })();
+  try {
+    return await browserPromise;
+  } catch (err) {
+    browserPromise = null;
+    throw err;
+  }
+}
+
 /** Screenshot the real share card via a headless browser. Throws on any failure
  *  (no executable, launch/nav/timeout) so the caller can fall back. */
 async function screenshotShareCard(projectId: string): Promise<Buffer> {
@@ -37,14 +96,9 @@ async function screenshotShareCard(projectId: string): Promise<Buffer> {
   const port = process.env.PORT ?? '3000';
   const url = `http://127.0.0.1:${port}/internal/quote-card/${projectId}?k=${QUOTE_CARD_TOKEN}`;
 
-  const { default: puppeteer } = await import('puppeteer-core');
-  const browser = await puppeteer.launch({
-    executablePath,
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
-  });
+  const browser = await getBrowser(executablePath);
+  const page = await browser.newPage();
   try {
-    const page = await browser.newPage();
     // deviceScaleFactor 3 matches the operator card's html-to-image pixelRatio 3.
     await page.setViewport({ width: 1400, height: 1200, deviceScaleFactor: 3 });
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 20_000 });
@@ -53,7 +107,8 @@ async function screenshotShareCard(projectId: string): Promise<Buffer> {
     const shot = await el.screenshot({ type: 'png' });
     return Buffer.from(shot);
   } finally {
-    await browser.close().catch(() => {});
+    await page.close().catch(() => {});
+    scheduleIdleClose();
   }
 }
 

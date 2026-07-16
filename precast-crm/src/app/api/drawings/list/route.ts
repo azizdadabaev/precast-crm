@@ -25,7 +25,7 @@ export const GET = withPermission(
 
     // When querying by orderId, also include drawings created during the draft
     // phase (which are linked to the project, not the order).
-    let where: Parameters<typeof prisma.drawingRequest.findMany>[0]["where"];
+    let where: NonNullable<Parameters<typeof prisma.drawingRequest.findMany>[0]>["where"];
     if (orderId) {
       const order = await prisma.order.findUnique({
         where: { id: orderId },

@@ -12,15 +12,31 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-precast} -d ${POSTGRES_DB:-precast}"]
-      interval: 5s
+      # 30s (not 5s): each probe is a `docker exec`, and ~17k execs/day
+      # measurably bloats dockerd memory on the small droplet. Startup
+      # ordering still works — depends_on waits through retries.
+      interval: 30s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          # Cap Postgres so a pathological query kills one backend
+          # instead of letting the kernel OOM-kill the whole database
+          # (happened on prod 2026-07-03: postgres grew to 1.7GB on a
+          # 2GB host). 512m is ample for shared_buffers 128MB + this
+          # DB size (~22MB).
+          memory: 512m
 
   app:
     build:
       context: ./precast-crm
       dockerfile: Dockerfile
     restart: unless-stopped
+    # tini as PID 1 — reaps the defunct Chromium/crashpad children the
+    # quote-card screenshots leave behind (node as PID 1 never wait()s
+    # for reparented processes; prod had 25 zombies after 9 days).
+    init: true
     depends_on:
       db:
         condition: service_healthy

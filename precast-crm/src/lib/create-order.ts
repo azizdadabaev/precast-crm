@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { PlaceOrderSchema } from "@/lib/validation";
 import { recordAudit } from "@/lib/audit";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
+import { notificationBus, ORDERS_CHANGED_CHANNEL } from "@/lib/notification-bus";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone } from "@/lib/phone";
@@ -375,6 +376,13 @@ export async function createOrder(
       roomCount: input.rooms.length,
     },
   });
+
+  // Nudge every connected client to refetch the orders list right away
+  // (named `orders` SSE event — not persisted, no bell/sound). This is
+  // what lets the orders page poll at 60s instead of 20s: the "new
+  // order appeared + chime" case arrives by push, the poll is only a
+  // reconnect fallback.
+  notificationBus.emit(ORDERS_CHANGED_CHANNEL, "{}");
 
   void (async () => {
     const userIds = await usersWithPermission("payment.confirm");

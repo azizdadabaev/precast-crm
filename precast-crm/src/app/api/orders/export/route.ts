@@ -1,7 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import path from "path";
+import { Worker } from "worker_threads";
 import { NextRequest, NextResponse } from "next/server";
-import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "@/lib/api-auth";
 
@@ -18,6 +19,11 @@ import { withPermission } from "@/lib/api-auth";
  * lookups. Payments and dispatches are rolled up into summary columns
  * to keep the workbook readable; the order detail page is the source
  * of truth for the per-payment trail.
+ *
+ * The ExcelJS workbook build runs in a worker thread
+ * (src/workers/order-export-worker.js) — it's CPU-bound, and on the
+ * single-vCPU prod host running it on the event loop froze every other
+ * user's requests for the duration of the export.
  */
 const STATUS_ORDER = [
   "PLACED",
@@ -26,6 +32,35 @@ const STATUS_ORDER = [
   "DELIVERED",
   "CANCELED",
 ] as const;
+
+function buildWorkbookInWorker(rows: unknown[]): Promise<Buffer> {
+  // Resolved at runtime (never bundled): dev cwd is precast-crm/, prod
+  // cwd is /app — both have src/workers/ on disk.
+  const workerPath = path.join(
+    process.cwd(),
+    "src",
+    "workers",
+    "order-export-worker.js",
+  );
+  return new Promise<Buffer>((resolve, reject) => {
+    const worker = new Worker(workerPath, {
+      workerData: { statusOrder: STATUS_ORDER, rows },
+    });
+    let settled = false;
+    worker.once("message", (buf: Buffer) => {
+      settled = true;
+      resolve(buf);
+      void worker.terminate();
+    });
+    worker.once("error", (err) => {
+      settled = true;
+      reject(err);
+    });
+    worker.once("exit", (code) => {
+      if (!settled) reject(new Error(`export worker exited with code ${code}`));
+    });
+  });
+}
 
 export const GET = withPermission(
   "order.exportBackup",
@@ -48,103 +83,55 @@ export const GET = withPermission(
       },
     });
 
-    const wb = new ExcelJS.Workbook();
-    wb.creator = "Precast CRM";
-    wb.created = new Date();
-
-    for (const status of STATUS_ORDER) {
-      const rows = orders.filter((o) => o.status === status);
-      const sheet = wb.addWorksheet(status);
-      sheet.columns = [
-        { header: "Order #", key: "orderNumber", width: 14 },
-        { header: "Status", key: "status", width: 14 },
-        { header: "Payment state", key: "paymentState", width: 18 },
-        { header: "Client name", key: "clientName", width: 28 },
-        { header: "Client phone", key: "clientPhone", width: 16 },
-        { header: "Client address", key: "clientAddress", width: 36 },
-        { header: "Project name", key: "projectName", width: 24 },
-        { header: "Draft #", key: "draftNumber", width: 10 },
-        { header: "Scheduled at", key: "scheduledAt", width: 18 },
-        { header: "Placed at", key: "placedAt", width: 18 },
-        { header: "Delivered at", key: "deliveredAt", width: 18 },
-        { header: "Canceled at", key: "canceledAt", width: 18 },
-        { header: "Cancel reason", key: "cancelReason", width: 28 },
-        { header: "Rooms subtotal", key: "roomsSubtotal", width: 16 },
-        { header: "Discount %", key: "discountPercent", width: 12 },
-        { header: "Discount amount", key: "discountAmount", width: 16 },
-        { header: "Delivery cost", key: "deliveryCost", width: 14 },
-        { header: "Other cost", key: "otherCost", width: 14 },
-        { header: "Total price", key: "totalPrice", width: 16 },
-        { header: "Confirmed paid", key: "confirmedPaid", width: 16 },
-        { header: "Pending paid", key: "pendingPaid", width: 16 },
-        { header: "Remaining", key: "remaining", width: 16 },
-        { header: "Total area (m²)", key: "totalArea", width: 14 },
-        { header: "Total blocks", key: "totalBlocks", width: 12 },
-        { header: "Total beams", key: "totalBeams", width: 12 },
-        { header: "Driver", key: "driver", width: 22 },
-        { header: "Truck", key: "truck", width: 14 },
-        { header: "Dispatched at", key: "dispatchedAt", width: 18 },
-        { header: "Driver returned at", key: "driverReturnedAt", width: 18 },
-        { header: "Notes", key: "notes", width: 40 },
-        { header: "Order ID", key: "id", width: 28 },
-      ];
-      sheet.getRow(1).font = { bold: true };
-      sheet.getRow(1).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFE5E7EB" },
+    // Flatten to plain structured-cloneable rows here (Prisma Decimal
+    // instances don't survive the worker boundary); the worker only
+    // does the CPU-heavy workbook build + serialize.
+    const rows = orders.map((o) => {
+      const confirmed = Number(o.confirmedPaid);
+      const pending = o.payments
+        .filter((p) => p.status === "PENDING_CONFIRMATION")
+        .reduce((s, p) => s + Number(p.amount), 0);
+      const total = Number(o.totalPrice);
+      const remaining = Math.max(
+        0,
+        total - confirmed - pending - Number(o.writeOffAmount),
+      );
+      return {
+        orderNumber: o.orderNumber,
+        status: o.status,
+        paymentState: o.paymentState,
+        clientName: o.client?.name ?? "",
+        clientPhone: o.client?.phone ?? "",
+        clientAddress: o.client?.address ?? "",
+        projectName: o.project?.name ?? "",
+        draftNumber: o.project?.draftNumber ?? "",
+        scheduledAt: o.scheduledAt,
+        placedAt: o.placedAt,
+        deliveredAt: o.deliveredAt,
+        canceledAt: o.canceledAt,
+        cancelReason: o.cancelReason ?? "",
+        roomsSubtotal: Number(o.roomsSubtotal),
+        discountPercent: Number(o.discountPercent),
+        discountAmount: Number(o.discountAmount),
+        deliveryCost: Number(o.deliveryCost),
+        otherCost: Number(o.otherCost),
+        totalPrice: total,
+        confirmedPaid: confirmed,
+        pendingPaid: pending,
+        remaining,
+        totalArea: Number(o.totalArea),
+        totalBlocks: o.totalBlocks,
+        totalBeams: o.totalBeams,
+        driver: o.dispatch?.driver?.name ?? "",
+        truck: o.dispatch?.truckIdentifier ?? "",
+        dispatchedAt: o.dispatch?.dispatchedAt ?? "",
+        driverReturnedAt: o.dispatch?.returnedAt ?? "",
+        notes: o.notes ?? "",
+        id: o.id,
       };
+    });
 
-      for (const o of rows) {
-        const confirmed = Number(o.confirmedPaid);
-        const pending = o.payments
-          .filter((p) => p.status === "PENDING_CONFIRMATION")
-          .reduce((s, p) => s + Number(p.amount), 0);
-        const total = Number(o.totalPrice);
-        const remaining = Math.max(0, total - confirmed - pending - Number(o.writeOffAmount));
-        sheet.addRow({
-          orderNumber: o.orderNumber,
-          status: o.status,
-          paymentState: o.paymentState,
-          clientName: o.client?.name ?? "",
-          clientPhone: o.client?.phone ?? "",
-          clientAddress: o.client?.address ?? "",
-          projectName: o.project?.name ?? "",
-          draftNumber: o.project?.draftNumber ?? "",
-          scheduledAt: o.scheduledAt,
-          placedAt: o.placedAt,
-          deliveredAt: o.deliveredAt,
-          canceledAt: o.canceledAt,
-          cancelReason: o.cancelReason ?? "",
-          roomsSubtotal: Number(o.roomsSubtotal),
-          discountPercent: Number(o.discountPercent),
-          discountAmount: Number(o.discountAmount),
-          deliveryCost: Number(o.deliveryCost),
-          otherCost: Number(o.otherCost),
-          totalPrice: total,
-          confirmedPaid: confirmed,
-          pendingPaid: pending,
-          remaining,
-          totalArea: Number(o.totalArea),
-          totalBlocks: o.totalBlocks,
-          totalBeams: o.totalBeams,
-          driver: o.dispatch?.driver?.name ?? "",
-          truck: o.dispatch?.truckIdentifier ?? "",
-          dispatchedAt: o.dispatch?.dispatchedAt ?? "",
-          driverReturnedAt: o.dispatch?.returnedAt ?? "",
-          notes: o.notes ?? "",
-          id: o.id,
-        });
-      }
-
-      // Empty sheets get a "(no orders)" row so the workbook structure
-      // is self-documenting even when a status has nothing in it.
-      if (rows.length === 0) {
-        sheet.addRow({ orderNumber: "(no orders)" });
-      }
-    }
-
-    const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+    const buf = await buildWorkbookInWorker(rows);
     const stamp = new Date().toISOString().slice(0, 10);
     return new NextResponse(new Uint8Array(buf), {
       status: 200,

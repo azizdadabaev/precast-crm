@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { notificationBus } from "@/lib/notification-bus";
+import { notificationBus, ORDERS_CHANGED_CHANNEL } from "@/lib/notification-bus";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -71,13 +71,24 @@ export async function GET(req: NextRequest) {
         } catch { cleanup(); }
       };
 
+      // Broadcast "orders changed" nudge — a NAMED event (`event: orders`)
+      // so the client's plain `onmessage` handler (bell/unread/sound)
+      // never sees it. No `id:` line on purpose: these frames must not
+      // disturb Last-Event-ID replay, which resolves real notification ids.
+      const onOrdersChanged = () => {
+        if (closed) return;
+        try { controller.enqueue(encoder.encode("event: orders\ndata: {}\n\n")); } catch { cleanup(); }
+      };
+
       notificationBus.on(userId, onNotification);
+      notificationBus.on(ORDERS_CHANGED_CHANNEL, onOrdersChanged);
 
       function cleanup() {
         if (closed) return;
         closed = true;
         clearInterval(pingInterval);
         notificationBus.off(userId, onNotification);
+        notificationBus.off(ORDERS_CHANGED_CHANNEL, onOrdersChanged);
         try { controller.close(); } catch { /* already closed */ }
       }
 

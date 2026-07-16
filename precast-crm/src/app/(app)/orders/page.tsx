@@ -16,6 +16,7 @@ import { CapacityCalendar } from "@/components/orders/CapacityCalendar";
 import { useT } from "@/lib/i18n";
 import { addressToCyrillic } from "@/lib/regions";
 import { playNewOrderChime } from "@/lib/new-order-chime";
+import { subscribeToOrdersChanged } from "@/hooks/useNotifications";
 
 interface Order {
   id: string;
@@ -151,11 +152,22 @@ function OrdersList() {
       p.set("pageSize", String(PAGE_SIZE));
       return api(`/api/orders?${p.toString()}`);
     },
-    // Poll so every CRM user with this page open sees new orders show
-    // up automatically — paired with the chime below this becomes a
-    // soft "ding! someone placed an order" notification across the team.
-    refetchInterval: 20_000,
+    // New orders arrive by SSE push (subscribeToOrdersChanged below) —
+    // paired with the chime this stays a soft "ding! someone placed an
+    // order" notification across the team. The 60s poll is only a
+    // fallback for dropped SSE connections; it used to be the primary
+    // mechanism at 20s, which cost every logged-in user 3 requests/min.
+    refetchInterval: 60_000,
   });
+
+  // Server-pushed refresh: refetch the list the moment any order is
+  // placed anywhere (operator UI, Telegram agent) instead of waiting
+  // out the poll interval.
+  useEffect(() => {
+    return subscribeToOrdersChanged(() => {
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    });
+  }, [qc]);
 
   const orders = data?.items ?? [];
   const total = data?.total ?? 0;

@@ -49,6 +49,7 @@ let state: State = {
 
 const stateListeners = new Set<Listener>();
 const notificationListeners = new Set<NotificationListener>();
+const ordersChangedListeners = new Set<() => void>();
 let initialized = false;
 let es: EventSource | null = null;
 
@@ -90,6 +91,13 @@ function ensureInitialized() {
   // any missed events.
   es = new EventSource("/api/notifications/stream", { withCredentials: true });
 
+  // Named server event: "orders changed" nudge. Deliberately outside
+  // `onmessage` — it is not a notification (no bell, no sound, not
+  // persisted); subscribers just refetch the orders list.
+  es.addEventListener("orders", () => {
+    ordersChangedListeners.forEach((l) => l());
+  });
+
   es.onopen = () => setState({ connected: true });
   es.onerror = () => setState({ connected: false });
   es.onmessage = (ev) => {
@@ -124,6 +132,20 @@ export function subscribeToNewNotifications(
   notificationListeners.add(cb);
   return () => {
     notificationListeners.delete(cb);
+  };
+}
+
+/**
+ * Subscribe to server-pushed "orders changed" nudges (SSE `orders`
+ * event). The orders page uses this to refetch immediately when an
+ * order is placed anywhere — its 60s poll is only a fallback for
+ * dropped connections. Returns an unsubscribe function.
+ */
+export function subscribeToOrdersChanged(cb: () => void): () => void {
+  ensureInitialized();
+  ordersChangedListeners.add(cb);
+  return () => {
+    ordersChangedListeners.delete(cb);
   };
 }
 
