@@ -70,14 +70,19 @@ export function registerClientTools(server: McpServer): void {
       phone: z.string().optional().describe('Phone number prefix or exact match'),
     },
     async (params) => {
-      const clients = await listClients(params);
-      const summary = `Found ${clients.length} client(s).`;
-      return {
-        content: [
-          { type: 'text' as const, text: summary },
-          { type: 'text' as const, text: '```json\n' + JSON.stringify(clients, null, 2) + '\n```' },
-        ],
-      };
+      try {
+        const clients = await listClients(params);
+        const summary = `Found ${clients.length} client(s).`;
+        return {
+          content: [
+            { type: 'text' as const, text: summary },
+            { type: 'text' as const, text: '```json\n' + JSON.stringify(clients, null, 2) + '\n```' },
+          ],
+        };
+      } catch (err) {
+        console.error('[MCP list_clients]', err);
+        return { content: [{ type: 'text' as const, text: 'Database error — please try again.' }] };
+      }
     },
   );
 
@@ -88,17 +93,22 @@ export function registerClientTools(server: McpServer): void {
       clientId: z.string().describe('The client ID (uuid)'),
     },
     async ({ clientId }) => {
-      const client = await getClient(clientId);
-      if (!client) {
-        return { content: [{ type: 'text' as const, text: `Client ${clientId} not found.` }] };
+      try {
+        const client = await getClient(clientId);
+        if (!client) {
+          return { content: [{ type: 'text' as const, text: `Client ${clientId} not found.` }] };
+        }
+        const summary = `${client.name} — ${client.phone} — ${client._count.orders} order(s)`;
+        return {
+          content: [
+            { type: 'text' as const, text: summary },
+            { type: 'text' as const, text: '```json\n' + JSON.stringify(client, null, 2) + '\n```' },
+          ],
+        };
+      } catch (err) {
+        console.error('[MCP get_client]', err);
+        return { content: [{ type: 'text' as const, text: 'Database error — please try again.' }] };
       }
-      const summary = `${client.name} — ${client.phone} — ${client._count.orders} order(s)`;
-      return {
-        content: [
-          { type: 'text' as const, text: summary },
-          { type: 'text' as const, text: '```json\n' + JSON.stringify(client, null, 2) + '\n```' },
-        ],
-      };
     },
   );
 }

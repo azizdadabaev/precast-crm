@@ -26,13 +26,18 @@ export function registerDashboardTools(server: McpServer): void {
     "Full dashboard snapshot: revenue, receivables, today's deliveries, week capacity, top customers, and 12-month chart data. Returns the same payload as GET /api/dashboard.",
     {},
     async () => {
-      const data = await fetchDashboardData();
-      return {
-        content: [
-          { type: 'text' as const, text: formatSummary(data) },
-          { type: 'text' as const, text: '```json\n' + JSON.stringify(data, null, 2) + '\n```' },
-        ],
-      };
+      try {
+        const data = await fetchDashboardData();
+        return {
+          content: [
+            { type: 'text' as const, text: formatSummary(data) },
+            { type: 'text' as const, text: '```json\n' + JSON.stringify(data, null, 2) + '\n```' },
+          ],
+        };
+      } catch (err) {
+        console.error('[MCP get_dashboard]', err);
+        return { content: [{ type: 'text' as const, text: 'Database error — please try again.' }] };
+      }
     },
   );
 }

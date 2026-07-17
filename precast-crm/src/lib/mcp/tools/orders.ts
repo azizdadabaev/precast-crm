@@ -86,14 +86,19 @@ export function registerOrderTools(server: McpServer): void {
       day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Filter by scheduled date (YYYY-MM-DD)'),
     },
     async (params) => {
-      const data = await listOrders(params);
-      const summary = `Found ${data.total} order(s) (page ${data.page}/${data.totalPages}). Showing ${data.items.length}.`;
-      return {
-        content: [
-          { type: 'text' as const, text: summary },
-          { type: 'text' as const, text: '```json\n' + JSON.stringify(data, null, 2) + '\n```' },
-        ],
-      };
+      try {
+        const data = await listOrders(params);
+        const summary = `Found ${data.total} order(s) (page ${data.page}/${data.totalPages}). Showing ${data.items.length}.`;
+        return {
+          content: [
+            { type: 'text' as const, text: summary },
+            { type: 'text' as const, text: '```json\n' + JSON.stringify(data, null, 2) + '\n```' },
+          ],
+        };
+      } catch (err) {
+        console.error('[MCP list_orders]', err);
+        return { content: [{ type: 'text' as const, text: 'Database error — please try again.' }] };
+      }
     },
   );
 
@@ -104,17 +109,22 @@ export function registerOrderTools(server: McpServer): void {
       orderId: z.string().describe('The order ID (uuid)'),
     },
     async ({ orderId }) => {
-      const order = await getOrder(orderId);
-      if (!order) {
-        return { content: [{ type: 'text' as const, text: `Order ${orderId} not found.` }] };
+      try {
+        const order = await getOrder(orderId);
+        if (!order) {
+          return { content: [{ type: 'text' as const, text: `Order ${orderId} not found.` }] };
+        }
+        const summary = `Order ${order.orderNumber} — ${order.status} — ${order.client.name} — ${Number(order.totalPrice).toLocaleString('ru-RU')} UZS`;
+        return {
+          content: [
+            { type: 'text' as const, text: summary },
+            { type: 'text' as const, text: '```json\n' + JSON.stringify(order, null, 2) + '\n```' },
+          ],
+        };
+      } catch (err) {
+        console.error('[MCP get_order]', err);
+        return { content: [{ type: 'text' as const, text: 'Database error — please try again.' }] };
       }
-      const summary = `Order ${order.orderNumber} — ${order.status} — ${order.client.name} — ${Number(order.totalPrice).toLocaleString('ru-RU')} UZS`;
-      return {
-        content: [
-          { type: 'text' as const, text: summary },
-          { type: 'text' as const, text: '```json\n' + JSON.stringify(order, null, 2) + '\n```' },
-        ],
-      };
     },
   );
 }
