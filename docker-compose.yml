@@ -68,6 +68,7 @@ services:
       INSTAGRAM_VERIFY_TOKEN: ${INSTAGRAM_VERIFY_TOKEN:-}
       INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://etalontbm.uz}
+      MCP_API_TOKEN: ${MCP_API_TOKEN}
     volumes:
       - uploads:/app/public/uploads
       - drawings_data:/data
