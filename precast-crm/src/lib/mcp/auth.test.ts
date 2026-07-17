@@ -3,10 +3,13 @@ import { checkBearer } from './auth';
 
 const REAL_TOKEN = 'abc123def456abc123def456abc123def456abc123def456abc123def456abcd';
 
-function makeReq(authHeader?: string): Request {
+function makeReq(authHeader?: string, queryToken?: string): Request {
   const headers = new Headers();
   if (authHeader !== undefined) headers.set('Authorization', authHeader);
-  return new Request('http://localhost/api/mcp', { method: 'POST', headers });
+  const url = queryToken
+    ? `http://localhost/api/mcp?token=${queryToken}`
+    : 'http://localhost/api/mcp';
+  return new Request(url, { method: 'POST', headers });
 }
 
 describe('checkBearer', () => {
@@ -41,5 +44,20 @@ describe('checkBearer', () => {
   it('does not throw when provided token has a different length than expected', () => {
     expect(() => checkBearer(makeReq('Bearer short'))).not.toThrow();
     expect(checkBearer(makeReq('Bearer short'))).toBe(false);
+  });
+
+  it('returns true when correct token is passed as ?token= query param', () => {
+    expect(checkBearer(makeReq(undefined, REAL_TOKEN))).toBe(true);
+  });
+
+  it('returns false when wrong token is passed as ?token= query param', () => {
+    expect(checkBearer(makeReq(undefined, 'wrongtoken'))).toBe(false);
+  });
+
+  it('prefers Authorization header over ?token= when both are present', () => {
+    // header has correct token, query has wrong — should pass
+    expect(checkBearer(makeReq(`Bearer ${REAL_TOKEN}`, 'wrongtoken'))).toBe(true);
+    // header has wrong token, query has correct — should fail (header wins)
+    expect(checkBearer(makeReq('Bearer wrongtoken', REAL_TOKEN))).toBe(false);
   });
 });

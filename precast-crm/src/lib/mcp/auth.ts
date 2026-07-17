@@ -13,10 +13,14 @@ export function checkBearer(req: Request): boolean {
   const expected = process.env.MCP_API_TOKEN;
   if (!expected) return false;
 
+  // Header takes priority; fall back to ?token= query param (for Claude.ai
+  // custom connectors whose UI only accepts a URL, not custom headers).
   const auth = req.headers.get('Authorization') ?? '';
-  if (!auth.startsWith('Bearer ')) return false;
+  const headerToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  const queryToken = new URL(req.url).searchParams.get('token') ?? '';
+  const provided = headerToken || queryToken;
+  if (!provided) return false;
 
-  const provided = auth.slice(7);
   const a = createHash('sha256').update(provided).digest();
   const b = createHash('sha256').update(expected).digest();
   return timingSafeEqual(a, b);
