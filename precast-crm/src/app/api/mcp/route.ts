@@ -10,10 +10,8 @@ export async function POST(req: Request): Promise<Response> {
   return mcpHandler(req);
 }
 
-export async function GET(req: Request): Promise<Response> {
-  if (!checkBearer(req)) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-  // SSE is disabled. Return 405 — spec-compliant for Streamable HTTP only.
-  return new Response('Method Not Allowed', { status: 405 });
+export async function GET(): Promise<Response> {
+  // Always 404 for GET — SSE is disabled and we never want Claude.ai to
+  // interpret a 401 here as "OAuth required" and trigger its sign-in flow.
+  return new Response('Not Found', { status: 404 });
 }
