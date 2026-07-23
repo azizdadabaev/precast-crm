@@ -2,13 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ok } from "@/lib/api";
+import { ok, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
 import { GazoblokStockAdjustSchema } from "@/lib/gazoblok-validation";
 
-/** GET /api/gazoblok/stock — gazoblok.view. Active sizes + current quantity. */
+/** GET /api/gazoblok/stock — auth-only (open to all logged-in users —
+ *  owner decision). Active sizes + current quantity. */
 export const GET = withAuth(async () => {
   const products = await prisma.gazoblokProduct.findMany({
     where: { active: true },
@@ -18,9 +19,17 @@ export const GET = withAuth(async () => {
   return ok(products);
 });
 
-/** POST /api/gazoblok/stock — gazoblok.production. Manual signed adjustment. */
+/** POST /api/gazoblok/stock — auth-only (open to all logged-in users —
+ *  owner decision). Manual signed adjustment. */
 export const POST = withAuth(async (req: NextRequest, { user }) => {
   const body = GazoblokStockAdjustSchema.parse(await req.json());
+  const product = await prisma.gazoblokProduct.findUnique({
+    where: { id: body.productId },
+    select: { id: true },
+  });
+  if (!product) {
+    return fail("Маҳсулот топилмади · Product not found", 422);
+  }
   const result = await prisma.$transaction((tx) =>
     applyGazoblokMovement(tx, body.productId, body.change, {
       reason: "MANUAL_ADJUSTMENT",

@@ -13,11 +13,18 @@ import { orderTotal, lineTotal, blockVolumeM3 } from "@/services/gazoblok-engine
 import { nextGazoblokOrderNumber, gazoblokMonthPrefix } from "@/lib/gazoblok-number";
 import { PlaceGazoblokOrderSchema } from "@/lib/gazoblok-validation";
 
-/** GET /api/gazoblok/orders — gazoblok.view. Filter by q / status. */
+const ORDER_STATUSES = ["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"] as const;
+
+/** GET /api/gazoblok/orders — auth-only (open to all logged-in users —
+ *  owner decision). Filter by q / status. */
 export const GET = withAuth(async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
-  const status = searchParams.get("status") ?? undefined;
+  // Whitelist against the enum — an arbitrary string would throw deep in Prisma.
+  const statusParam = searchParams.get("status");
+  const status = (ORDER_STATUSES as readonly string[]).includes(statusParam ?? "")
+    ? (statusParam as (typeof ORDER_STATUSES)[number])
+    : undefined;
 
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
@@ -58,7 +65,8 @@ async function createWithRetry<T>(create: () => Promise<T>): Promise<T> {
 }
 
 /**
- * POST /api/gazoblok/orders — gazoblok.order. Atomic:
+ * POST /api/gazoblok/orders — auth-only (open to all logged-in users —
+ * owner decision). Atomic:
  *   1. Resolve/create the Client (dedup by normalized phone)
  *   2. Snapshot each line's product label + unit price + quantity
  *   3. Allocate "B-YYYY-MM-NNNN" for the month

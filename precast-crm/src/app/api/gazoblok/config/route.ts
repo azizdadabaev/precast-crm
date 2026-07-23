@@ -2,19 +2,21 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
 import { ok } from "@/lib/api";
-import { withAuth } from "@/lib/api-auth";
+import { withAuth, withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { loadGazoblokGrade, saveGazoblokGrade } from "@/lib/gazoblok-config";
 import { GazoblokGradeSchema } from "@/lib/gazoblok-validation";
 
-/** GET /api/gazoblok/config — gazoblok.view. The single density-grade label. */
+/** GET /api/gazoblok/config — auth-only (open to all logged-in users —
+ *  owner decision). The single density-grade label. */
 export const GET = withAuth(async () => {
   const grade = await loadGazoblokGrade();
   return ok({ grade });
 });
 
-/** PUT /api/gazoblok/config — gazoblok.manage. Set the grade label. */
-export const PUT = withAuth(async (req: NextRequest, { user }) => {
+/** PUT /api/gazoblok/config — pricing.edit (config mutation, owner decision
+ *  2026-07-23). Set the grade label. */
+export const PUT = withPermission("pricing.edit", async (req: NextRequest, { user }) => {
   const { grade } = GazoblokGradeSchema.parse(await req.json());
   const saved = await saveGazoblokGrade(grade);
   recordAudit({

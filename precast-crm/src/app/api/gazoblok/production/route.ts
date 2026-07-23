@@ -2,13 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ok, created } from "@/lib/api";
+import { ok, created, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
 import { GazoblokProductionSchema } from "@/lib/gazoblok-validation";
 
-/** GET /api/gazoblok/production — gazoblok.view. Recent production entries. */
+/** GET /api/gazoblok/production — auth-only (open to all logged-in users —
+ *  owner decision). Recent production entries. */
 export const GET = withAuth(async () => {
   const entries = await prisma.gazoblokProductionEntry.findMany({
     orderBy: { producedAt: "desc" },
@@ -21,10 +22,22 @@ export const GET = withAuth(async () => {
   return ok(entries);
 });
 
-/** POST /api/gazoblok/production — gazoblok.production. Log a day's output;
- *  increments stock per line via the ledger. */
+/** POST /api/gazoblok/production — auth-only (open to all logged-in users —
+ *  owner decision). Log a day's output; increments stock per line via the
+ *  ledger. */
 export const POST = withAuth(async (req: NextRequest, { user }) => {
   const body = GazoblokProductionSchema.parse(await req.json());
+  const productIds = Array.from(new Set(body.lines.map((l) => l.productId)));
+  const products = await prisma.gazoblokProduct.findMany({
+    where: { id: { in: productIds } },
+    select: { id: true },
+  });
+  const known = new Set(products.map((p) => p.id));
+  for (const l of body.lines) {
+    if (!known.has(l.productId)) {
+      return fail(`Маҳсулот топилмади · Product not found: ${l.productId}`, 422);
+    }
+  }
   const entry = await prisma.$transaction(async (tx) => {
     const e = await tx.gazoblokProductionEntry.create({
       data: {

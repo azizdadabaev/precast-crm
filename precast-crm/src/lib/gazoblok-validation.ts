@@ -98,7 +98,13 @@ export const GazoblokOrderActionSchema = z.discriminatedUnion("action", [
 
 /** Log a day's production (one line per product). */
 export const GazoblokProductionSchema = z.object({
-  producedAt: z.coerce.date().optional(),
+  // Bound checked per-request via .refine — z.date().max(new Date(...)) would
+  // freeze the cutoff at module-load time. 5 min of clock-skew tolerance.
+  producedAt: z.coerce.date()
+    .refine((d) => d.getTime() <= Date.now() + 5 * 60_000, {
+      message: "Келажак санаси мумкин эмас · Future date not allowed",
+    })
+    .optional(),
   notes: z.string().trim().optional(),
   lines: z.array(OrderLineSchema).min(1),
 });
@@ -106,6 +112,8 @@ export const GazoblokProductionSchema = z.object({
 /** Manual stock correction (signed change). */
 export const GazoblokStockAdjustSchema = z.object({
   productId: z.string().min(1),
-  change: z.number().int(),
+  change: z.number().int().refine((c) => c !== 0, {
+    message: "Ўзгариш 0 бўлиши мумкин эмас · Change cannot be zero",
+  }),
   note: z.string().trim().optional(),
 });

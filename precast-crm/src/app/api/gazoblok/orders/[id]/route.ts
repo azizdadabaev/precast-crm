@@ -14,7 +14,8 @@ import {
 import { GazoblokOrderActionSchema } from "@/lib/gazoblok-validation";
 import { paymentStateFor, remainingBalance } from "@/lib/payment-state";
 
-/** GET /api/gazoblok/orders/[id] — gazoblok.view. Full order detail. */
+/** GET /api/gazoblok/orders/[id] — auth-only (open to all logged-in users —
+ *  owner decision). Full order detail. */
 export const GET = withAuth<{ id: string }>(
   async (_req: NextRequest, { params }) => {
     const order = await prisma.gazoblokOrder.findUnique({
@@ -36,7 +37,9 @@ export const GET = withAuth<{ id: string }>(
 );
 
 /**
- * PATCH /api/gazoblok/orders/[id] — gazoblok.order. One of three actions:
+ * PATCH /api/gazoblok/orders/[id] — auth-only (open to all logged-in users —
+ * owner decision), except confirm_payment which enforces payment.confirm
+ * in-handler. One of three actions:
  *   set_status      — move through PLACED → IN_PRODUCTION → DELIVERED / CANCELED.
  *                     DELIVERED decrements stock and is TERMINAL (no cancel after
  *                     delivery). CANCELED is only reachable before delivery, so

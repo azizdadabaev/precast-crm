@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { PlaceGazoblokOrderSchema, GazoblokOrderActionSchema } from "./gazoblok-validation";
+import {
+  PlaceGazoblokOrderSchema,
+  GazoblokOrderActionSchema,
+  GazoblokStockAdjustSchema,
+  GazoblokProductionSchema,
+} from "./gazoblok-validation";
 
 const baseOrder = {
   clientName: "Тест",
@@ -36,5 +41,34 @@ describe("record_payment receiptUrls prefix", () => {
   });
   it("rejects other modules' upload paths", () => {
     expect(rec(["/uploads/inbox/conv1/img.jpg"]).success).toBe(false);
+  });
+});
+
+describe("GazoblokStockAdjustSchema", () => {
+  it("rejects change of 0", () => {
+    expect(GazoblokStockAdjustSchema.safeParse({ productId: "p1", change: 0 }).success).toBe(false);
+  });
+  it("accepts a negative change", () => {
+    expect(GazoblokStockAdjustSchema.safeParse({ productId: "p1", change: -5 }).success).toBe(true);
+  });
+});
+
+describe("GazoblokProductionSchema producedAt", () => {
+  it("rejects a future date", () => {
+    const tomorrow = new Date(Date.now() + 86_400_000);
+    expect(GazoblokProductionSchema.safeParse({
+      lines: [{ productId: "p1", quantity: 5 }], producedAt: tomorrow,
+    }).success).toBe(false);
+  });
+  it("accepts a past date", () => {
+    const yesterday = new Date(Date.now() - 86_400_000);
+    expect(GazoblokProductionSchema.safeParse({
+      lines: [{ productId: "p1", quantity: 5 }], producedAt: yesterday,
+    }).success).toBe(true);
+  });
+  it("accepts an omitted producedAt", () => {
+    expect(GazoblokProductionSchema.safeParse({
+      lines: [{ productId: "p1", quantity: 5 }],
+    }).success).toBe(true);
   });
 });
