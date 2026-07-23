@@ -43,9 +43,14 @@ export const GET = withAuth(async (req: NextRequest) => {
     include: {
       client: { select: { id: true, name: true, phone: true } },
       lines: true,
+      payments: { where: { status: "PENDING_CONFIRMATION" }, select: { id: true } },
     },
   });
-  return ok(orders);
+  // Expose only the count — the raw payments array stays server-side.
+  return ok(orders.map(({ payments, ...rest }) => ({
+    ...rest,
+    pendingPaymentCount: payments.length,
+  })));
 });
 
 /**

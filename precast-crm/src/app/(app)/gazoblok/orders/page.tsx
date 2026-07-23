@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,7 @@ interface GazoblokOrder {
   canceledAt: string | null;
   client: { id: string; name: string; phone: string };
   lines: Array<{ id: string; productLabel: string; unitPrice: string; quantity: number; lineTotal: string }>;
+  pendingPaymentCount: number;
 }
 
 const STATUS_META: Record<
@@ -58,15 +59,23 @@ export default function GazoblokOrdersPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"" | Status>("");
 
-  const { data, isLoading } = useQuery<GazoblokOrder[]>({
-    queryKey: ["gazoblok-orders", q, status],
+  // Debounce the search input so we don't fire a request per keystroke.
+  const [debouncedQ, setDebouncedQ] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQ(q), 250);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  const { data, isLoading, isError, refetch } = useQuery<GazoblokOrder[]>({
+    queryKey: ["gazoblok-orders", debouncedQ, status],
     queryFn: () => {
       const p = new URLSearchParams();
-      if (q.trim()) p.set("q", q.trim());
+      if (debouncedQ.trim()) p.set("q", debouncedQ.trim());
       if (status) p.set("status", status);
       const qs = p.toString();
       return api(`/api/gazoblok/orders${qs ? `?${qs}` : ""}`);
     },
+    placeholderData: keepPreviousData,
   });
 
   const orders = data ?? [];
@@ -144,7 +153,16 @@ export default function GazoblokOrdersPage() {
 
       {/* Table */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
-        {isLoading ? (
+        {isError ? (
+          <div className="p-6 text-center space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {t("Маълумотни юклаб бўлмади. Уланишни текширинг.", "Failed to load. Check your connection.")}
+            </p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              {t("Қайта уриниш", "Retry")}
+            </Button>
+          </div>
+        ) : isLoading ? (
           <div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
         ) : orders.length === 0 ? (
           <div className="p-12 text-center text-muted-foreground">{t("Буюртма йўқ.", "No orders.")}</div>
@@ -193,7 +211,12 @@ export default function GazoblokOrdersPage() {
                         <Chip variant={meta.variant}>{t(meta.uz, meta.en)}</Chip>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
-                        <Chip variant={pay.variant}>{t(pay.uz, pay.en)}</Chip>
+                        <div className="flex flex-col items-start gap-1">
+                          <Chip variant={pay.variant}>{t(pay.uz, pay.en)}</Chip>
+                          {o.pendingPaymentCount > 0 && (
+                            <Chip variant="default">{t("Тасдиқ кутилмоқда", "Awaiting confirmation")}</Chip>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono font-bold">
                         {formatNumber(Number(o.totalPrice), 0)}
