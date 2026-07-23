@@ -71,16 +71,27 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
   let updated;
   try {
     updated = await prisma.$transaction(async (tx) => {
+      // Lock the order row: serializes concurrent loads of sibling shipments
+      // (and set_status) so the sibling-sum guard below reads committed truth
+      // instead of a stale READ COMMITTED snapshot.
+      await tx.$queryRaw`SELECT id FROM gazoblok_orders WHERE id = ${params.id} FOR UPDATE`;
+
       // Over-load guard: this shipment + the OTHER shipments must not exceed
       // the order's per-line block totals. Runs inside the tx so the sibling
       // sum and the loadedLines write are atomic.
       const fresh = await tx.gazoblokOrder.findUniqueOrThrow({
         where: { id: params.id },
         select: {
+          status: true,
           lines: { select: { id: true, quantity: true } },
           shipments: { where: { id: { not: params.sid } }, select: { loadedLines: true } },
         },
       });
+      // Re-check under the lock: a racing set_status may have closed the order
+      // after the pre-tx fast-path check passed.
+      if (fresh.status === "CANCELED" || fresh.status === "DELIVERED") {
+        throw new Error("GAZOBLOK_ORDER_CLOSED");
+      }
       const totals = new Map(fresh.lines.map((l) => [l.id, l.quantity]));
       const other: Record<string, number> = {};
       for (const s of fresh.shipments) {
@@ -124,6 +135,9 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
         `Жўнатма миқдори ошиб кетди · Line over-loaded: already ${ov.already} + ${ov.count} > ${ov.total}`,
         422,
       );
+    }
+    if (e instanceof Error && e.message === "GAZOBLOK_ORDER_CLOSED") {
+      return fail("Буюртма ёпилган — юклаб бўлмайди · Order is closed — cannot load", 409);
     }
     throw e;
   }
