@@ -1,9 +1,12 @@
 "use client";
 
-import { useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Camera, Upload, Loader2, ChevronDown, ChevronUp, Zap, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useT } from "@/lib/i18n";
+import { formatNumber } from "@/lib/utils";
 import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 import {
   distributeGazoblokLoad,
@@ -22,6 +25,17 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+}
+
+// Capacity/count fields hold STRINGS while editing so the user can clear a
+// field to type a new value without it snapping back to a default mid-edit.
+// Parsing (with defaults) happens on blur and inside applyDistribution.
+function parseTruckCount(s: string): number {
+  return Math.max(1, parseInt(s, 10) || 1);
+}
+function parseCapacity(s: string): number {
+  const n = parseInt(s, 10);
+  return n >= 1 ? n : 10000;
 }
 
 export function GazoblokSplitShipmentModal({
@@ -49,10 +63,20 @@ export function GazoblokSplitShipmentModal({
   const [error, setError] = useState<string | null>(null);
 
   const [distOpen, setDistOpen] = useState(false);
-  const [uniformCapacity, setUniformCapacity] = useState<number>(10000);
-  const [truckCount, setTruckCount] = useState<number>(2);
+  const [uniformCapacity, setUniformCapacity] = useState("10000");
+  const [truckCount, setTruckCount] = useState("2");
   const [useVaried, setUseVaried] = useState(false);
-  const [variedCapacities, setVariedCapacities] = useState<number[]>([10000, 10000]);
+  const [variedCapacities, setVariedCapacities] = useState<string[]>(["10000", "10000"]);
+
+  // Revoke every outstanding preview URL on unmount; removeFile revokes
+  // per-item as previews are deleted.
+  const previewsRef = useRef<string[]>([]);
+  previewsRef.current = previews;
+  useEffect(() => {
+    return () => {
+      for (const url of previewsRef.current) URL.revokeObjectURL(url);
+    };
+  }, []);
 
   // Signed remaining after this shipment's inputs (NEGATIVE = over-loaded). Unlike
   // `available` (clamped at 0) this is honest, so the UI can flag it red and block
@@ -88,13 +112,19 @@ export function GazoblokSplitShipmentModal({
 
   function removeFile(i: number) {
     setFiles((prev) => prev.filter((_, j) => j !== i));
-    setPreviews((prev) => prev.filter((_, j) => j !== i));
+    setPreviews((prev) => {
+      const url = prev[i];
+      if (url) URL.revokeObjectURL(url);
+      return prev.filter((_, j) => j !== i);
+    });
   }
 
   function applyDistribution() {
     const trucks: GazoblokTruck[] = useVaried
-      ? variedCapacities.map((c) => ({ capacityKg: c }))
-      : Array.from({ length: truckCount }, () => ({ capacityKg: uniformCapacity }));
+      ? variedCapacities.map((c) => ({ capacityKg: parseCapacity(c) }))
+      : Array.from({ length: parseTruckCount(truckCount) }, () => ({
+          capacityKg: parseCapacity(uniformCapacity),
+        }));
 
     const { shipments, warnings } = distributeGazoblokLoad(lines, trucks);
     if (warnings.length > 0) setError(warnings.join(" · "));
@@ -136,14 +166,19 @@ export function GazoblokSplitShipmentModal({
     }
   }
 
+  const capacityInputClass = "w-24 h-auto px-2 py-1 font-mono";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-auto">
-      <div className="bg-background rounded-lg border shadow-xl w-full max-w-xl space-y-4 p-5 my-4 max-h-[calc(100dvh-2rem)] overflow-y-auto">
-        <div className="flex items-baseline justify-between">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !loading) onClose(); }}>
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-xl p-5 max-h-[calc(100dvh-2rem)] overflow-y-auto"
+      >
+        <DialogHeader>
+          <DialogTitle className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             Жўнатма {shipment.number}<span className="lang-en"> · Shipment {shipment.number} — Load</span>
-          </div>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
 
         {/* Weight distributor accordion */}
         <div className="border rounded-md overflow-hidden">
@@ -156,7 +191,7 @@ export function GazoblokSplitShipmentModal({
               <Zap className="h-3.5 w-3.5 text-amber-500" />
               {t("Вазн бўйича тақсимлаш", "Distribute by weight")}
               <span className="text-xs text-muted-foreground font-normal">
-                — {t("умумий", "total")} {Math.round(orderWeight).toLocaleString("ru-RU")} кг
+                — {t("умумий", "total")} {formatNumber(Math.round(orderWeight), 0)} кг
               </span>
             </div>
             {distOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -177,23 +212,27 @@ export function GazoblokSplitShipmentModal({
 
               {!useVaried ? (
                 <div className="flex items-center gap-2 text-sm">
-                  <input
+                  <Input
                     type="number"
                     min={1}
                     value={truckCount}
+                    aria-label={t("Машиналар сони", "Truck count")}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setTruckCount(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-16 border rounded px-2 py-1 text-center font-mono"
+                    onChange={(e) => setTruckCount(e.target.value)}
+                    onBlur={() => setTruckCount(String(parseTruckCount(truckCount)))}
+                    className="w-16 h-auto px-2 py-1 text-center font-mono"
                   />
                   <span className="text-muted-foreground">{t("та машина ×", "trucks ×")}</span>
-                  <input
+                  <Input
                     type="number"
                     min={1000}
                     step={500}
                     value={uniformCapacity}
+                    aria-label={t("Машина сиғими, кг", "Truck capacity, kg")}
                     onFocus={(e) => e.target.select()}
-                    onChange={(e) => setUniformCapacity(parseInt(e.target.value) || 10000)}
-                    className="w-24 border rounded px-2 py-1 font-mono"
+                    onChange={(e) => setUniformCapacity(e.target.value)}
+                    onBlur={() => setUniformCapacity(String(parseCapacity(uniformCapacity)))}
+                    className={capacityInputClass}
                   />
                   <span className="text-muted-foreground">кг</span>
                 </div>
@@ -204,18 +243,24 @@ export function GazoblokSplitShipmentModal({
                       <span className="text-muted-foreground w-20 text-xs">
                         {t("Жўнатма", "Shipment")} {i + 1}:
                       </span>
-                      <input
+                      <Input
                         type="number"
                         min={1000}
                         step={500}
                         value={cap}
+                        aria-label={`${t("Машина сиғими, кг", "Truck capacity, kg")} ${i + 1}`}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) => {
                           const v = [...variedCapacities];
-                          v[i] = parseInt(e.target.value) || 10000;
+                          v[i] = e.target.value;
                           setVariedCapacities(v);
                         }}
-                        className="w-24 border rounded px-2 py-1 font-mono"
+                        onBlur={() => {
+                          const v = [...variedCapacities];
+                          v[i] = String(parseCapacity(v[i] ?? ""));
+                          setVariedCapacities(v);
+                        }}
+                        className={capacityInputClass}
                       />
                       <span className="text-muted-foreground">кг</span>
                     </div>
@@ -224,9 +269,9 @@ export function GazoblokSplitShipmentModal({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setVariedCapacities([...variedCapacities, 10000])}
+                      onClick={() => setVariedCapacities([...variedCapacities, "10000"])}
                     >
-                      + Машина
+                      {t("+ Машина", "+ Truck")}
                     </Button>
                     {variedCapacities.length > 1 && (
                       <Button
@@ -234,7 +279,7 @@ export function GazoblokSplitShipmentModal({
                         variant="outline"
                         onClick={() => setVariedCapacities(variedCapacities.slice(0, -1))}
                       >
-                        − Машина
+                        {t("− Машина", "− Truck")}
                       </Button>
                     )}
                   </div>
@@ -270,11 +315,12 @@ export function GazoblokSplitShipmentModal({
                       {l.quantity}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <input
+                      <Input
                         type="number"
                         min={0}
                         max={available[l.lineId] ?? 0}
                         value={inputs[l.lineId] ?? 0}
+                        aria-label={l.label}
                         onFocus={(e) => e.target.select()}
                         onChange={(e) =>
                           setInputs((prev) => ({
@@ -282,7 +328,7 @@ export function GazoblokSplitShipmentModal({
                             [l.lineId]: Math.max(0, parseInt(e.target.value) || 0),
                           }))
                         }
-                        className={`w-20 border rounded px-2 py-1 text-right font-mono focus:ring-1 ring-primary ${rem < 0 ? "border-destructive ring-destructive" : ""}`}
+                        className={`w-20 h-auto px-2 py-1 text-right font-mono focus:ring-1 ring-primary ${rem < 0 ? "border-destructive ring-destructive" : ""}`}
                       />
                     </td>
                     <td className={`px-3 py-2 text-right font-mono ${rem < 0 ? "text-destructive font-bold" : rem > 0 ? "text-amber-600" : "text-emerald-600"}`}>
@@ -297,13 +343,13 @@ export function GazoblokSplitShipmentModal({
                   {t("Вазн, кг", "Weight, kg")}
                 </td>
                 <td className="px-3 py-2 text-right font-mono font-semibold text-muted-foreground">
-                  {Math.round(orderWeight).toLocaleString("ru-RU")}
+                  {formatNumber(Math.round(orderWeight), 0)}
                 </td>
                 <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">
-                  {Math.round(thisShipmentWeight).toLocaleString("ru-RU")}
+                  {formatNumber(Math.round(thisShipmentWeight), 0)}
                 </td>
                 <td className={`px-3 py-2 text-right font-mono font-semibold ${remainingWeight > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-                  {Math.round(remainingWeight).toLocaleString("ru-RU")}
+                  {formatNumber(Math.round(remainingWeight), 0)}
                 </td>
               </tr>
             </tbody>
@@ -325,7 +371,7 @@ export function GazoblokSplitShipmentModal({
               <div className="flex flex-wrap gap-2 justify-center">
                 {previews.map((src, i) => (
                   <div key={i} className="relative">
-                    <img src={src} alt="preview" className="max-h-28 rounded object-cover" />
+                    <img src={src} alt={t("Расм", "Photo")} className="max-h-28 rounded object-cover" />
                     <button
                       type="button"
                       className="absolute -top-1.5 -right-1.5 bg-background border rounded-full p-0.5 shadow hover:bg-destructive hover:text-white"
@@ -376,7 +422,7 @@ export function GazoblokSplitShipmentModal({
             {t("Жўнатмани юклаш", "Save shipment load")}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
