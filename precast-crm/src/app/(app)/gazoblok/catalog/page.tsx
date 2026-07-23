@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, Loader2, Plus, Save } from "lucide-react";
 import { api } from "@/lib/fetcher";
@@ -62,6 +62,17 @@ function productToDraft(p: Product): RowDraft {
   };
 }
 
+function draftsEqual(a: RowDraft, b: RowDraft): boolean {
+  return (
+    a.label === b.label &&
+    a.lengthM === b.lengthM &&
+    a.heightM === b.heightM &&
+    a.thicknessM === b.thicknessM &&
+    a.pricePerBlock === b.pricePerBlock &&
+    a.lowStockThreshold === b.lowStockThreshold
+  );
+}
+
 function isPositive(s: string): boolean {
   if (s.trim() === "") return false;
   const n = Number(s);
@@ -110,8 +121,6 @@ export default function GazoblokCatalogPage() {
     queryFn: () => api("/api/gazoblok/config"),
   });
 
-  const [error, setError] = useState<string | null>(null);
-
   // ── Grade draft ───────────────────────────────────────────────
   const [grade, setGrade] = useState<string>("");
   useEffect(() => {
@@ -122,45 +131,91 @@ export default function GazoblokCatalogPage() {
     mutationFn: () =>
       api("/api/gazoblok/config", { method: "PUT", json: { grade: grade.trim() } }),
     onSuccess: () => {
-      setError(null);
       qc.invalidateQueries({ queryKey: ["gazoblok", "config"] });
     },
-    onError: (e: Error) => setError(e.message),
   });
 
   // ── Per-row edit drafts, keyed by product id ──────────────────
+  // baselineRef holds the last server snapshot each draft was built
+  // from. On refetch we overwrite a draft ONLY if it still equals its
+  // baseline — an operator's in-progress edits on row B must survive a
+  // refetch triggered by saving row A.
   const [drafts, setDrafts] = useState<Record<string, RowDraft>>({});
+  const baselineRef = useRef<Record<string, RowDraft>>({});
   useEffect(() => {
-    if (productsQuery.data) {
-      setDrafts(
-        Object.fromEntries(productsQuery.data.map((p) => [p.id, productToDraft(p)])),
-      );
-    }
+    const data = productsQuery.data;
+    if (!data) return;
+    setDrafts((prev) => {
+      const next: Record<string, RowDraft> = {};
+      for (const p of data) {
+        const fresh = productToDraft(p);
+        const existing = prev[p.id];
+        const baseline = baselineRef.current[p.id];
+        next[p.id] =
+          existing && baseline && !draftsEqual(existing, baseline)
+            ? existing
+            : fresh;
+      }
+      return next;
+    });
+    baselineRef.current = Object.fromEntries(
+      data.map((p) => [p.id, productToDraft(p)]),
+    );
   }, [productsQuery.data]);
 
   const patchProduct = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) =>
       api(`/api/gazoblok/products/${id}`, { method: "PATCH", json: body }),
-    onSuccess: () => {
-      setError(null);
+    onSuccess: (_data, { id }) => {
+      // Drop the saved row's baseline so the refetch snapshot resets it.
+      delete baselineRef.current[id];
       qc.invalidateQueries({ queryKey: ["gazoblok", "products"] });
+      qc.invalidateQueries({ queryKey: ["gazoblok", "stock"] });
     },
-    onError: (e: Error) => setError(e.message),
   });
 
   const disableProduct = useMutation({
     mutationFn: (id: string) =>
       api(`/api/gazoblok/products/${id}`, { method: "DELETE" }),
-    onSuccess: () => {
-      setError(null);
+    onSuccess: (_data, id) => {
+      delete baselineRef.current[id];
       qc.invalidateQueries({ queryKey: ["gazoblok", "products"] });
+      qc.invalidateQueries({ queryKey: ["gazoblok", "stock"] });
     },
-    onError: (e: Error) => setError(e.message),
   });
 
+  // ── Archive two-tap confirm ───────────────────────────────────
+  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    },
+    [],
+  );
+  const handleArchiveClick = (id: string) => {
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    if (confirmArchiveId === id) {
+      setConfirmArchiveId(null);
+      disableProduct.mutate(id);
+      return;
+    }
+    setConfirmArchiveId(id);
+    confirmTimerRef.current = setTimeout(() => setConfirmArchiveId(null), 3000);
+  };
+
   // ── Add-size form (dims in MILLIMETRES) ───────────────────────
-  const emptyAdd = { label: "", lengthMm: "", heightMm: "", thicknessMm: "", pricePerBlock: "" };
+  const emptyAdd = {
+    label: "",
+    lengthMm: "",
+    heightMm: "",
+    thicknessMm: "",
+    pricePerBlock: "",
+    lowStockThreshold: "50",
+  };
   const [add, setAdd] = useState(emptyAdd);
+  // Client-side duplicate-dims pre-check message (server also 422s).
+  const [dupError, setDupError] = useState<string | null>(null);
 
   const createProduct = useMutation({
     mutationFn: () => {
@@ -177,23 +232,16 @@ export default function GazoblokCatalogPage() {
           heightM: H / 1000,
           thicknessM: T / 1000,
           pricePerBlock: Number(add.pricePerBlock),
-          lowStockThreshold: 50,
+          lowStockThreshold: Number(add.lowStockThreshold),
         },
       });
     },
     onSuccess: () => {
-      setError(null);
       setAdd(emptyAdd);
       qc.invalidateQueries({ queryKey: ["gazoblok", "products"] });
+      qc.invalidateQueries({ queryKey: ["gazoblok", "stock"] });
     },
-    onError: (e: Error) => setError(e.message),
   });
-
-  if (productsQuery.isLoading || configQuery.isLoading) {
-    return (
-      <div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
-    );
-  }
 
   const products = productsQuery.data ?? [];
   const gradeDirty = grade.trim() !== (configQuery.data?.grade ?? "");
@@ -202,7 +250,27 @@ export default function GazoblokCatalogPage() {
     isPositive(add.lengthMm) &&
     isPositive(add.heightMm) &&
     isPositive(add.thicknessMm) &&
-    isNonNeg(add.pricePerBlock);
+    isNonNeg(add.pricePerBlock) &&
+    isNonNeg(add.lowStockThreshold);
+
+  /** Mirrors the server's duplicate check: same dims on an ACTIVE size. */
+  const sameDim = (storedM: string, typedMm: string) =>
+    Math.abs(Number(storedM) * 1000 - Number(typedMm)) < 0.001;
+  const submitAdd = () => {
+    const duplicate = products.some(
+      (p) =>
+        p.active &&
+        sameDim(p.lengthM, add.lengthMm) &&
+        sameDim(p.heightM, add.heightMm) &&
+        sameDim(p.thicknessM, add.thicknessMm),
+    );
+    if (duplicate) {
+      setDupError("Бу ўлчам аллақачон мавжуд · This size already exists");
+      return;
+    }
+    setDupError(null);
+    createProduct.mutate();
+  };
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -223,12 +291,6 @@ export default function GazoblokCatalogPage() {
         </p>
       </div>
 
-      {error && (
-        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
-          {error}
-        </div>
-      )}
-
       {/* Grade section */}
       <section className="rounded-lg border border-border bg-card overflow-hidden">
         <header className="px-4 py-3 border-b">
@@ -243,35 +305,53 @@ export default function GazoblokCatalogPage() {
             )}
           </div>
         </header>
-        <div className="p-3 flex items-end gap-3 flex-wrap">
-          <div>
-            <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
-              {t("Марка", "Grade")}
-            </label>
-            <Input
-              className="w-40"
-              placeholder="D500"
-              value={grade}
-              onChange={(e) => setGrade(e.target.value)}
-            />
+        {configQuery.isLoading ? (
+          <div className="p-4 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
+        ) : configQuery.isError ? (
+          <div className="p-6 text-center space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {t("Маълумотни юклаб бўлмади. Уланишни текширинг.", "Failed to load. Check your connection.")}
+            </p>
+            <Button variant="outline" size="sm" onClick={() => configQuery.refetch()}>
+              {t("Қайта уриниш", "Retry")}
+            </Button>
           </div>
-          <Button
-            disabled={!gradeDirty || grade.trim() === "" || saveGrade.isPending}
-            onClick={() => saveGrade.mutate()}
-          >
-            {saveGrade.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
-            {t("Сақлаш", "Save")}
-          </Button>
-          {configQuery.data?.grade && (
-            <div className="text-xs text-muted-foreground">
-              {t("Жорий:", "Current:")} {configQuery.data.grade}
+        ) : (
+          <div className="p-3 flex items-end gap-3 flex-wrap">
+            <div>
+              <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
+                {t("Марка", "Grade")}
+              </label>
+              <Input
+                className="w-40"
+                placeholder="D500"
+                value={grade}
+                onChange={(e) => setGrade(e.target.value)}
+              />
             </div>
-          )}
-        </div>
+            <Button
+              disabled={!gradeDirty || grade.trim() === "" || saveGrade.isPending}
+              onClick={() => saveGrade.mutate()}
+            >
+              {saveGrade.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              {t("Сақлаш", "Save")}
+            </Button>
+            {configQuery.data?.grade && (
+              <div className="text-xs text-muted-foreground">
+                {t("Жорий:", "Current:")} {configQuery.data.grade}
+              </div>
+            )}
+            {saveGrade.isError && (
+              <div className="text-sm text-destructive w-full">
+                {(saveGrade.error as Error).message}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Catalog */}
@@ -289,7 +369,18 @@ export default function GazoblokCatalogPage() {
           </div>
         </header>
 
-        {products.length === 0 ? (
+        {productsQuery.isLoading ? (
+          <div className="p-4 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
+        ) : productsQuery.isError ? (
+          <div className="p-6 text-center space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {t("Маълумотни юклаб бўлмади. Уланишни текширинг.", "Failed to load. Check your connection.")}
+            </p>
+            <Button variant="outline" size="sm" onClick={() => productsQuery.refetch()}>
+              {t("Қайта уриниш", "Retry")}
+            </Button>
+          </div>
+        ) : products.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">
             {t("Ҳозирча ўлчамлар йўқ.", "No sizes yet.")}
           </div>
@@ -327,28 +418,24 @@ export default function GazoblokCatalogPage() {
                     isPositive(d.heightM) &&
                     isPositive(d.thicknessM);
                   if (dimsOk) {
+                    const priceOk = isPositive(d.pricePerBlock);
                     const bp = toBlockProduct(
                       d.lengthM,
                       d.heightM,
                       d.thicknessM,
-                      d.pricePerBlock || "0",
+                      priceOk ? d.pricePerBlock : "0",
                     );
                     try {
-                      perM3 = formatNumber(pricePerM3(bp), 0);
+                      // A non-positive price makes the derived m³ price
+                      // meaningless — keep the dash instead of "0".
+                      if (priceOk) perM3 = formatNumber(pricePerM3(bp), 0);
                       perM3Count = formatNumber(blocksPerM3(bp), 1);
                     } catch {
                       // dims invalid for the engine — leave dashes
                     }
                   }
 
-                  const baseline = productToDraft(p);
-                  const rowDirty =
-                    d.label !== baseline.label ||
-                    d.lengthM !== baseline.lengthM ||
-                    d.heightM !== baseline.heightM ||
-                    d.thicknessM !== baseline.thicknessM ||
-                    d.pricePerBlock !== baseline.pricePerBlock ||
-                    d.lowStockThreshold !== baseline.lowStockThreshold;
+                  const rowDirty = !draftsEqual(d, productToDraft(p));
 
                   const rowValid =
                     d.label.trim() !== "" &&
@@ -430,7 +517,7 @@ export default function GazoblokCatalogPage() {
                         />
                       </td>
                       <td className="px-3 py-2 align-top text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-                        <div>{perM3} UZS/m³</div>
+                        <div>{perM3} {t("UZS/м³", "UZS/m³")}</div>
                         <div>{perM3Count} {t("блок/м³", "blocks/m³")}</div>
                       </td>
                       <td className="px-3 py-2 align-top text-right tabular-nums whitespace-nowrap">
@@ -470,9 +557,11 @@ export default function GazoblokCatalogPage() {
                                 disableProduct.isPending &&
                                 disableProduct.variables === p.id
                               }
-                              onClick={() => disableProduct.mutate(p.id)}
+                              onClick={() => handleArchiveClick(p.id)}
                             >
-                              {t("Ўчириш", "Disable")}
+                              {confirmArchiveId === p.id
+                                ? t("Тасдиқлайсизми?", "Confirm?")
+                                : t("Архивлаш", "Archive")}
                             </Button>
                           ) : (
                             <Button
@@ -489,6 +578,18 @@ export default function GazoblokCatalogPage() {
                               {t("Қайта ёқиш", "Re-enable")}
                             </Button>
                           )}
+                          {patchProduct.isError &&
+                            patchProduct.variables?.id === p.id && (
+                              <div className="text-[11px] text-destructive text-right max-w-[12rem] whitespace-normal">
+                                {(patchProduct.error as Error).message}
+                              </div>
+                            )}
+                          {disableProduct.isError &&
+                            disableProduct.variables === p.id && (
+                              <div className="text-[11px] text-destructive text-right max-w-[12rem] whitespace-normal">
+                                {(disableProduct.error as Error).message}
+                              </div>
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -585,9 +686,24 @@ export default function GazoblokCatalogPage() {
               onChange={(e) => setAdd({ ...add, pricePerBlock: e.target.value })}
             />
           </div>
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-muted-foreground mb-1">
+              {t("Кам захира чегараси", "Low-stock threshold")}
+            </label>
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              step={1}
+              className="w-24 tabular-nums"
+              placeholder="50"
+              value={add.lowStockThreshold}
+              onChange={(e) => setAdd({ ...add, lowStockThreshold: e.target.value })}
+            />
+          </div>
           <Button
             disabled={!addValid || createProduct.isPending}
-            onClick={() => createProduct.mutate()}
+            onClick={submitAdd}
           >
             {createProduct.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -596,6 +712,11 @@ export default function GazoblokCatalogPage() {
             )}
             {t("Қўшиш", "Add")}
           </Button>
+          {(dupError || createProduct.isError) && (
+            <div className="text-sm text-destructive w-full">
+              {dupError ?? (createProduct.error as Error).message}
+            </div>
+          )}
         </div>
       </section>
     </div>
