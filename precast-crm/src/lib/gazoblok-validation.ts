@@ -41,6 +41,19 @@ const OrderLineSchema = z.object({
   quantity: z.number().int().positive(),
 });
 
+// Receipt URLs must point at files the gazoblok uploader actually mints
+// (see /api/gazoblok/upload-receipt → saveBufferToUploads('receipts/gazoblok/<userId>')).
+const GazoblokUploadUrl = z.string().refine(
+  (u) => u.startsWith("/uploads/receipts/gazoblok/"),
+  { message: "Нотўғри файл манзили · Invalid receipt URL" },
+);
+
+// Delivery proofs may also be shipment photos saved under /uploads/gazoblok/orders/<id>/.
+const GazoblokDeliveryProofUrl = z.string().refine(
+  (u) => u.startsWith("/uploads/receipts/gazoblok/") || u.startsWith("/uploads/gazoblok/"),
+  { message: "Нотўғри файл манзили · Invalid proof URL" },
+);
+
 /** Place a new газоблок order. */
 export const PlaceGazoblokOrderSchema = z.object({
   clientName: z.string().trim().min(1),
@@ -52,9 +65,12 @@ export const PlaceGazoblokOrderSchema = z.object({
   deliveryCost: z.number().min(0).default(0),
   scheduledAt: z.coerce.date().optional(),
   notes: z.string().trim().optional(),
-  // Optional up-front payment, recorded as PENDING_CONFIRMATION.
+  // Optional up-front payment (auto-confirmed when the recorder can confirm).
   paidAmount: z.number().min(0).default(0),
   paymentMethod: PaymentMethodEnum.optional(),
+}).refine((b) => b.paidAmount === 0 || !!b.paymentMethod, {
+  message: "Тўлов усулини танланг · Payment method is required when an amount is paid",
+  path: ["paymentMethod"],
 });
 
 /** Actions on an existing order (status flow + payments). */
@@ -63,14 +79,14 @@ export const GazoblokOrderActionSchema = z.discriminatedUnion("action", [
     action: z.literal("set_status"),
     status: z.enum(["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"]),
     reason: z.string().trim().optional(),
-    deliveryProofUrl: z.string().trim().optional(),
+    deliveryProofUrl: GazoblokDeliveryProofUrl.optional(),
   }),
   z.object({
     action: z.literal("record_payment"),
     amount: z.number().positive(),
     method: PaymentMethodEnum,
     notes: z.string().trim().optional(),
-    receiptUrls: z.array(z.string()).max(20).default([]),
+    receiptUrls: z.array(GazoblokUploadUrl).max(20).default([]),
   }),
   z.object({
     action: z.literal("confirm_payment"),

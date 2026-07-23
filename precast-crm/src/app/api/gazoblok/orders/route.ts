@@ -4,6 +4,8 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
+import { can } from "@/lib/permissions";
+import { paymentStateFor } from "@/lib/payment-state";
 import { recordAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { orderTotal, lineTotal, blockVolumeM3 } from "@/services/gazoblok-engine";
@@ -164,14 +166,18 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
       include: { client: true, lines: true },
     });
 
-    // 4. Optional up-front payment
+    // 4. Optional up-front payment. A recorder with payment.confirm is the
+    //    confirming authority — their payment lands CONFIRMED in one step.
     if (paidAmount > 0 && body.paymentMethod) {
-      await tx.gazoblokPayment.create({
+      const autoConfirm = can(user, "payment.confirm");
+      const now = new Date();
+      const p = await tx.gazoblokPayment.create({
         data: {
           orderId: createdOrder.id,
           amount: paidAmount,
           method: body.paymentMethod,
-          status: "PENDING_CONFIRMATION",
+          status: autoConfirm ? "CONFIRMED" : "PENDING_CONFIRMATION",
+          ...(autoConfirm ? { confirmedById: user.id, confirmedAt: now } : {}),
           recordedById: user.id,
         },
       });
@@ -184,6 +190,24 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
           payload: { amount: paidAmount, method: body.paymentMethod, atPlacement: true },
         },
       });
+      if (autoConfirm) {
+        const paymentState = paymentStateFor(paidAmount, 0, totals.total);
+        const updatedOrder = await tx.gazoblokOrder.update({
+          where: { id: createdOrder.id },
+          data: { confirmedPaid: paidAmount, paymentState },
+          include: { client: true, lines: true },
+        });
+        await tx.gazoblokOrderEvent.create({
+          data: {
+            orderId: createdOrder.id,
+            type: "PAYMENT_CONFIRMED",
+            actorId: user.id,
+            message: `Payment ${p.id.slice(-6)} auto-confirmed (recorder has confirm rights): ${paidAmount}`,
+            payload: { paymentId: p.id, amount: paidAmount, autoConfirmed: true },
+          },
+        });
+        return updatedOrder;
+      }
     }
 
     return createdOrder;

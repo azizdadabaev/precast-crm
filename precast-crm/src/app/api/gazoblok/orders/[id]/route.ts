@@ -12,14 +12,7 @@ import {
   restockGazoblokForCancellation,
 } from "@/lib/gazoblok-stock";
 import { GazoblokOrderActionSchema } from "@/lib/gazoblok-validation";
-
-type PaymentState = "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
-
-function recomputePaymentState(totalPrice: number, confirmedPaid: number): PaymentState {
-  if (confirmedPaid <= 0) return "AWAITING_PAYMENT";
-  if (confirmedPaid + 1e-6 >= totalPrice) return "FULLY_PAID";
-  return "PARTIALLY_PAID";
-}
+import { paymentStateFor, remainingBalance } from "@/lib/payment-state";
 
 /** GET /api/gazoblok/orders/[id] — gazoblok.view. Full order detail. */
 export const GET = withAuth<{ id: string }>(
@@ -117,13 +110,38 @@ export const PATCH = withAuth<{ id: string }>(
 
     // ── record_payment ──────────────────────────────────────────
     if (body.action === "record_payment") {
+      if (order.status === "CANCELED") {
+        return fail("Бекор қилинган буюртмага тўлов ёзиб бўлмайди · Cannot record payment on a canceled order", 422);
+      }
+      // Remaining = total − confirmedPaid − sum(PENDING). Blocks double-recording
+      // while a previous payment is still in the owner's queue.
+      const pendingAgg = await prisma.gazoblokPayment.aggregate({
+        where: { orderId: order.id, status: "PENDING_CONFIRMATION" },
+        _sum: { amount: true },
+      });
+      const pendingSum = Number(pendingAgg._sum.amount ?? 0);
+      const remaining = remainingBalance(
+        Number(order.totalPrice), Number(order.confirmedPaid), 0, pendingSum,
+      );
+      if (body.amount > remaining + 0.005) {
+        return fail(
+          `Сумма қолдиқдан ошиб кетди (қолдиқ ${remaining}) · Amount exceeds remaining balance (${remaining})`,
+          422,
+        );
+      }
+
+      // Recorder with payment.confirm is the confirming authority — their own
+      // entries skip the queue and land CONFIRMED in one step.
+      const autoConfirm = can(user, "payment.confirm");
+      const now = new Date();
       const payment = await prisma.$transaction(async (tx) => {
         const p = await tx.gazoblokPayment.create({
           data: {
             orderId: order.id,
             amount: body.amount,
             method: body.method,
-            status: "PENDING_CONFIRMATION",
+            status: autoConfirm ? "CONFIRMED" : "PENDING_CONFIRMATION",
+            ...(autoConfirm ? { confirmedById: user.id, confirmedAt: now } : {}),
             recordedById: user.id,
             notes: body.notes ?? null,
           },
@@ -146,6 +164,31 @@ export const PATCH = withAuth<{ id: string }>(
               source: "CRM_UPLOAD" as const,
               uploadedById: user.id,
             })),
+          });
+        }
+
+        // Auto-confirmed — recompute the order's confirmed total + payment state
+        // now (same effect confirm_payment would have had), and log a
+        // PAYMENT_CONFIRMED event so the audit trail mirrors a manual confirm.
+        if (autoConfirm) {
+          const agg = await tx.gazoblokPayment.aggregate({
+            where: { orderId: order.id, status: "CONFIRMED" },
+            _sum: { amount: true },
+          });
+          const confirmedPaid = Number(agg._sum.amount ?? 0);
+          const paymentState = paymentStateFor(confirmedPaid, 0, Number(order.totalPrice));
+          await tx.gazoblokOrder.update({
+            where: { id: order.id },
+            data: { confirmedPaid, paymentState },
+          });
+          await tx.gazoblokOrderEvent.create({
+            data: {
+              orderId: order.id,
+              type: "PAYMENT_CONFIRMED",
+              actorId: user.id,
+              message: `Payment ${p.id.slice(-6)} auto-confirmed (recorder has confirm rights): ${body.amount}`,
+              payload: { paymentId: p.id, amount: body.amount, autoConfirmed: true },
+            },
           });
         }
         return p;
@@ -193,7 +236,7 @@ export const PATCH = withAuth<{ id: string }>(
         _sum: { amount: true },
       });
       const confirmedPaid = Number(agg._sum.amount ?? 0);
-      const paymentState = recomputePaymentState(Number(order.totalPrice), confirmedPaid);
+      const paymentState = paymentStateFor(confirmedPaid, 0, Number(order.totalPrice));
 
       return tx.gazoblokOrder.update({
         where: { id: order.id },
