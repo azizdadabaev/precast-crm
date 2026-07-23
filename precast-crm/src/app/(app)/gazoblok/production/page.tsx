@@ -7,7 +7,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { cn, formatDate, formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
 // ─────────────────────────────────────────────────────────────────
@@ -90,9 +90,26 @@ export default function GazoblokProductionPage() {
     setLines((rs) => (rs.length === 1 ? rs : rs.filter((r) => r.id !== id)));
   }
 
-  const validLines = lines.filter(
-    (l) => l.productId !== "" && l.quantity !== "" && Number(l.quantity) > 0,
-  );
+  // A line must be either fully empty (stripped at submit) or fully filled
+  // (product + integer qty ≥ 1). Half-filled lines block saving — they must
+  // never be silently dropped.
+  const lineStates = lines.map((l) => {
+    const hasProduct = l.productId !== "";
+    const qtyStr = l.quantity.trim();
+    const qtyNum = Number(qtyStr);
+    const hasValidQty = qtyStr !== "" && Number.isInteger(qtyNum) && qtyNum >= 1;
+    return {
+      line: l,
+      isEmpty: !hasProduct && qtyStr === "",
+      isFilled: hasProduct && hasValidQty,
+      needsProduct: !hasProduct && qtyStr !== "",
+      needsQty: hasProduct && !hasValidQty,
+    };
+  });
+  const filledLines = lineStates.filter((s) => s.isFilled).map((s) => s.line);
+  const hasPartialLine = lineStates.some((s) => !s.isEmpty && !s.isFilled);
+
+  const selectedProductIds = new Set(lines.map((l) => l.productId).filter(Boolean));
 
   const create = useMutation({
     mutationFn: () =>
@@ -101,7 +118,7 @@ export default function GazoblokProductionPage() {
         json: {
           producedAt: new Date(producedAt + "T12:00:00").toISOString(),
           notes: notes.trim() || undefined,
-          lines: validLines.map((l) => ({
+          lines: filledLines.map((l) => ({
             productId: l.productId,
             quantity: Number(l.quantity),
           })),
@@ -117,7 +134,7 @@ export default function GazoblokProductionPage() {
     },
   });
 
-  const canSave = validLines.length > 0 && !create.isPending;
+  const canSave = filledLines.length > 0 && !hasPartialLine && !create.isPending;
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -187,11 +204,11 @@ export default function GazoblokProductionPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {lines.map((l) => (
+              {lineStates.map(({ line: l, needsProduct, needsQty }) => (
                 <tr key={l.id}>
                   <td className="px-2 py-2">
                     <Select
-                      className="h-9"
+                      className={cn("h-9", needsProduct && "border-destructive")}
                       value={l.productId}
                       onChange={(e) => update(l.id, { productId: e.target.value })}
                     >
@@ -200,23 +217,38 @@ export default function GazoblokProductionPage() {
                           ? t("Юкланмоқда…", "Loading…")
                           : t("Ўлчамни танланг…", "Select a size…")}
                       </option>
-                      {activeProducts.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.label}
-                        </option>
-                      ))}
+                      {activeProducts
+                        .filter((p) => p.id === l.productId || !selectedProductIds.has(p.id))
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
                     </Select>
+                    {needsProduct && (
+                      <div className="mt-1 text-xs text-destructive">
+                        {t("Ўлчамни танланг", "Select size")}
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-2">
                     <Input
                       type="number"
                       step="1"
                       min="1"
-                      className="h-9 text-center tabular-nums"
+                      className={cn(
+                        "h-9 text-center tabular-nums",
+                        needsQty && "border-destructive",
+                      )}
                       value={l.quantity}
                       onChange={(e) => update(l.id, { quantity: e.target.value })}
                       placeholder="0"
                     />
+                    {needsQty && (
+                      <div className="mt-1 text-xs text-destructive">
+                        {t("Миқдорни киритинг", "Enter quantity")}
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-2 text-right">
                     <button
@@ -264,9 +296,14 @@ export default function GazoblokProductionPage() {
 
       {/* Recent entries */}
       <section className="space-y-3">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          Сўнгги ёзувлар<span className="lang-en font-normal">{" "}· Recent entries</span>
-        </h2>
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            Сўнгги ёзувлар<span className="lang-en font-normal">{" "}· Recent entries</span>
+          </h2>
+          <div className="text-xs text-text-tertiary">
+            {t("Сўнгги 50 та ёзув", "Last 50 entries")}
+          </div>
+        </div>
 
         {entriesQuery.isLoading ? (
           <div className="text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>

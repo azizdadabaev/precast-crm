@@ -39,31 +39,10 @@ function mToMm(m: string): string {
 
 export default function GazoblokStockPage() {
   const t = useT();
-  const qc = useQueryClient();
 
   const stockQuery = useQuery<Product[]>({
     queryKey: ["gazoblok", "stock"],
     queryFn: () => api("/api/gazoblok/stock"),
-  });
-
-  const adjust = useMutation({
-    mutationFn: ({
-      productId,
-      change,
-      note,
-    }: {
-      productId: string;
-      change: number;
-      note?: string;
-    }) =>
-      api("/api/gazoblok/stock", {
-        method: "POST",
-        json: { productId, change, note: note || undefined },
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["gazoblok", "stock"] });
-      qc.invalidateQueries({ queryKey: ["gazoblok", "products"] });
-    },
   });
 
   const products = (stockQuery.data ?? []).filter((p) => p.active === true);
@@ -120,15 +99,7 @@ export default function GazoblokStockPage() {
               </thead>
               <tbody className="divide-y">
                 {products.map((p) => (
-                  <Row
-                    key={p.id}
-                    product={p}
-                    isPending={adjust.isPending && adjust.variables?.productId === p.id}
-                    onAdjust={(change, note) =>
-                      adjust.mutate({ productId: p.id, change, note })
-                    }
-                    t={t}
-                  />
+                  <Row key={p.id} product={p} t={t} />
                 ))}
               </tbody>
             </table>
@@ -141,15 +112,12 @@ export default function GazoblokStockPage() {
 
 function Row({
   product,
-  isPending,
-  onAdjust,
   t,
 }: {
   product: Product;
-  isPending: boolean;
-  onAdjust: (change: number, note: string) => void;
   t: (uz: string, en: string) => string;
 }) {
+  const qc = useQueryClient();
   const qty = product.stock?.quantity ?? 0;
   const tier = stockTier(qty, product.lowStockThreshold);
 
@@ -164,6 +132,30 @@ function Row({
 
   const [change, setChange] = useState("");
   const [note, setNote] = useState("");
+  const [feedback, setFeedback] = useState<"error" | "warning" | null>(null);
+
+  // Inputs are cleared in onSuccess ONLY — a failed request must keep the
+  // operator's typed values so they can retry.
+  const adjust = useMutation<
+    { resultingQuantity: number },
+    Error,
+    { change: number; note: string }
+  >({
+    mutationFn: ({ change, note }) =>
+      api("/api/gazoblok/stock", {
+        method: "POST",
+        json: { productId: product.id, change, note: note || undefined },
+      }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["gazoblok", "stock"] });
+      qc.invalidateQueries({ queryKey: ["gazoblok", "products"] });
+      setChange("");
+      setNote("");
+      setFeedback(data.resultingQuantity < 0 ? "warning" : null);
+    },
+    onError: () => setFeedback("error"),
+  });
+  const isPending = adjust.isPending;
 
   const changeNum = Number(change);
   const canAdjust =
@@ -175,9 +167,8 @@ function Row({
 
   function submit() {
     if (!canAdjust) return;
-    onAdjust(changeNum, note.trim());
-    setChange("");
-    setNote("");
+    setFeedback(null);
+    adjust.mutate({ change: changeNum, note: note.trim() });
   }
 
   return (
@@ -221,6 +212,16 @@ function Row({
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("Тузатиш", "Adjust")}
           </Button>
         </div>
+        {feedback === "error" && (
+          <div className="mt-1 text-xs text-destructive">
+            {t("Сақлаб бўлмади. Қайта уриниб кўринг.", "Failed to save. Try again.")}
+          </div>
+        )}
+        {feedback === "warning" && (
+          <div className="mt-1 text-xs text-warning">
+            {t("Диққат: захира манфий бўлди", "Warning: stock is now negative")}
+          </div>
+        )}
       </td>
     </tr>
   );
