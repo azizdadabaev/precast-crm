@@ -65,6 +65,25 @@ export const PATCH = withAuth<{ id: string }>(
         return fail("Етказилган буюртмани ўзгартириб бўлмайди · A delivered order can't be changed", 409);
       }
       const next = body.status;
+      if (next === "DELIVERED" && order.status !== "DELIVERED") {
+        // Owner rule (2026-07-23): core parity — no delivery with outstanding debt.
+        const remaining = Number(order.totalPrice) - Number(order.confirmedPaid);
+        if (remaining > 0.005) {
+          return fail(
+            "Тўлиқ тўланмаган буюртмани етказиб бўлмайди — аввал тўловни тасдиқланг · Order must be fully paid before delivery",
+            409,
+          );
+        }
+        const openShipments = await prisma.gazoblokShipment.count({
+          where: { orderId: order.id, status: { not: "DELIVERED" } },
+        });
+        if (openShipments > 0) {
+          return fail(
+            "Аввал барча жўнатмаларни етказинг · Deliver all shipments first",
+            409,
+          );
+        }
+      }
       const lineMoves = order.lines.map((l) => ({ productId: l.productId, quantity: l.quantity }));
 
       try {
