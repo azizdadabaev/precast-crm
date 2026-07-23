@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
@@ -39,6 +40,22 @@ export const GET = withAuth(async (req: NextRequest) => {
   });
   return ok(orders);
 });
+
+/**
+ * Two concurrent placements can read the same max orderNumber and collide on
+ * its unique constraint (P2002). Retry once — the number is re-read inside the
+ * transaction, so the second attempt picks the next free number.
+ */
+async function createWithRetry<T>(create: () => Promise<T>): Promise<T> {
+  try {
+    return await create();
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return await create();
+    }
+    throw e;
+  }
+}
 
 /**
  * POST /api/gazoblok/orders — gazoblok.order. Atomic:
@@ -103,7 +120,7 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
   const month = placedAt.getMonth() + 1;
   const monthPrefix = gazoblokMonthPrefix(year, month);
 
-  const order = await prisma.$transaction(async (tx) => {
+  const order = await createWithRetry(() => prisma.$transaction(async (tx) => {
     // 1. Resolve or create Client (same dedup posture as the floor order route)
     let client = await tx.client.findUnique({ where: { phone: phoneNorm } });
     if (!client) {
@@ -211,7 +228,7 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
     }
 
     return createdOrder;
-  });
+  }));
 
   recordAudit({
     userId: user.id,

@@ -9,7 +9,7 @@ import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import {
   decrementGazoblokForOrder,
-  restockGazoblokForCancellation,
+  type NegativeStockWarning,
 } from "@/lib/gazoblok-stock";
 import { GazoblokOrderActionSchema } from "@/lib/gazoblok-validation";
 import { paymentStateFor, remainingBalance } from "@/lib/payment-state";
@@ -39,7 +39,8 @@ export const GET = withAuth<{ id: string }>(
  * PATCH /api/gazoblok/orders/[id] — gazoblok.order. One of three actions:
  *   set_status      — move through PLACED → IN_PRODUCTION → DELIVERED / CANCELED.
  *                     DELIVERED decrements stock and is TERMINAL (no cancel after
- *                     delivery). CANCELED before delivery just closes the order.
+ *                     delivery). CANCELED is only reachable before delivery, so
+ *                     restock-on-cancel intentionally does not exist.
  *   record_payment  — add a PENDING_CONFIRMATION payment.
  *   confirm_payment — confirm/reject a payment, recompute confirmedPaid + paymentState.
  */
@@ -66,46 +67,63 @@ export const PATCH = withAuth<{ id: string }>(
       const next = body.status;
       const lineMoves = order.lines.map((l) => ({ productId: l.productId, quantity: l.quantity }));
 
-      const updated = await prisma.$transaction(async (tx) => {
-        const data: Prisma.GazoblokOrderUpdateInput = { status: next };
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          const data: Prisma.GazoblokOrderUpdateManyMutationInput = { status: next };
 
-        if (next === "DELIVERED" && order.status !== "DELIVERED") {
-          data.deliveredAt = new Date();
-          if (body.deliveryProofUrl) {
-            data.deliveryProofUrl = body.deliveryProofUrl;
-            data.deliveryProofUploadedAt = new Date();
+          if (next === "DELIVERED" && order.status !== "DELIVERED") {
+            data.deliveredAt = new Date();
+            if (body.deliveryProofUrl) {
+              data.deliveryProofUrl = body.deliveryProofUrl;
+              data.deliveryProofUploadedAt = new Date();
+            }
           }
-          await decrementGazoblokForOrder(tx, order.id, lineMoves, user.id);
-        }
-        if (next === "CANCELED") {
-          data.canceledAt = new Date();
-          if (body.reason) data.cancelReason = body.reason;
-          if (order.status === "DELIVERED") {
-            await restockGazoblokForCancellation(tx, order.id, lineMoves, user.id, "order canceled");
+          if (next === "CANCELED") {
+            data.canceledAt = new Date();
+            if (body.reason) data.cancelReason = body.reason;
           }
-        }
 
-        const o = await tx.gazoblokOrder.update({ where: { id: order.id }, data });
-        await tx.gazoblokOrderEvent.create({
-          data: {
-            orderId: order.id,
-            type: "STATUS_CHANGED",
-            actorId: user.id,
-            message: `Status ${order.status} → ${next}`,
-            payload: { from: order.status, to: next },
-          },
+          // Compare-and-set: only wins if the status we validated against is
+          // still current. Prevents a concurrent duplicate transition from
+          // double-decrementing stock or double-logging the change.
+          const cas = await tx.gazoblokOrder.updateMany({
+            where: { id: order.id, status: order.status },
+            data,
+          });
+          if (cas.count === 0) throw new Error("GAZOBLOK_STATUS_CONFLICT");
+
+          let stockWarnings: NegativeStockWarning[] = [];
+          if (next === "DELIVERED" && order.status !== "DELIVERED") {
+            stockWarnings = await decrementGazoblokForOrder(tx, order.id, lineMoves, user.id);
+          }
+
+          await tx.gazoblokOrderEvent.create({
+            data: {
+              orderId: order.id,
+              type: "STATUS_CHANGED",
+              actorId: user.id,
+              message: `Status ${order.status} → ${next}`,
+              payload: { from: order.status, to: next },
+            },
+          });
+          const o = await tx.gazoblokOrder.findUniqueOrThrow({ where: { id: order.id } });
+          return { order: o, stockWarnings };
         });
-        return o;
-      });
 
-      recordAudit({
-        userId: user.id,
-        action: "gazoblok.order.status",
-        targetType: "gazoblok_order",
-        targetId: order.id,
-        message: `${order.orderNumber}: ${order.status} → ${next}`,
-      });
-      return ok(updated);
+        recordAudit({
+          userId: user.id,
+          action: "gazoblok.order.status",
+          targetType: "gazoblok_order",
+          targetId: order.id,
+          message: `${order.orderNumber}: ${order.status} → ${next}`,
+        });
+        return ok({ ...result.order, stockWarnings: result.stockWarnings });
+      } catch (e) {
+        if (e instanceof Error && e.message === "GAZOBLOK_STATUS_CONFLICT") {
+          return fail("Буюртма ҳолати ўзгарган — саҳифани янгиланг · Order was changed — reload and retry", 409);
+        }
+        throw e;
+      }
     }
 
     // ── record_payment ──────────────────────────────────────────
@@ -218,42 +236,53 @@ export const PATCH = withAuth<{ id: string }>(
       return fail("Тўлов аллақачон кўриб чиқилган · Payment already reviewed", 409);
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
-      await tx.gazoblokPayment.update({
-        where: { id: payment.id },
-        data: body.approve
-          ? { status: "CONFIRMED", confirmedById: user.id, confirmedAt: new Date() }
-          : {
-              status: "REJECTED",
-              confirmedById: user.id,
-              confirmedAt: new Date(),
-              notes: body.rejectionReason ?? payment.notes,
-            },
-      });
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        // Compare-and-set: the pre-tx PENDING check above is only a fast path —
+        // this guard is what stops two concurrent reviews of the same payment.
+        const cas = await tx.gazoblokPayment.updateMany({
+          where: { id: payment.id, status: "PENDING_CONFIRMATION" },
+          data: body.approve
+            ? { status: "CONFIRMED", confirmedById: user.id, confirmedAt: new Date() }
+            : {
+                status: "REJECTED",
+                confirmedById: user.id,
+                confirmedAt: new Date(),
+                notes: body.rejectionReason ?? payment.notes,
+              },
+        });
+        if (cas.count === 0) throw new Error("GAZOBLOK_PAYMENT_CONFLICT");
 
-      const agg = await tx.gazoblokPayment.aggregate({
-        where: { orderId: order.id, status: "CONFIRMED" },
-        _sum: { amount: true },
-      });
-      const confirmedPaid = Number(agg._sum.amount ?? 0);
-      const paymentState = paymentStateFor(confirmedPaid, 0, Number(order.totalPrice));
+        const agg = await tx.gazoblokPayment.aggregate({
+          where: { orderId: order.id, status: "CONFIRMED" },
+          _sum: { amount: true },
+        });
+        const confirmedPaid = Number(agg._sum.amount ?? 0);
+        const paymentState = paymentStateFor(confirmedPaid, 0, Number(order.totalPrice));
 
-      return tx.gazoblokOrder.update({
-        where: { id: order.id },
-        data: {
-          confirmedPaid,
-          paymentState,
-          events: {
-            create: {
-              type: body.approve ? "PAYMENT_CONFIRMED" : "PAYMENT_REJECTED",
-              actorId: user.id,
-              message: body.approve ? "Payment confirmed" : "Payment rejected",
-              payload: { paymentId: payment.id },
+        return tx.gazoblokOrder.update({
+          where: { id: order.id },
+          data: {
+            confirmedPaid,
+            paymentState,
+            events: {
+              create: {
+                type: body.approve ? "PAYMENT_CONFIRMED" : "PAYMENT_REJECTED",
+                actorId: user.id,
+                message: body.approve ? "Payment confirmed" : "Payment rejected",
+                payload: { paymentId: payment.id },
+              },
             },
           },
-        },
+        });
       });
-    });
+    } catch (e) {
+      if (e instanceof Error && e.message === "GAZOBLOK_PAYMENT_CONFLICT") {
+        return fail("Тўлов аллақачон кўриб чиқилган · Payment already reviewed", 409);
+      }
+      throw e;
+    }
 
     recordAudit({
       userId: user.id,
