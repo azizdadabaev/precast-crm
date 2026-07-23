@@ -26,6 +26,7 @@ import { CommentThread } from "@/components/comments/CommentThread";
 import { ReceiptPicker } from "@/components/payments/ReceiptPicker";
 import { GazoblokShipmentsSection } from "@/components/gazoblok/GazoblokShipmentsSection";
 import { blockWeightKg, type GazoblokLine } from "@/lib/gazoblok-weight";
+import { PAYMENT_METHOD_LABELS, EVENT_TYPE_LABELS } from "@/lib/gazoblok-labels";
 
 type GazoblokShipmentStatus = "PENDING" | "LOADED" | "DELIVERED";
 
@@ -80,7 +81,19 @@ interface OrderDetail {
     notes: string | null;
     receipts: Array<{ id: string; imageUrl: string }>;
   }>;
-  events: Array<{ id: string; type: string; message: string | null; createdAt: string }>;
+  events: Array<{
+    id: string;
+    type: string;
+    message: string | null;
+    createdAt: string;
+    actor: { id: string; name: string } | null;
+  }>;
+}
+
+interface StockWarning {
+  productId: string;
+  resultingQuantity: number;
+  decrementedBy: number;
 }
 
 const STATUS_META: Record<Status, { uz: string; en: string; variant: React.ComponentProps<typeof Chip>["variant"] }> = {
@@ -110,11 +123,17 @@ export default function GazoblokOrderDetailPage() {
   const qc = useQueryClient();
 
   const [error, setError] = useState<string | null>(null);
+  const [stockWarning, setStockWarning] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState<PaymentMethod>("CASH");
   const [payReceiptUrls, setPayReceiptUrls] = useState<string[]>([]);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [deliverOpen, setDeliverOpen] = useState(false);
+  const [rejectPaymentId, setRejectPaymentId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
-  const { data: order, isLoading } = useQuery<OrderDetail>({
+  const { data: order, isLoading, isError } = useQuery<OrderDetail>({
     queryKey: ["gazoblok-order", id],
     queryFn: () => api(`/api/gazoblok/orders/${id}`),
   });
@@ -129,16 +148,31 @@ export default function GazoblokOrderDetailPage() {
 
   function refresh() {
     qc.invalidateQueries({ queryKey: ["gazoblok-order", id] });
+    qc.invalidateQueries({ queryKey: ["gazoblok-orders"] });
   }
 
   const setStatus = useMutation({
     mutationFn: (vars: { status: Status; reason?: string }) =>
-      api(`/api/gazoblok/orders/${id}`, {
+      api<{ stockWarnings?: StockWarning[] }>(`/api/gazoblok/orders/${id}`, {
         method: "PATCH",
         json: { action: "set_status", status: vars.status, reason: vars.reason },
       }),
-    onSuccess: refresh,
-    onError: (e: Error) => setError(e.message),
+    onSuccess: (data, vars) => {
+      setCancelOpen(false);
+      setCancelReason("");
+      setDeliverOpen(false);
+      if (vars.status === "DELIVERED") {
+        qc.invalidateQueries({ queryKey: ["gazoblok", "stock"] });
+        setStockWarning((data.stockWarnings?.length ?? 0) > 0);
+      }
+      refresh();
+    },
+    onError: (e: Error) => {
+      // Close the dialogs so the error banner isn't hidden behind the overlay.
+      setCancelOpen(false);
+      setDeliverOpen(false);
+      setError(e.message);
+    },
   });
 
   const recordPayment = useMutation({
@@ -166,18 +200,19 @@ export default function GazoblokOrderDetailPage() {
           rejectionReason: vars.rejectionReason,
         },
       }),
-    onSuccess: refresh,
-    onError: (e: Error) => setError(e.message),
+    onSuccess: () => {
+      setRejectPaymentId(null);
+      setRejectReason("");
+      refresh();
+    },
+    onError: (e: Error) => {
+      setRejectPaymentId(null);
+      setError(e.message);
+    },
   });
 
-  function advance(status: Status, opts?: { confirm?: string; reason?: boolean }) {
+  function advance(status: Status) {
     setError(null);
-    if (opts?.confirm && !window.confirm(opts.confirm)) return;
-    if (opts?.reason) {
-      const reason = window.prompt(t("Бекор қилиш сабаби (ихтиёрий)", "Cancellation reason (optional)")) ?? undefined;
-      setStatus.mutate({ status, reason: reason || undefined });
-      return;
-    }
     setStatus.mutate({ status });
   }
 
@@ -192,8 +227,24 @@ export default function GazoblokOrderDetailPage() {
     recordPayment.mutate({ amount, method: payMethod, receiptUrls: payReceiptUrls });
   }
 
-  if (isLoading || !order) {
+  if (isLoading) {
     return <div className="p-4 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>;
+  }
+
+  if (isError || !order) {
+    return (
+      <div className="rounded-lg border bg-background p-5 shadow-sm space-y-3">
+        <div className="text-sm text-destructive">
+          {t("Буюртмани юклаб бўлмади ёки топилмади.", "Failed to load or order not found.")}
+        </div>
+        <Link
+          href="/gazoblok/orders"
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4 mr-1" /> {t("Буюртмаларга қайтиш", "Back to orders")}
+        </Link>
+      </div>
+    );
   }
 
   const status = STATUS_META[order.status];
@@ -221,7 +272,11 @@ export default function GazoblokOrderDetailPage() {
   const isCanceled = order.status === "CANCELED";
   const canStartProduction = order.status === "PLACED";
   const canDeliver = order.status === "PLACED" || order.status === "IN_PRODUCTION";
-  const canRecordPayment = !isCanceled && remainingNum > 0;
+  // 0.005 tolerance: totals arrive as decimal strings — don't let float dust
+  // (e.g. remaining 0.0000001) keep the payment form open on a settled order.
+  const canRecordPayment = !isCanceled && remainingNum > 0.005;
+  const payAmountNum = Number(payAmount);
+  const payAmountTooHigh = Number.isFinite(payAmountNum) && payAmountNum > remainingNum + 0.005;
 
   return (
     <div className="space-y-5">
@@ -235,6 +290,12 @@ export default function GazoblokOrderDetailPage() {
       {error && (
         <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
           {error}
+        </div>
+      )}
+
+      {stockWarning && (
+        <div className="text-sm text-warning bg-warning/10 border border-warning/30 px-3 py-2 rounded">
+          {t("Диққат: захира манфий бўлди", "Warning: stock went negative")}
         </div>
       )}
 
@@ -379,11 +440,10 @@ export default function GazoblokOrderDetailPage() {
                 size="sm"
                 className="bg-success hover:bg-success/90 text-success-foreground"
                 disabled={setStatus.isPending}
-                onClick={() =>
-                  advance("DELIVERED", {
-                    confirm: t("Етказилди деб белгилансинми? Захира камаяди.", "Mark as delivered? Stock will be decremented."),
-                  })
-                }
+                onClick={() => {
+                  setError(null);
+                  setDeliverOpen(true);
+                }}
               >
                 <Truck className="h-3.5 w-3.5 mr-1.5" />
                 Етказилди<span className="lang-en font-normal"> · Mark delivered</span>
@@ -394,7 +454,11 @@ export default function GazoblokOrderDetailPage() {
               size="sm"
               className="border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive hover:text-white hover:border-destructive transition-colors"
               disabled={setStatus.isPending}
-              onClick={() => advance("CANCELED", { reason: true })}
+              onClick={() => {
+                setError(null);
+                setCancelReason("");
+                setCancelOpen(true);
+              }}
             >
               <Ban className="h-3.5 w-3.5 mr-1.5" />
               Бекор қилиш<span className="lang-en font-normal"> · Cancel</span>
@@ -432,7 +496,7 @@ export default function GazoblokOrderDetailPage() {
                   return (
                     <tr key={p.id} className="hover:bg-muted/20">
                       <td className="px-3 py-2 text-xs uppercase tracking-wider">
-                        <div>{p.method}</div>
+                        <div>{PAYMENT_METHOD_LABELS[p.method] ? t(...PAYMENT_METHOD_LABELS[p.method]) : p.method}</div>
                         {p.receipts.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {p.receipts.map((r) => (
@@ -466,7 +530,10 @@ export default function GazoblokOrderDetailPage() {
                               variant="outline"
                               className="border-success/40 text-success hover:bg-success hover:text-white"
                               disabled={confirmPayment.isPending}
-                              onClick={() => confirmPayment.mutate({ paymentId: p.id, approve: true })}
+                              onClick={() => {
+                                setError(null);
+                                confirmPayment.mutate({ paymentId: p.id, approve: true });
+                              }}
                             >
                               <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
                               {t("Тасдиқлаш", "Confirm")}
@@ -477,8 +544,9 @@ export default function GazoblokOrderDetailPage() {
                               className="border-destructive/40 text-destructive hover:bg-destructive hover:text-white"
                               disabled={confirmPayment.isPending}
                               onClick={() => {
-                                const reason = window.prompt(t("Рад этиш сабаби (ихтиёрий)", "Rejection reason (optional)")) ?? undefined;
-                                confirmPayment.mutate({ paymentId: p.id, approve: false, rejectionReason: reason || undefined });
+                                setError(null);
+                                setRejectReason("");
+                                setRejectPaymentId(p.id);
                               }}
                             >
                               <Ban className="h-3.5 w-3.5 mr-1" />
@@ -507,12 +575,18 @@ export default function GazoblokOrderDetailPage() {
               <Input
                 type="number"
                 min={0}
+                max={remainingNum}
                 step="any"
                 inputMode="numeric"
                 placeholder={t("масалан 1000000", "e.g. 1000000")}
                 value={payAmount}
                 onChange={(e) => setPayAmount(e.target.value)}
               />
+              {payAmountTooHigh && (
+                <div className="text-xs text-warning mt-1">
+                  {t("Сумма қолдиқдан ошиб кетди", "Amount exceeds remaining balance")}
+                </div>
+              )}
             </div>
             <div className="min-w-[160px]">
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
@@ -521,7 +595,7 @@ export default function GazoblokOrderDetailPage() {
               <Select value={payMethod} onChange={(e) => setPayMethod(e.target.value as PaymentMethod)}>
                 {PAYMENT_METHODS.map((m) => (
                   <option key={m} value={m}>
-                    {m}
+                    {PAYMENT_METHOD_LABELS[m] ? t(...PAYMENT_METHOD_LABELS[m]) : m}
                   </option>
                 ))}
               </Select>
@@ -572,7 +646,10 @@ export default function GazoblokOrderDetailPage() {
             {order.events.map((e) => (
               <li key={e.id} className="px-4 py-2.5 text-sm flex items-baseline justify-between gap-4">
                 <div>
-                  <span className="font-medium">{e.type.replace(/_/g, " ").toLowerCase()}</span>
+                  <span className="font-medium">
+                    {EVENT_TYPE_LABELS[e.type] ? t(...EVENT_TYPE_LABELS[e.type]) : e.type}
+                  </span>
+                  {e.actor && <span className="text-muted-foreground"> · {e.actor.name}</span>}
                   {e.message && <span className="text-muted-foreground"> — {e.message}</span>}
                 </div>
                 <span className="text-xs text-muted-foreground tabular-nums shrink-0">{formatDate(e.createdAt)}</span>
@@ -583,6 +660,163 @@ export default function GazoblokOrderDetailPage() {
           <div className="px-4 py-6 text-sm text-muted-foreground">{t("Ёзув йўқ.", "No activity yet.")}</div>
         )}
       </div>
+
+      {/* Mark-delivered confirmation modal */}
+      {deliverOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setDeliverOpen(false)}
+        >
+          <div
+            className="bg-card rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3 border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold">
+              Етказилди деб белгилаш<span className="lang-en font-normal"> · Mark delivered</span>
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {t("Захира камаяди. Давом этасизми?", "Stock will be decremented. Continue?")}
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeliverOpen(false)}
+                disabled={setStatus.isPending}
+              >
+                {t("Бекор қилиш", "Cancel")}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-success hover:bg-success/90 text-success-foreground"
+                disabled={setStatus.isPending}
+                onClick={() => advance("DELIVERED")}
+              >
+                {setStatus.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Truck className="h-4 w-4 mr-2" />
+                )}
+                {t("Етказилди", "Mark delivered")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel-order modal with optional reason */}
+      {cancelOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setCancelOpen(false)}
+        >
+          <div
+            className="bg-card rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3 border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold">
+              Буюртмани бекор қилиш<span className="lang-en font-normal"> · Cancel order</span>
+            </h2>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                {t("Бекор қилиш сабаби (ихтиёрий)", "Cancellation reason (optional)")}
+              </label>
+              <textarea
+                rows={3}
+                autoFocus
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCancelOpen(false)}
+                disabled={setStatus.isPending}
+              >
+                {t("Орқага", "Back")}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                disabled={setStatus.isPending}
+                onClick={() => {
+                  setError(null);
+                  setStatus.mutate({ status: "CANCELED", reason: cancelReason.trim() || undefined });
+                }}
+              >
+                {setStatus.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Ban className="h-4 w-4 mr-2" />
+                )}
+                {t("Бекор қилиш", "Cancel order")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject-payment modal with optional reason */}
+      {rejectPaymentId && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+          onClick={() => setRejectPaymentId(null)}
+        >
+          <div
+            className="bg-card rounded-lg shadow-2xl w-full max-w-md p-5 space-y-3 border border-border"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold">
+              Тўловни рад этиш<span className="lang-en font-normal"> · Reject payment</span>
+            </h2>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-1">
+                {t("Рад этиш сабаби (ихтиёрий)", "Rejection reason (optional)")}
+              </label>
+              <textarea
+                rows={3}
+                autoFocus
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRejectPaymentId(null)}
+                disabled={confirmPayment.isPending}
+              >
+                {t("Бекор қилиш", "Cancel")}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                disabled={confirmPayment.isPending}
+                onClick={() => {
+                  setError(null);
+                  confirmPayment.mutate({
+                    paymentId: rejectPaymentId,
+                    approve: false,
+                    rejectionReason: rejectReason.trim() || undefined,
+                  });
+                }}
+              >
+                {confirmPayment.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Ban className="h-4 w-4 mr-2" />
+                )}
+                {t("Рад этиш", "Reject")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

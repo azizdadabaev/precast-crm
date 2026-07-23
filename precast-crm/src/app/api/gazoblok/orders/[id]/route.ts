@@ -28,7 +28,10 @@ export const GET = withAuth<{ id: string }>(
           include: { receipts: { orderBy: { createdAt: "asc" }, select: { id: true, imageUrl: true } } },
         },
         shipments: { orderBy: { number: "asc" } },
-        events: { orderBy: { createdAt: "desc" } },
+        events: {
+          orderBy: { createdAt: "desc" },
+          include: { actor: { select: { id: true, name: true } } },
+        },
       },
     });
     if (!order) return fail("Буюртма топилмади · Order not found", 404);
