@@ -188,7 +188,7 @@ export function GazoblokSplitShipmentModal({
             onClick={() => setDistOpen(!distOpen)}
           >
             <div className="flex items-center gap-2 font-medium">
-              <Zap className="h-3.5 w-3.5 text-amber-500" />
+              <Zap className="h-3.5 w-3.5 text-warning" />
               {t("Вазн бўйича тақсимлаш", "Distribute by weight")}
               <span className="text-xs text-muted-foreground font-normal">
                 — {t("умумий", "total")} {formatNumber(Math.round(orderWeight), 0)} кг
@@ -331,7 +331,7 @@ export function GazoblokSplitShipmentModal({
                         className={`w-20 h-auto px-2 py-1 text-right font-mono focus:ring-1 ring-primary ${rem < 0 ? "border-destructive ring-destructive" : ""}`}
                       />
                     </td>
-                    <td className={`px-3 py-2 text-right font-mono ${rem < 0 ? "text-destructive font-bold" : rem > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                    <td className={`px-3 py-2 text-right font-mono ${rem < 0 ? "text-destructive font-bold" : rem > 0 ? "text-warning" : "text-success"}`}>
                       {rem}
                     </td>
                   </tr>
@@ -348,7 +348,7 @@ export function GazoblokSplitShipmentModal({
                 <td className="px-3 py-2 text-right font-mono font-semibold text-foreground">
                   {formatNumber(Math.round(thisShipmentWeight), 0)}
                 </td>
-                <td className={`px-3 py-2 text-right font-mono font-semibold ${remainingWeight > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                <td className={`px-3 py-2 text-right font-mono font-semibold ${remainingWeight > 0 ? "text-warning" : "text-success"}`}>
                   {formatNumber(Math.round(remainingWeight), 0)}
                 </td>
               </tr>
