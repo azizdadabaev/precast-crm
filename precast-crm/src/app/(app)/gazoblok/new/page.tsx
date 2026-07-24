@@ -88,11 +88,7 @@ export default function GazoblokNewOrderPage() {
     queryKey: ["gazoblok-products"],
     queryFn: () => api("/api/gazoblok/products"),
   });
-  const {
-    data: config,
-    isError: configError,
-    refetch: refetchConfig,
-  } = useQuery<Config>({
+  const { data: config } = useQuery<Config>({
     queryKey: ["gazoblok-config"],
     queryFn: () => api("/api/gazoblok/config"),
   });
@@ -304,7 +300,10 @@ export default function GazoblokNewOrderPage() {
     !placeOrder.isPending;
 
   // ── Catalog states shared by the line builder and the estimator ──
-  const catalogError = productsError || configError;
+  // A config fetch failure must NOT block order entry — config only supplies the
+  // optional cosmetic `grade` label (guarded with `config?.grade`), so let it fail
+  // silently. Only a products failure blocks the line builder / estimator.
+  const catalogError = productsError;
   const catalogEmpty = !!products && !catalogError && activeProducts.length === 0;
   const catalogNotice = catalogError ? (
     <div className="text-center space-y-2 py-2">
@@ -320,7 +319,6 @@ export default function GazoblokNewOrderPage() {
         size="sm"
         onClick={() => {
           refetchProducts();
-          refetchConfig();
         }}
       >
         {t("Қайта уриниш", "Retry")}
