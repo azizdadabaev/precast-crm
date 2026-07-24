@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Hammer, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
@@ -39,6 +40,7 @@ interface ProductionEntry {
   id: string;
   producedAt: string;
   notes: string | null;
+  voidedAt: string | null;
   recordedBy: { id: string; name: string } | null;
   lines: ProductionLine[];
 }
@@ -135,6 +137,39 @@ export default function GazoblokProductionPage() {
   });
 
   const canSave = filledLines.length > 0 && !hasPartialLine && !create.isPending;
+
+  // ── Void a production entry (two-tap confirm) ─────────────────
+  const voidEntry = useMutation({
+    mutationFn: (entryId: string) =>
+      api("/api/gazoblok/production", {
+        method: "PATCH",
+        json: { action: "void", entryId },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["gazoblok", "production"] });
+      qc.invalidateQueries({ queryKey: ["gazoblok", "stock"] });
+      qc.invalidateQueries({ queryKey: ["gazoblok", "products"] });
+    },
+  });
+
+  const [confirmVoidId, setConfirmVoidId] = useState<string | null>(null);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    },
+    [],
+  );
+  const handleVoidClick = (id: string) => {
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    if (confirmVoidId === id) {
+      setConfirmVoidId(null);
+      voidEntry.mutate(id);
+      return;
+    }
+    setConfirmVoidId(id);
+    confirmTimerRef.current = setTimeout(() => setConfirmVoidId(null), 3000);
+  };
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -324,19 +359,22 @@ export default function GazoblokProductionPage() {
                   <th className="text-left px-3 py-2 w-40">{t("Ким қайд этди", "Recorded by")}</th>
                   <th className="text-left px-3 py-2">{t("Ўлчамлар бўйича сони", "Quantities by size")}</th>
                   <th className="text-left px-3 py-2">{t("Изоҳ", "Notes")}</th>
+                  <th className="px-3 py-2 w-32"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {(entriesQuery.data ?? []).map((e) => (
-                  <tr key={e.id} className="align-top">
-                    <td className="px-3 py-2.5 font-mono whitespace-nowrap">
+                {(entriesQuery.data ?? []).map((e) => {
+                  const isVoided = e.voidedAt !== null;
+                  return (
+                  <tr key={e.id} className={cn("align-top", isVoided && "opacity-60")}>
+                    <td className={cn("px-3 py-2.5 font-mono whitespace-nowrap", isVoided && "line-through")}>
                       {formatDate(e.producedAt)}
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground">
+                    <td className={cn("px-3 py-2.5 text-muted-foreground", isVoided && "line-through")}>
                       {e.recordedBy?.name ?? "—"}
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className={cn("flex flex-wrap gap-1.5", isVoided && "line-through")}>
                         {e.lines.map((line) => (
                           <span
                             key={line.id}
@@ -350,11 +388,29 @@ export default function GazoblokProductionPage() {
                         ))}
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-text-tertiary italic">
+                    <td className={cn("px-3 py-2.5 text-xs text-text-tertiary italic", isVoided && "line-through")}>
                       {e.notes || "—"}
                     </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      {isVoided ? (
+                        <Chip variant="neutral">{t("Бекор қилинган", "Voided")}</Chip>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={voidEntry.isPending && voidEntry.variables === e.id}
+                          onClick={() => handleVoidClick(e.id)}
+                          aria-label={t("Бекор қилиш", "Void")}
+                        >
+                          {confirmVoidId === e.id
+                            ? t("Тасдиқлайсизми?", "Confirm?")
+                            : t("Бекор қилиш", "Void")}
+                        </Button>
+                      )}
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

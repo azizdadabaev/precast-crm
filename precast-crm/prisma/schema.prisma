@@ -1424,11 +1424,13 @@ model GazoblokStockMovement {
 }
 
 model GazoblokProductionEntry {
-  id           String   @id @default(cuid())
-  producedAt   DateTime @default(now())
+  id           String    @id @default(cuid())
+  producedAt   DateTime  @default(now())
   recordedById String?
   notes        String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
+  voidedAt     DateTime?
+  voidedById   String?
 
   recordedBy User?                    @relation(fields: [recordedById], references: [id])
   lines      GazoblokProductionLine[]

@@ -109,6 +109,12 @@ export const GazoblokProductionSchema = z.object({
   lines: z.array(OrderLineSchema).min(1),
 });
 
+/** Void a production entry (reverses its stock additions). */
+export const GazoblokProductionActionSchema = z.object({
+  action: z.literal("void"),
+  entryId: z.string().min(1),
+});
+
 /** Manual stock correction (signed change). */
 export const GazoblokStockAdjustSchema = z.object({
   productId: z.string().min(1),

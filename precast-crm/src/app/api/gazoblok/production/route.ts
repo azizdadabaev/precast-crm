@@ -6,7 +6,10 @@ import { ok, created, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
-import { GazoblokProductionSchema } from "@/lib/gazoblok-validation";
+import {
+  GazoblokProductionSchema,
+  GazoblokProductionActionSchema,
+} from "@/lib/gazoblok-validation";
 
 /** GET /api/gazoblok/production — auth-only (open to all logged-in users —
  *  owner decision). Recent production entries. */
@@ -64,4 +67,51 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
     message: `Logged газоблок production (${body.lines.length} sizes)`,
   });
   return created(entry);
+});
+
+/** PATCH /api/gazoblok/production — auth-only (open to all logged-in users —
+ *  owner decision). Void a production entry: posts one reversing stock
+ *  movement per line so a mistyped entry can be undone without a manual
+ *  adjustment. Idempotent via a compare-and-set on voidedAt. */
+export const PATCH = withAuth(async (req: NextRequest, { user }) => {
+  const body = GazoblokProductionActionSchema.parse(await req.json());
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Compare-and-set: only the first void wins. count === 0 means the
+      // entry is already voided (or does not exist) — both map to 409.
+      const cas = await tx.gazoblokProductionEntry.updateMany({
+        where: { id: body.entryId, voidedAt: null },
+        data: { voidedAt: new Date(), voidedById: user.id },
+      });
+      if (cas.count === 0) throw new Error("GAZOBLOK_PRODUCTION_ALREADY_VOIDED");
+
+      const lines = await tx.gazoblokProductionLine.findMany({
+        where: { entryId: body.entryId },
+        select: { productId: true, quantity: true },
+      });
+      for (const line of lines) {
+        await applyGazoblokMovement(tx, line.productId, -line.quantity, {
+          reason: "MANUAL_ADJUSTMENT",
+          productionEntryId: body.entryId,
+          actorId: user.id,
+          note: "production void",
+        });
+      }
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "GAZOBLOK_PRODUCTION_ALREADY_VOIDED") {
+      return fail("Аллақачон бекор қилинган · Already voided", 409);
+    }
+    throw e;
+  }
+
+  recordAudit({
+    userId: user.id,
+    action: "gazoblok.production.void",
+    targetType: "gazoblok_production_entry",
+    targetId: body.entryId,
+    message: `Voided газоблок production entry`,
+  });
+  return ok({ id: body.entryId });
 });
