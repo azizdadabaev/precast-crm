@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Boxes,
   Loader2,
@@ -21,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
 import {
   estimateWall,
   orderTotal,
@@ -77,11 +79,20 @@ export default function GazoblokNewOrderPage() {
   const t = useT();
   const router = useRouter();
 
-  const { data: products } = useQuery<Product[]>({
+  const {
+    data: products,
+    isLoading: productsLoading,
+    isError: productsError,
+    refetch: refetchProducts,
+  } = useQuery<Product[]>({
     queryKey: ["gazoblok-products"],
     queryFn: () => api("/api/gazoblok/products"),
   });
-  const { data: config } = useQuery<Config>({
+  const {
+    data: config,
+    isError: configError,
+    refetch: refetchConfig,
+  } = useQuery<Config>({
     queryKey: ["gazoblok-config"],
     queryFn: () => api("/api/gazoblok/config"),
   });
@@ -115,9 +126,22 @@ export default function GazoblokNewOrderPage() {
   const [deliveryCost, setDeliveryCost] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [paidAmount, setPaidAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  // No default method: the server rejects a paid amount without an explicit
+  // method, so the operator must pick one consciously.
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | "">("");
 
   const [error, setError] = useState<string | null>(null);
+
+  // ── "Added ✓" feedback for the estimator button ──
+  const [estAdded, setEstAdded] = useState(false);
+  const estAddedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const linesSectionRef = useRef<HTMLElement | null>(null);
+  useEffect(
+    () => () => {
+      if (estAddedTimer.current) clearTimeout(estAddedTimer.current);
+    },
+    [],
+  );
 
   function addLine() {
     const p = activeProducts.find((x) => x.id === pickProductId);
@@ -169,6 +193,7 @@ export default function GazoblokNewOrderPage() {
   }, [estProduct, estLength, estHeight, estOpenings, estWaste]);
 
   function addEstimateToOrder() {
+    if (estAdded) return; // ignore double-clicks inside the feedback window
     if (!estProduct || !estimate || estimate.blocksNeeded <= 0) return;
     const unitPrice = Number(estProduct.pricePerBlock);
     const qty = estimate.blocksNeeded;
@@ -192,6 +217,10 @@ export default function GazoblokNewOrderPage() {
         },
       ];
     });
+    setEstAdded(true);
+    if (estAddedTimer.current) clearTimeout(estAddedTimer.current);
+    estAddedTimer.current = setTimeout(() => setEstAdded(false), 1500);
+    linesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
   // ── Live totals (preview only — server recomputes authoritatively) ──
@@ -210,6 +239,12 @@ export default function GazoblokNewOrderPage() {
       ),
     [lines, discountPercent, discountAmount, deliveryCost],
   );
+
+  // ── Payment coupling (mirrors the server-side refine) ──
+  const paidNum = paidAmount.trim() === "" ? 0 : Number(paidAmount);
+  const paidPositive = Number.isFinite(paidNum) && paidNum > 0;
+  const methodMissing = paidPositive && paymentMethod === "";
+  const paidExceedsTotal = paidPositive && paidNum > totals.total;
 
   // Total m³ across all lines (look up each product's volume).
   const totalVolumeM3 = useMemo(() => {
@@ -249,14 +284,9 @@ export default function GazoblokNewOrderPage() {
           scheduledAt: scheduledAt
             ? new Date(scheduledAt).toISOString()
             : undefined,
-          paidAmount:
-            paidAmount.trim() === "" || Number(paidAmount) <= 0
-              ? undefined
-              : Number(paidAmount),
+          paidAmount: paidPositive ? paidNum : undefined,
           paymentMethod:
-            paidAmount.trim() !== "" && Number(paidAmount) > 0
-              ? paymentMethod
-              : undefined,
+            paidPositive && paymentMethod !== "" ? paymentMethod : undefined,
         },
       }),
     onSuccess: (created) => {
@@ -270,7 +300,43 @@ export default function GazoblokNewOrderPage() {
     lines.length > 0 &&
     clientName.trim().length > 0 &&
     clientPhone.trim().length > 0 &&
+    !methodMissing &&
     !placeOrder.isPending;
+
+  // ── Catalog states shared by the line builder and the estimator ──
+  const catalogError = productsError || configError;
+  const catalogEmpty = !!products && !catalogError && activeProducts.length === 0;
+  const catalogNotice = catalogError ? (
+    <div className="text-center space-y-2 py-2">
+      <p className="text-sm text-muted-foreground">
+        {t(
+          "Маълумотни юклаб бўлмади. Уланишни текширинг.",
+          "Failed to load. Check your connection.",
+        )}
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          refetchProducts();
+          refetchConfig();
+        }}
+      >
+        {t("Қайта уриниш", "Retry")}
+      </Button>
+    </div>
+  ) : catalogEmpty ? (
+    <div className="text-sm text-muted-foreground">
+      {t("Каталог бўш — аввал ўлчам қўшинг", "Catalog is empty — add a size first")}{" "}
+      <Link
+        href="/gazoblok/catalog"
+        className="text-primary hover:underline whitespace-nowrap"
+      >
+        {t("Каталогга ўтиш", "Open catalog")}
+      </Link>
+    </div>
+  ) : null;
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -338,53 +404,68 @@ export default function GazoblokNewOrderPage() {
       </section>
 
       {/* Line builder */}
-      <section className="rounded-lg border border-border bg-card overflow-hidden">
+      <section
+        ref={linesSectionRef}
+        className="rounded-lg border border-border bg-card overflow-hidden"
+      >
         <header className="px-4 py-3 border-b">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             {t("Қаторлар", "Lines")}
           </div>
         </header>
         <div className="p-4 space-y-4">
-          {/* Add-line row */}
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[200px]">
-              <FieldLabel uz="Ўлчам" en="Size" />
-              <Select
-                value={pickProductId}
-                onChange={(e) => setPickProductId(e.target.value)}
-              >
-                <option value="">{t("Ўлчам танланг…", "Pick a size…")}</option>
-                {activeProducts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label} — {formatNumber(Number(p.pricePerBlock), 0)} UZS/
-                    {t("дона", "block")}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="w-32">
-              <FieldLabel uz="Сони" en="Qty" />
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                step={1}
-                className="tabular-nums"
-                placeholder="0"
-                value={pickQty}
-                onChange={(e) => setPickQty(e.target.value)}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={addLine}
-              disabled={!pickProductId || Math.floor(Number(pickQty)) <= 0}
+          {/* Add-line row — a form so Enter in the qty field adds the line */}
+          {catalogNotice ?? (
+            <form
+              className="flex flex-wrap items-end gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                addLine();
+              }}
             >
-              <Plus className="h-4 w-4 mr-1" />
-              {t("Қўшиш", "Add")}
-            </Button>
-          </div>
+              <div className="flex-1 min-w-[200px]">
+                <FieldLabel uz="Ўлчам" en="Size" />
+                <Select
+                  value={pickProductId}
+                  disabled={productsLoading}
+                  onChange={(e) => setPickProductId(e.target.value)}
+                >
+                  <option value="">
+                    {productsLoading
+                      ? t("Юкланмоқда…", "Loading…")
+                      : t("Ўлчам танланг…", "Pick a size…")}
+                  </option>
+                  {activeProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label} — {formatNumber(Number(p.pricePerBlock), 0)} UZS/
+                      {t("дона", "block")}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="w-32">
+                <FieldLabel uz="Сони" en="Qty" />
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  className="tabular-nums"
+                  placeholder="0"
+                  value={pickQty}
+                  onChange={(e) => setPickQty(e.target.value)}
+                />
+              </div>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={!pickProductId || Math.floor(Number(pickQty)) <= 0}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                {t("Қўшиш", "Add")}
+              </Button>
+            </form>
+          )}
 
           {/* Lines table */}
           {lines.length === 0 ? (
@@ -461,14 +542,21 @@ export default function GazoblokNewOrderPage() {
         </button>
         {estOpen && (
           <div className="p-4 border-t space-y-4">
+            {catalogNotice ?? (
+              <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="lg:col-span-3">
                 <FieldLabel uz="Ўлчам" en="Size" />
                 <Select
                   value={estProductId}
+                  disabled={productsLoading}
                   onChange={(e) => setEstProductId(e.target.value)}
                 >
-                  <option value="">{t("Ўлчам танланг…", "Pick a size…")}</option>
+                  <option value="">
+                    {productsLoading
+                      ? t("Юкланмоқда…", "Loading…")
+                      : t("Ўлчам танланг…", "Pick a size…")}
+                  </option>
                   {activeProducts.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label}
@@ -557,11 +645,19 @@ export default function GazoblokNewOrderPage() {
               type="button"
               variant="secondary"
               onClick={addEstimateToOrder}
-              disabled={!estimate || estimate.blocksNeeded <= 0}
+              disabled={estAdded || !estimate || estimate.blocksNeeded <= 0}
             >
-              <Plus className="h-4 w-4 mr-1" />
-              {t("Қаторга қўшиш", "Add to order")}
+              {estAdded ? (
+                t("Қўшилди ✓", "Added ✓")
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-1" />
+                  {t("Қаторга қўшиш", "Add to order")}
+                </>
+              )}
             </Button>
+              </>
+            )}
           </div>
         )}
       </section>
@@ -635,22 +731,40 @@ export default function GazoblokNewOrderPage() {
               value={paidAmount}
               onChange={(e) => setPaidAmount(e.target.value)}
             />
+            {paidExceedsTotal && (
+              <p className="mt-1 text-xs text-warning">
+                {t(
+                  "Тўлов суммаси жамидан ошиб кетди",
+                  "Paid amount exceeds the total",
+                )}
+              </p>
+            )}
           </div>
           <div>
             <FieldLabel uz="Тўлов усули" en="Payment method" />
             <Select
               value={paymentMethod}
-              disabled={paidAmount.trim() === "" || Number(paidAmount) <= 0}
-              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+              required={paidPositive}
+              disabled={!paidPositive}
+              onChange={(e) =>
+                setPaymentMethod(e.target.value as PaymentMethod | "")
+              }
             >
-              <option value="CASH">{t("Нақд", "Cash")}</option>
-              <option value="BANK_TRANSFER">
-                {t("Банк ўтказмаси", "Bank transfer")}
-              </option>
-              <option value="CLICK">Click</option>
-              <option value="PAYME">Payme</option>
-              <option value="OTHER">{t("Бошқа", "Other")}</option>
+              <option value="">{t("Танланг…", "Select…")}</option>
+              {Object.entries(PAYMENT_METHOD_LABELS).map(([value, [uz, en]]) => (
+                <option key={value} value={value}>
+                  {t(uz, en)}
+                </option>
+              ))}
             </Select>
+            {methodMissing && (
+              <p className="mt-1 text-xs text-destructive">
+                {t(
+                  "Тўлов усулини танланг",
+                  "Payment method is required when an amount is paid",
+                )}
+              </p>
+            )}
           </div>
         </div>
       </section>
