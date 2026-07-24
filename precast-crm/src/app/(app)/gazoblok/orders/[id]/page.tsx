@@ -509,7 +509,7 @@ export default function GazoblokOrderDetailPage() {
                                 className="block h-8 w-8 overflow-hidden rounded ring-1 ring-border hover:ring-primary"
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={r.imageUrl} alt="receipt" className="h-full w-full object-cover" />
+                                <img src={r.imageUrl} alt={t("Чек", "Receipt")} className="h-full w-full object-cover" />
                               </a>
                             ))}
                           </div>

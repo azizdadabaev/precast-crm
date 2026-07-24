@@ -121,12 +121,13 @@ function Row({
   const qty = product.stock?.quantity ?? 0;
   const tier = stockTier(qty, product.lowStockThreshold);
 
+  // Colored left border marks an alert only — healthy rows carry no border.
   const rowBorder =
     tier === "critical"
-      ? "border-l-destructive"
+      ? "border-l-[3px] border-l-destructive"
       : tier === "low"
-        ? "border-l-warning"
-        : "border-l-success";
+        ? "border-l-[3px] border-l-warning"
+        : "";
   const badgeVariant =
     tier === "critical" ? "danger" : tier === "low" ? "warning" : "success";
 
@@ -172,7 +173,7 @@ function Row({
   }
 
   return (
-    <tr className={cn("border-l-[3px]", rowBorder, "hover:bg-surface-hover transition-colors")}>
+    <tr className={cn(rowBorder, "hover:bg-surface-hover transition-colors")}>
       <td className="px-3 py-2.5 font-semibold">{product.label}</td>
       <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums whitespace-nowrap">
         {mToMm(product.lengthM)} × {mToMm(product.heightM)} × {mToMm(product.thicknessM)}
@@ -191,7 +192,7 @@ function Row({
             type="number"
             step="1"
             inputMode="numeric"
-            className="h-8 w-20 text-right tabular-nums"
+            className="h-11 md:h-8 w-20 text-right tabular-nums"
             placeholder="±N"
             value={change}
             onChange={(e) => setChange(e.target.value)}
@@ -200,7 +201,7 @@ function Row({
             }}
           />
           <Input
-            className="h-8 flex-1 min-w-[100px]"
+            className="h-11 md:h-8 flex-1 min-w-[100px]"
             placeholder={t("изоҳ", "note")}
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -208,7 +209,7 @@ function Row({
               if (e.key === "Enter") submit();
             }}
           />
-          <Button size="sm" className="h-8" disabled={!canAdjust} onClick={submit}>
+          <Button size="sm" className="h-11 md:h-8" disabled={!canAdjust} onClick={submit}>
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("Тузатиш", "Adjust")}
           </Button>
         </div>

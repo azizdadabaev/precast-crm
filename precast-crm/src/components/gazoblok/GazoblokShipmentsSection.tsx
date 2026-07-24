@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, Truck, Package, CheckCircle2, Clock, Loader2, Trash2 } from "lucide-react";
+import { Plus, Truck, Package, CheckCircle2, Clock, Loader2, Trash2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { useT } from "@/lib/i18n";
@@ -172,13 +172,9 @@ export function GazoblokShipmentsSection({
             {shipments.length} {t("та жўнатма", "shipments")}
           </div>
         </div>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
+        <ChevronDown
           className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ml-2 ${open ? "rotate-180" : ""}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+        />
       </button>
 
       {open && <div className="divide-y">

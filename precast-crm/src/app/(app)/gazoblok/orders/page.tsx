@@ -138,7 +138,7 @@ export default function GazoblokOrdersPage() {
                 key={v}
                 type="button"
                 className={cn(
-                  "relative h-10 px-3 text-[12px] font-bold uppercase tracking-wider transition-colors",
+                  "relative h-11 md:h-10 px-3 text-[12px] font-bold uppercase tracking-wider transition-colors",
                   active ? "text-primary" : "text-text-tertiary hover:text-foreground",
                 )}
                 onClick={() => setStatus(v)}

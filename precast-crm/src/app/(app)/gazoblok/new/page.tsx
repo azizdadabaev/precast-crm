@@ -508,7 +508,7 @@ export default function GazoblokNewOrderPage() {
                         type="button"
                         aria-label={t("Ўчириш", "Remove")}
                         onClick={() => removeLine(i)}
-                        className="text-muted-foreground hover:text-destructive"
+                        className="inline-flex items-center justify-center h-11 w-11 md:h-7 md:w-7 text-muted-foreground hover:text-destructive"
                       >
                         <X className="h-4 w-4" />
                       </button>

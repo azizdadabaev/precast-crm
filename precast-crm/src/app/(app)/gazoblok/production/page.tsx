@@ -221,7 +221,7 @@ export default function GazoblokProductionPage() {
             </label>
             <Input
               className="h-9 mt-1"
-              placeholder={t("масалан: Смена А, парти №42", "e.g. Shift A, lot #42")}
+              placeholder={t("масалан: Смена А, партия №42", "e.g. Shift A, lot #42")}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -288,7 +288,7 @@ export default function GazoblokProductionPage() {
                   <td className="px-2 py-2 text-right">
                     <button
                       type="button"
-                      className="h-7 w-7 inline-flex items-center justify-center rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      className="h-11 w-11 md:h-7 md:w-7 inline-flex items-center justify-center rounded text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
                       onClick={() => remove(l.id)}
                       disabled={lines.length === 1}
                       aria-label={t("Қаторни ўчириш", "Remove line")}
