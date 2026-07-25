@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -12,9 +12,6 @@ import {
   User,
   Phone,
   MapPin,
-  Ruler,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
@@ -24,11 +21,16 @@ import { formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
 import {
-  estimateWall,
   orderTotal,
   lineTotal,
   blockVolumeM3,
 } from "@/services/gazoblok-engine";
+import type { PerSizeResult } from "@/services/gazoblok-engine";
+import {
+  GazoblokWallCalculator,
+  type CalcProduct,
+  type WallCalcSnapshot,
+} from "@/components/gazoblok/GazoblokWallCalculator";
 
 // ── API types ───────────────────────────────────────────────────
 // Decimal fields arrive from Prisma as JSON STRINGS — always wrap with
@@ -108,13 +110,10 @@ export default function GazoblokNewOrderPage() {
   const [pickProductId, setPickProductId] = useState("");
   const [pickQty, setPickQty] = useState("");
 
-  // ── Wall estimator ──
-  const [estOpen, setEstOpen] = useState(false);
-  const [estProductId, setEstProductId] = useState("");
-  const [estLength, setEstLength] = useState("");
-  const [estHeight, setEstHeight] = useState("");
-  const [estOpenings, setEstOpenings] = useState("");
-  const [estWaste, setEstWaste] = useState("5");
+  // ── Wall calculator snapshot (sent with the order at placement) ──
+  const [wallSnapshot, setWallSnapshot] = useState<WallCalcSnapshot | null>(
+    null,
+  );
 
   // ── Pricing knobs ──
   const [discountPercent, setDiscountPercent] = useState("");
@@ -128,16 +127,7 @@ export default function GazoblokNewOrderPage() {
 
   const [error, setError] = useState<string | null>(null);
 
-  // ── "Added ✓" feedback for the estimator button ──
-  const [estAdded, setEstAdded] = useState(false);
-  const estAddedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const linesSectionRef = useRef<HTMLElement | null>(null);
-  useEffect(
-    () => () => {
-      if (estAddedTimer.current) clearTimeout(estAddedTimer.current);
-    },
-    [],
-  );
 
   function addLine() {
     const p = activeProducts.find((x) => x.id === pickProductId);
@@ -168,55 +158,47 @@ export default function GazoblokNewOrderPage() {
     setLines((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  // ── Live wall estimate (client-side preview) ──
-  const estProduct = activeProducts.find((p) => p.id === estProductId);
-  const estimate = useMemo(() => {
-    if (!estProduct) return null;
-    const lengthM = Number(estLength);
-    const heightM = Number(estHeight);
-    if (!Number.isFinite(lengthM) || lengthM <= 0) return null;
-    if (!Number.isFinite(heightM) || heightM <= 0) return null;
-    try {
-      return estimateWall(dims(estProduct), {
-        lengthM,
-        heightM,
-        openingsM2: estOpenings.trim() === "" ? 0 : Number(estOpenings),
-        wastePct: estWaste.trim() === "" ? undefined : Number(estWaste),
-      });
-    } catch {
-      return null;
-    }
-  }, [estProduct, estLength, estHeight, estOpenings, estWaste]);
+  // ── Stable product list for the wall calculator ──
+  // The calculator memoizes on `products` identity, so this MUST be a stable
+  // reference (not an inline map) or it re-estimates every render → render loop.
+  const calcProducts = useMemo<CalcProduct[]>(
+    () =>
+      activeProducts.map((p) => ({
+        id: p.id,
+        label: p.label,
+        lengthM: Number(p.lengthM),
+        heightM: Number(p.heightM),
+        thicknessM: Number(p.thicknessM),
+        pricePerBlock: Number(p.pricePerBlock),
+      })),
+    [activeProducts],
+  );
 
-  function addEstimateToOrder() {
-    if (estAdded) return; // ignore double-clicks inside the feedback window
-    if (!estProduct || !estimate || estimate.blocksNeeded <= 0) return;
-    const unitPrice = Number(estProduct.pricePerBlock);
-    const qty = estimate.blocksNeeded;
+  // Merge each block size from the calculator into the order lines by product.
+  function addPerSizeToOrder(perSize: PerSizeResult[]) {
     setLines((prev) => {
-      const existing = prev.findIndex((l) => l.productId === estProduct.id);
-      if (existing >= 0) {
-        const next = [...prev];
-        next[existing] = {
-          ...next[existing],
-          quantity: next[existing].quantity + qty,
-        };
-        return next;
+      const next = [...prev];
+      for (const s of perSize) {
+        if (s.blocksNeeded <= 0) continue;
+        const p = activeProducts.find((x) => x.id === s.productId);
+        if (!p) continue;
+        const i = next.findIndex((l) => l.productId === s.productId);
+        if (i >= 0)
+          next[i] = { ...next[i], quantity: next[i].quantity + s.blocksNeeded };
+        else
+          next.push({
+            productId: s.productId,
+            productLabel: p.label,
+            unitPrice: Number(p.pricePerBlock),
+            quantity: s.blocksNeeded,
+          });
       }
-      return [
-        ...prev,
-        {
-          productId: estProduct.id,
-          productLabel: estProduct.label,
-          unitPrice,
-          quantity: qty,
-        },
-      ];
+      return next;
     });
-    setEstAdded(true);
-    if (estAddedTimer.current) clearTimeout(estAddedTimer.current);
-    estAddedTimer.current = setTimeout(() => setEstAdded(false), 1500);
-    linesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    linesSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
   }
 
   // ── Live totals (preview only — server recomputes authoritatively) ──
@@ -283,6 +265,7 @@ export default function GazoblokNewOrderPage() {
           paidAmount: paidPositive ? paidNum : undefined,
           paymentMethod:
             paidPositive && paymentMethod !== "" ? paymentMethod : undefined,
+          wallEstimate: wallSnapshot ?? undefined,
         },
       }),
     onSuccess: (created) => {
@@ -521,143 +504,17 @@ export default function GazoblokNewOrderPage() {
         </div>
       </section>
 
-      {/* Wall estimator (collapsible) */}
+      {/* Wall calculator */}
       <section className="rounded-lg border border-border bg-card overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setEstOpen((v) => !v)}
-          className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-accent/40 transition-colors"
-        >
-          <span className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            <Ruler className="h-4 w-4" />
-            {t("Девор калькулятори", "Wall estimator")}
-          </span>
-          {estOpen ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        <div className="p-4">
+          {catalogNotice ?? (
+            <GazoblokWallCalculator
+              products={calcProducts}
+              onAddToOrder={addPerSizeToOrder}
+              onSnapshotChange={setWallSnapshot}
+            />
           )}
-        </button>
-        {estOpen && (
-          <div className="p-4 border-t space-y-4">
-            {catalogNotice ?? (
-              <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div className="lg:col-span-3">
-                <FieldLabel uz="Ўлчам" en="Size" />
-                <Select
-                  value={estProductId}
-                  disabled={productsLoading}
-                  onChange={(e) => setEstProductId(e.target.value)}
-                >
-                  <option value="">
-                    {productsLoading
-                      ? t("Юкланмоқда…", "Loading…")
-                      : t("Ўлчам танланг…", "Pick a size…")}
-                  </option>
-                  {activeProducts.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <FieldLabel uz="Девор узунлиги (м)" en="Wall length (m)" />
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step={0.1}
-                  className="tabular-nums"
-                  placeholder="0"
-                  value={estLength}
-                  onChange={(e) => setEstLength(e.target.value)}
-                />
-              </div>
-              <div>
-                <FieldLabel uz="Баландлиги (м)" en="Height (m)" />
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step={0.1}
-                  className="tabular-nums"
-                  placeholder="0"
-                  value={estHeight}
-                  onChange={(e) => setEstHeight(e.target.value)}
-                />
-              </div>
-              <div>
-                <FieldLabel uz="Очиқликлар (м²)" en="Openings (m²)" />
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step={0.1}
-                  className="tabular-nums"
-                  placeholder="0"
-                  value={estOpenings}
-                  onChange={(e) => setEstOpenings(e.target.value)}
-                />
-              </div>
-              <div>
-                <FieldLabel uz="Чиқинди (%)" en="Waste (%)" />
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
-                  className="tabular-nums"
-                  placeholder="5"
-                  value={estWaste}
-                  onChange={(e) => setEstWaste(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {estimate && (
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md bg-muted/50 px-3 py-2 text-sm">
-                <Stat
-                  label={t("Деворлар (м²)", "Wall (m²)")}
-                  value={formatNumber(estimate.wallAreaM2, 2)}
-                />
-                <Stat
-                  label={t("Блоклар", "Blocks")}
-                  value={formatNumber(estimate.blocksNeeded, 0)}
-                  strong
-                />
-                <Stat
-                  label="м³"
-                  value={formatNumber(estimate.volumeM3, 3)}
-                />
-                <Stat
-                  label={t("Нархи (UZS)", "Price (UZS)")}
-                  value={formatNumber(estimate.price, 0)}
-                  strong
-                />
-              </div>
-            )}
-
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={addEstimateToOrder}
-              disabled={estAdded || !estimate || estimate.blocksNeeded <= 0}
-            >
-              {estAdded ? (
-                t("Қўшилди ✓", "Added ✓")
-              ) : (
-                <>
-                  <Plus className="h-4 w-4 mr-1" />
-                  {t("Қаторга қўшиш", "Add to order")}
-                </>
-              )}
-            </Button>
-              </>
-            )}
-          </div>
-        )}
+        </div>
       </section>
 
       {/* Pricing knobs */}
@@ -872,29 +729,6 @@ function Labeled({
         <span className="lang-en text-[10px] font-normal">· {en}</span>
       </div>
       {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  strong,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      <span
-        className={`tabular-nums ${strong ? "font-bold text-base" : "font-medium"}`}
-      >
-        {value}
-      </span>
     </div>
   );
 }
