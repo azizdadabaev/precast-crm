@@ -1484,6 +1484,12 @@ model GazoblokOrder {
 
   notes String?
 
+  // Snapshot of the wall calculator that produced this order's block lines:
+  // { walls, opts, result } from estimateProject. Informational record —
+  // the order LINES remain the authoritative billed quantities. Nullable;
+  // older orders and manual orders have none.
+  wallEstimate Json?
+
   client         Client                  @relation(fields: [clientId], references: [id])
   lines          GazoblokOrderLine[]
   payments       GazoblokPayment[]

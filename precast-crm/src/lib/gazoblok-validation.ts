@@ -54,6 +54,33 @@ const GazoblokDeliveryProofUrl = z.string().refine(
   { message: "Нотўғри файл манзили · Invalid proof URL" },
 );
 
+const OpeningSnapshotSchema = z.object({
+  kind: z.enum(["DOOR", "WINDOW", "OTHER"]),
+  widthM: z.number().positive(),
+  heightM: z.number().positive(),
+  qty: z.number().int().min(1),
+});
+const WallSnapshotSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().trim().optional(),
+  lengthM: z.number().positive(),
+  heightM: z.number().positive(),
+  productId: z.string().min(1),
+  openings: z.array(OpeningSnapshotSchema).max(30),
+});
+/** Loose validation of the calculator snapshot the client sends at placement.
+ *  Stored as-is for the record; NOT recomputed server-side (lines are billed). */
+export const WallEstimateSnapshotSchema = z.object({
+  walls: z.array(WallSnapshotSchema).max(200),
+  opts: z.object({
+    jointMm: z.number().min(0).optional(),
+    wastePct: z.number().min(0).optional(),
+    glueKgPerM2: z.number().min(0).optional(),
+    glueBagKg: z.number().min(0).optional(),
+  }).optional(),
+  result: z.unknown().optional(),
+});
+
 /** Place a new газоблок order. */
 export const PlaceGazoblokOrderSchema = z.object({
   clientName: z.string().trim().min(1),
@@ -68,6 +95,7 @@ export const PlaceGazoblokOrderSchema = z.object({
   // Optional up-front payment (auto-confirmed when the recorder can confirm).
   paidAmount: z.number().min(0).default(0),
   paymentMethod: PaymentMethodEnum.optional(),
+  wallEstimate: WallEstimateSnapshotSchema.optional(),
 }).refine((b) => b.paidAmount === 0 || !!b.paymentMethod, {
   message: "Тўлов усулини танланг · Payment method is required when an amount is paid",
   path: ["paymentMethod"],

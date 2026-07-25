@@ -175,6 +175,7 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
         scheduledAt: body.scheduledAt ?? null,
         placedAt,
         notes: body.notes ?? null,
+        wallEstimate: (body.wallEstimate as Prisma.InputJsonValue) ?? undefined,
         lines: {
           create: lineRows.map((r) => ({
             productId: r.productId,
