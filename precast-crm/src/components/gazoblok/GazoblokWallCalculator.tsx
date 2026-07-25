@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Trash2, Plus, Copy, ChevronDown } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { formatNumber } from "@/lib/utils";
@@ -83,6 +83,18 @@ export function GazoblokWallCalculator({
   const [wastePct, setWastePct] = useState(String(DEFAULT_WASTE_PCT));
   const [glueKg, setGlueKg] = useState(String(DEFAULT_GLUE_KG_PER_M2));
   const [advOpen, setAdvOpen] = useState(false);
+  const [added, setAdded] = useState(false);
+  const addedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (addedTimer.current) clearTimeout(addedTimer.current);
+  }, []);
+
+  const handleAddToOrder = () => {
+    if (added || !result) return;
+    onAddToOrder(result.perSize);
+    setAdded(true);
+    addedTimer.current = setTimeout(() => setAdded(false), 1500);
+  };
 
   // ── Live estimate ─────────────────────────────────────────────
   const productMap = useMemo(
@@ -141,7 +153,11 @@ export function GazoblokWallCalculator({
   }, [readyWalls, productMap, jointMm, wastePct, glueKg]);
 
   useEffect(() => {
-    onSnapshotChange(result ? { walls: readyWalls, opts, result } : null);
+    // Snapshot must satisfy the server Zod schema (productId min length 1); a
+    // sizeless wall (no block chosen) is tolerated by the engine as a warning
+    // but would 422 the whole order — so exclude it from the emitted snapshot.
+    const snapshotWalls = readyWalls.filter((w) => w.productId !== "");
+    onSnapshotChange(result ? { walls: snapshotWalls, opts, result } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
@@ -534,10 +550,10 @@ export function GazoblokWallCalculator({
               <Button
                 type="button"
                 className="w-full"
-                disabled={result.totalBlocks <= 0}
-                onClick={() => onAddToOrder(result.perSize)}
+                disabled={added || !result || result.totalBlocks <= 0}
+                onClick={handleAddToOrder}
               >
-                {t("Буюртмага қўшиш", "Add to order")}
+                {added ? t("Қўшилди ✓", "Added ✓") : t("Буюртмага қўшиш", "Add to order")}
               </Button>
             </>
           )}
