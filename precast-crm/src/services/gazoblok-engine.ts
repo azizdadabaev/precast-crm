@@ -151,6 +151,7 @@ export interface WallInput {
   heightM: number;
   productId: string;
   openings: Opening[];
+  orientation?: "STANDARD" | "ROTATED";
 }
 
 export interface ProjectEstimateOpts {
@@ -195,10 +196,10 @@ export const DEFAULT_JOINT_MM = 2;
 export const DEFAULT_GLUE_KG_PER_M2 = 1.7;
 export const DEFAULT_GLUE_BAG_KG = 25;
 
-/** Blocks per m² of wall face, accounting for the thin-bed glue joint.
- *  = 1 / ((L + joint) × (H + joint)), all in meters. */
-function blocksPerM2(p: BlockProduct, jointM: number): number {
-  const denom = (p.lengthM + jointM) * (p.heightM + jointM);
+/** Blocks per m² of wall face for an explicit face (length × height), joint-aware.
+ *  = 1 / ((faceL + joint) × (faceH + joint)), all in meters. */
+function facePerM2(faceLM: number, faceHM: number, jointM: number): number {
+  const denom = (faceLM + jointM) * (faceHM + jointM);
   if (!Number.isFinite(denom) || denom <= 0) {
     throw new GazoblokError("block face + joint must be positive (check length/height)");
   }
@@ -257,7 +258,9 @@ export function estimateProject(
     }
     const net = Math.max(0, gross - openingsArea);
 
-    rawByProduct.set(w.productId, (rawByProduct.get(w.productId) ?? 0) + net * blocksPerM2(product, jointM));
+    const faceHM = w.orientation === "ROTATED" ? product.thicknessM : product.heightM;
+    const perM2 = facePerM2(product.lengthM, faceHM, jointM);
+    rawByProduct.set(w.productId, (rawByProduct.get(w.productId) ?? 0) + net * perM2);
     netByProduct.set(w.productId, (netByProduct.get(w.productId) ?? 0) + net);
     glueNetArea += net;
   }

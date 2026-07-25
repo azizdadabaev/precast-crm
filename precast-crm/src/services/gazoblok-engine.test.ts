@@ -101,3 +101,34 @@ describe("estimateProject", () => {
     ).toThrow(GazoblokError);
   });
 });
+
+describe("estimateProject — block orientation", () => {
+  // 20sm block: 0.6 x 0.3 x 0.2. STANDARD face 600x300 (5.50/m2); ROTATED face 600x200 (8.22/m2).
+  const p20 = () => new Map([["A", { lengthM: 0.6, heightM: 0.3, thicknessM: 0.2, pricePerBlock: 1000, label: "20sm" }]]);
+  const w = (orientation?: "STANDARD" | "ROTATED") => [{
+    id: "w1", productId: "A", lengthM: 10, heightM: 1, openings: [], ...(orientation ? { orientation } : {}),
+  }];
+
+  it("defaults to STANDARD when orientation is absent (face length×height)", () => {
+    const r = estimateProject(w(), p20(), { jointMm: 2, wastePct: 0 });
+    // 10 m2 * 5.5005 = 55.005 -> ceil 56
+    expect(r.perSize[0].blocksNeeded).toBe(56);
+  });
+
+  it("STANDARD and ROTATED give different block counts for the same wall & block", () => {
+    const std = estimateProject(w("STANDARD"), p20(), { jointMm: 2, wastePct: 0 });
+    const rot = estimateProject(w("ROTATED"), p20(), { jointMm: 2, wastePct: 0 });
+    expect(std.perSize[0].blocksNeeded).toBe(56);   // face 600x300
+    expect(rot.perSize[0].blocksNeeded).toBe(83);   // face 600x200: 10*8.2234=82.234 -> 83
+    expect(rot.perSize[0].blocksNeeded).toBeGreaterThan(std.perSize[0].blocksNeeded);
+  });
+
+  it("volume per block is identical across orientations (same physical block)", () => {
+    const std = estimateProject(w("STANDARD"), p20(), { jointMm: 2, wastePct: 0 });
+    const rot = estimateProject(w("ROTATED"), p20(), { jointMm: 2, wastePct: 0 });
+    const volPerBlockStd = std.perSize[0].volumeM3 / std.perSize[0].blocksNeeded;
+    const volPerBlockRot = rot.perSize[0].volumeM3 / rot.perSize[0].blocksNeeded;
+    expect(volPerBlockStd).toBeCloseTo(0.036, 3);
+    expect(volPerBlockRot).toBeCloseTo(0.036, 3);
+  });
+});
