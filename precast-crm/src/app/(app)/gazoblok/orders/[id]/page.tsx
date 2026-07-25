@@ -52,6 +52,8 @@ interface OrderDetail {
   deliveredAt: string | null;
   canceledAt: string | null;
   cancelReason: string | null;
+  // Read-only snapshot of the wall calculator that produced the order (stored JSON).
+  wallEstimate: Record<string, unknown> | null;
   client: { id: string; name: string; phone: string; address: string | null };
   lines: Array<{
     id: string;
@@ -416,6 +418,53 @@ export default function GazoblokOrderDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Estimate — read-only snapshot of the wall calculator that produced this order */}
+      {order.wallEstimate && (() => {
+        const snap = order.wallEstimate as unknown as {
+          walls?: Array<{
+            name?: string;
+            lengthM: number;
+            heightM: number;
+            productId?: string;
+            openings?: Array<{ kind: string; widthM: number; heightM: number; qty: number }>;
+          }>;
+          result?: { glue?: { kg: number; bags: number } };
+        };
+        const walls = snap.walls ?? [];
+        if (walls.length === 0 && !snap.result?.glue) return null;
+        return (
+          <div className="rounded-lg border bg-background overflow-hidden">
+            <div className="px-4 py-3 border-b text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              Ҳисоб-китоб<span className="lang-en"> · Estimate</span>
+            </div>
+            {walls.length > 0 && (
+              <ul className="divide-y">
+                {walls.map((w, i) => (
+                  <li key={i} className="px-4 py-2.5 text-sm flex items-baseline justify-between gap-4">
+                    <span className="font-medium">
+                      {w.name || `${t("Девор", "Wall")} ${i + 1}`}
+                      <span className="ml-2 font-mono tabular-nums text-muted-foreground">
+                        {formatNumber(Number(w.lengthM), 2)}×{formatNumber(Number(w.heightM), 2)} м
+                      </span>
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                      {(w.openings ?? []).reduce((s, o) => s + (Number(o.qty) || 0), 0)} {t("очиқлик", "openings")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {snap.result?.glue && (
+              <div className="px-4 py-2.5 text-xs text-muted-foreground border-t bg-muted/20">
+                {t("Ёпиштиргич", "Glue")}: ~
+                <span className="font-mono tabular-nums text-foreground">{formatNumber(Number(snap.result.glue.kg), 1)}</span> кг ·{" "}
+                <span className="font-mono tabular-nums text-foreground">{formatNumber(Number(snap.result.glue.bags), 0)}</span> {t("қоп", "bags")}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Status actions */}
       {!isCanceled && (canStartProduction || canDeliver) && (
