@@ -135,6 +135,162 @@ export function estimateWall(p: BlockProduct, input: WallEstimateInput): WallEst
   return { wallAreaM2, blockFaceAreaM2, wastePct, blocksNeeded, volumeM3, price };
 }
 
+// ── Multi-wall project estimator ────────────────────────────────
+
+export interface Opening {
+  kind: "DOOR" | "WINDOW" | "OTHER";
+  widthM: number;
+  heightM: number;
+  qty: number;
+}
+
+export interface WallInput {
+  id: string;
+  name?: string;
+  lengthM: number;
+  heightM: number;
+  productId: string;
+  openings: Opening[];
+}
+
+export interface ProjectEstimateOpts {
+  jointMm?: number;
+  wastePct?: number;
+  glueKgPerM2?: number;
+  glueBagKg?: number;
+}
+
+export interface PerSizeResult {
+  productId: string;
+  label: string;
+  netAreaM2: number;
+  blocksNeeded: number;
+  volumeM3: number;
+  price: number;
+}
+
+export interface GlueResult {
+  netAreaM2: number;
+  kg: number;
+  bags: number;
+}
+
+export interface EstimateWarning {
+  wallId: string;
+  code: "OPENINGS_EXCEED_WALL" | "NO_BLOCK_SIZE";
+  message: string;
+}
+
+export interface ProjectEstimateResult {
+  perSize: PerSizeResult[];
+  glue: GlueResult;
+  totalBlocks: number;
+  totalVolumeM3: number;
+  totalPrice: number;
+  warnings: EstimateWarning[];
+}
+
+/** Defaults for the project estimator's advanced knobs. */
+export const DEFAULT_JOINT_MM = 2;
+export const DEFAULT_GLUE_KG_PER_M2 = 1.7;
+export const DEFAULT_GLUE_BAG_KG = 25;
+
+/** Blocks per m² of wall face, accounting for the thin-bed glue joint.
+ *  = 1 / ((L + joint) × (H + joint)), all in meters. */
+function blocksPerM2(p: BlockProduct, jointM: number): number {
+  const denom = (p.lengthM + jointM) * (p.heightM + jointM);
+  if (!Number.isFinite(denom) || denom <= 0) {
+    throw new GazoblokError("block face + joint must be positive (check length/height)");
+  }
+  return 1 / denom;
+}
+
+/**
+ * Estimate a whole project (list of walls, each with its own catalog block
+ * and openings). Aggregates raw block counts per product, applies the waste
+ * margin ONCE per size, then ceils to whole blocks. Glue is informational.
+ *
+ * A wall whose product is missing/unknown is skipped with a NO_BLOCK_SIZE
+ * warning. Openings exceeding the wall clamp net area to 0 with a warning.
+ * Non-positive wall/opening dimensions throw GazoblokError (callers pass only
+ * geometrically-complete walls).
+ */
+export function estimateProject(
+  walls: WallInput[],
+  products: Map<string, BlockProduct & { label: string }>,
+  opts: ProjectEstimateOpts = {},
+): ProjectEstimateResult {
+  const jointM = (opts.jointMm ?? DEFAULT_JOINT_MM) / 1000;
+  const wastePct = opts.wastePct ?? DEFAULT_WASTE_PCT;
+  const glueKgPerM2 = opts.glueKgPerM2 ?? DEFAULT_GLUE_KG_PER_M2;
+  const glueBagKg = opts.glueBagKg ?? DEFAULT_GLUE_BAG_KG;
+  if (!Number.isFinite(jointM) || jointM < 0) throw new GazoblokError("joint must be a non-negative number (mm)");
+  if (!Number.isFinite(wastePct) || wastePct < 0) throw new GazoblokError("waste percent must be a non-negative number");
+
+  const warnings: EstimateWarning[] = [];
+  // productId -> accumulator
+  const rawByProduct = new Map<string, number>();
+  const netByProduct = new Map<string, number>();
+  let glueNetArea = 0;
+
+  for (const w of walls) {
+    const product = w.productId ? products.get(w.productId) : undefined;
+    if (!product) {
+      warnings.push({ wallId: w.id, code: "NO_BLOCK_SIZE", message: "Блок ўлчами танланмаган · No block size selected" });
+      continue;
+    }
+    if (!Number.isFinite(w.lengthM) || w.lengthM <= 0) throw new GazoblokError("wall length must be a positive number (meters)");
+    if (!Number.isFinite(w.heightM) || w.heightM <= 0) throw new GazoblokError("wall height must be a positive number (meters)");
+
+    let openingsArea = 0;
+    for (const o of w.openings) {
+      if (!Number.isFinite(o.widthM) || o.widthM <= 0 || !Number.isFinite(o.heightM) || o.heightM <= 0) {
+        throw new GazoblokError("opening dimensions must be positive numbers (meters)");
+      }
+      if (!Number.isInteger(o.qty) || o.qty < 1) throw new GazoblokError("opening quantity must be an integer >= 1");
+      openingsArea += o.widthM * o.heightM * o.qty;
+    }
+
+    const gross = w.lengthM * w.heightM;
+    if (openingsArea > gross) {
+      warnings.push({ wallId: w.id, code: "OPENINGS_EXCEED_WALL", message: "Очиқликлар девордан катта · Openings exceed the wall" });
+    }
+    const net = Math.max(0, gross - openingsArea);
+
+    rawByProduct.set(w.productId, (rawByProduct.get(w.productId) ?? 0) + net * blocksPerM2(product, jointM));
+    netByProduct.set(w.productId, (netByProduct.get(w.productId) ?? 0) + net);
+    glueNetArea += net;
+  }
+
+  const perSize: PerSizeResult[] = [];
+  for (const [productId, raw] of rawByProduct) {
+    const product = products.get(productId)!;
+    const blocksNeeded = Math.max(0, Math.ceil(raw * (1 + wastePct / 100) - 1e-9));
+    perSize.push({
+      productId,
+      label: product.label,
+      netAreaM2: round3(netByProduct.get(productId) ?? 0),
+      blocksNeeded,
+      volumeM3: round3(blocksNeeded * blockVolumeM3(product)),
+      price: round2(blocksNeeded * product.pricePerBlock),
+    });
+  }
+  // Exterior/thick (usually pricier) first.
+  perSize.sort((a, b) => b.price - a.price);
+
+  const kg = round2(glueNetArea * glueKgPerM2);
+  const glue: GlueResult = { netAreaM2: round3(glueNetArea), kg, bags: Math.ceil(kg / glueBagKg) };
+
+  return {
+    perSize,
+    glue,
+    totalBlocks: perSize.reduce((s, p) => s + p.blocksNeeded, 0),
+    totalVolumeM3: round3(perSize.reduce((s, p) => s + p.volumeM3, 0)),
+    totalPrice: round2(perSize.reduce((s, p) => s + p.price, 0)),
+    warnings,
+  };
+}
+
 // ── Order line + totals ─────────────────────────────────────────
 
 export interface OrderLineInput {
