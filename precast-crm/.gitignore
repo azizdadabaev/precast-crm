@@ -13,3 +13,6 @@ prisma/migrations/dev.db*
 # User-uploaded files (delivery proofs, etc.) — local-only artifacts.
 # Don't commit these to git; they live on the server's filesystem.
 public/uploads/
+
+# Superpowers scratch: brainstorm mockups, SDD progress/briefs — local-only.
+.superpowers/
