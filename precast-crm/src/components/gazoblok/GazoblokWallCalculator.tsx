@@ -51,6 +51,7 @@ interface WallRow {
   lengthM: string;
   heightM: string;
   productId: string;
+  orientation: "STANDARD" | "ROTATED";
   openings: OpeningRow[];
   collapsed: boolean;
 }
@@ -62,9 +63,25 @@ const newWall = (): WallRow => ({
   lengthM: "",
   heightM: "",
   productId: "",
+  orientation: "STANDARD",
   openings: [],
   collapsed: false,
 });
+
+// Block orientation matters only for asymmetric blocks (height ≠ thickness):
+// STANDARD lays the block so the wall thickness = block thickness (course = height),
+// ROTATED turns it so the wall thickness = block height (course = thickness).
+// Symmetric blocks (height == thickness in cm) offer no meaningful choice → null.
+function orientationOptions(p: CalcProduct | undefined) {
+  if (!p) return null;
+  const hCm = Math.round(p.heightM * 100);
+  const tCm = Math.round(p.thicknessM * 100);
+  if (hCm === tCm) return null;
+  return {
+    STANDARD: { wallCm: tCm, courseCm: hCm },
+    ROTATED: { wallCm: hCm, courseCm: tCm },
+  };
+}
 
 // Standard opening presets (bilingual chip labels rendered via t()).
 const DOOR_PRESET: OpeningRow = { kind: "DOOR", widthM: "0.9", heightM: "2.1", qty: "1" };
@@ -130,6 +147,7 @@ export function GazoblokWallCalculator({
           lengthM: Number(w.lengthM),
           heightM: Number(w.heightM),
           productId: w.productId,
+          orientation: w.orientation,
           openings: w.openings
             .filter((o) => Number(o.widthM) > 0 && Number(o.heightM) > 0 && Number(o.qty) >= 1)
             .map((o) => ({
@@ -198,6 +216,10 @@ export function GazoblokWallCalculator({
       <div className="space-y-4">
         {walls.map((w, wi) => {
           const product = w.productId ? products.find((p) => p.id === w.productId) : undefined;
+          const oo = orientationOptions(product);
+          const activeOrientation = w.orientation ?? "STANDARD";
+          const orientationLabel = (o: { wallCm: number; courseCm: number }) =>
+            t(`Девор ${o.wallCm}см · қатор ${o.courseCm}см`, `Wall ${o.wallCm}cm · course ${o.courseCm}cm`);
           return (
             <section
               key={w.id}
@@ -223,6 +245,7 @@ export function GazoblokWallCalculator({
                     {Number(w.lengthM) > 0 && Number(w.heightM) > 0
                       ? `${formatNumber(Number(w.lengthM), 2)} × ${formatNumber(Number(w.heightM), 2)} м`
                       : t("Ўлчам киритилмаган", "No dimensions")}
+                    {oo && ` · ${oo[activeOrientation].wallCm}см девор`}
                   </div>
                 </div>
                 {product && (
@@ -304,6 +327,33 @@ export function GazoblokWallCalculator({
                       </Select>
                     </div>
                   </div>
+
+                  {/* Block orientation — only for asymmetric blocks */}
+                  {oo && (
+                    <div>
+                      <FieldLabel uz="Блок йўналиши" en="Block orientation" />
+                      <div className="inline-flex rounded-md border border-border overflow-hidden">
+                        {(["STANDARD", "ROTATED"] as const).map((key) => {
+                          const active = activeOrientation === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() => setWall(w.id, { orientation: key })}
+                              className={`h-11 md:h-9 px-3 text-xs font-medium tabular-nums transition-colors ${
+                                active
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-card text-muted-foreground hover:bg-accent/40"
+                              }`}
+                            >
+                              {orientationLabel(oo[key])}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Openings */}
                   <div className="space-y-2">

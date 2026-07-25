@@ -427,6 +427,7 @@ export default function GazoblokOrderDetailPage() {
             lengthM: number;
             heightM: number;
             productId?: string;
+            orientation?: "STANDARD" | "ROTATED";
             openings?: Array<{ kind: string; widthM: number; heightM: number; qty: number }>;
           }>;
           result?: { glue?: { kg: number; bags: number } };
@@ -447,6 +448,11 @@ export default function GazoblokOrderDetailPage() {
                       <span className="ml-2 font-mono tabular-nums text-muted-foreground">
                         {formatNumber(Number(w.lengthM), 2)}×{formatNumber(Number(w.heightM), 2)} м
                       </span>
+                      {w.orientation === "ROTATED" && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          {t("(айланган)", "(rotated)")}
+                        </span>
+                      )}
                     </span>
                     <span className="text-xs text-muted-foreground tabular-nums shrink-0">
                       {(w.openings ?? []).reduce((s, o) => s + (Number(o.qty) || 0), 0)} {t("очиқлик", "openings")}

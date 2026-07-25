@@ -66,6 +66,7 @@ const WallSnapshotSchema = z.object({
   lengthM: z.number().positive(),
   heightM: z.number().positive(),
   productId: z.string().min(1),
+  orientation: z.enum(["STANDARD", "ROTATED"]).optional(),
   openings: z.array(OpeningSnapshotSchema).max(30),
 });
 /** Loose validation of the calculator snapshot the client sends at placement.
