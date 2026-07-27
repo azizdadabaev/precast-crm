@@ -14,6 +14,9 @@ import {
 } from "@/services/calculation-engine";
 import { calcResultToCreatePayload, type RoomInput } from "@/lib/calc-persistence";
 
+/** Which discount input the operator chose — persisted so an edit restores the same type. */
+export type DiscountMode = "AMOUNT" | "PERCENT";
+
 /** One room + the engine result it produced — threaded into persistence. */
 export interface ComputedRoom {
   input: RoomInput;
@@ -28,6 +31,7 @@ export interface OrderTotals {
   totalBeams: number; // Σ beam_count
   discountAmount: number;
   resolvedDiscountPercent: number;
+  discountMode: DiscountMode; // which input drove the discount (persisted to restore on edit)
   totalPrice: number; // roomsSubtotal − discountAmount + deliveryCost + otherCost
 }
 
@@ -82,6 +86,8 @@ export function computeOrderTotals(
   const totalBlocks = computed.reduce((s, c) => s + c.result.total_blocks, 0);
   const totalBeams = computed.reduce((s, c) => s + c.result.beam_count, 0);
 
+  const discountMode: DiscountMode = opts.discountAmount > 0 ? "AMOUNT" : "PERCENT";
+
   let discountAmount: number;
   let resolvedDiscountPercent: number;
   if (opts.discountAmount > 0) {
@@ -106,6 +112,24 @@ export function computeOrderTotals(
     totalBeams,
     discountAmount,
     resolvedDiscountPercent,
+    discountMode,
     totalPrice,
   };
+}
+
+/**
+ * Reconstruct the calculator's two discount inputs from a stored order,
+ * returning exactly ONE non-zero field so the mutually-exclusive
+ * percent/amount inputs restore the SAME type the operator chose.
+ * Legacy rows (no mode) infer AMOUNT when an amount was stored.
+ */
+export function restoreDiscountInputs(o: {
+  discountMode: DiscountMode | null | undefined;
+  discountPercent: number;
+  discountAmount: number;
+}): { discountPercent: number; discountAmount: number } {
+  const mode = o.discountMode ?? (o.discountAmount > 0 ? "AMOUNT" : "PERCENT");
+  return mode === "AMOUNT"
+    ? { discountPercent: 0, discountAmount: o.discountAmount }
+    : { discountPercent: o.discountPercent, discountAmount: 0 };
 }
