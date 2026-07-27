@@ -28,6 +28,7 @@ import {
   type SlabRow,
 } from "@/components/calculation/MultiRoomCalculator";
 import type { NormBox } from "@/lib/annotation-box";
+import { restoreDiscountInputs } from "@/lib/order-totals";
 import { projectTotal } from "@/services/calculation-engine";
 import { TaperedPrefillSchema } from "@/lib/validation";
 import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-bridge";
@@ -391,6 +392,8 @@ function CalculationsInner() {
         orderNumber: string;
         status: string;
         discountPercent: string;
+        discountAmount: string;
+        discountMode: "AMOUNT" | "PERCENT" | null;
         scheduledAt: string;
         client: {
           id: string;
@@ -438,7 +441,11 @@ function CalculationsInner() {
           address: order.client.address ?? "",
         },
         matchedClientId: order.client.id,
-        discountPercent: Number(order.discountPercent),
+        ...restoreDiscountInputs({
+          discountMode: order.discountMode,
+          discountPercent: Number(order.discountPercent),
+          discountAmount: Number(order.discountAmount),
+        }),
         rows: order.project.calculations.map((c) =>
           recomputeRow({
             id: Math.random().toString(36).slice(2, 9),
