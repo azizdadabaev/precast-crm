@@ -84,6 +84,11 @@ enum OrderPaymentState {
   FULLY_PAID
 }
 
+enum DiscountMode {
+  AMOUNT
+  PERCENT
+}
+
 // New three-state lifecycle. PENDING → CONFIRMED (owner) | REJECTED (owner).
 enum PaymentStatus {
   PENDING_CONFIRMATION
@@ -559,6 +564,10 @@ model Order {
   roomsSubtotal   Decimal @db.Decimal(14, 2)
   discountPercent Decimal @default(0) @db.Decimal(5, 2)
   discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+  // Which input produced the discount, so editing restores the same type
+  // (an exact amount stays an amount; a percent stays a percent and
+  // re-scales). Nullable: legacy orders infer from discountAmount.
+  discountMode DiscountMode?
   deliveryCost    Decimal @default(0) @db.Decimal(14, 2)
   otherCost       Decimal @default(0) @db.Decimal(14, 2)
   totalPrice      Decimal @db.Decimal(14, 2)

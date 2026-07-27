@@ -99,6 +99,7 @@ export async function createOrder(
     totalBeams,
     discountAmount,
     resolvedDiscountPercent,
+    discountMode,
     totalPrice,
   } = computeOrderTotals(input.rooms, input, pricing);
 
@@ -265,6 +266,7 @@ export async function createOrder(
         roomsSubtotal,
         discountPercent: resolvedDiscountPercent,
         discountAmount,
+        discountMode,
         deliveryCost: input.deliveryCost,
         otherCost: input.otherCost,
         totalPrice,

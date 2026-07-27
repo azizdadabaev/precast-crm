@@ -67,9 +67,21 @@ export const POST = withPermission<{ id: string }>("order.edit", async (_req: Ne
 
   const startSeq = (order.project.calculations[0]?.seq ?? -1) + 1;
   const newSubtotal = Number(order.roomsSubtotal) + added.roomsSubtotal;
-  const discountAmount = Number(order.discountAmount);
-  const resolvedPercent =
-    discountAmount > 0 && newSubtotal > 0 ? Math.round((discountAmount / newSubtotal) * 10000) / 100 : 0;
+  // Respect the order's discount mode so a PERCENT order keeps its percentage
+  // as rooms are added (the amount re-scales); an AMOUNT order keeps its
+  // negotiated absolute discount fixed (the percent rebases). Legacy orders
+  // (null mode) infer from whether an amount is present.
+  const mode = order.discountMode ?? (Number(order.discountAmount) > 0 ? "AMOUNT" : "PERCENT");
+  let discountAmount: number;
+  let resolvedPercent: number;
+  if (mode === "PERCENT") {
+    resolvedPercent = Number(order.discountPercent);
+    discountAmount = newSubtotal * (resolvedPercent / 100);
+  } else {
+    discountAmount = Number(order.discountAmount);
+    resolvedPercent =
+      discountAmount > 0 && newSubtotal > 0 ? Math.round((discountAmount / newSubtotal) * 10000) / 100 : 0;
+  }
   const totalPrice = newSubtotal - discountAmount + Number(order.deliveryCost) + Number(order.otherCost);
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -85,6 +97,7 @@ export const POST = withPermission<{ id: string }>("order.edit", async (_req: Ne
       data: {
         roomsSubtotal: newSubtotal,
         discountPercent: resolvedPercent,
+        discountAmount,
         totalArea: Number(order.totalArea) + added.totalArea,
         totalBlocks: order.totalBlocks + added.totalBlocks,
         totalBeams: order.totalBeams + added.totalBeams,

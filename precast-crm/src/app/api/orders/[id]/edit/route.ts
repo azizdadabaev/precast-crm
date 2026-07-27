@@ -100,6 +100,7 @@ export const PATCH = withPermission<{ id: string }>(
       resolvedDiscountPercent = body.discountPercent;
       discountAmount = roomsSubtotal * (resolvedDiscountPercent / 100);
     }
+    const discountMode: "AMOUNT" | "PERCENT" = body.discountAmount > 0 ? "AMOUNT" : "PERCENT";
     const newTotal = roomsSubtotal - discountAmount + body.deliveryCost + body.otherCost;
 
     // Recompute confirmedPaid + paymentState against the new total.
@@ -136,6 +137,7 @@ export const PATCH = withPermission<{ id: string }>(
       roomsSubtotal,
       discountPercent: resolvedDiscountPercent,
       discountAmount,
+      discountMode,
       deliveryCost: body.deliveryCost,
       otherCost: body.otherCost,
       totalPrice: newTotal,
@@ -168,6 +170,7 @@ export const PATCH = withPermission<{ id: string }>(
           roomsSubtotal,
           discountPercent: resolvedDiscountPercent,
           discountAmount,
+          discountMode,
           deliveryCost: body.deliveryCost,
           otherCost: body.otherCost,
           totalPrice: newTotal,
