@@ -4,7 +4,7 @@
 
 **Goal:** Add a stateless MCP (Model Context Protocol) server at `POST https://etalontbm.uz/api/mcp` exposing five read-only tools so Claude can query live CRM data.
 
-**Architecture:** A static Next.js App Router route at `src/app/api/mcp/route.ts` uses the `mcp-handler` package (Vercel's Next.js MCP adapter) to handle Streamable HTTP transport. Every request is stateless (no Redis, no sessions). Auth is a static bearer token checked manually before the handler runs — no OAuth advertising.
+**Architecture:** A static Next.js App Router route at `src/app/api/mcp/route.ts` uses the `mcp-handler` package (Vercel's Next.js MCP adapter) to handle Streamable HTTP transport. Every request is stateless (no Redis, no sessions). Auth is a static bearer token checked manually before the handler runs — no OAuth advertising. The dashboard tool calls an extracted shared function (`src/lib/dashboard-data.ts`) that is also called by the REST route, so both surfaces return identical numbers.
 
 **Tech Stack:** Next.js 14 App Router · `mcp-handler@1.1.0` · `@modelcontextprotocol/sdk@1.26.0` (pinned) · Prisma (existing) · Vitest (existing) · Zod ^3 (existing)
 
@@ -18,6 +18,20 @@
 - Tool output: two `content` blocks — prose summary + fenced JSON (do not rely on `structuredContent` alone)
 - Prisma import: `import { prisma } from "@/lib/prisma"` (confirmed pattern)
 - All money fields from Prisma are `Decimal` — call `.toNumber()` or `Number()` when doing arithmetic; they serialize to strings in `JSON.stringify` automatically
+- **No logic in the tool layer** — `get_dashboard` calls `fetchDashboardData()` from the shared lib; it does NOT reimplement queries itself
+
+## Confirmed Prisma field names (from schema audit in Task 0)
+
+| Field | Model | Type |
+|---|---|---|
+| `recordedAt` | `Payment` | `DateTime @default(now())` |
+| `number` | `Shipment` | `Int` (1-based sequence within order) |
+| `DealStatus.OPEN` | `DealStatus` enum | enum value (alongside `WON`, `LOST`) |
+| `stage` | `Deal` | `DealStage` (separate from `status`) |
+| `value` | `Deal` | `Decimal @default(0)` |
+| `writeOffAmount` | `Order` | `Decimal @default(0)` |
+| `confirmedPaid` | `Order` | `Decimal @default(0)` |
+| `paymentState` | `Order` | `OrderPaymentState` |
 
 ---
 
@@ -25,18 +39,58 @@
 
 | Action | Path | Responsibility |
 |---|---|---|
+| Create | `src/lib/dashboard-data.ts` | Shared `fetchDashboardData()` function + `DashboardPayload` types + helpers |
+| Modify | `src/app/api/dashboard/route.ts` | Replace inline handler body with `return ok(await fetchDashboardData())` |
 | Create | `src/lib/mcp/auth.ts` | `checkBearer(req)` — SHA-256 token comparison |
 | Create | `src/lib/mcp/server.ts` | `createMcpHandler` instance + tool registration |
-| Create | `src/lib/mcp/tools/dashboard.ts` | `registerDashboardTools` — `get_dashboard` |
+| Create | `src/lib/mcp/tools/dashboard.ts` | `registerDashboardTools` — `get_dashboard` (thin wrapper around shared lib) |
 | Create | `src/lib/mcp/tools/orders.ts` | `registerOrderTools` — `list_orders`, `get_order` |
 | Create | `src/lib/mcp/tools/clients.ts` | `registerClientTools` — `list_clients`, `get_client` |
 | Create | `src/app/api/mcp/route.ts` | Auth gate + `export { GET, POST }` |
 | Create | `src/lib/mcp/auth.test.ts` | Unit tests for `checkBearer` |
-| Create | `src/lib/mcp/tools/dashboard.test.ts` | Unit tests for dashboard tool |
+| Create | `src/lib/mcp/tools/dashboard.test.ts` | Unit tests for dashboard MCP wrapper |
 | Create | `src/lib/mcp/tools/orders.test.ts` | Unit tests for order tools |
 | Create | `src/lib/mcp/tools/clients.test.ts` | Unit tests for client tools |
 | Modify | `package.json` | Add `mcp-handler`, `@modelcontextprotocol/sdk` |
 | Modify | `docker-compose.yml` | Pass `MCP_API_TOKEN` env var to app container |
+
+---
+
+## Task 0: Schema & Dashboard Route Audit
+
+**Files:**
+- Read (no changes): `prisma/schema.prisma`
+- Read (no changes): `src/app/api/dashboard/route.ts`
+
+**Purpose:** Verify all Prisma field names used in Tasks 4–6 exist in the schema. Confirm the exact shape of `DashboardPayload` and where the handler body starts/ends in the route file. No commit.
+
+- [ ] **Step 1: Confirm Prisma field names**
+
+Run from the `precast-crm/` directory:
+
+```bash
+grep -n "recordedAt\|number.*Int\|DealStatus\|writeOffAmount\|confirmedPaid\|paymentState" prisma/schema.prisma | head -30
+```
+
+Expected matches (all must appear):
+- `recordedAt` on `Payment` model — `DateTime @default(now())`
+- `number  Int` on `Shipment` model
+- `DealStatus` enum containing `OPEN`
+- `writeOffAmount` on `Order` model — `Decimal @default(0)`
+- `confirmedPaid` on `Order` model — `Decimal @default(0)`
+- `paymentState` on `Order` model — `OrderPaymentState`
+
+If any are missing, stop and report before proceeding.
+
+- [ ] **Step 2: Read the dashboard route in full**
+
+Read `src/app/api/dashboard/route.ts`. Note the following locations for Task 4:
+- Lines 1–7: imports (`prisma`, `ok`, `withPermissionAny`, `normalizeCity` from `@/lib/city-normalize`)
+- Lines 25–103: type definitions (`RevenueAgg`, `Trend`, `DashboardPayload`)
+- Lines 105–148: helper functions (`dateKey`, `startOfDay`, `endOfDay`, `buildTrend`, `CAPACITY_M2_PER_DAY`)
+- Lines 157–559: `withPermissionAny` handler — this entire block (from `const now = new Date()` to `return ok(payload)`) will be moved into `fetchDashboardData()` in Task 4
+
+Task 0 complete. No commit needed.
 
 ---
 
@@ -87,7 +141,7 @@ Copy the output. Add to `.env` (the local env file, never committed):
 MCP_API_TOKEN=<paste-hex-value-here>
 ```
 
-This token is for local dev only. A separate value will be generated and set on the prod server during deployment.
+This token is for local dev only. A separate value will be generated and set on the prod server during Task 7.
 
 - [ ] **Step 5: Commit**
 
@@ -299,7 +353,7 @@ curl -s -X POST http://localhost:3000/api/mcp \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' \
-  | node -e "process.stdin||(0); let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>console.log(JSON.parse(d).result?.protocolVersion ?? JSON.parse(d)))"
+  | node -e "let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>console.log(JSON.parse(d).result?.protocolVersion ?? JSON.parse(d)))"
 ```
 
 Expected: prints `2025-06-18` (or the server's negotiated version)
@@ -344,16 +398,24 @@ git commit -m "feat(mcp): add stateless MCP route with auth gate — initialize 
 
 ---
 
-## Task 4: `get_dashboard` Tool
+## Task 4: `get_dashboard` Tool (via shared lib extraction)
+
+This task does two things in sequence:
+1. Extracts the dashboard route's aggregation logic into `src/lib/dashboard-data.ts` (shared function)
+2. Builds the MCP `get_dashboard` tool as a thin wrapper that calls `fetchDashboardData()`
+
+The REST route (`src/app/api/dashboard/route.ts`) is also updated to call the shared function — after this task both the HTTP dashboard and the MCP tool return identical numbers.
 
 **Files:**
-- Create: `src/lib/mcp/tools/dashboard.ts`
-- Create: `src/lib/mcp/tools/dashboard.test.ts`
-- Modify: `src/lib/mcp/server.ts` (add `registerDashboardTools` call)
+- Create: `src/lib/dashboard-data.ts` — shared `fetchDashboardData` function + types + helpers
+- Modify: `src/app/api/dashboard/route.ts` — replace inline handler body with shared function call
+- Create: `src/lib/mcp/tools/dashboard.ts` — thin MCP wrapper around `fetchDashboardData`
+- Create: `src/lib/mcp/tools/dashboard.test.ts` — unit tests (mock `fetchDashboardData`)
+- Modify: `src/lib/mcp/server.ts` — register dashboard tool
 
 **Interfaces:**
-- Consumes: `prisma` from `@/lib/prisma`
-- Produces: `registerDashboardTools(server: McpServer): void` — registers `get_dashboard` tool
+- Produces: `fetchDashboardData(): Promise<DashboardPayload>` from `@/lib/dashboard-data`
+- Produces: `registerDashboardTools(server: McpServer): void` from `@/lib/mcp/tools/dashboard`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -362,184 +424,253 @@ Create `src/lib/mcp/tools/dashboard.test.ts`:
 ```typescript
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock prisma before importing the module under test
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    order: {
-      aggregate: vi.fn(),
-      findMany: vi.fn(),
-      count: vi.fn(),
-    },
-    client: {
-      findMany: vi.fn(),
-    },
-  },
+vi.mock('@/lib/dashboard-data', () => ({
+  fetchDashboardData: vi.fn(),
 }));
 
-import { prisma } from '@/lib/prisma';
-import { buildDashboardData } from './dashboard';
+import { fetchDashboardData } from '@/lib/dashboard-data';
+import { registerDashboardTools } from './dashboard';
 
-const mockPrisma = prisma as unknown as {
-  order: { aggregate: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; count: ReturnType<typeof vi.fn> };
-  client: { findMany: ReturnType<typeof vi.fn> };
+const mockFetch = fetchDashboardData as ReturnType<typeof vi.fn>;
+
+const MOCK_PAYLOAD = {
+  revenueThisMonth: { total: 5_000_000, orderCount: 3, periodStart: '2026-07-01', periodEnd: '2026-07-31', trend: null },
+  revenueAllTime: { total: 50_000_000, orderCount: 100 },
+  averageOrderValue: { thisMonth: 1_666_666, allTime: 500_000, trend: null },
+  outstandingReceivables: { total: 2_000_000, orderCount: 5, trend: null },
+  activeCustomers: { count: 12, breakdown: { paid: 7, partial: 3, awaiting: 2 } },
+  todayDeliveries: { count: 2, totalArea: 96.5, date: '2026-07-17', orders: [] },
+  openDiscrepancies: { count: 0, totalAmount: 0 },
+  cashOnTheRoad: { total: 0, dispatchCount: 0, drivers: [] },
+  customersByCity: [],
+  topCustomers: [{ id: 'c1', name: 'Aziz', totalRevenue: 3_000_000, orderCount: 5 }],
+  weekCapacity: { utilizationPct: 30, days: [] },
+  revenueByMonth: [],
+  ordersByMonth: [],
+  recentOrders: [],
 };
 
-describe('buildDashboardData', () => {
+function makeMockServer() {
+  let capturedHandler: ((args: Record<string, never>) => Promise<unknown>) | undefined;
+  return {
+    server: {
+      tool: (_name: string, _desc: string, _schema: object, handler: typeof capturedHandler) => {
+        capturedHandler = handler as typeof capturedHandler;
+      },
+    },
+    getHandler: () => capturedHandler!,
+  };
+}
+
+describe('get_dashboard tool', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('returns shaped dashboard object with correct keys', async () => {
-    mockPrisma.order.aggregate.mockResolvedValue({ _sum: { confirmedPaid: '1500000' } });
-    mockPrisma.order.findMany.mockResolvedValue([
-      { totalPrice: '500000', confirmedPaid: '500000', paymentState: 'FULLY_PAID', orderNumber: '2026-01-0001', status: 'DELIVERED', placedAt: new Date(), client: { name: 'Test' } },
-    ]);
-    mockPrisma.order.count.mockResolvedValue(3);
-    mockPrisma.client.findMany.mockResolvedValue([{ id: 'c1', name: 'Top Client', phone: '998901234567', _count: { orders: 10 } }]);
+  it('returns two content blocks when fetchDashboardData resolves', async () => {
+    mockFetch.mockResolvedValue(MOCK_PAYLOAD);
+    const { server, getHandler } = makeMockServer();
+    registerDashboardTools(server as never);
 
-    const result = await buildDashboardData();
+    const result = await getHandler()({});
 
-    expect(result).toHaveProperty('revenueThisMonth');
-    expect(result).toHaveProperty('outstandingReceivables');
-    expect(result).toHaveProperty('todayDeliveries');
-    expect(result).toHaveProperty('recentOrders');
-    expect(result).toHaveProperty('topClients');
-    expect(typeof result.revenueThisMonth).toBe('number');
-    expect(typeof result.outstandingReceivables).toBe('number');
+    expect(mockFetch).toHaveBeenCalledOnce();
+    const content = (result as { content: Array<{ type: string; text: string }> }).content;
+    expect(content).toHaveLength(2);
+    expect(content[0].type).toBe('text');
+    expect(content[1].type).toBe('text');
+    expect(content[1].text).toContain('```json');
+    expect(content[1].text).toContain('"revenueThisMonth"');
   });
 
-  it('handles zero confirmed paid without throwing', async () => {
-    mockPrisma.order.aggregate.mockResolvedValue({ _sum: { confirmedPaid: null } });
-    mockPrisma.order.findMany.mockResolvedValue([]);
-    mockPrisma.order.count.mockResolvedValue(0);
-    mockPrisma.client.findMany.mockResolvedValue([]);
+  it('prose summary contains key metric labels', async () => {
+    mockFetch.mockResolvedValue(MOCK_PAYLOAD);
+    const { server, getHandler } = makeMockServer();
+    registerDashboardTools(server as never);
 
-    const result = await buildDashboardData();
-    expect(result.revenueThisMonth).toBe(0);
-    expect(result.outstandingReceivables).toBe(0);
+    const result = await getHandler()({});
+    const prose = (result as { content: Array<{ text: string }> }).content[0].text;
+
+    expect(prose).toContain('Revenue this month');
+    expect(prose).toContain('receivables');
+    expect(prose).toContain('UZS');
+  });
+
+  it('includes top customer names in prose', async () => {
+    mockFetch.mockResolvedValue(MOCK_PAYLOAD);
+    const { server, getHandler } = makeMockServer();
+    registerDashboardTools(server as never);
+
+    const result = await getHandler()({});
+    const prose = (result as { content: Array<{ text: string }> }).content[0].text;
+
+    expect(prose).toContain('Aziz');
   });
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [ ] **Step 2: Run to verify it fails**
 
 ```bash
 npx vitest run src/lib/mcp/tools/dashboard.test.ts
 ```
 
-Expected: fails — `Cannot find module './dashboard'`
+Expected: 3 failures — `Cannot find module '@/lib/dashboard-data'` and `Cannot find module './dashboard'`
 
-- [ ] **Step 3: Implement the dashboard tool**
+- [ ] **Step 3: Create the shared `fetchDashboardData` function**
+
+Read `src/app/api/dashboard/route.ts` in full. Then create `src/lib/dashboard-data.ts`:
+
+```typescript
+import { prisma } from '@/lib/prisma';
+import { normalizeCity } from '@/lib/city-normalize';
+
+// ── Types (moved from route.ts) ─────────────────────────────────────────────
+
+interface RevenueAgg {
+  total: number;
+  orderCount: number;
+}
+
+interface Trend {
+  deltaPct: number;
+  direction: 'up' | 'down' | 'flat';
+  polarity: 'positive' | 'negative';
+}
+
+export interface DashboardPayload {
+  revenueThisMonth: RevenueAgg & { periodStart: string; periodEnd: string; trend: Trend | null };
+  revenueAllTime: RevenueAgg;
+  averageOrderValue: { thisMonth: number; allTime: number; trend: Trend | null };
+  outstandingReceivables: { total: number; orderCount: number; trend: Trend | null };
+  activeCustomers: { count: number; breakdown: { paid: number; partial: number; awaiting: number } };
+  todayDeliveries: {
+    count: number;
+    totalArea: number;
+    date: string;
+    orders: Array<{ id: string; orderNumber: string; clientName: string; totalArea: number }>;
+  };
+  openDiscrepancies: { count: number; totalAmount: number };
+  cashOnTheRoad: { total: number; dispatchCount: number; drivers: Array<{ id: string; name: string; expected: number }> };
+  customersByCity: Array<{ city: string; count: number; revenue: number }>;
+  topCustomers: Array<{ id: string; name: string; totalRevenue: number; orderCount: number }>;
+  weekCapacity: { utilizationPct: number; days: Array<{ date: string; bookedM2: number; capacityM2: number }> };
+  revenueByMonth: Array<{ month: string; revenue: number }>;
+  ordersByMonth: Array<{ month: string; count: number }>;
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    clientName: string;
+    primaryProductLabel: string;
+    totalArea: number;
+    totalPrice: number;
+    paymentState: 'FULLY_PAID' | 'PARTIALLY_PAID' | 'AWAITING_PAYMENT';
+  }>;
+}
+
+// ── Helpers (moved from route.ts) ───────────────────────────────────────────
+
+function dateKey(d: Date): string {
+  return (
+    d.getFullYear() +
+    '-' +
+    String(d.getMonth() + 1).padStart(2, '0') +
+    '-' +
+    String(d.getDate()).padStart(2, '0')
+  );
+}
+
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+const CAPACITY_M2_PER_DAY = 600;
+
+function buildTrend(current: number, previous: number, polarity: Trend['polarity']): Trend | null {
+  if (previous <= 0) return null;
+  const deltaPct = Math.round(((current - previous) / previous) * 100);
+  const direction: Trend['direction'] =
+    Math.abs(deltaPct) < 1 ? 'flat' : deltaPct > 0 ? 'up' : 'down';
+  return { deltaPct, direction, polarity };
+}
+
+// ── Main export ─────────────────────────────────────────────────────────────
+
+/**
+ * Runs all 14 dashboard aggregation queries and returns the full DashboardPayload.
+ * Called by both GET /api/dashboard and the MCP get_dashboard tool so both
+ * surfaces always return identical numbers.
+ */
+export async function fetchDashboardData(): Promise<DashboardPayload> {
+  // IMPORTANT: copy the entire body of the `withPermissionAny` handler from
+  // src/app/api/dashboard/route.ts (lines ~160–558) here verbatim.
+  // Replace the final `return ok(payload)` with `return payload`.
+  // Do NOT change any query, aggregation, or in-memory calculation — the
+  // numbers must be bit-for-bit identical to what the REST route was returning.
+  throw new Error('fetchDashboardData: not yet implemented — see Task 4 Step 3');
+}
+```
+
+**Fill in `fetchDashboardData`:** Open `src/app/api/dashboard/route.ts`. Copy the entire body of the `withPermissionAny` async callback (starting at `const now = new Date();`, ending just before the closing `}`). Paste it into `fetchDashboardData` replacing the `throw` line. Change the final line from `return ok(payload);` to `return payload;`. No other changes.
+
+- [ ] **Step 4: Update the dashboard REST route to call the shared function**
+
+Replace the entire contents of `src/app/api/dashboard/route.ts` with:
+
+```typescript
+export const dynamic = 'force-dynamic';
+export const revalidate = 30;
+
+import { ok } from '@/lib/api';
+import { withPermissionAny } from '@/lib/api-auth';
+import { fetchDashboardData } from '@/lib/dashboard-data';
+
+export const GET = withPermissionAny(
+  ['dashboard.viewBasic', 'dashboard.view'],
+  async () => ok(await fetchDashboardData()),
+);
+```
+
+- [ ] **Step 5: Create the MCP dashboard tool (thin wrapper)**
 
 Create `src/lib/mcp/tools/dashboard.ts`:
 
 ```typescript
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { prisma } from '@/lib/prisma';
+import { fetchDashboardData, DashboardPayload } from '@/lib/dashboard-data';
 
-export interface DashboardData {
-  revenueThisMonth: number;
-  outstandingReceivables: number;
-  todayDeliveries: { count: number; orders: Array<{ orderNumber: string; clientName: string; totalArea: number }> };
-  recentOrders: Array<{ orderNumber: string; status: string; clientName: string; totalPrice: number; paymentState: string; placedAt: Date | null }>;
-  topClients: Array<{ id: string; name: string; phone: string; orderCount: number }>;
-}
-
-export async function buildDashboardData(): Promise<DashboardData> {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
-
-  const [revenueAgg, activeOrders, todayCount, todayOrderList, recentOrders, topClients] =
-    await Promise.all([
-      // Revenue this month = sum of confirmedPaid on non-canceled orders delivered this month
-      prisma.order.aggregate({
-        where: { status: 'DELIVERED', deliveredAt: { gte: monthStart }, NOT: { status: 'CANCELED' } },
-        _sum: { confirmedPaid: true },
-      }),
-      // All non-canceled, non-fully-paid orders for receivables calc
-      prisma.order.findMany({
-        where: { status: { not: 'CANCELED' }, paymentState: { not: 'FULLY_PAID' } },
-        select: { totalPrice: true, confirmedPaid: true },
-      }),
-      // Count of orders scheduled today
-      prisma.order.count({
-        where: { scheduledAt: { gte: todayStart, lt: todayEnd }, status: { not: 'CANCELED' } },
-      }),
-      // Today's order list
-      prisma.order.findMany({
-        where: { scheduledAt: { gte: todayStart, lt: todayEnd }, status: { not: 'CANCELED' } },
-        select: { orderNumber: true, totalArea: true, client: { select: { name: true } } },
-        orderBy: { scheduledAt: 'asc' },
-      }),
-      // 10 most recent orders
-      prisma.order.findMany({
-        where: { status: { not: 'CANCELED' } },
-        orderBy: { placedAt: 'desc' },
-        take: 10,
-        select: { orderNumber: true, status: true, totalPrice: true, paymentState: true, placedAt: true, client: { select: { name: true } } },
-      }),
-      // Top 5 clients by order count
-      prisma.client.findMany({
-        take: 5,
-        orderBy: { orders: { _count: 'desc' } },
-        select: { id: true, name: true, phone: true, _count: { select: { orders: true } } },
-      }),
-    ]);
-
-  const outstandingReceivables = activeOrders.reduce(
-    (sum, o) => sum + Number(o.totalPrice) - Number(o.confirmedPaid),
-    0,
-  );
-
-  return {
-    revenueThisMonth: Number(revenueAgg._sum.confirmedPaid ?? 0),
-    outstandingReceivables,
-    todayDeliveries: {
-      count: todayCount,
-      orders: todayOrderList.map((o) => ({
-        orderNumber: o.orderNumber,
-        clientName: o.client.name,
-        totalArea: Number(o.totalArea),
-      })),
-    },
-    recentOrders: recentOrders.map((o) => ({
-      orderNumber: o.orderNumber,
-      status: o.status,
-      clientName: o.client.name,
-      totalPrice: Number(o.totalPrice),
-      paymentState: o.paymentState,
-      placedAt: o.placedAt,
-    })),
-    topClients: topClients.map((c) => ({
-      id: c.id,
-      name: c.name,
-      phone: c.phone,
-      orderCount: c._count.orders,
-    })),
-  };
-}
-
-function formatSummary(d: DashboardData): string {
+function formatSummary(d: DashboardPayload): string {
   const fmt = (n: number) => n.toLocaleString('ru-RU') + ' UZS';
   const lines = [
-    `Revenue this month: ${fmt(d.revenueThisMonth)}`,
-    `Outstanding receivables: ${fmt(d.outstandingReceivables)}`,
-    `Today's scheduled deliveries: ${d.todayDeliveries.count}`,
+    `Revenue this month: ${fmt(d.revenueThisMonth.total)} (${d.revenueThisMonth.orderCount} orders)`,
+    `All-time revenue: ${fmt(d.revenueAllTime.total)} (${d.revenueAllTime.orderCount} orders)`,
+    `Avg order value: ${fmt(d.averageOrderValue.thisMonth)} this month / ${fmt(d.averageOrderValue.allTime)} all-time`,
+    `Outstanding receivables: ${fmt(d.outstandingReceivables.total)} across ${d.outstandingReceivables.orderCount} order(s)`,
+    `Active customers: ${d.activeCustomers.count} (${d.activeCustomers.breakdown.paid} paid, ${d.activeCustomers.breakdown.partial} partial, ${d.activeCustomers.breakdown.awaiting} awaiting)`,
+    `Today's deliveries: ${d.todayDeliveries.count} orders / ${d.todayDeliveries.totalArea} m²`,
+    `Open discrepancies: ${d.openDiscrepancies.count} (${fmt(d.openDiscrepancies.totalAmount)})`,
+    `Cash on road: ${fmt(d.cashOnTheRoad.total)} in ${d.cashOnTheRoad.dispatchCount} dispatch(es)`,
+    `Week utilization: ${d.weekCapacity.utilizationPct}%`,
   ];
-  if (d.todayDeliveries.orders.length > 0) {
-    lines.push(...d.todayDeliveries.orders.map((o) => `  • ${o.orderNumber} — ${o.clientName} (${o.totalArea} m²)`));
+  if (d.topCustomers.length > 0) {
+    lines.push(`Top customers: ${d.topCustomers.map((c) => `${c.name} (${fmt(c.totalRevenue)})`).join(', ')}`);
   }
-  lines.push(`Top clients: ${d.topClients.map((c) => c.name).join(', ')}`);
   return lines.join('\n');
 }
 
 export function registerDashboardTools(server: McpServer): void {
   server.tool(
     'get_dashboard',
-    'Revenue this month, outstanding receivables, today\'s scheduled deliveries, recent orders, and top clients.',
+    'Full dashboard snapshot: revenue, receivables, today\'s deliveries, week capacity, top customers, and 12-month chart data. Returns the same payload as GET /api/dashboard.',
     {},
     async () => {
-      const data = await buildDashboardData();
+      const data = await fetchDashboardData();
       return {
         content: [
           { type: 'text' as const, text: formatSummary(data) },
@@ -551,9 +682,7 @@ export function registerDashboardTools(server: McpServer): void {
 }
 ```
 
-**Note on `server.tool` vs `server.registerTool`:** The `McpServer` from `@modelcontextprotocol/sdk` 1.26.0 uses `server.tool(name, description, inputSchema, handler)` — a different signature from the mcp-handler README example which shows `server.registerTool`. Check which method is available; both do the same thing. If `server.tool` errors, try `server.registerTool`.
-
-- [ ] **Step 4: Register the tool in server.ts**
+- [ ] **Step 6: Register the tool in server.ts**
 
 Edit `src/lib/mcp/server.ts` — replace the placeholder comment with the actual import and call:
 
@@ -575,23 +704,25 @@ export const mcpHandler = createMcpHandler(
 );
 ```
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 7: Run tests**
 
 ```bash
 npx vitest run src/lib/mcp/tools/dashboard.test.ts
 ```
 
-Expected: 2 tests pass
+Expected: 3 tests pass
 
-- [ ] **Step 6: Verify TypeScript**
+- [ ] **Step 8: Verify TypeScript**
 
 ```bash
 npx tsc --noEmit
 ```
 
-Expected: no errors
+Expected: no errors. Common issues:
+- If `DashboardPayload` is not exported from `dashboard-data.ts` — add `export` to the interface
+- If `McpServer.tool` signature doesn't match — check the installed SDK's type definitions (`node_modules/@modelcontextprotocol/sdk/dist/server/mcp.d.ts`); try `server.registerTool` if `server.tool` errors
 
-- [ ] **Step 7: Smoke-test `tools/list` now shows 1 tool**
+- [ ] **Step 9: Smoke-test `tools/list` now shows 1 tool**
 
 With dev server running:
 
@@ -605,11 +736,13 @@ curl -s -X POST http://localhost:3000/api/mcp \
 
 Expected: `1 [ 'get_dashboard' ]`
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add src/lib/mcp/tools/dashboard.ts src/lib/mcp/tools/dashboard.test.ts src/lib/mcp/server.ts
-git commit -m "feat(mcp): add get_dashboard tool"
+git add src/lib/dashboard-data.ts src/app/api/dashboard/route.ts \
+        src/lib/mcp/tools/dashboard.ts src/lib/mcp/tools/dashboard.test.ts \
+        src/lib/mcp/server.ts
+git commit -m "feat(mcp): extract fetchDashboardData shared lib + add get_dashboard MCP tool"
 ```
 
 ---
@@ -1196,7 +1329,15 @@ Verify it's there:
 ssh root@207.154.218.194 "grep MCP_API_TOKEN /opt/precast-crm/.env"
 ```
 
-- [ ] **Step 3: Deploy**
+- [ ] **Step 3: Push local commits to remote**
+
+```bash
+git push origin main
+```
+
+This is required before the server can pull. All local commits from Tasks 1–6 must be pushed first.
+
+- [ ] **Step 4: Deploy**
 
 ```bash
 ssh root@207.154.218.194 "cd /opt/precast-crm && git pull origin main && nohup bash -c 'docker compose build app && docker compose up -d app' > /tmp/deploy.log 2>&1 &"
@@ -1209,7 +1350,7 @@ ssh root@207.154.218.194 "git -C /opt/precast-crm log --oneline -1 && docker ps 
 
 Expected: latest commit hash shown; `precast-crm-app-1 Up X minutes (healthy)`
 
-- [ ] **Step 4: Test auth rejection on prod**
+- [ ] **Step 5: Test auth rejection on prod**
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" -X POST https://etalontbm.uz/api/mcp \
@@ -1219,7 +1360,7 @@ curl -s -o /dev/null -w "%{http_code}" -X POST https://etalontbm.uz/api/mcp \
 
 Expected: `401`
 
-- [ ] **Step 5: Test initialize on prod**
+- [ ] **Step 6: Test initialize on prod**
 
 ```bash
 curl -s -X POST https://etalontbm.uz/api/mcp \
@@ -1229,9 +1370,9 @@ curl -s -X POST https://etalontbm.uz/api/mcp \
   | node -e "let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{ const r=JSON.parse(d); console.log('version:', r.result?.protocolVersion, 'name:', r.result?.serverInfo?.name) })"
 ```
 
-Expected: `version: 2025-06-18 name: etalon-crm` (version may differ based on negotiation)
+Expected: `version: 2025-06-18 name: etalon-crm`
 
-- [ ] **Step 6: Test tools/list**
+- [ ] **Step 7: Test tools/list**
 
 ```bash
 curl -s -X POST https://etalontbm.uz/api/mcp \
@@ -1243,7 +1384,7 @@ curl -s -X POST https://etalontbm.uz/api/mcp \
 
 Expected: `[ 'get_dashboard', 'list_orders', 'get_order', 'list_clients', 'get_client' ]`
 
-- [ ] **Step 7: Test a tool call**
+- [ ] **Step 8: Test a live tool call**
 
 ```bash
 curl -s -X POST https://etalontbm.uz/api/mcp \
@@ -1259,10 +1400,13 @@ Expected: a line like `Found N order(s) (page 1/M). Showing 3.`
 
 ## Self-Review Checklist
 
-- [x] **Spec section 3 (auth):** SHA-256 hash comparison implemented in Task 2 — `checkBearer` with `createHash('sha256')` before `timingSafeEqual`. Fail-closed on missing env var.
+- [x] **Spec section 3 (auth):** SHA-256 hash comparison in Task 2 — `checkBearer` with `createHash('sha256')` before `timingSafeEqual`. Fail-closed on missing env var.
+- [x] **Spec section 5 (`get_dashboard`):** Calls `fetchDashboardData()` from shared lib — returns identical payload to REST route. Fixed from original plan which hand-rolled different queries.
 - [x] **Spec section 6 (output format):** Both prose + fenced JSON `content` blocks emitted in every tool — Tasks 4, 5, 6.
 - [x] **Spec section 7 (GET→405):** Implemented in `route.ts`, Task 3.
 - [x] **Spec section 8 (smoke tests):** Protocol version `2025-06-18` used throughout, Task 7.
+- [x] **git push before git pull:** Task 7 Step 3 pushes before Step 4 deploys.
+- [x] **Prisma field names confirmed:** `recordedAt` (Payment), `number` (Shipment), `DealStatus.OPEN`, `writeOffAmount`, `confirmedPaid` — all verified in Task 0 against schema.
 - [x] **No placeholders:** All steps have concrete code and commands.
-- [x] **Type consistency:** `registerDashboardTools`, `registerOrderTools`, `registerClientTools` names match across server.ts tasks.
-- [x] **Note on `server.tool` vs `server.registerTool`:** Flagged in Task 4 Step 3 — implementer should verify which method the installed SDK version exposes.
+- [x] **Type consistency:** `registerDashboardTools`, `registerOrderTools`, `registerClientTools` names match across server.ts tasks. `fetchDashboardData` and `DashboardPayload` match between `dashboard-data.ts` and `dashboard.ts`.
+- [x] **Note on `server.tool` vs `server.registerTool`:** Flagged in Task 4 Step 8 — implementer should verify which method the installed SDK version exposes.
