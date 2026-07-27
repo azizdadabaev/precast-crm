@@ -65,6 +65,20 @@ export interface ShareData {
     badgeLabel: string;
     badgeColorCls: string;
   };
+  /**
+   * Optional price-composition breakdown (roomsSubtotal → total). When present
+   * and any adjustment is non-zero, the card renders a Сумма / Чегирма / ЖАМИ
+   * block so the gap between the table's subtotal footer and the headline total
+   * is explained. Omitted by quote/calculation producers → card looks unchanged.
+   */
+  pricing?: {
+    subtotal: number;
+    discountAmount: number;
+    discountPercent: number;
+    deliveryCost: number;
+    otherCost: number;
+    total: number;
+  };
   scheduledLabel?: string;
   rows: ShareRow[];
   totals: {
@@ -422,6 +436,78 @@ export const CalculationShareCard = React.forwardRef<HTMLDivElement, Props>(
             </tfoot>
           </table>
         </div>
+
+        {/* ── Price breakdown ──────────────────────────────────
+            Bridges the table's subtotal footer and the headline total by
+            spelling out the discount (amount + %) / delivery / other. Only
+            rendered when a producer supplies `pricing` and something actually
+            moved the total. Mirrors the print sheet's pricing block. */}
+        {data.pricing &&
+          (data.pricing.discountAmount > 0 ||
+            data.pricing.deliveryCost > 0 ||
+            data.pricing.otherCost > 0) && (() => {
+          const p = data.pricing;
+          const rowLabel: React.CSSProperties = {
+            color: cfg.dimText,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            fontSize: cfg.bodyFontSize,
+          };
+          const row: React.CSSProperties = {
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            paddingTop: 3,
+            paddingBottom: 3,
+          };
+          return (
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}>
+              <div style={{ width: 300, fontSize: cfg.bodyFontSize + 1 }}>
+                <div style={row}>
+                  <span style={rowLabel}>Сумма</span>
+                  <span style={{ ...tabular, fontWeight: 600 }}>{formatNumber(p.subtotal, 0)}</span>
+                </div>
+                {p.discountAmount > 0 && (
+                  <div style={row}>
+                    <span style={rowLabel}>
+                      Чегирма
+                      {p.discountPercent > 0 && (
+                        <span style={{ ...tabular, marginLeft: 4 }}>{formatNumber(p.discountPercent, 1)}%</span>
+                      )}
+                    </span>
+                    <span style={{ ...tabular, fontWeight: 600 }}>− {formatNumber(p.discountAmount, 0)}</span>
+                  </div>
+                )}
+                {p.deliveryCost > 0 && (
+                  <div style={row}>
+                    <span style={rowLabel}>Етказиб бериш</span>
+                    <span style={{ ...tabular, fontWeight: 600 }}>+ {formatNumber(p.deliveryCost, 0)}</span>
+                  </div>
+                )}
+                {p.otherCost > 0 && (
+                  <div style={row}>
+                    <span style={rowLabel}>Бошқа</span>
+                    <span style={{ ...tabular, fontWeight: 600 }}>+ {formatNumber(p.otherCost, 0)}</span>
+                  </div>
+                )}
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  paddingTop: 6,
+                  marginTop: 4,
+                  borderTop: `2px solid ${cfg.borderColor}`,
+                }}>
+                  <span style={{ fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em" }}>Жами</span>
+                  <span style={{ ...tabular, fontWeight: 900, color: cfg.subtotalColor, fontSize: cfg.footerFontSize + 2 }}>
+                    {formatNumber(p.total, 0)}
+                    <span style={{ fontSize: cfg.bodyFontSize - 1, color: cfg.dimText, fontWeight: 400, marginLeft: 4 }}>UZS</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Footer ──────────────────────────────────────────── */}
         <div style={{

@@ -437,6 +437,13 @@ export default function OrderDetailPage() {
   const writeOffNum = Number(order.writeOffAmount ?? 0);
   const remainingNum = Math.max(0, totalNum - paidNum - writeOffNum);
   const fullyPaid = paidNum + writeOffNum > 0 && remainingNum === 0;
+  // Price-composition adjustments that move roomsSubtotal → totalPrice.
+  // When all three are zero the subtotal equals the total, so the
+  // breakdown block below is suppressed as redundant noise.
+  const discountNum = Number(order.discountAmount);
+  const deliveryNum = Number(order.deliveryCost);
+  const otherNum = Number(order.otherCost);
+  const hasPriceAdjustments = discountNum > 0 || deliveryNum > 0 || otherNum > 0;
 
   // Build the share-card payload from the order. The offscreen
   // <ShareTarget> below renders this at 1100 px regardless of
@@ -475,6 +482,14 @@ export default function OrderDetailPage() {
       remaining: remainingNum,
       badgeLabel: sharePaymentLabel[order.paymentState],
       badgeColorCls: PAYMENT_STATE_BADGE[order.paymentState].cls,
+    },
+    pricing: {
+      subtotal: Number(order.roomsSubtotal),
+      discountAmount: discountNum,
+      discountPercent: Number(order.discountPercent),
+      deliveryCost: deliveryNum,
+      otherCost: otherNum,
+      total: totalNum,
     },
     scheduledLabel: `${WEEKDAY_UZ[new Date(order.scheduledAt).getDay()]}, ${formatDate(order.scheduledAt)}`,
     rows: order.project.calculations.map((c) => ({
@@ -949,6 +964,60 @@ export default function OrderDetailPage() {
             <div ref={mirrorSpacerRef} className="h-[1px]" />
           </div>
           </div>{/* end detailed table wrapper */}
+
+          {/* Price breakdown — explains the roomsSubtotal → totalPrice drop
+              (discount / delivery / other). Mirrors the print sheet's
+              pricing block. Hidden when subtotal already equals total. */}
+          {hasPriceAdjustments && (
+            <div className="border-t border-border px-4 py-3 sm:px-6 sm:py-4 flex justify-end">
+              <dl className="w-full sm:w-72 text-sm space-y-1.5">
+                <div className="flex items-baseline justify-between gap-4">
+                  <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Сумма<span className="lang-en"> · Subtotal</span>
+                  </dt>
+                  <dd className="font-mono tabular-nums">{formatNumber(order.roomsSubtotal, 0)}</dd>
+                </div>
+                {discountNum > 0 && (
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Чегирма<span className="lang-en"> · Discount</span>
+                      {Number(order.discountPercent) > 0 && (
+                        <span className="ml-1 font-mono tabular-nums normal-case">
+                          {formatNumber(order.discountPercent, 1)}%
+                        </span>
+                      )}
+                    </dt>
+                    <dd className="font-mono tabular-nums">− {formatNumber(order.discountAmount, 0)}</dd>
+                  </div>
+                )}
+                {deliveryNum > 0 && (
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Етказиб бериш<span className="lang-en"> · Delivery</span>
+                    </dt>
+                    <dd className="font-mono tabular-nums">+ {formatNumber(order.deliveryCost, 0)}</dd>
+                  </div>
+                )}
+                {otherNum > 0 && (
+                  <div className="flex items-baseline justify-between gap-4">
+                    <dt className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Бошқа<span className="lang-en"> · Other</span>
+                    </dt>
+                    <dd className="font-mono tabular-nums">+ {formatNumber(order.otherCost, 0)}</dd>
+                  </div>
+                )}
+                <div className="flex items-baseline justify-between gap-4 border-t border-border-strong pt-1.5 mt-1.5">
+                  <dt className="text-[11px] font-bold uppercase tracking-wider">
+                    Жами<span className="lang-en font-normal"> · Total</span>
+                  </dt>
+                  <dd className="font-mono tabular-nums font-black">
+                    {formatNumber(order.totalPrice, 0)}
+                    <span className="text-[10px] font-normal text-muted-foreground ml-1">UZS</span>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          )}
 
           {/* Financial recap — always visible (outside mobileCalcOpen toggle) */}
           <div className="border-t border-border">

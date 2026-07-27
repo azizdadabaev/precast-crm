@@ -187,12 +187,20 @@ export const PATCH = withPermission<{ id: string }>(
         },
       });
 
+      // Surface the price-composition adjustments in the log message so a
+      // discount (or delivery/other) that moved the total is legible at a
+      // glance — the full before/after breakdown remains in `payload`.
+      const priceParts: string[] = [];
+      if (discountAmount > 0) priceParts.push(`discount ${discountAmount.toFixed(0)}`);
+      if (body.deliveryCost > 0) priceParts.push(`delivery ${body.deliveryCost.toFixed(0)}`);
+      if (body.otherCost > 0) priceParts.push(`other ${body.otherCost.toFixed(0)}`);
+
       await tx.orderEvent.create({
         data: {
           orderId: existing.id,
           type: "ORDER_EDITED",
           actorId: user.id,
-          message: `Order edited: total ${oldSnapshot.totalPrice.toFixed(0)} → ${newTotal.toFixed(0)} (${computed.length} rooms)`,
+          message: `Order edited: total ${oldSnapshot.totalPrice.toFixed(0)} → ${newTotal.toFixed(0)} (${computed.length} rooms)${priceParts.length ? ` · ${priceParts.join(", ")}` : ""}`,
           payload: {
             before: oldSnapshot,
             after: newSnapshot,
