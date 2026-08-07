@@ -90,7 +90,24 @@ export const PATCH = withAuth<{ id: string }>(
           );
         }
       }
-      const lineMoves = order.lines.map((l) => ({ productId: l.productId, quantity: l.quantity }));
+      // Decrement by the ACTUAL shipped count when it exceeds the ordered
+      // quantity (over-shipment); never below ordered. Sums this order's
+      // shipments' loadedLines per line id.
+      const shipped = await prisma.gazoblokShipment.findMany({
+        where: { orderId: order.id },
+        select: { loadedLines: true },
+      });
+      const shippedByLine = new Map<string, number>();
+      for (const sh of shipped) {
+        const loaded = (sh.loadedLines as Record<string, number> | null) ?? {};
+        for (const [lineId, cnt] of Object.entries(loaded)) {
+          shippedByLine.set(lineId, (shippedByLine.get(lineId) ?? 0) + Number(cnt));
+        }
+      }
+      const lineMoves = order.lines.map((l) => ({
+        productId: l.productId,
+        quantity: Math.max(l.quantity, shippedByLine.get(l.id) ?? 0),
+      }));
 
       try {
         const result = await prisma.$transaction(async (tx) => {

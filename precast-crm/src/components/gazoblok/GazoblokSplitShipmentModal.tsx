@@ -17,10 +17,14 @@ import {
   type GazoblokTruck,
 } from "@/lib/gazoblok-weight";
 
+// Lines carry the frozen `unitPrice` so the modal can preview the over-ship
+// surcharge (extra blocks × unitPrice) live as the operator types.
+type LoadLine = GazoblokLine & { unitPrice: number };
+
 interface Props {
   orderId: string;
   shipment: { id: string; number: number };
-  lines: GazoblokLine[];
+  lines: LoadLine[];
   prevShipments: Array<Record<string, number>>;
   open: boolean;
   onClose: () => void;
@@ -78,19 +82,31 @@ export function GazoblokSplitShipmentModal({
     };
   }, []);
 
-  // Signed remaining after this shipment's inputs (NEGATIVE = over-loaded). Unlike
-  // `available` (clamped at 0) this is honest, so the UI can flag it red and block
-  // submit.
+  // Signed remaining after this shipment's inputs (NEGATIVE = over-shipped). Unlike
+  // `available` (clamped at 0) this is honest, so the UI can flag over-shipped rows
+  // and show the surcharge preview. Over-shipping is ALLOWED — never blocks submit.
   const signedRemaining = useMemo(() => {
     const rem: Record<string, number> = {};
     for (const l of lines) rem[l.lineId] = (available[l.lineId] ?? 0) - (inputs[l.lineId] ?? 0);
     return rem;
   }, [lines, available, inputs]);
 
-  const isOverloaded = useMemo(
-    () => Object.values(signedRemaining).some((v) => v < 0),
-    [signedRemaining],
-  );
+  // What THIS shipment adds beyond the ordered remaining, billed at the line's
+  // frozen unitPrice. `-signedRemaining` (when negative) is exactly the
+  // incremental over-ship for the line (already-over lines have available=0, so
+  // every loaded block counts).
+  const overshipPreview = useMemo(() => {
+    let blocks = 0;
+    let amount = 0;
+    for (const l of lines) {
+      const over = Math.max(0, -(signedRemaining[l.lineId] ?? 0));
+      if (over > 0) {
+        blocks += over;
+        amount += over * l.unitPrice;
+      }
+    }
+    return { blocks, amount };
+  }, [lines, signedRemaining]);
 
   const orderWeight = useMemo(() => orderWeightKg(lines), [lines]);
   const thisShipmentWeight = useMemo(() => loadWeightKg(lines, inputs), [lines, inputs]);
@@ -318,7 +334,6 @@ export function GazoblokSplitShipmentModal({
                       <Input
                         type="number"
                         min={0}
-                        max={available[l.lineId] ?? 0}
                         value={inputs[l.lineId] ?? 0}
                         aria-label={l.label}
                         onFocus={(e) => e.target.select()}
@@ -328,10 +343,10 @@ export function GazoblokSplitShipmentModal({
                             [l.lineId]: Math.max(0, parseInt(e.target.value) || 0),
                           }))
                         }
-                        className={`w-20 h-auto px-2 py-1 text-right font-mono focus:ring-1 ring-primary ${rem < 0 ? "border-destructive ring-destructive" : ""}`}
+                        className={`w-20 h-auto px-2 py-1 text-right font-mono focus:ring-1 ring-primary ${rem < 0 ? "border-primary ring-primary" : ""}`}
                       />
                     </td>
-                    <td className={`px-3 py-2 text-right font-mono ${rem < 0 ? "text-destructive font-bold" : rem > 0 ? "text-warning" : "text-success"}`}>
+                    <td className={`px-3 py-2 text-right font-mono ${rem < 0 ? "text-primary font-bold" : rem > 0 ? "text-warning" : "text-success"}`}>
                       {rem}
                     </td>
                   </tr>
@@ -399,12 +414,13 @@ export function GazoblokSplitShipmentModal({
           />
         </div>
 
-        {isOverloaded && (
-          <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
-            {t(
-              "Миқдор буюртма қолдиғидан ошиб кетди (олдинги жўнатмалар ҳисобга олинган). Қизил қаторларни камайтиринг.",
-              "Quantity exceeds what's left on the order (prior shipments counted). Reduce the red rows.",
-            )}
+        {overshipPreview.blocks > 0 && (
+          <div className="text-sm text-primary bg-primary/10 border border-primary/20 px-3 py-2 rounded font-medium">
+            {t("Ортиқча", "Over-ship")}
+            <span className="lang-en"> · Over-ship</span>: +{formatNumber(overshipPreview.blocks, 0)}{" "}
+            {t("блок", "blocks")} · +
+            <span className="font-mono tabular-nums">{formatNumber(overshipPreview.amount, 0)}</span>{" "}
+            {t("сўм", "UZS")}
           </div>
         )}
         {error && (
@@ -417,7 +433,7 @@ export function GazoblokSplitShipmentModal({
           <Button variant="outline" size="sm" onClick={onClose} disabled={loading}>
             {t("Бекор", "Cancel")}
           </Button>
-          <Button size="sm" onClick={submit} disabled={loading || isOverloaded}>
+          <Button size="sm" onClick={submit} disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
             {t("Жўнатмани юклаш", "Save shipment load")}
           </Button>

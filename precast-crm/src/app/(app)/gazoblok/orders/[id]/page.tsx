@@ -47,6 +47,7 @@ interface OrderDetail {
   linesSubtotal: string;
   discountAmount: string;
   deliveryCost: string;
+  overshipAmount: string;
   scheduledAt: string | null;
   placedAt: string | null;
   deliveredAt: string | null;
@@ -254,6 +255,9 @@ export default function GazoblokOrderDetailPage() {
   const totalNum = Number(order.totalPrice);
   const paidNum = Number(order.confirmedPaid);
   const remainingNum = Math.max(0, totalNum - paidNum);
+  const overshipNum = Number(order.overshipAmount);
+  // Frozen base — reconstructible from the still-frozen pricing snapshot.
+  const baseNum = Number(order.linesSubtotal) - Number(order.discountAmount) + Number(order.deliveryCost);
 
   // Per-line weight for the split-shipment distributor. perBlockKg from the
   // product dimensions; when the product was deleted, fall back to the order
@@ -262,10 +266,11 @@ export default function GazoblokOrderDetailPage() {
   const avgPerBlockKg = totalBlocks > 0
     ? (Number(order.totalVolumeM3) / totalBlocks) * 611
     : 0;
-  const weightLines: GazoblokLine[] = order.lines.map((l) => ({
+  const weightLines: Array<GazoblokLine & { unitPrice: number }> = order.lines.map((l) => ({
     lineId: l.id,
     label: l.productLabel,
     quantity: l.quantity,
+    unitPrice: Number(l.unitPrice),
     perBlockKg: l.product
       ? blockWeightKg(Number(l.product.lengthM), Number(l.product.heightM), Number(l.product.thicknessM))
       : avgPerBlockKg,
@@ -396,6 +401,16 @@ export default function GazoblokOrderDetailPage() {
           )}
           {Number(order.deliveryCost) > 0 && (
             <Row label={t("Етказиб бериш", "Delivery")} value={formatNumber(Number(order.deliveryCost), 0)} />
+          )}
+          {overshipNum > 0 && (
+            <>
+              <Row label={t("Буюртма жами", "Base")} value={formatNumber(baseNum, 0)} />
+              <Row
+                label={t("Ортиқча юклаш", "Over-ship")}
+                value={`+ ${formatNumber(overshipNum, 0)}`}
+                valueClassName="text-primary"
+              />
+            </>
           )}
           <Row
             label={t("ЖАМИ", "TOTAL")}
