@@ -57,6 +57,7 @@ export const GET = withPermission("order.view", async (req: NextRequest, { user 
       calculations: { orderBy: { seq: "asc" } },
       client: true,
       orders: { select: { id: true, orderNumber: true, status: true, scheduledAt: true } },
+      createdBy: { select: { name: true } },
     },
   });
 
@@ -176,6 +177,9 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           tentativeClientName: existingClient ? null : body.clientName ?? null,
           tentativeClientPhone: existingClient ? null : phoneNorm,
           tentativeClientAddress: existingClient ? null : body.clientAddress ?? null,
+          // Preserve the original creator; only stamp the current operator when
+          // the draft has no creator yet (legacy rows / previously null).
+          ...(existing.createdById ? {} : { createdById: user.id }),
           calculations: {
             create: computed.map((c, i) => ({
               ...calcResultToCreatePayload(c.input, c.result),
@@ -210,6 +214,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
         discountPercent: body.discountPercent,
         discountAmount: body.discountAmount,
         conversationId: linkConversationId ?? null,
+        createdById: user.id,
         clientId: existingClient?.id ?? null,
         tentativeClientName: existingClient ? null : body.clientName ?? null,
         tentativeClientPhone: existingClient ? null : phoneNorm,

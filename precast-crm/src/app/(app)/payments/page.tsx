@@ -201,6 +201,23 @@ export default function PaymentsPage() {
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono font-bold">
                         {formatNumber(p.amount, 0)}
+                        {/* Discount marker — the order this payment settles was
+                            discounted; shows amount + % so a confirmer sees it
+                            without opening the order. */}
+                        {Number(p.order.discountAmount ?? 0) > 0 && (
+                          <div
+                            className="text-[10px] font-normal text-text-tertiary"
+                            title={t(
+                              `Оралиқ жами ${formatNumber(p.order.roomsSubtotal ?? 0, 0)} · чегирма ${formatNumber(p.order.discountAmount ?? 0, 0)}`,
+                              `Subtotal ${formatNumber(p.order.roomsSubtotal ?? 0, 0)} · discount ${formatNumber(p.order.discountAmount ?? 0, 0)}`,
+                            )}
+                          >
+                            {t("Чегирма", "Discount")} −{formatNumber(p.order.discountAmount ?? 0, 0)}
+                            {Number(p.order.discountPercent ?? 0) > 0 && (
+                              <> ({formatNumber(p.order.discountPercent ?? 0, 1)}%)</>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono text-text-tertiary">
                         {expected != null ? (

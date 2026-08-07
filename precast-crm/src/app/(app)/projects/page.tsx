@@ -26,6 +26,7 @@ interface Project {
   tentativeClientPhone: string | null;
   tentativeClientAddress: string | null;
   client: { id: string; name: string; phone: string; address: string | null } | null;
+  createdBy: { name: string } | null;
   calculations: Array<{
     id: string;
     beamCount: number;
@@ -299,6 +300,7 @@ export default function ProjectsPage() {
                 <th className="text-right px-3 py-2">Сумма<span className="lang-en"> · Subtotal</span></th>
                 <th className="text-left px-3 py-2">{t("Ҳолат", "Status")}</th>
                 <th className="text-left px-3 py-2">{t("Янгиланди", "Updated")}</th>
+                <th className="text-left px-3 py-2">Оператор<span className="lang-en"> · Operator</span></th>
                 {canDelete && <th className="px-3 py-2 w-8" />}
               </tr>
             </thead>
@@ -390,6 +392,18 @@ export default function ProjectsPage() {
                     </td>
                     <td className="px-3 py-2 text-muted-foreground text-xs">
                       {formatDate(p.updatedAt)}
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {p.aiGenerated ? (
+                        <span
+                          title={t("AI агент яратган", "Created by the AI agent")}
+                          className="shrink-0 text-[9px] font-bold uppercase tracking-wider bg-amber-500 text-white rounded px-1.5 py-0.5"
+                        >
+                          🤖 AI
+                        </span>
+                      ) : (
+                        p.createdBy?.name ?? "—"
+                      )}
                     </td>
                     {canDelete && (
                       <td className="px-3 py-2 w-8">

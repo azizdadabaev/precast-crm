@@ -35,6 +35,11 @@ export const GET = withPermission("payment.view", async (req: NextRequest) => {
           id: true,
           orderNumber: true,
           totalPrice: true,
+          // Discount snapshot — surfaced next to the amount so a confirmer can
+          // see the order was discounted without opening the order page.
+          roomsSubtotal: true,
+          discountAmount: true,
+          discountPercent: true,
           confirmedPaid: true,
           paymentState: true,
           status: true,

@@ -25,7 +25,8 @@ interface ShipmentData {
 interface Props {
   orderId: string;
   shipments: ShipmentData[];
-  lines: GazoblokLine[];
+  // Lines carry the frozen unitPrice for the load modal's over-ship surcharge preview.
+  lines: Array<GazoblokLine & { unitPrice: number }>;
   orderStatus: string;
   onRefresh: () => void;
 }
