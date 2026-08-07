@@ -40,6 +40,10 @@ export interface PaymentForConfirm {
     id: string;
     orderNumber: string;
     totalPrice: string;
+    /** Discount snapshot — shown next to the amount in the payments table. */
+    roomsSubtotal?: string;
+    discountAmount?: string;
+    discountPercent?: string;
     confirmedPaid: string;
     dispatch: { expectedCollection: string; driver: { id: string; name: string } | null } | null;
     /** Order-level (unlinked) receipts — bot-forwarded proof predating a row. */
