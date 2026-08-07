@@ -263,6 +263,9 @@ model User {
   gazoblokPaymentsRecorded  GazoblokPayment[]         @relation("GazoblokPaymentRecorder")
   gazoblokPaymentsConfirmed GazoblokPayment[]         @relation("GazoblokPaymentConfirmer")
 
+  // Saved calculator drafts this user created (operator attribution)
+  createdProjects Project[] @relation("ProjectCreatedBy")
+
   @@map("users")
 }
 
@@ -410,6 +413,10 @@ model Project {
   // agent (Auto mode). Drives the "AI" badge + "AI Agent" filter in /projects.
   aiGenerated Boolean       @default(false)
 
+  // Operator who created this draft (attribution shown in the drafts table).
+  // Null for AI-generated drafts (aiGenerated flags those) and legacy rows.
+  createdById String?
+
   // Tentative client info captured during the phone call.
   // Once the order is placed (or operator picks an existing client),
   // this gets reconciled into a Client row and these fields are cleared.
@@ -431,6 +438,7 @@ model Project {
   deal            Deal?            @relation(fields: [dealId], references: [id], onDelete: SetNull)
   client          Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
   conversation    Conversation?    @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  createdBy       User?            @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   calculations    Calculation[]
   orders          Order[]
   drawingRequests DrawingRequest[]
@@ -442,6 +450,7 @@ model Project {
   @@index([clientId])
   @@index([conversationId])
   @@index([tentativeClientPhone])
+  @@index([createdById])
   @@map("projects")
 }
 
@@ -1476,6 +1485,10 @@ model GazoblokOrder {
   discountPercent Decimal @default(0) @db.Decimal(5, 2)
   discountAmount  Decimal @default(0) @db.Decimal(14, 2)
   deliveryCost    Decimal @default(0) @db.Decimal(14, 2)
+  // Over-shipment surcharge — Σ (shipped − ordered) × line unitPrice, folded into
+  // totalPrice when a shipment carries more blocks than the order's line quantity.
+  // Frozen base is recoverable as linesSubtotal − discountAmount + deliveryCost.
+  overshipAmount  Decimal @default(0) @db.Decimal(14, 2)
   totalPrice      Decimal @db.Decimal(14, 2)
 
   // Denormalized capacity
