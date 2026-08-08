@@ -1,15 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { TablePager } from "@/components/ui/table-pager";
 import { Plus, Search, Trash2, Loader2 } from "lucide-react";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { PhoneLink } from "@/components/PhoneLink";
 import { useT } from "@/lib/i18n";
+import { getViloyats, viloyatLabel } from "@/lib/regions";
+import type { SortDir } from "@/lib/table-query";
+import { useDraftsTableDesign } from "@/hooks/useDraftsTableDesign";
+import { draftsTableStyleVars } from "@/lib/drafts-table-style";
+import type { DraftsColumnKey } from "@/lib/drafts-table-design";
+import { useThemeStore } from "@/store/theme";
 
 type ProjectFilter = "DRAFT" | "ALL" | "AGENT";
 
@@ -38,11 +46,27 @@ interface Project {
   orders: Array<{ id: string; orderNumber: string; status: string }>;
 }
 
+/** Paginated envelope returned by /api/projects when `page` is sent. */
+interface ProjectsResponse {
+  rows: Project[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+  /** Whole-result-set status split, so the tracker isn't limited to one page. */
+  statusCounts?: { DRAFT: number; ORDERED: number };
+}
+
 export default function ProjectsPage() {
   const t = useT();
   const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<ProjectFilter>("DRAFT");
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState("updatedAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [operatorId, setOperatorId] = useState("");
+  const [viloyat, setViloyat] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -51,16 +75,25 @@ export default function ProjectsPage() {
   const [toDelete, setToDelete] = useState<Project | null>(null);
   const [rowErrorMsg, setRowErrorMsg] = useState<string | null>(null);
 
-  const { data: projects = [], isLoading } = useQuery<Project[]>({
-    queryKey: ["projects", filter, q],
+  const { data, isLoading } = useQuery<ProjectsResponse>({
+    queryKey: ["projects", filter, q, page, sortBy, sortDir, operatorId, viloyat],
     queryFn: () => {
       const params = new URLSearchParams();
       if (filter === "DRAFT") params.set("status", "DRAFT");
       if (filter === "AGENT") params.set("source", "agent");
       if (q.trim()) params.set("q", q.trim());
+      if (operatorId) params.set("operatorId", operatorId);
+      if (viloyat) params.set("viloyat", viloyat);
+      // `page` is what opts this caller into the paginated envelope.
+      params.set("page", String(page));
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
       return api(`/api/projects?${params.toString()}`);
     },
+    // Keep the previous page on screen while the next one loads.
+    placeholderData: (prev) => prev,
   });
+  const projects = useMemo(() => data?.rows ?? [], [data]);
 
   // Permission check — only show selection UI to users with project.delete.
   const { data: me } = useQuery<{ permissions: string[] }>({
@@ -69,16 +102,69 @@ export default function ProjectsPage() {
   });
   const canDelete = me?.permissions?.includes("project.delete") ?? false;
 
-  // Project→Order conversion tracker. Counted client-side from the
-  // current filtered list so it reflects whatever the operator is
-  // looking at; switching the DRAFT/ALL toggle re-counts.
+  // Operator filter options. Reuses the @mention list (same order.view gate).
+  const { data: operators = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["users", "mentionable"],
+    queryFn: () => api("/api/users/mentionable"),
+    staleTime: 5 * 60_000,
+  });
+
+  const viloyats = useMemo(() => getViloyats(), []);
+  const filtersActive = Boolean(viloyat || operatorId);
+
+  // Owner-editable table layout (global, from /table-design/drafts). Column
+  // ORDER is the array order; hidden columns are dropped entirely. Everything
+  // visual is passed down as `--dt-*` CSS variables on the <table>, so a theme
+  // flip re-renders one style object instead of every cell.
+  const design = useDraftsTableDesign();
+  const isDark = useThemeStore((s) => s.theme) === "dark";
+  const visibleColumns = useMemo(
+    () => design.columns.filter((c) => c.visible),
+    [design],
+  );
+  const tableStyle = useMemo(
+    () => draftsTableStyleVars(design, isDark),
+    [design, isDark],
+  );
+
+  /** Re-clicking the active column flips direction; any change resets paging. */
+  function handleSort(field: string) {
+    if (sortBy === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir("desc");
+    }
+    setPage(1);
+  }
+
+  // Selection is page-scoped: rows the operator can no longer see must never
+  // stay silently checked and end up in a bulk delete.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [filter, q, page, sortBy, sortDir, operatorId, viloyat]);
+
+  // A delete can shrink the table past the current page — snap back so the
+  // operator never lands on an empty page with no pager to escape it.
+  useEffect(() => {
+    if (data && page > data.pageCount) setPage(data.pageCount);
+  }, [data, page]);
+
+  // Project→Order conversion tracker. Counted client-side from the rows
+  // currently on screen — i.e. the loaded page of the active filter, not
+  // the whole table (the status split isn't part of the API envelope).
+  // Counts come from the server over the WHOLE filtered result set — counting
+  // the loaded rows would only ever describe the current page and understate
+  // conversion. Falls back to the page's own rows if an older/unpaginated
+  // response arrives without the counts.
   const tracker = useMemo(() => {
-    const total = projects.length;
-    const ordered = projects.filter((p) => p.status === "ORDERED").length;
-    const draft = projects.filter((p) => p.status === "DRAFT").length;
+    const counts = data?.statusCounts;
+    const ordered = counts ? counts.ORDERED : projects.filter((p) => p.status === "ORDERED").length;
+    const draft = counts ? counts.DRAFT : projects.filter((p) => p.status === "DRAFT").length;
+    const total = counts ? data?.total ?? ordered + draft : projects.length;
     const pct = total > 0 ? Math.round((ordered / total) * 100) : 0;
     return { total, ordered, draft, pct };
-  }, [projects]);
+  }, [projects, data]);
 
   const deletableSelected = useMemo(() => {
     return projects.filter(
@@ -140,6 +226,138 @@ export default function ProjectsPage() {
     onError: (e: Error) => setRowErrorMsg(e.message),
   });
 
+  // Column filter popovers. Plain selects so the whole option list stays
+  // keyboard-reachable inside the header popover.
+  const filterSelectClass =
+    "w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs";
+
+  const viloyatFilter = (
+    <select
+      className={filterSelectClass}
+      aria-label={t("Вилоят бўйича фильтр", "Filter by region")}
+      value={viloyat}
+      onChange={(e) => {
+        setViloyat(e.target.value);
+        setPage(1);
+      }}
+    >
+      <option value="">Барчаси · All</option>
+      {viloyats.map((v) => (
+        <option key={v.id} value={v.name}>
+          {viloyatLabel(v.name)}
+        </option>
+      ))}
+    </select>
+  );
+
+  const operatorFilter = (
+    <select
+      className={filterSelectClass}
+      aria-label={t("Оператор бўйича фильтр", "Filter by operator")}
+      value={operatorId}
+      onChange={(e) => {
+        setOperatorId(e.target.value);
+        setPage(1);
+      }}
+    >
+      <option value="">Барчаси · All</option>
+      <option value="ai">AI агент · AI agent</option>
+      <option value="none">—</option>
+      {operators.map((u) => (
+        <option key={u.id} value={u.id}>
+          {u.name}
+        </option>
+      ))}
+    </select>
+  );
+
+  // Header cells keyed by column so the designer can reorder/hide them without
+  // any header losing its behaviour: sortability and the filter funnel belong
+  // to the COLUMN, not to its position.
+  //   - sortable:   Ҳолат, Янгиланди, Оператор
+  //   - funnels:    Манзил (вилоят), Оператор
+  //   - inert:      Мижоз / Тел (they render a client → tentative fallback, so
+  //                 no SQL ordering can match what's on screen) and the five
+  //                 totals below, which are reduced from `calculations` in the
+  //                 browser and therefore cannot be ordered server-side.
+  const headerCells: Record<DraftsColumnKey, ReactNode> = {
+    client: (
+      <SortableTh key="client">
+        Мижоз<span className="lang-en"> · Client</span>
+      </SortableTh>
+    ),
+    phone: (
+      <SortableTh key="phone">
+        Тел<span className="lang-en"> · Phone</span>
+      </SortableTh>
+    ),
+    address: (
+      <SortableTh key="address" filterContent={viloyatFilter} filterActive={Boolean(viloyat)}>
+        Манзил<span className="lang-en"> · Address</span>
+      </SortableTh>
+    ),
+    rooms: (
+      <SortableTh key="rooms" align="center">
+        Хоналар<span className="lang-en"> · Rooms</span>
+      </SortableTh>
+    ),
+    slabL: (
+      <SortableTh key="slabL" align="right">
+        Монолит Б<span className="lang-en"> · Slab L</span>
+      </SortableTh>
+    ),
+    area: (
+      <SortableTh key="area" align="right">
+        Майдон<span className="lang-en"> · Area</span>
+      </SortableTh>
+    ),
+    weight: (
+      <SortableTh key="weight" align="right">
+        Оғирлик<span className="lang-en"> · Weight</span>
+      </SortableTh>
+    ),
+    subtotal: (
+      <SortableTh key="subtotal" align="right">
+        Сумма<span className="lang-en"> · Subtotal</span>
+      </SortableTh>
+    ),
+    status: (
+      <SortableTh
+        key="status"
+        field="status"
+        activeField={sortBy}
+        activeDir={sortDir}
+        onSort={handleSort}
+      >
+        {t("Ҳолат", "Status")}
+      </SortableTh>
+    ),
+    updated: (
+      <SortableTh
+        key="updated"
+        field="updatedAt"
+        activeField={sortBy}
+        activeDir={sortDir}
+        onSort={handleSort}
+      >
+        {t("Янгиланди", "Updated")}
+      </SortableTh>
+    ),
+    operator: (
+      <SortableTh
+        key="operator"
+        field="operator"
+        activeField={sortBy}
+        activeDir={sortDir}
+        onSort={handleSort}
+        filterContent={operatorFilter}
+        filterActive={Boolean(operatorId)}
+      >
+        Оператор<span className="lang-en"> · Operator</span>
+      </SortableTh>
+    ),
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -163,9 +381,8 @@ export default function ProjectsPage() {
         </Button>
       </div>
 
-      {/* Tracker — projects → orders conversion. Reflects the current
-          DRAFT/ALL filter so operators can see e.g. "of all my saved
-          projects, X became orders". Hidden when there are no rows. */}
+      {/* Tracker — projects → orders conversion for the rows on screen.
+          Hidden when there are no rows. */}
       {projects.length > 0 && (
         <div className="rounded-lg border border-border bg-card px-4 py-3 flex flex-wrap items-baseline justify-between gap-3 text-sm">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
@@ -206,7 +423,10 @@ export default function ProjectsPage() {
               "Search · name, phone (last 4 digits OK), or address",
             )}
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
         <div className="flex rounded-md border border-border bg-card overflow-hidden">
@@ -230,7 +450,10 @@ export default function ProjectsPage() {
                       ? "text-amber-600 hover:bg-amber-500/10"
                       : "text-muted-foreground hover:bg-muted"
                 }`}
-                onClick={() => setFilter(opt.key)}
+                onClick={() => {
+                  setFilter(opt.key);
+                  setPage(1);
+                }}
               >
                 {isAgent ? "🤖 " : ""}
                 {opt.label}
@@ -265,18 +488,50 @@ export default function ProjectsPage() {
           <div className="text-muted-foreground py-12 text-center">
             {q
               ? t(`"${q}" бўйича лойиҳа топилмади.`, `No projects match "${q}".`)
-              : t(
-                  "Ҳозирча лойиҳалар йўқ — ҳисоб-китобни бошланг.",
-                  "No drafts yet — start a calculation to save one.",
-                )}
+              : filtersActive
+                ? t(
+                    "Танланган фильтрларга мос лойиҳа йўқ.",
+                    "No projects match the selected filters.",
+                  )
+                : t(
+                    "Ҳозирча лойиҳалар йўқ — ҳисоб-китобни бошланг.",
+                    "No drafts yet — start a calculation to save one.",
+                  )}
+            {/* Without this the column funnels are unreachable — the header
+                row isn't rendered when the filtered result is empty. */}
+            {filtersActive && (
+              <div className="mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setViloyat("");
+                    setOperatorId("");
+                    setPage(1);
+                  }}
+                >
+                  {t("Фильтрларни тозалаш", "Clear filters")}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+          <table className="drafts-table w-full min-w-[760px] table-fixed" style={tableStyle}>
+            {/* Configured widths. The selection and delete columns are fixed
+                and never part of the design. */}
+            <colgroup>
+              {canDelete && <col style={{ width: 40 }} />}
+              {visibleColumns.map((c) => (
+                <col key={c.key} style={{ width: `${c.width}%` }} />
+              ))}
+              {canDelete && <col style={{ width: 40 }} />}
+            </colgroup>
+            <thead>
               <tr>
                 {canDelete && (
-                  <th className="px-3 py-2 w-8">
+                  <th>
                     <input
                       type="checkbox"
                       title={t("Лойиҳаларни танлаш", "Select drafts")}
@@ -290,21 +545,11 @@ export default function ProjectsPage() {
                     />
                   </th>
                 )}
-                <th className="text-left px-3 py-2">Мижоз<span className="lang-en"> · Client</span></th>
-                <th className="text-left px-3 py-2">Тел<span className="lang-en"> · Phone</span></th>
-                <th className="text-left px-3 py-2">Манзил<span className="lang-en"> · Address</span></th>
-                <th className="text-center px-3 py-2">Хоналар<span className="lang-en"> · Rooms</span></th>
-                <th className="text-right px-3 py-2">Монолит Б<span className="lang-en"> · Slab L</span></th>
-                <th className="text-right px-3 py-2">Майдон<span className="lang-en"> · Area</span></th>
-                <th className="text-right px-3 py-2">Оғирлик<span className="lang-en"> · Weight</span></th>
-                <th className="text-right px-3 py-2">Сумма<span className="lang-en"> · Subtotal</span></th>
-                <th className="text-left px-3 py-2">{t("Ҳолат", "Status")}</th>
-                <th className="text-left px-3 py-2">{t("Янгиланди", "Updated")}</th>
-                <th className="text-left px-3 py-2">Оператор<span className="lang-en"> · Operator</span></th>
-                {canDelete && <th className="px-3 py-2 w-8" />}
+                {visibleColumns.map((c) => headerCells[c.key])}
+                {canDelete && <th />}
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody>
               {projects.map((p) => {
                 const totalLength = p.calculations.reduce(
                   (s, c) => s + Number(c.monolithLength),
@@ -324,33 +569,12 @@ export default function ProjectsPage() {
                 const order = p.orders[0];
                 const isChecked = selected.has(p.id);
                 const isDeletable = p.status === "DRAFT";
-                return (
-                  <tr
-                    key={p.id}
-                    className={
-                      "hover:bg-muted/20 transition-colors " +
-                      (isChecked ? "bg-destructive/5" : "")
-                    }
-                  >
-                    {canDelete && (
-                      <td className="px-3 py-2 w-8">
-                        <input
-                          type="checkbox"
-                          disabled={!isDeletable}
-                          title={
-                            isDeletable
-                              ? t("Ўчириш учун танлаш", "Select to delete")
-                              : t(
-                                  "Буюртма берилган — ўчириб бўлмайди",
-                                  "Has an order — cannot delete",
-                                )
-                          }
-                          checked={isChecked}
-                          onChange={() => toggleOne(p.id)}
-                        />
-                      </td>
-                    )}
-                    <td className="px-3 py-2">
+                // Body cells keyed like the headers. `dt-muted` / `dt-accent`
+                // opt into the configured secondary / money colors; the rest
+                // inherit the configured body color from `.drafts-table`.
+                const cells: Record<DraftsColumnKey, ReactNode> = {
+                  client: (
+                    <td key="client">
                       <div className="flex items-center gap-2">
                         <Link href={`/projects/${p.id}`} className="font-medium hover:underline">
                           {clientName}
@@ -368,32 +592,54 @@ export default function ProjectsPage() {
                         <div className="text-xs text-muted-foreground">{p.name}</div>
                       )}
                     </td>
-                    <td className="px-3 py-2 tabular-nums text-xs">
+                  ),
+                  phone: (
+                    <td key="phone" className="tabular-nums">
                       {clientPhone ? <PhoneLink phone={clientPhone} /> : "—"}
                     </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">
+                  ),
+                  address: (
+                    <td key="address" className="dt-muted">
                       {clientAddress || "—"}
                     </td>
-                    <td className="px-3 py-2 text-center">{p.calculations.length}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  ),
+                  rooms: (
+                    <td key="rooms" className="text-center">
+                      {p.calculations.length}
+                    </td>
+                  ),
+                  slabL: (
+                    <td key="slabL" className="text-right tabular-nums dt-muted">
                       {formatNumber(totalLength, 2)} m
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
+                  ),
+                  area: (
+                    <td key="area" className="text-right tabular-nums">
                       {formatNumber(totalArea, 2)} m²
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  ),
+                  weight: (
+                    <td key="weight" className="text-right tabular-nums dt-muted">
                       {formatNumber(totalArea * 180, 0)} <span className="text-xs">кг</span>
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                  ),
+                  subtotal: (
+                    <td key="subtotal" className="text-right tabular-nums dt-accent">
                       {formatNumber(totalSum, 0)}
                     </td>
-                    <td className="px-3 py-2">
+                  ),
+                  status: (
+                    <td key="status">
                       <StatusPill status={p.status} order={order} />
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground text-xs">
+                  ),
+                  updated: (
+                    <td key="updated" className="dt-muted">
                       {formatDate(p.updatedAt)}
                     </td>
-                    <td className="px-3 py-2 text-xs">
+                  ),
+                  operator: (
+                    <td key="operator">
                       {p.aiGenerated ? (
                         <span
                           title={t("AI агент яратган", "Created by the AI agent")}
@@ -405,8 +651,34 @@ export default function ProjectsPage() {
                         p.createdBy?.name ?? "—"
                       )}
                     </td>
+                  ),
+                };
+                return (
+                  <tr
+                    key={p.id}
+                    className={"transition-colors " + (isChecked ? "dt-selected" : "")}
+                  >
                     {canDelete && (
-                      <td className="px-3 py-2 w-8">
+                      <td>
+                        <input
+                          type="checkbox"
+                          disabled={!isDeletable}
+                          title={
+                            isDeletable
+                              ? t("Ўчириш учун танлаш", "Select to delete")
+                              : t(
+                                  "Буюртма берилган — ўчириб бўлмайди",
+                                  "Has an order — cannot delete",
+                                )
+                          }
+                          checked={isChecked}
+                          onChange={() => toggleOne(p.id)}
+                        />
+                      </td>
+                    )}
+                    {visibleColumns.map((c) => cells[c.key])}
+                    {canDelete && (
+                      <td>
                         <button
                           type="button"
                           title={t("Лойиҳани ўчириш", "Delete project")}
@@ -427,6 +699,16 @@ export default function ProjectsPage() {
             </tbody>
           </table>
           </div>
+          {data && (
+            <TablePager
+              page={data.page}
+              pageCount={data.pageCount}
+              total={data.total}
+              pageSize={data.pageSize}
+              onPage={setPage}
+            />
+          )}
+          </>
         )}
       </div>
 

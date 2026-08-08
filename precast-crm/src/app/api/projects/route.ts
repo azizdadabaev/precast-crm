@@ -14,9 +14,48 @@ import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
-import { addressSearchForms } from "@/lib/regions";
+import { addressSearchForms, VILOYATS } from "@/lib/regions";
 import { nextDraftNumber } from "@/lib/draft-number";
 import { copyUploadToProject, isAllowedAnnotationSource } from "@/lib/uploads";
+import {
+  parseTableQuery,
+  isPaginated,
+  buildPageMeta,
+  type SortDir,
+} from "@/lib/table-query";
+
+/**
+ * Sortable columns for the saved-drafts table. Everything the browser derives
+ * from `calculations` (rooms, slab length, area, weight, subtotal) is absent on
+ * purpose: those totals don't exist as columns, so SQL can't order by them.
+ * `client`/`address` are absent too — they display a COALESCE of a relation and
+ * a tentative scalar, which a Prisma orderBy can't reproduce.
+ */
+const PROJECT_SORT_FIELDS = [
+  "updatedAt",
+  "createdAt",
+  "status",
+  "draftNumber",
+  "operator",
+] as const;
+
+function projectOrderBy(
+  sortBy: string | null,
+  sortDir: SortDir,
+): Prisma.ProjectOrderByWithRelationInput {
+  switch (sortBy) {
+    case "operator":
+      return { createdBy: { name: sortDir } };
+    case "createdAt":
+      return { createdAt: sortDir };
+    case "status":
+      return { status: sortDir };
+    case "draftNumber":
+      return { draftNumber: sortDir };
+    default:
+      return { updatedAt: sortDir };
+  }
+}
 
 /** GET /api/projects — order.view. List projects with optional status + search. */
 export const GET = withPermission("order.view", async (req: NextRequest, { user }) => {
@@ -25,11 +64,19 @@ export const GET = withPermission("order.view", async (req: NextRequest, { user 
   const status = searchParams.get("status") ?? undefined; // DRAFT | ORDERED | ARCHIVED
   const source = searchParams.get("source") ?? undefined; // "agent" → AI-agent drafts only
   const q = searchParams.get("q")?.trim() ?? "";
+  const operatorId = searchParams.get("operatorId")?.trim() ?? ""; // userId | "ai" | "none"
+  const viloyat = searchParams.get("viloyat")?.trim() ?? "";
 
   const where: Record<string, unknown> = {};
   if (dealId) where.dealId = dealId;
   if (status && ProjectStatusEnum.options.includes(status as never)) where.status = status;
   if (source === "agent") where.aiGenerated = true;
+
+  // Operator column filter. Two sentinels beside a real userId: "ai" for the
+  // agent-authored drafts, "none" for legacy rows that have no creator.
+  if (operatorId === "ai") where.aiGenerated = true;
+  else if (operatorId === "none") where.createdById = null;
+  else if (operatorId) where.createdById = operatorId;
 
   if (q) {
     const phoneForms = phoneMatchForms(q);
@@ -50,23 +97,75 @@ export const GET = withPermission("order.view", async (req: NextRequest, { user 
     where.OR = filters;
   }
 
-  const projects = await prisma.project.findMany({
-    where,
-    orderBy: { updatedAt: "desc" },
-    include: {
-      calculations: { orderBy: { seq: "asc" } },
-      client: true,
-      orders: { select: { id: true, orderNumber: true, status: true, scheduledAt: true } },
-      createdBy: { select: { name: true } },
-    },
+  // Region column filter. Matched against BOTH address fields (a draft's
+  // address lives on the linked Client or, until Place Order, on the
+  // tentative column). Nested in AND so it narrows the `q` search above
+  // instead of overwriting its OR. Both alphabets are tried because the
+  // address string may have been stored Latin (AddressInput) or Cyrillic
+  // (free text pasted from a chat).
+  if (viloyat) {
+    const v = VILOYATS.find((x) => x.name === viloyat || x.nameUz === viloyat);
+    const forms = v ? [v.name, v.nameUz] : [viloyat];
+    where.AND = [
+      {
+        OR: forms.flatMap((f) => [
+          { client: { address: { contains: f, mode: "insensitive" } } },
+          { tentativeClientAddress: { contains: f, mode: "insensitive" } },
+        ]),
+      },
+    ];
+  }
+
+  const paginated = isPaginated(searchParams);
+  const tq = parseTableQuery(searchParams, {
+    allowedSortFields: PROJECT_SORT_FIELDS,
+    defaultSort: "updatedAt",
+    defaultDir: "desc",
   });
+
+  // Same `where` for all three halves so `total` and the status counts can
+  // never disagree with `rows`.
+  const [projects, total, draftCount, orderedCount] = await prisma.$transaction([
+    prisma.project.findMany({
+      where,
+      orderBy: projectOrderBy(tq.sortBy, tq.sortDir),
+      ...(paginated ? { skip: tq.skip, take: tq.pageSize } : {}),
+      include: {
+        calculations: { orderBy: { seq: "asc" } },
+        client: true,
+        orders: { select: { id: true, orderNumber: true, status: true, scheduledAt: true } },
+        createdBy: { select: { name: true } },
+      },
+    }),
+    prisma.project.count({ where }),
+    // Whole-result-set status split. Without these the Лойиҳа → Буюртма tracker
+    // could only count the rows on the current page, which understates
+    // conversion once the list is paginated. Composed with AND rather than by
+    // overwriting `where.status`, so an active status filter still applies.
+    prisma.project.count({
+      where: { AND: [where as Prisma.ProjectWhereInput, { status: "DRAFT" }] },
+    }),
+    prisma.project.count({
+      where: { AND: [where as Prisma.ProjectWhereInput, { status: "ORDERED" }] },
+    }),
+  ]);
+
+  const statusCounts = { DRAFT: draftCount, ORDERED: orderedCount };
 
   // The conversation link is inbox-only data. Strip it for users without
   // inbox.access so chat linkage never leaks through the projects surface.
   const sanitized = can(user, "inbox.access")
     ? projects
     : projects.map((p) => ({ ...p, conversationId: null }));
-  return ok(sanitized);
+
+  // BACKWARD COMPATIBILITY: callers that don't ask for a page (projects/[id],
+  // the calculations page) still get the bare array they've always got.
+  if (!paginated) return ok(sanitized);
+  return ok({
+    rows: sanitized,
+    ...buildPageMeta(total, tq.page, tq.pageSize),
+    statusCounts,
+  });
 });
 
 /** POST /api/projects — order.create. Save Project (draft). Phone-only required. */
