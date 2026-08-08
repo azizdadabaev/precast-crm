@@ -1069,3 +1069,75 @@ html[data-theme="dark"] .tg-wallpaper {
   border-radius: var(--dash-radius-sm);
   animation: dash-shimmer 1.5s ease-in-out infinite;
 }
+
+/* ── Saved-drafts table (/projects) ────────────────────────────────
+   Typography, spacing and colors come from the owner-editable design
+   saved at /table-design/drafts. The React side only sets the `--dt-*`
+   variables on the <table> (see src/lib/drafts-table-style.ts); every
+   rule below is plain CSS, so flipping light↔dark swaps one style
+   object and nothing re-renders per cell.
+
+   These rules deliberately out-specify Tailwind's single-class
+   utilities — a `text-xs` or `text-muted-foreground` on a cell must not
+   defeat the configured size/color. Cells that WANT the secondary or
+   money color opt in with `.dt-muted` / `.dt-accent`.
+   ────────────────────────────────────────────────────────────────── */
+.drafts-table {
+  font-family: var(--dt-font-family);
+}
+
+.drafts-table thead th {
+  background-color: var(--dt-header-bg);
+  color: var(--dt-header-text);
+  font-size: var(--dt-header-font-size);
+  font-weight: var(--dt-header-font-weight);
+  padding: var(--dt-header-py) var(--dt-cell-px);
+  border-bottom: 1px solid var(--dt-border);
+}
+
+.drafts-table tbody td {
+  color: var(--dt-body-text);
+  font-size: var(--dt-body-font-size);
+  font-weight: var(--dt-body-font-weight);
+  padding: var(--dt-body-py) var(--dt-cell-px);
+}
+
+/* Row divider on every row but the first — the header already draws a
+   line, and a second one under it reads as a double rule. */
+.drafts-table tbody tr + tr td {
+  border-top: 1px solid var(--dt-border);
+}
+
+.drafts-table tbody tr:nth-child(odd) {
+  background-color: var(--dt-even-row-bg);
+}
+
+.drafts-table tbody tr:nth-child(even) {
+  background-color: var(--dt-odd-row-bg);
+}
+
+/* Hover and selection tint LAYER over the striping instead of replacing
+   it: background-image doesn't collide with the background-color above,
+   so no specificity war and the tint works on any palette. */
+.drafts-table tbody tr:hover {
+  background-image: linear-gradient(
+    rgb(127 127 127 / 0.1),
+    rgb(127 127 127 / 0.1)
+  );
+}
+
+.drafts-table tbody tr.dt-selected,
+.drafts-table tbody tr.dt-selected:hover {
+  background-image: linear-gradient(
+    hsl(var(--destructive) / 0.08),
+    hsl(var(--destructive) / 0.08)
+  );
+}
+
+.drafts-table tbody td.dt-muted {
+  color: var(--dt-muted-text);
+}
+
+.drafts-table tbody td.dt-accent {
+  color: var(--dt-accent-text);
+}
