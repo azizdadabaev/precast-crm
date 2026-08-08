@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Chip } from "@/components/ui/chip";
+import { SortableTh } from "@/components/ui/sortable-th";
+import { TablePager } from "@/components/ui/table-pager";
+import type { SortDir } from "@/lib/table-query";
+import { VILOYATS, viloyatLabel } from "@/lib/regions";
 import {
   Dialog,
   DialogContent,
@@ -35,25 +39,69 @@ interface Client {
   _count: { deals: number; orders: number };
 }
 
+/** Paginated envelope returned by /api/clients when `page` is sent. */
+interface ClientsPage {
+  rows: Client[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+  sources: string[];
+}
+
+/** Columns where the useful first click is newest/biggest first. */
+const DESC_FIRST_SORTS = new Set(["createdAt", "orders"]);
+
 export default function ClientsPage() {
   const t = useT();
   const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [language, setLanguage] = useState("");
+  const [source, setSource] = useState("");
+  const [viloyat, setViloyat] = useState("");
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exportOpen, setExportOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Client | null>(null);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
-  const { data: clients = [], isLoading } = useQuery<Client[]>({
-    queryKey: ["clients", q, language],
+  const { data, isLoading } = useQuery<ClientsPage>({
+    queryKey: ["clients", q, language, source, viloyat, sortBy, sortDir, page],
     queryFn: () => {
       const params = new URLSearchParams();
       if (q) params.set("q", q);
       if (language) params.set("language", language);
+      if (source) params.set("source", source);
+      if (viloyat) params.set("viloyat", viloyat);
+      params.set("sortBy", sortBy);
+      params.set("sortDir", sortDir);
+      params.set("page", String(page));
       return api(`/api/clients?${params.toString()}`);
     },
+    // Keep the previous page on screen while the next one loads — the table
+    // must not collapse to the empty state between pages.
+    placeholderData: (prev) => prev,
   });
+  const clients = data?.rows ?? [];
+  const sources = data?.sources ?? [];
+
+  // Any sort or filter change invalidates the current page number — otherwise
+  // the operator lands past the end of a narrower result set.
+  function handleSort(field: string) {
+    setSortDir((prev) =>
+      sortBy === field
+        ? prev === "asc"
+          ? "desc"
+          : "asc"
+        : DESC_FIRST_SORTS.has(field)
+          ? "desc"
+          : "asc",
+    );
+    setSortBy(field);
+    setPage(1);
+  }
 
   // Permission check — only the owner sees the per-row delete button.
   const { data: me } = useQuery<{ permissions: string[] }>({
@@ -82,7 +130,7 @@ export default function ClientsPage() {
   // context after narrowing/widening the visible list (per spec).
   useEffect(() => {
     setSelected(new Set());
-  }, [q, language]);
+  }, [q, language, source, viloyat]);
 
   const eligibleIds = useMemo(() => clients.map((c) => c.id), [clients]);
   const allEligibleSelected =
@@ -153,13 +201,19 @@ export default function ClientsPage() {
               "Search · name, phone (last 4 digits OK), or address…",
             )}
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
             className="pl-9"
           />
         </div>
         <Select
           value={language}
-          onChange={(e) => setLanguage(e.target.value)}
+          onChange={(e) => {
+            setLanguage(e.target.value);
+            setPage(1);
+          }}
           className="sm:w-44"
         >
           <option value="">{t("Барча тиллар", "All languages")}</option>
@@ -222,13 +276,108 @@ export default function ClientsPage() {
                       }
                     />
                   </th>
-                  <th className="text-left px-3 py-2.5">Исм<span className="lang-en"> · Name</span></th>
-                  <th className="text-left px-3 py-2.5">Тел<span className="lang-en"> · Phone</span></th>
-                  <th className="text-left px-3 py-2.5">Манзил<span className="lang-en"> · Address</span></th>
-                  <th className="text-left px-3 py-2.5">{t("Тил", "Lang")}</th>
-                  <th className="text-left px-3 py-2.5">{t("Манба", "Source")}</th>
-                  <th className="text-right px-3 py-2.5">{t("Буюртма", "Orders")}</th>
-                  <th className="text-left px-3 py-2.5">{t("Қўшилди", "Added")}</th>
+                  <SortableTh
+                    field="name"
+                    activeField={sortBy}
+                    activeDir={sortDir}
+                    onSort={handleSort}
+                  >
+                    Исм<span className="lang-en"> · Name</span>
+                  </SortableTh>
+                  <SortableTh>
+                    Тел<span className="lang-en"> · Phone</span>
+                  </SortableTh>
+                  <SortableTh
+                    field="address"
+                    activeField={sortBy}
+                    activeDir={sortDir}
+                    onSort={handleSort}
+                    filterActive={Boolean(viloyat)}
+                    filterContent={
+                      <Select
+                        value={viloyat}
+                        onChange={(e) => {
+                          setViloyat(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">{t("Барчаси", "All")}</option>
+                        {VILOYATS.map((v) => (
+                          <option key={v.id} value={v.name}>
+                            {viloyatLabel(v.name)}
+                          </option>
+                        ))}
+                      </Select>
+                    }
+                  >
+                    Манзил<span className="lang-en"> · Address</span>
+                  </SortableTh>
+                  {/* The funnel drives the same `language` state as the
+                      filter bar's select — one filter, two entry points. */}
+                  <SortableTh
+                    field="language"
+                    activeField={sortBy}
+                    activeDir={sortDir}
+                    onSort={handleSort}
+                    filterActive={Boolean(language)}
+                    filterContent={
+                      <Select
+                        value={language}
+                        onChange={(e) => {
+                          setLanguage(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">{t("Барча тиллар", "All languages")}</option>
+                        <option value="UZ">{t("Ўзбекча", "Uzbek")}</option>
+                        <option value="RU">{t("Русча", "Russian")}</option>
+                      </Select>
+                    }
+                  >
+                    {t("Тил", "Lang")}
+                  </SortableTh>
+                  <SortableTh
+                    field="source"
+                    activeField={sortBy}
+                    activeDir={sortDir}
+                    onSort={handleSort}
+                    filterActive={Boolean(source)}
+                    filterContent={
+                      <Select
+                        value={source}
+                        onChange={(e) => {
+                          setSource(e.target.value);
+                          setPage(1);
+                        }}
+                      >
+                        <option value="">{t("Барчаси", "All")}</option>
+                        {sources.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </Select>
+                    }
+                  >
+                    {t("Манба", "Source")}
+                  </SortableTh>
+                  <SortableTh
+                    field="orders"
+                    activeField={sortBy}
+                    activeDir={sortDir}
+                    onSort={handleSort}
+                    align="right"
+                  >
+                    {t("Буюртма", "Orders")}
+                  </SortableTh>
+                  <SortableTh
+                    field="createdAt"
+                    activeField={sortBy}
+                    activeDir={sortDir}
+                    onSort={handleSort}
+                  >
+                    {t("Қўшилди", "Added")}
+                  </SortableTh>
                   {canDelete && <th className="px-3 py-2.5 w-10" />}
                 </tr>
               </thead>
@@ -300,6 +449,15 @@ export default function ClientsPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {data && data.total > 0 && (
+          <TablePager
+            page={data.page}
+            pageCount={data.pageCount}
+            total={data.total}
+            pageSize={data.pageSize}
+            onPage={setPage}
+          />
         )}
       </div>
 
