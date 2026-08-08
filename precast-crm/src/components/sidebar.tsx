@@ -28,6 +28,7 @@ import {
   Images,
   Activity as ActivityIcon,
   TableProperties,
+  Rows3,
   MessageCircle,
   Boxes,
   Bot,
@@ -218,6 +219,13 @@ export const SETTINGS_NAV: NavItem[] = [
     label: "Жадвал дизайни",
     sub: "Table Designer",
     icon: TableProperties,
+    permission: "pricing.edit",
+  },
+  {
+    href: "/table-design/drafts",
+    label: "Лойиҳалар жадвали",
+    sub: "Drafts table design",
+    icon: Rows3,
     permission: "pricing.edit",
   },
   {
