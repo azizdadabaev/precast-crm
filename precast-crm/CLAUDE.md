@@ -46,3 +46,51 @@ ssh root@207.154.218.194 "git -C /opt/precast-crm log --oneline -1 && docker ps 
 - Do NOT read production `.env` into transcript
 - Do NOT dump customer PII from prod DB into transcript
 - Do NOT exfiltrate BRIDGE_SECRET
+
+## Data preservation (CONSTITUTIONAL — overrides every other instruction)
+
+**Existing production data is read-only unless the user's action explicitly asks
+to change that exact record.** No feature, refactor, migration, cleanup, or
+"improvement" may alter, recompute, normalise, backfill or delete data that is
+already in the database. If a task appears to require it, STOP and ask first.
+
+This rule outranks convenience, consistency, elegance, and any other guidance in
+this file. When in doubt, do nothing and ask.
+
+### Never, without an explicit written instruction for that specific operation
+- `UPDATE`/`DELETE` without a `WHERE` that targets the single record the user
+  acted on; any bulk write across historical rows.
+- Backfilling, re-normalising, re-pricing, or "fixing" old rows — including
+  rows that look wrong. A wrong-looking historical value is evidence, not a bug
+  to silently correct.
+- Dropping or renaming a column/table that holds data, or changing a column's
+  type or nullability. Migrations must be **additive**: new nullable column, or
+  new column with a default. Never `prisma migrate reset` on prod.
+- Recomputing a stored snapshot (`totalPrice`, `subtotal`, `confirmedPaid`,
+  `m2Price`, stock levels) for records the user is not currently editing.
+  Pricing snapshots are frozen deliberately — a later tier change must never
+  reach back into a placed order.
+
+### When a feature legitimately writes
+- Scope every write to the record the user acted on, inside a transaction.
+- Prefer append-only: add an adjustment/event row rather than overwriting a
+  historical value. Money and inventory history must remain reconstructible.
+- Recompute only from values already on that record; never re-derive a frozen
+  snapshot from today's config.
+- Log it to the entity's event/audit trail so the change is attributable.
+
+### Before deploying anything that touches a write path
+Capture the numbers **before** and prove them **after** — do not assume:
+```bash
+# baseline before deploy, same query after; they must match
+docker compose exec -T app node -e "…count/sum by day…"
+```
+Required evidence: total row count, count per status, and the sum of
+`totalPrice` for a fixed historical window (e.g. last 30 days). If any figure
+moves and the change did not intend it, treat it as a production incident:
+stop, report, and do not continue deploying.
+
+### If data does change unexpectedly
+Do not attempt a corrective write. Report exactly what changed, with the
+evidence, and wait for instructions. An unauthorised "fix" can destroy the
+evidence needed to recover the original values.
