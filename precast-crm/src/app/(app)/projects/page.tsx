@@ -43,7 +43,13 @@ interface Project {
     monolithArea: string;
     subtotal: string;
   }>;
-  orders: Array<{ id: string; orderNumber: string; status: string }>;
+  orders: Array<{
+    id: string;
+    orderNumber: string;
+    status: string;
+    /** [0] is the ORDER_PLACED event, carrying who placed the order. */
+    events?: Array<{ actor: { name: string } | null }>;
+  }>;
 }
 
 /** Paginated envelope returned by /api/projects when `page` is sent. */
@@ -343,13 +349,13 @@ export default function ProjectsPage() {
         {t("Янгиланди", "Updated")}
       </SortableTh>
     ),
+    // Not sortable: this column shows whoever PLACED the order, which lives on
+    // the ORDER_PLACED event. Prisma cannot order by a nested relation event, so
+    // sorting here would order by createdById — null on 98% of rows — and would
+    // disagree with what is displayed. The funnel filter matches both.
     operator: (
       <SortableTh
         key="operator"
-        field="operator"
-        activeField={sortBy}
-        activeDir={sortDir}
-        onSort={handleSort}
         filterContent={operatorFilter}
         filterActive={Boolean(operatorId)}
       >
@@ -640,16 +646,24 @@ export default function ProjectsPage() {
                   ),
                   operator: (
                     <td key="operator">
-                      {p.aiGenerated ? (
-                        <span
-                          title={t("AI агент яратган", "Created by the AI agent")}
-                          className="shrink-0 text-[9px] font-bold uppercase tracking-wider bg-amber-500 text-white rounded px-1.5 py-0.5"
-                        >
-                          🤖 AI
-                        </span>
-                      ) : (
-                        p.createdBy?.name ?? "—"
-                      )}
+                      {(() => {
+                        // Who placed the order wins: an order placed straight from the
+                        // calculator has no Project creator, so this event is the only
+                        // record of the operator. Falls back to the draft's creator.
+                        const placedBy = p.orders?.[0]?.events?.[0]?.actor?.name ?? null;
+                        const name = placedBy ?? p.createdBy?.name ?? null;
+                        if (name) return name;
+                        if (p.aiGenerated)
+                          return (
+                            <span
+                              title={t("AI агент яратган", "Created by the AI agent")}
+                              className="shrink-0 text-[9px] font-bold uppercase tracking-wider bg-amber-500 text-white rounded px-1.5 py-0.5"
+                            >
+                              🤖 AI
+                            </span>
+                          );
+                        return "—";
+                      })()}
                     </td>
                   ),
                 };
