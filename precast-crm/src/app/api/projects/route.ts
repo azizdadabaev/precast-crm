@@ -36,7 +36,6 @@ const PROJECT_SORT_FIELDS = [
   "createdAt",
   "status",
   "draftNumber",
-  "operator",
 ] as const;
 
 function projectOrderBy(
@@ -44,8 +43,6 @@ function projectOrderBy(
   sortDir: SortDir,
 ): Prisma.ProjectOrderByWithRelationInput {
   switch (sortBy) {
-    case "operator":
-      return { createdBy: { name: sortDir } };
     case "createdAt":
       return { createdAt: sortDir };
     case "status":
@@ -75,8 +72,11 @@ export const GET = withPermission("order.view", async (req: NextRequest, { user 
   // Operator column filter. Two sentinels beside a real userId: "ai" for the
   // agent-authored drafts, "none" for legacy rows that have no creator.
   if (operatorId === "ai") where.aiGenerated = true;
-  else if (operatorId === "none") where.createdById = null;
-  else if (operatorId) where.createdById = operatorId;
+  // "none" is handled with the real-userId case below: it must mean "the column
+  // renders —", i.e. no creator AND no order-placer. Matching createdById: null
+  // alone would return rows that now display the operator who placed the order.
+  // A real userId is handled after the viloyat filter below: it must APPEND to
+  // where.AND rather than assign it.
 
   if (q) {
     const phoneForms = phoneMatchForms(q);
@@ -116,6 +116,34 @@ export const GET = withPermission("order.view", async (req: NextRequest, { user 
     ];
   }
 
+  // Operator filter, matched against EITHER attribution the operator column can
+  // display: the creator of the draft, or whoever placed the resulting order.
+  // Filtering on createdById alone would hide every directly-placed order,
+  // since those Projects carry no creator at all. Appended to AND so it narrows
+  // the q-search OR and the viloyat clause instead of replacing either.
+  if (operatorId === "none") {
+    const prior = Array.isArray(where.AND) ? where.AND : [];
+    where.AND = [
+      ...prior,
+      {
+        createdById: null,
+        orders: { none: { events: { some: { type: "ORDER_PLACED", actorId: { not: null } } } } },
+      },
+    ];
+  }
+  if (operatorId && operatorId !== "ai" && operatorId !== "none") {
+    const prior = Array.isArray(where.AND) ? where.AND : [];
+    where.AND = [
+      ...prior,
+      {
+        OR: [
+          { createdById: operatorId },
+          { orders: { some: { events: { some: { type: "ORDER_PLACED", actorId: operatorId } } } } },
+        ],
+      },
+    ];
+  }
+
   const paginated = isPaginated(searchParams);
   const tq = parseTableQuery(searchParams, {
     allowedSortFields: PROJECT_SORT_FIELDS,
@@ -133,7 +161,23 @@ export const GET = withPermission("order.view", async (req: NextRequest, { user 
       include: {
         calculations: { orderBy: { seq: "asc" } },
         client: true,
-        orders: { select: { id: true, orderNumber: true, status: true, scheduledAt: true } },
+        orders: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            scheduledAt: true,
+            // Who actually placed the order. An order placed straight from the
+            // calculator creates its Project with no creator, so this event is
+            // the only surviving record of the operator behind it.
+            events: {
+              where: { type: "ORDER_PLACED" },
+              select: { actor: { select: { name: true } } },
+              orderBy: { createdAt: "asc" },
+              take: 1,
+            },
+          },
+        },
         createdBy: { select: { name: true } },
       },
     }),

@@ -194,6 +194,11 @@ export async function createOrder(
       project = await tx.project.create({
         data: {
           clientId: client.id,
+          // Attribute the Project to whoever placed the order. Without this a
+          // directly-placed order (no saved draft first) has no creator at all,
+          // and the operator column can only fall back to the ORDER_PLACED event.
+          // null for the agent service account, which is what the schema expects.
+          createdById: actor.userId,
           name: null,
           shapeType: input.shapeType,
           dimensions: input.dimensions ?? {
