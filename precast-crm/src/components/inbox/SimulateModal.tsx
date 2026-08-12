@@ -81,7 +81,7 @@ export function SimulateModal({
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="масалан: 4x5 хона нархи қанча? · e.g. how much for a 4x5 room?"
-          className="mt-4 w-full resize-none rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-focus-ring)]"
+          className="mt-4 w-full resize-none rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-steel)]"
         />
         <label className="mt-2 flex flex-wrap items-center gap-2 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
           <span>📐 Чизма расм · Floor-plan image (vision):</span>
@@ -145,8 +145,8 @@ export function SimulateModal({
             type="button"
             onClick={() => { setNote(null); sim.mutate(); }}
             disabled={sim.isPending || (!text.trim() && !image && !audio)}
-            className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium transition-opacity hover:opacity-90 disabled:opacity-60"
-            style={{ background: "var(--inbox-accent)", color: "var(--inbox-accent-contrast)" }}
+            className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium text-[color:var(--inbox-panel)] transition-opacity hover:opacity-90 disabled:opacity-60"
+            style={{ background: "var(--inbox-ink)" }}
           >
             {sim.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
             Юбориш · Run

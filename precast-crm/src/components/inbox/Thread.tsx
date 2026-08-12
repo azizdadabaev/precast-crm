@@ -172,7 +172,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
         {/* Actions: AI handoff toggle, Calculate-from-chat, then delete (two-step inline confirm) */}
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {/* Functional colour only: green = the AI has this chat handled,
-              orange (systemOrange) = it needs a human decision. */}
+              amber highlight = it needs a human decision. */}
           {!confirming && data?.conversation && (
             <button
               type="button"
@@ -182,7 +182,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
               className={`flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1 text-[13px] font-medium transition-colors ${
                 aiOn
                   ? "text-[color:var(--inbox-resolve)] hover:bg-[var(--inbox-hover)]"
-                  : "bg-[var(--inbox-warn-wash)] text-[color:var(--inbox-warn-text)] hover:opacity-90"
+                  : "bg-[var(--inbox-highlight)] text-[color:var(--inbox-ink)] hover:bg-[var(--inbox-selected)]"
               }`}
             >
               {aiToggle.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
@@ -344,7 +344,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Жавоб ёзинг…"
-          className="flex-1 rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-4 py-2.5 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-focus-ring)] focus:bg-[var(--inbox-panel)]"
+          className="flex-1 rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-4 py-2.5 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-steel)] focus:bg-[var(--inbox-panel)]"
         />
         <AttachFileButton
           conversationId={conversationId}
@@ -358,8 +358,8 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
             type="submit"
             aria-label="Send"
             disabled={reply.isPending}
-            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] transition-colors disabled:opacity-60"
-            style={{ background: "var(--inbox-accent)", color: "var(--inbox-accent-contrast)" }}
+            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-panel)] transition-colors disabled:opacity-60"
+            style={{ background: "var(--inbox-ink)" }}
           >
             {reply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </button>
