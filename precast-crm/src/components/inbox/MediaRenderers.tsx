@@ -21,7 +21,7 @@ export interface MessageMediaProps {
   footer?: React.ReactNode;
 }
 
-const ACCENT = "var(--tg-accent)";
+const INK = "var(--inbox-ink)";
 
 export function MessageMedia({
   mediaKind,
@@ -49,7 +49,7 @@ export function MessageMedia({
           <img
             src={mediaPath}
             alt={mediaName ?? "image"}
-            className="block max-h-[210px] max-w-[180px] rounded-[14px] object-cover"
+            className="block max-h-[210px] max-w-[180px] rounded-[var(--inbox-r-input)] object-cover"
           />
           {footer ? <MediaScrimFooter>{footer}</MediaScrimFooter> : null}
         </button>
@@ -82,17 +82,17 @@ export function MessageMedia({
           className="flex items-center gap-3 py-0.5 pr-1"
         >
           <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white"
-            style={{ background: ACCENT }}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-panel)]"
+            style={{ background: INK }}
           >
             <FileText className="h-5 w-5" />
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="max-w-[200px] truncate text-[14px] font-medium text-[var(--tg-text)]">
+            <span className="max-w-[200px] truncate text-[15px] font-medium text-[var(--inbox-ink)]">
               {mediaName ?? "document"}
             </span>
-            <span className="inline-flex items-center gap-1 text-[12px] text-[color:var(--tg-text-dim)]">
-              <Download className="h-3 w-3" />
+            <span className="inline-flex items-center gap-1 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
+              <Download className="h-3.5 w-3.5" />
               {fileHint(mediaName, meta)}
             </span>
           </span>
@@ -105,16 +105,16 @@ export function MessageMedia({
       if (lat == null || lng == null) return null;
       const url = `https://maps.google.com/?q=${lat},${lng}`;
       return (
-        <a href={url} target="_blank" rel="noreferrer" className="block w-[260px] overflow-hidden rounded-[12px]">
+        <a href={url} target="_blank" rel="noreferrer" className="block w-[260px] overflow-hidden rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)]">
           <MapTexture lat={lat} lng={lng} />
-          <span className="flex flex-col px-2 pb-1 pt-1.5">
-            <span className="text-[14px] font-medium text-[var(--tg-text)]">
+          <span className="flex flex-col px-3 py-2">
+            <span className="text-[15px] font-medium text-[var(--inbox-ink)]">
               {(meta.title as string) ?? "Жойлашув · Location"}
             </span>
             {meta.address ? (
-              <span className="text-[12px] text-[color:var(--tg-text-dim)]">{String(meta.address)}</span>
+              <span className="text-[13px] leading-[1.4] text-[color:var(--inbox-steel)]">{String(meta.address)}</span>
             ) : null}
-            <span className="mt-0.5 text-[12px] font-medium" style={{ color: ACCENT }}>
+            <span className="mt-1 text-[11px] font-medium leading-[1.4] underline" style={{ color: INK }}>
               Open in Google Maps
             </span>
           </span>
@@ -133,14 +133,14 @@ function VideoPlayer({ src, footer }: { src: string; footer?: React.ReactNode })
   const ref = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
   return (
-    <div className="group relative block max-w-[320px] overflow-hidden rounded-[14px]">
+    <div className="group relative block max-w-[320px] overflow-hidden rounded-[var(--inbox-r-input)]">
       <video
         ref={ref}
         src={src}
         playsInline
         controls={started}
         onPlay={() => setStarted(true)}
-        className="block max-h-[360px] w-full rounded-[14px] object-cover"
+        className="block max-h-[360px] w-full rounded-[var(--inbox-r-input)] object-cover"
       />
       {!started && (
         <button
@@ -214,14 +214,14 @@ function VideoNote({ src, footer }: { src: string; footer?: React.ReactNode }) {
 // Bottom-right timestamp on a soft dark gradient, Telegram-style.
 function MediaScrimFooter({ children }: { children: React.ReactNode }) {
   return (
-    <span className="pointer-events-none absolute bottom-0 right-0 left-0 flex justify-end rounded-b-[14px] bg-gradient-to-t from-black/45 to-transparent px-2 pb-1.5 pt-6 text-white">
+    <span className="pointer-events-none absolute bottom-0 right-0 left-0 flex justify-end rounded-b-[var(--inbox-r-input)] bg-gradient-to-t from-black/45 to-transparent px-2 pb-1.5 pt-6 text-white">
       {children}
     </span>
   );
 }
 
-// A faux map: layered gradients give a subtle "satellite-ish" texture
-// with a grid of faint roads and a centered pin. No external tiles.
+// A faux map: a neutral ground with a grid of faint roads and a centered pin.
+// No external tiles — and no colour, since Campsite spends colour on meaning.
 function MapTexture({ lat, lng }: { lat: number; lng: number }) {
   // Nudge the pin a touch based on the coords so different locations
   // don't look pixel-identical.
@@ -230,33 +230,29 @@ function MapTexture({ lat, lng }: { lat: number; lng: number }) {
   return (
     <div
       className="relative h-[120px] w-full"
-      style={{
-        background:
-          "linear-gradient(135deg, #cfe0c3 0%, #e3e9d6 45%, #d7e3ea 100%)",
-        backgroundColor: "#dde3d8",
-      }}
+      style={{ background: "var(--inbox-surface-3)" }}
     >
       {/* faint road grid */}
       <div
-        className="absolute inset-0 opacity-40"
+        className="absolute inset-0 opacity-60"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(255,255,255,.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.6) 1px, transparent 1px)",
+            "linear-gradient(var(--inbox-panel) 1px, transparent 1px), linear-gradient(90deg, var(--inbox-panel) 1px, transparent 1px)",
           backgroundSize: "26px 26px",
         }}
       />
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 opacity-60"
         style={{
           backgroundImage:
-            "linear-gradient(115deg, transparent 46%, rgba(255,255,255,.55) 47%, rgba(255,255,255,.55) 49%, transparent 50%)",
+            "linear-gradient(115deg, transparent 46%, var(--inbox-panel) 47%, var(--inbox-panel) 49%, transparent 50%)",
         }}
       />
       <span
         className="absolute left-1/2 top-1/2"
         style={{ transform: `translate(calc(-50% + ${dx}px), calc(-60% + ${dy}px))` }}
       >
-        <MapPin className="h-7 w-7 fill-[#e24b4b] text-white drop-shadow" />
+        <MapPin className="h-7 w-7 fill-[color:var(--inbox-ink)] text-[color:var(--inbox-panel)]" />
       </span>
     </div>
   );
@@ -277,8 +273,8 @@ function formatBytes(bytes: number): string {
 
 function Placeholder({ label }: { label: string }) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-[10px] border border-[color:var(--tg-divider)] px-3 py-2 text-[12px] text-[color:var(--tg-text-dim)]">
-      <AlertCircle className="h-3.5 w-3.5" />
+    <div className="inline-flex items-center gap-2 rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] px-3 py-2 text-[13px] text-[color:var(--inbox-steel)]">
+      <AlertCircle className="h-4 w-4" />
       {label}
     </div>
   );

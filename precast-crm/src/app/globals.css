@@ -332,53 +332,122 @@
   }
 }
 
+
 /* ──────────────────────────────────────────────────────────────
-   Telegram inbox theme tokens.
-   Light defaults in :root; dark overrides flip with the app theme.
-   All Telegram-style inbox components read from these vars instead
-   of hardcoded hex so night-mode works automatically.
+   Inbox — Campsite design system tokens.
+   Source: styles.refero.design/style/5d8ad116-b3d8-4890-a969-5b856b35c678
+   Scoped to the Inbox subtree only; no other screen reads these.
+
+   The reference is LIGHT-ONLY and specifies no interactive states.
+   Everything under `dark` below, plus the -hover/-selected/-focus
+   values, are OUR extrapolations kept in Campsite's achromatic
+   discipline — see the spec, section 4. Colour is functional only:
+   green = resolved, red = destructive, amber = highlight.
    ────────────────────────────────────────────────────────────── */
 :root {
-  --tg-wallpaper: #e6ebee;
-  --tg-panel: #ffffff;          /* list + header + composer surfaces */
-  --tg-bubble-in: #ffffff;
-  --tg-bubble-out: #effdde;
-  --tg-text: #0f1419;           /* primary message/text */
-  --tg-text-dim: #8696a3;       /* meta, timestamps, snippets */
-  --tg-accent: #3390ec;         /* play button, send, links, unread */
-  --tg-list-hover: #f5f5f5;
-  --tg-list-selected: #ededed;
-  --tg-divider: rgba(0,0,0,0.08);
-  --tg-pill-bg: rgba(255,255,255,0.85);   /* date separator pill */
-  --tg-pill-text: #5a6b78;
-  --tg-wave-track: rgba(0,0,0,0.18);       /* unplayed waveform bars */
-  --tg-input-bg: #f5f6f8;
-  --tg-meta-out: #62a03f;        /* outgoing timestamp/check (green-ish on light) */
-}
-html[data-theme="dark"] {
-  --tg-wallpaper: #0e1621;
-  --tg-panel: #17212b;
-  --tg-bubble-in: #182533;
-  --tg-bubble-out: #2b5278;
-  --tg-text: #ffffff;
-  --tg-text-dim: #6c7883;
-  --tg-accent: #5eb5f7;
-  --tg-list-hover: #202b36;
-  --tg-list-selected: #2b5278;
-  --tg-divider: rgba(255,255,255,0.08);
-  --tg-pill-bg: rgba(0,0,0,0.35);
-  --tg-pill-text: #c6d3df;
-  --tg-wave-track: rgba(255,255,255,0.25);
-  --tg-input-bg: #182533;
-  --tg-meta-out: rgba(255,255,255,0.55);
+  /* Surfaces */
+  --inbox-canvas: #fffdf9;        /* Warm Canvas — thread background */
+  --inbox-panel: #ffffff;         /* Pure White — list, header, composer */
+  --inbox-surface-2: #f5f5f5;     /* Ash Mist — secondary surface */
+  --inbox-surface-3: #f0f0f0;     /* Soft Fog — tertiary / dividers */
+
+  /* Text (achromatic ramp) */
+  --inbox-ink: #171717;           /* Ink — primary */
+  --inbox-graphite: #525252;      /* Graphite — secondary */
+  --inbox-steel: #737373;         /* Steel — tertiary, icons */
+  --inbox-silver: #a3a3a3;        /* Silver — muted / inactive */
+
+  /* Bubbles — both neutral. Campsite reserves green for RESOLVED, so
+     the outgoing bubble is no longer green (was --tg-bubble-out). */
+  --inbox-bubble-in: #ffffff;
+  --inbox-bubble-out: #f5f5f5;
+
+  /* Functional accents only */
+  --inbox-resolve: #22c55e;       /* Resolve Green */
+  --inbox-alert: #ef4444;         /* Alert Red */
+  --inbox-highlight: #fef3c7;     /* Highlight Wash */
+
+  /* Lines + inputs */
+  --inbox-border: #f0f0f0;        /* 1px on cards, inputs, sidebar */
+  --inbox-avatar-ring: #ffffff;   /* 1px ring around avatars */
+  --inbox-input-bg: #f5f5f5;
+
+  /* States — NOT in the reference (extrapolated) */
+  --inbox-hover: #f5f5f5;
+  --inbox-selected: #f0f0f0;
+  --inbox-focus-ring: #171717;
+
+  /* Radii */
+  --inbox-r-pill: 9999px;         /* buttons, tags, avatars */
+  --inbox-r-card: 12px;
+  --inbox-r-input: 8px;           /* inputs, images */
+  --inbox-r-badge: 4px;
+
+  /* Spacing (4px base) */
+  --inbox-space-unit: 4px;
+  --inbox-card-padding: 16px;
+  --inbox-element-gap: 8px;
+
+  /* Shadows — verbatim from the reference */
+  --inbox-shadow-sm:
+    rgba(0,0,0,.05) 0 3px 6px -3px, rgba(0,0,0,.05) 0 2px 4px -2px,
+    rgba(0,0,0,.05) 0 1px 2px -1px, rgba(0,0,0,.05) 0 1px 1px -1px,
+    rgba(0,0,0,.05) 0 1px 0 -1px;
+  --inbox-shadow-subtle:
+    rgba(0,0,0,.08) 0 1px 1px -1px, rgba(0,0,0,.08) 0 2px 2px -1px,
+    rgba(0,0,0,.06) 0 0 0 1px, #fff 0 1px 0 0 inset,
+    #fff 0 1px 2px 1px inset, rgba(0,0,0,.06) 0 1px 2px 0 inset;
+  --inbox-shadow-subtle-2: rgba(0,0,0,.05) 0 1px 2px 0;
+  --inbox-shadow-subtle-4:
+    rgba(0,0,0,.1) 0 .5px 0 0 inset, rgba(0,0,0,.1) 0 2px 4px 0,
+    rgba(0,0,0,.1) 0 4px 12px 0, rgba(0,0,0,.02) 0 8px 20px 0;
 }
 
-/* Wallpaper doodle pattern flips stroke color for dark mode.
-   The base background-color is always var(--tg-wallpaper) set inline;
-   the background-image data-URI is overridden here with a lighter stroke. */
-html[data-theme="dark"] .tg-wallpaper {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' opacity='0.04'%3E%3Ccircle cx='24' cy='24' r='9'/%3E%3Cpath d='M70 18 q10 8 0 18 q-10 8 0 18'/%3E%3Cpath d='M96 70 l8 8 m0 -8 l-8 8'/%3E%3Ccircle cx='30' cy='90' r='6'/%3E%3Cpath d='M58 78 h20 m-10 -10 v20'/%3E%3Cpath d='M10 60 q12 -10 24 0 t24 0'/%3E%3Crect x='86' y='14' width='16' height='16' rx='4'/%3E%3C/g%3E%3C/svg%3E");
+/* Dark: OUR extrapolation. The reference gives only Charcoal #1e1e1e for
+   dark card surfaces; the rest keeps its achromatic ramp inverted. */
+html[data-theme="dark"] {
+  --inbox-canvas: #141414;
+  --inbox-panel: #1e1e1e;         /* Charcoal Card — the one dark value given */
+  --inbox-surface-2: #262626;
+  --inbox-surface-3: #2e2e2e;
+
+  --inbox-ink: #f5f5f5;
+  --inbox-graphite: #a3a3a3;
+  --inbox-steel: #8a8a8a;
+  --inbox-silver: #6b6b6b;
+
+  --inbox-bubble-in: #1e1e1e;
+  --inbox-bubble-out: #2b2b2b;
+
+  --inbox-border: #2e2e2e;
+  --inbox-avatar-ring: #1e1e1e;
+  --inbox-input-bg: #262626;
+
+  --inbox-hover: #262626;
+  --inbox-selected: #2e2e2e;
+  --inbox-focus-ring: #f5f5f5;
+
+  /* Shadows read as depth, not haze, on a dark ground. */
+  --inbox-shadow-sm: rgba(0,0,0,.4) 0 2px 6px -2px, rgba(0,0,0,.3) 0 1px 2px -1px;
+  --inbox-shadow-subtle: rgba(0,0,0,.5) 0 1px 2px 0, rgba(255,255,255,.04) 0 0 0 1px inset;
+  --inbox-shadow-subtle-2: rgba(0,0,0,.4) 0 1px 2px 0;
+  --inbox-shadow-subtle-4: rgba(0,0,0,.5) 0 4px 12px 0, rgba(0,0,0,.3) 0 2px 4px 0;
 }
+
+/* Campsite is Inter-only. Scoped so no other screen's type changes. */
+.inbox-campsite {
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  font-variant-numeric: tabular-nums;   /* timestamps + sums stay aligned */
+  letter-spacing: -0.27px;              /* Body spec */
+  font-size: 15px;
+  line-height: 1.56;
+  color: var(--inbox-ink);
+}
+.inbox-campsite :focus-visible {
+  outline: 2px solid var(--inbox-focus-ring);
+  outline-offset: 2px;
+}
+
 
 @layer base {
   * {

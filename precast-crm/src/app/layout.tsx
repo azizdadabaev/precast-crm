@@ -6,6 +6,7 @@ import {
   Playfair_Display,
   IBM_Plex_Mono,
   Golos_Text,
+  Inter,
 } from "next/font/google";
 import { Providers } from "@/components/providers";
 
@@ -44,6 +45,16 @@ const golosText = Golos_Text({
   weight: ["400", "500", "600", "700"],
 });
 
+// Inter is used ONLY inside the Inbox (Campsite design system specifies it
+// exclusively). Scoped via the .inbox-campsite class so no other screen's
+// typography changes.
+const inter = Inter({
+  subsets: ["latin", "cyrillic"],
+  display: "swap",
+  variable: "--font-inter",
+  weight: ["400", "500", "600"],
+});
+
 export const metadata: Metadata = {
   title: "Precast CRM",
   description: "Beam-and-block precast concrete CRM, calculation & sales system",
@@ -54,7 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${manrope.variable} ${jetbrainsMono.variable} ${playfairDisplay.variable} ${ibmPlexMono.variable} ${golosText.variable}`}
+      className={`${manrope.variable} ${jetbrainsMono.variable} ${playfairDisplay.variable} ${ibmPlexMono.variable} ${golosText.variable} ${inter.variable}`}
     >
       <body className="min-h-screen bg-background text-foreground antialiased font-sans">
         <Providers>{children}</Providers>
