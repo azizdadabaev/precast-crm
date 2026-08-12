@@ -72,7 +72,7 @@ export function AttachFileButton({
     <label
       title={t("Файл юбориш", "Send a file")}
       aria-label={t("Файл бириктириш", "Attach file")}
-      className={`flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] hover:text-[var(--inbox-ink)] ${
+      className={`flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-[color:var(--tg-text-dim)] transition-colors hover:text-[var(--tg-accent)] ${
         sending ? "pointer-events-none opacity-50" : "cursor-pointer"
       }`}
     >

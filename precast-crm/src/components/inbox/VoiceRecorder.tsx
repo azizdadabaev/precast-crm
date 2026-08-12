@@ -175,30 +175,30 @@ export function VoiceRecorder({
         onClick={start}
         aria-label={t("Овоз ёзиш", "Record voice")}
         title={t("Овозли хабар", "Voice message")}
-        className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] hover:text-[var(--inbox-ink)]"
+        className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-[color:var(--tg-text-dim)] transition-colors hover:text-[var(--tg-accent)]"
       >
         <Mic className="h-5 w-5" />
       </button>
 
       {state !== "idle" && (
-        <div className="absolute inset-0 z-10 flex items-center gap-3 bg-[var(--inbox-panel)] px-4">
+        <div className="absolute inset-0 z-10 flex items-center gap-3 bg-[var(--tg-panel)] px-4">
           <button
             type="button"
             onClick={cancel}
             disabled={state === "sending"}
             aria-label={t("Бекор қилиш", "Cancel")}
             title={t("Бекор қилиш", "Cancel")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-steel)] transition-colors hover:text-[color:var(--inbox-alert)] disabled:opacity-40"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[color:var(--tg-text-dim)] transition-colors hover:text-rose-500 disabled:opacity-40"
           >
             <Trash2 className="h-5 w-5" />
           </button>
 
-          <span className="flex items-center gap-2 text-[15px] tabular-nums text-[var(--inbox-ink)]">
-            <span className="h-2 w-2 rounded-[var(--inbox-r-pill)] bg-[var(--inbox-alert)] animate-pulse" />
+          <span className="flex items-center gap-2 text-sm tabular-nums text-[var(--tg-text)]">
+            <span className="h-2.5 w-2.5 rounded-full bg-rose-500 animate-pulse" />
             {fmt(seconds)}
           </span>
 
-          <span className="flex-1 truncate text-[13px] text-[color:var(--inbox-steel)]">
+          <span className="flex-1 truncate text-xs text-[color:var(--tg-text-dim)]">
             {state === "sending"
               ? t("Юборилмоқда…", "Sending…")
               : t("Ёзиб олинмоқда…", "Recording…")}
@@ -209,8 +209,8 @@ export function VoiceRecorder({
             onClick={finish}
             disabled={state === "sending"}
             aria-label={t("Юбориш", "Send")}
-            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-panel)] transition-transform active:scale-95"
-            style={{ background: "var(--inbox-ink)" }}
+            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-white transition-transform active:scale-95"
+            style={{ background: "var(--tg-accent)" }}
           >
             {state === "sending" ? (
               <Loader2 className="h-5 w-5 animate-spin" />

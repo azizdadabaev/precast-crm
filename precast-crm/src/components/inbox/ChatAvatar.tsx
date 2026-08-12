@@ -1,14 +1,25 @@
 "use client";
 
 /**
- * Circular avatar with initials, Campsite-style: achromatic. Colour in this
- * system means something (resolved / alert / highlight), so a peer can't own
- * a hue. Identity is still deterministic — a hash of the name picks one of
- * four tones of Ink over the panel, so the same contact reads the same in the
- * list and in the chat header, in either theme.
+ * Telegram-style circular avatar with initials on a deterministic
+ * gradient. Telegram derives a peer's color from a hash of its id /
+ * name and picks from a fixed palette of gradient pairs — we mirror
+ * that so the same contact always renders the same color across the
+ * list and the chat header.
  */
 
-const TONES = [8, 12, 18, 26] as const;
+// Telegram light-theme peer gradients (top → bottom). Seven pairs,
+// matching Telegram Desktop's user-color rotation closely enough to
+// read as authentic.
+const GRADIENTS: [string, string][] = [
+  ["#ff885e", "#ff516a"], // red
+  ["#ffcd6a", "#ffa85c"], // orange
+  ["#82b1ff", "#665fff"], // violet / blue
+  ["#a0de7e", "#54cb68"], // green
+  ["#53edd6", "#28c9b7"], // cyan
+  ["#72d5fd", "#2a9ef1"], // blue
+  ["#e0a2f3", "#d669ed"], // pink
+];
 
 function hashString(s: string): number {
   let h = 0;
@@ -33,15 +44,15 @@ export function ChatAvatar({
   name: string;
   size?: number;
 }) {
-  const tone = TONES[hashString(name || "?") % TONES.length];
+  const [from, to] = GRADIENTS[hashString(name || "?") % GRADIENTS.length];
   return (
     <span
-      className="inline-flex shrink-0 select-none items-center justify-center rounded-[var(--inbox-r-pill)] font-medium text-[color:var(--inbox-ink)] ring-1 ring-[color:var(--inbox-avatar-ring)]"
+      className="inline-flex shrink-0 select-none items-center justify-center rounded-full font-semibold text-white"
       style={{
         width: size,
         height: size,
-        fontSize: Math.round(size * 0.36),
-        background: `color-mix(in srgb, var(--inbox-ink) ${tone}%, var(--inbox-panel))`,
+        fontSize: Math.round(size * 0.4),
+        background: `linear-gradient(180deg, ${from} 0%, ${to} 100%)`,
       }}
       aria-hidden
     >
