@@ -10,8 +10,8 @@ import { snippet, timeAgo } from "./inbox-utils";
 
 // Channel chrome for the multi-channel inbox (Telegram today, Instagram now,
 // WhatsApp later). Tabs appear automatically for any channel present in the list.
-// Icons are monochrome: Campsite spends colour on meaning (resolved / alert /
-// highlight) only, so the channel is carried by the glyph, not a brand hue.
+// Icons rest in systemGray and take systemBlue once their tab is selected —
+// tint marks what's active, so the channel reads from the glyph plus its state.
 const CHANNEL_META: Record<string, { label: string; icon: LucideIcon }> = {
   TELEGRAM:  { label: "Telegram",  icon: Send },
   INSTAGRAM: { label: "Instagram", icon: InstagramIcon },
@@ -41,7 +41,7 @@ export function ChannelTabs({
         className={cn(
           "rounded-[var(--inbox-r-pill)] px-3 py-1 text-[13px] font-medium transition-colors",
           channelFilter === "ALL"
-            ? "bg-[var(--inbox-panel)] text-[var(--inbox-ink)] shadow-[var(--inbox-shadow-sm)]"
+            ? "bg-[var(--inbox-panel)] text-[color:var(--inbox-accent)] shadow-[var(--inbox-shadow-sm)]"
             : "text-[color:var(--inbox-steel)] hover:text-[var(--inbox-ink)]",
         )}
       >
@@ -59,7 +59,7 @@ export function ChannelTabs({
             className={cn(
               "flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1 text-[13px] font-medium transition-colors",
               channelFilter === ch
-                ? "bg-[var(--inbox-panel)] text-[var(--inbox-ink)] shadow-[var(--inbox-shadow-sm)]"
+                ? "bg-[var(--inbox-panel)] text-[color:var(--inbox-accent)] shadow-[var(--inbox-shadow-sm)]"
                 : "text-[color:var(--inbox-steel)] hover:text-[var(--inbox-ink)]",
             )}
           >
@@ -102,7 +102,7 @@ export function ConversationList({
           value={convSearch}
           onChange={(e) => setConvSearch(e.target.value)}
           placeholder="Қидириш · Search"
-          className="w-full rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] py-2 pl-10 pr-9 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-steel)] focus:bg-[var(--inbox-panel)]"
+          className="w-full rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] py-2 pl-10 pr-9 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-focus-ring)] focus:bg-[var(--inbox-panel)]"
         />
         {convSearch && (
           <button
@@ -139,7 +139,7 @@ export function ConversationList({
                 <span
                   className={cn(
                     "shrink-0 text-[11px] leading-[1.4] tabular-nums",
-                    c.unread ? "font-medium text-[color:var(--inbox-ink)]" : "text-[color:var(--inbox-silver)]",
+                    c.unread ? "font-medium text-[color:var(--inbox-accent)]" : "text-[color:var(--inbox-silver)]",
                   )}
                 >
                   {timeAgo(c.lastMessageAt)}
@@ -147,9 +147,10 @@ export function ConversationList({
               </span>
               <span className="flex items-center justify-between gap-2">
                 <span className="truncate text-[13px] leading-[1.4] text-[color:var(--inbox-steel)]">{snippet(c.lastSnippet)}</span>
-                {/* Unread is a state, not a category — it reads as Ink, never a hue. */}
+                {/* Unread is the one list state worth a tint — systemBlue, the
+                    same hue the timestamp above it takes. */}
                 {c.unread && (
-                  <span className="h-2 w-2 shrink-0 rounded-[var(--inbox-r-pill)] bg-[var(--inbox-ink)]" />
+                  <span className="h-2 w-2 shrink-0 rounded-[var(--inbox-r-pill)] bg-[var(--inbox-accent)]" />
                 )}
               </span>
             </span>

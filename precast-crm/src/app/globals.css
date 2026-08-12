@@ -334,61 +334,80 @@
 
 
 /* ──────────────────────────────────────────────────────────────
-   Inbox — Campsite design system tokens.
-   Source: styles.refero.design/style/5d8ad116-b3d8-4890-a969-5b856b35c678
-   Scoped to the Inbox subtree only; no other screen reads these.
+   Inbox theme — Campsite STRUCTURE, Apple COLOUR.
 
-   The reference is LIGHT-ONLY and specifies no interactive states.
-   Everything under `dark` below, plus the -hover/-selected/-focus
-   values, are OUR extrapolations kept in Campsite's achromatic
-   discipline — see the spec, section 4. Colour is functional only:
-   green = resolved, red = destructive, amber = highlight.
+   Shape, rhythm and restraint follow the Campsite reference (pill
+   controls, 12px cards, 8px inputs, 4px grid, hairlines, Inter).
+   The palette is Apple's system colours instead of Campsite's
+   98%-achromatic ramp, which read as lifeless in a chat surface.
+
+   Light/dark pairs are the documented iOS system values, so dark
+   mode is no longer an extrapolation.
    ────────────────────────────────────────────────────────────── */
 :root {
-  /* Surfaces */
-  --inbox-canvas: #fffdf9;        /* Warm Canvas — thread background */
-  --inbox-panel: #ffffff;         /* Pure White — list, header, composer */
-  --inbox-surface-2: #f5f5f5;     /* Ash Mist — secondary surface */
-  --inbox-surface-3: #f0f0f0;     /* Soft Fog — tertiary / dividers */
+  /* Surfaces — iOS grouped-background family */
+  --inbox-canvas: #f2f2f7;        /* secondarySystemBackground */
+  --inbox-panel: #ffffff;         /* systemBackground */
+  --inbox-surface-2: #e5e5ea;     /* systemGray5 */
+  --inbox-surface-3: #f2f2f7;     /* systemGray6 */
 
-  /* Text (achromatic ramp) */
-  --inbox-ink: #171717;           /* Ink — primary */
-  --inbox-graphite: #525252;      /* Graphite — secondary */
-  --inbox-steel: #737373;         /* Steel — tertiary, icons */
-  --inbox-silver: #a3a3a3;        /* Silver — muted / inactive */
+  /* Labels */
+  --inbox-ink: #000000;                    /* label */
+  --inbox-graphite: rgba(60,60,67,0.60);   /* secondaryLabel */
+  --inbox-steel: #8e8e93;                  /* systemGray — icons, meta */
+  --inbox-silver: #c7c7cc;                 /* systemGray3 — muted */
 
-  /* Bubbles — both neutral. Campsite reserves green for RESOLVED, so
-     the outgoing bubble is no longer green (was --tg-bubble-out). */
-  --inbox-bubble-in: #ffffff;
-  --inbox-bubble-out: #f5f5f5;
+  /* Interactive accent — systemBlue. Links, send, unread, focus. */
+  --inbox-accent: #007aff;
+  --inbox-accent-contrast: #ffffff;
 
-  /* Functional accents only */
-  --inbox-resolve: #22c55e;       /* Resolve Green */
-  --inbox-alert: #ef4444;         /* Alert Red */
-  --inbox-highlight: #fef3c7;     /* Highlight Wash */
+  /* Bubbles — iMessage: blue outgoing on white text, grey incoming. */
+  --inbox-bubble-in: #e9e9eb;
+  --inbox-bubble-in-text: #000000;
+  --inbox-bubble-out: #007aff;
+  --inbox-bubble-out-text: #ffffff;
+  --inbox-bubble-out-meta: rgba(255,255,255,0.75);
+
+  /* Functional */
+  --inbox-resolve: #34c759;       /* systemGreen */
+  --inbox-alert: #ff3b30;         /* systemRed */
+  --inbox-warn: #ff9500;          /* systemOrange */
+  --inbox-highlight: #fff4d6;     /* systemYellow wash */
+  --inbox-warn-wash: #fff0d9;   /* orange wash behind warn text */
+  --inbox-warn-text: #8a4b00;   /* readable orange ON the wash (~8:1) */
 
   /* Lines + inputs */
-  --inbox-border: #f0f0f0;        /* 1px on cards, inputs, sidebar */
-  --inbox-avatar-ring: #ffffff;   /* 1px ring around avatars */
-  --inbox-input-bg: #f5f5f5;
+  --inbox-border: #e5e5ea;
+  --inbox-border-strong: #c6c6c8; /* opaqueSeparator */
+  --inbox-avatar-ring: #ffffff;
+  --inbox-input-bg: #e9e9eb;
 
-  /* States — NOT in the reference (extrapolated) */
-  --inbox-hover: #f5f5f5;
-  --inbox-selected: #f0f0f0;
-  --inbox-focus-ring: #171717;
+  /* States */
+  --inbox-hover: #f2f2f7;
+  --inbox-selected: #e5e5ea;
+  --inbox-focus-ring: #007aff;
 
-  /* Radii */
-  --inbox-r-pill: 9999px;         /* buttons, tags, avatars */
+  /* Avatar palette — deterministic per name, iOS system hues */
+  --inbox-av-1: #007aff;  /* blue   */
+  --inbox-av-2: #34c759;  /* green  */
+  --inbox-av-3: #ff9500;  /* orange */
+  --inbox-av-4: #af52de;  /* purple */
+  --inbox-av-5: #ff2d55;  /* pink   */
+  --inbox-av-6: #30b0c7;  /* teal   */
+  --inbox-av-7: #5856d6;  /* indigo */
+
+  /* Radii (Campsite) */
+  --inbox-r-pill: 9999px;
   --inbox-r-card: 12px;
-  --inbox-r-input: 8px;           /* inputs, images */
+  --inbox-r-input: 8px;
   --inbox-r-badge: 4px;
 
-  /* Spacing (4px base) */
+  /* Spacing (Campsite, 4px base) */
   --inbox-space-unit: 4px;
   --inbox-card-padding: 16px;
   --inbox-element-gap: 8px;
 
-  /* Shadows — verbatim from the reference */
+  /* Shadows (Campsite, verbatim) */
   --inbox-shadow-sm:
     rgba(0,0,0,.05) 0 3px 6px -3px, rgba(0,0,0,.05) 0 2px 4px -2px,
     rgba(0,0,0,.05) 0 1px 2px -1px, rgba(0,0,0,.05) 0 1px 1px -1px,
@@ -403,31 +422,50 @@
     rgba(0,0,0,.1) 0 4px 12px 0, rgba(0,0,0,.02) 0 8px 20px 0;
 }
 
-/* Dark: OUR extrapolation. The reference gives only Charcoal #1e1e1e for
-   dark card surfaces; the rest keeps its achromatic ramp inverted. */
 html[data-theme="dark"] {
-  --inbox-canvas: #141414;
-  --inbox-panel: #1e1e1e;         /* Charcoal Card — the one dark value given */
-  --inbox-surface-2: #262626;
-  --inbox-surface-3: #2e2e2e;
+  --inbox-canvas: #000000;        /* systemBackground dark */
+  --inbox-panel: #1c1c1e;         /* systemGray6 dark */
+  --inbox-surface-2: #2c2c2e;     /* systemGray5 dark */
+  --inbox-surface-3: #3a3a3c;     /* systemGray4 dark */
 
-  --inbox-ink: #f5f5f5;
-  --inbox-graphite: #a3a3a3;
-  --inbox-steel: #8a8a8a;
-  --inbox-silver: #6b6b6b;
+  --inbox-ink: #ffffff;
+  --inbox-graphite: rgba(235,235,245,0.60);
+  --inbox-steel: #8e8e93;
+  --inbox-silver: #48484a;
 
-  --inbox-bubble-in: #1e1e1e;
-  --inbox-bubble-out: #2b2b2b;
+  --inbox-accent: #0a84ff;
+  --inbox-accent-contrast: #ffffff;
 
-  --inbox-border: #2e2e2e;
-  --inbox-avatar-ring: #1e1e1e;
-  --inbox-input-bg: #262626;
+  --inbox-bubble-in: #3b3b3d;
+  --inbox-bubble-in-text: #ffffff;
+  --inbox-bubble-out: #0a84ff;
+  --inbox-bubble-out-text: #ffffff;
+  --inbox-bubble-out-meta: rgba(255,255,255,0.75);
 
-  --inbox-hover: #262626;
-  --inbox-selected: #2e2e2e;
-  --inbox-focus-ring: #f5f5f5;
+  --inbox-resolve: #30d158;
+  --inbox-alert: #ff453a;
+  --inbox-warn: #ff9f0a;
+  --inbox-highlight: #3a3320;
+  --inbox-warn-wash: #3a2a12;
+  --inbox-warn-text: #ffb340;
 
-  /* Shadows read as depth, not haze, on a dark ground. */
+  --inbox-border: #38383a;
+  --inbox-border-strong: #545458;
+  --inbox-avatar-ring: #1c1c1e;
+  --inbox-input-bg: #2c2c2e;
+
+  --inbox-hover: #2c2c2e;
+  --inbox-selected: #3a3a3c;
+  --inbox-focus-ring: #0a84ff;
+
+  --inbox-av-1: #0a84ff;
+  --inbox-av-2: #30d158;
+  --inbox-av-3: #ff9f0a;
+  --inbox-av-4: #bf5af2;
+  --inbox-av-5: #ff375f;
+  --inbox-av-6: #40cbe0;
+  --inbox-av-7: #5e5ce6;
+
   --inbox-shadow-sm: rgba(0,0,0,.4) 0 2px 6px -2px, rgba(0,0,0,.3) 0 1px 2px -1px;
   --inbox-shadow-subtle: rgba(0,0,0,.5) 0 1px 2px 0, rgba(255,255,255,.04) 0 0 0 1px inset;
   --inbox-shadow-subtle-2: rgba(0,0,0,.4) 0 1px 2px 0;

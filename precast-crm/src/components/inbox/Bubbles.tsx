@@ -7,10 +7,16 @@ import { useImageViewer } from "@/components/inbox/ImageViewer";
 import type { InboxMessage, RenderItem } from "./inbox-types";
 import { clock, dateLabel } from "./inbox-utils";
 
-// Both bubbles are neutral: Campsite reserves green for RESOLVED, so
-// direction reads from alignment and a half-step of tone, not hue.
+// Direction reads from hue, iMessage-style: ours is systemBlue, theirs is a
+// neutral fill. Because the outgoing fill is saturated, EVERY piece of text
+// inside a bubble has to pick its colour from the direction — body, caption,
+// timestamp and check all read from the -text / -meta pair below.
 const BUBBLE_IN = "var(--inbox-bubble-in)";
 const BUBBLE_OUT = "var(--inbox-bubble-out)";
+const TEXT_IN = "var(--inbox-bubble-in-text)";
+const TEXT_OUT = "var(--inbox-bubble-out-text)";
+const META_OUT = "var(--inbox-bubble-out-meta)";
+const META_IN = "var(--inbox-steel)";
 
 export function Bubble({
   msg,
@@ -32,7 +38,15 @@ export function Bubble({
   const footer = (
     <span
       className={cn("flex select-none items-center gap-1 text-[11px] leading-[1.4]", overlayMedia && "text-white")}
-      style={overlayMedia ? undefined : { color: msg.failed ? "var(--inbox-alert)" : "var(--inbox-steel)" }}
+      style={
+        overlayMedia
+          ? undefined
+          : {
+              // On the blue outgoing fill even the failure marker has to stay
+              // white — the red hairline border carries "failed" instead.
+              color: outgoing ? META_OUT : msg.failed ? "var(--inbox-alert)" : META_IN,
+            }
+      }
     >
       {clock(msg.createdAt)}
       {outgoing && !msg.failed && <SentCheck />}
@@ -61,7 +75,7 @@ export function Bubble({
       )}
       <div
         className={cn(
-          "relative max-w-[min(72%,600px)] text-[15px] leading-[1.56] text-[var(--inbox-ink)]",
+          "relative max-w-[min(72%,600px)] text-[15px] leading-[1.56]",
           // Media-only bubbles are the image itself — it carries its own
           // radius, so no card chrome around it.
           overlayMedia ? "overflow-hidden" : "rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)] px-3 py-2",
@@ -72,6 +86,14 @@ export function Bubble({
         )}
         style={{
           background: overlayMedia ? "transparent" : outgoing ? BUBBLE_OUT : BUBBLE_IN,
+          // The hairline is the fill's own colour on outgoing, so a light
+          // separator never outlines the blue.
+          borderColor: msg.failed
+            ? "var(--inbox-alert)"
+            : outgoing
+              ? BUBBLE_OUT
+              : "var(--inbox-border)",
+          color: outgoing ? TEXT_OUT : TEXT_IN,
           boxShadow: overlayMedia ? "none" : "var(--inbox-shadow-sm)",
         }}
       >
@@ -133,8 +155,11 @@ export function AlbumBubble({
   const lastCreatedAt = items[items.length - 1].createdAt;
 
   const footer = (
+    // The album footer sits on the caption strip (not on a scrim), so it takes
+    // the strip's own direction colours rather than a flat white.
     <span
-      className="flex select-none items-center gap-1 text-[11px] leading-[1.4] text-white"
+      className="flex select-none items-center gap-1 text-[11px] leading-[1.4]"
+      style={{ color: outgoing ? META_OUT : META_IN }}
     >
       {clock(lastCreatedAt)}
       {outgoing && <SentCheck />}
@@ -190,10 +215,13 @@ export function AlbumBubble({
         {(caption || true) && (
           <div
             className="flex flex-col px-3 py-2"
-            style={{ background: outgoing ? BUBBLE_OUT : BUBBLE_IN }}
+            style={{
+              background: outgoing ? BUBBLE_OUT : BUBBLE_IN,
+              color: outgoing ? TEXT_OUT : TEXT_IN,
+            }}
           >
             {caption && (
-              <span className="whitespace-pre-wrap break-words text-[15px] leading-[1.56] text-[var(--inbox-ink)]">
+              <span className="whitespace-pre-wrap break-words text-[15px] leading-[1.56]">
                 {caption}
               </span>
             )}

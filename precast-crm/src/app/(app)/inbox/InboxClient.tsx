@@ -39,8 +39,9 @@ export function InboxClient() {
 }
 
 // The shared shell buttons (simulate / settings / lock): pill, 1px border,
-// achromatic. Overrides the app-wide outline variant so the Inbox chrome
-// reads from the --inbox-* tokens like everything else on this screen.
+// neutral — colour on this screen belongs to state, not to chrome. Overrides
+// the app-wide outline variant so the Inbox chrome reads from the --inbox-*
+// tokens like everything else on this screen.
 const CHROME_BUTTON =
   "h-8 rounded-[var(--inbox-r-pill)] border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] text-[13px] font-medium text-[var(--inbox-ink)] shadow-[var(--inbox-shadow-sm)] hover:bg-[var(--inbox-hover)] hover:text-[var(--inbox-ink)]";
 
@@ -165,7 +166,7 @@ function Inbox() {
                 <DropdownMenuItem key={opt.value} onClick={() => setAutolockMin(opt.value)}>
                   <span className="flex flex-1 items-center justify-between">
                     {opt.label}
-                    {autolockMin === opt.value && <Check className="h-4 w-4 text-[color:var(--inbox-ink)]" />}
+                    {autolockMin === opt.value && <Check className="h-4 w-4 text-[color:var(--inbox-accent)]" />}
                   </span>
                 </DropdownMenuItem>
               ))}
