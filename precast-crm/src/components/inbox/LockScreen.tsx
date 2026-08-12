@@ -22,9 +22,9 @@ export function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
         className="flex w-full max-w-xs flex-col items-center gap-4 rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] p-4 shadow-[var(--inbox-shadow-sm)]"
       >
         <div
-          className="flex h-12 w-12 items-center justify-center rounded-[var(--inbox-r-pill)] bg-[var(--inbox-ink)]"
+          className="flex h-12 w-12 items-center justify-center rounded-[var(--inbox-r-pill)] bg-[var(--inbox-accent)]"
         >
-          <Lock className="h-5 w-5 text-[color:var(--inbox-panel)]" />
+          <Lock className="h-5 w-5 text-[color:var(--inbox-accent-contrast)]" />
         </div>
         <div className="text-center">
           <div className="text-[15px] font-medium text-[var(--inbox-ink)]">Хабарлар қулфланган</div>
@@ -37,14 +37,14 @@ export function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           autoFocus
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-center text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-steel)] focus:bg-[var(--inbox-panel)]"
+          className="w-full rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-center text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-focus-ring)] focus:bg-[var(--inbox-panel)]"
           placeholder="••••••••"
         />
         {error && <span className="text-[11px] leading-[1.4] text-[color:var(--inbox-alert)]">{error}</span>}
         <Button
           type="submit"
           size="sm"
-          className="w-full rounded-[var(--inbox-r-pill)] bg-[var(--inbox-ink)] text-[13px] font-medium text-[color:var(--inbox-panel)] hover:bg-[var(--inbox-graphite)]"
+          className="w-full rounded-[var(--inbox-r-pill)] bg-[var(--inbox-accent)] text-[13px] font-medium text-[color:var(--inbox-accent-contrast)] hover:opacity-90 hover:bg-[var(--inbox-accent)]"
           disabled={m.isPending || !password}
         >
           {m.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Очиш · Unlock"}

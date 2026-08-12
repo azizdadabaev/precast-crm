@@ -9,16 +9,18 @@ import { AlertTriangle, Bot, Check, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AgentProposal } from "./inbox-types";
 
-// Status badges: 4px radius, 4px/8px padding. Colour is functional — an amber
-// wash marks the ones waiting on a human, red marks a block; a plain reply is
+// Status badges: 4px radius, 4px/8px padding. Colour is functional — systemOrange
+// marks the ones waiting on a human, red marks a block; a plain reply is
 // neutral, since nothing about it is resolved yet.
 const BADGE = "rounded-[var(--inbox-r-badge)] px-2 py-1 text-[11px] leading-[1.4]";
+const NEEDS_HUMAN =
+  "bg-[var(--inbox-warn-wash)] text-[color:var(--inbox-warn-text)]";
 const DECISION_STYLE: Record<string, { label: string; cls: string }> = {
   reply: { label: "Жавоб · Reply", cls: "bg-[var(--inbox-surface-2)] text-[color:var(--inbox-ink)]" },
-  escalate: { label: "Одамга · Escalate", cls: "bg-[var(--inbox-highlight)] text-[color:var(--inbox-ink)]" },
-  max_turns: { label: "Лимит · Max turns", cls: "bg-[var(--inbox-highlight)] text-[color:var(--inbox-ink)]" },
+  escalate: { label: "Одамга · Escalate", cls: NEEDS_HUMAN },
+  max_turns: { label: "Лимит · Max turns", cls: NEEDS_HUMAN },
   blocked: { label: "Блок · Blocked", cls: "bg-[var(--inbox-surface-2)] text-[color:var(--inbox-alert)]" },
-  request_approval: { label: "Буюртма · Approval", cls: "bg-[var(--inbox-highlight)] text-[color:var(--inbox-ink)]" },
+  request_approval: { label: "Буюртма · Approval", cls: NEEDS_HUMAN },
 };
 
 // The agent's latest PENDING proposal for this chat. Read-only in Shadow; in
@@ -130,7 +132,7 @@ function GhostSuggestForm({ conversationId, proposalId, reply }: { conversationI
         rows={3}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        className="w-full resize-none rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors focus:border-[color:var(--inbox-steel)]"
+        className="w-full resize-none rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors focus:border-[color:var(--inbox-focus-ring)]"
       />
       {error && <div className="mt-1 text-[11px] leading-[1.4] text-[color:var(--inbox-alert)]">{error}</div>}
       <div className="mt-2 flex items-center gap-2">
@@ -138,8 +140,8 @@ function GhostSuggestForm({ conversationId, proposalId, reply }: { conversationI
           type="button"
           disabled={act.isPending || !text.trim()}
           onClick={() => { setError(null); act.mutate({ action: "send", text: text.trim() }); }}
-          className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium text-[color:var(--inbox-panel)] transition-opacity hover:opacity-90 disabled:opacity-60"
-          style={{ background: "var(--inbox-ink)" }}
+          className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium transition-opacity hover:opacity-90 disabled:opacity-60"
+          style={{ background: "var(--inbox-accent)", color: "var(--inbox-accent-contrast)" }}
         >
           {act.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           {edited ? "Таҳрирлаб юбориш · Send edited" : "Юбориш · Send"}
@@ -204,8 +206,8 @@ function GhostOrderForm({
           type="button"
           disabled={act.isPending || missing}
           onClick={() => { setError(null); act.mutate("place_order"); }}
-          className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium text-[color:var(--inbox-panel)] transition-opacity hover:opacity-90 disabled:opacity-60"
-          style={{ background: "var(--inbox-ink)" }}
+          className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium transition-opacity hover:opacity-90 disabled:opacity-60"
+          style={{ background: "var(--inbox-accent)", color: "var(--inbox-accent-contrast)" }}
         >
           {act.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           Tasdiqlab joylash · Place order

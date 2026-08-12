@@ -209,8 +209,8 @@ export function VoiceRecorder({
             onClick={finish}
             disabled={state === "sending"}
             aria-label={t("Юбориш", "Send")}
-            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-panel)] transition-transform active:scale-95"
-            style={{ background: "var(--inbox-ink)" }}
+            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] transition-transform active:scale-95"
+            style={{ background: "var(--inbox-accent)", color: "var(--inbox-accent-contrast)" }}
           >
             {state === "sending" ? (
               <Loader2 className="h-5 w-5 animate-spin" />

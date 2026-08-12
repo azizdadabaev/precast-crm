@@ -21,7 +21,16 @@ export interface MessageMediaProps {
   footer?: React.ReactNode;
 }
 
-const INK = "var(--inbox-ink)";
+// Everything drawn inside a bubble picks its colour from the direction: the
+// outgoing fill is systemBlue, so its text/glyphs invert to white while the
+// incoming side keeps label ink and systemBlue accents.
+const TEXT_IN = "var(--inbox-bubble-in-text)";
+const TEXT_OUT = "var(--inbox-bubble-out-text)";
+const META_IN = "var(--inbox-steel)";
+const META_OUT = "var(--inbox-bubble-out-meta)";
+const ACCENT = "var(--inbox-accent)";
+const ACCENT_CONTRAST = "var(--inbox-accent-contrast)";
+const BUBBLE_OUT = "var(--inbox-bubble-out)";
 
 export function MessageMedia({
   mediaKind,
@@ -37,9 +46,14 @@ export function MessageMedia({
   if (!mediaKind) return null;
 
   const meta = mediaMeta ?? {};
-  if (meta.unavailable) return <Placeholder label="Медиа юкланмади · Media unavailable" />;
+  if (meta.unavailable) return <Placeholder label="Медиа юкланмади · Media unavailable" outgoing={outgoing} />;
   if (meta.oversize)
-    return <Placeholder label="Файл катта — Telegram'да очинг · Too large — open in Telegram" />;
+    return (
+      <Placeholder
+        label="Файл катта — Telegram'да очинг · Too large — open in Telegram"
+        outgoing={outgoing}
+      />
+    );
 
   switch (mediaKind) {
     case "IMAGE":
@@ -82,16 +96,27 @@ export function MessageMedia({
           className="flex items-center gap-3 py-0.5 pr-1"
         >
           <span
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-panel)]"
-            style={{ background: INK }}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)]"
+            style={{
+              // Blue disc on the incoming side; inverted (white disc, blue
+              // glyph) on the blue outgoing fill.
+              background: outgoing ? TEXT_OUT : ACCENT,
+              color: outgoing ? BUBBLE_OUT : ACCENT_CONTRAST,
+            }}
           >
             <FileText className="h-5 w-5" />
           </span>
           <span className="flex min-w-0 flex-col">
-            <span className="max-w-[200px] truncate text-[15px] font-medium text-[var(--inbox-ink)]">
+            <span
+              className="max-w-[200px] truncate text-[15px] font-medium"
+              style={{ color: outgoing ? TEXT_OUT : TEXT_IN }}
+            >
               {mediaName ?? "document"}
             </span>
-            <span className="inline-flex items-center gap-1 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
+            <span
+              className="inline-flex items-center gap-1 text-[11px] leading-[1.4]"
+              style={{ color: outgoing ? META_OUT : META_IN }}
+            >
               <Download className="h-3.5 w-3.5" />
               {fileHint(mediaName, meta)}
             </span>
@@ -105,16 +130,29 @@ export function MessageMedia({
       if (lat == null || lng == null) return null;
       const url = `https://maps.google.com/?q=${lat},${lng}`;
       return (
-        <a href={url} target="_blank" rel="noreferrer" className="block w-[260px] overflow-hidden rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)]">
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="block w-[260px] overflow-hidden rounded-[var(--inbox-r-input)] border"
+          style={{ borderColor: outgoing ? BUBBLE_OUT : "var(--inbox-border)" }}
+        >
           <MapTexture lat={lat} lng={lng} />
           <span className="flex flex-col px-3 py-2">
-            <span className="text-[15px] font-medium text-[var(--inbox-ink)]">
+            <span className="text-[15px] font-medium" style={{ color: outgoing ? TEXT_OUT : TEXT_IN }}>
               {(meta.title as string) ?? "Жойлашув · Location"}
             </span>
             {meta.address ? (
-              <span className="text-[13px] leading-[1.4] text-[color:var(--inbox-steel)]">{String(meta.address)}</span>
+              <span className="text-[13px] leading-[1.4]" style={{ color: outgoing ? META_OUT : META_IN }}>
+                {String(meta.address)}
+              </span>
             ) : null}
-            <span className="mt-1 text-[11px] font-medium leading-[1.4] underline" style={{ color: INK }}>
+            {/* A link is systemBlue — except on the blue fill, where it inverts
+                to white and keeps the underline as its affordance. */}
+            <span
+              className="mt-1 text-[11px] font-medium leading-[1.4] underline"
+              style={{ color: outgoing ? TEXT_OUT : ACCENT }}
+            >
               Open in Google Maps
             </span>
           </span>
@@ -123,7 +161,7 @@ export function MessageMedia({
     }
 
     default:
-      return <Placeholder label="Қўллаб-қувватланмайди · Unsupported message" />;
+      return <Placeholder label="Қўллаб-қувватланмайди · Unsupported message" outgoing={outgoing} />;
   }
 }
 
@@ -221,7 +259,8 @@ function MediaScrimFooter({ children }: { children: React.ReactNode }) {
 }
 
 // A faux map: a neutral ground with a grid of faint roads and a centered pin.
-// No external tiles — and no colour, since Campsite spends colour on meaning.
+// No external tiles — the card keeps its own neutral ground in both
+// directions, so it stays readable inside the blue outgoing fill too.
 function MapTexture({ lat, lng }: { lat: number; lng: number }) {
   // Nudge the pin a touch based on the coords so different locations
   // don't look pixel-identical.
@@ -271,9 +310,15 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function Placeholder({ label }: { label: string }) {
+function Placeholder({ label, outgoing = false }: { label: string; outgoing?: boolean }) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] px-3 py-2 text-[13px] text-[color:var(--inbox-steel)]">
+    <div
+      className="inline-flex items-center gap-2 rounded-[var(--inbox-r-input)] border px-3 py-2 text-[13px]"
+      style={{
+        borderColor: outgoing ? META_OUT : "var(--inbox-border)",
+        color: outgoing ? META_OUT : META_IN,
+      }}
+    >
       <AlertCircle className="h-4 w-4" />
       {label}
     </div>

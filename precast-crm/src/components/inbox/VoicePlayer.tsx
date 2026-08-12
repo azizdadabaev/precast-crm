@@ -9,15 +9,23 @@ import { Play, Pause } from "lucide-react";
  * The Bot API gives us no amplitude data for voice notes, so the
  * waveform is *synthesized* deterministically from the message id: a
  * tiny seeded PRNG produces stable bar heights that never reshuffle
- * across renders. Played bars fill with Ink left → right as the hidden
- * <audio> element progresses.
+ * across renders. Played bars fill left → right as the hidden <audio>
+ * element progresses.
  */
 
 const BAR_COUNT = 44;
 
-// Colors are CSS variables so they flip with the app's dark mode.
-// Progress is achromatic: played bars are Ink, unplayed are Silver.
-const INK = "var(--inbox-ink)";
+// Colors are CSS variables so they flip with the app's dark mode. The player
+// lives inside a bubble, so it takes its colours from the direction: systemBlue
+// on the incoming (neutral) fill, inverted to white on the blue outgoing fill.
+const ACCENT = "var(--inbox-accent)";
+const ACCENT_CONTRAST = "var(--inbox-accent-contrast)";
+const BUBBLE_OUT = "var(--inbox-bubble-out)";
+const TEXT_OUT = "var(--inbox-bubble-out-text)";
+const META_OUT = "var(--inbox-bubble-out-meta)";
+// No token exists for a dimmed white, so the unplayed bars on the blue fill are
+// derived from the bubble's own text colour rather than a new hard-coded value.
+const UNPLAYED_OUT = "color-mix(in srgb, var(--inbox-bubble-out-text) 40%, transparent)";
 
 function seeded(seed: number): () => number {
   // mulberry32 — small, fast, deterministic.
@@ -61,13 +69,13 @@ export function VoicePlayer({
   src,
   duration,
   title,
+  outgoing,
 }: {
   id: string;
   src: string;
   duration?: number;
   title?: string;
-  /** Kept in the contract by the caller; both bubbles are neutral now, so the
-   *  player no longer tints itself by direction. */
+  /** True inside an OUTBOUND (systemBlue) bubble — inverts the player's tint. */
   outgoing: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -134,12 +142,17 @@ export function VoicePlayer({
   const progress = total > 0 ? current / total : 0;
   // Time label: count up while playing / scrubbed, show total when idle.
   const label = current > 0 ? fmt(current) : fmt(total);
-  const unplayed = "var(--inbox-silver)";
+  const played = outgoing ? TEXT_OUT : ACCENT;
+  const unplayed = outgoing ? UNPLAYED_OUT : "var(--inbox-silver)";
 
   return (
     <div className="flex flex-col gap-2">
       {title ? (
-        <span className="truncate text-[13px] font-medium text-[color:var(--inbox-ink)]" title={title}>
+        <span
+          className="truncate text-[13px] font-medium"
+          style={{ color: outgoing ? TEXT_OUT : "var(--inbox-bubble-in-text)" }}
+          title={title}
+        >
           {title}
         </span>
       ) : null}
@@ -148,8 +161,11 @@ export function VoicePlayer({
           type="button"
           onClick={toggle}
           aria-label={playing ? "Pause" : "Play"}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-panel)] shadow-[var(--inbox-shadow-sm)] transition-transform active:scale-95"
-          style={{ background: INK }}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] shadow-[var(--inbox-shadow-sm)] transition-transform active:scale-95"
+          style={{
+            background: outgoing ? TEXT_OUT : ACCENT,
+            color: outgoing ? BUBBLE_OUT : ACCENT_CONTRAST,
+          }}
         >
           {playing ? (
             <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} />
@@ -180,7 +196,7 @@ export function VoicePlayer({
                   style={{
                     height: `${Math.round(h * 100)}%`,
                     minHeight: 3,
-                    background: filled ? INK : unplayed,
+                    background: filled ? played : unplayed,
                   }}
                 />
               );
@@ -188,7 +204,7 @@ export function VoicePlayer({
           </div>
           <span
             className="text-[11px] font-medium leading-[1.4] tabular-nums"
-            style={{ color: "var(--inbox-steel)" }}
+            style={{ color: outgoing ? META_OUT : "var(--inbox-steel)" }}
           >
             {label}
           </span>

@@ -1,14 +1,21 @@
 "use client";
 
 /**
- * Circular avatar with initials, Campsite-style: achromatic. Colour in this
- * system means something (resolved / alert / highlight), so a peer can't own
- * a hue. Identity is still deterministic — a hash of the name picks one of
- * four tones of Ink over the panel, so the same contact reads the same in the
- * list and in the chat header, in either theme.
+ * Circular avatar with initials. Identity carries a hue again (Apple's system
+ * colours): a hash of the name picks one of the seven --inbox-av-* tones, so
+ * the same contact always reads the same in the list and in the chat header,
+ * in either theme. The initials stay white on every tone.
  */
 
-const TONES = [8, 12, 18, 26] as const;
+const AVATAR_TOKENS = [
+  "var(--inbox-av-1)",
+  "var(--inbox-av-2)",
+  "var(--inbox-av-3)",
+  "var(--inbox-av-4)",
+  "var(--inbox-av-5)",
+  "var(--inbox-av-6)",
+  "var(--inbox-av-7)",
+] as const;
 
 function hashString(s: string): number {
   let h = 0;
@@ -33,15 +40,15 @@ export function ChatAvatar({
   name: string;
   size?: number;
 }) {
-  const tone = TONES[hashString(name || "?") % TONES.length];
+  const tone = AVATAR_TOKENS[hashString(name || "?") % AVATAR_TOKENS.length];
   return (
     <span
-      className="inline-flex shrink-0 select-none items-center justify-center rounded-[var(--inbox-r-pill)] font-medium text-[color:var(--inbox-ink)] ring-1 ring-[color:var(--inbox-avatar-ring)]"
+      className="inline-flex shrink-0 select-none items-center justify-center rounded-[var(--inbox-r-pill)] font-medium text-[color:var(--inbox-accent-contrast)] ring-1 ring-[color:var(--inbox-avatar-ring)]"
       style={{
         width: size,
         height: size,
         fontSize: Math.round(size * 0.36),
-        background: `color-mix(in srgb, var(--inbox-ink) ${tone}%, var(--inbox-panel))`,
+        background: tone,
       }}
       aria-hidden
     >
