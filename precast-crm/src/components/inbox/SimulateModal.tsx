@@ -54,21 +54,24 @@ export function SimulateModal({
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
       onClick={() => !sim.isPending && onClose()}
     >
-      <div className="w-full max-w-md rounded-2xl bg-[var(--tg-panel)] p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="w-full max-w-md rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] p-4 shadow-[var(--inbox-shadow-subtle-4)]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-[15px] font-semibold text-[var(--tg-text)]">
-            <FlaskConical className="h-4 w-4 text-[var(--tg-accent)]" />
+          <div className="flex items-center gap-2 text-[15px] font-medium text-[var(--inbox-ink)]">
+            <FlaskConical className="h-4 w-4 text-[color:var(--inbox-steel)]" />
             Хабарни синаш · Simulate inbound
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)]"
+            className="rounded-[var(--inbox-r-pill)] p-1 text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] hover:text-[var(--inbox-ink)]"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <p className="mt-1.5 text-[12px] text-[color:var(--tg-text-dim)]">
+        <p className="mt-2 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
           Мижоз хабарини ёзинг — AI агент Shadow режимида жавоб таклиф қилади (мижозга ҳеч нима юборилмайди) · Type a
           customer message; the AI proposes a reply in Shadow (nothing is sent to a customer).
         </p>
@@ -78,9 +81,9 @@ export function SimulateModal({
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="масалан: 4x5 хона нархи қанча? · e.g. how much for a 4x5 room?"
-          className="mt-3 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-[color:var(--tg-accent)]"
+          className="mt-4 w-full resize-none rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-steel)]"
         />
-        <label className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-[color:var(--tg-text-dim)]">
+        <label className="mt-2 flex flex-wrap items-center gap-2 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
           <span>📐 Чизма расм · Floor-plan image (vision):</span>
           <input
             type="file"
@@ -97,9 +100,9 @@ export function SimulateModal({
               reader.readAsDataURL(f);
             }}
           />
-          {image && <span className="text-[var(--tg-accent)]">📎 {image.name} · расм юборилади · image will be sent</span>}
+          {image && <span className="text-[var(--inbox-ink)]">📎 {image.name} · расм юборилади · image will be sent</span>}
         </label>
-        <label className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-[color:var(--tg-text-dim)]">
+        <label className="mt-2 flex flex-wrap items-center gap-2 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
           <span>🎤 Овоз · Voice note (transcription):</span>
           <input
             type="file"
@@ -116,16 +119,16 @@ export function SimulateModal({
               reader.readAsDataURL(f);
             }}
           />
-          {audio && <span className="text-[var(--tg-accent)]">📎 {audio.name} · овоз юборилади · audio will be sent</span>}
+          {audio && <span className="text-[var(--inbox-ink)]">📎 {audio.name} · овоз юборилади · audio will be sent</span>}
         </label>
         {activeId && (
-          <label className="mt-2 flex items-center gap-2 text-[13px] text-[color:var(--tg-text-dim)]">
+          <label className="mt-2 flex items-center gap-2 text-[13px] text-[color:var(--inbox-steel)]">
             <input type="checkbox" checked={intoCurrent} onChange={(e) => setIntoCurrent(e.target.checked)} />
             Очиқ суҳбатга қўшиш · Add to the open chat
           </label>
         )}
         {note && (
-          <div className="mt-2 rounded-lg bg-amber-500/10 px-3 py-2 text-[12px] text-amber-700 dark:text-amber-400">
+          <div className="mt-2 rounded-[var(--inbox-r-input)] bg-[var(--inbox-highlight)] px-3 py-2 text-[11px] leading-[1.4] text-[color:var(--inbox-ink)]">
             {note}
           </div>
         )}
@@ -134,7 +137,7 @@ export function SimulateModal({
             type="button"
             onClick={onClose}
             disabled={sim.isPending}
-            className="rounded-lg px-3 py-1.5 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+            className="rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] disabled:opacity-60"
           >
             Бекор · Cancel
           </button>
@@ -142,10 +145,10 @@ export function SimulateModal({
             type="button"
             onClick={() => { setNote(null); sim.mutate(); }}
             disabled={sim.isPending || (!text.trim() && !image && !audio)}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-white transition-colors disabled:opacity-60"
-            style={{ background: "var(--tg-accent)" }}
+            className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium text-[color:var(--inbox-panel)] transition-opacity hover:opacity-90 disabled:opacity-60"
+            style={{ background: "var(--inbox-ink)" }}
           >
-            {sim.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
+            {sim.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FlaskConical className="h-4 w-4" />}
             Юбориш · Run
           </button>
         </div>

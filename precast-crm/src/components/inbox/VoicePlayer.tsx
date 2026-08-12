@@ -9,16 +9,15 @@ import { Play, Pause } from "lucide-react";
  * The Bot API gives us no amplitude data for voice notes, so the
  * waveform is *synthesized* deterministically from the message id: a
  * tiny seeded PRNG produces stable bar heights that never reshuffle
- * across renders. Played bars fill with the accent color left → right
- * as the hidden <audio> element progresses.
+ * across renders. Played bars fill with Ink left → right as the hidden
+ * <audio> element progresses.
  */
 
 const BAR_COUNT = 44;
 
 // Colors are CSS variables so they flip with the app's dark mode.
-// Played bars use the accent; unplayed use the wave-track token;
-// time label uses the meta-out token for outgoing, text-dim for incoming.
-const ACCENT = "var(--tg-accent)";
+// Progress is achromatic: played bars are Ink, unplayed are Silver.
+const INK = "var(--inbox-ink)";
 
 function seeded(seed: number): () => number {
   // mulberry32 — small, fast, deterministic.
@@ -62,12 +61,13 @@ export function VoicePlayer({
   src,
   duration,
   title,
-  outgoing,
 }: {
   id: string;
   src: string;
   duration?: number;
   title?: string;
+  /** Kept in the contract by the caller; both bubbles are neutral now, so the
+   *  player no longer tints itself by direction. */
   outgoing: boolean;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -134,12 +134,12 @@ export function VoicePlayer({
   const progress = total > 0 ? current / total : 0;
   // Time label: count up while playing / scrubbed, show total when idle.
   const label = current > 0 ? fmt(current) : fmt(total);
-  const unplayed = "var(--tg-wave-track)";
+  const unplayed = "var(--inbox-silver)";
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-2">
       {title ? (
-        <span className="truncate text-[13px] font-medium text-[color:var(--tg-accent)]" title={title}>
+        <span className="truncate text-[13px] font-medium text-[color:var(--inbox-ink)]" title={title}>
           {title}
         </span>
       ) : null}
@@ -148,8 +148,8 @@ export function VoicePlayer({
           type="button"
           onClick={toggle}
           aria-label={playing ? "Pause" : "Play"}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-transform active:scale-95"
-          style={{ background: ACCENT }}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-panel)] shadow-[var(--inbox-shadow-sm)] transition-transform active:scale-95"
+          style={{ background: INK }}
         >
           {playing ? (
             <Pause className="h-5 w-5" fill="currentColor" strokeWidth={0} />
@@ -176,19 +176,19 @@ export function VoicePlayer({
               return (
                 <span
                   key={i}
-                  className="flex-1 rounded-full transition-colors"
+                  className="flex-1 rounded-[var(--inbox-r-pill)] transition-colors"
                   style={{
                     height: `${Math.round(h * 100)}%`,
                     minHeight: 3,
-                    background: filled ? ACCENT : unplayed,
+                    background: filled ? INK : unplayed,
                   }}
                 />
               );
             })}
           </div>
           <span
-            className="text-[11px] font-medium tabular-nums"
-            style={{ color: outgoing ? "var(--tg-meta-out)" : "var(--tg-text-dim)" }}
+            className="text-[11px] font-medium leading-[1.4] tabular-nums"
+            style={{ color: "var(--inbox-steel)" }}
           >
             {label}
           </span>

@@ -10,10 +10,12 @@ import { snippet, timeAgo } from "./inbox-utils";
 
 // Channel chrome for the multi-channel inbox (Telegram today, Instagram now,
 // WhatsApp later). Tabs appear automatically for any channel present in the list.
-const CHANNEL_META: Record<string, { label: string; icon: LucideIcon; cls: string }> = {
-  TELEGRAM:  { label: "Telegram",  icon: Send,          cls: "text-sky-500" },
-  INSTAGRAM: { label: "Instagram", icon: InstagramIcon, cls: "text-pink-500" },
-  WHATSAPP:  { label: "WhatsApp",  icon: MessageCircle, cls: "text-green-500" },
+// Icons are monochrome: Campsite spends colour on meaning (resolved / alert /
+// highlight) only, so the channel is carried by the glyph, not a brand hue.
+const CHANNEL_META: Record<string, { label: string; icon: LucideIcon }> = {
+  TELEGRAM:  { label: "Telegram",  icon: Send },
+  INSTAGRAM: { label: "Instagram", icon: InstagramIcon },
+  WHATSAPP:  { label: "WhatsApp",  icon: MessageCircle },
 };
 
 // Multi-channel switcher (header). Telegram + Instagram always offered; any
@@ -32,13 +34,15 @@ export function ChannelTabs({
   const channelCounts: Record<string, number> = counts;
   const channelTabs = Array.from(new Set(["TELEGRAM", "INSTAGRAM", ...Object.keys(channelCounts)]));
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 p-0.5">
+    <div className="flex items-center gap-1 rounded-[var(--inbox-r-pill)] border border-[color:var(--inbox-border)] bg-[var(--inbox-surface-2)] p-1">
       <button
         type="button"
         onClick={() => onChange("ALL")}
         className={cn(
-          "rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors",
-          channelFilter === "ALL" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+          "rounded-[var(--inbox-r-pill)] px-3 py-1 text-[13px] font-medium transition-colors",
+          channelFilter === "ALL"
+            ? "bg-[var(--inbox-panel)] text-[var(--inbox-ink)] shadow-[var(--inbox-shadow-sm)]"
+            : "text-[color:var(--inbox-steel)] hover:text-[var(--inbox-ink)]",
         )}
       >
         Ҳаммаси
@@ -53,13 +57,15 @@ export function ChannelTabs({
             type="button"
             onClick={() => onChange(ch)}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12.5px] font-medium transition-colors",
-              channelFilter === ch ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+              "flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1 text-[13px] font-medium transition-colors",
+              channelFilter === ch
+                ? "bg-[var(--inbox-panel)] text-[var(--inbox-ink)] shadow-[var(--inbox-shadow-sm)]"
+                : "text-[color:var(--inbox-steel)] hover:text-[var(--inbox-ink)]",
             )}
           >
-            <Icon className={cn("h-3.5 w-3.5", meta?.cls)} />
+            <Icon className="h-4 w-4" />
             {meta?.label ?? ch}
-            <span className="tabular-nums text-[11px] text-muted-foreground">{count}</span>
+            <span className="tabular-nums text-[11px] text-[color:var(--inbox-silver)]">{count}</span>
           </button>
         );
       })}
@@ -88,22 +94,22 @@ export function ConversationList({
   );
 
   return (
-    <div className="flex w-[340px] shrink-0 flex-col border-r border-[color:var(--tg-divider)] bg-[var(--tg-panel)]">
+    <div className="flex w-[340px] shrink-0 flex-col border-r border-[color:var(--inbox-border)] bg-[var(--inbox-panel)]">
       {/* Search — script-insensitive (Cyrillic/Latin) over name + snippet. */}
-      <div className="relative shrink-0 border-b border-[color:var(--tg-divider)] p-2">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--tg-text-dim)]" />
+      <div className="relative shrink-0 border-b border-[color:var(--inbox-border)] p-2">
+        <Search className="pointer-events-none absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--inbox-steel)]" />
         <input
           value={convSearch}
           onChange={(e) => setConvSearch(e.target.value)}
           placeholder="Қидириш · Search"
-          className="w-full rounded-[18px] border border-transparent bg-[var(--tg-input-bg)] py-2 pl-9 pr-8 text-sm text-[var(--tg-text)] outline-none transition-colors focus:border-[color:var(--tg-accent)] focus:bg-[var(--tg-panel)]"
+          className="w-full rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] py-2 pl-10 pr-9 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-steel)] focus:bg-[var(--inbox-panel)]"
         />
         {convSearch && (
           <button
             type="button"
             onClick={() => setConvSearch("")}
             title="Тозалаш · Clear"
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-[color:var(--tg-text-dim)] hover:text-[var(--tg-text)]"
+            className="absolute right-5 top-1/2 -translate-y-1/2 text-[color:var(--inbox-steel)] transition-colors hover:text-[var(--inbox-ink)]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -115,36 +121,42 @@ export function ConversationList({
             key={c.id}
             onClick={() => onSelect(c.id)}
             className={cn(
-              "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
-              activeId === c.id ? "bg-[var(--tg-list-selected)]" : "hover:bg-[var(--tg-list-hover)]",
+              "flex w-full items-center gap-3 px-4 py-3 text-left transition-colors",
+              activeId === c.id ? "bg-[var(--inbox-selected)]" : "hover:bg-[var(--inbox-hover)]",
             )}
           >
-            <ChatAvatar name={c.displayName} size={50} />
-            <span className="flex min-w-0 flex-1 flex-col">
+            <ChatAvatar name={c.displayName} size={44} />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5">
                   {(() => {
                     const meta = CHANNEL_META[c.channel ?? "TELEGRAM"];
                     const Icon = meta?.icon ?? MessageCircle;
-                    return <Icon className={cn("h-3.5 w-3.5 shrink-0", meta?.cls)} aria-label={meta?.label} />;
+                    return <Icon className="h-4 w-4 shrink-0 text-[color:var(--inbox-steel)]" aria-label={meta?.label} />;
                   })()}
-                  <span className="truncate text-[15px] font-semibold text-[var(--tg-text)]">{c.displayName}</span>
+                  <span className="truncate text-[15px] font-medium leading-[1.4] text-[var(--inbox-ink)]">{c.displayName}</span>
                 </span>
-                <span className={cn("shrink-0 text-[12px]", c.unread ? "text-[color:var(--tg-accent)]" : "text-[color:var(--tg-text-dim)]")}>
+                <span
+                  className={cn(
+                    "shrink-0 text-[11px] leading-[1.4] tabular-nums",
+                    c.unread ? "font-medium text-[color:var(--inbox-ink)]" : "text-[color:var(--inbox-silver)]",
+                  )}
+                >
                   {timeAgo(c.lastMessageAt)}
                 </span>
               </span>
               <span className="flex items-center justify-between gap-2">
-                <span className="truncate text-[13px] text-[color:var(--tg-text-dim)]">{snippet(c.lastSnippet)}</span>
+                <span className="truncate text-[13px] leading-[1.4] text-[color:var(--inbox-steel)]">{snippet(c.lastSnippet)}</span>
+                {/* Unread is a state, not a category — it reads as Ink, never a hue. */}
                 {c.unread && (
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[var(--tg-accent)]" />
+                  <span className="h-2 w-2 shrink-0 rounded-[var(--inbox-r-pill)] bg-[var(--inbox-ink)]" />
                 )}
               </span>
             </span>
           </button>
         ))}
         {conversations && visibleConversations.length === 0 && (
-          <div className="p-6 text-center text-sm text-muted-foreground">
+          <div className="p-6 text-center text-[13px] text-[color:var(--inbox-steel)]">
             {convSearch.trim()
               ? "Қидирув бўйича натижа йўқ · No matches"
               : channelFilter === "ALL"

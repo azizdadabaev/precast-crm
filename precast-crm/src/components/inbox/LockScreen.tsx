@@ -19,16 +19,16 @@ export function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
     <Centered>
       <form
         onSubmit={(e) => { e.preventDefault(); setError(null); m.mutate(); }}
-        className="flex w-full max-w-xs flex-col items-center gap-4 rounded-2xl border border-border bg-card p-8 shadow-sm"
+        className="flex w-full max-w-xs flex-col items-center gap-4 rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] p-4 shadow-[var(--inbox-shadow-sm)]"
       >
         <div
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--tg-accent)]"
+          className="flex h-12 w-12 items-center justify-center rounded-[var(--inbox-r-pill)] bg-[var(--inbox-ink)]"
         >
-          <Lock className="h-7 w-7 text-white" />
+          <Lock className="h-5 w-5 text-[color:var(--inbox-panel)]" />
         </div>
         <div className="text-center">
-          <div className="font-semibold">Хабарлар қулфланган</div>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <div className="text-[15px] font-medium text-[var(--inbox-ink)]">Хабарлар қулфланган</div>
+          <p className="mt-1 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
             Кириш учун паролни киритинг · Enter the password to open the inbox.
           </p>
         </div>
@@ -37,11 +37,16 @@ export function LockScreen({ onUnlocked }: { onUnlocked: () => void }) {
           autoFocus
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-center text-sm outline-none focus:border-[color:var(--tg-accent)] focus:ring-1 focus:ring-[color:var(--tg-accent)]"
+          className="w-full rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-center text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-steel)] focus:bg-[var(--inbox-panel)]"
           placeholder="••••••••"
         />
-        {error && <span className="text-xs text-destructive">{error}</span>}
-        <Button type="submit" size="sm" className="w-full" disabled={m.isPending || !password}>
+        {error && <span className="text-[11px] leading-[1.4] text-[color:var(--inbox-alert)]">{error}</span>}
+        <Button
+          type="submit"
+          size="sm"
+          className="w-full rounded-[var(--inbox-r-pill)] bg-[var(--inbox-ink)] text-[13px] font-medium text-[color:var(--inbox-panel)] hover:bg-[var(--inbox-graphite)]"
+          disabled={m.isPending || !password}
+        >
           {m.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Очиш · Unlock"}
         </Button>
       </form>

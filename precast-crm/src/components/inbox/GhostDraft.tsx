@@ -9,12 +9,16 @@ import { AlertTriangle, Bot, Check, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AgentProposal } from "./inbox-types";
 
+// Status badges: 4px radius, 4px/8px padding. Colour is functional — an amber
+// wash marks the ones waiting on a human, red marks a block; a plain reply is
+// neutral, since nothing about it is resolved yet.
+const BADGE = "rounded-[var(--inbox-r-badge)] px-2 py-1 text-[11px] leading-[1.4]";
 const DECISION_STYLE: Record<string, { label: string; cls: string }> = {
-  reply: { label: "Жавоб · Reply", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
-  escalate: { label: "Одамга · Escalate", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
-  max_turns: { label: "Лимит · Max turns", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-400" },
-  blocked: { label: "Блок · Blocked", cls: "bg-red-500/15 text-red-700 dark:text-red-400" },
-  request_approval: { label: "Буюртма · Approval", cls: "bg-blue-500/15 text-blue-700 dark:text-blue-400" },
+  reply: { label: "Жавоб · Reply", cls: "bg-[var(--inbox-surface-2)] text-[color:var(--inbox-ink)]" },
+  escalate: { label: "Одамга · Escalate", cls: "bg-[var(--inbox-highlight)] text-[color:var(--inbox-ink)]" },
+  max_turns: { label: "Лимит · Max turns", cls: "bg-[var(--inbox-highlight)] text-[color:var(--inbox-ink)]" },
+  blocked: { label: "Блок · Blocked", cls: "bg-[var(--inbox-surface-2)] text-[color:var(--inbox-alert)]" },
+  request_approval: { label: "Буюртма · Approval", cls: "bg-[var(--inbox-highlight)] text-[color:var(--inbox-ink)]" },
 };
 
 // The agent's latest PENDING proposal for this chat. Read-only in Shadow; in
@@ -40,7 +44,10 @@ export function GhostDraft({ conversationId }: { conversationId: string }) {
   // Orders are operator-placed in suggest AND auto (auto never auto-places an order).
   const canPlaceOrder = (suggest || mode === "auto") && proposal.decision === "request_approval";
 
-  const ds = DECISION_STYLE[proposal.decision] ?? { label: proposal.decision, cls: "bg-muted text-muted-foreground" };
+  const ds = DECISION_STYLE[proposal.decision] ?? {
+    label: proposal.decision,
+    cls: "bg-[var(--inbox-surface-2)] text-[color:var(--inbox-steel)]",
+  };
   const body =
     proposal.decision === "reply"
       ? proposal.reply
@@ -50,22 +57,23 @@ export function GhostDraft({ conversationId }: { conversationId: string }) {
   const tools = (proposal.toolCalls ?? []).map((t) => t.name);
 
   return (
-    <div className="shrink-0 border-t border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 pt-2">
-      <div className="rounded-xl border border-dashed border-[color:var(--tg-accent)]/50 bg-[color:var(--tg-accent)]/[0.06] p-3">
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-          <span className="flex items-center gap-1 font-semibold text-[var(--tg-accent)]">
-            <Bot className="h-3.5 w-3.5" /> AI таклифи · AI proposal
+    <div className="shrink-0 border-t border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] px-4 pt-2">
+      {/* Dashed edge = a draft, not a sent message. */}
+      <div className="rounded-[var(--inbox-r-card)] border border-dashed border-[color:var(--inbox-silver)] bg-[var(--inbox-surface-2)] p-4">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] leading-[1.4]">
+          <span className="flex items-center gap-1 font-medium text-[var(--inbox-ink)]">
+            <Bot className="h-4 w-4" /> AI таклифи · AI proposal
           </span>
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{mode === "shadow" ? "shadow · read-only" : mode}</span>
-          <span className={cn("rounded-full px-1.5 py-0.5 font-medium", ds.cls)}>{ds.label}</span>
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{proposal.modelKey}</span>
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">{proposal.language}</span>
+          <span className={cn(BADGE, "bg-[var(--inbox-panel)] text-[color:var(--inbox-steel)]")}>{mode === "shadow" ? "shadow · read-only" : mode}</span>
+          <span className={cn(BADGE, "font-medium", ds.cls)}>{ds.label}</span>
+          <span className={cn(BADGE, "bg-[var(--inbox-panel)] text-[color:var(--inbox-steel)]")}>{proposal.modelKey}</span>
+          <span className={cn(BADGE, "bg-[var(--inbox-panel)] text-[color:var(--inbox-steel)]")}>{proposal.language}</span>
           {tools.length > 0 && (
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">🔧 {tools.join(", ")}</span>
+            <span className={cn(BADGE, "bg-[var(--inbox-panel)] text-[color:var(--inbox-steel)]")}>🔧 {tools.join(", ")}</span>
           )}
           {proposal.screen?.verdict === "suspicious" && (
-            <span className="flex items-center gap-1 rounded-full bg-red-500/15 px-1.5 py-0.5 font-medium text-red-700 dark:text-red-400">
-              <AlertTriangle className="h-3 w-3" /> suspicious
+            <span className={cn(BADGE, "flex items-center gap-1 bg-[var(--inbox-panel)] font-medium text-[color:var(--inbox-alert)]")}>
+              <AlertTriangle className="h-3.5 w-3.5" /> suspicious
             </span>
           )}
         </div>
@@ -76,11 +84,11 @@ export function GhostDraft({ conversationId }: { conversationId: string }) {
           <GhostOrderForm key={proposal.id} conversationId={conversationId} proposalId={proposal.id} draft={proposal.approvalDraft} />
         ) : (
           <>
-            <div className="mt-2 whitespace-pre-wrap break-words text-[14px] leading-[1.4] text-[var(--tg-text)]">
-              {body || <span className="italic text-muted-foreground">—</span>}
+            <div className="mt-2 whitespace-pre-wrap break-words text-[15px] leading-[1.56] text-[var(--inbox-ink)]">
+              {body || <span className="italic text-[color:var(--inbox-silver)]">—</span>}
             </div>
-            <div className="mt-1.5 flex items-center justify-between gap-2">
-              <span className="text-[10px] text-[color:var(--tg-text-dim)]">
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <span className="text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
                 {proposal.turns} turn(s)
                 {proposal.usage?.inputTokens != null && ` · ${proposal.usage.inputTokens}+${proposal.usage.outputTokens ?? 0} tok`}
                 {mode === "shadow" && " · юборилмади · not sent"}
@@ -122,29 +130,29 @@ function GhostSuggestForm({ conversationId, proposalId, reply }: { conversationI
         rows={3}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        className="w-full resize-none rounded-lg border border-border bg-[var(--tg-input-bg)] px-3 py-2 text-[14px] text-[var(--tg-text)] outline-none focus:border-[color:var(--tg-accent)]"
+        className="w-full resize-none rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-3 py-2 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors focus:border-[color:var(--inbox-steel)]"
       />
-      {error && <div className="mt-1 text-[12px] text-destructive">{error}</div>}
+      {error && <div className="mt-1 text-[11px] leading-[1.4] text-[color:var(--inbox-alert)]">{error}</div>}
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"
           disabled={act.isPending || !text.trim()}
           onClick={() => { setError(null); act.mutate({ action: "send", text: text.trim() }); }}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-white transition-colors disabled:opacity-60"
-          style={{ background: "var(--tg-accent)" }}
+          className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium text-[color:var(--inbox-panel)] transition-opacity hover:opacity-90 disabled:opacity-60"
+          style={{ background: "var(--inbox-ink)" }}
         >
-          {act.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          {act.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           {edited ? "Таҳрирлаб юбориш · Send edited" : "Юбориш · Send"}
         </button>
         <button
           type="button"
           disabled={act.isPending}
           onClick={() => { setError(null); act.mutate({ action: "dismiss" }); }}
-          className="rounded-lg px-3 py-1.5 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+          className="rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] disabled:opacity-60"
         >
           Рад этиш · Dismiss
         </button>
-        <span className="ml-auto text-[10px] text-[color:var(--tg-text-dim)]">текширинг · review before sending</span>
+        <span className="ml-auto text-[11px] leading-[1.4] text-[color:var(--inbox-silver)]">текширинг · review before sending</span>
       </div>
     </div>
   );
@@ -174,39 +182,39 @@ function GhostOrderForm({
     onError: (e: Error) => setError(e.message),
   });
 
-  const need = (v: string | null | undefined) => v || <span className="text-destructive">— kerak · needed</span>;
+  const need = (v: string | null | undefined) => v || <span className="text-[color:var(--inbox-alert)]">— kerak · needed</span>;
   const missing = !draft?.customerName || !draft?.customerPhone || !draft?.deliveryAddress;
 
   return (
     <div className="mt-2">
-      <div className="rounded-lg border border-blue-500/30 bg-blue-500/[0.06] p-2.5 text-[13px] text-[var(--tg-text)]">
-        <div className="mb-1 font-semibold">Buyurtma · Order</div>
+      <div className="rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] p-4 text-[13px] leading-[1.4] text-[var(--inbox-ink)]">
+        <div className="mb-2 font-medium">Buyurtma · Order</div>
         <div>Mijoz · Customer: {need(draft?.customerName)}</div>
         <div>Tel: {need(draft?.customerPhone)}</div>
         <div>Manzil · Address: {need(draft?.deliveryAddress)}</div>
       </div>
       {missing && (
-        <div className="mt-1 text-[12px] text-[color:var(--tg-text-dim)]">
+        <div className="mt-1 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)]">
           Ism, telefon va manzil yig&apos;ilgach joylash mumkin · collect name, phone and address first
         </div>
       )}
-      {error && <div className="mt-1 text-[12px] text-destructive">{error}</div>}
+      {error && <div className="mt-1 text-[11px] leading-[1.4] text-[color:var(--inbox-alert)]">{error}</div>}
       <div className="mt-2 flex items-center gap-2">
         <button
           type="button"
           disabled={act.isPending || missing}
           onClick={() => { setError(null); act.mutate("place_order"); }}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-medium text-white transition-colors disabled:opacity-60"
-          style={{ background: "var(--tg-accent)" }}
+          className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] font-medium text-[color:var(--inbox-panel)] transition-opacity hover:opacity-90 disabled:opacity-60"
+          style={{ background: "var(--inbox-ink)" }}
         >
-          {act.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          {act.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           Tasdiqlab joylash · Place order
         </button>
         <button
           type="button"
           disabled={act.isPending}
           onClick={() => { setError(null); act.mutate("dismiss"); }}
-          className="rounded-lg px-3 py-1.5 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+          className="rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] disabled:opacity-60"
         >
           Рад этиш · Reject
         </button>
@@ -227,7 +235,7 @@ function GhostDismiss({ conversationId, proposalId }: { conversationId: string; 
       type="button"
       disabled={act.isPending}
       onClick={() => act.mutate()}
-      className="shrink-0 rounded-md px-2 py-0.5 text-[11px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+      className="shrink-0 rounded-[var(--inbox-r-pill)] px-2 py-0.5 text-[11px] leading-[1.4] text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] disabled:opacity-60"
     >
       Рад этиш · Dismiss
     </button>

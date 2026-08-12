@@ -5,8 +5,12 @@ import { cn } from "@/lib/utils";
 import { MessageMedia } from "@/components/inbox/MediaRenderers";
 import { useImageViewer } from "@/components/inbox/ImageViewer";
 import type { InboxMessage, RenderItem } from "./inbox-types";
-import { TG, TAIL_MASK_LEFT, TAIL_MASK_RIGHT } from "./inbox-style";
 import { clock, dateLabel } from "./inbox-utils";
+
+// Both bubbles are neutral: Campsite reserves green for RESOLVED, so
+// direction reads from alignment and a half-step of tone, not hue.
+const BUBBLE_IN = "var(--inbox-bubble-in)";
+const BUBBLE_OUT = "var(--inbox-bubble-out)";
 
 export function Bubble({
   msg,
@@ -27,21 +31,21 @@ export function Bubble({
 
   const footer = (
     <span
-      className={cn("flex select-none items-center gap-1 text-[11px] leading-none", overlayMedia ? "text-white" : msg.failed ? "text-destructive" : "")}
-      style={overlayMedia || msg.failed ? undefined : { color: outgoing ? "var(--tg-meta-out)" : "var(--tg-text-dim)" }}
+      className={cn("flex select-none items-center gap-1 text-[11px] leading-[1.4]", overlayMedia && "text-white")}
+      style={overlayMedia ? undefined : { color: msg.failed ? "var(--inbox-alert)" : "var(--inbox-steel)" }}
     >
       {clock(msg.createdAt)}
       {outgoing && !msg.failed && <SentCheck />}
-      {msg.failed && <span className="font-semibold">! · юборилмади</span>}
+      {msg.failed && <span className="font-medium">! · юборилмади</span>}
     </span>
   );
 
   return (
     <div
       className={cn(
-        "group flex items-center gap-1 tg-msg-in",
+        "group flex items-center gap-1 inbox-msg-in",
         outgoing ? "justify-end" : "justify-start",
-        groupedTop ? "mt-[2px]" : "mt-[10px]",
+        groupedTop ? "mt-[4px]" : "mt-[8px]",
       )}
     >
       {outgoing && onDelete && (
@@ -50,30 +54,27 @@ export function Bubble({
           onClick={() => onDelete(msg.id)}
           title="Ўчириш · Delete"
           aria-label="Delete message"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[color:var(--tg-text-dim)] opacity-0 transition-opacity hover:bg-[var(--tg-list-hover)] hover:text-destructive group-hover:opacity-100"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-steel)] opacity-0 transition-colors hover:bg-[var(--inbox-hover)] hover:text-[color:var(--inbox-alert)] group-hover:opacity-100"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-4 w-4" />
         </button>
       )}
       <div
         className={cn(
-          "relative max-w-[min(72%,600px)] text-[14px] leading-[1.35] text-[var(--tg-text)]",
-          overlayMedia ? "overflow-hidden" : "px-2.5 py-1.5",
-          // rounded corners — tighten the tail corner on the tailed bubble
-          "rounded-[16px]",
-          hasTail && (outgoing ? "rounded-br-[5px]" : "rounded-bl-[5px]"),
-          msg.failed && "ring-1 ring-destructive/60",
+          "relative max-w-[min(72%,600px)] text-[15px] leading-[1.56] text-[var(--inbox-ink)]",
+          // Media-only bubbles are the image itself — it carries its own
+          // radius, so no card chrome around it.
+          overlayMedia ? "overflow-hidden" : "rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)] px-3 py-2",
+          // The last bubble of a run tightens its inner corner so a group
+          // still reads as one block (Campsite has no tails).
+          !overlayMedia && hasTail && (outgoing ? "rounded-br-[var(--inbox-r-badge)]" : "rounded-bl-[var(--inbox-r-badge)]"),
+          msg.failed && "border border-[color:var(--inbox-alert)]",
         )}
         style={{
-          background: overlayMedia ? "transparent" : outgoing ? TG.outgoing : TG.incoming,
-          boxShadow: overlayMedia ? "none" : outgoing ? "0 1px 1px rgba(0,0,0,.06)" : "0 1px 2px rgba(0,0,0,.08)",
+          background: overlayMedia ? "transparent" : outgoing ? BUBBLE_OUT : BUBBLE_IN,
+          boxShadow: overlayMedia ? "none" : "var(--inbox-shadow-sm)",
         }}
       >
-        {/* Tail notch */}
-        {hasTail && !overlayMedia && (
-          <Tail outgoing={outgoing} color={outgoing ? TG.outgoing : TG.incoming} />
-        )}
-
         {overlayMedia ? (
           <MessageMedia
             mediaKind={msg.mediaKind}
@@ -133,7 +134,7 @@ export function AlbumBubble({
 
   const footer = (
     <span
-      className="flex select-none items-center gap-1 text-[11px] leading-none text-white"
+      className="flex select-none items-center gap-1 text-[11px] leading-[1.4] text-white"
     >
       {clock(lastCreatedAt)}
       {outgoing && <SentCheck />}
@@ -143,26 +144,18 @@ export function AlbumBubble({
   return (
     <div
       className={cn(
-        "flex tg-msg-in",
+        "flex inbox-msg-in",
         outgoing ? "justify-end" : "justify-start",
-        groupedTop ? "mt-[2px]" : "mt-[10px]",
+        groupedTop ? "mt-[4px]" : "mt-[8px]",
       )}
     >
       <div
         className={cn(
-          "relative overflow-hidden rounded-[14px]",
-          hasTail && (outgoing ? "rounded-br-[5px]" : "rounded-bl-[5px]"),
+          "relative overflow-hidden rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)]",
+          hasTail && (outgoing ? "rounded-br-[var(--inbox-r-badge)]" : "rounded-bl-[var(--inbox-r-badge)]"),
         )}
-        style={{
-          width: 300,
-          boxShadow: outgoing ? "0 1px 1px rgba(0,0,0,.06)" : "0 1px 2px rgba(0,0,0,.08)",
-        }}
+        style={{ width: 300, boxShadow: "var(--inbox-shadow-sm)" }}
       >
-        {/* Tail notch on the album bubble */}
-        {hasTail && (
-          <Tail outgoing={outgoing} color={outgoing ? TG.outgoing : TG.incoming} />
-        )}
-
         {/* Image grid */}
         <div className={cn("grid gap-[2px]", gridClass)}>
           {items.map((item) => {
@@ -171,7 +164,7 @@ export function AlbumBubble({
               return (
                 <div
                   key={item.id}
-                  className="aspect-square w-full bg-[color:var(--tg-divider)]"
+                  className="aspect-square w-full bg-[color:var(--inbox-surface-3)]"
                 />
               );
             }
@@ -196,11 +189,11 @@ export function AlbumBubble({
         {/* Caption + footer */}
         {(caption || true) && (
           <div
-            className="flex flex-col px-2.5 py-1.5"
-            style={{ background: outgoing ? TG.outgoing : TG.incoming }}
+            className="flex flex-col px-3 py-2"
+            style={{ background: outgoing ? BUBBLE_OUT : BUBBLE_IN }}
           >
             {caption && (
-              <span className="whitespace-pre-wrap break-words text-[14px] leading-[1.35] text-[var(--tg-text)]">
+              <span className="whitespace-pre-wrap break-words text-[15px] leading-[1.56] text-[var(--inbox-ink)]">
                 {caption}
               </span>
             )}
@@ -210,27 +203,6 @@ export function AlbumBubble({
         )}
       </div>
     </div>
-  );
-}
-
-// The little bubble tail — a CSS triangle that bridges the tightened
-// corner back to a point, matching Telegram's notch.
-function Tail({ outgoing, color }: { outgoing: boolean; color: string }) {
-  return (
-    <span
-      aria-hidden
-      className="absolute bottom-0"
-      style={{
-        [outgoing ? "right" : "left"]: -6,
-        width: 12,
-        height: 16,
-        background: color,
-        WebkitMaskImage: outgoing ? TAIL_MASK_RIGHT : TAIL_MASK_LEFT,
-        maskImage: outgoing ? TAIL_MASK_RIGHT : TAIL_MASK_LEFT,
-        WebkitMaskRepeat: "no-repeat",
-        maskRepeat: "no-repeat",
-      } as React.CSSProperties}
-    />
   );
 }
 
@@ -248,14 +220,19 @@ function SentCheck() {
 
 export function DateSeparator({ iso }: { iso: string }) {
   return (
-    <div className="my-3 flex justify-center">
-      <span className="rounded-full px-2.5 py-1 text-[12px] font-medium backdrop-blur-sm" style={{ background: "var(--tg-pill-bg)", color: "var(--tg-pill-text)" }}>
+    <div className="my-4 flex justify-center">
+      <span
+        className="rounded-[var(--inbox-r-pill)] border border-[color:var(--inbox-border)] px-3 py-1 text-[11px] font-medium leading-[1.4]"
+        style={{ background: "var(--inbox-surface-2)", color: "var(--inbox-steel)" }}
+      >
         {dateLabel(iso)}
       </span>
     </div>
   );
 }
 
+// The Inbox's own centred shell (lock screen, loading). Carries the
+// Campsite type scope so those screens match the rest of the Inbox.
 export function Centered({ children }: { children: React.ReactNode }) {
-  return <div className="flex h-[60vh] items-center justify-center">{children}</div>;
+  return <div className="inbox-campsite flex h-[60vh] items-center justify-center">{children}</div>;
 }

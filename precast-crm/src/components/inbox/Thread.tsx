@@ -11,19 +11,15 @@ import { ChatAvatar } from "@/components/inbox/ChatAvatar";
 import { ImageViewerProvider } from "@/components/inbox/ImageViewer";
 import { formatDraftNumber } from "@/lib/draft-number";
 import type { ConversationSummary, InboxMessage } from "./inbox-types";
-import { WALLPAPER_PATTERN } from "./inbox-style";
 import { buildRenderItems, sameDay } from "./inbox-utils";
 import { AlbumBubble, Bubble, DateSeparator } from "./Bubbles";
 import { GhostDraft } from "./GhostDraft";
 
 export function EmptyState() {
   return (
-    <div
-      className="tg-wallpaper flex flex-1 items-center justify-center"
-      style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
-    >
-      <span className="flex items-center gap-2 rounded-full bg-[var(--tg-pill-bg)] px-4 py-2 text-[13px] font-medium text-[color:var(--tg-pill-text)]">
-        <MessageCircle className="h-4 w-4 opacity-70" />
+    <div className="flex flex-1 items-center justify-center bg-[var(--inbox-canvas)]">
+      <span className="flex items-center gap-2 rounded-[var(--inbox-r-pill)] border border-[color:var(--inbox-border)] bg-[var(--inbox-surface-2)] px-4 py-2 text-[13px] font-medium text-[color:var(--inbox-steel)]">
+        <MessageCircle className="h-4 w-4" />
         Суҳбатни танланг · Select a conversation
       </span>
     </div>
@@ -165,26 +161,28 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
   return (
     <ImageViewerProvider images={threadImages}>
       {/* Chat header */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5">
-        <ChatAvatar name={data?.conversation.displayName ?? "?"} size={42} />
+      <div className="flex shrink-0 items-center gap-3 border-b border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] px-4 py-3">
+        <ChatAvatar name={data?.conversation.displayName ?? "?"} size={40} />
         <div className="flex min-w-0 flex-col">
-          <div className="truncate text-[15px] font-semibold text-[var(--tg-text)]">{data?.conversation.displayName}</div>
-          <div className="truncate text-[13px] text-[color:var(--tg-text-dim)]">
+          <div className="truncate text-[15px] font-medium leading-[1.4] text-[var(--inbox-ink)]">{data?.conversation.displayName}</div>
+          <div className="truncate text-[13px] leading-[1.4] text-[color:var(--inbox-steel)]">
             {data?.conversation.username ? `@${data.conversation.username}` : "online"}
           </div>
         </div>
         {/* Actions: AI handoff toggle, Calculate-from-chat, then delete (two-step inline confirm) */}
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/* Functional colour only: green = the AI has this chat handled,
+              amber highlight = it needs a human decision. */}
           {!confirming && data?.conversation && (
             <button
               type="button"
               disabled={aiToggle.isPending}
               onClick={() => aiToggle.mutate(!aiOn)}
               title={aiOn ? "AI bu chatni boshqaryapti — qo'lda olish uchun bosing" : "AI ga qaytarish · Resume AI"}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1 text-[13px] font-medium transition-colors ${
                 aiOn
-                  ? "text-emerald-600 hover:bg-[var(--tg-list-hover)]"
-                  : "bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
+                  ? "text-[color:var(--inbox-resolve)] hover:bg-[var(--inbox-hover)]"
+                  : "bg-[var(--inbox-highlight)] text-[color:var(--inbox-ink)] hover:bg-[var(--inbox-selected)]"
               }`}
             >
               {aiToggle.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
@@ -196,7 +194,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
               type="button"
               onClick={() => router.push(`/calculations?fromConversation=${conversationId}`)}
               title="Бу чатдан ҳисоблаш · Calculate from this chat"
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] font-medium text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] hover:text-[var(--tg-accent)]"
+              className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] px-3 py-1 text-[13px] font-medium text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] hover:text-[var(--inbox-ink)]"
             >
               <Calculator className="h-4 w-4" />
               <span className="hidden sm:inline">Ҳисоблаш · Calculate</span>
@@ -204,14 +202,14 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
           )}
           {confirming ? (
             <>
-              <span className="text-[13px] text-[color:var(--tg-text-dim)]">
+              <span className="text-[13px] text-[color:var(--inbox-steel)]">
                 Ўчирилсинми? · Delete?
               </span>
               <button
                 type="button"
                 onClick={() => del.mutate()}
                 disabled={del.isPending}
-                className="flex items-center gap-1 rounded-md bg-destructive/10 px-2.5 py-1 text-[13px] font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-60"
+                className="flex items-center gap-1 rounded-[var(--inbox-r-pill)] bg-[var(--inbox-surface-2)] px-3 py-1 text-[13px] font-medium text-[color:var(--inbox-alert)] transition-colors hover:bg-[var(--inbox-selected)] disabled:opacity-60"
               >
                 {del.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 Ҳа · Yes
@@ -220,7 +218,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
                 type="button"
                 onClick={() => setConfirming(false)}
                 disabled={del.isPending}
-                className="rounded-md px-2.5 py-1 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+                className="rounded-[var(--inbox-r-pill)] px-3 py-1 text-[13px] text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] disabled:opacity-60"
               >
                 Йўқ · No
               </button>
@@ -230,7 +228,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
               type="button"
               onClick={() => setConfirming(true)}
               title="Суҳбатни ўчириш · Delete chat"
-              className="rounded-md p-1.5 text-[color:var(--tg-text-dim)] transition-colors hover:text-destructive"
+              className="rounded-[var(--inbox-r-pill)] p-1.5 text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] hover:text-[color:var(--inbox-alert)]"
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -240,8 +238,8 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
 
       {/* Quotes calculated from this chat — links back to /projects. */}
       {linkedQuotes && linkedQuotes.length > 0 && (
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-1.5 text-[12px]">
-          <span className="text-[color:var(--tg-text-dim)]">Бу чатдан · Quotes:</span>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] px-4 py-2 text-[11px] leading-[1.4]">
+          <span className="text-[color:var(--inbox-steel)]">Бу чатдан · Quotes:</span>
           {linkedQuotes.map((q) => {
             // Ordered → order id, opens the Orders page. Still a draft → draft
             // id, opens the Projects page. Always a CRM-assigned unique id.
@@ -256,7 +254,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
               <a
                 key={q.id}
                 href={href}
-                className="rounded-full bg-[var(--tg-list-hover)] px-2 py-0.5 font-medium text-[var(--tg-accent)] hover:underline"
+                className="rounded-[var(--inbox-r-pill)] border border-[color:var(--inbox-border)] bg-[var(--inbox-surface-2)] px-2 py-0.5 font-medium tabular-nums text-[var(--inbox-ink)] transition-colors hover:bg-[var(--inbox-selected)]"
               >
                 {label}
               </a>
@@ -270,8 +268,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
       <div
         ref={scrollRef}
         onScroll={updateScrollPos}
-        className="tg-wallpaper min-h-0 flex-1 overflow-y-auto px-4 py-4"
-        style={{ backgroundColor: "var(--tg-wallpaper)", backgroundImage: WALLPAPER_PATTERN }}
+        className="min-h-0 flex-1 overflow-y-auto bg-[var(--inbox-canvas)] px-4 py-4"
       >
         <div className="flex flex-col">
           {renderItems.map((item, i) => {
@@ -316,7 +313,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
             onClick={scrollToTop}
             title="Бошига · To start"
             aria-label="Scroll to start"
-            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
+            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-[var(--inbox-r-pill)] border border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] text-[color:var(--inbox-steel)] shadow-[var(--inbox-shadow-sm)] transition-colors hover:text-[var(--inbox-ink)]"
           >
             <ArrowUp className="h-5 w-5" />
           </button>
@@ -327,7 +324,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
             onClick={scrollToBottom}
             title="Охирига · To end"
             aria-label="Scroll to end"
-            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full bg-[var(--tg-panel)] text-[color:var(--tg-text-dim)] shadow-md ring-1 ring-[color:var(--tg-divider)] transition-colors hover:text-[var(--tg-accent)]"
+            className="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-[var(--inbox-r-pill)] border border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] text-[color:var(--inbox-steel)] shadow-[var(--inbox-shadow-sm)] transition-colors hover:text-[var(--inbox-ink)]"
           >
             <ArrowDown className="h-5 w-5" />
           </button>
@@ -341,13 +338,13 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
       {/* Composer */}
       <form
         onSubmit={(e) => { e.preventDefault(); if (draft.trim()) reply.mutate(draft.trim()); }}
-        className="relative flex shrink-0 items-end gap-2 border-t border-[color:var(--tg-divider)] bg-[var(--tg-panel)] px-4 py-2.5"
+        className="relative flex shrink-0 items-end gap-2 border-t border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] px-4 py-3"
       >
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Жавоб ёзинг…"
-          className="flex-1 rounded-[20px] border border-border bg-[var(--tg-input-bg)] px-4 py-2.5 text-sm text-[var(--tg-text)] outline-none transition-colors focus:border-[color:var(--tg-accent)] focus:bg-[var(--tg-panel)]"
+          className="flex-1 rounded-[var(--inbox-r-input)] border border-[color:var(--inbox-border)] bg-[var(--inbox-input-bg)] px-4 py-2.5 text-[15px] text-[var(--inbox-ink)] outline-none transition-colors placeholder:text-[color:var(--inbox-silver)] focus:border-[color:var(--inbox-steel)] focus:bg-[var(--inbox-panel)]"
         />
         <AttachFileButton
           conversationId={conversationId}
@@ -361,8 +358,8 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
             type="submit"
             aria-label="Send"
             disabled={reply.isPending}
-            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-white transition-all"
-            style={{ background: "var(--tg-accent)" }}
+            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[var(--inbox-r-pill)] text-[color:var(--inbox-panel)] transition-colors disabled:opacity-60"
+            style={{ background: "var(--inbox-ink)" }}
           >
             {reply.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </button>
@@ -383,13 +380,13 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
           onClick={() => !deleteMsg.isPending && setPendingDelete(null)}
         >
           <div
-            className="w-full max-w-xs rounded-2xl bg-[var(--tg-panel)] p-5 shadow-xl"
+            className="w-full max-w-xs rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] p-4 shadow-[var(--inbox-shadow-subtle-4)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="text-[15px] font-semibold text-[var(--tg-text)]">
+            <div className="text-[15px] font-medium text-[var(--inbox-ink)]">
               Хабарни ўчириш · Delete message
             </div>
-            <p className="mt-1.5 text-[13px] text-[color:var(--tg-text-dim)]">
+            <p className="mt-2 text-[13px] leading-[1.4] text-[color:var(--inbox-steel)]">
               Бу хабар ҳамма учун ўчирилади, қайтариб бўлмайди · It will be deleted for everyone and can&apos;t be undone.
             </p>
             <div className="mt-4 flex justify-end gap-2">
@@ -397,7 +394,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
                 type="button"
                 disabled={deleteMsg.isPending}
                 onClick={() => setPendingDelete(null)}
-                className="rounded-lg px-3 py-1.5 text-[13px] text-[color:var(--tg-text-dim)] transition-colors hover:bg-[var(--tg-list-hover)] disabled:opacity-60"
+                className="rounded-[var(--inbox-r-pill)] px-3 py-1.5 text-[13px] text-[color:var(--inbox-steel)] transition-colors hover:bg-[var(--inbox-hover)] disabled:opacity-60"
               >
                 Бекор · Cancel
               </button>
@@ -405,7 +402,7 @@ export function Thread({ conversationId, onDeleted }: { conversationId: string; 
                 type="button"
                 disabled={deleteMsg.isPending}
                 onClick={() => deleteMsg.mutate(pendingDelete)}
-                className="flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-destructive/90 disabled:opacity-60"
+                className="flex items-center gap-1.5 rounded-[var(--inbox-r-pill)] bg-[var(--inbox-alert)] px-3 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
               >
                 {deleteMsg.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />

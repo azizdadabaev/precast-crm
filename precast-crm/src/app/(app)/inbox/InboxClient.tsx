@@ -14,7 +14,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import type { ConversationSummary } from "@/components/inbox/inbox-types";
-import { TELEGRAM_CSS } from "@/components/inbox/inbox-style";
+import { INBOX_CSS } from "@/components/inbox/inbox-style";
 import { readAutolockMin } from "@/components/inbox/inbox-utils";
 import { Centered } from "@/components/inbox/Bubbles";
 import { LockScreen } from "@/components/inbox/LockScreen";
@@ -32,11 +32,17 @@ export function InboxClient() {
     retry: false,
   });
 
-  if (unlockLoading) return <Centered><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></Centered>;
+  if (unlockLoading) return <Centered><Loader2 className="h-5 w-5 animate-spin text-[color:var(--inbox-steel)]" /></Centered>;
   if (!unlockState?.unlocked) return <LockScreen onUnlocked={() => qc.invalidateQueries({ queryKey: ["inbox-unlock"] })} />;
 
   return <Inbox />;
 }
+
+// The shared shell buttons (simulate / settings / lock): pill, 1px border,
+// achromatic. Overrides the app-wide outline variant so the Inbox chrome
+// reads from the --inbox-* tokens like everything else on this screen.
+const CHROME_BUTTON =
+  "h-8 rounded-[var(--inbox-r-pill)] border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] text-[13px] font-medium text-[var(--inbox-ink)] shadow-[var(--inbox-shadow-sm)] hover:bg-[var(--inbox-hover)] hover:text-[var(--inbox-ink)]";
 
 const AUTOLOCK_OPTIONS = [
   { value: 0,  label: "Ўчирилган · Off" },
@@ -119,21 +125,25 @@ function Inbox() {
   }, [qc]);
 
   return (
-    <div className="flex h-full flex-col gap-3">
-      <style>{TELEGRAM_CSS}</style>
-      <div className="flex shrink-0 items-center justify-between gap-3">
+    // `inbox-campsite` scopes Inter + tabular-nums + the Campsite body scale to
+    // this subtree; every child inherits it, so no other screen's type changes.
+    <div className="inbox-campsite flex h-full flex-col gap-4">
+      <style>{INBOX_CSS}</style>
+      <div className="flex shrink-0 items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
-          <h1 className="text-xl font-bold tracking-tight">Хабарлар<span className="text-muted-foreground"> · Inbox</span></h1>
+          <h1 className="text-[22px] font-medium leading-[1.4] text-[var(--inbox-ink)]">
+            Хабарлар<span className="text-[color:var(--inbox-silver)]"> · Inbox</span>
+          </h1>
           {/* Channel switcher — always visible; the conversation list filters live. */}
           <ChannelTabs channelFilter={channelFilter} onChange={setChannelFilter} counts={data?.counts ?? {}} />
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           {/* Simulate an inbound customer message (owner test tool — Plan 09
               Slice B). Runs the agent on the real webhook path with no Telegram. */}
           <Button
             variant="outline"
             size="sm"
-            className="h-8 gap-1.5"
+            className={CHROME_BUTTON + " gap-1.5 px-3"}
             title="Хабарни синаб кўриш · Simulate an inbound message"
             onClick={() => setSimOpen(true)}
           >
@@ -144,7 +154,7 @@ function Inbox() {
           {/* Settings: auto-lock timeout */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Созламалар · Settings">
+              <Button variant="outline" size="sm" className={CHROME_BUTTON + " w-8 p-0"} title="Созламалар · Settings">
                 <Clock className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -155,7 +165,7 @@ function Inbox() {
                 <DropdownMenuItem key={opt.value} onClick={() => setAutolockMin(opt.value)}>
                   <span className="flex flex-1 items-center justify-between">
                     {opt.label}
-                    {autolockMin === opt.value && <Check className="h-3.5 w-3.5 text-[color:var(--tg-accent)]" />}
+                    {autolockMin === opt.value && <Check className="h-4 w-4 text-[color:var(--inbox-ink)]" />}
                   </span>
                 </DropdownMenuItem>
               ))}
@@ -166,7 +176,7 @@ function Inbox() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 w-8 p-0"
+            className={CHROME_BUTTON + " w-8 p-0"}
             title="Қулфлаш · Lock"
             onClick={() => lock.mutate()}
             disabled={lock.isPending}
@@ -175,7 +185,7 @@ function Inbox() {
           </Button>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border shadow-sm">
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-[var(--inbox-r-card)] border border-[color:var(--inbox-border)] bg-[var(--inbox-panel)] shadow-[var(--inbox-shadow-sm)]">
         {/* Left: conversation list */}
         <ConversationList
           conversations={conversations}
