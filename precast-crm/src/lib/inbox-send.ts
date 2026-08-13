@@ -7,7 +7,7 @@
 // handling, same sentById attribution, same live event.
 
 import { prisma } from "@/lib/prisma";
-import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessVideo, tgSendBusinessLocation, tgSendBusinessChatAction, tgUploadPhotoGetFileId, humanizeTelegramSendError, isPeerSendError } from "@/lib/telegram/api";
+import { tgSendBusinessMessage, tgSendBusinessPhoto, tgSendBusinessVideo, tgSendBusinessLocation, tgSendBusinessDocument, tgSendBusinessChatAction, tgUploadPhotoGetFileId, humanizeTelegramSendError, isPeerSendError } from "@/lib/telegram/api";
 import { igSendText, igSendImage, igSendVideo, igSendTyping } from "@/lib/instagram/api";
 import { publicBaseUrl } from "@/lib/instagram/config";
 import { emitInbox } from "@/lib/inbox-bus";
@@ -429,4 +429,75 @@ export async function sendBusinessPhoto(input: {
 
   const message = await persistOutboundPhoto(conversation.id, mediaPath, caption, telegramMsgId, input.userId, failed);
   return failed ? { ok: false, reason: "SEND_FAILED", message, detail, peerInvalid } : { ok: true, message };
+}
+
+/**
+ * Send a DOCUMENT (e.g. the price-list PDF) by an existing Telegram `file_id`.
+ *
+ * Document was the one send capability with no wrapper — the logic lived inlined
+ * in the reply-document route, which uploads a Blender PDF through the staging
+ * chat first. This wrapper covers the other half of the need: an asset whose
+ * `file_id` was captured once at curation time, so nothing is re-uploaded
+ * (business connections reject fresh uploads — see telegram/api.ts). Persists an
+ * OUTBOUND marker so the inbox shows what was sent. Mirrors sendBusinessReply's
+ * contract.
+ */
+export async function sendBusinessDocument(input: {
+  conversationId: string;
+  /** Telegram file_id — staged once, reused, never re-uploaded. */
+  fileId: string;
+  caption?: string | null;
+  userId: string | null;
+}): Promise<SendBusinessReplyResult> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: input.conversationId },
+    select: { id: true, externalId: true, businessConnectionId: true, channel: true },
+  });
+  if (!conversation) return { ok: false, reason: "NOT_FOUND" };
+  // Telegram-only: the Instagram client here speaks text/image/video, it has no
+  // document/file send at all. Reported as NO_CONNECTION so the caller skips it
+  // rather than persisting a failed bubble the operator can never retry.
+  if (conversation.channel !== "TELEGRAM") return { ok: false, reason: "NO_CONNECTION" };
+  const simulated = !conversation.businessConnectionId && conversation.externalId.startsWith("sim-");
+  if (!conversation.businessConnectionId && !simulated) return { ok: false, reason: "NO_CONNECTION" };
+
+  const caption = input.caption?.trim() ? input.caption.trim().slice(0, 1024) : null;
+  const marker = caption ?? "[Ҳужжат · Document]";
+
+  let telegramMsgId: string | null = null;
+  let failed = false;
+  if (conversation.businessConnectionId) {
+    try {
+      const sent = await tgSendBusinessDocument(
+        conversation.businessConnectionId,
+        conversation.externalId,
+        input.fileId,
+        { caption: caption ?? undefined },
+      );
+      telegramMsgId = sent.messageId;
+    } catch (err) {
+      console.error("[inbox send-document]", err);
+      failed = true; // persist as a failed bubble so the UI can offer retry
+    }
+  }
+
+  const message = await prisma.message.create({
+    data: {
+      conversationId: conversation.id,
+      direction: "OUTBOUND",
+      mediaKind: "DOCUMENT",
+      text: marker,
+      telegramMsgId,
+      sentById: input.userId,
+      failed,
+    },
+    select: { id: true, direction: true, text: true, failed: true, createdAt: true },
+  });
+  await prisma.conversation.update({
+    where: { id: conversation.id },
+    data: { lastMessageAt: new Date(), lastSnippet: marker.slice(0, 80), unread: false },
+  });
+  emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
+
+  return failed ? { ok: false, reason: "SEND_FAILED", message } : { ok: true, message };
 }

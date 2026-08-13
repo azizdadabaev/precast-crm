@@ -17,6 +17,9 @@ import {
   handleOperatorPhotoCallback,
 } from "@/lib/agent/operator-photo-dm";
 import { parsePhotoCallback } from "@/lib/agent/operator-photo-callback";
+import { extractToken } from "@/lib/handoff-token";
+import { dispatchHandoffPresets } from "@/lib/handoff-dispatch";
+import { normalizePhone, formatPhone } from "@/lib/phone";
 
 const EXT_BY_KIND: Record<string, string> = {
   IMAGE: ".jpg", VIDEO: ".mp4", VIDEO_NOTE: ".mp4", VOICE: ".ogg", AUDIO: ".mp3", DOCUMENT: "",
@@ -34,6 +37,111 @@ function snippetFor(text: string | null, media: ParsedMedia | null): string {
     case "DOCUMENT": return `[Файл · ${media.fileName ?? "Document"}]`;
     case "LOCATION": return "[Жойлашув · Location]";
     default: return "[Хабар · Message]";
+  }
+}
+
+/**
+ * A token is only matchable while a conversation is still opening. A stray
+ * six-character word in message #40 of a long chat must never consume a live
+ * follow-up (spec §4.4).
+ */
+const HANDOFF_MATCH_MAX_MESSAGES = 5;
+
+/**
+ * Call → Telegram handoff (spec §3, §4.4). Telegram never reveals the sender's
+ * phone number, so the 6-char token the customer sends as their first message is
+ * the ONLY link between the phone call and this chat. Match it, then we hold both
+ * the chat and the number that was called.
+ *
+ * Never throws and never rejects: the caller fires it without awaiting, and a
+ * handoff failure must not disturb ordinary inbound message processing.
+ */
+async function tryMatchHandoffToken(
+  conversationId: string,
+  text: string,
+  displayName: string,
+): Promise<void> {
+  try {
+    const token = extractToken(text);
+    if (!token) return; // cheapest check first — most messages stop here
+
+    const messageCount = await prisma.message.count({ where: { conversationId } });
+    if (messageCount > HANDOFF_MATCH_MAX_MESSAGES) return;
+
+    // A chat that already produced a client-linked quote is not a fresh lead —
+    // there is nothing to link, so don't burn a token on it.
+    const linked = await prisma.project.count({
+      where: { conversationId, clientId: { not: null } },
+    });
+    if (linked > 0) return;
+
+    const now = new Date();
+    const followUp = await prisma.pendingFollowUp.findFirst({
+      where: { token, status: "PENDING", expiresAt: { gt: now } },
+      select: { id: true, phone: true, presets: true },
+    });
+    // No live row → a coincidental six-character word. Harmless; do nothing.
+    if (!followUp) return;
+
+    const phone = normalizePhone(followUp.phone);
+    if (!phone) return;
+
+    const claimed = await prisma.$transaction(async (tx) => {
+      // Claim the follow-up conditionally on it still being PENDING. A duplicate
+      // webhook delivery (Telegram retries) then finds count === 0 and dispatches
+      // nothing, so the customer never receives the media twice.
+      const consumed = await tx.pendingFollowUp.updateMany({
+        where: { id: followUp.id, status: "PENDING" },
+        data: { status: "CONSUMED", consumedAt: now, conversationId },
+      });
+      if (consumed.count === 0) return false;
+
+      // Create the client ONLY when this number is unknown. An existing client's
+      // name, address and notes are never touched — CLAUDE.md data preservation:
+      // this feature may create rows, never rewrite them.
+      const existing = await tx.client.findUnique({ where: { phone }, select: { id: true } });
+      if (!existing) {
+        await tx.client.create({
+          data: {
+            name: displayName.trim() || formatPhone(phone),
+            phone,
+            source: "Қўнғироқ · Call handoff",
+          },
+        });
+      }
+
+      // The chat→client link in this schema is Conversation.sharedContactPhone
+      // (what lookup-client and the agent read). Set it only while it is empty,
+      // so a contact card the customer shared themselves always wins.
+      await tx.conversation.updateMany({
+        where: { id: conversationId, sharedContactPhone: null },
+        data: { sharedContactPhone: phone },
+      });
+      return true;
+    });
+    if (!claimed) return;
+
+    // Media goes out AFTER the transaction commits — network calls inside a DB
+    // transaction hold the connection open for the length of the Telegram round
+    // trips. dispatchHandoffPresets never throws and never aborts on one bad
+    // preset.
+    const result = await dispatchHandoffPresets({
+      conversationId,
+      presets: followUp.presets,
+      userId: null, // system send — no operator triggered it
+    });
+    if (result.failed.length || result.skipped.length) {
+      // Not fatal — a skip just means the owner has not uploaded that asset yet.
+      // Never log the phone number itself.
+      console.warn("[telegram webhook handoff]", {
+        followUpId: followUp.id,
+        sent: result.sent,
+        skipped: result.skipped,
+        failed: result.failed,
+      });
+    }
+  } catch (err) {
+    console.error("[telegram webhook handoff]", err);
   }
 }
 
@@ -205,6 +313,15 @@ export async function POST(req: NextRequest) {
 
     // 7. Notify live listeners.
     emitInbox({ type: "message:new", conversationId: conversation.id, messageId: message.id });
+
+    // 7b. Call → Telegram handoff (spec §4.4) — inbound TEXT only. Fire-and-forget
+    //     so a slow media send never delays the webhook's 200, and so a handoff
+    //     failure can never break normal inbound processing.
+    if (!parsed.outgoing && !parsed.isEdited && parsed.text && parsed.text.trim()) {
+      void tryMatchHandoffToken(conversation.id, parsed.text, parsed.displayName).catch((e) =>
+        console.error("[telegram webhook handoff]", e),
+      );
+    }
 
     // Albums: Telegram delivers a media group as N separate updates — run
     // vision ONLY on the group's first photo, or the customer gets N identical
