@@ -55,6 +55,9 @@ export const ROUTE_PERMISSIONS: Record<
   "/audit": "audit.view",
   "/pricing": "pricing.edit",
   "/table-design": "pricing.edit",
+  // Call → Telegram handoff admin: the presets are what every caller receives,
+  // so it sits with the other owner-only settings pages.
+  "/handoff": "pricing.edit",
   // Газоблок (aerated blocks) — open to every authenticated user (no
   // per-user gating, by owner decision).
   "/gazoblok": "any-auth",
