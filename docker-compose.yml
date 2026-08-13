@@ -69,6 +69,10 @@ services:
       INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://etalontbm.uz}
       MCP_API_TOKEN: ${MCP_API_TOKEN}
+      # Call -> Telegram handoff. Device token is fail-closed when unset, so an
+      # unconfigured deploy simply rejects every request from the phone.
+      HANDOFF_DEVICE_TOKEN: ${HANDOFF_DEVICE_TOKEN:-}
+      HANDOFF_TG_HANDLE: ${HANDOFF_TG_HANDLE:-}
     volumes:
       - uploads:/app/public/uploads
       - drawings_data:/data
