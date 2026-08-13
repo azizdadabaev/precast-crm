@@ -1638,3 +1638,32 @@ model GazoblokOrderEvent {
   @@index([createdAt])
   @@map("gazoblok_order_events")
 }
+
+/// A follow-up promised during a phone call, waiting for the customer to open
+/// Telegram. Outbound Telegram needs a business_connection_id that only ever
+/// arrives on an INBOUND update, and Telegram never reveals the sender's phone
+/// number — so `token` is what stitches the call to the chat: the customer sends
+/// it as their first message and the webhook matches it back to this row.
+/// Append-only in spirit: rows are created here and only ever transition status.
+model PendingFollowUp {
+  id             String    @id @default(cuid())
+  /// 6 chars, Crockford base32 (no I/L/O/U). Matched case-insensitively.
+  token          String    @unique
+  /// Normalized via normalizePhone() — digits only, 998-prefixed.
+  phone          String
+  /// LOCATION | VIDEOS | PHOTOS | PRICELIST
+  presets        String[]
+  /// PENDING | CONSUMED | EXPIRED | CANCELED
+  status         String    @default("PENDING")
+  createdById    String?
+  /// Set when an inbound message matched the token.
+  conversationId String?
+  createdAt      DateTime  @default(now())
+  consumedAt     DateTime?
+  expiresAt      DateTime
+
+  @@index([token])
+  @@index([status, expiresAt])
+  @@index([phone])
+  @@map("pending_follow_ups")
+}

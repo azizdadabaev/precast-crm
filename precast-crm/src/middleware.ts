@@ -16,6 +16,8 @@ const PUBLIC_PATHS = [
   "/data-deletion",
   "/internal/quote-card", // agent's headless quote-card render target — gated by an in-process token, not the session
   "/api/mcp", // MCP endpoint — gated by Bearer token in route handler, not the session cookie
+  "/api/handoff", // POST is gated by the device Bearer token in the route
+                   // handler; GET re-checks the session via withPermission.
   "/_next",
   "/favicon.ico",
   "/opus", // static opus-recorder encoder worker (voice recording)
