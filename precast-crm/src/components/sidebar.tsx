@@ -28,6 +28,7 @@ import {
   Images,
   Activity as ActivityIcon,
   TableProperties,
+  PhoneForwarded,
   Rows3,
   MessageCircle,
   Boxes,
@@ -226,6 +227,13 @@ export const SETTINGS_NAV: NavItem[] = [
     label: "Лойиҳалар жадвали",
     sub: "Drafts table design",
     icon: Rows3,
+    permission: "pricing.edit",
+  },
+  {
+    href: "/handoff",
+    label: "Қўнғироқ узатиш",
+    sub: "Call handoff",
+    icon: PhoneForwarded,
     permission: "pricing.edit",
   },
   {
