@@ -1,7 +1,9 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { normalizePhone } from "@/lib/phone";
 import { ClientUpdateSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
@@ -33,9 +35,25 @@ export const PATCH = withPermission<Ctx["params"]>(
   async (req: NextRequest, { params }) => {
     const body = ClientUpdateSchema.parse(await req.json());
 
+    // The phone is stored digits-only (every lookup path normalizes before
+    // querying), so an unnormalized write here would make the row
+    // unfindable. Same guard as PATCH /api/drivers/[id].
+    const { phone, ...rest } = body;
+    const data: Prisma.ClientUpdateInput = { ...rest };
+    if (phone != null) {
+      const phoneNorm = normalizePhone(phone);
+      if (!phoneNorm) {
+        return fail(
+          "Телефон рақами нотўғри — рақамларни киритинг · Invalid phone number — digits required",
+          422,
+        );
+      }
+      data.phone = phoneNorm;
+    }
+
     const client = await prisma.client.update({
       where: { id: params.id },
-      data: { ...body },
+      data,
     });
     return ok(client);
   },

@@ -100,6 +100,18 @@ export function PlaceOrderDialog({
     if (defaultScheduledAt) setDate(defaultScheduledAt);
   }, [defaultScheduledAt]);
 
+  // `confirm()` deliberately leaves `submitting` on after a successful
+  // submit (the caller navigates away). When the caller instead closes
+  // the dialog to ask a follow-up question — e.g. the client-phone
+  // change confirmation in edit-mode — reopening it must not find a
+  // permanently disabled button.
+  useEffect(() => {
+    if (!open) {
+      setSubmitting(false);
+      setError(null);
+    }
+  }, [open]);
+
   if (!open) return null;
 
   const paidNum = paidAmount === "" ? 0 : Number(paidAmount);

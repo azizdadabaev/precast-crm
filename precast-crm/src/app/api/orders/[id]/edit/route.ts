@@ -1,11 +1,18 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
+import { Prisma, type Order } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { EditOrderSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
+import { normalizePhone } from "@/lib/phone";
+import {
+  resolvePhoneChange,
+  type PhoneChangeDecision,
+  type PhoneOwner,
+} from "@/lib/client-phone-resolve";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
@@ -31,10 +38,25 @@ import { calcResultToCreatePayload } from "@/lib/calc-persistence";
  * auto-refunds. If the new total is above, the existing pending
  * payments stay PENDING; the maker-checker flow handles confirm.
  *
+ * Client contact: name/address/phone corrections are applied to the
+ * shared Client row. The phone is the client's unique identity, so a
+ * phone edit is ambiguous and may answer 409 with a machine-readable
+ * `details.code` (PHONE_BELONGS_TO_OTHER / SHARED_CLIENT_PHONE) that
+ * the UI re-submits with `confirmClientPhoneChange: true`. See
+ * `src/lib/client-phone-resolve.ts` for the decision table.
+ *
  * Audit: appends an ORDER_EDITED event with a JSON diff of the
  * pricing-snapshot fields so the Activity log shows the change
- * alongside placement, dispatch, etc.
+ * alongside placement, dispatch, etc. Phone corrections and
+ * re-points each append their own NOTE_ADDED event with before/after.
  */
+/**
+ * Shown both by the pre-flight ownership check and by the P2002 race
+ * fallback, so the operator sees one message for one situation.
+ */
+const PHONE_TAKEN_MESSAGE =
+  "Бу рақам бошқа мижозга тегишли · This phone belongs to another client";
+
 export const PATCH = withPermission<{ id: string }>(
   "order.edit",
   async (req: NextRequest, { user, params }) => {
@@ -46,7 +68,7 @@ export const PATCH = withPermission<{ id: string }>(
       include: {
         project: { include: { calculations: true } },
         payments: { select: { status: true, amount: true } },
-        client: { select: { id: true, name: true, address: true } },
+        client: { select: { id: true, name: true, address: true, phone: true } },
       },
     });
     if (!existing) return fail("Order not found", 404);
@@ -55,6 +77,62 @@ export const PATCH = withPermission<{ id: string }>(
         `Order in status ${existing.status} cannot be edited. Use Cancel + recreate instead.`,
         422,
       );
+    }
+
+    // ── Client phone correction ─────────────────────────────────
+    // The owner mistypes a number when placing an order and must be able to
+    // fix it here. Resolve what the typed number MEANS before anything is
+    // written, so an ambiguous case can answer 409 without half-applying the
+    // edit. The actual writes happen inside the transaction below.
+    let phoneDecision: PhoneChangeDecision = { action: "none" };
+    let phoneOwner: PhoneOwner | null = null;
+    if (existing.client && body.clientPhone !== undefined) {
+      const typed = normalizePhone(body.clientPhone);
+      if (!typed) {
+        return fail(
+          "Телефон рақами нотўғри — рақамларни киритинг · Invalid phone number — digits required",
+          400,
+        );
+      }
+      if (typed !== normalizePhone(existing.client.phone)) {
+        const clientId = existing.client.id;
+        const [owner, currentClientOrderCount] = await Promise.all([
+          prisma.client.findFirst({
+            where: { phone: typed, id: { not: clientId } },
+            select: { id: true, name: true, _count: { select: { orders: true } } },
+          }),
+          prisma.order.count({ where: { clientId } }),
+        ]);
+        phoneOwner = owner
+          ? { id: owner.id, name: owner.name, orderCount: owner._count.orders }
+          : null;
+        phoneDecision = resolvePhoneChange({
+          currentPhone: existing.client.phone,
+          currentClientName: existing.client.name,
+          newPhone: body.clientPhone,
+          currentClientOrderCount,
+          otherClientWithPhone: phoneOwner,
+          confirmed: body.confirmClientPhoneChange,
+        });
+      }
+    }
+    if (phoneDecision.action === "confirm-required") {
+      return phoneDecision.code === "PHONE_BELONGS_TO_OTHER"
+        ? fail(PHONE_TAKEN_MESSAGE, 409, {
+            code: phoneDecision.code,
+            targetClientId: phoneDecision.targetClientId,
+            targetClientName: phoneDecision.targetClientName,
+            targetClientOrderCount: phoneDecision.targetClientOrderCount,
+          })
+        : fail(
+            "Бу мижознинг бошқа буюртмалари ҳам бор — рақам ҳаммасида ўзгаради · This client has other orders — the number will change on all of them",
+            409,
+            {
+              code: phoneDecision.code,
+              clientName: phoneDecision.clientName,
+              orderCount: phoneDecision.orderCount,
+            },
+          );
     }
 
     // Compute every room up-front (mirrors POST /api/orders).
@@ -148,7 +226,7 @@ export const PATCH = withPermission<{ id: string }>(
       roomsCount: computed.length,
     };
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const editTx = prisma.$transaction(async (tx) => {
       // Replace the project's calculations with the freshly-computed ones.
       await tx.calculation.deleteMany({ where: { projectId: existing.projectId } });
       await tx.calculation.createMany({
@@ -164,7 +242,7 @@ export const PATCH = withPermission<{ id: string }>(
       });
       const primaryCalc = refreshed.calculations[0];
 
-      const o = await tx.order.update({
+      let o = await tx.order.update({
         where: { id: existing.id },
         data: {
           roomsSubtotal,
@@ -232,8 +310,10 @@ export const PATCH = withPermission<{ id: string }>(
       // Persist any client-contact correction (address/name) to the SHARED
       // Client row — this is what a placed order displays (order.client.address),
       // and it reflects on the Clients tab + every other order for this client.
-      // Phone is the client's unique identity; it's edited on the Clients page.
-      if (existing.client) {
+      // Skipped on a re-point: the order is moving to a client who already has
+      // their own name/address, and the client being left behind is no longer
+      // the record the operator is acting on.
+      if (existing.client && phoneDecision.action !== "repoint") {
         const clientData: { name?: string; address?: string | null } = {};
         const newName = body.clientName?.trim();
         if (newName && newName !== existing.client.name) clientData.name = newName;
@@ -261,8 +341,95 @@ export const PATCH = withPermission<{ id: string }>(
         }
       }
 
+      // Phone correction. Scoped to this order's client (or to this order's
+      // clientId on a re-point) and always logged — the phone is the identity
+      // every other lookup path keys on.
+      if (existing.client && phoneDecision.action === "update-phone") {
+        await tx.client.update({
+          where: { id: existing.client.id },
+          data: { phone: phoneDecision.phone },
+        });
+        await tx.orderEvent.create({
+          data: {
+            orderId: existing.id,
+            type: "NOTE_ADDED",
+            actorId: user.id,
+            message: `Client phone corrected · ${existing.client.phone || "—"} → ${phoneDecision.phone}`,
+            payload: {
+              change: "CLIENT_PHONE_CORRECTED",
+              clientId: existing.client.id,
+              clientName: existing.client.name,
+              confirmed: body.confirmClientPhoneChange,
+              before: { phone: existing.client.phone },
+              after: { phone: phoneDecision.phone },
+            },
+          },
+        });
+      }
+
+      // Re-point: the number turned out to belong to a different client, so
+      // the order was filed under the wrong one. Move the order; never rewrite
+      // either client's phone.
+      if (existing.client && phoneDecision.action === "repoint") {
+        o = await tx.order.update({
+          where: { id: existing.id },
+          data: { clientId: phoneDecision.clientId },
+        });
+        await tx.orderEvent.create({
+          data: {
+            orderId: existing.id,
+            type: "NOTE_ADDED",
+            actorId: user.id,
+            message: `Order re-pointed to the client owning ${phoneDecision.phone} · ${existing.client.name} → ${phoneOwner?.name ?? phoneDecision.clientId}`,
+            payload: {
+              change: "ORDER_CLIENT_REPOINTED",
+              phone: phoneDecision.phone,
+              before: {
+                clientId: existing.client.id,
+                clientName: existing.client.name,
+                phone: existing.client.phone,
+              },
+              after: {
+                clientId: phoneDecision.clientId,
+                clientName: phoneOwner?.name ?? null,
+                phone: phoneDecision.phone,
+              },
+            },
+          },
+        });
+      }
+
       return o;
     });
+
+    let updated: Order;
+    try {
+      updated = await editTx;
+    } catch (err) {
+      // Race: the pre-flight saw the number as free, but another request
+      // claimed it before our write landed. Answer with the same prompt the
+      // pre-flight would have produced instead of a 500.
+      const target = (
+        err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
+          ? ((err.meta?.target as string[] | string | undefined) ?? "")
+          : ""
+      ).toString();
+      if (phoneDecision.action === "update-phone" && target.includes("phone")) {
+        const winner = await prisma.client.findFirst({
+          where: { phone: phoneDecision.phone },
+          select: { id: true, name: true, _count: { select: { orders: true } } },
+        });
+        if (winner) {
+          return fail(PHONE_TAKEN_MESSAGE, 409, {
+            code: "PHONE_BELONGS_TO_OTHER",
+            targetClientId: winner.id,
+            targetClientName: winner.name,
+            targetClientOrderCount: winner._count.orders,
+          });
+        }
+      }
+      throw err;
+    }
 
     recordAudit({
       userId: user.id,
@@ -277,6 +444,7 @@ export const PATCH = withPermission<{ id: string }>(
         previousScheduledAt: existing.scheduledAt,
         nextScheduledAt: updated.scheduledAt,
         roomCount: body.rooms.length,
+        clientPhoneAction: phoneDecision.action,
       },
     });
 

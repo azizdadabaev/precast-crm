@@ -21,12 +21,13 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Plus, Search, Send, X, Trash2, Loader2 } from "lucide-react";
+import { Plus, Search, Send, X, Trash2, Loader2, Pencil } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { PhoneLink } from "@/components/PhoneLink";
 import { AddressInput } from "@/components/address/AddressInput";
 import { ExportDialog } from "@/components/clients/ExportDialog";
+import { EditClientDialog } from "@/components/clients/EditClientDialog";
 
 interface Client {
   id: string;
@@ -66,6 +67,7 @@ export default function ClientsPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Client | null>(null);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const [toEdit, setToEdit] = useState<Client | null>(null);
 
   const { data, isLoading } = useQuery<ClientsPage>({
     queryKey: ["clients", q, language, source, viloyat, sortBy, sortDir, page],
@@ -103,12 +105,15 @@ export default function ClientsPage() {
     setPage(1);
   }
 
-  // Permission check — only the owner sees the per-row delete button.
+  // Permission check — only the owner sees the per-row delete button;
+  // the edit button needs client.edit (the same action the PATCH route
+  // enforces server-side).
   const { data: me } = useQuery<{ permissions: string[] }>({
     queryKey: ["me"],
     queryFn: () => api("/api/auth/me"),
   });
   const canDelete = me?.permissions?.includes("client.delete") ?? false;
+  const canEdit = me?.permissions?.includes("client.edit") ?? false;
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -378,6 +383,7 @@ export default function ClientsPage() {
                   >
                     {t("Қўшилди", "Added")}
                   </SortableTh>
+                  {canEdit && <th className="px-3 py-2.5 w-10" />}
                   {canDelete && <th className="px-3 py-2.5 w-10" />}
                 </tr>
               </thead>
@@ -427,6 +433,21 @@ export default function ClientsPage() {
                       <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
                         {formatDate(c.createdAt)}
                       </td>
+                      {canEdit && (
+                        <td className="px-3 py-2.5 w-10 text-center">
+                          <button
+                            type="button"
+                            title={t("Мижозни таҳрирлаш", "Edit client")}
+                            className="text-text-tertiary hover:text-primary transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setToEdit(c);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        </td>
+                      )}
                       {canDelete && (
                         <td className="px-3 py-2.5 w-10 text-center">
                           <button
@@ -466,6 +487,12 @@ export default function ClientsPage() {
         ids={selectedIds}
         onClose={() => setExportOpen(false)}
       />
+
+      {/* Contact correction — name / phone / address. Mounted per client
+          so the form always opens on that row's current values. */}
+      {toEdit && (
+        <EditClientDialog client={toEdit} onClose={() => setToEdit(null)} />
+      )}
 
       {/* Single-client delete confirmation modal (owner-only). Strongest
           warning — deleting a client cascades to all their orders/projects/deals. */}
