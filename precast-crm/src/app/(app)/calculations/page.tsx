@@ -22,6 +22,11 @@ import { ClientInfoBar } from "@/components/calculation/ClientInfoBar";
 import { DrawingDock } from "@/components/calculation/DrawingDock";
 import { PlaceOrderDialog } from "@/components/calculation/PlaceOrderDialog";
 import {
+  PhoneChangeConfirmDialog,
+  parsePhoneChangeConfirm,
+  type PhoneChangeConfirm,
+} from "@/components/calculation/PhoneChangeConfirmDialog";
+import {
   MultiRoomCalculator,
   recomputeRow,
   makeRow,
@@ -86,6 +91,13 @@ function CalculationsInner() {
   // ── Transient (UI-only) state — NOT persisted ──
   const [error, setError] = useState<string | null>(null);
   const [orderOpen, setOrderOpen] = useState(false);
+  /** Set when the edit endpoint answered 409 asking for an explicit
+   *  confirmation of the client-phone change. Holds the scheduled date
+   *  from the first attempt so the retry sends the identical payload. */
+  const [phoneConfirm, setPhoneConfirm] = useState<{
+    request: PhoneChangeConfirm;
+    scheduledAt: Date;
+  } | null>(null);
   const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [drawRoomOpen, setDrawRoomOpen] = useState(false);
@@ -812,7 +824,7 @@ function CalculationsInner() {
    *  are preserved; the route recomputes confirmedPaid + paymentState
    *  for the new total. */
   const editOrder = useMutation({
-    mutationFn: (args: { scheduledAt: Date }) => {
+    mutationFn: (args: { scheduledAt: Date; confirmPhoneChange?: boolean }) => {
       if (!editingOrderId) throw new Error("Not in edit-mode");
       return api<{ id: string; orderNumber: string }>(
         `/api/orders/${editingOrderId}/edit`,
@@ -837,9 +849,14 @@ function CalculationsInner() {
             deliveryCost: 0,
             otherCost: 0,
             scheduledAt: args.scheduledAt.toISOString(),
-            // Persist any contact correction to the shared Client (address/name).
+            // Persist any contact correction to the shared Client. The phone
+            // is the client's identity, so changing it is confirmed in a
+            // second step: the route answers 409 with a machine-readable code
+            // and we re-issue the same payload with the flag set.
             clientName: client.name,
+            clientPhone: client.phone,
             clientAddress: client.address,
+            confirmClientPhoneChange: args.confirmPhoneChange ?? false,
           },
         },
       );
@@ -853,7 +870,12 @@ function CalculationsInner() {
       clearAll();
       router.push(`/orders/${order.id}`);
     },
-    onError: (e: Error) => setError(e.message),
+    // A phone-change confirmation is not an error the operator should read
+    // as red text — it opens a dialog instead (handled at the call site).
+    onError: (e: Error) => {
+      if (parsePhoneChangeConfirm(e)) return;
+      setError(e.message);
+    },
   });
 
   /** Cancel edit-mode without saving. Returns to the order detail
@@ -1071,6 +1093,7 @@ function CalculationsInner() {
         }}
         matchedClientId={matchedClientId}
         onMatch={setMatchedClientId}
+        editMode={isEditingOrder}
       />
 
       {/* One-tap fill the phone from a contact the client shared in chat. */}
@@ -1203,12 +1226,47 @@ function CalculationsInner() {
         defaultScheduledAt={editingOrderInfo?.scheduledAt ?? null}
         onConfirm={async ({ scheduledAt, paidAmount, paymentMethod, receiptUrls }) => {
           if (isEditingOrder) {
-            await editOrder.mutateAsync({ scheduledAt });
+            try {
+              await editOrder.mutateAsync({ scheduledAt });
+            } catch (e) {
+              const request = parsePhoneChangeConfirm(e);
+              if (!request) throw e;
+              // Not a failure — the server needs a yes/no on the phone
+              // change. Swap this dialog for the confirmation one; the
+              // calculator keeps every typed value either way.
+              setOrderOpen(false);
+              setPhoneConfirm({ request, scheduledAt });
+            }
           } else {
             await placeOrder.mutateAsync({ scheduledAt, paidAmount, paymentMethod, receiptUrls });
           }
         }}
       />
+
+      {/* Client-phone change confirmation. Cancel leaves the operator on
+          the edit screen with their typed phone intact — never clearAll(). */}
+      {phoneConfirm && (
+        <PhoneChangeConfirmDialog
+          request={phoneConfirm.request}
+          phone={client.phone}
+          pending={editOrder.isPending}
+          onCancel={() => setPhoneConfirm(null)}
+          onConfirm={async () => {
+            try {
+              await editOrder.mutateAsync({
+                scheduledAt: phoneConfirm.scheduledAt,
+                confirmPhoneChange: true,
+              });
+            } catch (e) {
+              // A different confirmation came back (the number changed
+              // hands meanwhile) → ask that question instead. Anything
+              // else is already on the page's error banner.
+              const next = parsePhoneChangeConfirm(e);
+              setPhoneConfirm(next ? { ...phoneConfirm, request: next } : null);
+            }
+          }}
+        />
+      )}
 
       {/* Clear confirmation modal */}
       <Dialog

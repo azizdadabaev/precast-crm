@@ -318,9 +318,14 @@ export const EditOrderSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
   // Correct the client's contact on the placed order. Address/name live on the
   // shared Client, so saving updates them everywhere (orders + Clients tab).
-  // Phone is the client's unique identity — edit it on the Clients page.
   clientName: z.string().max(200).optional(),
   clientAddress: z.string().max(500).optional().nullable(),
+  // The phone is the client's unique identity, so a correction here is
+  // ambiguous: it can mean "fix this client's number" or "this order belongs
+  // to a different client who already owns that number". The route answers 409
+  // with a machine-readable code and the UI re-submits with the flag set.
+  clientPhone: z.string().max(40).optional(),
+  confirmClientPhoneChange: z.coerce.boolean().optional().default(false),
 });
 
 // ── Cancel order ────────────────────────────────────────────────

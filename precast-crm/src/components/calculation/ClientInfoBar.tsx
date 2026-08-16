@@ -6,6 +6,7 @@ import {
   User,
   MapPin,
   CheckCircle2,
+  Info,
   Pencil,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
@@ -35,6 +36,14 @@ interface Props {
    */
   matchedClientId: string | null;
   onMatch: (clientId: string | null) => void;
+  /**
+   * True while the calculator is editing a placed order. The link badge
+   * and its «узиш» button are local-only affordances (they just re-open
+   * the autocomplete) — in edit mode that reads as "detach this order
+   * from the client", which it never did. Hidden here and replaced by a
+   * note describing what saving the phone actually does.
+   */
+  editMode?: boolean;
 }
 
 /**
@@ -42,7 +51,13 @@ interface Props {
  * Name / Phone / Address during the call. Phone has live autocomplete so the
  * operator can pick an existing client instead of creating a duplicate.
  */
-export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Props) {
+export function ClientInfoBar({
+  value,
+  onChange,
+  matchedClientId,
+  onMatch,
+  editMode = false,
+}: Props) {
   const t = useT();
   const [suggestions, setSuggestions] = useState<MatchedClient[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -249,7 +264,7 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
         </div>{/* close mobile Phone+Address wrapper (lg:contents on desktop) */}
       </div>
 
-      {matchedClientId && (
+      {matchedClientId && !editMode && (
         <div className="text-[11px] text-success mt-2 flex items-center gap-1.5">
           <CheckCircle2 className="h-3 w-3" />
           {t(
@@ -263,6 +278,18 @@ export function ClientInfoBar({ value, onChange, matchedClientId, onMatch }: Pro
           >
             {t("узиш", "unlink")}
           </button>
+        </div>
+      )}
+
+      {editMode && (
+        <div className="text-[11px] text-muted-foreground mt-2 flex items-start gap-1.5">
+          <Info className="h-3 w-3 mt-[1px] shrink-0" />
+          <span>
+            {t(
+              "Телефон рақами мижоз картасида сақланади. Сақлашда тасдиқлашингиз сўралади.",
+              "The phone is saved on the client card. You'll be asked to confirm when saving.",
+            )}
+          </span>
         </div>
       )}
       </div>{/* close form wrapper (hidden when mobile-collapsed) */}
