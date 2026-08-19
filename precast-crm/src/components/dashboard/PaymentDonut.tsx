@@ -1,6 +1,9 @@
 'use client';
 
 interface Props {
+  /** ORDER ROWS per payment state — disjoint buckets, so the slices add
+   *  up to the whole. Not a per-customer split: one client can hold
+   *  orders in several states, which a donut cannot express. */
   breakdown: { paid: number; partial: number; awaiting: number };
 }
 

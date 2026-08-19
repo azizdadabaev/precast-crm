@@ -1,7 +1,12 @@
 /**
  * Wire-format types for the dashboard payload returned by GET
- * /api/dashboard. Mirrors the route handler's `DashboardPayload`
+ * /api/dashboard. Mirrors `DashboardPayload` in `@/lib/dashboard-data`
  * exactly. Cards consume these directly.
+ *
+ * The money side is split into two metrics that must never be collapsed
+ * into one "revenue" number — they differ by the outstanding receivable:
+ *   • booked    «Буюртма қилинган · Booked»  Σ Order.totalPrice by placedAt
+ *   • collected «Тушган пул · Collected»     Σ CONFIRMED Payment.amount by confirmedAt
  */
 
 export interface Trend {
@@ -9,22 +14,36 @@ export interface Trend {
   deltaPct: number;
   /** "flat" when |delta| < 1% so noise doesn't trigger green/red flashing. */
   direction: "up" | "down" | "flat";
-  /** Whether an up arrow is good (revenue) or bad (receivables). */
+  /** Whether an up arrow is good (booked/collected) or bad (receivables). */
   polarity: "positive" | "negative";
 }
 
 export interface DashboardData {
-  revenueThisMonth: {
+  /** «Буюртма қилинган · Booked» — what was SOLD this month. */
+  bookedThisMonth: {
     total: number;
     orderCount: number;
     periodStart: string;
     periodEnd: string;
     trend: Trend | null;
   };
-  revenueAllTime: {
+  bookedAllTime: {
     total: number;
     orderCount: number;
   };
+  /** «Тушган пул · Collected» — cash confirmed received this month. */
+  collectedThisMonth: {
+    total: number;
+    paymentCount: number;
+    periodStart: string;
+    periodEnd: string;
+    trend: Trend | null;
+  };
+  collectedAllTime: {
+    total: number;
+    paymentCount: number;
+  };
+  /** Booked value per order (Σ totalPrice ÷ order count). */
   averageOrderValue: {
     thisMonth: number;
     allTime: number;
@@ -35,10 +54,12 @@ export interface DashboardData {
     orderCount: number;
     trend: Trend | null;
   };
+  /** DISTINCT clients holding at least one live order. */
   activeCustomers: {
     count: number;
-    breakdown: { paid: number; partial: number; awaiting: number };
   };
+  /** ORDER ROWS per payment state — disjoint buckets, they sum to the whole. */
+  ordersByPaymentState: { paid: number; partial: number; awaiting: number };
   todayDeliveries: {
     count: number;
     totalArea: number;
@@ -56,18 +77,19 @@ export interface DashboardData {
     dispatchCount: number;
     drivers: Array<{ id: string; name: string; expected: number }>;
   };
-  customersByCity: Array<{ city: string; count: number; revenue: number }>;
+  customersByCity: Array<{ city: string; count: number; collected: number }>;
   topCustomers: Array<{
     id: string;
     name: string;
-    totalRevenue: number;
+    totalCollected: number;
     orderCount: number;
   }>;
   weekCapacity: {
     utilizationPct: number;
     days: Array<{ date: string; bookedM2: number; capacityM2: number }>;
   };
-  revenueByMonth: Array<{ month: string; revenue: number }>;
+  bookedByMonth: Array<{ month: string; booked: number }>;
+  collectedByMonth: Array<{ month: string; collected: number }>;
   ordersByMonth: Array<{ month: string; count: number }>;
   recentOrders: Array<{
     id: string;

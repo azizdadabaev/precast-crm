@@ -5,7 +5,8 @@ import Link from 'next/link';
 interface ClientRow {
   id: string;
   name: string;
-  totalRevenue: number;
+  /** Cash confirmed received from this client, not booked value. */
+  totalCollected: number;
   orderCount: number;
 }
 
@@ -22,7 +23,7 @@ function initials(name: string): string {
 }
 
 export function TopClients({ clients }: Props) {
-  const maxRevenue = Math.max(...clients.map(c => c.totalRevenue), 1);
+  const maxCollected = Math.max(...clients.map(c => c.totalCollected), 1);
 
   return (
     <div style={{
@@ -37,7 +38,7 @@ export function TopClients({ clients }: Props) {
           fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 19,
           color: 'var(--dash-ink)',
         }}>Энг тўрти мижозлар</h3>
-        <span style={{ fontFamily: 'var(--font-num)', fontSize: 11, color: 'var(--dash-muted)' }}>12 ой</span>
+        <span style={{ fontFamily: 'var(--font-num)', fontSize: 11, color: 'var(--dash-muted)' }}>Тушган пул · Collected</span>
       </div>
 
       {clients.length === 0 && (
@@ -47,7 +48,7 @@ export function TopClients({ clients }: Props) {
       )}
 
       {clients.map(c => {
-        const pct = (c.totalRevenue / maxRevenue) * 100;
+        const pct = (c.totalCollected / maxCollected) * 100;
         return (
           <div key={c.id} style={{
             display: 'flex', alignItems: 'center', gap: 12,
@@ -75,7 +76,7 @@ export function TopClients({ clients }: Props) {
                   fontFamily: 'var(--font-num)', fontSize: 12.5, fontWeight: 600,
                   color: 'var(--dash-ink)', whiteSpace: 'nowrap',
                   fontVariantNumeric: 'tabular-nums',
-                }}>{fmt(c.totalRevenue)}</span>
+                }}>{fmt(c.totalCollected)}</span>
               </div>
               <div style={{
                 height: 5, borderRadius: 4, background: 'var(--dash-surface2)',

@@ -41,8 +41,9 @@ const cardBase: React.CSSProperties = {
 
 interface Props {
   data: Pick<DashboardData,
-    'revenueThisMonth' | 'revenueAllTime' | 'averageOrderValue' |
-    'outstandingReceivables' | 'revenueByMonth' | 'ordersByMonth'>;
+    'bookedThisMonth' | 'bookedAllTime' | 'collectedThisMonth' | 'collectedAllTime' |
+    'averageOrderValue' | 'outstandingReceivables' |
+    'bookedByMonth' | 'collectedByMonth' | 'ordersByMonth'>;
 }
 
 export function FinancialKPIs({ data }: Props) {
@@ -54,16 +55,14 @@ export function FinancialKPIs({ data }: Props) {
   const accent = 'var(--dash-accent)';
   const neg = 'var(--dash-neg)';
 
-  const revLast6 = data.revenueByMonth.slice(-6).map(m => m.revenue);
-  const cumRevLast6 = data.revenueByMonth.reduce<number[]>((acc, m, i) => {
-    const prev = acc[i - 1] ?? 0;
-    acc.push(prev + m.revenue);
-    return acc;
-  }, []).slice(-6);
-  const avgLast6 = data.revenueByMonth.slice(-6).map((m, i) => {
-    const idx = data.revenueByMonth.length - 6 + i;
+  const bookedLast6 = data.bookedByMonth.slice(-6).map(m => m.booked);
+  const collectedLast6 = data.collectedByMonth.slice(-6).map(m => m.collected);
+  // Sparkline for the AOV card: booked ÷ orders, month by month — the same
+  // formula as the headline number, not collections-per-order.
+  const avgLast6 = data.bookedByMonth.slice(-6).map((m, i) => {
+    const idx = data.bookedByMonth.length - 6 + i;
     const cnt = data.ordersByMonth[idx]?.count ?? 0;
-    return cnt > 0 ? Math.round(m.revenue / cnt) : 0;
+    return cnt > 0 ? Math.round(m.booked / cnt) : 0;
   });
   const recvFlat = Array.from({ length: 6 }, () => data.outstandingReceivables.total);
 
@@ -104,39 +103,50 @@ export function FinancialKPIs({ data }: Props) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 32 }}>
 
-      {/* Card 1: Revenue this month */}
+      {/* Card 1: BOOKED — Σ totalPrice of orders placed this month.
+          Money SOLD, not money received. */}
       <div style={cardBase}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={label}>Бу ойдаги даромад</span>
-          {deltaBadge(data.revenueThisMonth.trend)}
+          <span style={label}>Буюртма қилинган · Booked</span>
+          {deltaBadge(data.bookedThisMonth.trend)}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '12px 0 4px' }}>
-          <span style={bigNum}>{fmt(data.revenueThisMonth.total)}</span>
+          <span style={bigNum}>{fmt(data.bookedThisMonth.total)}</span>
           <span style={unit}>UZS</span>
         </div>
         <div style={{ margin: '8px 0 10px' }}>
-          <Sparkline values={revLast6} color={accent} id={id1} />
+          <Sparkline values={bookedLast6} color={accent} id={id1} />
         </div>
-        <div style={sub}>{data.revenueThisMonth.orderCount} та буюртма · ушбу ой</div>
+        <div style={sub}>{data.bookedThisMonth.orderCount} та буюртма · ушбу ой</div>
+        <div style={sub}>
+          Бошланғичдан: {fmt(data.bookedAllTime.total)} UZS · {data.bookedAllTime.orderCount} та
+        </div>
       </div>
 
-      {/* Card 2: Total revenue all time */}
+      {/* Card 2: COLLECTED — Σ confirmed Payment.amount by confirmedAt.
+          Money actually RECEIVED. Booked − Collected ≈ receivables. */}
       <div style={cardBase}>
-        <div style={label}>Жами даромад</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={label}>Тушган пул · Collected</span>
+          {deltaBadge(data.collectedThisMonth.trend)}
+        </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '12px 0 4px' }}>
-          <span style={bigNum}>{fmt(data.revenueAllTime.total)}</span>
+          <span style={bigNum}>{fmt(data.collectedThisMonth.total)}</span>
           <span style={unit}>UZS</span>
         </div>
         <div style={{ margin: '8px 0 10px' }}>
-          <Sparkline values={cumRevLast6} color={accent} id={id2} />
+          <Sparkline values={collectedLast6} color={accent} id={id2} />
         </div>
-        <div style={sub}>{data.revenueAllTime.orderCount} та буюртма · бошланғичдан</div>
+        <div style={sub}>{data.collectedThisMonth.paymentCount} та тўлов · ушбу ой</div>
+        <div style={sub}>
+          Бошланғичдан: {fmt(data.collectedAllTime.total)} UZS · {data.collectedAllTime.paymentCount} та
+        </div>
       </div>
 
-      {/* Card 3: Average order value */}
+      {/* Card 3: AOV — booked value per order (Σ totalPrice ÷ orders). */}
       <div style={cardBase}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={label}>Ўртача буюртма</span>
+          <span style={label}>Ўртача буюртма · AOV</span>
           {deltaBadge(data.averageOrderValue.trend)}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '12px 0 4px' }}>
@@ -147,12 +157,13 @@ export function FinancialKPIs({ data }: Props) {
           <Sparkline values={avgLast6} color={accent} id={id3} />
         </div>
         <div style={sub}>Жами ўртача: {fmt(data.averageOrderValue.allTime)} UZS</div>
+        <div style={sub}>Ҳисоб: буюртма қилинган ÷ буюртмалар сони</div>
       </div>
 
       {/* Card 4: Receivables — red left border */}
       <div style={{ ...cardBase, borderLeft: '3px solid var(--dash-accent2)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={label}>Қарздорлик</span>
+          <span style={label}>Қарздорлик · Receivables</span>
           <span style={{ fontFamily: 'var(--font-num)', fontSize: 12, fontWeight: 700, color: 'var(--dash-accent2)' }}>
             тўлов кутилмоқда
           </span>
