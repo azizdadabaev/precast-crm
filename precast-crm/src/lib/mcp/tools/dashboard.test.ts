@@ -21,7 +21,7 @@ const MOCK_PAYLOAD = {
   todayDeliveries: { count: 2, totalArea: 96.5, date: '2026-07-17', orders: [] },
   openDiscrepancies: { count: 0, totalAmount: 0 },
   cashOnTheRoad: { total: 0, dispatchCount: 0, drivers: [] },
-  customersByCity: [],
+  ordersByRegion: [],
   topCustomers: [{ id: 'c1', name: 'Aziz', totalCollected: 3_000_000, orderCount: 5 }],
   weekCapacity: { utilizationPct: 30, days: [] },
   bookedByMonth: [],

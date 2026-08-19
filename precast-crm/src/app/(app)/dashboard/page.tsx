@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/fetcher';
 import { DashboardSkeleton } from '@/components/dashboard/DashboardSkeleton';
 import { HeroChart } from '@/components/dashboard/HeroChart';
 import { FinancialKPIs } from '@/components/dashboard/FinancialKPIs';
 import { OperationalKPIs } from '@/components/dashboard/OperationalKPIs';
+import { RegionRanking } from '@/components/dashboard/RegionRanking';
 import { TopClients } from '@/components/dashboard/TopClients';
 import { RecentOrders } from '@/components/dashboard/RecentOrders';
 import { PaymentDonut } from '@/components/dashboard/PaymentDonut';
@@ -18,12 +20,18 @@ const SECTION_LABEL: React.CSSProperties = {
 };
 
 export default function DashboardPage() {
+  // Selected month, as an index into the 12-month window. `null` means
+  // "the latest bucket" = the current calendar month, which is the
+  // default; it lives here rather than inside HeroChart because the same
+  // selection also scopes the financial KPI cards below the chart.
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+
   // Real per-day orders for the hero chart’s monthly view. Previously that
   // view rendered a generated sine wave; this endpoint already computed the
   // real numbers and had no consumer.
   const { data: monthly } = useQuery<{
     months: Array<{ monthKey: string }>;
-    days: Array<{ date: number; monthKey: string; orderCount: number }>;
+    days: Array<{ date: number; monthKey: string; orderCount: number; booked: number }>;
   }>({
     queryKey: ['dashboard-monthly-revenue'],
     queryFn: () => api('/api/dashboard/monthly-revenue'),
@@ -55,6 +63,13 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  // Clamp against the series actually delivered — the window is built by
+  // monthWindow(now, 12), so the LAST index is the current month.
+  const lastMonthIdx = Math.max(data.bookedByMonth.length - 1, 0);
+  const monthIdx = Math.min(selectedMonth ?? lastMonthIdx, lastMonthIdx);
+  const isCurrentMonth = monthIdx >= lastMonthIdx;
+  const monthLabel = data.bookedByMonth[monthIdx]?.month ?? '';
 
   return (
     <div className="dashboard-root" style={{
@@ -93,21 +108,38 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Hero chart */}
+        {/* Hero chart — owns the month picker, but not the selection */}
         <HeroChart
           bookedByMonth={data.bookedByMonth}
           ordersByMonth={data.ordersByMonth}
           dailyByDay={monthly?.days}
           monthKeys={monthly?.months.map((m) => m.monthKey)}
+          monthIdx={monthIdx}
+          onMonthChange={setSelectedMonth}
         />
 
-        {/* Financial KPIs */}
-        <div style={SECTION_LABEL}>Молиявий ҳолат</div>
-        <FinancialKPIs data={data} />
+        {/* Financial KPIs — scoped to the month picked in the hero chart */}
+        <div style={{ ...SECTION_LABEL, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span>Молиявий ҳолат · {isCurrentMonth ? 'жорий ой' : `${monthLabel} ойи`}</span>
+          {!isCurrentMonth && (
+            <span style={{
+              fontFamily: 'var(--font-num)', fontSize: 11, fontWeight: 700,
+              letterSpacing: '.06em', padding: '3px 9px', borderRadius: 999,
+              color: 'var(--dash-accent2)',
+              background: 'color-mix(in srgb, var(--dash-accent2) 14%, transparent)',
+            }}>
+              танланган ой · not current month
+            </span>
+          )}
+        </div>
+        <FinancialKPIs data={data} monthIdx={monthIdx} />
 
         {/* Operational KPIs */}
         <div style={SECTION_LABEL}>Операцион ҳолат</div>
         <OperationalKPIs data={data} />
+
+        {/* Region ranking — all-time, deliberately not month-scoped */}
+        <RegionRanking regions={data.ordersByRegion} />
 
         {/* Bottom widgets */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr 0.85fr', gap: 16 }}>

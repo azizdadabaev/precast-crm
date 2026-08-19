@@ -1,13 +1,15 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { normalizeCity } from '@/lib/city-normalize';
+import { aggregateByRegion, type RegionRow } from '@/lib/dashboard-regions';
 import {
   accumulateByMonth,
   averageOrderValue,
+  buildTrend,
   countDistinct,
   dayKey,
   monthWindow,
   outstandingAmount,
+  type Trend,
 } from '@/lib/dashboard-metrics';
 
 // ── Order / payment sets used by every metric below ─────────────────────────
@@ -41,19 +43,6 @@ const COLLECTED_PAYMENTS: Prisma.PaymentWhereInput = {
 };
 
 // ── Types ───────────────────────────────────────────────────────────────────
-
-/**
- * Trend pill data. `deltaPct` is rounded to whole percent. `direction`
- * derives from the sign — "flat" when |delta| < 1% so we don't flash a
- * pill for noise. `polarity` controls the green/red color in the UI:
- * "positive" means an up arrow is good (booked/collected), "negative"
- * means an up arrow is bad (receivables).
- */
-interface Trend {
-  deltaPct: number;
-  direction: 'up' | 'down' | 'flat';
-  polarity: 'positive' | 'negative';
-}
 
 export interface DashboardPayload {
   /**
@@ -104,13 +93,19 @@ export interface DashboardPayload {
   };
   openDiscrepancies: { count: number; totalAmount: number };
   cashOnTheRoad: { total: number; dispatchCount: number; drivers: Array<{ id: string; name: string; expected: number }> };
-  /** `collected` = Σ Order.confirmedPaid for that city's live orders. */
-  customersByCity: Array<{ city: string; count: number; collected: number }>;
+  /**
+   * Province (viloyat) ranking, ranked by ORDERS PLACED descending.
+   * All-time over LIVE_ORDERS — it has no time axis, so it is never
+   * scoped to the month picked in the hero chart. `booked` is
+   * Σ Order.totalPrice for the province, NOT cash received.
+   */
+  ordersByRegion: RegionRow[];
   /** Ranked by cash collected, not by booked value. */
   topCustomers: Array<{ id: string; name: string; totalCollected: number; orderCount: number }>;
   weekCapacity: { utilizationPct: number; days: Array<{ date: string; bookedM2: number; capacityM2: number }> };
   bookedByMonth: Array<{ month: string; booked: number }>;
-  collectedByMonth: Array<{ month: string; collected: number }>;
+  /** `paymentCount` lets the Collected KPI card follow the selected month. */
+  collectedByMonth: Array<{ month: string; collected: number; paymentCount: number }>;
   ordersByMonth: Array<{ month: string; count: number }>;
   recentOrders: Array<{
     id: string;
@@ -140,25 +135,6 @@ function endOfDay(d: Date): Date {
 /** Capacity per day in m². Mirrors the calendar's heavy threshold so the
  *  dashboard's "100% booked" lines up with the calendar's red zone. */
 const CAPACITY_M2_PER_DAY = 600;
-
-/**
- * Build a trend pill from a current vs previous-period number pair.
- * Returns null when there's no previous-period basis (the first month
- * of operation, or any case where dividing by zero is meaningless).
- * |delta| < 1% renders as a flat arrow so noise doesn't trigger
- * green/red flashing.
- */
-function buildTrend(
-  current: number,
-  previous: number,
-  polarity: Trend['polarity'],
-): Trend | null {
-  if (previous <= 0) return null;
-  const deltaPct = Math.round(((current - previous) / previous) * 100);
-  const direction: Trend['direction'] =
-    Math.abs(deltaPct) < 1 ? 'flat' : deltaPct > 0 ? 'up' : 'down';
-  return { deltaPct, direction, polarity };
-}
 
 // ── Main export ─────────────────────────────────────────────────────────────
 
@@ -208,7 +184,7 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     discrepanciesCount,
     cashOnRoadDispatches,
     weekOrders,
-    cityRows,
+    regionRows,
     topClientsRows,
     rollingOrders,
     rollingPayments,
@@ -316,17 +292,16 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
       where: { ...LIVE_ORDERS, scheduledAt: { gte: weekStart, lte: weekEnd } },
       select: { scheduledAt: true, totalArea: true },
     }),
-    // City aggregation — pull each live order's client address +
-    // confirmedPaid + a unique-client tally. Aggregate in-memory because
-    // the city normalization happens in JS, not SQL. `confirmedPaid` is a
-    // cash figure with no date, which is fine here: the city split is
-    // all-time and has no time axis.
+    // Region aggregation — pull each live order's client address +
+    // booked value + client id. Aggregated in-memory because resolving
+    // an address to a viloyat happens in JS (both alphabets), not SQL.
+    // All-time: the ranking has no time axis.
     prisma.order.findMany({
       where: LIVE_ORDERS,
       take: 10_000,
       select: {
         clientId: true,
-        confirmedPaid: true,
+        totalPrice: true,
         client: { select: { address: true } },
       },
     }),
@@ -434,28 +409,17 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     0,
   );
 
-  // ── Customers by city ──
-  // For each canonical city, count UNIQUE clients and sum cash collected.
-  const cityMap = new Map<string, { clients: Set<string>; collected: number }>();
-  for (const row of cityRows) {
-    const city = normalizeCity(row.client.address);
-    const cur = cityMap.get(city) ?? { clients: new Set<string>(), collected: 0 };
-    cur.clients.add(row.clientId);
-    cur.collected += Number(row.confirmedPaid);
-    cityMap.set(city, cur);
-  }
-  const cityList = Array.from(cityMap.entries())
-    .map(([city, agg]) => ({
-      city,
-      count: agg.clients.size,
-      collected: Math.round(agg.collected),
-    }))
-    .sort((a, b) => b.count - a.count);
-  // Top 10 named + "Other" if non-zero.
-  const named = cityList.filter((c) => c.city !== 'Other').slice(0, 10);
-  const other = cityList.find((c) => c.city === 'Other');
-  const customersByCity =
-    other && other.count > 0 ? [...named, other] : named;
+  // ── Orders by region (viloyat) ──
+  // Top 8 provinces by orders placed, everything else folded into
+  // «Бошқа». Unmatched addresses are bucketed, never dropped.
+  const ordersByRegion = aggregateByRegion(
+    regionRows.map((r) => ({
+      clientId: r.clientId,
+      address: r.client.address,
+      booked: Number(r.totalPrice),
+    })),
+    8,
+  );
 
   // ── Top 5 customers — hydrate names ──
   const topClientIds = topClientsRows.map((r) => r.clientId);
@@ -526,6 +490,7 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
   const collectedByMonth = window12.map((b) => ({
     month: b.label,
     collected: Math.round(collectedMonthMap.get(b.key)?.total ?? 0),
+    paymentCount: collectedMonthMap.get(b.key)?.count ?? 0,
   }));
   const ordersByMonth = window12.map((b) => ({
     month: b.label,
@@ -607,7 +572,7 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
           expected: Math.round(Number(d.expectedCollection)),
         })),
     },
-    customersByCity,
+    ordersByRegion,
     topCustomers,
     weekCapacity: { utilizationPct, days: weekDays },
     bookedByMonth,

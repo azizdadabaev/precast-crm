@@ -151,3 +151,40 @@ export function outstandingAmount(row: {
 export function countDistinct(values: Iterable<string>): number {
   return new Set(values).size;
 }
+
+/**
+ * Trend pill data. `deltaPct` is rounded to whole percent. `direction`
+ * derives from the sign — "flat" when |delta| < 1% so we don't flash a
+ * pill for noise. `polarity` controls the green/red color in the UI:
+ * "positive" means an up arrow is good (booked/collected), "negative"
+ * means an up arrow is bad (receivables).
+ */
+export interface Trend {
+  deltaPct: number;
+  direction: 'up' | 'down' | 'flat';
+  polarity: 'positive' | 'negative';
+}
+
+/**
+ * Build a trend pill from a current vs previous-period number pair.
+ * Returns null when there's no previous-period basis (the first month
+ * of operation, or any case where dividing by zero is meaningless).
+ * |delta| < 1% renders as a flat arrow so noise doesn't trigger
+ * green/red flashing.
+ *
+ * Lives here (not in `dashboard-data.ts`) because the dashboard page
+ * recomputes these client-side when the operator selects a month other
+ * than the current one — the server can only precompute the
+ * current-vs-previous pair.
+ */
+export function buildTrend(
+  current: number,
+  previous: number,
+  polarity: Trend['polarity'],
+): Trend | null {
+  if (previous <= 0) return null;
+  const deltaPct = Math.round(((current - previous) / previous) * 100);
+  const direction: Trend['direction'] =
+    Math.abs(deltaPct) < 1 ? 'flat' : deltaPct > 0 ? 'up' : 'down';
+  return { deltaPct, direction, polarity };
+}

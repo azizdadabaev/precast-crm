@@ -44,7 +44,7 @@ function YearTooltip({ active, payload }: TooltipProps<number, string>) {
 
 function MonthTooltip({ active, payload }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload as { day: number; orders: number } | undefined;
+  const d = payload[0]?.payload as { day: number; orders: number; booked: number } | undefined;
   if (!d) return null;
   return (
     <div style={{
@@ -56,7 +56,11 @@ function MonthTooltip({ active, payload }: TooltipProps<number, string>) {
       <div style={{ fontFamily: 'var(--font-num)', fontWeight: 700, fontSize: 12.5, marginBottom: 5 }}>{d.day}-кун</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 12, lineHeight: 1.7 }}>
         <span style={{ opacity: .7 }}>Буюртма</span>
-        <span style={{ fontFamily: 'var(--font-num)', fontWeight: 600 }}>{d.orders} та</span>
+        <span style={{ fontFamily: 'var(--font-num)', fontWeight: 600 }}>{d.orders} та буюртма</span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 12, lineHeight: 1.7 }}>
+        <span style={{ opacity: .7 }}>Буюртма қилинган</span>
+        <span style={{ fontFamily: 'var(--font-num)', fontWeight: 600 }}>{fmt(d.booked)} UZS</span>
       </div>
     </div>
   );
@@ -72,16 +76,25 @@ interface Props {
    *  only days that actually had orders. `monthKey` is YYYY-MM in LOCAL
    *  time, matching how every other bucket in the app is keyed.
    *  Replaces a generated sine wave that used to render here as if it
-   *  were real business data. */
-  dailyByDay?: Array<{ date: number; monthKey: string; orderCount: number }>;
+   *  were real business data. `booked` is that day's Σ totalPrice. */
+  dailyByDay?: Array<{ date: number; monthKey: string; orderCount: number; booked: number }>;
   /** YYYY-MM keys aligned 1:1 with bookedByMonth, so a selected month can
    *  be matched to its days. */
   monthKeys?: string[];
+  /**
+   * Selected month as an index into `bookedByMonth` (last = current
+   * month). CONTROLLED by the dashboard page, because the same selection
+   * also scopes the financial KPI cards below the chart.
+   */
+  monthIdx: number;
+  onMonthChange: (idx: number) => void;
 }
 
-export function HeroChart({ bookedByMonth, ordersByMonth, dailyByDay, monthKeys }: Props) {
+export function HeroChart({
+  bookedByMonth, ordersByMonth, dailyByDay, monthKeys, monthIdx, onMonthChange,
+}: Props) {
   const [view, setView] = useState<'year' | 'month'>('year');
-  const [monthIdx, setMonthIdx] = useState(bookedByMonth.length - 1);
+  const lastIdx = bookedByMonth.length - 1;
 
   const yearTotal = bookedByMonth.reduce((s, m) => s + m.booked, 0);
   const yearOrders = ordersByMonth.reduce((s, m) => s + m.count, 0);
@@ -104,18 +117,23 @@ export function HeroChart({ bookedByMonth, ordersByMonth, dailyByDay, monthKeys 
   // omitting it would draw a misleadingly continuous line.
   const monthData = (() => {
     const key = monthKeys?.[monthIdx];
-    if (!key || !dailyByDay) return [] as Array<{ day: number; orders: number }>;
-    const byDay = new Map<number, number>();
+    if (!key || !dailyByDay) return [] as Array<{ day: number; orders: number; booked: number }>;
+    const byDay = new Map<number, { orders: number; booked: number }>();
     for (const d of dailyByDay) {
       if (d.monthKey !== key) continue;
       const dayNum = new Date(d.date).getDate();
-      if (Number.isFinite(dayNum)) byDay.set(dayNum, (byDay.get(dayNum) ?? 0) + d.orderCount);
+      if (!Number.isFinite(dayNum)) continue;
+      const cur = byDay.get(dayNum) ?? { orders: 0, booked: 0 };
+      cur.orders += d.orderCount;
+      cur.booked += d.booked;
+      byDay.set(dayNum, cur);
     }
     const [y, m] = key.split('-').map(Number);
     const daysInMonth = new Date(y, m, 0).getDate();
     return Array.from({ length: daysInMonth }, (_, i) => ({
       day: i + 1,
-      orders: byDay.get(i + 1) ?? 0,
+      orders: byDay.get(i + 1)?.orders ?? 0,
+      booked: byDay.get(i + 1)?.booked ?? 0,
     }));
   })();
 
@@ -199,7 +217,9 @@ export function HeroChart({ bookedByMonth, ordersByMonth, dailyByDay, monthKeys 
 
           <div style={{ flex: 1 }} />
 
-          {/* View toggle */}
+          {/* View toggle. Leaving the monthly view snaps the selection back
+              to the current month so the KPI cards below can never stay
+              pinned to a month whose picker is no longer on screen. */}
           <div style={{
             display: 'flex', gap: 6, marginTop: 24, padding: 4,
             background: 'var(--dash-surface2)',
@@ -207,7 +227,7 @@ export function HeroChart({ bookedByMonth, ordersByMonth, dailyByDay, monthKeys 
           }}>
             <button
               type="button"
-              onClick={() => setView('year')}
+              onClick={() => { setView('year'); onMonthChange(lastIdx); }}
               style={view === 'year' ? btnActive : btnInactive}
             >12 ой · Booked</button>
             <button
@@ -218,26 +238,36 @@ export function HeroChart({ bookedByMonth, ordersByMonth, dailyByDay, monthKeys 
           </div>
 
           {view === 'month' && (
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              marginTop: 10, padding: '6px 8px',
-              border: '1px solid var(--dash-line)', borderRadius: 9,
-            }}>
-              <button
-                type="button"
-                onClick={() => setMonthIdx(i => Math.max(0, i - 1))}
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--dash-muted)', width: 26 }}
-              >‹</button>
-              <span style={{
-                fontFamily: 'var(--font-display)', fontWeight: 600,
-                fontSize: 16, color: 'var(--dash-ink)',
-              }}>{selectedBookedMonth?.month}</span>
-              <button
-                type="button"
-                onClick={() => setMonthIdx(i => Math.min(bookedByMonth.length - 1, i + 1))}
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--dash-muted)', width: 26 }}
-              >›</button>
-            </div>
+            <>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginTop: 10, padding: '6px 8px',
+                border: '1px solid var(--dash-line)', borderRadius: 9,
+              }}>
+                <button
+                  type="button"
+                  aria-label="Олдинги ой"
+                  onClick={() => onMonthChange(Math.max(0, monthIdx - 1))}
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--dash-muted)', width: 26 }}
+                >‹</button>
+                <span style={{
+                  fontFamily: 'var(--font-display)', fontWeight: 600,
+                  fontSize: 16, color: 'var(--dash-ink)',
+                }}>{selectedBookedMonth?.month}</span>
+                <button
+                  type="button"
+                  aria-label="Кейинги ой"
+                  onClick={() => onMonthChange(Math.min(lastIdx, monthIdx + 1))}
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--dash-muted)', width: 26 }}
+                >›</button>
+              </div>
+              <div style={{
+                marginTop: 8, fontFamily: 'var(--font-body-alt)',
+                fontSize: 11.5, lineHeight: 1.45, color: 'var(--dash-muted)',
+              }}>
+                Танланган ой қуйидаги молиявий кўрсаткичларга ҳам таъсир қилади.
+              </div>
+            </>
           )}
         </div>
 
