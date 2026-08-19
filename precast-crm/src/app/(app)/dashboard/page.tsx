@@ -138,15 +138,17 @@ export default function DashboardPage() {
         <div style={SECTION_LABEL}>Операцион ҳолат</div>
         <OperationalKPIs data={data} />
 
-        {/* Region ranking — all-time, deliberately not month-scoped */}
-        <RegionRanking regions={data.ordersByRegion} />
-
         {/* Bottom widgets */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr 0.85fr', gap: 16 }}>
           <TopClients clients={data.topCustomers} />
           <RecentOrders orders={data.recentOrders} />
           <PaymentDonut breakdown={data.ordersByPaymentState} />
         </div>
+
+        {/* Region ranking sits below the per-order widgets: it answers a
+            slower, territory-level question than the daily operational
+            cards above. All-time, deliberately not month-scoped. */}
+        <RegionRanking regions={data.ordersByRegion} />
 
       </div>
     </div>
