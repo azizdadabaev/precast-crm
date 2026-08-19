@@ -77,7 +77,20 @@ export interface DashboardData {
     dispatchCount: number;
     drivers: Array<{ id: string; name: string; expected: number }>;
   };
-  customersByCity: Array<{ city: string; count: number; collected: number }>;
+  /**
+   * Province (viloyat) ranking — all-time over live orders, ranked by
+   * ORDERS PLACED descending. `booked` is Σ Order.totalPrice for the
+   * province, not cash received. `region` is the canonical Latin name
+   * (stable key), `regionUz` the Cyrillic label. Everything that
+   * matched no province sits in the «Бошқа» row.
+   */
+  ordersByRegion: Array<{
+    region: string;
+    regionUz: string;
+    orderCount: number;
+    clientCount: number;
+    booked: number;
+  }>;
   topCustomers: Array<{
     id: string;
     name: string;
@@ -89,7 +102,8 @@ export interface DashboardData {
     days: Array<{ date: string; bookedM2: number; capacityM2: number }>;
   };
   bookedByMonth: Array<{ month: string; booked: number }>;
-  collectedByMonth: Array<{ month: string; collected: number }>;
+  /** `paymentCount` lets the Collected KPI card follow the selected month. */
+  collectedByMonth: Array<{ month: string; collected: number; paymentCount: number }>;
   ordersByMonth: Array<{ month: string; count: number }>;
   recentOrders: Array<{
     id: string;
