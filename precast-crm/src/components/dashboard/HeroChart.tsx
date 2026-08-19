@@ -17,20 +17,10 @@ function compact(n: number): { value: string; unit: string } {
   return { value: fmt(n), unit: 'UZS' };
 }
 
-function monthlyDailyData(monthIdx: number): Array<{ day: number; orders: number }> {
-  const out = [];
-  for (let d = 1; d <= 30; d++) {
-    let v = 1.7 + 1.5 * Math.sin(d * 0.7 + monthIdx * 0.9) + ((d * 13 + monthIdx * 7) % 4) * 0.45;
-    let orders = Math.max(0, Math.round(v));
-    if ((d * 7 + monthIdx * 3) % 9 === 0) orders = 0;
-    out.push({ day: d, orders });
-  }
-  return out;
-}
 
 function YearTooltip({ active, payload }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload as { month: string; revenue: number; count: number } | undefined;
+  const d = payload[0]?.payload as { month: string; booked: number; count: number } | undefined;
   if (!d) return null;
   return (
     <div style={{
@@ -41,8 +31,8 @@ function YearTooltip({ active, payload }: TooltipProps<number, string>) {
     }}>
       <div style={{ fontFamily: 'var(--font-num)', fontWeight: 700, fontSize: 12.5, marginBottom: 5 }}>{d.month}</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 12, lineHeight: 1.7 }}>
-        <span style={{ opacity: .7 }}>Даромад</span>
-        <span style={{ fontFamily: 'var(--font-num)', fontWeight: 600 }}>{fmt(d.revenue)} UZS</span>
+        <span style={{ opacity: .7 }}>Буюртма қилинган</span>
+        <span style={{ fontFamily: 'var(--font-num)', fontWeight: 600 }}>{fmt(d.booked)} UZS</span>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: 12, lineHeight: 1.7 }}>
         <span style={{ opacity: .7 }}>Буюртма</span>
@@ -73,39 +63,69 @@ function MonthTooltip({ active, payload }: TooltipProps<number, string>) {
 }
 
 interface Props {
-  revenueByMonth: Array<{ month: string; revenue: number }>;
+  /** «Буюртма қилинган · Booked» — Σ Order.totalPrice bucketed by
+   *  `placedAt`. Explicitly NOT cash received (that is the Collected KPI
+   *  card, fed from the Payment table). Never render as bare "даромад". */
+  bookedByMonth: Array<{ month: string; booked: number }>;
   ordersByMonth: Array<{ month: string; count: number }>;
+  /** Real per-day activity from /api/dashboard/monthly-revenue. Sparse —
+   *  only days that actually had orders. `monthKey` is YYYY-MM in LOCAL
+   *  time, matching how every other bucket in the app is keyed.
+   *  Replaces a generated sine wave that used to render here as if it
+   *  were real business data. */
+  dailyByDay?: Array<{ date: number; monthKey: string; orderCount: number }>;
+  /** YYYY-MM keys aligned 1:1 with bookedByMonth, so a selected month can
+   *  be matched to its days. */
+  monthKeys?: string[];
 }
 
-export function HeroChart({ revenueByMonth, ordersByMonth }: Props) {
+export function HeroChart({ bookedByMonth, ordersByMonth, dailyByDay, monthKeys }: Props) {
   const [view, setView] = useState<'year' | 'month'>('year');
-  const [monthIdx, setMonthIdx] = useState(revenueByMonth.length - 1);
+  const [monthIdx, setMonthIdx] = useState(bookedByMonth.length - 1);
 
-  const yearTotal = revenueByMonth.reduce((s, m) => s + m.revenue, 0);
+  const yearTotal = bookedByMonth.reduce((s, m) => s + m.booked, 0);
   const yearOrders = ordersByMonth.reduce((s, m) => s + m.count, 0);
-  const lastMonth = revenueByMonth[revenueByMonth.length - 1]!;
-  const prevMonth = revenueByMonth[revenueByMonth.length - 2];
-  const deltaPct = prevMonth && prevMonth.revenue > 0
-    ? ((lastMonth.revenue - prevMonth.revenue) / prevMonth.revenue * 100)
+  const lastMonth = bookedByMonth[bookedByMonth.length - 1]!;
+  const prevMonth = bookedByMonth[bookedByMonth.length - 2];
+  const deltaPct = prevMonth && prevMonth.booked > 0
+    ? ((lastMonth.booked - prevMonth.booked) / prevMonth.booked * 100)
     : null;
 
-  const selectedRevMonth = revenueByMonth[monthIdx];
+  const selectedBookedMonth = bookedByMonth[monthIdx];
   const selectedOrdMonth = ordersByMonth[monthIdx];
-  const prevRevMonth = monthIdx > 0 ? revenueByMonth[monthIdx - 1] : null;
-  const monthDeltaPct = prevRevMonth && prevRevMonth.revenue > 0 && selectedRevMonth
-    ? ((selectedRevMonth.revenue - prevRevMonth.revenue) / prevRevMonth.revenue * 100)
+  const prevBookedMonth = monthIdx > 0 ? bookedByMonth[monthIdx - 1] : null;
+  const monthDeltaPct = prevBookedMonth && prevBookedMonth.booked > 0 && selectedBookedMonth
+    ? ((selectedBookedMonth.booked - prevBookedMonth.booked) / prevBookedMonth.booked * 100)
     : null;
 
-  const yearData = revenueByMonth.map((m, i) => ({ ...m, count: ordersByMonth[i]?.count ?? 0 }));
-  const monthData = monthlyDailyData(monthIdx);
+  const yearData = bookedByMonth.map((m, i) => ({ ...m, count: ordersByMonth[i]?.count ?? 0 }));
+  // Real orders for the selected month. The API returns only days that had
+  // activity, so zero-fill the rest — an absent day is a real zero, and
+  // omitting it would draw a misleadingly continuous line.
+  const monthData = (() => {
+    const key = monthKeys?.[monthIdx];
+    if (!key || !dailyByDay) return [] as Array<{ day: number; orders: number }>;
+    const byDay = new Map<number, number>();
+    for (const d of dailyByDay) {
+      if (d.monthKey !== key) continue;
+      const dayNum = new Date(d.date).getDate();
+      if (Number.isFinite(dayNum)) byDay.set(dayNum, (byDay.get(dayNum) ?? 0) + d.orderCount);
+    }
+    const [y, m] = key.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, i) => ({
+      day: i + 1,
+      orders: byDay.get(i + 1) ?? 0,
+    }));
+  })();
 
   const { value: headValue, unit: headUnit } = view === 'year'
     ? compact(yearTotal)
-    : compact(selectedRevMonth?.revenue ?? 0);
+    : compact(selectedBookedMonth?.booked ?? 0);
 
   const headLabel = view === 'year'
-    ? '12 ОЙЛИК ДАРОМАД'
-    : `${selectedRevMonth?.month ?? ''} ОЙИ ДАРОМАДИ`;
+    ? '12 ОЙЛИК БУЮРТМА · BOOKED'
+    : `${selectedBookedMonth?.month ?? ''} ОЙИ · BOOKED`;
 
   const headSub = view === 'year'
     ? `${fmt(yearOrders)} та буюртма · сўнгги 12 ой`
@@ -189,7 +209,7 @@ export function HeroChart({ revenueByMonth, ordersByMonth }: Props) {
               type="button"
               onClick={() => setView('year')}
               style={view === 'year' ? btnActive : btnInactive}
-            >12 ой даромад</button>
+            >12 ой · Booked</button>
             <button
               type="button"
               onClick={() => setView('month')}
@@ -211,10 +231,10 @@ export function HeroChart({ revenueByMonth, ordersByMonth }: Props) {
               <span style={{
                 fontFamily: 'var(--font-display)', fontWeight: 600,
                 fontSize: 16, color: 'var(--dash-ink)',
-              }}>{selectedRevMonth?.month}</span>
+              }}>{selectedBookedMonth?.month}</span>
               <button
                 type="button"
-                onClick={() => setMonthIdx(i => Math.min(revenueByMonth.length - 1, i + 1))}
+                onClick={() => setMonthIdx(i => Math.min(bookedByMonth.length - 1, i + 1))}
                 style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--dash-muted)', width: 26 }}
               >›</button>
             </div>
@@ -245,7 +265,7 @@ export function HeroChart({ revenueByMonth, ordersByMonth }: Props) {
                   wrapperStyle={{ outline: 'none' }}
                 />
                 <Area
-                  type="monotone" dataKey="revenue"
+                  type="monotone" dataKey="booked"
                   stroke="var(--dash-accent)" strokeWidth={3}
                   fill="url(#heroRevGrad)"
                   dot={false}

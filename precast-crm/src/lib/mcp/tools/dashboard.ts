@@ -3,19 +3,24 @@ import { fetchDashboardData, DashboardPayload } from '@/lib/dashboard-data';
 
 function formatSummary(d: DashboardPayload): string {
   const fmt = (n: number) => n.toLocaleString('ru-RU') + ' UZS';
+  // "Booked" and "Collected" are named explicitly and never collapsed
+  // into "revenue" — they differ by the outstanding receivable.
   const lines = [
-    `Revenue this month: ${fmt(d.revenueThisMonth.total)} (${d.revenueThisMonth.orderCount} orders)`,
-    `All-time revenue: ${fmt(d.revenueAllTime.total)} (${d.revenueAllTime.orderCount} orders)`,
-    `Avg order value: ${fmt(d.averageOrderValue.thisMonth)} this month / ${fmt(d.averageOrderValue.allTime)} all-time`,
+    `Booked this month (orders placed, sum of totalPrice): ${fmt(d.bookedThisMonth.total)} (${d.bookedThisMonth.orderCount} orders)`,
+    `Booked all-time: ${fmt(d.bookedAllTime.total)} (${d.bookedAllTime.orderCount} orders)`,
+    `Collected this month (confirmed payments, by confirmedAt): ${fmt(d.collectedThisMonth.total)} (${d.collectedThisMonth.paymentCount} payments)`,
+    `Collected all-time: ${fmt(d.collectedAllTime.total)} (${d.collectedAllTime.paymentCount} payments)`,
+    `Avg order value (booked per order): ${fmt(d.averageOrderValue.thisMonth)} this month / ${fmt(d.averageOrderValue.allTime)} all-time`,
     `Outstanding receivables: ${fmt(d.outstandingReceivables.total)} across ${d.outstandingReceivables.orderCount} order(s)`,
-    `Active customers: ${d.activeCustomers.count} (${d.activeCustomers.breakdown.paid} paid, ${d.activeCustomers.breakdown.partial} partial, ${d.activeCustomers.breakdown.awaiting} awaiting)`,
+    `Active customers (distinct clients): ${d.activeCustomers.count}`,
+    `Orders by payment state: ${d.ordersByPaymentState.paid} paid, ${d.ordersByPaymentState.partial} partial, ${d.ordersByPaymentState.awaiting} awaiting`,
     `Today's deliveries: ${d.todayDeliveries.count} orders / ${d.todayDeliveries.totalArea} m²`,
     `Open discrepancies: ${d.openDiscrepancies.count} (${fmt(d.openDiscrepancies.totalAmount)})`,
     `Cash on road: ${fmt(d.cashOnTheRoad.total)} in ${d.cashOnTheRoad.dispatchCount} dispatch(es)`,
     `Week utilization: ${d.weekCapacity.utilizationPct}%`,
   ];
   if (d.topCustomers.length > 0) {
-    lines.push(`Top customers: ${d.topCustomers.map((c) => `${c.name} (${fmt(c.totalRevenue)})`).join(', ')}`);
+    lines.push(`Top customers by cash collected: ${d.topCustomers.map((c) => `${c.name} (${fmt(c.totalCollected)})`).join(', ')}`);
   }
   return lines.join('\n');
 }
@@ -23,7 +28,7 @@ function formatSummary(d: DashboardPayload): string {
 export function registerDashboardTools(server: McpServer): void {
   server.tool(
     'get_dashboard',
-    "Full dashboard snapshot: revenue, receivables, today's deliveries, week capacity, top customers, and 12-month chart data. Returns the same payload as GET /api/dashboard.",
+    "Full dashboard snapshot: booked value (orders placed), collected cash (confirmed payments), receivables, today's deliveries, week capacity, top customers, and 12-month chart data. Returns the same payload as GET /api/dashboard.",
     {},
     async () => {
       try {

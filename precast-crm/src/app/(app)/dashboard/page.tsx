@@ -18,6 +18,19 @@ const SECTION_LABEL: React.CSSProperties = {
 };
 
 export default function DashboardPage() {
+  // Real per-day orders for the hero chart’s monthly view. Previously that
+  // view rendered a generated sine wave; this endpoint already computed the
+  // real numbers and had no consumer.
+  const { data: monthly } = useQuery<{
+    months: Array<{ monthKey: string }>;
+    days: Array<{ date: number; monthKey: string; orderCount: number }>;
+  }>({
+    queryKey: ['dashboard-monthly-revenue'],
+    queryFn: () => api('/api/dashboard/monthly-revenue'),
+    staleTime: 60_000,
+    retry: false,
+  });
+
   const { data, isLoading, error } = useQuery<DashboardData>({
     queryKey: ['dashboard'],
     queryFn: () => api<DashboardData>('/api/dashboard'),
@@ -82,8 +95,10 @@ export default function DashboardPage() {
 
         {/* Hero chart */}
         <HeroChart
-          revenueByMonth={data.revenueByMonth}
+          bookedByMonth={data.bookedByMonth}
           ordersByMonth={data.ordersByMonth}
+          dailyByDay={monthly?.days}
+          monthKeys={monthly?.months.map((m) => m.monthKey)}
         />
 
         {/* Financial KPIs */}
@@ -98,7 +113,7 @@ export default function DashboardPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr 0.85fr', gap: 16 }}>
           <TopClients clients={data.topCustomers} />
           <RecentOrders orders={data.recentOrders} />
-          <PaymentDonut breakdown={data.activeCustomers.breakdown} />
+          <PaymentDonut breakdown={data.ordersByPaymentState} />
         </div>
 
       </div>

@@ -1,120 +1,149 @@
 export const dynamic = "force-dynamic";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { accumulateByMonth, dayKey, monthWindow } from "@/lib/dashboard-metrics";
 
 /**
  * GET /api/dashboard/monthly-revenue
  *
- * Returns the last 12 months of revenue (current month + 11 prior),
- * one row per month, ordered oldest → newest. Months with zero
- * placed orders still appear (revenue: 0) so the line chart has a
- * continuous x-axis. CANCELED orders are excluded — same posture as
- * the rest of the dashboard's revenue queries.
+ * Last 12 months (current month + 11 prior), one row per month, ordered
+ * oldest → newest. Months with no activity still appear (zeros) so a line
+ * chart keeps a continuous x-axis.
+ *
+ * TWO metrics are returned and neither is called "revenue" — the route
+ * used to return Σ totalPrice under the name `revenue` while
+ * `fetchDashboardData()` returned Σ confirmedPaid under the same name, so
+ * the two dashboards disagreed by exactly the outstanding receivable:
+ *
+ *   • `booked`    «Буюртма қилинган · Booked»  — Σ Order.totalPrice over
+ *     live orders, bucketed by `Order.placedAt`. What was SOLD.
+ *   • `collected` «Тушган пул · Collected»     — Σ Payment.amount over
+ *     CONFIRMED payments, bucketed by `Payment.confirmedAt` (when the cash
+ *     was confirmed received, not `recordedAt` = when it was typed in).
+ *     What was RECEIVED.
+ *
+ * CANCELED (and the reserved DRAFT) orders are excluded from both, same
+ * posture as `fetchDashboardData()`. `amount` is used rather than
+ * `originalAmount` — the latter is the pre-adjustment audit trail, not cash.
  *
  * Bucketing uses the server's local TZ (`Asia/Tashkent` in prod) via
- * Date#getFullYear()/getMonth() — matches every other day/month
- * filter in the app so an operator picking "May" sees the same
- * window the calendar paints.
+ * Date#getFullYear()/getMonth() — matches every other day/month filter in
+ * the app so an operator picking "May" sees the same window the calendar
+ * paints. Never `date_trunc`/UTC: that shifts every local date by one day.
  *
- * Currency is UZS. We return integer (rounded) values because the
- * chart only renders to 2-3 significant figures anyway.
+ * Currency is UZS. Values are rounded to whole UZS.
  */
+const LIVE_ORDERS: Prisma.OrderWhereInput = {
+  status: { notIn: ["CANCELED", "DRAFT"] },
+};
+
 export const GET = withPermission("dashboard.view", async () => {
   const now = new Date();
-  const startYear = now.getFullYear();
-  const startMonth = now.getMonth(); // 0-indexed
 
   // 11 months back, anchored at the first instant of that month.
-  const windowStart = new Date(startYear, startMonth - 11, 1, 0, 0, 0, 0);
+  const windowStart = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0, 0);
 
-  // Pull every non-canceled order in the window. For our volume (a
-  // few thousand orders/yr) this is plenty fast and avoids a raw SQL
-  // date_trunc that would have to switch dialects in tests.
-  const orders = await prisma.order.findMany({
-    where: {
-      status: { not: "CANCELED" },
-      placedAt: { gte: windowStart },
-    },
-    select: { placedAt: true, totalPrice: true },
+  // Pull every live order + confirmed payment in the window. For our
+  // volume (a few thousand orders/yr) this is plenty fast and avoids a raw
+  // SQL date_trunc that would have to switch dialects in tests.
+  const [orders, payments] = await Promise.all([
+    prisma.order.findMany({
+      where: { ...LIVE_ORDERS, placedAt: { gte: windowStart } },
+      select: { placedAt: true, totalPrice: true },
+    }),
+    prisma.payment.findMany({
+      where: {
+        status: "CONFIRMED",
+        order: LIVE_ORDERS,
+        confirmedAt: { gte: windowStart },
+      },
+      select: { confirmedAt: true, amount: true },
+    }),
+  ]);
+
+  // Monthly — build the 12 contiguous buckets up front so empty months render.
+  const bookedByMonth = accumulateByMonth(orders, (o) => o.placedAt, (o) => Number(o.totalPrice));
+  const collectedByMonth = accumulateByMonth(payments, (p) => p.confirmedAt, (p) => Number(p.amount));
+
+  const months = monthWindow(now, 12).map((b) => {
+    const booked = bookedByMonth.get(b.key);
+    const collected = collectedByMonth.get(b.key);
+    return {
+      monthKey: b.key,
+      monthLabel: b.label.toLowerCase(),
+      year: b.year,
+      booked: Math.round(booked?.total ?? 0),
+      collected: Math.round(collected?.total ?? 0),
+      orderCount: booked?.count ?? 0,
+      paymentCount: collected?.count ?? 0,
+    };
   });
 
-  // Build the 12 contiguous buckets up front so empty months render.
-  const buckets: Array<{ monthKey: string; monthLabel: string; year: number; revenue: number; orderCount: number }> = [];
-  const MONTH_UZ_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(startYear, startMonth - 11 + i, 1);
-    const y = d.getFullYear();
-    const m = d.getMonth();
-    buckets.push({
-      monthKey: `${y}-${String(m + 1).padStart(2, "0")}`,
-      monthLabel: MONTH_UZ_SHORT[m]!,
-      year: y,
-      revenue: 0,
-      orderCount: 0,
-    });
-  }
+  // Daily — sparse (only days with activity), sorted oldest → newest.
+  const dayMap = new Map<
+    string,
+    { date: number; dayLabel: string; monthKey: string; booked: number; collected: number; orderCount: number; paymentCount: number }
+  >();
+  const MONTH_UZ_LOWER = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 
-  // Accumulate monthly and daily in a single pass.
-  const dayBuckets = new Map<string, {
-    date: number; dayLabel: string; monthKey: string; revenue: number; orderCount: number;
-  }>();
+  function dayBucket(d: Date) {
+    const key = dayKey(d);
+    let bucket = dayMap.get(key);
+    if (!bucket) {
+      bucket = {
+        date: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(),
+        dayLabel: `${d.getDate()} ${MONTH_UZ_LOWER[d.getMonth()]}`,
+        monthKey: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        booked: 0,
+        collected: 0,
+        orderCount: 0,
+        paymentCount: 0,
+      };
+      dayMap.set(key, bucket);
+    }
+    return bucket;
+  }
 
   for (const o of orders) {
-    const pd = new Date(o.placedAt);
-    const y = pd.getFullYear();
-    const m = pd.getMonth();
-    const d = pd.getDate();
-
-    // Monthly
-    const idx = (y - startYear) * 12 + (m - startMonth + 11);
-    if (idx >= 0 && idx < 12) {
-      buckets[idx]!.revenue += Number(o.totalPrice);
-      buckets[idx]!.orderCount += 1;
-    }
-
-    // Daily
-    const dayKey = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    if (!dayBuckets.has(dayKey)) {
-      dayBuckets.set(dayKey, {
-        date: new Date(y, m, d).getTime(),
-        dayLabel: `${d} ${MONTH_UZ_SHORT[m]}`,
-        monthKey: `${y}-${String(m + 1).padStart(2, "0")}`,
-        revenue: 0,
-        orderCount: 0,
-      });
-    }
-    const db = dayBuckets.get(dayKey)!;
-    db.revenue += Number(o.totalPrice);
-    db.orderCount += 1;
+    const b = dayBucket(new Date(o.placedAt));
+    b.booked += Number(o.totalPrice);
+    b.orderCount += 1;
+  }
+  for (const p of payments) {
+    if (!p.confirmedAt) continue;
+    const b = dayBucket(new Date(p.confirmedAt));
+    b.collected += Number(p.amount);
+    b.paymentCount += 1;
   }
 
-  const days = Array.from(dayBuckets.values())
+  const days = Array.from(dayMap.values())
     .sort((a, b) => a.date - b.date)
-    .map((d) => ({ ...d, revenue: Math.round(d.revenue) }));
+    .map((d) => ({ ...d, booked: Math.round(d.booked), collected: Math.round(d.collected) }));
 
-  const total = buckets.reduce((s, b) => s + b.revenue, 0);
-  const totalOrders = buckets.reduce((s, b) => s + b.orderCount, 0);
+  const totalBooked = months.reduce((s, m) => s + m.booked, 0);
+  const totalCollected = months.reduce((s, m) => s + m.collected, 0);
+  const totalOrders = months.reduce((s, m) => s + m.orderCount, 0);
 
   // YoY-ish indicator: compare the most-recent 6 months to the
   // 6 before them. Cleaner than a fragile "vs last month" number
   // because a single zero month can swing month-on-month wildly.
-  const recent6 = buckets.slice(6).reduce((s, b) => s + b.revenue, 0);
-  const prior6 = buckets.slice(0, 6).reduce((s, b) => s + b.revenue, 0);
-  const trendPct = prior6 > 0 ? ((recent6 - prior6) / prior6) * 100 : null;
+  function halfOverHalfPct(values: number[]): number | null {
+    const prior6 = values.slice(0, 6).reduce((s, v) => s + v, 0);
+    const recent6 = values.slice(6).reduce((s, v) => s + v, 0);
+    if (prior6 <= 0) return null;
+    return Math.round(((recent6 - prior6) / prior6) * 100 * 10) / 10;
+  }
 
   return ok({
-    months: buckets.map((b) => ({
-      monthKey: b.monthKey,
-      monthLabel: b.monthLabel,
-      year: b.year,
-      revenue: Math.round(b.revenue),
-      orderCount: b.orderCount,
-    })),
+    months,
     days,
-    total: Math.round(total),
+    totalBooked,
+    totalCollected,
     totalOrders,
-    trendPct: trendPct === null ? null : Math.round(trendPct * 10) / 10,
+    bookedTrendPct: halfOverHalfPct(months.map((m) => m.booked)),
+    collectedTrendPct: halfOverHalfPct(months.map((m) => m.collected)),
   });
 });

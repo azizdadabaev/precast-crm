@@ -25,11 +25,14 @@ const sub: React.CSSProperties = {
 };
 
 interface Props {
-  data: Pick<DashboardData, 'activeCustomers' | 'todayDeliveries' | 'openDiscrepancies' | 'cashOnTheRoad'>;
+  data: Pick<DashboardData, 'activeCustomers' | 'ordersByPaymentState' | 'todayDeliveries' | 'openDiscrepancies' | 'cashOnTheRoad'>;
 }
 
 export function OperationalKPIs({ data }: Props) {
-  const { breakdown } = data.activeCustomers;
+  // The big number counts DISTINCT clients; the bar underneath splits
+  // ORDER ROWS by payment state. Two different units, so the sub-label
+  // says which is which — a client can hold orders in several states.
+  const breakdown = data.ordersByPaymentState;
   const total = breakdown.paid + breakdown.partial + breakdown.awaiting || 1;
 
   const delivered = Math.min(data.todayDeliveries.count, 8);
@@ -40,7 +43,7 @@ export function OperationalKPIs({ data }: Props) {
 
       {/* Card 1: Active clients */}
       <div style={cardBase}>
-        <div style={labelStyle}>Фаол мижозлар</div>
+        <div style={labelStyle}>Фаол мижозлар · Active clients</div>
         <div style={bigNum}>{data.activeCustomers.count}</div>
         <div style={{ display: 'flex', height: 7, borderRadius: 5, overflow: 'hidden', background: 'var(--dash-surface2)' }}>
           {breakdown.paid > 0 && (
@@ -54,7 +57,7 @@ export function OperationalKPIs({ data }: Props) {
           )}
         </div>
         <div style={{ ...sub, marginTop: 9 }}>
-          {breakdown.paid} тўланган · {breakdown.partial} қисман · {breakdown.awaiting} кутилмоқда
+          Буюртмалар: {breakdown.paid} тўланган · {breakdown.partial} қисман · {breakdown.awaiting} кутилмоқда
         </div>
       </div>
 
