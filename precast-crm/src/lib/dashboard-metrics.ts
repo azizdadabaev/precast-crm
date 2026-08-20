@@ -63,14 +63,52 @@ export interface MonthBucket {
 }
 
 /**
- * `months` contiguous buckets ending with the month that contains `now`,
- * ordered oldest → newest. Empty months still get a bucket so a line chart
- * keeps a continuous x-axis.
+ * ── The two date bases ────────────────────────────────────────────────
+ * An order carries two meaningful dates that answer different questions:
+ *
+ *   • ORDER DATE    `Order.placedAt`    — when the business was WON.
+ *     IMMUTABLE. A placed order never moves between months, so a figure
+ *     bucketed by `placedAt` is final once the month has closed. Nothing
+ *     is ever placed in the future, so this basis is purely backward
+ *     looking (trailing 12 months).
+ *
+ *   • DELIVERY DATE `Order.scheduledAt` — when the work is PROMISED.
+ *     MUTABLE. Rescheduling moves an order — and its whole value — from
+ *     one month into another, so a PAST month's figure on this basis can
+ *     still change. That is correct behaviour, but it has to be surfaced
+ *     in the UI or the number stops being trustworthy.
+ *
+ * Bucketing by `placedAt` alone hides committed FUTURE work: an order
+ * placed in August and rescheduled into September reads as August money
+ * while September reads zero. The delivery basis therefore needs a window
+ * that extends forward (`deliveryMonthWindow`) — a trailing-only window
+ * would hide exactly the months this basis exists to show.
  */
-export function monthWindow(now: Date, months: number): MonthBucket[] {
+export type DateBasis = 'order' | 'delivery';
+
+/**
+ * Trailing months carried BEFORE the current one on the delivery basis.
+ * 8 + current + 3 forward = 12 buckets — deliberately the same width as
+ * the order-date window, and the widest span that still yields 12 DISTINCT
+ * month labels. A 13-month span would print the same Cyrillic short name
+ * twice (Ноя '25 and Ноя '26) on the x-axis and in the month picker.
+ */
+export const DELIVERY_WINDOW_BACK = 8;
+/** Future months carried AFTER the current one on the delivery basis. */
+export const DELIVERY_WINDOW_FORWARD = 3;
+/** Trailing months, current one included, on the order-date basis. */
+export const ORDER_WINDOW_MONTHS = 12;
+
+/**
+ * Contiguous month buckets from `back` months before the month holding
+ * `now` through `forward` months after it, ordered oldest → newest —
+ * `back + 1 + forward` buckets. Empty months still get a bucket so a line
+ * chart keeps a continuous x-axis.
+ */
+export function monthWindowSpan(now: Date, back: number, forward: number): MonthBucket[] {
   const out: MonthBucket[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+  for (let offset = -back; offset <= forward; offset++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     out.push({
       key: monthKey(d),
       label: MONTH_UZ_SHORT[d.getMonth()]!,
@@ -79,6 +117,60 @@ export function monthWindow(now: Date, months: number): MonthBucket[] {
     });
   }
   return out;
+}
+
+/**
+ * `months` contiguous buckets ending with the month that contains `now`,
+ * ordered oldest → newest. This is the ORDER-DATE window: backward-only,
+ * because nothing is ever placed in the future.
+ */
+export function monthWindow(now: Date, months: number): MonthBucket[] {
+  return monthWindowSpan(now, months - 1, 0);
+}
+
+/**
+ * The DELIVERY-DATE window: `DELIVERY_WINDOW_BACK` trailing months, the
+ * current month, and `DELIVERY_WINDOW_FORWARD` months of committed future
+ * work. Forward-looking on purpose — scheduled work sits in months that
+ * have not happened yet.
+ */
+export function deliveryMonthWindow(now: Date): MonthBucket[] {
+  return monthWindowSpan(now, DELIVERY_WINDOW_BACK, DELIVERY_WINDOW_FORWARD);
+}
+
+/**
+ * Index of the bucket holding `now`. On the order-date window that is the
+ * LAST index; on the delivery window it sits `DELIVERY_WINDOW_FORWARD`
+ * buckets from the end, so "current month" can never be assumed to be
+ * `length - 1`. Falls back to the last bucket when the window does not
+ * contain `now` at all.
+ */
+export function currentMonthIndex(buckets: readonly MonthBucket[], now: Date): number {
+  const key = monthKey(now);
+  const i = buckets.findIndex((b) => b.key === key);
+  return i >= 0 ? i : Math.max(buckets.length - 1, 0);
+}
+
+/**
+ * Translate a selected month index from one window into another, used when
+ * the operator flips the date basis so the SAME calendar month stays
+ * selected instead of the selection silently jumping to another month.
+ * Falls back to clamping the raw index into range when that month is not
+ * in the target window — e.g. a future month picked on the delivery basis
+ * and then flipped back to the order basis, which carries no future.
+ */
+export function remapMonthIndex(
+  fromKeys: readonly string[],
+  toKeys: readonly string[],
+  idx: number,
+): number {
+  if (toKeys.length === 0) return 0;
+  const key = fromKeys[idx];
+  if (key !== undefined) {
+    const found = toKeys.indexOf(key);
+    if (found >= 0) return found;
+  }
+  return Math.min(Math.max(idx, 0), toKeys.length - 1);
 }
 
 export interface MonthTotal {

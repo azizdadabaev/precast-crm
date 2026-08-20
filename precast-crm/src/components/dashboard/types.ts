@@ -7,6 +7,13 @@
  * into one "revenue" number — they differ by the outstanding receivable:
  *   • booked    «Буюртма қилинган · Booked»  Σ Order.totalPrice by placedAt
  *   • collected «Тушган пул · Collected»     Σ CONFIRMED Payment.amount by confirmedAt
+ *
+ * Booked (and everything derived from it) can be filed under either of the
+ * order's two dates — see `DateBasis` in `@/lib/dashboard-metrics`. The
+ * order-date series live at the top level; the delivery-date series live
+ * under `deliveryBasis` and cover a window that reaches into the future.
+ * Collected never changes basis: cash is dated by `Payment.confirmedAt`
+ * whichever way the toggle is set.
  */
 
 export interface Trend {
@@ -101,10 +108,37 @@ export interface DashboardData {
     utilizationPct: number;
     days: Array<{ date: string; bookedM2: number; capacityM2: number }>;
   };
+  /**
+   * ORDER-DATE basis (default) — bucketed by `Order.placedAt`, trailing 12
+   * months, index-aligned with `collectedByMonth`, `ordersByMonth` and
+   * `monthKeys`. `placedAt` is immutable, so a closed month never moves.
+   */
   bookedByMonth: Array<{ month: string; booked: number }>;
   /** `paymentCount` lets the Collected KPI card follow the selected month. */
   collectedByMonth: Array<{ month: string; collected: number; paymentCount: number }>;
   ordersByMonth: Array<{ month: string; count: number }>;
+  /** `YYYY-MM` keys index-aligned with the three series above. */
+  monthKeys: string[];
+  /** Index of the current month in those series (their last index). */
+  currentMonthIdx: number;
+  /**
+   * DELIVERY-DATE basis — the same orders bucketed by `Order.scheduledAt`
+   * over a FORWARD-looking window (trailing 9 + current + next 3), so
+   * committed future work is visible instead of reading as zero.
+   * `scheduledAt` is MUTABLE: rescheduling moves an order between months,
+   * so past figures on this basis can still change — the UI says so.
+   * `collectedByMonth` here is still bucketed by `Payment.confirmedAt`; it
+   * is only re-projected onto this window to stay index-aligned.
+   */
+  deliveryBasis: {
+    monthKeys: string[];
+    bookedByMonth: Array<{ month: string; booked: number }>;
+    collectedByMonth: Array<{ month: string; collected: number; paymentCount: number }>;
+    ordersByMonth: Array<{ month: string; count: number }>;
+    dailyByDay: Array<{ date: number; monthKey: string; orderCount: number; booked: number }>;
+    /** Index of the month containing today — NOT the last index here. */
+    currentMonthIdx: number;
+  };
   recentOrders: Array<{
     id: string;
     orderNumber: string;

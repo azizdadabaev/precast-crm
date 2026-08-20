@@ -11,6 +11,8 @@ import { RegionRanking } from '@/components/dashboard/RegionRanking';
 import { TopClients } from '@/components/dashboard/TopClients';
 import { RecentOrders } from '@/components/dashboard/RecentOrders';
 import { PaymentDonut } from '@/components/dashboard/PaymentDonut';
+import { DateBasisToggle } from '@/components/dashboard/DateBasisToggle';
+import { remapMonthIndex, type DateBasis } from '@/lib/dashboard-metrics';
 import type { DashboardData } from '@/components/dashboard/types';
 
 const SECTION_LABEL: React.CSSProperties = {
@@ -25,6 +27,13 @@ export default function DashboardPage() {
   // default; it lives here rather than inside HeroChart because the same
   // selection also scopes the financial KPI cards below the chart.
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+
+  // Which of the order's two dates Booked / AOV / the hero chart are filed
+  // under. 'order' = `placedAt` (immutable, trailing 12 months) is the
+  // default; 'delivery' = `scheduledAt` (mutable, window reaches 3 months
+  // forward) exists because work rescheduled into a future month otherwise
+  // reads as zero everywhere on this page. Collected never follows it.
+  const [basis, setBasis] = useState<DateBasis>('order');
 
   // Real per-day orders for the hero chart’s monthly view. Previously that
   // view rendered a generated sine wave; this endpoint already computed the
@@ -64,12 +73,38 @@ export default function DashboardPage() {
     );
   }
 
-  // Clamp against the series actually delivered — the window is built by
-  // monthWindow(now, 12), so the LAST index is the current month.
-  const lastMonthIdx = Math.max(data.bookedByMonth.length - 1, 0);
-  const monthIdx = Math.min(selectedMonth ?? lastMonthIdx, lastMonthIdx);
-  const isCurrentMonth = monthIdx >= lastMonthIdx;
-  const monthLabel = data.bookedByMonth[monthIdx]?.month ?? '';
+  // The active series. Both shapes expose the same index-aligned
+  // bookedByMonth / collectedByMonth / ordersByMonth / monthKeys, so one
+  // month index scopes the chart and every card on either basis.
+  const series = basis === 'delivery' ? data.deliveryBasis : data;
+
+  // Clamp against the series actually delivered. The current month is the
+  // LAST index on the order basis but NOT on the delivery basis, whose
+  // window carries committed future months after it.
+  const lastMonthIdx = Math.max(series.bookedByMonth.length - 1, 0);
+  const currentIdx = Math.min(Math.max(series.currentMonthIdx, 0), lastMonthIdx);
+  const monthIdx = Math.min(Math.max(selectedMonth ?? currentIdx, 0), lastMonthIdx);
+  const isCurrentMonth = monthIdx === currentIdx;
+  const isFutureMonth = monthIdx > currentIdx;
+  const monthLabel = series.bookedByMonth[monthIdx]?.month ?? '';
+
+  /**
+   * Flipping the basis keeps the SAME calendar month selected rather than
+   * letting the index mean a different month on the other window (the two
+   * windows start at different months). A month with no counterpart — a
+   * future month, when switching back to the order basis — clamps into
+   * range instead of crashing. `null` means "follow the current month" and
+   * needs no remapping.
+   */
+  const handleBasisChange = (next: DateBasis) => {
+    if (next === basis) return;
+    if (selectedMonth !== null) {
+      const fromKeys = basis === 'delivery' ? data.deliveryBasis.monthKeys : data.monthKeys;
+      const toKeys = next === 'delivery' ? data.deliveryBasis.monthKeys : data.monthKeys;
+      setSelectedMonth(remapMonthIndex(fromKeys, toKeys, monthIdx));
+    }
+    setBasis(next);
+  };
 
   return (
     <div className="dashboard-root" style={{
@@ -110,13 +145,18 @@ export default function DashboardPage() {
 
         {/* Hero chart — owns the month picker, but not the selection */}
         <HeroChart
-          bookedByMonth={data.bookedByMonth}
-          ordersByMonth={data.ordersByMonth}
-          dailyByDay={monthly?.days}
-          monthKeys={monthly?.months.map((m) => m.monthKey)}
+          bookedByMonth={series.bookedByMonth}
+          ordersByMonth={series.ordersByMonth}
+          dailyByDay={basis === 'delivery' ? data.deliveryBasis.dailyByDay : monthly?.days}
+          monthKeys={series.monthKeys}
           monthIdx={monthIdx}
           onMonthChange={setSelectedMonth}
+          basis={basis}
+          currentIdx={currentIdx}
         />
+
+        {/* Date basis — one clock for Booked, AOV and the hero chart. */}
+        <DateBasisToggle basis={basis} onChange={handleBasisChange} />
 
         {/* Financial KPIs — scoped to the month picked in the hero chart */}
         <div style={{ ...SECTION_LABEL, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -128,11 +168,18 @@ export default function DashboardPage() {
               color: 'var(--dash-accent2)',
               background: 'color-mix(in srgb, var(--dash-accent2) 14%, transparent)',
             }}>
-              танланган ой · not current month
+              {isFutureMonth
+                ? 'келажак ой · future month'
+                : 'танланган ой · not current month'}
             </span>
           )}
         </div>
-        <FinancialKPIs data={data} monthIdx={monthIdx} />
+        <FinancialKPIs
+          data={data}
+          monthIdx={monthIdx}
+          basis={basis}
+          currentIdx={currentIdx}
+        />
 
         {/* Operational KPIs */}
         <div style={SECTION_LABEL}>Операцион ҳолат</div>

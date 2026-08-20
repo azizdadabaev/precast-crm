@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import {
   AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
   ResponsiveContainer, type TooltipProps,
 } from 'recharts';
+import type { DateBasis } from '@/lib/dashboard-metrics';
 
 function fmt(n: number): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -18,10 +19,13 @@ function compact(n: number): { value: string; unit: string } {
 }
 
 
-function YearTooltip({ active, payload }: TooltipProps<number, string>) {
+function YearTooltip(
+  { active, payload, basis }: TooltipProps<number, string> & { basis: DateBasis },
+) {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload as { month: string; booked: number; count: number } | undefined;
   if (!d) return null;
+  const basisNote = basis === 'delivery' ? 'етказиш санаси' : 'буюртма санаси';
   return (
     <div style={{
       background: 'var(--dash-ink)', color: 'var(--dash-bg)',
@@ -38,6 +42,7 @@ function YearTooltip({ active, payload }: TooltipProps<number, string>) {
         <span style={{ opacity: .7 }}>Буюртма</span>
         <span style={{ fontFamily: 'var(--font-num)', fontWeight: 600 }}>{d.count} та</span>
       </div>
+      <div style={{ fontSize: 11, opacity: .55, marginTop: 4 }}>{basisNote} бўйича</div>
     </div>
   );
 }
@@ -88,20 +93,42 @@ interface Props {
    */
   monthIdx: number;
   onMonthChange: (idx: number) => void;
+  /**
+   * Which of the order's two dates the series above are bucketed by.
+   * 'order' = `placedAt` (immutable, trailing window only); 'delivery' =
+   * `scheduledAt` (mutable, window reaches into the future). Only changes
+   * labels here — the arithmetic is done server-side.
+   */
+  basis: DateBasis;
+  /**
+   * Index of the month containing today. Equal to the last index on the
+   * order basis, but NOT on the delivery basis, whose window carries
+   * future months after it.
+   */
+  currentIdx: number;
 }
 
 export function HeroChart({
   bookedByMonth, ordersByMonth, dailyByDay, monthKeys, monthIdx, onMonthChange,
+  basis, currentIdx,
 }: Props) {
   const [view, setView] = useState<'year' | 'month'>('year');
   const lastIdx = bookedByMonth.length - 1;
+  // The current month is the LAST bucket on the order basis, but sits
+  // three buckets from the end on the delivery basis, whose window carries
+  // committed future work. Never assume `lastIdx` is today.
+  const curIdx = Math.min(Math.max(currentIdx, 0), Math.max(lastIdx, 0));
+  const futureMonths = Math.max(lastIdx - curIdx, 0);
 
   const yearTotal = bookedByMonth.reduce((s, m) => s + m.booked, 0);
   const yearOrders = ordersByMonth.reduce((s, m) => s + m.count, 0);
-  const lastMonth = bookedByMonth[bookedByMonth.length - 1]!;
-  const prevMonth = bookedByMonth[bookedByMonth.length - 2];
-  const deltaPct = prevMonth && prevMonth.booked > 0
-    ? ((lastMonth.booked - prevMonth.booked) / prevMonth.booked * 100)
+  // Headline delta = the CURRENT month vs the one before it. Comparing the
+  // last two buckets would, on the delivery basis, compare two future
+  // months that are still filling up and report a meaningless collapse.
+  const currentMonth = bookedByMonth[curIdx];
+  const monthBeforeCurrent = curIdx > 0 ? bookedByMonth[curIdx - 1] : undefined;
+  const deltaPct = currentMonth && monthBeforeCurrent && monthBeforeCurrent.booked > 0
+    ? ((currentMonth.booked - monthBeforeCurrent.booked) / monthBeforeCurrent.booked * 100)
     : null;
 
   const selectedBookedMonth = bookedByMonth[monthIdx];
@@ -137,16 +164,28 @@ export function HeroChart({
     }));
   })();
 
+  const isDelivery = basis === 'delivery';
+  const windowMonths = bookedByMonth.length;
+  const isFutureMonth = monthIdx > curIdx;
+
   const { value: headValue, unit: headUnit } = view === 'year'
     ? compact(yearTotal)
     : compact(selectedBookedMonth?.booked ?? 0);
 
   const headLabel = view === 'year'
-    ? '12 ОЙЛИК БУЮРТМА · BOOKED'
+    ? `${windowMonths} ОЙЛИК БУЮРТМА · BOOKED`
     : `${selectedBookedMonth?.month ?? ''} ОЙИ · BOOKED`;
 
+  // The basis is printed under the headline rather than implied, so the
+  // figure can never be read as the other date's number.
+  const basisCaption = isDelivery
+    ? 'Етказиш санаси бўйича · by delivery date'
+    : 'Буюртма санаси бўйича · by order date';
+
   const headSub = view === 'year'
-    ? `${fmt(yearOrders)} та буюртма · сўнгги 12 ой`
+    ? (isDelivery
+        ? `${fmt(yearOrders)} та буюртма · сўнгги ${curIdx} ой, жорий ва кейинги ${futureMonths} ой`
+        : `${fmt(yearOrders)} та буюртма · сўнгги ${windowMonths} ой`)
     : `${selectedOrdMonth?.count ?? 0} та буюртма`;
 
   const delta = view === 'year' ? deltaPct : monthDeltaPct;
@@ -191,6 +230,10 @@ export function HeroChart({
             letterSpacing: '.18em', textTransform: 'uppercase',
             color: 'var(--dash-muted)', fontWeight: 600,
           }}>{headLabel}</div>
+          <div style={{
+            marginTop: 5, fontFamily: 'var(--font-body-alt)',
+            fontSize: 11.5, color: 'var(--dash-muted)',
+          }}>{basisCaption}</div>
 
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 14 }}>
             <span style={{
@@ -227,9 +270,9 @@ export function HeroChart({
           }}>
             <button
               type="button"
-              onClick={() => { setView('year'); onMonthChange(lastIdx); }}
+              onClick={() => { setView('year'); onMonthChange(curIdx); }}
               style={view === 'year' ? btnActive : btnInactive}
-            >12 ой · Booked</button>
+            >{windowMonths} ой · Booked</button>
             <button
               type="button"
               onClick={() => setView('month')}
@@ -267,6 +310,15 @@ export function HeroChart({
               }}>
                 Танланган ой қуйидаги молиявий кўрсаткичларга ҳам таъсир қилади.
               </div>
+              {isFutureMonth && (
+                <div style={{
+                  marginTop: 6, fontFamily: 'var(--font-body-alt)',
+                  fontSize: 11.5, lineHeight: 1.45, color: 'var(--dash-accent2)',
+                  fontWeight: 600,
+                }}>
+                  Келажак ой · режалаштирилган етказишлар
+                </div>
+              )}
             </>
           )}
         </div>
@@ -290,10 +342,28 @@ export function HeroChart({
                 />
                 <YAxis hide domain={[0, (max: number) => Math.max(Math.ceil(max * 1.14), 1)]} />
                 <Tooltip
-                  content={(p) => <YearTooltip {...(p as TooltipProps<number, string>)} />}
+                  content={(p) => (
+                    <YearTooltip {...(p as TooltipProps<number, string>)} basis={basis} />
+                  )}
                   cursor={{ stroke: 'var(--dash-accent)', strokeOpacity: .45, strokeDasharray: '3 3', strokeWidth: 1 }}
                   wrapperStyle={{ outline: 'none' }}
                 />
+                {/* Everything right of this line is promised, not delivered —
+                    only drawn when the window actually carries future months. */}
+                {futureMonths > 0 && currentMonth && (
+                  <ReferenceLine
+                    x={currentMonth.month}
+                    stroke="var(--dash-accent2)"
+                    strokeDasharray="4 4"
+                    label={{
+                      value: 'жорий ой',
+                      position: 'top',
+                      fill: 'var(--dash-accent2)',
+                      fontSize: 11,
+                      fontFamily: 'var(--font-num)',
+                    }}
+                  />
+                )}
                 <Area
                   type="monotone" dataKey="booked"
                   stroke="var(--dash-accent)" strokeWidth={3}

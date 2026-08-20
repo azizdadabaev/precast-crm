@@ -27,6 +27,26 @@ const MOCK_PAYLOAD = {
   bookedByMonth: [],
   collectedByMonth: [],
   ordersByMonth: [],
+  monthKeys: ['2026-07'],
+  currentMonthIdx: 0,
+  // Delivery-date basis: current month + one committed future month.
+  deliveryBasis: {
+    monthKeys: ['2026-07', '2026-08'],
+    bookedByMonth: [
+      { month: 'Июл', booked: 4_000_000 },
+      { month: 'Авг', booked: 9_000_000 },
+    ],
+    collectedByMonth: [
+      { month: 'Июл', collected: 3_000_000, paymentCount: 4 },
+      { month: 'Авг', collected: 0, paymentCount: 0 },
+    ],
+    ordersByMonth: [
+      { month: 'Июл', count: 2 },
+      { month: 'Авг', count: 3 },
+    ],
+    dailyByDay: [],
+    currentMonthIdx: 0,
+  },
   recentOrders: [],
 };
 
@@ -74,6 +94,23 @@ describe('get_dashboard tool', () => {
     expect(prose).toContain('Collected this month');
     expect(prose).toContain('receivables');
     expect(prose).toContain('UZS');
+  });
+
+  it('reports the delivery-date basis and the committed future months', async () => {
+    mockFetch.mockResolvedValue(MOCK_PAYLOAD);
+    const { server, getHandler } = makeMockServer();
+    registerDashboardTools(server as never);
+
+    const result = await getHandler()({});
+    const prose = (result as { content: Array<{ text: string }> }).content[0].text;
+
+    expect(prose).toContain('Booked by DELIVERY date');
+    // The mutability of `scheduledAt` is stated, not implied.
+    expect(prose).toContain('mutable');
+    // Future work is reported as its own figure: 9 000 000 over 3 orders,
+    // none of which appears in the placedAt-based numbers above it.
+    expect(prose).toContain('committed in the next 1 month(s)');
+    expect(prose).toContain('(3 orders)');
   });
 
   it('never labels a money figure as bare "revenue"', async () => {

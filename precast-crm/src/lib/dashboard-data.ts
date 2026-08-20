@@ -6,9 +6,15 @@ import {
   averageOrderValue,
   buildTrend,
   countDistinct,
+  currentMonthIndex,
   dayKey,
+  deliveryMonthWindow,
+  monthKey,
   monthWindow,
   outstandingAmount,
+  DELIVERY_WINDOW_BACK,
+  DELIVERY_WINDOW_FORWARD,
+  ORDER_WINDOW_MONTHS,
   type Trend,
 } from '@/lib/dashboard-metrics';
 
@@ -43,6 +49,43 @@ const COLLECTED_PAYMENTS: Prisma.PaymentWhereInput = {
 };
 
 // ── Types ───────────────────────────────────────────────────────────────────
+
+/**
+ * The same order series bucketed by `Order.scheduledAt` (DELIVERY DATE)
+ * instead of `placedAt` (ORDER DATE), over a window that extends FORWARD.
+ *
+ * Why a second window: `scheduledAt` carries promised work into months
+ * that have not happened yet. A trailing-12 window would drop every one of
+ * them, which is the blind spot this basis exists to close — September can
+ * read 0 booked while holding tens of millions of committed work.
+ *
+ * `scheduledAt` is MUTABLE: rescheduling an order moves its whole value
+ * from one month to another, so a PAST month on this basis is not frozen
+ * the way a `placedAt` month is. The UI says so whenever this basis is on.
+ *
+ * `collectedByMonth` here is deliberately still bucketed by
+ * `Payment.confirmedAt` — cash arrival is a fact about MONEY, not about
+ * when an order was promised, so it does NOT follow the basis toggle. It
+ * is re-projected onto this window only so all four series stay
+ * index-aligned and one month index can scope every card.
+ *
+ * All four series and `monthKeys` are index-aligned by construction: they
+ * are all `.map()`ed off the one `deliveryMonthWindow(now)` array.
+ */
+export interface DeliveryBasisSeries {
+  /** `YYYY-MM` keys, index-aligned with the series below. */
+  monthKeys: string[];
+  /** Σ Order.totalPrice over LIVE_ORDERS, bucketed by `scheduledAt`. */
+  bookedByMonth: Array<{ month: string; booked: number }>;
+  /** Σ CONFIRMED Payment.amount by `confirmedAt` — NOT by `scheduledAt`. */
+  collectedByMonth: Array<{ month: string; collected: number; paymentCount: number }>;
+  /** Live orders whose `scheduledAt` falls in the month. */
+  ordersByMonth: Array<{ month: string; count: number }>;
+  /** Sparse per-day scheduled activity for the hero chart's monthly view. */
+  dailyByDay: Array<{ date: number; monthKey: string; orderCount: number; booked: number }>;
+  /** Index of the month containing today — NOT the last index here. */
+  currentMonthIdx: number;
+}
 
 export interface DashboardPayload {
   /**
@@ -103,10 +146,21 @@ export interface DashboardPayload {
   /** Ranked by cash collected, not by booked value. */
   topCustomers: Array<{ id: string; name: string; totalCollected: number; orderCount: number }>;
   weekCapacity: { utilizationPct: number; days: Array<{ date: string; bookedM2: number; capacityM2: number }> };
+  // ── ORDER-DATE basis (default) — bucketed by `Order.placedAt`, trailing
+  // 12 months. Index-aligned with each other and with `monthKeys`: all are
+  // mapped off one `monthWindow(now, 12)` array. `placedAt` is immutable,
+  // so these months are frozen once closed, and no order is ever placed in
+  // the future — hence no forward months on this basis.
   bookedByMonth: Array<{ month: string; booked: number }>;
   /** `paymentCount` lets the Collected KPI card follow the selected month. */
   collectedByMonth: Array<{ month: string; collected: number; paymentCount: number }>;
   ordersByMonth: Array<{ month: string; count: number }>;
+  /** `YYYY-MM` keys index-aligned with the three series above. */
+  monthKeys: string[];
+  /** Index of the current month in those series (their last index). */
+  currentMonthIdx: number;
+  /** The same figures bucketed by DELIVERY date, over a forward window. */
+  deliveryBasis: DeliveryBasisSeries;
   recentOrders: Array<{
     id: string;
     orderNumber: string;
@@ -151,6 +205,16 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
   const now = new Date();
   // Rolling 12-month window — start of the month 11 months ago
   const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0, 0);
+  // Delivery-date window — reaches FORWARD past today, because scheduled
+  // work lives in months that have not happened yet. Both bounds are LOCAL
+  // instants: `scheduledAt` stores a local date as the previous day 19:00Z,
+  // so a UTC-anchored bound would slice a day off each end.
+  const deliveryWindowStart = new Date(
+    now.getFullYear(), now.getMonth() - DELIVERY_WINDOW_BACK, 1, 0, 0, 0, 0,
+  );
+  const deliveryWindowEnd = new Date(
+    now.getFullYear(), now.getMonth() + DELIVERY_WINDOW_FORWARD + 1, 0, 23, 59, 59, 999,
+  );
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
   // Previous calendar month — for "vs last month" trend pills.
@@ -188,6 +252,7 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     topClientsRows,
     rollingOrders,
     rollingPayments,
+    scheduledOrders,
     recentOrdersRaw,
   ] = await Promise.all([
     // ── 1-3. BOOKED — Σ totalPrice by placedAt, over LIVE_ORDERS ──
@@ -325,6 +390,17 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     prisma.payment.findMany({
       where: { ...COLLECTED_PAYMENTS, confirmedAt: { gte: twelveMonthsAgo } },
       select: { confirmedAt: true, amount: true },
+    }),
+    // Delivery-date basis: the same live orders keyed by `scheduledAt`.
+    // A separate query from `rollingOrders` because the two windows differ
+    // (this one reaches into the future) and one order can sit in a
+    // different month under each basis — that divergence is the point.
+    prisma.order.findMany({
+      where: {
+        ...LIVE_ORDERS,
+        scheduledAt: { gte: deliveryWindowStart, lte: deliveryWindowEnd },
+      },
+      select: { scheduledAt: true, totalPrice: true },
     }),
     // Recent 6 orders for the bottom widget
     prisma.order.findMany({
@@ -482,7 +558,7 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     (p) => Number(p.amount),
   );
 
-  const window12 = monthWindow(now, 12);
+  const window12 = monthWindow(now, ORDER_WINDOW_MONTHS);
   const bookedByMonth = window12.map((b) => ({
     month: b.label,
     booked: Math.round(bookedMonthMap.get(b.key)?.total ?? 0),
@@ -496,6 +572,66 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     month: b.label,
     count: bookedMonthMap.get(b.key)?.count ?? 0,
   }));
+
+  // ── Delivery-date basis ────────────────────────────────────────────
+  // The same money filed under `scheduledAt` instead of `placedAt`, over a
+  // window running DELIVERY_WINDOW_FORWARD months past today so committed
+  // future work is visible at all. Every series below is mapped off the one
+  // `deliveryWindow` array — that is what keeps them index-aligned, and
+  // HeroChart / FinancialKPIs both select by index.
+  const deliveryWindow = deliveryMonthWindow(now);
+  const scheduledMonthMap = accumulateByMonth(
+    scheduledOrders,
+    (o) => o.scheduledAt,
+    (o) => Number(o.totalPrice),
+  );
+
+  // Sparse per-day scheduled activity, in the same shape the hero chart
+  // already consumes from /api/dashboard/monthly-revenue. Keys are LOCAL.
+  const deliveryDayMap = new Map<
+    string,
+    { date: number; monthKey: string; orderCount: number; booked: number }
+  >();
+  for (const o of scheduledOrders) {
+    const d = new Date(o.scheduledAt);
+    const key = dayKey(d);
+    let bucket = deliveryDayMap.get(key);
+    if (!bucket) {
+      bucket = {
+        date: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(),
+        monthKey: monthKey(d),
+        orderCount: 0,
+        booked: 0,
+      };
+      deliveryDayMap.set(key, bucket);
+    }
+    bucket.orderCount += 1;
+    bucket.booked += Number(o.totalPrice);
+  }
+
+  const deliveryBasis: DeliveryBasisSeries = {
+    monthKeys: deliveryWindow.map((b) => b.key),
+    bookedByMonth: deliveryWindow.map((b) => ({
+      month: b.label,
+      booked: Math.round(scheduledMonthMap.get(b.key)?.total ?? 0),
+    })),
+    // Still `Payment.confirmedAt` — cash does not move when an order is
+    // rescheduled, so this series does NOT follow the basis toggle. It is
+    // re-projected onto this window purely to stay index-aligned.
+    collectedByMonth: deliveryWindow.map((b) => ({
+      month: b.label,
+      collected: Math.round(collectedMonthMap.get(b.key)?.total ?? 0),
+      paymentCount: collectedMonthMap.get(b.key)?.count ?? 0,
+    })),
+    ordersByMonth: deliveryWindow.map((b) => ({
+      month: b.label,
+      count: scheduledMonthMap.get(b.key)?.count ?? 0,
+    })),
+    dailyByDay: Array.from(deliveryDayMap.values())
+      .sort((a, b) => a.date - b.date)
+      .map((d) => ({ ...d, booked: Math.round(d.booked) })),
+    currentMonthIdx: currentMonthIndex(deliveryWindow, now),
+  };
 
   // ── Recent 6 orders ────────────────────────────────────────────────
   const recentOrders = recentOrdersRaw.map((r) => ({
@@ -578,6 +714,9 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     bookedByMonth,
     collectedByMonth,
     ordersByMonth,
+    monthKeys: window12.map((b) => b.key),
+    currentMonthIdx: currentMonthIndex(window12, now),
+    deliveryBasis,
     recentOrders,
   };
 
