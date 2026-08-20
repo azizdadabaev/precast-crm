@@ -24,11 +24,30 @@ const sub: React.CSSProperties = {
   fontFamily: 'var(--font-body-alt)', fontSize: 12, color: 'var(--dash-muted)',
 };
 
-interface Props {
-  data: Pick<DashboardData, 'activeCustomers' | 'ordersByPaymentState' | 'todayDeliveries' | 'openDiscrepancies' | 'cashOnTheRoad'>;
+/** One decimal, space thousands, decimal COMMA — the house number format. */
+function fmt1(n: number): string {
+  const [whole, frac] = (Math.round(n * 10) / 10).toFixed(1).split('.');
+  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')},${frac}`;
 }
 
-export function OperationalKPIs({ data }: Props) {
+/** Loaded volume for the selected month. */
+interface LoadedMonth {
+  blocks: number;
+  beamCount: number;
+  beamMeters: number;
+  area: number;
+  orderCount: number;
+}
+
+interface Props {
+  data: Pick<DashboardData, 'activeCustomers' | 'ordersByPaymentState' | 'todayDeliveries' | 'openDiscrepancies'>;
+  /** Already resolved for the selected month by the dashboard page. */
+  loaded: LoadedMonth;
+  /** Short Cyrillic month label, e.g. «авг». */
+  monthLabel: string;
+}
+
+export function OperationalKPIs({ data, loaded, monthLabel }: Props) {
   // The big number counts DISTINCT clients; the bar underneath splits
   // ORDER ROWS by payment state. Two different units, so the sub-label
   // says which is which — a client can hold orders in several states.
@@ -110,26 +129,45 @@ export function OperationalKPIs({ data }: Props) {
         </div>
       </div>
 
-      {/* Card 4: Cash on the road */}
+      {/* Card 4: Loaded volume — what physically left the yard this month.
+          Blocks lead because they are the largest count; beam METRES sit
+          beside them because a piece count cannot be compared across orders
+          (a 3.35 m and a 6.40 m beam are one piece each). */}
       <div style={cardBase}>
-        <div style={labelStyle}>Йўлдаги нақд пул</div>
+        <div style={labelStyle}>Юкланган ҳажм · {monthLabel}</div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, margin: '10px 0 12px' }}>
-          <span style={bigNum}>{data.cashOnTheRoad.dispatchCount}</span>
+          <span style={bigNum}>{fmt(loaded.blocks)}</span>
           <span style={{ fontFamily: 'var(--font-body-alt)', fontSize: 13, color: 'var(--dash-muted)' }}>
-            жўнатиш
+            блок
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}>
-          <span style={{
-            fontFamily: 'var(--font-num)', fontSize: 13, fontWeight: 700,
-            color: 'var(--dash-ink)', fontVariantNumeric: 'tabular-nums',
-          }}>{fmt(data.cashOnTheRoad.total)}</span>
-          <span style={{ fontFamily: 'var(--font-num)', fontSize: 10, color: 'var(--dash-muted)' }}>UZS</span>
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+          paddingTop: 10, borderTop: '1px solid var(--dash-line)', marginBottom: 9,
+        }}>
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-num)', fontSize: 15, fontWeight: 700,
+              color: 'var(--dash-ink)', fontVariantNumeric: 'tabular-nums',
+            }}>
+              {fmt1(loaded.beamMeters)}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dash-muted)' }}> м</span>
+            </div>
+            <div style={{ ...labelStyle, fontSize: 9, marginTop: 2 }}>Балка</div>
+          </div>
+          <div>
+            <div style={{
+              fontFamily: 'var(--font-num)', fontSize: 15, fontWeight: 700,
+              color: 'var(--dash-ink)', fontVariantNumeric: 'tabular-nums',
+            }}>
+              {fmt1(loaded.area)}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dash-muted)' }}> м²</span>
+            </div>
+            <div style={{ ...labelStyle, fontSize: 9, marginTop: 2 }}>Майдон</div>
+          </div>
         </div>
         <div style={sub}>
-          {data.cashOnTheRoad.drivers.length > 0
-            ? data.cashOnTheRoad.drivers.map(d => d.name).join(', ') + ' йўлда'
-            : 'Ҳайдовчи йўлда эмас'}
+          {loaded.orderCount > 0
+            ? `${loaded.orderCount} та буюртма · ${fmt(loaded.beamCount)} та балка`
+            : 'Бу ойда юклаш йўқ'}
         </div>
       </div>
 

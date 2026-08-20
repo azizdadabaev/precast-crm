@@ -2,6 +2,17 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { aggregateByRegion, type RegionRow } from '@/lib/dashboard-regions';
 import {
+  accumulateLoaded,
+  areaShares,
+  beamsFromLoadedJson,
+  hasRemainder,
+  loadMonthKey,
+  remainderAfterRecorded,
+  roomBeamMeters,
+  type LoadEvent,
+  type LoadedVolume,
+} from '@/lib/loaded-volume';
+import {
   accumulateByMonth,
   averageOrderValue,
   buildTrend,
@@ -161,6 +172,12 @@ export interface DashboardPayload {
   currentMonthIdx: number;
   /** The same figures bucketed by DELIVERY date, over a forward window. */
   deliveryBasis: DeliveryBasisSeries;
+  /**
+   * Product that physically left the yard, per calendar month, keyed by
+   * `YYYY-MM`. Independent of the order/delivery basis toggle: loading is its
+   * own event with its own date, so the card looks itself up by month key.
+   */
+  loadedVolumeByMonth: Array<{ monthKey: string } & LoadedVolume>;
   recentOrders: Array<{
     id: string;
     orderNumber: string;
@@ -558,6 +575,110 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     (p) => Number(p.amount),
   );
 
+  // ── Loaded volume — what physically left the yard, by month ─────────
+  //
+  // Three sources, applied in this order so nothing is counted twice:
+  //   1. SPLIT SHIPMENTS — actual counted quantities per truck.
+  //   2. SINGLE TRUCK    — `Order.loadedAt` with no quantities recorded,
+  //      which by definition means the whole order went on one truck.
+  //   3. DELIVERED REMAINDER — loading paperwork is often incomplete (the
+  //      operator logs the first truck and forgets the rest; filler blocks
+  //      are not photographed the way T-beams are). Once an order is
+  //      DELIVERED the whole order demonstrably shipped, so the unrecorded
+  //      BALANCE is added. Taking the difference, not replacing the figures,
+  //      is what preserves accurate truck records where they exist.
+  //
+  // Sources 1 and 2 are mutually exclusive in the data — no order that uses
+  // shipments also sets `Order.loadedAt`.
+  const loadWindowStart = new Date(
+    Math.min(twelveMonthsAgo.getTime(), deliveryWindowStart.getTime()),
+  );
+  const loadableOrders = await prisma.order.findMany({
+    where: {
+      ...LIVE_ORDERS,
+      OR: [
+        { loadedAt: { gte: loadWindowStart } },
+        { deliveredAt: { gte: loadWindowStart } },
+        { shipments: { some: { loadedAt: { gte: loadWindowStart } } } },
+      ],
+    },
+    select: {
+      id: true,
+      status: true,
+      loadedAt: true,
+      deliveredAt: true,
+      scheduledAt: true,
+      totalArea: true,
+      totalBlocks: true,
+      totalBeams: true,
+      project: { select: { calculations: { select: { beamCount: true, beamLength: true } } } },
+      shipments: {
+        where: { loadedAt: { not: null } },
+        select: { loadedAt: true, loadedBeams: true, loadedBlocks: true },
+      },
+    },
+  });
+
+  const loadEvents: LoadEvent[] = [];
+  for (const o of loadableOrders) {
+    const rooms = o.project.calculations.map((c) => ({
+      beamCount: c.beamCount,
+      beamLength: Number(c.beamLength),
+    }));
+    // The owner's formula: Σ(beamCount × beamLength) over the order's rooms.
+    const orderTotals = {
+      blocks: o.totalBlocks,
+      beamCount: o.totalBeams,
+      beamMeters: roomBeamMeters(rooms),
+      area: Number(o.totalArea),
+    };
+
+    const recorded = { blocks: 0, beamCount: 0, beamMeters: 0, area: 0 };
+
+    if (o.shipments.length > 0) {
+      const per = o.shipments.map((s) => {
+        const beams = beamsFromLoadedJson(s.loadedBeams);
+        return { blocks: Number(s.loadedBlocks ?? 0), ...beams };
+      });
+      // The order's own m² cell, split across its trucks so the parts add
+      // back to exactly that figure — shipments never record area.
+      const shares = areaShares(orderTotals.area, per);
+      o.shipments.forEach((s, i) => {
+        const e: LoadEvent = {
+          monthKey: loadMonthKey(s.loadedAt as Date),
+          orderId: o.id,
+          blocks: per[i].blocks,
+          beamCount: per[i].count,
+          beamMeters: per[i].meters,
+          area: shares[i] ?? 0,
+        };
+        recorded.blocks += e.blocks;
+        recorded.beamCount += e.beamCount;
+        recorded.beamMeters += e.beamMeters;
+        recorded.area += e.area;
+        loadEvents.push(e);
+      });
+    } else if (o.loadedAt) {
+      loadEvents.push({ monthKey: loadMonthKey(o.loadedAt), orderId: o.id, ...orderTotals });
+      recorded.blocks = orderTotals.blocks;
+      recorded.beamCount = orderTotals.beamCount;
+      recorded.beamMeters = orderTotals.beamMeters;
+      recorded.area = orderTotals.area;
+    }
+
+    if (o.status === 'DELIVERED') {
+      const rest = remainderAfterRecorded(orderTotals, recorded);
+      if (hasRemainder(rest)) {
+        // Attributed to delivery, the moment the order provably left in full.
+        // `deliveredAt` can be unset on older rows — fall back to the loading
+        // stamp, then to the scheduled date, so the volume is never dropped.
+        const when = o.deliveredAt ?? o.loadedAt ?? o.scheduledAt;
+        loadEvents.push({ monthKey: loadMonthKey(when), orderId: o.id, ...rest });
+      }
+    }
+  }
+  const loadedMap = accumulateLoaded(loadEvents);
+
   const window12 = monthWindow(now, ORDER_WINDOW_MONTHS);
   const bookedByMonth = window12.map((b) => ({
     month: b.label,
@@ -632,6 +753,25 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
       .map((d) => ({ ...d, booked: Math.round(d.booked) })),
     currentMonthIdx: currentMonthIndex(deliveryWindow, now),
   };
+
+  // Keyed by `YYYY-MM`, not by index: the loading month is its own axis and
+  // must stay correct whichever basis (and therefore whichever window) the
+  // dashboard is showing. The client looks this up by the selected month key.
+  const loadedMonthKeys = Array.from(
+    new Set([...window12.map((b) => b.key), ...deliveryWindow.map((b) => b.key)]),
+  ).sort();
+  const loadedVolumeByMonth = loadedMonthKeys.map((key) => {
+    const v = loadedMap.get(key);
+    return {
+      monthKey: key,
+      blocks: v?.blocks ?? 0,
+      beamCount: v?.beamCount ?? 0,
+      // One decimal: metres and m² are measurements, not currency.
+      beamMeters: Math.round((v?.beamMeters ?? 0) * 10) / 10,
+      area: Math.round((v?.area ?? 0) * 10) / 10,
+      orderCount: v?.orderCount ?? 0,
+    };
+  });
 
   // ── Recent 6 orders ────────────────────────────────────────────────
   const recentOrders = recentOrdersRaw.map((r) => ({
@@ -717,6 +857,7 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     monthKeys: window12.map((b) => b.key),
     currentMonthIdx: currentMonthIndex(window12, now),
     deliveryBasis,
+    loadedVolumeByMonth,
     recentOrders,
   };
 

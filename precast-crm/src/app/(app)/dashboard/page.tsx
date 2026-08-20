@@ -89,6 +89,21 @@ export default function DashboardPage() {
   const monthLabel = series.bookedByMonth[monthIdx]?.month ?? '';
 
   /**
+   * Loaded volume is looked up by month KEY, not by index: it is bucketed on
+   * the loading date, which is its own axis, so it must resolve to the same
+   * calendar month whichever basis (and therefore whichever window) is active.
+   */
+  const selectedMonthKey = series.monthKeys[monthIdx] ?? '';
+  const loadedThisMonth = data.loadedVolumeByMonth.find((m) => m.monthKey === selectedMonthKey) ?? {
+    monthKey: selectedMonthKey,
+    blocks: 0,
+    beamCount: 0,
+    beamMeters: 0,
+    area: 0,
+    orderCount: 0,
+  };
+
+  /**
    * Flipping the basis keeps the SAME calendar month selected rather than
    * letting the index mean a different month on the other window (the two
    * windows start at different months). A month with no counterpart — a
@@ -183,7 +198,7 @@ export default function DashboardPage() {
 
         {/* Operational KPIs */}
         <div style={SECTION_LABEL}>Операцион ҳолат</div>
-        <OperationalKPIs data={data} />
+        <OperationalKPIs data={data} loaded={loadedThisMonth} monthLabel={monthLabel} />
 
         {/* Bottom widgets */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr 0.85fr', gap: 16 }}>

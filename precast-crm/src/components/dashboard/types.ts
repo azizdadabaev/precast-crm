@@ -139,6 +139,25 @@ export interface DashboardData {
     /** Index of the month containing today — NOT the last index here. */
     currentMonthIdx: number;
   };
+  /**
+   * Product that physically left the yard, per calendar month.
+   *
+   * Keyed by `YYYY-MM` rather than positioned by index because loading has its
+   * own date and its own axis: it must resolve to the same calendar month
+   * whichever basis the dashboard is currently showing.
+   *
+   * `blocks`, `beamCount` and `beamMeters` are counted quantities. `area` is
+   * each order's own m² figure, apportioned across its trucks when an order
+   * shipped on more than one.
+   */
+  loadedVolumeByMonth: Array<{
+    monthKey: string;
+    blocks: number;
+    beamCount: number;
+    beamMeters: number;
+    area: number;
+    orderCount: number;
+  }>;
   recentOrders: Array<{
     id: string;
     orderNumber: string;
