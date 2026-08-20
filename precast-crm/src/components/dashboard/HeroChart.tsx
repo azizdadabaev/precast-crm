@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import {
-  AreaChart, Area, BarChart, Bar,
+  AreaChart, Area, BarChart, Bar, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine,
   ResponsiveContainer, type TooltipProps,
 } from 'recharts';
 import type { DateBasis } from '@/lib/dashboard-metrics';
+import { buildMonthDays, todayMarkerFor } from '@/lib/month-days';
 
 function fmt(n: number): string {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -49,7 +50,9 @@ function YearTooltip(
 
 function MonthTooltip({ active, payload }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload as { day: number; orders: number; booked: number } | undefined;
+  const d = payload[0]?.payload as
+    | { day: number; orders: number; booked: number; future: boolean }
+    | undefined;
   if (!d) return null;
   return (
     <div style={{
@@ -67,6 +70,11 @@ function MonthTooltip({ active, payload }: TooltipProps<number, string>) {
         <span style={{ opacity: .7 }}>Буюртма қилинган</span>
         <span style={{ fontFamily: 'var(--font-num)', fontWeight: 600 }}>{fmt(d.booked)} UZS</span>
       </div>
+      {/* A future delivery date has not happened yet. Saying so is the whole
+          point of the hollow bar — the tooltip must not contradict it. */}
+      {d.future && (
+        <div style={{ fontSize: 11, opacity: .55, marginTop: 4 }}>режалаштирилган · not yet delivered</div>
+      )}
     </div>
   );
 }
@@ -142,27 +150,12 @@ export function HeroChart({
   // Real orders for the selected month. The API returns only days that had
   // activity, so zero-fill the rest — an absent day is a real zero, and
   // omitting it would draw a misleadingly continuous line.
-  const monthData = (() => {
-    const key = monthKeys?.[monthIdx];
-    if (!key || !dailyByDay) return [] as Array<{ day: number; orders: number; booked: number }>;
-    const byDay = new Map<number, { orders: number; booked: number }>();
-    for (const d of dailyByDay) {
-      if (d.monthKey !== key) continue;
-      const dayNum = new Date(d.date).getDate();
-      if (!Number.isFinite(dayNum)) continue;
-      const cur = byDay.get(dayNum) ?? { orders: 0, booked: 0 };
-      cur.orders += d.orderCount;
-      cur.booked += d.booked;
-      byDay.set(dayNum, cur);
-    }
-    const [y, m] = key.split('-').map(Number);
-    const daysInMonth = new Date(y, m, 0).getDate();
-    return Array.from({ length: daysInMonth }, (_, i) => ({
-      day: i + 1,
-      orders: byDay.get(i + 1)?.orders ?? 0,
-      booked: byDay.get(i + 1)?.booked ?? 0,
-    }));
-  })();
+  // `future` is what makes a scheduled-but-not-yet-delivered day render
+  // hollow. See src/lib/month-days.ts — the rule is unit-tested there.
+  const selectedKey = monthKeys?.[monthIdx];
+  const now = new Date();
+  const monthData = buildMonthDays(selectedKey, dailyByDay, now);
+  const todayMarker = todayMarkerFor(selectedKey, now);
 
   const isDelivery = basis === 'delivery';
   const windowMonths = bookedByMonth.length;
@@ -310,6 +303,20 @@ export function HeroChart({
               }}>
                 Танланган ой қуйидаги молиявий кўрсаткичларга ҳам таъсир қилади.
               </div>
+              {/* Only worth explaining when a hollow bar is actually on screen. */}
+              {monthData.some((d) => d.future && d.orders > 0) && (
+                <div style={{
+                  marginTop: 6, display: 'flex', alignItems: 'center', gap: 6,
+                  fontFamily: 'var(--font-body-alt)', fontSize: 11.5,
+                  lineHeight: 1.45, color: 'var(--dash-muted)',
+                }}>
+                  <span style={{
+                    display: 'inline-block', width: 10, height: 10, flexShrink: 0,
+                    border: '1.5px dashed var(--dash-accent)', borderRadius: 2,
+                  }} />
+                  Пунктир — режалаштирилган, ҳали етказилмаган
+                </div>
+              )}
               {isFutureMonth && (
                 <div style={{
                   marginTop: 6, fontFamily: 'var(--font-body-alt)',
@@ -390,10 +397,39 @@ export function HeroChart({
                   cursor={{ fill: 'color-mix(in srgb, var(--dash-accent) 10%, transparent)' }}
                   wrapperStyle={{ outline: 'none' }}
                 />
+                {/* «Бугун» — the line between what happened and what is
+                    merely promised. Only drawn when today is in view. */}
+                {todayMarker !== null && (
+                  <ReferenceLine
+                    x={todayMarker}
+                    stroke="var(--dash-muted)"
+                    strokeDasharray="3 4"
+                    label={{
+                      value: 'бугун',
+                      position: 'insideTopRight',
+                      fill: 'var(--dash-muted)',
+                      fontSize: 10,
+                      fontFamily: 'var(--font-num)',
+                    }}
+                  />
+                )}
                 <Bar
-                  dataKey="orders" fill="var(--dash-accent)" radius={[4, 4, 0, 0]}
+                  dataKey="orders" radius={[4, 4, 0, 0]}
                   maxBarSize={24} animationDuration={800}
-                />
+                >
+                  {monthData.map((d) => (
+                    // Hollow = scheduled but not yet delivered. Same accent
+                    // hue so it still reads as one series, but unmistakably
+                    // not a completed day.
+                    <Cell
+                      key={d.day}
+                      fill={d.future ? 'transparent' : 'var(--dash-accent)'}
+                      stroke="var(--dash-accent)"
+                      strokeWidth={d.future ? 1.5 : 0}
+                      strokeDasharray={d.future ? '3 2' : undefined}
+                    />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
