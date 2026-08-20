@@ -147,8 +147,10 @@ export function OperationalKPIs({ data, loaded, monthLabel }: Props) {
         }}>
           <div>
             <div style={{
-              fontFamily: 'var(--font-num)', fontSize: 15, fontWeight: 700,
+              fontFamily: 'var(--font-num)', fontSize: 14, fontWeight: 700,
               color: 'var(--dash-ink)', fontVariantNumeric: 'tabular-nums',
+              // Five-figure metres must not split from their unit.
+              whiteSpace: 'nowrap',
             }}>
               {fmt1(loaded.beamMeters)}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dash-muted)' }}> м</span>
             </div>
@@ -156,8 +158,10 @@ export function OperationalKPIs({ data, loaded, monthLabel }: Props) {
           </div>
           <div>
             <div style={{
-              fontFamily: 'var(--font-num)', fontSize: 15, fontWeight: 700,
+              fontFamily: 'var(--font-num)', fontSize: 14, fontWeight: 700,
               color: 'var(--dash-ink)', fontVariantNumeric: 'tabular-nums',
+              // Five-figure metres must not split from their unit.
+              whiteSpace: 'nowrap',
             }}>
               {fmt1(loaded.area)}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--dash-muted)' }}> м²</span>
             </div>
