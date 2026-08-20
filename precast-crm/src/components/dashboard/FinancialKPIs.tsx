@@ -1,7 +1,7 @@
 'use client';
 
 import { useId } from 'react';
-import { averageOrderValue, buildTrend } from '@/lib/dashboard-metrics';
+import { averageOrderValue, buildTrend, type DateBasis } from '@/lib/dashboard-metrics';
 import type { DashboardData, Trend } from './types';
 
 function fmt(n: number): string {
@@ -44,14 +44,26 @@ interface Props {
   data: Pick<DashboardData,
     'bookedAllTime' | 'collectedAllTime' |
     'averageOrderValue' | 'outstandingReceivables' |
-    'bookedByMonth' | 'collectedByMonth' | 'ordersByMonth'>;
+    'bookedByMonth' | 'collectedByMonth' | 'ordersByMonth' | 'deliveryBasis'>;
   /**
-   * Index into the 12-month window. `bookedByMonth` / `collectedByMonth` /
-   * `ordersByMonth` are index-aligned — `monthWindow()` builds all three —
-   * so one index scopes all three cards. The LAST index is the current
-   * calendar month. Driven by the hero chart's month picker.
+   * Index into the active window. Booked / collected / orders are
+   * index-aligned within each basis — every series is mapped off one
+   * month-window array server-side — so a single index scopes all three
+   * cards. Driven by the hero chart's month picker.
    */
   monthIdx: number;
+  /**
+   * Which date the order series are filed under. 'order' reads the
+   * top-level (trailing 12 months, `placedAt`); 'delivery' reads
+   * `deliveryBasis` (forward-looking, `scheduledAt`). Collected does NOT
+   * follow this — it stays bucketed by `Payment.confirmedAt` either way.
+   */
+  basis: DateBasis;
+  /**
+   * Index of the month containing today. The LAST index on the order
+   * basis, but not on the delivery basis, which carries future months.
+   */
+  currentIdx: number;
 }
 
 /**
@@ -68,7 +80,7 @@ interface Props {
  * selected it spells out that it is not month-scoped, so it can never be
  * misread as belonging to that month.
  */
-export function FinancialKPIs({ data, monthIdx }: Props) {
+export function FinancialKPIs({ data, monthIdx, basis, currentIdx }: Props) {
   const id1 = useId();
   const id2 = useId();
   const id3 = useId();
@@ -77,20 +89,33 @@ export function FinancialKPIs({ data, monthIdx }: Props) {
   const accent = 'var(--dash-accent)';
   const neg = 'var(--dash-neg)';
 
-  const lastIdx = data.bookedByMonth.length - 1;
+  // One basis, one set of series. Both shapes carry the same three
+  // index-aligned arrays, so the rest of the card maths is identical —
+  // only the date each order was filed under differs.
+  const isDelivery = basis === 'delivery';
+  const series = isDelivery ? data.deliveryBasis : data;
+
+  const lastIdx = series.bookedByMonth.length - 1;
   const idx = Math.min(Math.max(monthIdx, 0), Math.max(lastIdx, 0));
-  const isCurrentMonth = idx >= lastIdx;
-  const monthLabel = data.bookedByMonth[idx]?.month ?? '';
+  const curIdx = Math.min(Math.max(currentIdx, 0), Math.max(lastIdx, 0));
+  const isCurrentMonth = idx === curIdx;
+  // Only reachable on the delivery basis: nothing is ever PLACED ahead of
+  // today, so the order-date window carries no future months.
+  const isFutureMonth = idx > curIdx;
+  const monthLabel = series.bookedByMonth[idx]?.month ?? '';
   const scopeLabel = isCurrentMonth ? 'ушбу ой' : `${monthLabel} ойи`;
+  const basisFooter = isDelivery
+    ? 'Етказиш санаси бўйича · by delivery date'
+    : 'Буюртма санаси бўйича · by order date';
 
   // Selected month + the month before it — every delta compares this pair.
-  const booked = data.bookedByMonth[idx]?.booked ?? 0;
-  const orderCount = data.ordersByMonth[idx]?.count ?? 0;
-  const collected = data.collectedByMonth[idx]?.collected ?? 0;
-  const paymentCount = data.collectedByMonth[idx]?.paymentCount ?? 0;
-  const prevBooked = idx > 0 ? data.bookedByMonth[idx - 1]?.booked ?? 0 : 0;
-  const prevOrderCount = idx > 0 ? data.ordersByMonth[idx - 1]?.count ?? 0 : 0;
-  const prevCollected = idx > 0 ? data.collectedByMonth[idx - 1]?.collected ?? 0 : 0;
+  const booked = series.bookedByMonth[idx]?.booked ?? 0;
+  const orderCount = series.ordersByMonth[idx]?.count ?? 0;
+  const collected = series.collectedByMonth[idx]?.collected ?? 0;
+  const paymentCount = series.collectedByMonth[idx]?.paymentCount ?? 0;
+  const prevBooked = idx > 0 ? series.bookedByMonth[idx - 1]?.booked ?? 0 : 0;
+  const prevOrderCount = idx > 0 ? series.ordersByMonth[idx - 1]?.count ?? 0 : 0;
+  const prevCollected = idx > 0 ? series.collectedByMonth[idx - 1]?.collected ?? 0 : 0;
 
   const avg = averageOrderValue(booked, orderCount);
   const prevAvg = averageOrderValue(prevBooked, prevOrderCount);
@@ -102,12 +127,12 @@ export function FinancialKPIs({ data, monthIdx }: Props) {
   // Sparklines run over the six months ENDING at the selected one, so the
   // last point of the line is the big number printed above it.
   const from = Math.max(0, idx - 5);
-  const bookedWindow = data.bookedByMonth.slice(from, idx + 1).map((m) => m.booked);
-  const collectedWindow = data.collectedByMonth.slice(from, idx + 1).map((m) => m.collected);
+  const bookedWindow = series.bookedByMonth.slice(from, idx + 1).map((m) => m.booked);
+  const collectedWindow = series.collectedByMonth.slice(from, idx + 1).map((m) => m.collected);
   // AOV sparkline: booked ÷ orders month by month — the same formula as
   // the headline number, not collections-per-order.
-  const avgWindow = data.bookedByMonth.slice(from, idx + 1).map((m, i) =>
-    averageOrderValue(m.booked, data.ordersByMonth[from + i]?.count ?? 0),
+  const avgWindow = series.bookedByMonth.slice(from, idx + 1).map((m, i) =>
+    averageOrderValue(m.booked, series.ordersByMonth[from + i]?.count ?? 0),
   );
   const recvFlat = Array.from({ length: 6 }, () => data.outstandingReceivables.total);
 
@@ -151,9 +176,16 @@ export function FinancialKPIs({ data, monthIdx }: Props) {
       {/* Card 1: BOOKED — Σ totalPrice of orders placed in the selected
           month. Money SOLD, not money received. */}
       <div style={cardBase}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <span style={label}>Буюртма қилинган · Booked</span>
-          {deltaBadge(bookedTrend)}
+          {isFutureMonth ? (
+            <span style={{
+              fontFamily: 'var(--font-num)', fontSize: 11, fontWeight: 700,
+              padding: '3px 9px', borderRadius: 6, whiteSpace: 'nowrap',
+              color: 'var(--dash-accent2)',
+              background: 'color-mix(in srgb, var(--dash-accent2) 14%, transparent)',
+            }}>режа · planned</span>
+          ) : deltaBadge(bookedTrend)}
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '12px 0 4px' }}>
           <span style={bigNum}>{fmt(booked)}</span>
@@ -166,6 +198,7 @@ export function FinancialKPIs({ data, monthIdx }: Props) {
         <div style={sub}>
           Бошланғичдан: {fmt(data.bookedAllTime.total)} UZS · {data.bookedAllTime.orderCount} та
         </div>
+        <div style={{ ...sub, marginTop: 2 }}>{basisFooter}</div>
       </div>
 
       {/* Card 2: COLLECTED — Σ confirmed Payment.amount by confirmedAt in
@@ -186,6 +219,15 @@ export function FinancialKPIs({ data, monthIdx }: Props) {
         <div style={sub}>
           Бошланғичдан: {fmt(data.collectedAllTime.total)} UZS · {data.collectedAllTime.paymentCount} та
         </div>
+        {/* Cash is dated by when it was confirmed received — rescheduling an
+            order does not move money, so this card ignores the basis toggle.
+            Said out loud only when the toggle is on the other setting, where
+            the difference could otherwise be assumed away. */}
+        {isDelivery && (
+          <div style={{ ...sub, marginTop: 2 }}>
+            Тўлов тасдиқланган сана бўйича · unaffected by the toggle
+          </div>
+        )}
       </div>
 
       {/* Card 3: AOV — booked value per order in the selected month
@@ -204,6 +246,7 @@ export function FinancialKPIs({ data, monthIdx }: Props) {
         </div>
         <div style={sub}>{scopeLabel} · жами ўртача: {fmt(data.averageOrderValue.allTime)} UZS</div>
         <div style={sub}>Ҳисоб: буюртма қилинган ÷ буюртмалар сони</div>
+        <div style={{ ...sub, marginTop: 2 }}>{basisFooter}</div>
       </div>
 
       {/* Card 4: Receivables — a point-in-time balance, NOT month-scoped. */}
