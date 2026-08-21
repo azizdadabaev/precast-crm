@@ -390,6 +390,11 @@ export const PaymentRecordSchema = z
     collectedByDriverId: z.string().optional().nullable(),
     notes: z.string().max(500).optional().nullable(),
     receiptUrls: z.array(z.string().max(500)).max(10).default([]),
+    // When the CUSTOMER actually paid, if that is not today. Passed through as
+    // a raw string and checked by validatePaidOn, which enforces the
+    // not-future / not-ancient rules and returns an Uzbek message. Absent means
+    // "count it the old way", which is what every historical row does.
+    paidOn: z.string().optional().nullable(),
   })
   .refine(
     (d) => !(d.source === "FROM_DRIVER_AT_DELIVERY" && !d.collectedByDriverId),

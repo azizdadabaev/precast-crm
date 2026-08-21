@@ -69,8 +69,15 @@ export function AddPaymentDialog({
   const [source, setSource] = useState<PaymentSource>("IN_OFFICE_CASH");
   const [handOverNow, setHandOverNow] = useState(false);
   const [notes, setNotes] = useState("");
+  // When the customer ACTUALLY paid. Empty = today, which is the normal case;
+  // filled in only when entering a payment that was received earlier.
+  const [paidOn, setPaidOn] = useState("");
   const [receiptUrls, setReceiptUrls] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  // LOCAL today. toISOString() would give the UTC day, which at +05 is still
+  // yesterday for the first five hours and would block a same-day entry.
+  const now = new Date();
+  const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const [error, setError] = useState<string | null>(null);
 
   const { data: me } = useQuery<{ permissions: string[] }>({
@@ -139,6 +146,7 @@ export function AddPaymentDialog({
           source,
           handOverNow: source === "IN_OFFICE_CASH" ? handOverNow : false,
           notes: notes.trim() || null,
+          paidOn: paidOn || null,
           receiptUrls,
         },
       });
@@ -306,6 +314,27 @@ export function AddPaymentDialog({
               </div>
             </label>
           )}
+
+          {/* Paid-on date — optional. Defaults to today when left empty.
+              Exists because cash received in one month but entered in the
+              next used to be counted as the LATER month's revenue. */}
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider font-bold">
+              Тўлов санаси<span className="lang-en"> · Paid on</span> ({t("ихтиёрий", "optional")})
+            </Label>
+            <Input
+              type="date"
+              value={paidOn}
+              max={todayISO}
+              onChange={(e) => setPaidOn(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {t(
+                "Бўш қолдирилса — бугунги сана. Пул олдинроқ олинган бўлса, ўша кунни танланг.",
+                "Leave empty for today. Set it if the money was received earlier.",
+              )}
+            </p>
+          </div>
 
           {/* Notes */}
           <div className="space-y-1.5">

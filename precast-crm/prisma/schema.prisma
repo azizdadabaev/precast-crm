@@ -773,6 +773,13 @@ model Payment {
   // Operator who entered the row in the app.
   recordedById           String
   recordedAt             DateTime  @default(now())
+  // When the CUSTOMER actually handed the money over, if that is not the day
+  // it was entered. Optional and NULL for every historical row: cash paid in
+  // July but only remembered in August was previously counted as August
+  // revenue, because no field recorded the real date. When set, the dashboard
+  // buckets the payment by this date instead of `confirmedAt`; when NULL the
+  // old behaviour is unchanged, so no existing figure moves.
+  paidOn                 DateTime?
   // Operator who physically received the cash from the driver at the office.
   handedOverToOfficeById String?
   handedOverToOfficeAt   DateTime?

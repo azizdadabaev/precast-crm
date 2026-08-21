@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { aggregateByRegion, type RegionRow } from '@/lib/dashboard-regions';
+import { attributionDate } from '@/lib/payment-attribution';
 import {
   accumulateLoaded,
   areaShares,
@@ -191,6 +192,27 @@ export interface DashboardPayload {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Prisma `where` fragment selecting payments whose ATTRIBUTION date falls in a
+ * window — `paidOn` when one was recorded, `confirmedAt` otherwise.
+ *
+ * Expressed as an OR because SQL cannot index a COALESCE through Prisma's
+ * filter API. The second arm carries `paidOn: null`, which is what keeps the
+ * two arms disjoint: without it a row with an early `paidOn` and a late
+ * `confirmedAt` would match both and be counted twice.
+ *
+ * `end` of null means "no upper bound" (the rolling-window case).
+ */
+function paidWindow(start: Date, end: Date | null): Prisma.PaymentWhereInput {
+  const range = end ? { gte: start, lte: end } : { gte: start };
+  return {
+    OR: [
+      { paidOn: range },
+      { paidOn: null, confirmedAt: range },
+    ],
+  };
+}
+
 function startOfDay(d: Date): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -300,12 +322,12 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     prisma.payment.aggregate({
       _sum: { amount: true },
       _count: { _all: true },
-      where: { ...COLLECTED_PAYMENTS, confirmedAt: { gte: monthStart, lte: monthEnd } },
+      where: { ...COLLECTED_PAYMENTS, ...paidWindow(monthStart, monthEnd) },
     }),
     prisma.payment.aggregate({
       _sum: { amount: true },
       _count: { _all: true },
-      where: { ...COLLECTED_PAYMENTS, confirmedAt: { gte: prevMonthStart, lte: prevMonthEnd } },
+      where: { ...COLLECTED_PAYMENTS, ...paidWindow(prevMonthStart, prevMonthEnd) },
     }),
     // ── 7. Receivables — Σ max(0, totalPrice − confirmedPaid − writeOff) ──
     // Filtered by paymentState only to narrow the row set; the amount is
@@ -405,8 +427,8 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     // `Order.confirmedPaid` has no date, so it cannot be bucketed by when
     // the money actually arrived.
     prisma.payment.findMany({
-      where: { ...COLLECTED_PAYMENTS, confirmedAt: { gte: twelveMonthsAgo } },
-      select: { confirmedAt: true, amount: true },
+      where: { ...COLLECTED_PAYMENTS, ...paidWindow(twelveMonthsAgo, null) },
+      select: { confirmedAt: true, paidOn: true, amount: true },
     }),
     // Delivery-date basis: the same live orders keyed by `scheduledAt`.
     // A separate query from `rollingOrders` because the two windows differ
@@ -571,7 +593,10 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
   );
   const collectedMonthMap = accumulateByMonth(
     rollingPayments,
-    (p) => p.confirmedAt,
+    // `paidOn` when the operator recorded when the customer ACTUALLY paid,
+    // else `confirmedAt` — which is every historical row, so their months
+    // do not move. See src/lib/payment-attribution.ts
+    (p) => attributionDate(p),
     (p) => Number(p.amount),
   );
 

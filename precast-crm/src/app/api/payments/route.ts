@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PaymentRecordSchema } from "@/lib/validation";
+import { validatePaidOn, PAID_ON_ERRORS } from "@/lib/payment-attribution";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { can } from "@/lib/permissions";
@@ -140,6 +141,15 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
   // entries skip the queue and land CONFIRMED in one step.
   const autoConfirm = can(user, "payment.confirm");
   const now = new Date();
+
+  // Optional record of when the CUSTOMER actually handed the money over.
+  // Refused rather than coerced when malformed: an Invalid Date here would
+  // silently misfile revenue into a month nobody can find.
+  const paidOnCheck = validatePaidOn(body.paidOn, now);
+  if (!paidOnCheck.ok) {
+    return fail(PAID_ON_ERRORS[paidOnCheck.reason!], 422);
+  }
+  const paidOn = paidOnCheck.value ?? null;
   const payment = await prisma.$transaction(async (tx) => {
     const p = await tx.payment.create({
       data: {
@@ -150,6 +160,7 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
         ...(autoConfirm ? { confirmedById: user.id, confirmedAt: now } : {}),
         recordedById: user.id,
         recordedAt: now,
+        paidOn,
         // Driver chain: only when driver collected on site.
         collectedById: body.collectedByDriverId ?? null,
         collectedAt: body.source === "FROM_DRIVER_AT_DELIVERY" ? now : null,
@@ -173,6 +184,10 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
           source: body.source,
           handOverNow: body.handOverNow,
           collectedByDriverId: body.collectedByDriverId ?? null,
+          // Recorded so the ledger can show WHY a payment counted in a month
+          // other than the one it was entered in.
+          paidOn: paidOn ? paidOn.toISOString() : null,
+          backdated: paidOn !== null,
         },
       },
     });

@@ -33,6 +33,7 @@ import {
   MessageCircle,
   Boxes,
   Bot,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/fetcher";
@@ -136,6 +137,14 @@ export const NAV: NavItem[] = [
     sub: "Payments",
     icon: Wallet,
     permission: "payment.view",
+  },
+  {
+    href: "/ledger",
+    label: "Ҳисоб журнали",
+    sub: "Ledger",
+    icon: BookOpen,
+    // Same gate as the dashboard: it explains the dashboard's own figures.
+    permission: "dashboard.viewBasic",
   },
   {
     href: "/discrepancies",
