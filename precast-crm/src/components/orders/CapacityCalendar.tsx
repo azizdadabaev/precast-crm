@@ -8,6 +8,18 @@ export interface CapacityDay {
   date: string;        // "YYYY-MM-DD"
   totalArea: number;   // m²
   totalOrders: number;
+  /**
+   * Filler blocks the yard needs ready to fulfil the day's orders — Σ
+   * `Order.totalBlocks` over the same orders behind `totalArea` and
+   * `totalOrders`, so all three describe one set. What was ORDERED, not what
+   * has been loaded.
+   */
+  totalBlocks: number;
+}
+
+/** Space-separated thousands, matching the house format for figures. */
+function fmtBlocks(n: number): string {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
 interface CapacityResponse {
@@ -270,9 +282,26 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
                     )}
                   </div>
                   {showTier && !isPast && (
-                    <div className="mt-1 text-[10px] tabular-nums font-mono leading-tight text-muted-foreground">
-                      {totalForTier.toFixed(0)}
-                      <span className="text-text-tertiary"> m²</span>
+                    <div className="mt-1 flex items-baseline justify-between gap-1.5 text-[10px] tabular-nums font-mono leading-tight">
+                      <span className="text-muted-foreground">
+                        {totalForTier.toFixed(0)}
+                        <span className="text-text-tertiary"> m²</span>
+                      </span>
+                      {/* Blocks the yard must have ready for the day. Bare
+                          number, dimmed to the same tint as the order count:
+                          the m² carries the only unit in the cell, so a second
+                          label would compete with it. Booked only — it
+                          deliberately excludes `pendingArea`'s order, which has
+                          no block count at this point in the placement flow.
+                          The title attribute names the figure on hover. */}
+                      {(cap?.totalBlocks ?? 0) > 0 && (
+                        <span
+                          className="text-text-tertiary whitespace-nowrap"
+                          title={`${fmtBlocks(cap!.totalBlocks)} та блок`}
+                        >
+                          {fmtBlocks(cap!.totalBlocks)}
+                        </span>
+                      )}
                     </div>
                   )}
                 </button>

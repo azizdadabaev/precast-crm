@@ -12,7 +12,7 @@ import { withPermission } from "@/lib/api-auth";
  * Returns daily aggregates of scheduled orders so the calendar can color
  * each cell by load:
  *   {
- *     days: [{ date: "2026-05-08", totalArea: 285.4, totalOrders: 3 }, …],
+ *     days: [{ date: "2026-05-08", totalArea: 285.4, totalOrders: 3, totalBlocks: 1216 }, …],
  *     thresholds: { low: 300, moderate: 450, heavy: 600 }
  *   }
  *
@@ -32,11 +32,11 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       scheduledAt: { gte: from, lte: to },
       status: { not: "CANCELED" },
     },
-    select: { id: true, scheduledAt: true, totalArea: true },
+    select: { id: true, scheduledAt: true, totalArea: true, totalBlocks: true },
   });
 
   // Bucket by YYYY-MM-DD in the server's local zone (Asia/Tashkent on prod is fine)
-  const byDay = new Map<string, { totalArea: number; totalOrders: number }>();
+  const byDay = new Map<string, { totalArea: number; totalOrders: number; totalBlocks: number }>();
   for (const o of orders) {
     const d = new Date(o.scheduledAt);
     const key =
@@ -45,9 +45,13 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       String(d.getMonth() + 1).padStart(2, "0") +
       "-" +
       String(d.getDate()).padStart(2, "0");
-    const cur = byDay.get(key) ?? { totalArea: 0, totalOrders: 0 };
+    const cur = byDay.get(key) ?? { totalArea: 0, totalOrders: 0, totalBlocks: 0 };
     cur.totalArea += Number(o.totalArea);
     cur.totalOrders += 1;
+    // Filler blocks the yard must have ready for the day. Frozen per-order
+    // snapshot, the same figure the orders list shows as «N та блок» — it is
+    // what was ORDERED, not what has been loaded.
+    cur.totalBlocks += o.totalBlocks;
     byDay.set(key, cur);
   }
 
@@ -56,6 +60,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       date,
       totalArea: Math.round(agg.totalArea * 100) / 100,
       totalOrders: agg.totalOrders,
+      totalBlocks: agg.totalBlocks,
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
