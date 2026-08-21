@@ -203,7 +203,11 @@ export default function DashboardPage() {
         {/* Bottom widgets */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr 0.85fr', gap: 16 }}>
           <TopClients clients={data.topCustomers} />
-          <RecentOrders orders={data.recentOrders} />
+          <RecentOrders
+            orders={data.recentOrders}
+            monthKey={selectedMonthKey}
+            basis={basis}
+          />
           <PaymentDonut breakdown={data.ordersByPaymentState} />
         </div>
 
