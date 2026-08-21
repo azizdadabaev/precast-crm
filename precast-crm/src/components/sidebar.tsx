@@ -143,8 +143,7 @@ export const NAV: NavItem[] = [
     label: "Ҳисоб журнали",
     sub: "Ledger",
     icon: BookOpen,
-    // Same gate as the dashboard: it explains the dashboard's own figures.
-    permission: "dashboard.viewBasic",
+    permission: "ledger.view",
   },
   {
     href: "/discrepancies",

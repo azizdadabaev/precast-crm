@@ -32,6 +32,7 @@ export const ACTIONS = [
   "order.exportBackup", // owner-only · download Excel snapshot of all orders
   "project.delete", // owner-only · delete saved/draft projects (+ their order)
   "audit.view", // owner-only · view system-wide audit log
+  "ledger.view", // owner-only · attribution ledger: where each figure landed
   "pricing.edit", // owner-only · edit m² + extra-beam tier prices
   "comment.moderate", // ADMIN/OWNER · delete any user's comment on orders/drafts
 
@@ -160,6 +161,7 @@ export const PERMISSION_GROUPS: Array<{
     actions: [
       "dashboard.view",
       "dashboard.viewBasic",
+      "ledger.view",
       "report.view",
       "report.export",
     ],
@@ -193,6 +195,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "order.exportBackup": "Буюртмалар захираси (Excel) · Export orders backup (Excel)",
   "project.delete": "Сақланган лойиҳаларни ўчириш · Delete saved projects",
   "audit.view": "Журнал · View audit log",
+  "ledger.view": "Ҳисоб журнали · Attribution ledger (owner-only)",
   "pricing.edit": "Нархларни таҳрирлаш · Edit pricing tiers",
   "comment.moderate": "Бошқалар изоҳини ўчириш · Moderate others' comments",
   "client.view": "Мижозларни кўриш · View clients",
@@ -241,6 +244,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "order.exportBackup",
     "project.delete",
     "audit.view",
+    "ledger.view",
     "pricing.edit",
     "comment.moderate",
     "client.view",

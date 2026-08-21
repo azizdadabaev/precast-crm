@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { ok, fail } from '@/lib/api';
-import { withPermissionAny } from '@/lib/api-auth';
+import { withPermission } from '@/lib/api-auth';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { isMonthKey, monthBounds } from '@/lib/month-orders';
@@ -18,8 +18,10 @@ const PAGE_SIZE = 200;
  * Cursor-paged rather than offset-paged: an offset would skip or repeat rows
  * as new events arrive mid-scroll.
  */
-export const GET = withPermissionAny(
-  ['dashboard.viewBasic', 'dashboard.view'],
+// Owner-only. The ledger exposes every payment and every order's volume in
+// one place, which is a wider view than any operator needs.
+export const GET = withPermission(
+  'ledger.view',
   async (req) => {
     const { searchParams } = new URL(req.url);
     const month = searchParams.get('month');

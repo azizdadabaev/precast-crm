@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/fetcher';
+import { api, ApiError } from '@/lib/fetcher';
 import { monthTitle, shiftMonth } from '@/lib/month-orders';
 import type { LedgerRow, LedgerTotals } from '@/lib/ledger';
 
@@ -46,10 +46,78 @@ const thisMonthKey = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
+/**
+ * Plain-language guide to what the table is.
+ *
+ * The owner opened this page and said "I have no idea how this table works" —
+ * which is a design failure, not a reading failure. Each row is one EVENT that
+ * put a number into the month, and nothing on screen said so.
+ */
+function HowItWorks({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <div className="mb-4 rounded-lg border border-border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-sm font-semibold">
+          Бу жадвал қандай ишлайди? · How this table works
+        </span>
+        <span className="text-muted-foreground font-mono">{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 text-sm leading-relaxed space-y-3 border-t border-border pt-3">
+          <p>
+            Юқоридаги 4 та рақам — шу ойнинг жами кўрсаткичлари. Пастдаги жадвал
+            эса <strong>ўша рақамлар нимадан тузилганини</strong> кўрсатади:
+            ҳар бир қатор — битта ҳодиса.
+          </p>
+          <div className="space-y-2">
+            <Legend title="Тўлов тасдиқланган сана">
+              Пул келди. <strong>СУММА</strong> устунида кўринади. Блок ва балка
+              бўш бўлади — бу пул ҳодисаси, юк эмас.
+            </Legend>
+            <Legend title="Битта машинада юкланган сана">
+              Буюртма битта машинада кетди. Бутун буюртманинг блок, балка ва
+              майдони шу кунга ёзилади.
+            </Legend>
+            <Legend title="N-жўнатма юкланган сана">
+              Бўлиб юборилган буюртманинг битта машинаси. Операторлар ўша
+              машинага ёзган блок ва балка миқдори.
+            </Legend>
+            <Legend title="Етказилди — ёзилмаган қолдиқ">
+              Буюртма тўлиқ етказилди, лекин машиналарга ҳамма нарса ёзилмаган
+              эди. Ёзилмай қолган <strong>фарқ</strong> шу кунга қўшилади — шунинг
+              учун бу қаторда кўпинча битта устун тўлади, бошқаси «—» бўлади.
+              Тагида «блок: 925 / 1 314» деб ёзилгани — қанчаси олдин ёзилганини
+              кўрсатади.
+            </Legend>
+          </div>
+          <p className="text-muted-foreground">
+            ⚠ белгиси — бу рақам бошқа ойдаги буюртмага тегишли. Хато эмас:
+            масалан июлда сотилган буюртманинг пули августда келган бўлиши мумкин.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Legend({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <span className="font-semibold">{title}</span>
+      <span className="text-muted-foreground"> — {children}</span>
+    </div>
+  );
+}
+
 export function LedgerClient() {
   const [month, setMonth] = useState(thisMonthKey);
   const [tab, setTab] = useState<'attribution' | 'events'>('attribution');
   const [onlyCrossing, setOnlyCrossing] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const ledger = useQuery<LedgerResponse>({
     queryKey: ['ledger', month],
@@ -118,6 +186,8 @@ export function LedgerClient() {
 
       {tab === 'attribution' ? (
         <>
+          <HowItWorks open={helpOpen} onToggle={() => setHelpOpen((v) => !v)} />
+
           {/* Totals — what this month's dashboard figures are made of. */}
           {totals && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
@@ -141,7 +211,7 @@ export function LedgerClient() {
             </div>
           )}
 
-          {ledger.isError && <Msg>Юклаб бўлмади. Қайта уриниб кўринг.</Msg>}
+          {ledger.isError && <Msg>{errorText(ledger.error)}</Msg>}
           {ledger.isLoading && !ledger.data && <Msg>Юкланмоқда…</Msg>}
           {ledger.data && rows.length === 0 && <Msg>Бу ойда ёзув йўқ</Msg>}
 
@@ -237,7 +307,7 @@ export function LedgerClient() {
         </>
       ) : (
         <>
-          {events.isError && <Msg>Юклаб бўлмади. Қайта уриниб кўринг.</Msg>}
+          {events.isError && <Msg>{errorText(events.error)}</Msg>}
           {events.isLoading && !events.data && <Msg>Юкланмоқда…</Msg>}
           {events.data && events.data.events.length === 0 && <Msg>Бу ойда ҳодиса йўқ</Msg>}
 
@@ -291,6 +361,14 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="font-mono text-lg font-bold tabular-nums mt-1">{value}</div>
     </div>
   );
+}
+
+/** A 403 means "not for you", not "try again" — say which. */
+function errorText(err: unknown): string {
+  if (err instanceof ApiError && (err.status === 403 || err.status === 401)) {
+    return "Бу саҳифа фақат эгаси учун · owner-only page";
+  }
+  return "Юклаб бўлмади. Қайта уриниб кўринг.";
 }
 
 function Msg({ children }: { children: React.ReactNode }) {
