@@ -8,6 +8,7 @@ import {
   beamsFromLoadedJson,
   hasRemainder,
   loadMonthKey,
+  physicalCompletion,
   remainderAfterRecorded,
   roomBeamMeters,
   type LoadEvent,
@@ -625,6 +626,9 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
         { loadedAt: { gte: loadWindowStart } },
         { deliveredAt: { gte: loadWindowStart } },
         { shipments: { some: { loadedAt: { gte: loadWindowStart } } } },
+        // A truck DELIVERED in the window completes its order even if it
+        // loaded earlier, so the remainder must be reachable by that date too.
+        { shipments: { some: { deliveredAt: { gte: loadWindowStart } } } },
       ],
     },
     select: {
@@ -637,9 +641,18 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
       totalBlocks: true,
       totalBeams: true,
       project: { select: { calculations: { select: { beamCount: true, beamLength: true } } } },
+      // EVERY shipment, not just loaded ones: completion asks whether all of
+      // them are delivered, and a shipment that was never loaded still counts
+      // against that. Loaded ones are filtered out in code below.
       shipments: {
-        where: { loadedAt: { not: null } },
-        select: { loadedAt: true, loadedBeams: true, loadedBlocks: true },
+        orderBy: { number: 'asc' },
+        select: {
+          status: true,
+          loadedAt: true,
+          deliveredAt: true,
+          loadedBeams: true,
+          loadedBlocks: true,
+        },
       },
     },
   });
@@ -660,15 +673,19 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
 
     const recorded = { blocks: 0, beamCount: 0, beamMeters: 0, area: 0 };
 
-    if (o.shipments.length > 0) {
-      const per = o.shipments.map((s) => {
+    // Only trucks that were actually loaded carry quantities; the rest are
+    // still needed above, to judge whether the order is complete.
+    const loadedShipments = o.shipments.filter((s) => s.loadedAt);
+
+    if (loadedShipments.length > 0) {
+      const per = loadedShipments.map((s) => {
         const beams = beamsFromLoadedJson(s.loadedBeams);
         return { blocks: Number(s.loadedBlocks ?? 0), ...beams };
       });
       // The order's own m² cell, split across its trucks so the parts add
       // back to exactly that figure — shipments never record area.
       const shares = areaShares(orderTotals.area, per);
-      o.shipments.forEach((s, i) => {
+      loadedShipments.forEach((s, i) => {
         const e: LoadEvent = {
           monthKey: loadMonthKey(s.loadedAt as Date),
           orderId: o.id,
@@ -691,13 +708,22 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
       recorded.area = orderTotals.area;
     }
 
-    if (o.status === 'DELIVERED') {
+    // Physically complete, NOT `status === 'DELIVERED'`. That status is gated
+    // on a zero balance, so a split order whose every truck has been delivered
+    // stays at DISPATCHED while unpaid and its unrecorded balance would never
+    // be counted at all — three orders and 1 653 blocks on prod. Delivery and
+    // payment are different facts; volume follows the goods.
+    const completedAt = physicalCompletion({
+      status: o.status,
+      deliveredAt: o.deliveredAt,
+      loadedAt: o.loadedAt,
+      scheduledAt: o.scheduledAt,
+      shipments: o.shipments,
+    });
+    if (completedAt) {
       const rest = remainderAfterRecorded(orderTotals, recorded);
       if (hasRemainder(rest)) {
-        // Attributed to delivery, the moment the order provably left in full.
-        // `deliveredAt` can be unset on older rows — fall back to the loading
-        // stamp, then to the scheduled date, so the volume is never dropped.
-        const when = o.deliveredAt ?? o.loadedAt ?? o.scheduledAt;
+        const when = completedAt;
         loadEvents.push({ monthKey: loadMonthKey(when), orderId: o.id, ...rest });
       }
     }

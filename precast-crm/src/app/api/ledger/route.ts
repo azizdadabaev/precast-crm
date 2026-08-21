@@ -14,7 +14,13 @@ import {
   sortLedger,
   type LedgerRow,
 } from '@/lib/ledger';
-import { areaShares, beamsFromLoadedJson, remainderAfterRecorded, roomBeamMeters } from '@/lib/loaded-volume';
+import {
+  areaShares,
+  beamsFromLoadedJson,
+  physicalCompletion,
+  remainderAfterRecorded,
+  roomBeamMeters,
+} from '@/lib/loaded-volume';
 
 // Same live-order set as every dashboard figure.
 const LIVE: Prisma.OrderWhereInput = { status: { notIn: ['CANCELED', 'DRAFT'] } };
@@ -91,6 +97,9 @@ export const GET = withPermissionAny(
           { loadedAt: { gte: start, lte: end } },
           { deliveredAt: { gte: start, lte: end } },
           { shipments: { some: { loadedAt: { gte: start, lte: end } } } },
+          // A truck DELIVERED this month completes its order even if it
+          // loaded earlier, so the remainder is reachable by that date too.
+          { shipments: { some: { deliveredAt: { gte: start, lte: end } } } },
         ],
       },
       select: {
@@ -99,10 +108,15 @@ export const GET = withPermissionAny(
         totalArea: true, totalBlocks: true, totalBeams: true,
         client: { select: { name: true } },
         project: { select: { calculations: { select: { beamCount: true, beamLength: true } } } },
+        // EVERY shipment, not only loaded ones: completion asks whether all
+        // of them are delivered, and one that was never loaded counts against
+        // that. The loaded subset is taken in code below.
         shipments: {
-          where: { loadedAt: { not: null } },
           orderBy: { number: 'asc' },
-          select: { id: true, number: true, loadedAt: true, loadedBeams: true, loadedBlocks: true },
+          select: {
+            id: true, number: true, status: true, loadedAt: true,
+            deliveredAt: true, loadedBeams: true, loadedBlocks: true,
+          },
         },
       },
     });
@@ -149,13 +163,15 @@ export const GET = withPermissionAny(
         });
       };
 
-      if (o.shipments.length > 0) {
-        const per = o.shipments.map((s) => ({
+      // Only loaded trucks carry quantities.
+      const loadedShipments = o.shipments.filter((s) => s.loadedAt);
+      if (loadedShipments.length > 0) {
+        const per = loadedShipments.map((s) => ({
           blocks: Number(s.loadedBlocks ?? 0),
           ...beamsFromLoadedJson(s.loadedBeams),
         }));
         const shares = areaShares(totals.area, per);
-        o.shipments.forEach((s, i) => {
+        loadedShipments.forEach((s, i) => {
           const q = {
             blocks: per[i].blocks,
             beamCount: per[i].count,
@@ -184,9 +200,18 @@ export const GET = withPermissionAny(
         }
       }
 
-      if (o.status === 'DELIVERED') {
+      // Physically complete, NOT `status === 'DELIVERED'` — that status is
+      // gated on a zero balance, so a delivered-but-unpaid split order would
+      // never have its unrecorded balance counted. See physicalCompletion().
+      const when = physicalCompletion({
+        status: o.status,
+        deliveredAt: o.deliveredAt,
+        loadedAt: o.loadedAt,
+        scheduledAt: o.scheduledAt,
+        shipments: o.shipments,
+      });
+      if (when) {
         const rest = remainderAfterRecorded(totals, recorded);
-        const when = o.deliveredAt ?? o.loadedAt ?? o.scheduledAt;
         const worth = rest.blocks > 0 || rest.beamCount > 0 || rest.beamMeters > 0.0001 || rest.area > 0.0001;
         if (worth && inMonth(when)) {
           push(

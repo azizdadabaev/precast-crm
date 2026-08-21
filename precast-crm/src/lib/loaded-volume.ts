@@ -126,6 +126,47 @@ export function areaShares(
   return loaded.map(() => orderArea / loaded.length);
 }
 
+/** Minimum an order must expose for `physicalCompletion` to judge it. */
+export interface CompletionInput {
+  status: string;
+  deliveredAt?: Date | null;
+  loadedAt?: Date | null;
+  scheduledAt: Date;
+  shipments: Array<{ status: string; deliveredAt?: Date | null }>;
+}
+
+/**
+ * When the goods physically left the yard in full — or null if they have not.
+ *
+ * NOT the same as `status === 'DELIVERED'`. An order cannot reach that status
+ * until its balance is zero (`PATCH /api/orders/[id]` gates it, and the UI
+ * disables the button), so a split-shipment order whose every truck has been
+ * delivered but which is still unpaid stays at DISPATCHED forever. On prod
+ * that is three orders holding 1 653 blocks that never counted anywhere.
+ *
+ * Delivery and payment are different facts. Volume follows the goods:
+ *  - the order is marked DELIVERED — the single-truck path, gated on payment; or
+ *  - it has shipments and EVERY one of them is DELIVERED, whatever the balance.
+ *
+ * The returned date is when that completion happened, used to pick the month.
+ * Falls back through `loadedAt` to `scheduledAt` so a missing timestamp on an
+ * old row can never drop the volume entirely.
+ */
+export function physicalCompletion(order: CompletionInput): Date | null {
+  if (order.status === 'DELIVERED') {
+    return order.deliveredAt ?? order.loadedAt ?? order.scheduledAt;
+  }
+  if (order.shipments.length > 0 && order.shipments.every((s) => s.status === 'DELIVERED')) {
+    // The LAST truck is when the order became whole.
+    const dates = order.shipments
+      .map((s) => s.deliveredAt)
+      .filter((d): d is Date => !!d)
+      .sort((a, b) => b.getTime() - a.getTime());
+    return dates[0] ?? order.loadedAt ?? order.scheduledAt;
+  }
+  return null;
+}
+
 /**
  * What a fully-delivered order still owes the tally.
  *

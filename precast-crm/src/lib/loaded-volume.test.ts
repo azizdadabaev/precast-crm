@@ -4,6 +4,7 @@ import {
   areaShares,
   beamsFromLoadedJson,
   loadMonthKey,
+  physicalCompletion,
   remainderAfterRecorded,
   hasRemainder,
   roomBeamMeters,
@@ -130,6 +131,75 @@ describe('loadMonthKey', () => {
   it('zero-pads the month', () => {
     expect(loadMonthKey(new Date(2026, 0, 15))).toBe('2026-01');
     expect(loadMonthKey(new Date(2026, 11, 15))).toBe('2026-12');
+  });
+});
+
+describe('physicalCompletion', () => {
+  const sched = new Date(2026, 7, 15);
+
+  it('uses deliveredAt when the order itself is DELIVERED', () => {
+    const d = new Date(2026, 7, 21);
+    expect(physicalCompletion({ status: 'DELIVERED', deliveredAt: d, scheduledAt: sched, shipments: [] })).toBe(d);
+  });
+
+  it('completes a fully-delivered order that is still UNPAID', () => {
+    // The reported case, order 2026-08-0086: every truck delivered, balance
+    // 5 150 000 outstanding, so the order is stuck at DISPATCHED and its 207
+    // unrecorded blocks never counted.
+    const shipped = new Date(2026, 7, 21, 10, 50);
+    const at = physicalCompletion({
+      status: 'DISPATCHED',
+      deliveredAt: null,
+      scheduledAt: sched,
+      shipments: [{ status: 'DELIVERED', deliveredAt: shipped }],
+    });
+    expect(at).toEqual(shipped);
+  });
+
+  it('takes the LAST truck when several delivered on different days', () => {
+    const first = new Date(2026, 6, 27);
+    const last = new Date(2026, 7, 3);
+    const at = physicalCompletion({
+      status: 'DISPATCHED',
+      scheduledAt: sched,
+      shipments: [
+        { status: 'DELIVERED', deliveredAt: first },
+        { status: 'DELIVERED', deliveredAt: last },
+      ],
+    });
+    expect(at).toEqual(last);
+  });
+
+  it('is null while any truck is still outstanding', () => {
+    // Half-delivered is not delivered; counting the balance now would credit
+    // product that has not left the yard.
+    expect(physicalCompletion({
+      status: 'DISPATCHED',
+      scheduledAt: sched,
+      shipments: [
+        { status: 'DELIVERED', deliveredAt: new Date(2026, 7, 3) },
+        { status: 'DISPATCHED', deliveredAt: null },
+      ],
+    })).toBeNull();
+  });
+
+  it('is null for an order with no shipments that is not delivered', () => {
+    expect(physicalCompletion({ status: 'PLACED', scheduledAt: sched, shipments: [] })).toBeNull();
+    expect(physicalCompletion({ status: 'LOADED', loadedAt: new Date(), scheduledAt: sched, shipments: [] })).toBeNull();
+  });
+
+  it('never loses the volume when timestamps are missing', () => {
+    const loaded = new Date(2026, 7, 10);
+    expect(physicalCompletion({ status: 'DELIVERED', deliveredAt: null, loadedAt: loaded, scheduledAt: sched, shipments: [] })).toBe(loaded);
+    expect(physicalCompletion({ status: 'DELIVERED', deliveredAt: null, loadedAt: null, scheduledAt: sched, shipments: [] })).toBe(sched);
+    expect(physicalCompletion({
+      status: 'DISPATCHED', loadedAt: loaded, scheduledAt: sched,
+      shipments: [{ status: 'DELIVERED', deliveredAt: null }],
+    })).toBe(loaded);
+  });
+
+  it('does not treat a cancelled order as complete', () => {
+    expect(physicalCompletion({ status: 'CANCELED', scheduledAt: sched, shipments: [] })).toBeNull();
   });
 });
 
