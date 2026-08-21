@@ -171,6 +171,34 @@ export function LedgerClient() {
                       </td>
                       <td className="px-3 py-2">
                         {r.reason}
+                        {/* A remainder row shows only the BALANCE, so on a
+                            well-recorded order most columns are empty and it
+                            reads as "nothing counted" when the opposite is
+                            true. Spell out what was already counted, where. */}
+                        {r.context && (
+                          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                            <div>
+                              блок:{' '}
+                              <span className="font-mono">
+                                {fmt(r.context.recorded.blocks)} / {fmt(r.context.orderTotals.blocks)}
+                              </span>
+                              {r.context.blocksComplete && ' ✓ тўлиқ ёзилган'}
+                            </div>
+                            <div>
+                              балка:{' '}
+                              <span className="font-mono">
+                                {fmt1(r.context.recorded.beamMeters)} / {fmt1(r.context.orderTotals.beamMeters)} м
+                              </span>
+                              {r.context.beamsComplete && ' ✓ тўлиқ ёзилган'}
+                            </div>
+                            {r.context.recordedMonths.length > 0 && (
+                              <div>
+                                олдин ҳисобланган:{' '}
+                                <span className="font-mono">{r.context.recordedMonths.join(', ')}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {r.crossesMonth && (
                           // The point of the whole page: this figure counted in
                           // a month other than its order's.
@@ -186,7 +214,16 @@ export function LedgerClient() {
                         {r.kind === 'volume' && r.blocks ? fmt(r.blocks) : '—'}
                       </td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
-                        {r.kind === 'volume' && r.beamMeters ? `${fmt1(r.beamMeters)} м` : '—'}
+                        {r.kind === 'volume' && r.beamMeters ? (
+                          <>
+                            {fmt1(r.beamMeters)} м
+                            {/* Metres are what compare across orders, but the
+                                piece count is what the yard actually loads. */}
+                            {r.beamCount ? (
+                              <div className="text-xs text-muted-foreground">{fmt(r.beamCount)} та</div>
+                            ) : null}
+                          </>
+                        ) : '—'}
                       </td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums whitespace-nowrap">
                         {r.kind === 'volume' && r.area ? `${fmt1(r.area)} м²` : '—'}

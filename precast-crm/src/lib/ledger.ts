@@ -42,6 +42,50 @@ export interface LedgerRow {
    * looking at when a monthly total is surprising.
    */
   crossesMonth: boolean;
+  /** Present on delivered-remainder rows only. See `RemainderContext`. */
+  context?: RemainderContext;
+}
+
+/**
+ * What a delivered-remainder row needs in order to explain itself.
+ *
+ * A remainder row shows only the BALANCE nobody entered, so on a well-recorded
+ * order most of its columns are empty — which reads as "nothing was counted"
+ * when the truth is the opposite: everything was counted, just earlier and in
+ * another month. Order 2026-07-0081 is the case in point — its 1 216 blocks
+ * were recorded in full on the July trucks, so its August remainder row shows
+ * a blocks column of "—" and looks broken.
+ *
+ * Carrying the order totals, what was already recorded, and WHERE it was
+ * recorded lets the row say so.
+ */
+export interface RemainderContext {
+  orderTotals: { blocks: number; beamCount: number; beamMeters: number; area: number };
+  recorded: { blocks: number; beamCount: number; beamMeters: number; area: number };
+  /** `YYYY-MM` months the already-recorded loads counted in, oldest first. */
+  recordedMonths: string[];
+  /** True when the trucks accounted for every block the order carried. */
+  blocksComplete: boolean;
+  /** True when the trucks accounted for every beam metre. */
+  beamsComplete: boolean;
+}
+
+/** Build the context, rounding measurements once so the UI never re-rounds. */
+export function buildRemainderContext(
+  orderTotals: { blocks: number; beamCount: number; beamMeters: number; area: number },
+  recorded: { blocks: number; beamCount: number; beamMeters: number; area: number },
+  recordedMonths: string[],
+): RemainderContext {
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  return {
+    orderTotals: { ...orderTotals, beamMeters: r1(orderTotals.beamMeters), area: r1(orderTotals.area) },
+    recorded: { ...recorded, beamMeters: r1(recorded.beamMeters), area: r1(recorded.area) },
+    recordedMonths: Array.from(new Set(recordedMonths)).sort(),
+    blocksComplete: recorded.blocks >= orderTotals.blocks,
+    // Tolerance, not equality: metres are floating-point sums of
+    // length × count and will not land exactly on the total.
+    beamsComplete: recorded.beamMeters >= orderTotals.beamMeters - 0.05,
+  };
 }
 
 export function monthOf(d: Date): string {

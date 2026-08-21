@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { isMonthKey, monthBounds } from '@/lib/month-orders';
 import { attributionDate } from '@/lib/payment-attribution';
 import {
+  buildRemainderContext,
   LEDGER_REASONS,
   ledgerTotals,
   monthOf,
@@ -119,10 +120,14 @@ export const GET = withPermissionAny(
         area: Number(o.totalArea),
       };
       const recorded = { blocks: 0, beamCount: 0, beamMeters: 0, area: 0 };
+      // Where the already-entered loads counted, so a remainder row can say
+      // "the rest was counted in July" instead of showing a bare dash.
+      const recordedMonths: string[] = [];
 
       const push = (
         idSuffix: string, at: Date, reason: string,
         q: { blocks: number; beamCount: number; beamMeters: number; area: number },
+        context?: ReturnType<typeof buildRemainderContext>,
       ) => {
         const attributedMonth = monthOf(at);
         rows.push({
@@ -140,6 +145,7 @@ export const GET = withPermissionAny(
           beamMeters: Math.round(q.beamMeters * 10) / 10,
           area: Math.round(q.area * 10) / 10,
           crossesMonth: orderMonth !== attributedMonth,
+          ...(context ? { context } : {}),
         });
       };
 
@@ -160,6 +166,7 @@ export const GET = withPermissionAny(
           recorded.beamCount += q.beamCount;
           recorded.beamMeters += q.beamMeters;
           recorded.area += q.area;
+          recordedMonths.push(monthOf(s.loadedAt as Date));
           // Only rows landing IN this month belong in the list; the rest were
           // summed purely to compute the remainder correctly.
           if (inMonth(s.loadedAt)) {
@@ -171,6 +178,7 @@ export const GET = withPermissionAny(
         recorded.beamCount = totals.beamCount;
         recorded.beamMeters = totals.beamMeters;
         recorded.area = totals.area;
+        recordedMonths.push(monthOf(o.loadedAt));
         if (inMonth(o.loadedAt)) {
           push('single', o.loadedAt, LEDGER_REASONS.singleTruck, totals);
         }
@@ -181,7 +189,10 @@ export const GET = withPermissionAny(
         const when = o.deliveredAt ?? o.loadedAt ?? o.scheduledAt;
         const worth = rest.blocks > 0 || rest.beamCount > 0 || rest.beamMeters > 0.0001 || rest.area > 0.0001;
         if (worth && inMonth(when)) {
-          push('remainder', when, LEDGER_REASONS.deliveredRemainder, rest);
+          push(
+            'remainder', when, LEDGER_REASONS.deliveredRemainder, rest,
+            buildRemainderContext(totals, recorded, recordedMonths),
+          );
         }
       }
     }
