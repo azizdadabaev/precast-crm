@@ -162,6 +162,10 @@ export interface DashboardData {
     id: string;
     orderNumber: string;
     clientName: string;
+    /** Digits-only as stored; formatted for display by OrderRow. */
+    clientPhone: string;
+    /** Nullable in the schema — many clients have no address on file. */
+    clientAddress: string | null;
     primaryProductLabel: string;
     totalArea: number;
     totalPrice: number;

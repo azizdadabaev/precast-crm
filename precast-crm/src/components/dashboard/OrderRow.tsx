@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { formatPhone, formatPhoneCompact } from '@/lib/phone';
 import type { DashboardData } from './types';
 
 /**
@@ -77,7 +78,9 @@ export function OrderRow({ order: o }: { order: DashOrder }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
           <Link href={`/orders/${o.id}`} style={{
             fontFamily: 'var(--font-num)', fontSize: 10.5, color: 'var(--dash-accent)',
-            textDecoration: 'none',
+            // An order number is one token — breaking it as "2026-07- / 0001"
+            // makes it unreadable and unsearchable by eye.
+            textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
           }}>{o.orderNumber}</Link>
           <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--dash-muted)', flexShrink: 0 }} />
           <span style={{
@@ -85,6 +88,31 @@ export function OrderRow({ order: o }: { order: DashOrder }) {
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{o.primaryProductLabel}</span>
         </div>
+
+        {/* Phone on its own line, as a tel: link — it dials straight from a
+            phone or tablet, which is the operator's most common next action
+            after reading this row. */}
+        <div style={{ marginTop: 3 }}>
+          <a
+            href={`tel:${formatPhoneCompact(o.clientPhone)}`}
+            style={{
+              fontFamily: 'var(--font-num)', fontSize: 10.5, color: 'var(--dash-muted)',
+              textDecoration: 'none', whiteSpace: 'nowrap',
+            }}
+          >{formatPhone(o.clientPhone)}</a>
+        </div>
+
+        {/* Address gets a line of its own rather than sharing with the phone:
+            the client column is ~280px in the dashboard card, and an Uzbek
+            address («Фарғона вилояти, Қува тумани») shares that width with a
+            13-character phone only by ellipsing itself away to nothing.
+            Nullable on Client, so the line disappears entirely when absent. */}
+        {o.clientAddress && (
+          <div style={{
+            fontFamily: 'var(--font-body-alt)', fontSize: 11, color: 'var(--dash-muted)',
+            marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{o.clientAddress}</div>
+        )}
       </div>
 
       {/* Area */}

@@ -455,7 +455,7 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
         totalBeams: true,
         totalBlocks: true,
         paymentState: true,
-        client: { select: { name: true } },
+        client: { select: { name: true, phone: true, address: true } },
       },
     }),
   ]);
@@ -829,6 +829,8 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     id: r.id,
     orderNumber: r.orderNumber,
     clientName: r.client.name,
+    clientPhone: r.client.phone,
+    clientAddress: r.client.address,
     primaryProductLabel:
       r.totalBeams > 0
         ? `${r.totalBeams} та балка · ${r.totalBlocks} та блок`

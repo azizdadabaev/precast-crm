@@ -50,7 +50,7 @@ export const GET = withPermissionAny(
         totalBlocks: true,
         paymentState: true,
         placedAt: true,
-        client: { select: { name: true } },
+        client: { select: { name: true, phone: true, address: true } },
       },
     });
 
@@ -58,6 +58,8 @@ export const GET = withPermissionAny(
       id: r.id,
       orderNumber: r.orderNumber,
       clientName: r.client.name,
+      clientPhone: r.client.phone,
+      clientAddress: r.client.address,
       primaryProductLabel:
         r.totalBeams > 0
           ? `${r.totalBeams} та балка · ${r.totalBlocks} та блок`
