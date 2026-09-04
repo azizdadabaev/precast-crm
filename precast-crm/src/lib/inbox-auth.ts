@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextRequest } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
 import { fail } from "@/lib/api";
@@ -17,13 +17,21 @@ export function verifyInboxPassword(input: string): boolean {
   return expected.length > 0 && input === expected;
 }
 
-/** Issue the short-lived unlock cookie after a correct password. */
-export async function setInboxUnlockCookie(): Promise<void> {
-  const token = await new SignJWT({ inbox: true })
+export const INBOX_UNLOCK_HEADER = "x-inbox-unlock";
+
+/** Mint the 12 h unlock JWT. Shared by the cookie (web) and the header (Android). */
+export async function mintInboxUnlockToken(): Promise<string> {
+  return new SignJWT({ inbox: true })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("12h")
     .sign(SECRET);
+}
+
+/** Issue the short-lived unlock cookie after a correct password. Returns the
+ *  token so the unlock route can also hand it to a cookie-less client. */
+export async function setInboxUnlockCookie(): Promise<string> {
+  const token = await mintInboxUnlockToken();
   cookies().set(UNLOCK_COOKIE, token, {
     httpOnly: true,
     secure: process.env.COOKIE_SECURE !== "false" && process.env.NODE_ENV === "production",
@@ -31,6 +39,7 @@ export async function setInboxUnlockCookie(): Promise<void> {
     path: "/",
     maxAge: UNLOCK_TTL_SECONDS,
   });
+  return token;
 }
 
 /** Delete the unlock cookie, effectively locking the inbox immediately. */
@@ -38,9 +47,7 @@ export function clearInboxUnlockCookie(): void {
   cookies().delete(UNLOCK_COOKIE);
 }
 
-/** True if a valid, unexpired unlock cookie is present. */
-export async function isInboxUnlocked(): Promise<boolean> {
-  const t = cookies().get(UNLOCK_COOKIE)?.value;
+async function verifyUnlock(t: string | undefined | null): Promise<boolean> {
   if (!t) return false;
   try {
     await jwtVerify(t, SECRET);
@@ -48,6 +55,13 @@ export async function isInboxUnlocked(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** True if a valid, unexpired unlock token is present — cookie (web) or
+ *  `X-Inbox-Unlock` header (Android, which keeps it in memory only). */
+export async function isInboxUnlocked(): Promise<boolean> {
+  if (await verifyUnlock(cookies().get(UNLOCK_COOKIE)?.value)) return true;
+  return verifyUnlock(headers().get(INBOX_UNLOCK_HEADER));
 }
 
 /**

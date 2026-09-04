@@ -17,6 +17,8 @@ export const POST = withPermission("inbox.access", async (req: NextRequest) => {
   if (!verifyInboxPassword(password)) {
     return fail("Нотўғри парол · Wrong password", 401);
   }
-  await setInboxUnlockCookie();
-  return ok({ unlocked: true });
+  const token = await setInboxUnlockCookie();
+  // The web ignores `token` (cookie does the work); Android sends it back
+  // as X-Inbox-Unlock on every inbox request.
+  return ok({ unlocked: true, token });
 });
