@@ -29,7 +29,7 @@ class SessionRepository @Inject constructor(
     /** The last authenticated user, surviving process death; see SessionPrefs.lastMe. */
     val lastMe: Flow<Me?> = prefs.lastMe
 
-    suspend fun login(loginName: String, pin: String): Result<Me> = runCatching {
+    suspend fun login(loginName: String, pin: String): Result<Me> = runCatchingCancellable {
         val res = api.login(LoginRequest(loginName.trim(), pin))
         tokens.set(res.token)
         prefs.setLastLoginName(loginName.trim())
@@ -38,9 +38,9 @@ class SessionRepository @Inject constructor(
 
     /** Cold start. A 401 here clears the token (AuthInterceptor) and the caller shows the PIN screen. */
     suspend fun bootstrap(): Result<Bootstrap> =
-        runCatching { api.bootstrap().toDomain().also { _me.value = it.me; prefs.setLastMe(it.me) } }
+        runCatchingCancellable { api.bootstrap().toDomain().also { _me.value = it.me; prefs.setLastMe(it.me) } }
 
-    suspend fun changePin(currentPin: String, newPin: String): Result<Unit> = runCatching {
+    suspend fun changePin(currentPin: String, newPin: String): Result<Unit> = runCatchingCancellable {
         api.changePin(ChangePinRequest(currentPin, newPin))
         _me.value = _me.value?.copy(mustChangePassword = false)
     }

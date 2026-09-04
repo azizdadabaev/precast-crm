@@ -1,10 +1,14 @@
 package uz.etalon.crm.core.data
 
 import app.cash.turbine.test
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Assertions.*
@@ -39,7 +43,10 @@ private class FakeDao : OrdersDao {
 private open class FakeApi : EtalonApi {
     var page: OrdersPageDto = OrdersPageDto(emptyList(), 0, 1, 20, 0)
     var fail: Throwable? = null
-    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto { fail?.let { throw it }; return this.page }
+
+    /** When set, `orders()` suspends until it completes, so a test can act mid-flight. */
+    var gate: CompletableDeferred<Unit>? = null
+    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto { gate?.await(); fail?.let { throw it }; return this.page }
     override suspend fun order(id: String): OrderDetailDto { fail?.let { throw it }; throw ApiException(404, "Топилмади · Not found") }
     override suspend fun login(body: LoginRequest) = error("unused")
     override suspend fun me() = error("unused")
@@ -108,6 +115,38 @@ class OrdersRepositoryTest {
         repo.refreshList(OrdersFilter())
         dao.clearAllSummaries() // what SessionRepository.signOut()'s db.wipe() does to the DAO half of the cache
         repo.clearCache()
+        repo.list(OrdersFilter()).test {
+            assertEquals(Resource.Loading<List<uz.etalon.crm.core.model.OrderSummary>>(null), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    /** User A's request is still in flight when user A signs out. It must not write its rows into
+     *  the cleared cache, where user B would be the one to see them. */
+    @Test fun `a refresh that lands after clearCache cannot resurrect the previous session's rows`() = runTest {
+        val dao = FakeDao()
+        val gate = CompletableDeferred<Unit>()
+        val api = FakeApi().apply { page = OrdersPageDto(listOf(summary), 1, 1, 20, 1); this.gate = gate }
+        val repo = OrdersRepository(api, dao, Json { ignoreUnknownKeys = true }, "https://x")
+        val job = launch { repo.refreshList(OrdersFilter()) }
+        runCurrent() // the refresh is now parked inside the API call
+        repo.clearCache()
+        gate.complete(Unit)
+        job.join()
+        assertTrue(dao.lists.value.values.all { it.isEmpty() }, "the stale page must not reach Room either")
+        repo.list(OrdersFilter()).test {
+            assertEquals(Resource.Loading<List<uz.etalon.crm.core.model.OrderSummary>>(null), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    /** A cancelled scope (screen left, ViewModel cleared) is not a failure to report to the user. */
+    @Test fun `cancelling a refresh records no error outcome`() = runTest {
+        val api = FakeApi().apply { gate = CompletableDeferred() }
+        val repo = OrdersRepository(api, FakeDao(), Json { ignoreUnknownKeys = true }, "https://x")
+        val job = launch { repo.refreshList(OrdersFilter()) }
+        runCurrent()
+        job.cancelAndJoin()
         repo.list(OrdersFilter()).test {
             assertEquals(Resource.Loading<List<uz.etalon.crm.core.model.OrderSummary>>(null), awaitItem())
             cancelAndIgnoreRemainingEvents()
