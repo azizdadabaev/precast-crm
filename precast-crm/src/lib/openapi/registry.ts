@@ -16,7 +16,8 @@ import {
   LoginSchema, ChangePinSchema, DeviceRegisterSchema, ClientCreateSchema, ClientUpdateSchema,
   PlaceOrderSchema, OrderUpdateSchema, PaymentRecordSchema, PaymentConfirmSchema,
   PaymentRejectSchema, CommentCreateSchema, DriverCreateSchema, OrderStatusEnum,
-  OrderPaymentStateEnum, PaymentStatusEnum, PaymentMethodEnum, RoleEnum,
+  OrderPaymentStateEnum, PaymentStatusEnum, PaymentMethodEnum, RoleEnum, LanguageEnum,
+  GalleryListSchema,
 } from "@/lib/validation";
 import { CalculateBatchSchema } from "@/app/api/calculate/batch/schema";
 
@@ -99,6 +100,9 @@ registry.registerPath({ method: "get", path: "/api/orders", security: bearer,
   request: { query: z.object({ q: z.string().optional(), status: OrderStatusEnum.optional(), day: z.string().optional(), page: z.number().int().optional(), pageSize: z.number().int().max(100).optional() }) },
   responses: { 200: { description: "Page", ...json(envelope(z.object({ items: z.array(OrderListItem), total: z.number(), page: z.number(), pageSize: z.number(), totalPages: z.number() }))) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/orders", security: bearer, request: { body: json(PlaceOrderSchema) }, responses: { 201: { description: "Order", ...json(envelope(Any)) }, ...errors, 409: { description: "Already placed", ...json(ApiError) } } });
+// CapacityRangeSchema (validation.ts) uses z.coerce.date() for from/to, which
+// zod-to-openapi renders as an optional nullable string instead of a required
+// date — worse than this hand-written object, so it's kept as-is.
 registry.registerPath({ method: "get", path: "/api/orders/capacity", security: bearer, request: { query: z.object({ from: z.string(), to: z.string() }) },
   responses: { 200: { description: "Days", ...json(envelope(z.object({ days: z.array(z.object({ date: z.string(), totalArea: z.number(), totalOrders: z.number(), totalBlocks: z.number() })), thresholds: z.object({ low: z.number(), moderate: z.number(), heavy: z.number() }) }))) }, ...errors } });
 registry.registerPath({ method: "get", path: "/api/orders/{id}", security: bearer, request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: "Order aggregate", ...json(envelope(Any)) }, 404: { description: "Not found", ...json(ApiError) }, ...errors } });
@@ -126,7 +130,7 @@ registry.registerPath({ method: "post", path: "/api/payments/upload-receipt", se
 registry.registerPath({ method: "post", path: "/api/payments/{id}/receipts", security: bearer, request: { params: z.object({ id: z.string() }), headers: z.object({ "Idempotency-Key": idem }), body: multipart({ file: File }) }, responses: { 200: { description: "Receipt", ...json(envelope(z.object({ id: z.string(), imageUrl: z.string() }))) }, ...errors } });
 
 // ── Clients / drivers / notifications / gallery / calc ─────────
-registry.registerPath({ method: "get", path: "/api/clients", security: bearer, request: { query: z.object({ q: z.string().optional(), phone: z.string().optional(), viloyat: z.string().optional(), page: z.number().int().optional(), pageSize: z.number().int().optional(), sortBy: z.string().optional(), sortDir: z.enum(["asc", "desc"]).optional() }) },
+registry.registerPath({ method: "get", path: "/api/clients", security: bearer, request: { query: z.object({ q: z.string().optional(), phone: z.string().optional(), language: LanguageEnum.optional(), source: z.string().optional(), viloyat: z.string().optional(), page: z.number().int().optional(), pageSize: z.number().int().optional(), sortBy: z.string().optional(), sortDir: z.enum(["asc", "desc"]).optional() }) },
   responses: { 200: { description: "Page (when ?page given) or bare array", ...json(envelope(z.union([z.array(Any), z.object({ rows: z.array(Any), total: z.number(), page: z.number(), pageSize: z.number(), pageCount: z.number(), sources: z.array(z.string()) })]))) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/clients", security: bearer, request: { body: json(ClientCreateSchema) }, responses: { 201: { description: "Client", ...json(envelope(Any)) }, 200: { description: "Existing client (same phone)", ...json(envelope(Any)) }, ...errors } });
 registry.registerPath({ method: "get", path: "/api/clients/{id}", security: bearer, request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: "Client", ...json(envelope(Any)) }, ...errors } });
@@ -136,7 +140,7 @@ registry.registerPath({ method: "post", path: "/api/drivers", security: bearer, 
 registry.registerPath({ method: "get", path: "/api/notifications", security: bearer, request: { query: z.object({ limit: z.number().int().optional(), unreadOnly: z.enum(["true", "false"]).optional() }) }, responses: { 200: { description: "Feed", ...json(envelope(z.object({ items: z.array(Notification), unreadCount: z.number() }))) }, ...errors } });
 registry.registerPath({ method: "patch", path: "/api/notifications/{id}", security: bearer, request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: "Read", ...json(envelope(z.object({ ok: z.literal(true) }))) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/notifications/read-all", security: bearer, responses: { 200: { description: "Read all", ...json(envelope(z.object({ ok: z.literal(true) }))) }, ...errors } });
-registry.registerPath({ method: "get", path: "/api/gallery", security: bearer, request: { query: z.object({ page: z.number().int().optional(), pageSize: z.number().int().max(48).optional(), kind: z.enum(["LOADED", "DELIVERY_PROOF", "SHIPMENT_LOADED"]).optional(), clientId: z.string().optional(), from: z.string().optional(), to: z.string().optional(), q: z.string().optional() }) },
+registry.registerPath({ method: "get", path: "/api/gallery", security: bearer, request: { query: GalleryListSchema },
   responses: { 200: { description: "Posts", ...json(envelope(z.object({ posts: z.array(Any), total: z.number(), photoTotal: z.number(), page: z.number(), pageSize: z.number(), pageCount: z.number() }))) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/calculate/batch", security: bearer, request: { body: json(CalculateBatchSchema) }, responses: { 200: { description: "Totals", ...json(envelope(Any)) }, ...errors } });
 

@@ -3454,6 +3454,26 @@
           },
           {
             "schema": {
+              "type": "string",
+              "enum": [
+                "UZ",
+                "RU"
+              ]
+            },
+            "required": false,
+            "name": "language",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "source",
+            "in": "query"
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "required": false,
@@ -4407,7 +4427,9 @@
         "parameters": [
           {
             "schema": {
-              "type": "integer"
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
             },
             "required": false,
             "name": "page",
@@ -4416,7 +4438,9 @@
           {
             "schema": {
               "type": "integer",
-              "maximum": 48
+              "minimum": 1,
+              "maximum": 48,
+              "default": 24
             },
             "required": false,
             "name": "pageSize",
@@ -4437,7 +4461,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "cuid"
             },
             "required": false,
             "name": "clientId",
@@ -4445,7 +4470,10 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "required": false,
             "name": "from",
@@ -4453,7 +4481,10 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "required": false,
             "name": "to",
@@ -4461,7 +4492,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 120
             },
             "required": false,
             "name": "q",
