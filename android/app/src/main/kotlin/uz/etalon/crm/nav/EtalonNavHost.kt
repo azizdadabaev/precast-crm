@@ -40,15 +40,14 @@ private fun Destination.icon(): ImageVector = when (this) {
     Destination.MORE -> Icons.Default.MoreHoriz
 }
 
-private fun Destination.key(): Key = when (this) {
-    Destination.ORDERS -> Orders
-    Destination.MORE -> More
-    else -> ComingSoon(labelRes)
-}
-
 /** Signed-in shell: navigation suite (bottom bar on phones, rail at >= 600 dp) + Nav3 display. */
 @Composable
-fun SignedInShell(me: Me, backStack: NavBackStack<NavKey>, onSignOut: () -> Unit) {
+fun SignedInShell(
+    me: Me,
+    backStack: NavBackStack<NavKey>,
+    onSignOut: () -> Unit,
+    onPinChanged: () -> Unit,
+) {
     val destinations = destinationsFor(me)
     val current = backStack.lastOrNull()
     NavigationSuiteScaffold(
@@ -58,7 +57,12 @@ fun SignedInShell(me: Me, backStack: NavBackStack<NavKey>, onSignOut: () -> Unit
                 val selected = current == target || (d == Destination.ORDERS && current is OrderDetail)
                 item(
                     selected = selected,
-                    onClick = { backStack.clear(); backStack.add(target) },
+                    // Add first, then trim: clear-then-add would leave the stack momentarily
+                    // empty, which NavDisplay cannot render.
+                    onClick = {
+                        backStack.add(target)
+                        while (backStack.size > 1) backStack.removeAt(0)
+                    },
                     icon = { Icon(d.icon(), null) },
                     label = { Text(stringResource(d.labelRes)) },
                 )
@@ -72,29 +76,25 @@ fun SignedInShell(me: Me, backStack: NavBackStack<NavKey>, onSignOut: () -> Unit
                 entry<Orders> { OrdersListRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
                 entry<OrderDetail> { k -> OrderDetailRoute(orderId = k.id, onBack = { backStack.removeLastOrNull() }) }
                 entry<More> { MoreScreen(me, onChangePin = { backStack.add(ChangePin(forced = false)) }, onSignOut = onSignOut) }
-                entry<ChangePin> { k ->
-                    // A forced change is the start key, so popping it would empty the stack.
-                    ChangePinRoute(
-                        forced = k.forced,
-                        onDone = {
-                            backStack.removeLastOrNull()
-                            if (backStack.isEmpty()) backStack.add(Orders)
-                        },
-                    )
-                }
+                // The server bumps tokenVersion on a PIN change, so the current token is dead the
+                // moment this succeeds. Sign out deliberately instead of walking back into the app
+                // and hitting a silent 401.
+                entry<ChangePin> { k -> ChangePinRoute(forced = k.forced, onDone = onPinChanged) }
                 entry<ComingSoon> { k -> ComingSoonScreen(k.labelRes) }
             },
         )
     }
 }
 
+/** [hintRes] is an optional info line on the login screen, e.g. after a PIN change. */
 @Composable
-fun SignedOutShell(backStack: NavBackStack<NavKey>, onLoggedIn: (Me) -> Unit) {
+fun SignedOutShell(backStack: NavBackStack<NavKey>, hintRes: Int?, onLoggedIn: (Me) -> Unit) {
+    val hint = hintRes?.let { stringResource(it) }
     NavDisplay(
         backStack = backStack,
         onBack = { backStack.removeLastOrNull() },
         entryProvider = entryProvider {
-            entry<Login> { LoginRoute(onLoggedIn = onLoggedIn) }
+            entry<Login> { LoginRoute(onLoggedIn = onLoggedIn, hint = hint) }
         },
     )
 }

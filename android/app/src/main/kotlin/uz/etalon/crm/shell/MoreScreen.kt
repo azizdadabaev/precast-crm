@@ -19,6 +19,19 @@ import uz.etalon.crm.R
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.model.Me
+import uz.etalon.crm.core.model.Role
+
+/** Uzbek label for a role; the enum constant itself is an English identifier and must not reach the UI. */
+fun roleLabel(role: Role): Int = when (role) {
+    Role.OWNER -> R.string.role_owner
+    Role.ADMIN -> R.string.role_admin
+    Role.SALES -> R.string.role_sales
+    Role.INVENTORY -> R.string.role_inventory
+    Role.DRIVER -> R.string.role_driver
+    Role.ACCOUNTANT -> R.string.role_accountant
+    Role.CUSTOM -> R.string.role_custom
+    Role.UNKNOWN -> R.string.role_unknown
+}
 
 @Composable
 fun MoreScreen(me: Me, onChangePin: () -> Unit, onSignOut: () -> Unit) {
@@ -27,7 +40,7 @@ fun MoreScreen(me: Me, onChangePin: () -> Unit, onSignOut: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(me.name, style = MaterialTheme.typography.headlineMedium)
-        SectionLabel(me.role.name)
+        SectionLabel(stringResource(roleLabel(me.role)))
         OutlinedButton(onClick = onChangePin, modifier = Modifier.fillMaxWidth().height(48.dp)) {
             Text(stringResource(R.string.more_change_pin))
         }

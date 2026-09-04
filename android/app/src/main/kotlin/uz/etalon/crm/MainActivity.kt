@@ -15,6 +15,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,39 +27,42 @@ import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.nav.ChangePin
 import uz.etalon.crm.nav.Key
 import uz.etalon.crm.nav.Login
-import uz.etalon.crm.nav.OrderDetail
-import uz.etalon.crm.nav.Orders
 import uz.etalon.crm.nav.SignedInShell
 import uz.etalon.crm.nav.SignedOutShell
+import uz.etalon.crm.nav.startKeyFor
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private val vm: MainViewModel by viewModels()
+    private val vm: HiltMainViewModel by viewModels()
+
+    /** etalon://order/{id} from a push notification. Consumed once, so a later sign-out and
+     *  sign-in on the same activity does not re-open a stale order. */
+    private var deepLinkOrderId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // etalon://order/{id} from a push notification.
-        val deepLinkOrderId = intent?.data?.takeIf { it.scheme == "etalon" && it.host == "order" }?.lastPathSegment
+        deepLinkOrderId = intent?.data?.takeIf { it.scheme == "etalon" && it.host == "order" }?.lastPathSegment
         setContent {
             EtalonTheme {
                 val state by vm.state.collectAsStateWithLifecycle()
                 when (val s = state) {
                     AppState.Booting -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     // A successful login flips the state to SignedIn; the forced PIN change is the SignedIn start key below.
-                    AppState.SignedOut -> {
+                    is AppState.SignedOut -> {
                         val bs = rememberNavBackStack(Login)
-                        SignedOutShell(bs, onLoggedIn = vm::onSignedIn)
+                        SignedOutShell(bs, hintRes = s.hintRes, onLoggedIn = vm::onSignedIn)
                     }
                     is AppState.SignedIn -> {
                         AskForNotificationPermission()
-                        val start: Key = when {
-                            s.me.mustChangePassword -> ChangePin(forced = true)
-                            deepLinkOrderId != null -> OrderDetail(deepLinkOrderId)
-                            else -> Orders
+                        // Computed once: the LaunchedEffect below clears the deep link, and a
+                        // recomputed start key must not be able to reset the back stack.
+                        val start: Key = remember(s.me) {
+                            if (s.me.mustChangePassword) ChangePin(forced = true) else startKeyFor(s.me, deepLinkOrderId)
                         }
                         val bs = rememberNavBackStack(start)
-                        SignedInShell(s.me, bs, onSignOut = vm::signOut)
+                        LaunchedEffect(Unit) { deepLinkOrderId = null }
+                        SignedInShell(s.me, bs, onSignOut = vm::signOut, onPinChanged = vm::onPinChanged)
                     }
                 }
             }

@@ -11,6 +11,15 @@
     <string name="more_change_pin">PIN ни ўзгартириш</string>
     <string name="more_sign_out">Чиқиш</string>
     <string name="coming_soon">Бу бўлим кейинги релизда</string>
+    <string name="login_after_pin_change">Янги PIN билан киринг</string>
+    <string name="role_owner">Эгаси</string>
+    <string name="role_admin">Администратор</string>
+    <string name="role_sales">Сотув</string>
+    <string name="role_inventory">Омбор</string>
+    <string name="role_driver">Ҳайдовчи</string>
+    <string name="role_accountant">Бухгалтер</string>
+    <string name="role_custom">Махсус</string>
+    <string name="role_unknown">Номаълум</string>
     <string name="channel_orders">Буюртмалар</string>
     <string name="channel_payments">Тўловлар</string>
     <string name="channel_inbox">Хабарлар</string>

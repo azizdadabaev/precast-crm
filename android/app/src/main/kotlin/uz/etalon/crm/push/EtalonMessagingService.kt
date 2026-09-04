@@ -13,18 +13,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import uz.etalon.crm.BuildConfig
 import uz.etalon.crm.MainActivity
 import uz.etalon.crm.R
 import uz.etalon.crm.core.data.DeviceRepository
 import uz.etalon.crm.core.data.OrdersRepository
+import uz.etalon.crm.core.data.SessionRepository
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class EtalonMessagingService : FirebaseMessagingService() {
     @Inject lateinit var devices: DeviceRepository
     @Inject lateinit var orders: OrdersRepository
+    @Inject lateinit var session: SessionRepository
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onDestroy() {
@@ -40,7 +43,9 @@ class EtalonMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(msg: RemoteMessage) {
         val d = msg.data
         val orderId = d["orderId"]?.takeIf { it.isNotBlank() }
-        if (orderId != null) scope.launch { orders.refreshDetail(orderId) } // invalidate the cached detail
+        // Only refresh while signed in: after a sign-out or a 401 the request would be
+        // unauthenticated, and re-populating the cache would undo signOut()'s wipe.
+        if (orderId != null) scope.launch { if (session.isLoggedIn.first()) orders.refreshDetail(orderId) }
         val channelId = channelFor(d["type"].orEmpty())
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(channelId, channelName(channelId), NotificationManager.IMPORTANCE_HIGH))

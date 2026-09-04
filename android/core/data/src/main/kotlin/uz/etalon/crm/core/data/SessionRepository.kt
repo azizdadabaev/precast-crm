@@ -26,15 +26,19 @@ class SessionRepository @Inject constructor(
     val me: StateFlow<Me?> = _me.asStateFlow()
     val isLoggedIn: Flow<Boolean> = tokens.isLoggedIn
 
+    /** The last authenticated user, surviving process death; see SessionPrefs.lastMe. */
+    val lastMe: Flow<Me?> = prefs.lastMe
+
     suspend fun login(loginName: String, pin: String): Result<Me> = runCatching {
         val res = api.login(LoginRequest(loginName.trim(), pin))
         tokens.set(res.token)
         prefs.setLastLoginName(loginName.trim())
-        res.user.toMe().also { _me.value = it }
+        res.user.toMe().also { _me.value = it; prefs.setLastMe(it) }
     }
 
     /** Cold start. A 401 here clears the token (AuthInterceptor) and the caller shows the PIN screen. */
-    suspend fun bootstrap(): Result<Bootstrap> = runCatching { api.bootstrap().toDomain().also { _me.value = it.me } }
+    suspend fun bootstrap(): Result<Bootstrap> =
+        runCatching { api.bootstrap().toDomain().also { _me.value = it.me; prefs.setLastMe(it.me) } }
 
     suspend fun changePin(currentPin: String, newPin: String): Result<Unit> = runCatching {
         api.changePin(ChangePinRequest(currentPin, newPin))
@@ -43,6 +47,7 @@ class SessionRepository @Inject constructor(
 
     /** Local sign-out: the mobile JWT has no server-side logout; device unregistration is DeviceRepository's job.
      *  db.wipe() clears the Room tables; orders.clearCache() clears OrdersRepository's in-memory outcome maps —
-     *  both are needed or the next signed-in user could briefly see the previous user's cached orders. */
-    suspend fun signOut() { tokens.clear(); _me.value = null; db.wipe(); orders.clearCache() }
+     *  both are needed or the next signed-in user could briefly see the previous user's cached orders.
+     *  setLastMe(null) drops the cached identity so the offline fallback cannot resurrect this session. */
+    suspend fun signOut() { tokens.clear(); _me.value = null; prefs.setLastMe(null); db.wipe(); orders.clearCache() }
 }
