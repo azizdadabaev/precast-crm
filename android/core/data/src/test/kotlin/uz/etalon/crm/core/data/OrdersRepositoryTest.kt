@@ -148,6 +148,27 @@ class OrdersRepositoryTest {
         }
     }
 
+    /** Cold offline start: Room still holds the last page, but the in-memory outcome map died with
+     *  the process. The error must be reported *over* the Room rows, not instead of them. */
+    @Test fun `a failed refresh with no in-memory rows falls back to the Room cache`() = runTest {
+        val key = OrdersFilter().listKey
+        val dao = FakeDao().apply {
+            lists.value = mapOf(key to listOf(OrderSummaryEntity(
+                id = "o1", orderNumber = "2026-09-0041", status = "PLACED", paymentState = "AWAITING_PAYMENT",
+                totalPrice = "1.00", confirmedPaid = "0", totalArea = "1.000", totalBlocks = 1, totalBeams = 1,
+                scheduledAt = 0L, placedAt = 0L, clientId = "c", clientName = "A", clientPhone = "998901112233",
+                clientAddress = null, listKey = key, position = 0, cachedAt = 0L,
+            )))
+        }
+        val repo = OrdersRepository(FakeApi().apply { fail = IOException("down") }, dao, Json { ignoreUnknownKeys = true }, "https://x")
+        repo.refreshList(OrdersFilter())
+        repo.list(OrdersFilter()).test {
+            val e = awaitItem() as Resource.Error
+            assertEquals("2026-09-0041", e.cached!!.single().orderNumber)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test fun `a corrupt cached detail JSON does not crash the flow`() = runTest {
         val dao = FakeDao().apply { details.value = mapOf("o1" to OrderDetailEntity("o1", "{}", 0)) }
         val repo = OrdersRepository(FakeApi(), dao, Json { ignoreUnknownKeys = true }, "https://x")

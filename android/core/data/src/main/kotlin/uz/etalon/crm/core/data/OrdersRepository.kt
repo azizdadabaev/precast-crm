@@ -31,7 +31,10 @@ data class OrdersFilter(val q: String? = null, val status: OrderStatus? = null, 
  *  could hand an already-waiting collector a stale in-between snapshot (cache updated, flag not
  *  yet, or vice versa). Folding status+rows into one map, written with a single assignment, keeps
  *  every emission internally consistent. */
-private data class ListOutcome(val rows: List<OrderSummary>, val error: AppError?)
+/** [rows] is null only on a failed refresh with no rows of its own to offer (nothing was fetched
+ *  in this process yet); `list()` then falls back to the DAO's cached rows. An empty list is a
+ *  real answer ("the server has none") and is never overridden by the cache. */
+private data class ListOutcome(val rows: List<OrderSummary>?, val error: AppError?)
 private data class DetailOutcome(val detail: OrderDetail?, val error: AppError?)
 
 @Singleton
@@ -57,8 +60,10 @@ class OrdersRepository @Inject constructor(
             val outcome = outcomes[key]
             when {
                 outcome == null -> Resource.Loading(rows.takeIf { it.isNotEmpty() })
-                outcome.error != null -> Resource.Error(outcome.rows.takeIf { it.isNotEmpty() }, outcome.error)
-                else -> Resource.Success(outcome.rows)
+                // Cache-first has to survive process death: after a restart the in-memory outcome
+                // carries no rows of its own, so the DAO rows collected here are the only cache left.
+                outcome.error != null -> Resource.Error(outcome.rows ?: rows.takeIf { it.isNotEmpty() }, outcome.error)
+                else -> Resource.Success(outcome.rows.orEmpty())
             }
         }.distinctUntilChanged()
     }
@@ -75,9 +80,9 @@ class OrdersRepository @Inject constructor(
             dao.replaceList(key, rows.mapIndexed { i, o -> o.toEntity(key, i, now) })
         } catch (t: Throwable) {
             // No DAO read here on purpose: it would be a second suspending call that can itself
-            // fail (DB wiped concurrently, disk error) inside a catch block. The in-memory outcome
-            // from the last successful refresh (if any) is all we need for the cached rows.
-            val prevRows = listOutcomes.value[key]?.rows.orEmpty()
+            // fail (DB wiped concurrently, disk error) inside a catch block. Recording null instead
+            // lets list() fall back to the DAO rows off the Flow it is already collecting.
+            val prevRows = listOutcomes.value[key]?.rows
             listOutcomes.value = listOutcomes.value + (key to ListOutcome(prevRows, t.toAppError()))
         }
     }
@@ -107,7 +112,7 @@ class OrdersRepository @Inject constructor(
                 // Record the error (not just evict) so detail() reports it instead of spinning forever,
                 // and strip the id from every cached list page so list() stops showing the deleted order.
                 detailOutcomes.value = detailOutcomes.value + (id to DetailOutcome(null, t.toAppError()))
-                listOutcomes.value = listOutcomes.value.mapValues { (_, v) -> v.copy(rows = v.rows.filterNot { it.id == id }) }
+                listOutcomes.value = listOutcomes.value.mapValues { (_, v) -> v.copy(rows = v.rows?.filterNot { it.id == id }) }
             } else {
                 val prevDetail = detailOutcomes.value[id]?.detail
                 detailOutcomes.value = detailOutcomes.value + (id to DetailOutcome(prevDetail, t.toAppError()))
