@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import path from "path";
 import { buildOpenApiDocument } from "@/lib/openapi/registry";
 
 describe("OpenAPI document", () => {
@@ -24,5 +26,9 @@ describe("OpenAPI document", () => {
     expect(doc.components?.schemas?.ApiError).toBeDefined();
     const login = doc.paths?.["/api/auth/login"]?.post;
     expect(login?.security).toEqual([]); // public
+  });
+  it("docs/api/openapi.json matches the registry (run `npm run openapi:generate` if this fails)", () => {
+    const committed = readFileSync(path.resolve(process.cwd(), "../docs/api/openapi.json"), "utf8");
+    expect(committed).toEqual(JSON.stringify(buildOpenApiDocument(), null, 2) + "\n");
   });
 });
