@@ -6,7 +6,7 @@
 // correction, extras-only mode, and a bearing sweep. Add a case here
 // whenever a rule changes; the Android suite fails until it is ported.
 
-import { writeFileSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import {
   calculateSlab,
@@ -72,7 +72,17 @@ export function buildGolden(): GoldenFile {
 const invokedDirectly = (process.argv[1] ?? "").replace(/\\/g, "/").endsWith("scripts/export-calc-golden.ts");
 if (invokedDirectly) {
   const out = path.resolve(__dirname, "../../docs/api/calc-golden.json");
-  mkdirSync(path.dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify(buildGolden(), null, 2) + "\n");
-  console.log(`wrote ${out}`);
+  const next = JSON.stringify(buildGolden(), null, 2) + "\n";
+  if (process.argv.includes("--check")) {
+    const current = existsSync(out) ? readFileSync(out, "utf8") : "";
+    if (current !== next) {
+      console.error("docs/api/calc-golden.json is stale — run `npm run golden:calc`");
+      process.exit(1);
+    }
+    console.log("calc-golden.json is up to date");
+  } else {
+    mkdirSync(path.dirname(out), { recursive: true });
+    writeFileSync(out, next);
+    console.log(`wrote ${out}`);
+  }
 }

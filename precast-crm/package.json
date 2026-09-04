@@ -18,6 +18,7 @@
     "db:migrate-pins": "tsx prisma/migrate-pins.ts",
     "db:studio": "prisma studio",
     "golden:calc": "tsx scripts/export-calc-golden.ts",
+    "golden:check": "tsx scripts/export-calc-golden.ts --check",
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "openapi:check": "tsx scripts/generate-openapi.ts --check",
     "postinstall": "patch-package"
