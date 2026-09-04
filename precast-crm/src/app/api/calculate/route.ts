@@ -4,20 +4,27 @@ import { prisma } from "@/lib/prisma";
 import { CalculateRequestSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { loadPricingConfig } from "@/lib/pricing-config";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 
 export const POST = withPermission("calculator.use", async (req) => {
   const body = CalculateRequestSchema.parse(await req.json());
 
-  const result = calculateSlab({
-    inner_width: body.innerWidth,
-    inner_length: body.innerLength,
-    bearing: body.bearing,
-    correction: body.correction,
-    extra_beams: body.extraBeams,
-    force_start_beam: body.forceStartBeam,
-    pattern: body.patternOverride ?? undefined,
-  });
+  // Live tiers, same as /api/projects and /api/orders. Previously this
+  // route silently billed at DEFAULT_PRICE_CONFIG (spec S9).
+  const pricing = await loadPricingConfig();
+  const result = calculateSlab(
+    {
+      inner_width: body.innerWidth,
+      inner_length: body.innerLength,
+      bearing: body.bearing,
+      correction: body.correction,
+      extra_beams: body.extraBeams,
+      force_start_beam: body.forceStartBeam,
+      pattern: body.patternOverride ?? undefined,
+    },
+    pricing,
+  );
 
   if (body.projectId) {
     const exists = await prisma.project.findUnique({ where: { id: body.projectId } });
