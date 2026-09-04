@@ -53,7 +53,14 @@ open class MainViewModel(
                         // Anything else (timeout, no network) must not evict a signed-in user, so
                         // fall back to the identity persisted at the last login/bootstrap.
                         val cached = if (session.isLoggedIn.first()) session.lastMe.first() else null
-                        if (cached != null) onSignedIn(cached) else _state.value = AppState.SignedOut()
+                        if (cached != null) {
+                            onSignedIn(cached)
+                        } else {
+                            // Still holding a token but no identity to show: wipe rather than strand a
+                            // half-session, so the token, Room and the order cache all go together.
+                            session.signOut()
+                            _state.value = AppState.SignedOut()
+                        }
                     }
             } else {
                 _state.value = AppState.SignedOut()

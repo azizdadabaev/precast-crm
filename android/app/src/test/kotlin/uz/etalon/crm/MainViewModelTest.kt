@@ -101,6 +101,21 @@ class MainViewModelTest {
         assertEquals(0, devices.calls)
     }
 
+    /** Token present, bootstrap down, nothing persisted: there is no session to keep, so it must be
+     *  wiped rather than left half-alive with the previous user's Room rows still on disk. */
+    @Test
+    fun `a bootstrap failure with no persisted identity wipes the session`() = runTest {
+        val session = FakeSession(
+            loggedIn = true,
+            outcome = Result.failure(java.io.IOException("timeout")),
+            persisted = null,
+        )
+        val vm = MainViewModel(session, FakeDevices(), FakePush())
+        advanceUntilIdle()
+        assertEquals(AppState.SignedOut(), vm.state.value)
+        assertTrue(session.signOutCalls >= 1, "signOut() must run when no identity can be restored")
+    }
+
     @Test
     fun `a PIN change signs out with the login hint`() = runTest {
         val session = FakeSession(loggedIn = true, outcome = Result.success(bootstrapOf(me)))
