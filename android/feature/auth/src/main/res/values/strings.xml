@@ -1,0 +1,12 @@
+<resources>
+    <string name="login_title">Кириш</string>
+    <string name="login_subtitle">Исмингиз ва 4 рақамли PIN</string>
+    <string name="login_name">Логин</string>
+    <string name="login_pin">PIN</string>
+    <string name="change_pin_title">PIN ни ўзгартириш</string>
+    <string name="change_pin_forced_hint">Биринчи киришда янги PIN ўрнатинг</string>
+    <string name="change_pin_current">Жорий PIN</string>
+    <string name="change_pin_new">Янги PIN</string>
+    <string name="change_pin_confirm">Янги PIN (такрор)</string>
+    <string name="action_save">Сақлаш</string>
+</resources>
