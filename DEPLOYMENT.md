@@ -280,3 +280,15 @@ Copy backups off-server with `rclone` or `scp` regularly — local backups don't
 - **CI/CD** — auto-redeploy on `git push` via a GitHub Actions workflow that SSHes in and runs `git pull && docker compose up -d --build`.
 - **Object storage for uploads** — when you outgrow a single VM, swap `public/uploads/` for S3-compatible storage (Cloudflare R2 is cheapest). The upload handler is a single file change.
 - **Managed Postgres** — replace the `db` service in compose with a `DATABASE_URL` pointing at Neon/Supabase/Hetzner DB.
+
+---
+
+## Android app support (Phase 0)
+
+After pulling a build that includes the mobile enablement:
+
+1. `docker compose exec app npx prisma db push` — adds `users.tokenVersion`, `devices`, `idempotency_keys` (additive; no data rewritten).
+2. Optional: create a Firebase project, download a service-account JSON, and set `FIREBASE_SERVICE_ACCOUNT_JSON` (base64 of the file is easiest: `base64 -w0 sa.json`). Without it the API works; phones simply get no push.
+3. `MOBILE_MIN_APP_VERSION` gates old APKs; leave at `0` until the first Play release.
+
+Rollback: unset the env vars and redeploy the previous image. The three schema additions are harmless to leave in place.

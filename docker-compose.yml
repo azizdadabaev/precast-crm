@@ -73,6 +73,12 @@ services:
       # unconfigured deploy simply rejects every request from the phone.
       HANDOFF_DEVICE_TOKEN: ${HANDOFF_DEVICE_TOKEN:-}
       HANDOFF_TG_HANDLE: ${HANDOFF_TG_HANDLE:-}
+      # Android app (spec 2026-09-02). Push is a no-op until the Firebase
+      # service account is set; tokens minted for client=android live
+      # MOBILE_JWT_EXPIRES_IN and are revoked by User.tokenVersion.
+      MOBILE_JWT_EXPIRES_IN: ${MOBILE_JWT_EXPIRES_IN:-30d}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      MOBILE_MIN_APP_VERSION: ${MOBILE_MIN_APP_VERSION:-0}
     volumes:
       - uploads:/app/public/uploads
       - drawings_data:/data
