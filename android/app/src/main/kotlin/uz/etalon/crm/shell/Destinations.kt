@@ -18,9 +18,11 @@ enum class Destination(val labelRes: Int, val requires: String?) {
     MORE(R.string.nav_more, null),
 }
 
-private const val MAX_BEFORE_MORE = 5
+/** Material 3 caps the navigation bar at five items, and MORE always takes one of them —
+ *  six labelled items crowd into overlapping text on a 411 dp phone. */
+private const val MAX_BEFORE_MORE = 4
 
-/** The permitted destinations in priority order, capped at five, with MORE always last. */
+/** The permitted destinations in priority order, capped at four, with MORE always last. */
 fun destinationsFor(me: Me): List<Destination> {
     val ordered = Destination.entries.filter { it != Destination.MORE }
     val allowed = ordered.filter { it.requires == null || me.can(it.requires) }

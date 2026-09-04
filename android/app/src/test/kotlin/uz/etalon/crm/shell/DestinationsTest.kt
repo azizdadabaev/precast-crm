@@ -14,12 +14,12 @@ class DestinationsTest {
     private fun me(vararg p: String) = Me("u", "n", Role.CUSTOM, p.toSet(), false)
 
     @Test
-    fun `owner gets five plus More in priority order`() {
+    fun `owner gets four plus More in priority order`() {
         val d = destinationsFor(me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view"))
         assertEquals(
             listOf(
                 Destination.HOME, Destination.ORDERS, Destination.CALCULATOR,
-                Destination.INBOX, Destination.PAYMENTS, Destination.MORE,
+                Destination.INBOX, Destination.MORE,
             ),
             d,
         )
@@ -33,12 +33,13 @@ class DestinationsTest {
         )
     }
 
+    /** Material 3's navigation bar holds five items; MORE is always one of them. */
     @Test
-    fun `never more than five before More`() {
+    fun `never more than five items in the bar`() {
         val d = destinationsFor(
             me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view", "client.view"),
         )
-        assertEquals(6, d.size)
+        assertEquals(5, d.size)
         assertEquals(Destination.MORE, d.last())
     }
 
