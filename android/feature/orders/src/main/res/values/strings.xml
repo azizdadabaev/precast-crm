@@ -1,0 +1,25 @@
+<resources>
+    <string name="orders_title">Буюртмалар</string>
+    <string name="orders_search_hint">Буюртма № · Мижоз · Телефон · Манзил</string>
+    <string name="orders_all">Барчаси</string>
+    <string name="orders_empty">Буюртма йўқ.</string>
+    <string name="paging_prev">Олдинги</string>
+    <string name="paging_next">Кейинги</string>
+    <string name="action_call">Қўнғироқ қилиш</string>
+    <string name="action_navigate">Навигация</string>
+    <string name="scheduled_on">Жадвал: %1$s</string>
+    <string name="remaining">Қолди</string>
+    <string name="paid_of_total">Тўланган %1$s / %2$s</string>
+    <string name="pending_amount">Тасдиқ кутилмоқда: %1$s</string>
+    <string name="payment_confirmed">Тасдиқланган</string>
+    <string name="payment_rejected">Рад этилган</string>
+    <string name="payment_pending_confirmation">Кутилмоқда</string>
+    <string name="rooms">Хоналар</string>
+    <string name="room_n">Хона %1$d</string>
+    <string name="total_area">Майдон</string>
+    <string name="discount">Чегирма</string>
+    <string name="delivery">Етказиш</string>
+    <string name="total">Жами</string>
+    <string name="photos">Расмлар</string>
+    <string name="events">Тарих</string>
+</resources>
