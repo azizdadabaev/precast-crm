@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import bcrypt from "bcryptjs";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -148,10 +148,28 @@ async function loadUserFromPayload(
   return u as AuthUser | null;
 }
 
+/** Extract the raw token from an `Authorization: Bearer <jwt>` header value. */
+export function bearerFromHeader(value: string | null): string | null {
+  if (!value) return null;
+  const m = /^Bearer\s+(\S+)$/i.exec(value.trim());
+  return m ? m[1] : null;
+}
+
+/**
+ * Resolve the caller. Cookie first (web), then `Authorization: Bearer`
+ * (Android). Both carry the same HS256 JWT; only the transport differs.
+ * The mobile client never receives a cookie, so the header path is the
+ * only way its requests can authenticate against withPermission routes.
+ */
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  const token = cookies().get(COOKIE_NAME)?.value;
-  if (!token) return null;
-  return loadUserFromPayload(await verifyToken(token));
+  const cookieToken = cookies().get(COOKIE_NAME)?.value;
+  if (cookieToken) {
+    const u = await loadUserFromPayload(await verifyToken(cookieToken));
+    if (u) return u;
+  }
+  const bearer = bearerFromHeader(headers().get("authorization"));
+  if (!bearer) return null;
+  return loadUserFromPayload(await verifyToken(bearer));
 }
 
 export async function getUserFromRequest(
@@ -162,9 +180,9 @@ export async function getUserFromRequest(
     const u = await loadUserFromPayload(await verifyToken(cookieToken));
     if (u) return u;
   }
-  const auth = req.headers.get("authorization");
-  if (auth?.startsWith("Bearer ")) {
-    return loadUserFromPayload(await verifyToken(auth.slice(7)));
+  const bearer = bearerFromHeader(req.headers.get("authorization"));
+  if (bearer) {
+    return loadUserFromPayload(await verifyToken(bearer));
   }
   return null;
 }

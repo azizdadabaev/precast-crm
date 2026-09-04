@@ -36,12 +36,25 @@ export async function middleware(req: NextRequest) {
   // rule for the current route.
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-pathname", pathname);
-  const next = () =>
-    NextResponse.next({ request: { headers: requestHeaders } });
+  const isApi = pathname.startsWith("/api/");
+  const next = () => {
+    const res = NextResponse.next({ request: { headers: requestHeaders } });
+    // Mobile clients cache aggressively by default; every API response is
+    // per-user and time-sensitive. The web is unaffected (fetcher already
+    // bypasses the HTTP cache via React Query).
+    if (isApi) res.headers.set("Cache-Control", "no-store");
+    return res;
+  };
 
   if (isPublic(pathname)) return next();
 
-  const token = req.cookies.get(COOKIE_NAME)?.value;
+  // Web sends the cookie; Android sends `Authorization: Bearer`. Only API
+  // paths accept the header — page routes stay cookie-only so a leaked
+  // bearer can never render the HTML shell.
+  const cookieToken = req.cookies.get(COOKIE_NAME)?.value;
+  const authHeader = req.headers.get("authorization") ?? "";
+  const bearerMatch = /^Bearer\s+(\S+)$/i.exec(authHeader.trim());
+  const token = cookieToken ?? (isApi && bearerMatch ? bearerMatch[1] : undefined);
   if (!token) return redirectToLogin(req);
 
   try {
