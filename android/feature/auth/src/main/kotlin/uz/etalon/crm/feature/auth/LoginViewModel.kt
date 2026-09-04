@@ -10,10 +10,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.SessionRepository
-import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.datastore.SessionPrefs
 import uz.etalon.crm.core.model.Me
-import uz.etalon.crm.core.network.ApiException
 import javax.inject.Inject
 
 /** Seam so the ViewModel is testable without Hilt. */
@@ -41,10 +39,7 @@ open class LoginViewModel(private val login: LoginUseCase, initialLoginName: Str
         viewModelScope.launch {
             login(s.loginName, s.pin).fold(
                 onSuccess = { me -> _state.update { it.copy(isSubmitting = false, done = me) } },
-                // A 401 here means "wrong login/PIN", not "session expired" — the generic
-                // toAppError() mapping collapses every 401 to AppError.Unauthorized's fixed
-                // "Сессия тугади" message, so show the server's own bilingual message instead.
-                onFailure = { t -> _state.update { it.copy(isSubmitting = false, pin = "", error = (t as? ApiException)?.uzbekMessage ?: t.toAppError().message) } },
+                onFailure = { t -> _state.update { it.copy(isSubmitting = false, pin = "", error = t.credentialErrorMessage()) } },
             )
         }
     }

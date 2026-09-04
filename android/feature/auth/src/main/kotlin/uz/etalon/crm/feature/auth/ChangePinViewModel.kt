@@ -8,13 +8,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.SessionRepository
-import uz.etalon.crm.core.data.toAppError
 import javax.inject.Inject
+
+/** Seam so the ViewModel is testable without Hilt. */
+fun interface ChangePinUseCase { suspend operator fun invoke(current: String, next: String): Result<Unit> }
 
 data class ChangePinUiState(val current: String = "", val next: String = "", val confirm: String = "", val isSubmitting: Boolean = false, val error: String? = null, val done: Boolean = false)
 
-@HiltViewModel
-class ChangePinViewModel @Inject constructor(private val session: SessionRepository) : ViewModel() {
+open class ChangePinViewModel(private val changePin: ChangePinUseCase) : ViewModel() {
     private val _state = MutableStateFlow(ChangePinUiState())
     val state = _state.asStateFlow()
     fun setCurrent(v: String) = _state.update { it.copy(current = v.filter(Char::isDigit).take(4), error = null) }
@@ -27,10 +28,14 @@ class ChangePinViewModel @Inject constructor(private val session: SessionReposit
         if (!forced && s.current.length != 4) { _state.update { it.copy(error = "Жорий PIN керак") }; return }
         _state.update { it.copy(isSubmitting = true) }
         viewModelScope.launch {
-            session.changePin(if (forced) "" else s.current, s.next).fold(
+            changePin(if (forced) "" else s.current, s.next).fold(
                 onSuccess = { _state.update { it.copy(isSubmitting = false, done = true) } },
-                onFailure = { t -> _state.update { it.copy(isSubmitting = false, error = t.toAppError().message) } },
+                onFailure = { t -> _state.update { it.copy(isSubmitting = false, error = t.credentialErrorMessage()) } },
             )
         }
     }
 }
+
+@HiltViewModel
+class HiltChangePinViewModel @Inject constructor(session: SessionRepository) :
+    ChangePinViewModel(ChangePinUseCase { c, n -> session.changePin(c, n) })

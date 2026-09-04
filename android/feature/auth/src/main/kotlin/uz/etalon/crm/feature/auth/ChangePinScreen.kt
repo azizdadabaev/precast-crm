@@ -14,7 +14,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 
 @Composable
-fun ChangePinRoute(forced: Boolean, onDone: () -> Unit, vm: ChangePinViewModel = hiltViewModel()) {
+fun ChangePinRoute(forced: Boolean, onDone: () -> Unit, vm: HiltChangePinViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(s.done) { if (s.done) onDone() }
     val pinField: @Composable (String, (String) -> Unit, Int) -> Unit = { v, on, label ->
