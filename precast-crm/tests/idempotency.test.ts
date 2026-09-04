@@ -30,8 +30,8 @@ vi.mock("@/lib/prisma", () => ({
 import { withIdempotency } from "@/lib/idempotency";
 
 const ctx = { user: { id: "u1", email: "", name: "", role: "SALES" as const, permissions: [], isActive: true, mustChangePassword: false }, params: {} };
-const req = (key?: string) =>
-  new NextRequest(new URL("http://localhost/api/orders/o1/delivery-proof"), {
+const req = (key?: string, url = "http://localhost/api/orders/o1/delivery-proof") =>
+  new NextRequest(new URL(url), {
     method: "POST", headers: key ? { "idempotency-key": key } : {},
   });
 
@@ -67,7 +67,7 @@ describe("withIdempotency", () => {
   });
 
   it("returns 409 while the first attempt is still in progress", async () => {
-    table.set("u1:k9", { id: "u1:k9", userId: "u1", route: "/api/x", status: "IN_PROGRESS", responseStatus: null, responseBody: null, createdAt: new Date() });
+    table.set("u1:k9", { id: "u1:k9", userId: "u1", route: "/api/orders/o1/delivery-proof", status: "IN_PROGRESS", responseStatus: null, responseBody: null, createdAt: new Date() });
     const inner = vi.fn(async () => Response.json({ ok: true, data: {} }));
     const res = await withIdempotency(inner)(req("k9"), ctx);
     expect(res.status).toBe(409);
@@ -80,6 +80,16 @@ describe("withIdempotency", () => {
     await wrapped(req("k2"), ctx);
     await wrapped(req("k2"), ctx);
     expect(inner).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a key reused for a different route", async () => {
+    const inner = vi.fn(async () => Response.json({ ok: true, data: {} }));
+    const wrapped = withIdempotency(inner);
+    await wrapped(req("k4", "http://localhost/api/orders/o1/comments"), ctx);
+    const res = await wrapped(req("k4", "http://localhost/api/orders/o1/delivery-proof"), ctx);
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(422);
+    expect((await res.json()).details.code).toBe("IDEMPOTENT_ROUTE_MISMATCH");
   });
 
   it("does not strand the row when content-type says JSON but the body isn't", async () => {

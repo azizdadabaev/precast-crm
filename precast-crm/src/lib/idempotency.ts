@@ -50,6 +50,13 @@ export function withIdempotency<P = Record<string, string>>(fn: Fn<P>): Fn<P> {
 
     const existing = await prisma.idempotencyKey.findUnique({ where: { id } });
     if (existing) {
+      if (existing.route !== route) {
+        return fail(
+          "Idempotency-Key бошқа сўров учун ишлатилган · Idempotency-Key already used for a different request",
+          422,
+          { code: "IDEMPOTENT_ROUTE_MISMATCH" },
+        );
+      }
       if (existing.status === "DONE" && existing.responseStatus !== null) {
         return replay(existing.responseStatus, existing.responseBody);
       }
