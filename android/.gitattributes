@@ -1,0 +1,5 @@
+# The repo-wide `* text=auto` would check gradlew out with CRLF on Windows,
+# which breaks it on Linux/CI. Pin the wrapper scripts' line endings.
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+*.jar binary

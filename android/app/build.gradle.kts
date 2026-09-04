@@ -1,0 +1,62 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import uz.etalon.buildlogic.AndroidConfig
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    id("etalon.hilt")
+    // alias(libs.plugins.google.services)  <- enable in Task 9 once google-services.json exists
+}
+
+android {
+    namespace = "uz.etalon.crm"
+    compileSdk = AndroidConfig.COMPILE_SDK
+    defaultConfig {
+        applicationId = "uz.etalon.crm"
+        minSdk = AndroidConfig.MIN_SDK
+        targetSdk = AndroidConfig.TARGET_SDK
+        versionCode = 1
+        versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+    buildTypes {
+        debug { buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000\"") }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            buildConfigField("String", "API_BASE_URL", "\"https://etalontbm.uz\"")
+        }
+    }
+    buildFeatures { compose = true; buildConfig = true }
+    compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+}
+
+kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
+
+dependencies {
+    implementation(project(":core:designsystem"))
+    implementation(project(":core:model"))
+    implementation(project(":core:ui"))
+    implementation(project(":core:network"))
+    implementation(project(":core:datastore"))
+    implementation(project(":core:database"))
+    implementation(project(":core:data"))
+    implementation(project(":feature:auth"))
+    implementation(project(":feature:orders"))
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material3.adaptive)
+    implementation(libs.compose.material3.adaptive.navigation.suite)
+    implementation(libs.compose.material.icons)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.hilt.navigation.compose)
+    implementation(libs.navigation3.runtime)
+    implementation(libs.navigation3.ui)
+    implementation(libs.kotlinx.coroutines.android)
+    debugImplementation(libs.compose.ui.tooling)
+}
