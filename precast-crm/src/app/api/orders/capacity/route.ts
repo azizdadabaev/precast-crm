@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CapacityRangeSchema } from "@/lib/validation";
 import { ok } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { CAPACITY_THRESHOLDS } from "@/lib/capacity";
 
 /**
  * GET /api/orders/capacity?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -66,6 +67,6 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
 
   return ok({
     days,
-    thresholds: { low: 300, moderate: 450, heavy: 600 }, // m² per day
+    thresholds: CAPACITY_THRESHOLDS,
   });
 });
