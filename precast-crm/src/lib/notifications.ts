@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notificationBus } from "@/lib/notification-bus";
+import { sendPushToUsers } from "@/lib/push";
 import type { NotificationType } from "@prisma/client";
 
 export interface CreateNotificationInput {
@@ -60,6 +61,23 @@ export async function emitNotifications(
           readAt: null,
         }),
       );
+    }
+
+    // Android push (spec S3). One call per row keeps per-user targeting
+    // and lets FCM prune dead tokens per device. Fire-and-forget.
+    for (const row of rows) {
+      void sendPushToUsers([row.userId], {
+        type: row.type,
+        notificationId: row.id,
+        title: row.title,
+        body: row.body ?? "",
+        orderId: row.orderId ?? "",
+        paymentId: row.paymentId ?? "",
+        projectId: row.projectId ?? "",
+        commentId: row.commentId ?? "",
+        conversationId: row.conversationId ?? "",
+        createdAt: row.createdAt.toISOString(),
+      });
     }
   } catch (err) {
     console.error("[notifications] emitNotifications failed:", err);

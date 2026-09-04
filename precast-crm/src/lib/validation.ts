@@ -99,6 +99,13 @@ export const ChangePinSchema = z.object({
   newPin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits"),
 });
 
+// ── Mobile push devices ─────────────────────────────────────────
+export const DeviceRegisterSchema = z.object({
+  fcmToken: z.string().min(1).max(4096),
+  platform: z.literal("android"),
+  appVersion: z.string().max(40).optional(),
+});
+
 // ── Clients ─────────────────────────────────────────────────────
 export const ClientCreateSchema = z.object({
   name: z.string().min(1, "name is required").max(120),
