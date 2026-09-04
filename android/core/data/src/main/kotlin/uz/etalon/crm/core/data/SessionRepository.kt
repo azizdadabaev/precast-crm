@@ -20,6 +20,7 @@ import javax.inject.Singleton
 @Singleton
 class SessionRepository @Inject constructor(
     private val api: EtalonApi, private val tokens: TokenStore, private val prefs: SessionPrefs, private val db: EtalonDatabase,
+    private val orders: OrdersRepository,
 ) {
     private val _me = MutableStateFlow<Me?>(null)
     val me: StateFlow<Me?> = _me.asStateFlow()
@@ -40,6 +41,8 @@ class SessionRepository @Inject constructor(
         _me.value = _me.value?.copy(mustChangePassword = false)
     }
 
-    /** Local sign-out: the mobile JWT has no server-side logout; device unregistration is DeviceRepository's job. */
-    suspend fun signOut() { tokens.clear(); _me.value = null; db.wipe() }
+    /** Local sign-out: the mobile JWT has no server-side logout; device unregistration is DeviceRepository's job.
+     *  db.wipe() clears the Room tables; orders.clearCache() clears OrdersRepository's in-memory outcome maps —
+     *  both are needed or the next signed-in user could briefly see the previous user's cached orders. */
+    suspend fun signOut() { tokens.clear(); _me.value = null; db.wipe(); orders.clearCache() }
 }

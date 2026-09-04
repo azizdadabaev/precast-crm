@@ -2,8 +2,9 @@ package uz.etalon.crm.core.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import uz.etalon.crm.core.data.mapper.toDomain
@@ -40,16 +41,26 @@ class OrdersRepository @Inject constructor(
     private val listOutcomes = MutableStateFlow<Map<String, ListOutcome>>(emptyMap())
     private val detailOutcomes = MutableStateFlow<Map<String, DetailOutcome>>(emptyMap())
 
+    /** Called on sign-out, alongside `EtalonDatabase.wipe()`: these outcome maps are `@Singleton`
+     *  in-memory state, so the next signed-in user would otherwise see whatever the previous
+     *  user last fetched (wipe() only clears the Room tables, not this in-memory cache). */
+    fun clearCache() {
+        listOutcomes.value = emptyMap()
+        detailOutcomes.value = emptyMap()
+    }
+
     fun list(filter: OrdersFilter): Flow<Resource<List<OrderSummary>>> {
         val key = filter.listKey
-        return combine(dao.observeList(key).map { rows -> rows.map { it.toDomain() } }, listOutcomes) { daoRows, outcomes ->
+        val daoRows = dao.observeList(key).map { rows -> rows.map { it.toDomain() } }
+            .catch { emit(emptyList()) } // a broken DB read must not take the whole Flow down; fall back to "no cache"
+        return combine(daoRows, listOutcomes) { rows, outcomes ->
             val outcome = outcomes[key]
             when {
-                outcome == null -> Resource.Loading(daoRows.takeIf { it.isNotEmpty() })
+                outcome == null -> Resource.Loading(rows.takeIf { it.isNotEmpty() })
                 outcome.error != null -> Resource.Error(outcome.rows.takeIf { it.isNotEmpty() }, outcome.error)
                 else -> Resource.Success(outcome.rows)
             }
-        }
+        }.distinctUntilChanged()
     }
 
     suspend fun refreshList(filter: OrdersFilter) {
@@ -63,21 +74,25 @@ class OrdersRepository @Inject constructor(
             val now = System.currentTimeMillis()
             dao.replaceList(key, rows.mapIndexed { i, o -> o.toEntity(key, i, now) })
         } catch (t: Throwable) {
-            val prevRows = listOutcomes.value[key]?.rows ?: dao.observeList(key).first().map { it.toDomain() }
+            // No DAO read here on purpose: it would be a second suspending call that can itself
+            // fail (DB wiped concurrently, disk error) inside a catch block. The in-memory outcome
+            // from the last successful refresh (if any) is all we need for the cached rows.
+            val prevRows = listOutcomes.value[key]?.rows.orEmpty()
             listOutcomes.value = listOutcomes.value + (key to ListOutcome(prevRows, t.toAppError()))
         }
     }
 
     fun detail(id: String): Flow<Resource<OrderDetail>> =
         combine(dao.observeDetail(id), detailOutcomes) { row, outcomes ->
-            val fromDao = row?.let { json.decodeFromString(OrderDetailDto.serializer(), it.json).toDomain(mediaBase, Instant.ofEpochMilli(it.cachedAt)) }
+            // Cached JSON can predate a schema change; a decode failure must read as "no cache", not crash the flow.
+            val fromDao = row?.let { runCatching { json.decodeFromString(OrderDetailDto.serializer(), it.json).toDomain(mediaBase, Instant.ofEpochMilli(it.cachedAt)) }.getOrNull() }
             val outcome = outcomes[id]
             when {
                 outcome == null -> Resource.Loading(fromDao)
                 outcome.error != null -> Resource.Error(outcome.detail ?: fromDao, outcome.error)
                 else -> outcome.detail?.let { Resource.Success(it) } ?: Resource.Loading(fromDao)
             }
-        }
+        }.distinctUntilChanged()
 
     suspend fun refreshDetail(id: String) {
         try {
@@ -89,7 +104,10 @@ class OrdersRepository @Inject constructor(
         } catch (t: Throwable) {
             if (t is ApiException && t.status == 404) {
                 dao.deleteOrder(id) // hard-deleted on the server (spec §4.3)
-                detailOutcomes.value = detailOutcomes.value - id
+                // Record the error (not just evict) so detail() reports it instead of spinning forever,
+                // and strip the id from every cached list page so list() stops showing the deleted order.
+                detailOutcomes.value = detailOutcomes.value + (id to DetailOutcome(null, t.toAppError()))
+                listOutcomes.value = listOutcomes.value.mapValues { (_, v) -> v.copy(rows = v.rows.filterNot { it.id == id }) }
             } else {
                 val prevDetail = detailOutcomes.value[id]?.detail
                 detailOutcomes.value = detailOutcomes.value + (id to DetailOutcome(prevDetail, t.toAppError()))
