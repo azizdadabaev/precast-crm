@@ -1,0 +1,13 @@
+<resources>
+    <string name="status_placed">Қабул қилинган</string>
+    <string name="status_in_production">Ишлаб чиқилмоқда</string>
+    <string name="status_loaded">Юкланган</string>
+    <string name="status_dispatched">Жўнатилган</string>
+    <string name="status_delivered">Етказилган</string>
+    <string name="status_canceled">Бекор қилинган</string>
+    <string name="status_unknown">Номаълум</string>
+    <string name="payment_paid">Тўланган</string>
+    <string name="payment_partial">Қисман</string>
+    <string name="payment_pending">Кутилмоқда</string>
+    <string name="action_retry">Қайта уриниш</string>
+</resources>
