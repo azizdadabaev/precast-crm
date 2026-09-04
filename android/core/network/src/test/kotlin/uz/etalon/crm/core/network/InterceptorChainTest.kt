@@ -49,6 +49,25 @@ class InterceptorChainTest {
         assertEquals(1, tokens.unauthorizedCalls)
     }
 
+    /** A wrong *current* PIN answers 401 on the change-PIN endpoint. That is a credential error the
+     *  screen must show, not a dead session — clearing the token would sign the user out of the app. */
+    @Test fun `a 401 on change-PIN throws but keeps the session`() {
+        server.enqueue(
+            MockResponse().setResponseCode(401)
+                .setBody("""{"ok":false,"error":"Жорий PIN нотўғри · Current PIN is wrong"}""")
+                .addHeader("Content-Type", "application/json")
+        )
+        val tokens = FakeTokens("abc")
+        val client = clientFor(tokens)
+        val e = assertThrows(ApiException::class.java) {
+            client.newCall(Request.Builder().url(server.url("/api/users/me/password")).build()).execute()
+        }
+        assertEquals(401, e.status)
+        assertEquals(0, tokens.unauthorizedCalls)
+        // The header is still sent — the endpoint is authenticated, only the 401 handling differs.
+        assertEquals("Bearer abc", server.takeRequest().getHeader("Authorization"))
+    }
+
     @Test fun `a successful envelope carries the Bearer header and does not clear the session`() {
         server.enqueue(
             MockResponse().setBody("""{"ok":true,"data":{"n":1}}""").addHeader("Content-Type", "application/json")
