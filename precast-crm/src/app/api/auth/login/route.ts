@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { LoginSchema } from "@/lib/validation";
 import { ok, fail, handler } from "@/lib/api";
-import { signToken, verifyPin, setAuthCookie } from "@/lib/auth";
+import { signToken, verifyPin, setAuthCookie, mobileTokenOptions } from "@/lib/auth";
 import { homeForUser } from "@/lib/permissions";
 
 export const POST = handler(async (req: NextRequest) => {
@@ -32,13 +32,18 @@ export const POST = handler(async (req: NextRequest) => {
 
   if (!valid) return fail("Логин ёки PIN нотўғри · Invalid credentials", 401);
 
-  const token = await signToken({
-    sub: user.id,
-    email: user.email ?? "",
-    name: user.name,
-    role: user.role,
-  });
-  await setAuthCookie(token);
+  const token = await signToken(
+    {
+      sub: user.id,
+      email: user.email ?? "",
+      name: user.name,
+      role: user.role,
+    },
+    body.client === "android" ? mobileTokenOptions(user.tokenVersion) : {},
+  );
+  // Web keeps the httpOnly cookie. Android holds the body token and
+  // never gets a cookie, so a phone cannot render the HTML shell.
+  if (body.client === "web") await setAuthCookie(token);
 
   prisma.user
     .update({ where: { id: user.id }, data: { lastLogin: new Date() } })

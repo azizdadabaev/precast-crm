@@ -40,7 +40,7 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
   await prisma.$transaction(async (tx) => {
     await tx.user.update({
       where: { id: user.id },
-      data: { pinHash: newHash, mustChangePassword: false },
+      data: { pinHash: newHash, mustChangePassword: false, tokenVersion: { increment: 1 } },
     });
     await tx.userAuditLog.create({
       data: { userId: user.id, actorId: user.id, action: "pin_reset" },

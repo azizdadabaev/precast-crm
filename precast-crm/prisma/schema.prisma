@@ -210,6 +210,15 @@ model User {
   createdById        String?
   telegramUserId     String?   @unique
 
+  // Mobile-session revocation counter. Mobile JWTs carry `tv` = this
+  // value at issue time; a mismatch on any request means the token was
+  // revoked (PIN change, admin reset, disable). Web cookies carry no
+  // `tv` and are unaffected.
+  tokenVersion       Int       @default(0)
+
+  // Push-notification devices registered by the Android app.
+  devices            Device[]
+
   deals             Deal[]            @relation("AssignedDeals")
   orderEvents       OrderEvent[]
   productionEntries ProductionEntry[]
@@ -886,6 +895,22 @@ model AppConfig {
   updatedAt DateTime @updatedAt
 
   @@map("app_config")
+}
+
+// Android push registration. One row per (device, user). A token that
+// moves to another user (shared phone) is re-pointed by the PUT route.
+model Device {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fcmToken   String   @unique
+  platform   String   // "android"
+  appVersion String?
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@map("devices")
 }
 
 // ─────────────────────────────────────────────

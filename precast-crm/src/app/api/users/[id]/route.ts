@@ -114,6 +114,7 @@ export const PATCH = withPermission<{ id: string }>(
 
     if (data.isActive !== undefined && data.isActive !== target.isActive) {
       updates.isActive = data.isActive;
+      if (!data.isActive) updates.tokenVersion = { increment: 1 }; // revoke phones
       audits.push({
         action: data.isActive ? "enabled" : "disabled",
       });
@@ -122,6 +123,7 @@ export const PATCH = withPermission<{ id: string }>(
     if (data.resetPin) {
       updates.pinHash = await hashPin(data.resetPin);
       updates.mustChangePassword = true;
+      updates.tokenVersion = { increment: 1 }; // revoke phones
       audits.push({ action: "pin_reset" });
     }
 

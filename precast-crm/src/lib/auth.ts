@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 const JWT_SECRET =
   process.env.JWT_SECRET ?? "dev-secret-change-me-please-32chars!";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? "7d";
+const MOBILE_JWT_EXPIRES_IN = process.env.MOBILE_JWT_EXPIRES_IN ?? "30d";
+export const MOBILE_AUDIENCE = "mobile";
 const COOKIE_NAME = "precast_token";
 
 const secretKey = new TextEncoder().encode(JWT_SECRET);
@@ -45,6 +47,19 @@ export interface AuthPayload extends JWTPayload {
   email: string;
   name: string;
   role: AuthRole;
+  /** Mobile only: User.tokenVersion at issue time. Absent on web cookies. */
+  tv?: number;
+}
+
+export interface SignTokenOptions {
+  expiresIn?: string;
+  audience?: typeof MOBILE_AUDIENCE;
+  tokenVersion?: number;
+}
+
+/** Convenience: the options the login route uses for `client: "android"`. */
+export function mobileTokenOptions(tokenVersion: number): SignTokenOptions {
+  return { expiresIn: MOBILE_JWT_EXPIRES_IN, audience: MOBILE_AUDIENCE, tokenVersion };
 }
 
 /** Helper for the maker-checker payment / discrepancy gate.
@@ -91,13 +106,17 @@ export function deriveLoginName(name: string, taken: Set<string>): string {
 }
 
 export async function signToken(
-  payload: Omit<AuthPayload, "iat" | "exp">,
+  payload: Omit<AuthPayload, "iat" | "exp" | "tv">,
+  opts: SignTokenOptions = {},
 ): Promise<string> {
-  return new SignJWT(payload as JWTPayload)
+  const claims: JWTPayload = { ...payload };
+  if (opts.tokenVersion !== undefined) claims.tv = opts.tokenVersion;
+  let jwt = new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(JWT_EXPIRES_IN)
-    .sign(secretKey);
+    .setExpirationTime(opts.expiresIn ?? JWT_EXPIRES_IN);
+  if (opts.audience) jwt = jwt.setAudience(opts.audience);
+  return jwt.sign(secretKey);
 }
 
 export async function verifyToken(token: string): Promise<AuthPayload | null> {
@@ -143,9 +162,16 @@ async function loadUserFromPayload(
       permissions: true,
       isActive: true,
       mustChangePassword: true,
+      tokenVersion: true,
     },
   });
-  return u as AuthUser | null;
+  if (!u) return null;
+  // Revocation: a mobile token minted before the last PIN change / admin
+  // reset / disable carries a stale `tv` and is rejected outright. Web
+  // cookies have no `tv` and skip this (their 7-day TTL is the bound).
+  if (typeof payload.tv === "number" && payload.tv !== u.tokenVersion) return null;
+  const { tokenVersion: _tv, ...user } = u;
+  return user as AuthUser;
 }
 
 /** Extract the raw token from an `Authorization: Bearer <jwt>` header value. */

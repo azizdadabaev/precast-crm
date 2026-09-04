@@ -61,6 +61,8 @@ export const RoleEnum = z.enum([
 export const LoginSchema = z.object({
   loginName: z.string().min(1).max(120),
   pin: z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits"),
+  // "android" mints a long-lived, revocable mobile token (spec D5/S2).
+  client: z.enum(["web", "android"]).default("web"),
 });
 
 // ── User management ─────────────────────────────────────────────
