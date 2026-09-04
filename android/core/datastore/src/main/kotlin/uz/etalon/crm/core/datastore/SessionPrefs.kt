@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -12,7 +13,7 @@ import javax.inject.Singleton
 private val Context.sessionDataStore by preferencesDataStore("session_prefs")
 
 @Singleton
-class SessionPrefs @Inject constructor(private val context: Context) {
+class SessionPrefs @Inject constructor(@param:ApplicationContext private val context: Context) {
     private val lastLogin = stringPreferencesKey("last_login_name")
     private val fcm = stringPreferencesKey("fcm_token")
     val lastLoginName: Flow<String?> = context.sessionDataStore.data.map { it[lastLogin] }

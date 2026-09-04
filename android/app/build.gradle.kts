@@ -1,11 +1,17 @@
+import org.gradle.api.tasks.testing.Test
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import uz.etalon.buildlogic.AndroidConfig
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     id("etalon.hilt")
-    // alias(libs.plugins.google.services)  <- enable in Task 9 once google-services.json exists
+    // To enable push delivery: drop the Firebase project's google-services.json into
+    // android/app/ (git-ignored; CI injects it from a secret) and uncomment the line
+    // below. Without it the app still builds and runs — FirebaseMessaging has no
+    // default app, so PushRegistrar.registerIfPossible() silently no-ops.
+    // alias(libs.plugins.google.services)
 }
 
 android {
@@ -34,6 +40,10 @@ android {
 
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
+// :app applies com.android.application, not the etalon.android.library convention
+// plugin, so the JUnit 5 platform is wired here instead.
+tasks.withType<Test>().configureEach { useJUnitPlatform() }
+
 dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:model"))
@@ -58,5 +68,13 @@ dependencies {
     implementation(libs.navigation3.runtime)
     implementation(libs.navigation3.ui)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.kotlinx.coroutines.play.services)
     debugImplementation(libs.compose.ui.tooling)
+
+    testImplementation(libs.junit5.api)
+    testRuntimeOnly(libs.junit5.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
 }

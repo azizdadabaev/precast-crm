@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">EtalonSlabs</string>
+    <string name="nav_home">Бош саҳифа</string>
+    <string name="nav_orders">Буюртмалар</string>
+    <string name="nav_calculator">Калькулятор</string>
+    <string name="nav_inbox">Хабарлар</string>
+    <string name="nav_payments">Тўловлар</string>
+    <string name="nav_production">Ишлаб чиқариш</string>
+    <string name="nav_gazoblok">Газоблок</string>
+    <string name="nav_more">Яна</string>
+    <string name="more_change_pin">PIN ни ўзгартириш</string>
+    <string name="more_sign_out">Чиқиш</string>
+    <string name="coming_soon">Бу бўлим кейинги релизда</string>
+    <string name="channel_orders">Буюртмалар</string>
+    <string name="channel_payments">Тўловлар</string>
+    <string name="channel_inbox">Хабарлар</string>
+    <string name="channel_comments">Изоҳлар</string>
 </resources>
