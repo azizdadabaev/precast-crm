@@ -18,13 +18,20 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    @Provides @Singleton fun json(): Json = Json { ignoreUnknownKeys = true; explicitNulls = false; coerceInputValues = true }
+    @Provides @Singleton fun json(): Json = EtalonJson.create()
 
     @Provides @Singleton fun okHttp(json: Json, tokens: TokenProvider): OkHttpClient =
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).writeTimeout(60, TimeUnit.SECONDS)
-            .addInterceptor(AuthInterceptor(tokens))
+            // EnvelopeInterceptor must be added first (outer) and AuthInterceptor
+            // second (inner): AuthInterceptor still adds the header on the way
+            // down, but on the way back it sees the raw 401 response BEFORE
+            // EnvelopeInterceptor turns a {ok:false} 401 body into a thrown
+            // ApiException. If the order were reversed, that throw would
+            // propagate out of chain.proceed() and onUnauthorized() would
+            // never run -- see InterceptorChainTest.
             .addInterceptor(EnvelopeInterceptor(json))
+            .addInterceptor(AuthInterceptor(tokens))
             .addInterceptor(HttpLoggingInterceptor().apply { level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE })
             .build()
 
