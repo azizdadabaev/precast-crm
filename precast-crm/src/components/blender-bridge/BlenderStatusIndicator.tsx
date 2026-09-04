@@ -50,8 +50,8 @@ export function BlenderStatusIndicator({
           if (alive) setStatus("offline");
           return;
         }
-        const data = (await res.json()) as { blenderConnected: boolean };
-        if (alive) setStatus(data.blenderConnected ? "connected" : "offline");
+        const body = (await res.json()) as { ok: boolean; data?: { blenderConnected: boolean } };
+        if (alive) setStatus(body.ok && body.data?.blenderConnected ? "connected" : "offline");
       } catch {
         if (alive) setStatus("offline");
       }

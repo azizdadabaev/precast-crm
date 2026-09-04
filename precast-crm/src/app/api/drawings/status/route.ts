@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "@/lib/api-auth";
+import { ok } from "@/lib/api";
 
 /**
  * GET /api/drawings/status
@@ -67,7 +68,7 @@ export const GET = withPermission(
       }),
     ]);
 
-    return NextResponse.json({
+    return ok({
       blenderConnected: bridge.connected,
       connectedSince: bridge.connectedSince,
       recentRequests,

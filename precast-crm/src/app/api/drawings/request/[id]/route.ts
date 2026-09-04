@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "@/lib/api-auth";
+import { ok, fail } from "@/lib/api";
 
 /**
  * GET /api/drawings/request/[id]
@@ -30,9 +31,9 @@ export const GET = withPermission<{ id: string }>(
     });
 
     if (!row) {
-      return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+      return fail("Топилмади · Not found", 404);
     }
 
-    return NextResponse.json(row);
+    return ok(row);
   },
 );

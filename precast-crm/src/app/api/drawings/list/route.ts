@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "@/lib/api-auth";
+import { ok, fail } from "@/lib/api";
 
 /**
  * GET /api/drawings/list?orderId=X
@@ -17,10 +18,7 @@ export const GET = withPermission(
     const projectId = searchParams.get("projectId");
 
     if (!orderId && !projectId) {
-      return NextResponse.json(
-        { ok: false, error: "Provide orderId or projectId" },
-        { status: 400 },
-      );
+      return fail("orderId ёки projectId керак · Provide orderId or projectId", 400);
     }
 
     // When querying by orderId, also include drawings created during the draft
@@ -58,6 +56,6 @@ export const GET = withPermission(
       },
     });
 
-    return NextResponse.json(rows);
+    return ok(rows);
   },
 );

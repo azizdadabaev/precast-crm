@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import fs from "fs";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "@/lib/api-auth";
+import { ok, fail } from "@/lib/api";
 
 const DRAWINGS_DIR = process.env.DRAWINGS_DIR ?? "/data/drawings";
 
@@ -22,7 +23,7 @@ export const DELETE = withPermission<{ id: string }>(
     });
 
     if (!row) {
-      return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
+      return fail("Топилмади · Not found", 404);
     }
 
     // Delete the file first — if it fails for any reason other than
@@ -40,6 +41,6 @@ export const DELETE = withPermission<{ id: string }>(
 
     await prisma.drawingRequest.delete({ where: { id: params.id } });
 
-    return NextResponse.json({ ok: true });
+    return ok({ deleted: true });
   },
 );
