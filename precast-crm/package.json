@@ -17,6 +17,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:migrate-pins": "tsx prisma/migrate-pins.ts",
     "db:studio": "prisma studio",
+    "golden:calc": "tsx scripts/export-calc-golden.ts",
     "postinstall": "patch-package"
   },
   "dependencies": {
