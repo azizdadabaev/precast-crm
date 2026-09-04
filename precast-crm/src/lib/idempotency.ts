@@ -90,7 +90,15 @@ export function withIdempotency<P = Record<string, string>>(fn: Fn<P>): Fn<P> {
       await prisma.idempotencyKey.delete({ where: { id } }).catch(() => undefined);
       return res;
     }
-    const body = (await res.clone().json()) as Prisma.InputJsonValue;
+    let body: Prisma.InputJsonValue;
+    try {
+      body = (await res.clone().json()) as Prisma.InputJsonValue;
+    } catch {
+      // content-type lied — body isn't actually valid JSON. Don't strand
+      // the row in IN_PROGRESS; let the client retry uncached.
+      await prisma.idempotencyKey.delete({ where: { id } }).catch(() => undefined);
+      return res;
+    }
     await prisma.idempotencyKey.update({
       where: { id },
       data: { status: "DONE", responseStatus: res.status, responseBody: body },

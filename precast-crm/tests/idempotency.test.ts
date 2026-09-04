@@ -81,4 +81,18 @@ describe("withIdempotency", () => {
     await wrapped(req("k2"), ctx);
     expect(inner).toHaveBeenCalledTimes(2);
   });
+
+  it("does not strand the row when content-type says JSON but the body isn't", async () => {
+    const inner = vi.fn(
+      async () => new Response("not json", { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    const wrapped = withIdempotency(inner);
+    const a = await wrapped(req("k3"), ctx);
+    const b = await wrapped(req("k3"), ctx);
+    expect(inner).toHaveBeenCalledTimes(2);
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    expect(await a.text()).toBe("not json");
+    expect(await b.text()).toBe("not json");
+  });
 });
