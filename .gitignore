@@ -19,3 +19,6 @@ node_modules/
 # artifacts created when driving the browser; never part of the codebase.
 .playwright-mcp/
 **/.playwright-mcp/
+
+# Subagent-driven-development scratch (ledgers, briefs, review packages)
+.superpowers/
