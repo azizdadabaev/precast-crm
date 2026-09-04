@@ -1,0 +1,55 @@
+package uz.etalon.crm.core.data.mapper
+
+import uz.etalon.crm.core.database.entity.OrderSummaryEntity
+import uz.etalon.crm.core.model.*
+import uz.etalon.crm.core.network.MediaUrl
+import uz.etalon.crm.core.network.dto.OrderDetailDto
+import uz.etalon.crm.core.network.dto.OrderSummaryDto
+import java.math.BigDecimal
+import java.time.Instant
+
+private fun String.toInstant(): Instant = Instant.parse(this)
+
+fun OrderSummaryDto.toDomain() = OrderSummary(
+    id = id, orderNumber = orderNumber, status = OrderStatus.from(status), paymentState = PaymentState.from(paymentState),
+    totalPrice = Money.parse(totalPrice), confirmedPaid = Money.parse(confirmedPaid), totalArea = BigDecimal(totalArea),
+    totalBlocks = totalBlocks, totalBeams = totalBeams, scheduledAt = scheduledAt.toInstant(), placedAt = placedAt.toInstant(),
+    client = ClientRef(client.id, client.name, client.phone, client.address),
+)
+
+fun OrderSummary.toEntity(listKey: String, position: Int, cachedAt: Long) = OrderSummaryEntity(
+    id = id, orderNumber = orderNumber, status = status.name, paymentState = paymentState.name,
+    totalPrice = totalPrice.amount.toPlainString(), confirmedPaid = confirmedPaid.amount.toPlainString(), totalArea = totalArea.toPlainString(),
+    totalBlocks = totalBlocks, totalBeams = totalBeams, scheduledAt = scheduledAt.toEpochMilli(), placedAt = placedAt.toEpochMilli(),
+    clientId = client.id, clientName = client.name, clientPhone = client.phone, clientAddress = client.address,
+    listKey = listKey, position = position, cachedAt = cachedAt,
+)
+
+fun OrderSummaryEntity.toDomain() = OrderSummary(
+    id = id, orderNumber = orderNumber, status = OrderStatus.from(status), paymentState = PaymentState.from(paymentState),
+    totalPrice = Money.parse(totalPrice), confirmedPaid = Money.parse(confirmedPaid), totalArea = BigDecimal(totalArea),
+    totalBlocks = totalBlocks, totalBeams = totalBeams, scheduledAt = Instant.ofEpochMilli(scheduledAt), placedAt = Instant.ofEpochMilli(placedAt),
+    client = ClientRef(clientId, clientName, clientPhone, clientAddress),
+)
+
+fun OrderDetailDto.toDomain(mediaBase: String, fetchedAt: Instant): OrderDetail {
+    val summary = OrderSummary(
+        id = id, orderNumber = orderNumber, status = OrderStatus.from(status), paymentState = PaymentState.from(paymentState),
+        totalPrice = Money.parse(totalPrice), confirmedPaid = Money.parse(confirmedPaid), totalArea = BigDecimal(totalArea),
+        totalBlocks = totalBlocks, totalBeams = totalBeams, scheduledAt = scheduledAt.toInstant(), placedAt = placedAt.toInstant(),
+        client = ClientRef(client.id, client.name, client.phone, client.address),
+    )
+    return OrderDetail(
+        summary = summary, notes = notes,
+        deliveryLat = deliveryLat, deliveryLng = deliveryLng, deliveryLocationUrl = deliveryLocationUrl, deliveryLocationLabel = deliveryLocationLabel,
+        discountAmount = Money.parse(discountAmount), deliveryCost = Money.parse(deliveryCost), otherCost = Money.parse(otherCost),
+        roomsSubtotal = Money.parse(roomsSubtotal), writeOffAmount = Money.parse(writeOffAmount),
+        rooms = project.calculations.map { RoomLine(it.name, BigDecimal(it.innerWidth), BigDecimal(it.innerLength), it.pattern, BigDecimal(it.beamLength), it.beamCount, it.totalBlocks, BigDecimal(it.billedArea), Money.parse(it.subtotal)) },
+        payments = payments.map { PaymentLine(it.id, Money.parse(it.amount), PaymentMethod.from(it.method), PaymentStatus.from(it.status), it.recordedAt.toInstant(), it.recordedBy?.name, it.receipts.mapNotNull { r -> MediaUrl.absolute(mediaBase, r.imageUrl) }) },
+        shipments = shipments.map { ShipmentLine(it.id, it.number, ShipmentStatus.from(it.status), it.loadedBlocks, MediaUrl.absolute(mediaBase, it.loadedPhotoUrl), it.driver?.name, it.truckIdentifier) },
+        loadedPhotoUrls = galleryPhotos.mapNotNull { MediaUrl.absolute(mediaBase, it.url) },
+        deliveryProofUrl = MediaUrl.absolute(mediaBase, deliveryProofUrl),
+        events = events.map { OrderEventLine(it.id, it.type, it.message, it.actor?.name, it.createdAt.toInstant()) },
+        fetchedAt = fetchedAt,
+    )
+}
