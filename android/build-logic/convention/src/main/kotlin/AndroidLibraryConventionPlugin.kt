@@ -39,6 +39,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
             add("testImplementation", libs.findLibrary("junit5-params").get())
             add("testImplementation", libs.findLibrary("kotlinx-coroutines-test").get())
             add("testImplementation", libs.findLibrary("turbine").get())
+            add("testRuntimeOnly", libs.findLibrary("junit-platform-launcher").get())
         }
     }
 }
