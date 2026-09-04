@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.Bootstrap
 import uz.etalon.crm.core.model.CapacityThresholds
 import uz.etalon.crm.core.model.Me
+import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.model.Role
 
@@ -29,7 +30,7 @@ class MainViewModelTest {
     @AfterEach fun down() = Dispatchers.resetMain()
 
     private val me = Me("u1", "Азиз", Role.SALES, setOf("order.view"), mustChangePassword = false)
-    private fun bootstrapOf(m: Me) = Bootstrap(m, Pricing(emptyList(), emptyList(), 0L), CapacityThresholds(1, 2, 3), "0.1.0")
+    private fun bootstrapOf(m: Me) = Bootstrap(m, Pricing(emptyList(), emptyList(), Money.ZERO), CapacityThresholds(1, 2, 3), "0.1.0")
 
     private class FakeSession(
         loggedIn: Boolean,
