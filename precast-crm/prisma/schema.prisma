@@ -913,6 +913,22 @@ model Device {
   @@map("devices")
 }
 
+// Replay cache for mobile upload retries (spec S4). Scope = user + key
+// so two users can never collide. Rows older than 24 h are pruned lazily
+// by withIdempotency(). responseBody is the JSON the route returned.
+model IdempotencyKey {
+  id             String   @id            // `${userId}:${key}`
+  userId         String
+  route          String
+  status         String   @default("IN_PROGRESS") // IN_PROGRESS | DONE
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
 // ─────────────────────────────────────────────
 // Inventory module
 //
