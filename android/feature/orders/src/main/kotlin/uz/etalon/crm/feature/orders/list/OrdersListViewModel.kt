@@ -41,7 +41,19 @@ open class OrdersListViewModel(private val source: OrdersSource) : ViewModel() {
         .onEach { f -> viewModelScope.launch { refreshing.value = true; source.refreshList(f); refreshing.value = false } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, OrdersFilter())
 
-    private val resource: Flow<Resource<List<OrderSummary>>> = filter.flatMapLatest { source.list(it) }
+    private val resource: Flow<Resource<List<OrderSummary>>> = filter.flatMapLatest { f ->
+        // The cache can be emptied under a live collector — sign-out wipes Room *and* the
+        // repository's in-memory outcomes — and the filter has not changed, so nothing else would
+        // ever trigger a fetch and the list would spin forever. Re-arm one refresh each time a
+        // settled flow falls back to "no data at all"; `settled` gates it so the very first
+        // Loading(null) (which the filter's own eager refresh already covers) is not double-fetched.
+        var settled = false
+        source.list(f).onEach { r ->
+            if (r is Resource.Loading && r.cached == null) {
+                if (settled) { settled = false; refresh() }
+            } else settled = true
+        }
+    }
 
     val state: StateFlow<OrdersListUiState> = combine(query, status, page, resource, refreshing) { q, s, p, r, busy ->
         OrdersListUiState(

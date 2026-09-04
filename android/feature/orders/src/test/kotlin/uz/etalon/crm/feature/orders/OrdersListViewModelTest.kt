@@ -46,6 +46,20 @@ class OrdersListViewModelTest {
         assertEquals(OrdersFilter(status = OrderStatus.DELIVERED), src.refreshed.last())
         assertEquals(1, vm.state.value.page)
     }
+    /** Sign-out wipes Room and the repository's in-memory outcomes, so the list flow drops back to
+     *  Loading(null) with no filter change to trigger a fetch (defect f4). */
+    @Test fun `a cache emptied under the collector re-triggers exactly one refresh`() = runTest {
+        val src = FakeSource(); val vm = OrdersListViewModel(src); advanceUntilIdle()
+        val flow = src.flows[OrdersFilter().listKey]!!
+        flow.value = Resource.Success(listOf(order("2026-09-0001"))); advanceUntilIdle()
+        assertEquals(1, src.refreshed.size)
+        flow.value = Resource.Loading(null); advanceUntilIdle()
+        assertEquals(2, src.refreshed.size)
+        assertEquals(OrdersFilter(), src.refreshed.last())
+        advanceUntilIdle()
+        assertEquals(2, src.refreshed.size) // and only one: no refresh loop
+    }
+
     @Test fun `query is debounced`() = runTest {
         val src = FakeSource(); val vm = OrdersListViewModel(src); advanceUntilIdle()
         vm.setQuery("Аз"); vm.setQuery("Ази"); vm.setQuery("Азиз")
