@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import { recordAudit } from "@/lib/audit";
 import { loadOrderWithPhoto } from "@/lib/order-load";
@@ -27,7 +28,7 @@ import { loadOrderWithPhoto } from "@/lib/order-load";
  */
 export const POST = withPermission<{ id: string }>(
   "order.edit",
-  async (req: NextRequest, { user, params }) => {
+  withIdempotency<{ id: string }>(async (req: NextRequest, { user, params }) => {
     const order = await prisma.order.findUnique({ where: { id: params.id } });
     if (!order) return fail("Order not found", 404);
     if (order.status !== "PLACED" && order.status !== "IN_PRODUCTION") {
@@ -73,5 +74,5 @@ export const POST = withPermission<{ id: string }>(
     });
 
     return ok({ loadedPhotoUrl: uploadUrl });
-  },
+  }),
 );

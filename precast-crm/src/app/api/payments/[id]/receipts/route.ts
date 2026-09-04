@@ -4,12 +4,13 @@ import { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { prisma } from "@/lib/prisma";
 import { ALLOWED_IMAGE_MIME, MAX_IMAGE_SIZE_BYTES, imageExtFromBytes, saveBufferToUploads } from "@/lib/uploads";
 
 /** POST /api/payments/[id]/receipts — payment.record. Attach a receipt image to an
  *  existing payment (e.g. one recorded earlier without a receipt). Multipart: file. */
-export const POST = withPermission<{ id: string }>("payment.record", async (req: NextRequest, { user, params }) => {
+export const POST = withPermission<{ id: string }>("payment.record", withIdempotency<{ id: string }>(async (req: NextRequest, { user, params }) => {
   const payment = await prisma.payment.findUnique({ where: { id: params.id }, select: { id: true, orderId: true } });
   if (!payment) return fail("Payment not found", 404);
 
@@ -30,4 +31,4 @@ export const POST = withPermission<{ id: string }>("payment.record", async (req:
     select: { id: true, imageUrl: true },
   });
   return ok(receipt);
-});
+}));

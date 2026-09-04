@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { CommentCreateSchema } from "@/lib/validation";
 import { extractMentions } from "@/lib/comments";
 import { emitNotifications } from "@/lib/notifications";
@@ -45,7 +46,7 @@ export const GET = withPermission<Params>(
 /** POST /api/orders/[id]/comments — order.view */
 export const POST = withPermission<Params>(
   "order.view",
-  async (req: NextRequest, { params, user }) => {
+  withIdempotency<Params>(async (req: NextRequest, { params, user }) => {
     const order = await prisma.order.findUnique({
       where: { id: params.id },
       select: { id: true },
@@ -85,5 +86,5 @@ export const POST = withPermission<Params>(
     }
 
     return created(comment);
-  },
+  }),
 );

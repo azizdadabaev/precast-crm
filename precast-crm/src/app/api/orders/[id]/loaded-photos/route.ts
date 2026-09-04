@@ -5,13 +5,14 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import { canAddLoadedPhoto } from "@/lib/loaded-photos";
 import { recordAudit } from "@/lib/audit";
 
 /** POST /api/orders/[id]/loaded-photos — order.edit. Append one more loaded-truck
  *  photo to an already-loaded order. Multipart: file. Does NOT change status. */
-export const POST = withPermission<{ id: string }>("order.edit", async (req: NextRequest, { user, params }) => {
+export const POST = withPermission<{ id: string }>("order.edit", withIdempotency<{ id: string }>(async (req: NextRequest, { user, params }) => {
   const order = await prisma.order.findUnique({ where: { id: params.id }, select: { id: true, status: true, orderNumber: true } });
   if (!order) return fail("Order not found", 404);
   if (!canAddLoadedPhoto(order.status)) {
@@ -33,4 +34,4 @@ export const POST = withPermission<{ id: string }>("order.edit", async (req: Nex
   });
   recordAudit({ userId: user.id, action: "order.loadedPhotoAdded", targetType: "order", targetId: params.id, message: `Loaded photo added to ${order.orderNumber}` });
   return created(photo);
-});
+}));

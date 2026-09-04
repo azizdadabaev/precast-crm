@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 
 /**
@@ -18,7 +19,7 @@ import { saveImageFromFormData, UploadError } from "@/lib/uploads";
  */
 export const POST = withPermission<{ id: string; sid: string }>(
   "dispatch.create",
-  async (req: NextRequest, { user, params }) => {
+  withIdempotency<{ id: string; sid: string }>(async (req: NextRequest, { user, params }) => {
     const shipment = await prisma.shipment.findFirst({
       where: { id: params.sid, orderId: params.id },
     });
@@ -135,5 +136,5 @@ export const POST = withPermission<{ id: string; sid: string }>(
     });
 
     return ok(updated);
-  },
+  }),
 );

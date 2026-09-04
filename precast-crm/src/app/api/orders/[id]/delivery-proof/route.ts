@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import {
   calcSnapshotToInventoryLines,
@@ -37,7 +38,7 @@ import { emitNotifications, usersWithPermission } from "@/lib/notifications";
  */
 export const POST = withPermission<{ id: string }>(
   "order.edit",
-  async (req: NextRequest, { user, params }) => {
+  withIdempotency<{ id: string }>(async (req: NextRequest, { user, params }) => {
   const order = await prisma.order.findUnique({
     where: { id: params.id },
     include: { dispatch: true },
@@ -221,4 +222,4 @@ export const POST = withPermission<{ id: string }>(
   })();
 
   return ok(updated);
-});
+}));
