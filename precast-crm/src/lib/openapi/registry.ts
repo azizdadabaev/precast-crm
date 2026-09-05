@@ -15,11 +15,13 @@ import {
 import {
   LoginSchema, ChangePinSchema, DeviceRegisterSchema, ClientCreateSchema, ClientUpdateSchema,
   PlaceOrderSchema, OrderUpdateSchema, PaymentRecordSchema, PaymentConfirmSchema,
-  PaymentRejectSchema, CommentCreateSchema, DriverCreateSchema, OrderStatusEnum,
-  OrderPaymentStateEnum, PaymentStatusEnum, PaymentMethodEnum, RoleEnum, LanguageEnum,
-  GalleryListSchema,
+  PaymentRejectSchema, CommentCreateSchema, DriverCreateSchema, DriverUpdateSchema,
+  DispatchCreateSchema, OrderStatusEnum, OrderPaymentStateEnum, PaymentStatusEnum,
+  PaymentMethodEnum, RoleEnum, LanguageEnum, GalleryListSchema,
 } from "@/lib/validation";
 import { CalculateBatchSchema } from "@/app/api/calculate/batch/schema";
+import { DeliveryLocationBody } from "@/app/api/orders/[id]/delivery-location/schema";
+import { ResolveLinkBody } from "@/app/api/geo/resolve-link/schema";
 
 extendZodWithOpenApi(z);
 
@@ -143,6 +145,50 @@ registry.registerPath({ method: "post", path: "/api/notifications/read-all", sec
 registry.registerPath({ method: "get", path: "/api/gallery", security: bearer, request: { query: GalleryListSchema },
   responses: { 200: { description: "Posts", ...json(envelope(z.object({ posts: z.array(Any), total: z.number(), photoTotal: z.number(), page: z.number(), pageSize: z.number(), pageCount: z.number() }))) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/calculate/batch", security: bearer, request: { body: json(CalculateBatchSchema) }, responses: { 200: { description: "Totals", ...json(envelope(Any)) }, ...errors } });
+
+// ── Phase 1b: logistics, drivers, location ─────────────────────
+registry.registerPath({ method: "delete", path: "/api/orders/{id}/loaded-photos/{photoId}", security: bearer,
+  request: { params: z.object({ id: z.string(), photoId: z.string() }) },
+  responses: { 200: { description: "Deleted", ...json(envelope(z.object({ id: z.string() }))) }, 404: { description: "Photo not found", ...json(ApiError) }, ...errors } });
+
+registry.registerPath({ method: "delete", path: "/api/orders/{id}/shipments/{sid}", security: bearer,
+  request: { params: z.object({ id: z.string(), sid: z.string() }) },
+  responses: { 200: { description: "Deleted", ...json(envelope(z.object({ deleted: z.literal(true) }))) }, 404: { description: "Shipment not found", ...json(ApiError) }, ...errors } });
+
+registry.registerPath({ method: "post", path: "/api/orders/{id}/dispatch", security: bearer,
+  request: { params: z.object({ id: z.string() }), body: json(DispatchCreateSchema) },
+  responses: { 201: { description: "Dispatch", ...json(envelope(Any)) }, 409: { description: "Order already has a dispatch", ...json(ApiError) }, 404: { description: "Order not found", ...json(ApiError) }, ...errors } });
+
+registry.registerPath({ method: "patch", path: "/api/dispatches/{id}/return", security: bearer,
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 200: { description: "Dispatch", ...json(envelope(Any)) }, 404: { description: "Dispatch not found", ...json(ApiError) }, ...errors } });
+
+registry.registerPath({ method: "patch", path: "/api/orders/{id}/delivery-location", security: bearer,
+  request: { params: z.object({ id: z.string() }), body: json(DeliveryLocationBody) },
+  responses: { 200: { description: "Pin", ...json(envelope(z.object({
+    id: z.string(), deliveryLat: z.number().nullable(), deliveryLng: z.number().nullable(),
+    deliveryLocationUrl: z.string().nullable(), deliveryLocationLabel: z.string().nullable(),
+  }))) }, 404: { description: "Order not found", ...json(ApiError) }, ...errors } });
+
+registry.registerPath({ method: "post", path: "/api/geo/resolve-link", security: bearer,
+  request: { body: json(ResolveLinkBody) },
+  responses: { 200: { description: "Coordinates", ...json(envelope(z.object({ lat: z.number(), lng: z.number() }))) }, ...errors } });
+
+registry.registerPath({ method: "get", path: "/api/drivers/{id}", security: bearer,
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 200: { description: "Driver detail", ...json(envelope(Any)) }, 404: { description: "Driver not found", ...json(ApiError) }, ...errors } });
+
+registry.registerPath({ method: "patch", path: "/api/drivers/{id}", security: bearer,
+  request: { params: z.object({ id: z.string() }), body: json(DriverUpdateSchema) },
+  responses: { 200: { description: "Driver", ...json(envelope(Any)) }, 404: { description: "Driver not found", ...json(ApiError) }, ...errors } });
+
+registry.registerPath({ method: "patch", path: "/api/drivers/{id}/deactivate", security: bearer,
+  request: { params: z.object({ id: z.string() }), body: json(z.object({ active: z.boolean().optional() })) },
+  responses: { 200: { description: "Driver", ...json(envelope(Any)) }, 404: { description: "Driver not found", ...json(ApiError) }, ...errors } });
+
+registry.registerPath({ method: "post", path: "/api/payments/{id}/handover", security: bearer,
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 200: { description: "Payment", ...json(envelope(Any)) }, 404: { description: "Payment not found", ...json(ApiError) }, ...errors } });
 
 // Keep these referenced so tree-shaking never drops the enum components.
 registry.register("PaymentMethod", PaymentMethodEnum);

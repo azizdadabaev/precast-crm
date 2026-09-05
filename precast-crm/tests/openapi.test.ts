@@ -17,9 +17,23 @@ describe("OpenAPI document", () => {
       "/api/payments/upload-receipt", "/api/payments/{id}/receipts", "/api/clients", "/api/clients/{id}",
       "/api/drivers", "/api/notifications", "/api/notifications/{id}", "/api/notifications/read-all",
       "/api/gallery", "/api/calculate/batch", "/api/pricing",
+      "/api/orders/{id}/loaded-photos/{photoId}",
+      "/api/orders/{id}/shipments/{sid}",
+      "/api/orders/{id}/dispatch",
+      "/api/dispatches/{id}/return",
+      "/api/orders/{id}/delivery-location",
+      "/api/geo/resolve-link",
+      "/api/drivers/{id}",
+      "/api/drivers/{id}/deactivate",
+      "/api/payments/{id}/handover",
     ]) {
       expect(paths, `missing ${p}`).toContain(p);
     }
+  });
+  it("documents both methods on /api/drivers/{id}", () => {
+    const p = doc.paths?.["/api/drivers/{id}"];
+    expect(p?.get).toBeDefined();
+    expect(p?.patch).toBeDefined();
   });
   it("uses bearer auth and the standard envelope", () => {
     expect(doc.components?.securitySchemes?.bearerAuth).toBeDefined();
