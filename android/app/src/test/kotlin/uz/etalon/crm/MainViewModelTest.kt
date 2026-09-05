@@ -58,6 +58,7 @@ class MainViewModelTest {
 
     private class FakeDevices : DeviceGateway { var calls = 0; override suspend fun unregisterCurrent() { calls++ } }
     private class FakePush : PushGateway { var calls = 0; override suspend fun registerIfPossible() { calls++ } }
+    private class FakeOutboxKick : OutboxKickGateway { var calls = 0; override fun kick() { calls++ } }
 
     @Test
     fun `a successful bootstrap signs the user in and registers for push`() = runTest {
@@ -135,5 +136,15 @@ class MainViewModelTest {
         val s = vm.state.value
         assertEquals(AppState.SignedOut(), s)
         assertNull((s as AppState.SignedOut).hintRes)
+    }
+
+    @Test
+    fun `every start nudges the outbox drain as a backstop, signed in or not`() = runTest {
+        // schedule() can race WorkManager's own bookkeeping for a drain that just finished, so
+        // this must fire unconditionally rather than only on a signed-in path.
+        val kick = FakeOutboxKick()
+        val session = FakeSession(loggedIn = false, outcome = Result.failure(IllegalStateException("never called")))
+        MainViewModel(session, FakeDevices(), FakePush(), kick)
+        assertEquals(1, kick.calls)
     }
 }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.DeviceRepository
+import uz.etalon.crm.core.data.OutboxScheduler
 import uz.etalon.crm.core.data.SessionRepository
 import uz.etalon.crm.core.model.Bootstrap
 import uz.etalon.crm.core.model.Me
@@ -35,15 +36,23 @@ interface SessionGateway {
 fun interface DeviceGateway { suspend fun unregisterCurrent() }
 fun interface PushGateway { suspend fun registerIfPossible() }
 
+/** A backstop for `OutboxScheduler.schedule()`: that call can race WorkManager's own bookkeeping
+ *  for a drain that just finished (see WorkManagerOutboxScheduler), so a row enqueued in that
+ *  narrow window would otherwise sit QUEUED with nothing to nudge it until the next enqueue.
+ *  Every app start closes the gap unconditionally, independent of sign-in state. */
+fun interface OutboxKickGateway { fun kick() }
+
 open class MainViewModel(
     private val session: SessionGateway,
     private val devices: DeviceGateway,
     private val push: PushGateway,
+    outboxKick: OutboxKickGateway = OutboxKickGateway {},
 ) : ViewModel() {
     private val _state = MutableStateFlow<AppState>(AppState.Booting)
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     init {
+        outboxKick.kick()
         viewModelScope.launch {
             if (session.isLoggedIn.first()) {
                 session.bootstrap()
@@ -113,8 +122,10 @@ class HiltMainViewModel @Inject constructor(
     session: SessionRepository,
     devices: DeviceRepository,
     push: PushRegistrar,
+    outboxScheduler: OutboxScheduler,
 ) : MainViewModel(
     SessionRepositoryGateway(session),
     DeviceGateway { devices.unregisterCurrent() },
     PushGateway { push.registerIfPossible() },
+    OutboxKickGateway { outboxScheduler.schedule("app-start") },
 )

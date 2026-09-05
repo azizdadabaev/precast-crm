@@ -10,4 +10,14 @@ dependencies {
     ksp(libs.hilt.androidx.compiler)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+
+    // The drain loop (resetRunning ordering, retry-doesn't-block-newer-rows, requeue-at-end) is
+    // exercised by constructing a real OutboxWorker via work-testing's TestListenableWorkerBuilder
+    // against a real in-memory Room database, the same way :core:data/:core:database test their
+    // DAOs and repositories.
+    testImplementation(libs.work.testing)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.room.testing)
+    testRuntimeOnly(libs.junit.vintage.engine)
 }

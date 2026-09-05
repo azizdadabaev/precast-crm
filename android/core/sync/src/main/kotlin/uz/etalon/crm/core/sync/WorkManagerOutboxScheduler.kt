@@ -20,9 +20,14 @@ class WorkManagerOutboxScheduler @Inject constructor(
 
     /**
      * [id] does not key the work request. [OutboxWorker] drains the whole queue itself (it claims
-     * rows one at a time via `OutboxDao.claimNext`), so one named unique work is enough: KEEP means
-     * a drain that is already pending or running absorbs this newly queued row instead of a second
-     * worker racing it for the same rows.
+     * rows one at a time via `OutboxDao.claimNext`), so one named unique work is enough — but it
+     * must be APPEND_OR_REPLACE, not KEEP. KEEP would drop this call outright if a drain is
+     * already running: a row committed to the outbox right after that drain's last `claimNext`
+     * returned null, but before WorkManager finishes recording the run as complete, would then
+     * have no worker left to see it — the running drain already decided the queue was empty, and
+     * this "no-op" schedule() call was its only other chance. APPEND_OR_REPLACE instead chains a
+     * fresh run after the current one (or starts one immediately if none is in flight/it already
+     * finished or failed), so that row is always covered by a subsequent read of the queue.
      */
     override fun schedule(id: String) {
         val request = OneTimeWorkRequestBuilder<OutboxWorker>()
@@ -30,7 +35,7 @@ class WorkManagerOutboxScheduler @Inject constructor(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag(TAG)
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(TAG, ExistingWorkPolicy.KEEP, request)
+        WorkManager.getInstance(context).enqueueUniqueWork(TAG, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 
     companion object { const val TAG = "outbox-drain" }

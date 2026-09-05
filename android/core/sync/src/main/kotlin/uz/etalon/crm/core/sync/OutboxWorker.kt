@@ -17,6 +17,7 @@ import uz.etalon.crm.core.data.OrdersGateway
 import uz.etalon.crm.core.data.runCatchingCancellable
 import uz.etalon.crm.core.database.dao.OutboxDao
 import uz.etalon.crm.core.database.entity.OutboxEntity
+import uz.etalon.crm.core.database.entity.OutboxState
 import uz.etalon.crm.core.model.OutboxKind
 import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.core.network.EtalonApi
@@ -54,8 +55,12 @@ fun outcomeFor(t: Throwable): OutboxOutcome = when {
     t is ApiException && t.status >= 500 -> OutboxOutcome.Retry
     t is ApiException -> OutboxOutcome.Fail(t.uzbekMessage)
     t is IOException -> OutboxOutcome.Retry
-    else -> OutboxOutcome.Fail(t.message ?: "Хатолик")
+    // A bug, not a server rejection (unknown OutboxKind, a null shipmentId, malformed payload
+    // JSON) — the raw exception text is not operator-facing, so it never reaches lastError.
+    else -> OutboxOutcome.Fail(GENERIC_FAILURE_MESSAGE)
 }
+
+private const val GENERIC_FAILURE_MESSAGE = "Хатолик юз берди"
 
 /**
  * Drains the whole outbox in one run rather than handling a single row: [OutboxDao.claimNext]
@@ -76,8 +81,18 @@ class OutboxWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         dao.resetRunning(System.currentTimeMillis())
 
+        // A row that keeps retrying (offline, a flaky 5xx) must not freeze every newer upload
+        // behind it: claimNext always takes the oldest QUEUED row, so a retryable one is left
+        // RUNNING instead of being requeued immediately — that drops it out of claimNext's
+        // candidates for the rest of THIS run, letting newer rows drain first. It goes back to
+        // QUEUED only once the queue is otherwise empty, via the requeue pass below. If the
+        // worker is killed before that pass runs, the row stays RUNNING and the next run's
+        // resetRunning() above recovers it, same as any other stranded row.
+        val deferred = mutableListOf<OutboxEntity>()
+        val touchedOrders = mutableSetOf<String>()
+
         while (true) {
-            val row = dao.claimNext(System.currentTimeMillis()) ?: return Result.success()
+            val row = dao.claimNext(System.currentTimeMillis()) ?: break
             val outcome = runCatchingCancellable { send(row) }.fold(
                 onSuccess = { OutboxOutcome.Done },
                 onFailure = { outcomeFor(it) },
@@ -86,15 +101,21 @@ class OutboxWorker @AssistedInject constructor(
                 OutboxOutcome.Done -> {
                     row.filePath?.let { File(it).delete() }
                     dao.delete(row.id)
-                    orders.refreshDetail(row.orderId)
+                    touchedOrders += row.orderId
                 }
-                OutboxOutcome.Retry -> {
-                    dao.markQueued(row.id, System.currentTimeMillis())
-                    return Result.retry()
-                }
+                OutboxOutcome.Retry -> deferred += row
                 is OutboxOutcome.Fail -> dao.markFailed(row.id, outcome.message, System.currentTimeMillis())
             }
         }
+
+        // One refresh per order, not one per row — several queued rows sharing an order (a
+        // truck-load photo followed by a delivery proof) would otherwise cost a round-trip each.
+        touchedOrders.forEach { orders.refreshDetail(it) }
+
+        if (deferred.isEmpty()) return Result.success()
+        val now = System.currentTimeMillis()
+        deferred.forEach { dao.upsert(it.copy(state = OutboxState.QUEUED, attempts = it.attempts + 1, updatedAt = now)) }
+        return Result.retry()
     }
 
     private suspend fun send(row: OutboxEntity) {
