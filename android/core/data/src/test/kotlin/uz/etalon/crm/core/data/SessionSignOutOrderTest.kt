@@ -15,6 +15,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,12 +29,7 @@ import uz.etalon.crm.core.database.dao.OutboxDao
 import uz.etalon.crm.core.datastore.InMemoryTokenStore
 import uz.etalon.crm.core.datastore.SessionPrefs
 import uz.etalon.crm.core.network.EtalonApi
-import uz.etalon.crm.core.network.dto.ChangePinRequest
-import uz.etalon.crm.core.network.dto.ClientDto
-import uz.etalon.crm.core.network.dto.DeviceRegisterRequest
-import uz.etalon.crm.core.network.dto.LoginRequest
-import uz.etalon.crm.core.network.dto.OrderSummaryDto
-import uz.etalon.crm.core.network.dto.OrdersPageDto
+import uz.etalon.crm.core.network.dto.*
 import java.util.concurrent.Executor
 
 /** A no-op DataStore backing a real SessionPrefs without touching disk. */
@@ -58,6 +56,24 @@ private class UnusedApi(private val gate: CompletableDeferred<Unit>, private val
     override suspend fun changePin(body: ChangePinRequest) = error("unused")
     override suspend fun registerDevice(body: DeviceRegisterRequest) = error("unused")
     override suspend fun unregisterDevice(token: String) = error("unused")
+
+    override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String): LoadedPhotoDto = throw NotImplementedError("unused")
+    override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String): GalleryPhotoDto = throw NotImplementedError("unused")
+    override suspend fun deliveryProof(id: String, file: MultipartBody.Part, cashAmount: RequestBody, noCashCollected: RequestBody, noCashCollectedNote: RequestBody, driverReturned: RequestBody, idempotencyKey: String): OrderStatusDto = throw NotImplementedError("unused")
+    override suspend fun loadShipment(id: String, sid: String, file: MultipartBody.Part, loadedBeams: RequestBody, loadedBlocks: RequestBody, idempotencyKey: String): ShipmentDto = throw NotImplementedError("unused")
+    override suspend fun deleteLoadedPhoto(id: String, photoId: String): DeletedIdDto = throw NotImplementedError("unused")
+    override suspend fun createShipment(id: String): ShipmentDto = throw NotImplementedError("unused")
+    override suspend fun deleteShipment(id: String, sid: String): DeletedDto = throw NotImplementedError("unused")
+    override suspend fun dispatchShipment(id: String, sid: String, body: ShipmentDispatchRequest): DispatchedDto = throw NotImplementedError("unused")
+    override suspend fun deliverShipment(id: String, sid: String): DeliveredDto = throw NotImplementedError("unused")
+    override suspend fun createDispatch(id: String, body: DispatchCreateRequest): DispatchDto = throw NotImplementedError("unused")
+    override suspend fun markDispatchReturned(id: String): DispatchDto = throw NotImplementedError("unused")
+    override suspend fun setDeliveryLocation(id: String, body: JsonObject): DeliveryLocationDto = throw NotImplementedError("unused")
+    override suspend fun resolveMapLink(body: ResolveLinkRequest): LatLngDto = throw NotImplementedError("unused")
+    override suspend fun drivers(activeOnly: String?): List<DriverListItemDto> = throw NotImplementedError("unused")
+    override suspend fun createDriver(body: DriverCreateRequest): DriverListItemDto = throw NotImplementedError("unused")
+    override suspend fun updateDriver(id: String, body: DriverUpdateRequest): DriverListItemDto = throw NotImplementedError("unused")
+    override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = throw NotImplementedError("unused")
 }
 
 /** Wraps the real, Room-generated DAO to pin down the exact moment signOut()'s db.wipe() has

@@ -6,6 +6,6 @@ dependencies {
     // Room runtime comes transitively via :core:database's `api(libs.room.runtime)` — needed to
     // compile against EtalonDatabase (extends RoomDatabase) for SessionRepository's db.wipe().
     testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core); testImplementation(libs.room.testing)
-    testImplementation(libs.datastore.preferences)
+    testImplementation(libs.datastore.preferences); testImplementation(libs.okhttp)
     testRuntimeOnly(libs.junit.vintage.engine)
 }
