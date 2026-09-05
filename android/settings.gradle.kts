@@ -8,5 +8,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "EtalonCRM"
 include(":app")
-include(":core:designsystem", ":core:model", ":core:ui", ":core:network", ":core:datastore", ":core:database", ":core:data", ":core:testing", ":core:image")
+include(":core:designsystem", ":core:model", ":core:ui", ":core:network", ":core:datastore", ":core:database", ":core:data", ":core:testing", ":core:image", ":core:sync")
 include(":feature:auth", ":feature:orders")

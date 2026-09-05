@@ -23,6 +23,8 @@ securityCrypto = "1.1.0"
 googleServices = "4.5.0"
 exifinterface = "1.4.2"
 junit4 = "4.13.2"
+workmanager = "2.11.0"
+hiltWork = "1.4.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version = "1.19.0" }
@@ -76,6 +78,10 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTest" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version.ref = "exifinterface" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
+work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workmanager" }
+hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltWork" }
+hilt-androidx-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltWork" }
+work-testing = { module = "androidx.work:work-testing", version.ref = "workmanager" }
 # build-logic classpath
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
