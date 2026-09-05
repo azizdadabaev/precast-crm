@@ -48,6 +48,9 @@ class SessionRepository @Inject constructor(
     /** Local sign-out: the mobile JWT has no server-side logout; device unregistration is DeviceRepository's job.
      *  db.wipe() clears the Room tables; orders.clearCache() clears OrdersRepository's in-memory outcome maps —
      *  both are needed or the next signed-in user could briefly see the previous user's cached orders.
-     *  setLastMe(null) drops the cached identity so the offline fallback cannot resurrect this session. */
-    suspend fun signOut() { tokens.clear(); _me.value = null; prefs.setLastMe(null); db.wipe(); orders.clearCache() }
+     *  setLastMe(null) drops the cached identity so the offline fallback cannot resurrect this session.
+     *  orders.clearCache() (which bumps OrdersRepository's epoch) must run BEFORE db.wipe(): a refresh
+     *  already in flight captured the old epoch, and bumping it first guarantees that refresh's write is
+     *  rejected instead of landing in the table db.wipe() just emptied. */
+    suspend fun signOut() { tokens.clear(); _me.value = null; prefs.setLastMe(null); orders.clearCache(); db.wipe() }
 }

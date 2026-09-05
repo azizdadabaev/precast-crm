@@ -80,8 +80,8 @@ fun SignedInShell(
                         backStack.add(target)
                         while (backStack.size > 1) backStack.removeAt(0)
                     },
-                    icon = { Icon(d.icon(), null) },
-                    label = { Text(stringResource(d.labelRes)) },
+                    icon = { Icon(d.icon(), contentDescription = stringResource(d.labelRes)) },
+                    label = { Text(stringResource(d.shortLabelRes), maxLines = 1) },
                 )
             }
         },

@@ -7,15 +7,15 @@ import uz.etalon.crm.core.model.Me
  *  are declared so the bar is stable across slices and route to a "coming in the next
  *  release" notice via ComingSoonScreen until their feature module lands.
  *  Declaration order is the priority order from spec §5.1. */
-enum class Destination(val labelRes: Int, val requires: String?) {
-    HOME(R.string.nav_home, null),
-    ORDERS(R.string.nav_orders, "order.view"),
-    CALCULATOR(R.string.nav_calculator, "calculator.use"),
-    INBOX(R.string.nav_inbox, "inbox.access"),
-    PAYMENTS(R.string.nav_payments, "payment.view"),
-    PRODUCTION(R.string.nav_production, "inventory.view"),
-    GAZOBLOK(R.string.nav_gazoblok, null),
-    MORE(R.string.nav_more, null),
+enum class Destination(val labelRes: Int, val shortLabelRes: Int, val requires: String?) {
+    HOME(R.string.nav_home, R.string.nav_home_short, null),
+    ORDERS(R.string.nav_orders, R.string.nav_orders_short, "order.view"),
+    CALCULATOR(R.string.nav_calculator, R.string.nav_calculator_short, "calculator.use"),
+    INBOX(R.string.nav_inbox, R.string.nav_inbox_short, "inbox.access"),
+    PAYMENTS(R.string.nav_payments, R.string.nav_payments_short, "payment.view"),
+    PRODUCTION(R.string.nav_production, R.string.nav_production_short, "inventory.view"),
+    GAZOBLOK(R.string.nav_gazoblok, R.string.nav_gazoblok_short, null),
+    MORE(R.string.nav_more, R.string.nav_more_short, null),
 }
 
 /** Material 3 caps the navigation bar at five items, and MORE always takes one of them —
