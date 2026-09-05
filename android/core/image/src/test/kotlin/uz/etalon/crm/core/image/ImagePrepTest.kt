@@ -3,6 +3,7 @@ package uz.etalon.crm.core.image
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.exifinterface.media.ExifInterface
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -15,6 +16,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -34,6 +36,15 @@ class ImagePrepTest {
         val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(f.absolutePath, o)
         return o.outWidth to o.outHeight
+    }
+
+    private fun writeJpegWithOrientation(w: Int, h: Int, name: String, orientation: Int): File {
+        val f = writeJpeg(w, h, name)
+        ExifInterface(f.absolutePath).apply {
+            setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+            saveAttributes()
+        }
+        return f
     }
 
     @Test
@@ -62,6 +73,29 @@ class ImagePrepTest {
         assertTrue(out.file.name.endsWith(".jpg"))
         assertEquals(out.file.length(), out.bytes)
         assertTrue("prepared file should be under the server's 8 MB cap", out.bytes < 8L * 1024 * 1024)
+    }
+
+    @Test
+    fun `applies EXIF rotation, swapping width and height, when no scaling is needed`() = runTest {
+        val src = writeJpegWithOrientation(1200, 600, "rotate-only.jpg", ExifInterface.ORIENTATION_ROTATE_90)
+        val out = AndroidImagePrep(context).prepare(src).getOrThrow()
+        val (w, h) = sizeOf(out.file)
+        assertEquals(600, w)
+        assertEquals(1200, h)
+        assertEquals(w, out.width)
+        assertEquals(h, out.height)
+    }
+
+    @Test
+    fun `applies EXIF rotation and then scales when the rotated image still exceeds the cap`() = runTest {
+        val src = writeJpegWithOrientation(2400, 1200, "rotate-and-scale.jpg", ExifInterface.ORIENTATION_ROTATE_90)
+        val out = AndroidImagePrep(context).prepare(src).getOrThrow()
+        val (w, h) = sizeOf(out.file)
+        // Rotated upright is 1200x2400 (portrait, ratio 1:2) before the cap is applied.
+        assertEquals(1280, max(w, h))
+        assertTrue(abs(min(w, h) * 2.0 - max(w, h)) <= 1.0)
+        assertEquals(w, out.width)
+        assertEquals(h, out.height)
     }
 
     @Test

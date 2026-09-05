@@ -68,15 +68,28 @@ class AndroidImagePrep @Inject constructor(
                     .use { ExifInterface(it).rotationDegrees }
                 val upright = if (rotation == 0) decoded else decoded.rotate(rotation)
                 val scaled = upright.scaleToFit(maxEdge)
+                // Capture dimensions before recycling: a recycled Bitmap's width/height
+                // are no longer safe to read.
+                val width = scaled.width
+                val height = scaled.height
 
                 val out = File(context.cacheDir, "upload-${UUID.randomUUID()}.jpg")
-                out.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, quality, it) }
+                try {
+                    val encoded = out.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, quality, it) }
+                    check(encoded) { "failed to encode JPEG" }
+                } catch (t: Throwable) {
+                    out.delete()
+                    throw t
+                } finally {
+                    // Identity-aware: scaleToFit/rotate return `this` unchanged when no
+                    // transform was needed, so two of these variables can be the same
+                    // instance. Guard against recycling any bitmap twice.
+                    if (scaled !== upright) scaled.recycle()
+                    if (upright !== decoded) upright.recycle()
+                    decoded.recycle()
+                }
 
-                if (scaled !== decoded) scaled.recycle()
-                if (upright !== decoded) upright.recycle()
-                decoded.recycle()
-
-                PreparedImage(out, scaled.width, scaled.height, out.length())
+                PreparedImage(out, width, height, out.length())
             }
         }
 
