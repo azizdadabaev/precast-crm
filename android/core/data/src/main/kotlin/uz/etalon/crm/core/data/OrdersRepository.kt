@@ -43,7 +43,7 @@ private data class DetailOutcome(val detail: OrderDetail?, val error: AppError?)
 @Singleton
 class OrdersRepository @Inject constructor(
     private val api: EtalonApi, private val dao: OrdersDao, private val json: Json, @Named("apiBaseUrl") private val mediaBase: String,
-) {
+) : OrdersGateway {
     private val listOutcomes = MutableStateFlow<Map<String, ListOutcome>>(emptyMap())
     private val detailOutcomes = MutableStateFlow<Map<String, DetailOutcome>>(emptyMap())
 
@@ -112,7 +112,7 @@ class OrdersRepository @Inject constructor(
             }
         }.distinctUntilChanged()
 
-    suspend fun refreshDetail(id: String) {
+    override suspend fun refreshDetail(id: String) {
         val started = epoch.get()
         try {
             val dto = api.order(id)

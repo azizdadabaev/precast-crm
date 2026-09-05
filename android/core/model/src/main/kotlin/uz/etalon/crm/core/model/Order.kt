@@ -30,8 +30,19 @@ data class PaymentLine(
     val recordedAt: Instant, val recordedByName: String?, val receiptUrls: List<String>,
 )
 data class ShipmentLine(
-    val id: String, val number: Int, val status: ShipmentStatus, val loadedBlocks: Int?,
-    val loadedPhotoUrl: String?, val driverName: String?, val truckIdentifier: String?,
+    val id: String,
+    val number: Int,
+    val status: ShipmentStatus,
+    val loadedBeams: Map<String, Int> = emptyMap(),
+    val loadedBlocks: Int?,
+    val loadedPhotoUrl: String?,
+    val loadedAt: Instant? = null,
+    val dispatchedAt: Instant? = null,
+    val deliveredAt: Instant? = null,
+    val driverWillCollectCash: Boolean = false,
+    val cashToCollect: Money? = null,
+    val driverName: String?,
+    val truckIdentifier: String?,
 )
 data class OrderEventLine(val id: String, val type: String, val message: String?, val actorName: String?, val createdAt: Instant)
 
@@ -45,11 +56,14 @@ data class OrderDetail(
     val rooms: List<RoomLine>,
     val payments: List<PaymentLine>,
     val shipments: List<ShipmentLine>,
-    val loadedPhotoUrls: List<String>,
+    val loadedPhotos: List<LoadedPhoto>,
     val deliveryProofUrl: String?,
     val events: List<OrderEventLine>,
+    val dispatch: DispatchInfo?,
     val fetchedAt: Instant,
 ) {
     val pendingAmount: Money get() = payments.filter { it.status == PaymentStatus.PENDING_CONFIRMATION }.fold(Money.ZERO) { a, p -> a + p.amount }
     val remaining: Money get() = (summary.totalPrice - summary.confirmedPaid - writeOffAmount).coerceAtLeastZero()
+    /** Kept for 1a's screens: a flat URL list derived from [loadedPhotos]. */
+    val loadedPhotoUrls: List<String> get() = loadedPhotos.map { it.url }
 }

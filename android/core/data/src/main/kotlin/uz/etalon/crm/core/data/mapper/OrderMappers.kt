@@ -46,10 +46,32 @@ fun OrderDetailDto.toDomain(mediaBase: String, fetchedAt: Instant): OrderDetail 
         roomsSubtotal = Money.parse(roomsSubtotal), writeOffAmount = Money.parse(writeOffAmount),
         rooms = project.calculations.map { RoomLine(it.name, BigDecimal(it.innerWidth), BigDecimal(it.innerLength), it.pattern, BigDecimal(it.beamLength), it.beamCount, it.totalBlocks, BigDecimal(it.billedArea), Money.parse(it.subtotal)) },
         payments = payments.map { PaymentLine(it.id, Money.parse(it.amount), PaymentMethod.from(it.method), PaymentStatus.from(it.status), it.recordedAt.toInstant(), it.recordedBy?.name, it.receipts.mapNotNull { r -> MediaUrl.absolute(mediaBase, r.imageUrl) }) },
-        shipments = shipments.map { ShipmentLine(it.id, it.number, ShipmentStatus.from(it.status), it.loadedBlocks, MediaUrl.absolute(mediaBase, it.loadedPhotoUrl), it.driver?.name, it.truckIdentifier) },
-        loadedPhotoUrls = galleryPhotos.mapNotNull { MediaUrl.absolute(mediaBase, it.url) },
+        shipments = shipments.map {
+            ShipmentLine(
+                id = it.id, number = it.number, status = ShipmentStatus.from(it.status),
+                loadedBeams = it.loadedBeams.orEmpty(),
+                loadedBlocks = it.loadedBlocks,
+                loadedPhotoUrl = MediaUrl.absolute(mediaBase, it.loadedPhotoUrl),
+                loadedAt = it.loadedAt?.toInstant(),
+                dispatchedAt = it.dispatchedAt?.toInstant(),
+                deliveredAt = it.deliveredAt?.toInstant(),
+                driverWillCollectCash = it.driverWillCollectCash,
+                cashToCollect = it.cashToCollect?.let(Money::parse),
+                driverName = it.driver?.name, truckIdentifier = it.truckIdentifier,
+            )
+        },
+        loadedPhotos = galleryPhotos.mapNotNull { p ->
+            MediaUrl.absolute(mediaBase, p.url)?.let { LoadedPhoto(p.id, it, p.kind) }
+        },
         deliveryProofUrl = MediaUrl.absolute(mediaBase, deliveryProofUrl),
         events = events.map { OrderEventLine(it.id, it.type, it.message, it.actor?.name, it.createdAt.toInstant()) },
+        dispatch = dispatch?.let { d ->
+            DispatchInfo(
+                id = d.id, driverName = d.driver?.name, truckIdentifier = d.truckIdentifier,
+                expectedCollection = Money.parse(d.expectedCollection),
+                dispatchedAt = d.dispatchedAt?.toInstant(), returnedAt = d.returnedAt?.toInstant(),
+            )
+        },
         fetchedAt = fetchedAt,
     )
 }
