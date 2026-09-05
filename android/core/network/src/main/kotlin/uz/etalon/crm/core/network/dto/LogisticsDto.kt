@@ -4,6 +4,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import uz.etalon.crm.core.network.BigDecimalSerializer
+import java.math.BigDecimal
 
 // ── Shipments ───────────────────────────────────────────────────
 /** Body of POST /api/orders/{id}/shipments/{sid}/dispatch. The server reads this
@@ -14,7 +16,7 @@ data class ShipmentDispatchRequest(
     val driverId: String? = null,
     val truckIdentifier: String? = null,
     val driverWillCollectCash: Boolean = false,
-    val cashToCollect: Double? = null,
+    @Serializable(with = BigDecimalSerializer::class) val cashToCollect: BigDecimal? = null,
     val notes: String? = null,
 )
 
@@ -37,7 +39,7 @@ data class ShipmentDispatchRequest(
 data class DispatchCreateRequest(
     val driverId: String? = null,
     val truckIdentifier: String? = null,
-    val expectedCollection: Double,
+    @Serializable(with = BigDecimalSerializer::class) val expectedCollection: BigDecimal,
     val notes: String? = null,
 )
 
@@ -50,6 +52,7 @@ data class DispatchDto(
     val dispatchedAt: String? = null,
     val returnedAt: String? = null,
     val driver: DriverDto? = null,
+    val notes: String? = null,
 )
 
 // ── Delivery location ───────────────────────────────────────────

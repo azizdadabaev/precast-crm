@@ -18,6 +18,7 @@ import uz.etalon.crm.core.network.dto.DeliveryLocationRequest
 import uz.etalon.crm.core.network.dto.DispatchCreateRequest
 import uz.etalon.crm.core.network.dto.ShipmentDispatchRequest
 import uz.etalon.crm.core.network.dto.toJsonBody
+import java.math.BigDecimal
 
 class LogisticsApiTest {
     private lateinit var server: MockWebServer
@@ -87,7 +88,7 @@ class LogisticsApiTest {
 
     @Test fun `dispatchShipment posts json and reads the dispatched flag`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"dispatched":true}}"""))
-        val res = api.dispatchShipment("o1", "s1", ShipmentDispatchRequest(driverId = "d1", truckIdentifier = "01A123BC", driverWillCollectCash = true, cashToCollect = 500000.0))
+        val res = api.dispatchShipment("o1", "s1", ShipmentDispatchRequest(driverId = "d1", truckIdentifier = "01A123BC", driverWillCollectCash = true, cashToCollect = BigDecimal("500000.00")))
         assertTrue(res.dispatched)
         val rec = server.takeRequest()
         assertEquals("POST", rec.method)
@@ -96,11 +97,33 @@ class LogisticsApiTest {
         assertTrue(sent.contains(""""driverWillCollectCash":true"""))
     }
 
+    // Money on the wire must carry the exact decimal the server's
+    // Decimal(14,2) column expects, as a bare number (never a quoted
+    // string, never a Double — see BigDecimalSerializer).
+    @Test fun `dispatchShipment carries the exact cash decimal, not a Double approximation`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":{"dispatched":true}}"""))
+        api.dispatchShipment("o1", "s1", ShipmentDispatchRequest(cashToCollect = BigDecimal("1234.56")))
+        val sent = server.takeRequest().body.readUtf8()
+        assertTrue(sent.contains(""""cashToCollect":1234.56"""), "expected the bare literal 1234.56, got: $sent")
+    }
+
+    @Test fun `createDispatch carries the Decimal(14,2) ceiling exactly, where Double would switch to scientific notation`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":{"id":"dp1","expectedCollection":"999999999999.99"}}"""))
+        api.createDispatch("o1", DispatchCreateRequest(expectedCollection = BigDecimal("999999999999.99")))
+        val sent = server.takeRequest().body.readUtf8()
+        // Double.toString(999999999999.99) renders "9.9999999999999E11" on the
+        // JVM this module targets — not representable as this plain-decimal
+        // literal, which is exactly why this field is BigDecimal, not Double.
+        assertTrue(sent.contains(""""expectedCollection":999999999999.99"""), "expected the bare literal 999999999999.99, got: $sent")
+    }
+
     @Test fun `createShipment posts with no body and returns the new shipment`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"id":"s2","number":2,"status":"PENDING"}}"""))
         val res = api.createShipment("o1")
         assertEquals(2, res.number)
-        assertEquals("POST", server.takeRequest().method)
+        val rec = server.takeRequest()
+        assertEquals("POST", rec.method)
+        assertEquals("/api/orders/o1/shipments", rec.path)
     }
 
     @Test fun `deleteShipment and deliverShipment hit the right paths`() = runTest {
@@ -114,8 +137,8 @@ class LogisticsApiTest {
 
     @Test fun `createDispatch sends expectedCollection`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"id":"dp1","expectedCollection":"500000.00"}}"""))
-        api.createDispatch("o1", DispatchCreateRequest(driverId = "d1", truckIdentifier = null, expectedCollection = 500000.0, notes = null))
-        assertTrue(server.takeRequest().body.readUtf8().contains(""""expectedCollection":500000"""))
+        api.createDispatch("o1", DispatchCreateRequest(driverId = "d1", truckIdentifier = null, expectedCollection = BigDecimal("500000.00"), notes = null))
+        assertTrue(server.takeRequest().body.readUtf8().contains(""""expectedCollection":500000.00"""))
     }
 
     // The shared Json has explicitNulls = false, which would silently drop a
