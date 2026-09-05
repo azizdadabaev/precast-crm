@@ -21,10 +21,14 @@ abstract class EtalonDatabase : RoomDatabase() {
      * Called on sign-out so the next user never sees the previous user's cache.
      * The outbox goes with it: a queued photo belongs to the session that took
      * it, and uploading it under a different token would misattribute the work.
+     *
+     * Returns the file paths the dropped outbox rows pointed at, so the caller
+     * (`:core:data`) can delete the actual JPEGs — the DAO only owns the table,
+     * not the files on disk.
      */
-    suspend fun wipe() {
+    suspend fun wipe(): List<String> {
         ordersDao().clearAllSummaries()
         ordersDao().clearAllDetails()
-        outboxDao().clearAll()
+        return outboxDao().wipeAndReturnPaths()
     }
 }

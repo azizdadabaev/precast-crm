@@ -14,6 +14,7 @@ import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.ChangePinRequest
 import uz.etalon.crm.core.network.dto.LoginRequest
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,6 +52,12 @@ class SessionRepository @Inject constructor(
      *  setLastMe(null) drops the cached identity so the offline fallback cannot resurrect this session.
      *  orders.clearCache() (which bumps OrdersRepository's epoch) must run BEFORE db.wipe(): a refresh
      *  already in flight captured the old epoch, and bumping it first guarantees that refresh's write is
-     *  rejected instead of landing in the table db.wipe() just emptied. */
-    suspend fun signOut() { tokens.clear(); _me.value = null; prefs.setLastMe(null); orders.clearCache(); db.wipe() }
+     *  rejected instead of landing in the table db.wipe() just emptied.
+     *  db.wipe() also returns the outbox's queued JPEG paths: the DAO only owns the table, so deleting the
+     *  actual files is this repository's job. A missing or undeletable file must not fail sign-out. */
+    suspend fun signOut() {
+        tokens.clear(); _me.value = null; prefs.setLastMe(null); orders.clearCache()
+        val orphanedFiles = db.wipe()
+        orphanedFiles.forEach { path -> runCatching { File(path).delete() } }
+    }
 }

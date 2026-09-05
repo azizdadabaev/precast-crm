@@ -40,12 +40,48 @@ class OutboxDaoTest {
         }
     }
 
-    @Test fun `nextQueued skips rows that are already running or failed`() = runTest {
+    @Test fun `observeForOrder breaks ties on id when createdAt matches`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("b", "o1", created = 5))
+        dao.upsert(row("a", "o1", created = 5))
+        dao.observeForOrder("o1").test {
+            assertEquals(listOf("a", "b"), awaitItem().map { it.id })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test fun `claimNext skips rows that are already running or failed`() = runTest {
         val dao = db().outboxDao()
         dao.upsert(row("running", "o1", OutboxState.RUNNING, created = 1))
         dao.upsert(row("failed", "o1", OutboxState.FAILED, created = 2))
         dao.upsert(row("queued", "o1", OutboxState.QUEUED, created = 3))
-        assertEquals("queued", dao.nextQueued()?.id)
+        val claimed = dao.claimNext(at = 10)
+        assertEquals("queued", claimed?.id)
+        assertEquals(OutboxState.RUNNING, claimed?.state)
+        assertEquals(OutboxState.RUNNING, dao.byId("queued")?.state)
+    }
+
+    @Test fun `claimNext is an atomic claim - a second claim on a single-row queue returns null`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("a", "o1"))
+        val first = dao.claimNext(at = 1)
+        val second = dao.claimNext(at = 2)
+        assertEquals("a", first?.id)
+        assertNull(second)
+        // The row is RUNNING, not lost or duplicated.
+        assertEquals(OutboxState.RUNNING, dao.byId("a")?.state)
+    }
+
+    @Test fun `resetRunning requeues a row a killed process left running`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("a", "o1", OutboxState.RUNNING, created = 1))
+        val recovered = dao.resetRunning(at = 50)
+        assertEquals(1, recovered)
+        val after = dao.byId("a")!!
+        assertEquals(OutboxState.QUEUED, after.state)
+        assertEquals(50, after.updatedAt)
+        // The recovered row is claimable again — it was not stranded.
+        assertEquals("a", dao.claimNext(at = 51)?.id)
     }
 
     @Test fun `markFailed records the message and bumps the attempt count`() = runTest {
@@ -59,10 +95,11 @@ class OutboxDaoTest {
         assertEquals(99, after.updatedAt)
     }
 
-    @Test fun `wipe clears the outbox along with the order cache`() = runTest {
+    @Test fun `wipe clears the outbox along with the order cache, and returns the dropped file paths`() = runTest {
         val database = db()
         database.outboxDao().upsert(row("a", "o1"))
-        database.wipe()
+        val dropped = database.wipe()
+        assertEquals(listOf("/data/outbox/a.jpg"), dropped)
         assertNull(database.outboxDao().byId("a"))
         assertEquals(0, database.outboxDao().countPending())
     }

@@ -22,6 +22,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import uz.etalon.crm.core.database.EtalonDatabase
 import uz.etalon.crm.core.database.dao.OrdersDao
+import uz.etalon.crm.core.database.dao.OutboxDao
 import uz.etalon.crm.core.datastore.InMemoryTokenStore
 import uz.etalon.crm.core.datastore.SessionPrefs
 import uz.etalon.crm.core.network.EtalonApi
@@ -93,10 +94,17 @@ class SessionSignOutOrderTest {
         ApplicationProvider.getApplicationContext<Context>(), EtalonDatabase::class.java,
     ).setQueryExecutor(DirectExecutor).setTransactionExecutor(DirectExecutor).build()
 
-    private fun fakeSessionDatabase(dao: OrdersDao): EtalonDatabase = object : EtalonDatabase() {
-        override fun ordersDao(): OrdersDao = dao
-        override fun clearAllTables() { /* unused: wipe() never calls this */ }
-        override fun createInvalidationTracker(): InvalidationTracker = InvalidationTracker(this)
+    /** `outboxDao()` delegates to a genuinely Room-built in-memory database (unlike the gated
+     *  `ordersDao()` above) — wipe()'s outbox half is a real `@Transaction` DAO method and needs
+     *  a real underlying connection to run against; this test does not exercise outbox behavior. */
+    private fun fakeSessionDatabase(dao: OrdersDao): EtalonDatabase {
+        val real = realDatabase()
+        return object : EtalonDatabase() {
+            override fun ordersDao(): OrdersDao = dao
+            override fun outboxDao(): OutboxDao = real.outboxDao()
+            override fun clearAllTables() { /* unused: wipe() never calls this */ }
+            override fun createInvalidationTracker(): InvalidationTracker = InvalidationTracker(this)
+        }
     }
 
     /**
