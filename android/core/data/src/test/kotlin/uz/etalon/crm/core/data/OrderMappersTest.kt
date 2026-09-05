@@ -38,4 +38,41 @@ class OrderMappersTest {
         assertEquals("https://etalontbm.uz/uploads/receipts/u1/x.jpg", o.payments.single().receiptUrls.single())
         assertEquals(PaymentMethod.CASH, o.payments.single().method)
     }
+
+    /** `Money.parse` throws on a malformed string, which would fail the whole detail decode —
+     *  nothing exercised the new shipment-timing/cash and dispatch fields before this, so a
+     *  server response shaped like this one could have broken silently until a real device hit it. */
+    @Test fun `detail maps loaded-shipment timing, cash and the dispatch block`() {
+        val d = OrderDetailDto(
+            "o1", "2026-09-0041", "LOADED", "PARTIALLY_PAID", "100.00", "60.00", "10.000", 1, 1,
+            "2026-09-04T00:00:00.000Z", "2026-09-01T00:00:00.000Z", ClientDto("c1", "A", "998901112233", null),
+            roomsSubtotal = "100.00", discountAmount = "0", deliveryCost = "0", otherCost = "0", writeOffAmount = "0",
+            shipments = listOf(ShipmentDto(
+                id = "s1", number = 1, status = "DISPATCHED",
+                loadedBeams = mapOf("3.30" to 5, "4.00" to 2), loadedBlocks = 40,
+                loadedAt = "2026-09-02T08:00:00.000Z", dispatchedAt = "2026-09-02T09:00:00.000Z", deliveredAt = null,
+                driverWillCollectCash = true, cashToCollect = "150000.00", truckIdentifier = "01A123BB",
+                driver = DriverDto("dr1", "Шер"),
+            )),
+            dispatch = DispatchDto(
+                id = "dp1", driverId = "dr1", truckIdentifier = "01A123BB", expectedCollection = "150000.00",
+                dispatchedAt = "2026-09-02T09:00:00.000Z", returnedAt = null, driver = DriverDto("dr1", "Шер"),
+            ),
+        )
+        val o = d.toDomain("https://etalontbm.uz", Instant.EPOCH)
+
+        val shipment = o.shipments.single()
+        assertEquals(mapOf("3.30" to 5, "4.00" to 2), shipment.loadedBeams)
+        assertEquals(Instant.parse("2026-09-02T08:00:00Z"), shipment.loadedAt)
+        assertEquals(Instant.parse("2026-09-02T09:00:00Z"), shipment.dispatchedAt)
+        assertNull(shipment.deliveredAt)
+        assertTrue(shipment.driverWillCollectCash)
+        assertEquals(Money.parse("150000.00"), shipment.cashToCollect)
+
+        val dispatch = o.dispatch!!
+        assertEquals("Шер", dispatch.driverName)
+        assertEquals("01A123BB", dispatch.truckIdentifier)
+        assertEquals(Money.parse("150000.00"), dispatch.expectedCollection)
+        assertFalse(dispatch.isReturned)
+    }
 }

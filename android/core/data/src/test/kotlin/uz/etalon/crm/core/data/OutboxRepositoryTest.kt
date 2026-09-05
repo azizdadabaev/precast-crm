@@ -1,9 +1,11 @@
 package uz.etalon.crm.core.data
 
 import app.cash.turbine.test
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -55,6 +57,23 @@ private class FakeOutboxDao : OutboxDao {
 private class RecordingScheduler : OutboxScheduler {
     val scheduled = mutableListOf<String>()
     override fun schedule(id: String) { scheduled += id }
+}
+
+/** Wraps a real DAO to pin down the exact moment enqueue()'s `dao.upsert` has written the row
+ *  but not yet returned — the same window the production race (a signOut() landing between the
+ *  write and enqueue's post-write epoch check) depends on. Mirrors `SessionSignOutOrderTest`'s
+ *  `GatedOrdersDao`: a suspend DAO call genuinely redispatches, so this is exercised with real
+ *  suspension, not a hand-simulated ordering. */
+private class GatingOutboxDao(
+    private val real: OutboxDao,
+    private val reachedUpsert: CompletableDeferred<Unit>,
+    private val releaseUpsert: CompletableDeferred<Unit>,
+) : OutboxDao by real {
+    override suspend fun upsert(row: OutboxEntity) {
+        real.upsert(row)
+        reachedUpsert.complete(Unit)
+        releaseUpsert.await()
+    }
 }
 
 class OutboxRepositoryTest {
@@ -137,5 +156,42 @@ class OutboxRepositoryTest {
             assertEquals(1, item.attempts)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    /**
+     * The reachable failure this guards: operator A's token expires, a background refresh
+     * 401s, `MainViewModel` calls `signOut()` — which wipes the outbox — in the same
+     * milliseconds A taps save on the delivery-proof screen. The JPEG is moved and the row is
+     * written *after* the wipe conceptually landed (here: `clearCache()` runs while the row's
+     * `dao.upsert` is suspended), so without a guard the row would survive into the next
+     * session and Task 7's worker would upload it under whoever signs in next.
+     */
+    @Test fun `enqueue rolls back if sign-out lands mid-write`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+        val cache = File(tmp, "cache").apply { mkdirs() }
+        val outboxDir = File(tmp, "outbox")
+        val photo = File(cache, "shot.jpg").apply { writeBytes(ByteArray(8)) }
+        val realDao = FakeOutboxDao()
+        val reachedUpsert = CompletableDeferred<Unit>()
+        val releaseUpsert = CompletableDeferred<Unit>()
+        val scheduler = RecordingScheduler()
+        val r = repo(GatingOutboxDao(realDao, reachedUpsert, releaseUpsert), scheduler, outboxDir)
+
+        var caught: Throwable? = null
+        val job = launch {
+            try {
+                r.enqueue(OutboxKind.LOAD_TRUCK, "o1", photo = PreparedImage(photo, 1, 1, photo.length()))
+            } catch (t: Throwable) {
+                caught = t
+            }
+        }
+        reachedUpsert.await() // the row is written; enqueue is paused right there, about to check the epoch
+        r.clearCache()        // the sign-out equivalent
+        releaseUpsert.complete(Unit)
+        job.join()
+
+        assertNotNull(caught, "enqueue must fail, not silently succeed, once sign-out lands mid-write")
+        assertTrue(realDao.rows.value.isEmpty(), "the row must not survive")
+        assertTrue(outboxDir.listFiles().orEmpty().isEmpty(), "the moved file must not survive")
+        assertTrue(scheduler.scheduled.isEmpty(), "a rolled-back row must never be scheduled")
     }
 }

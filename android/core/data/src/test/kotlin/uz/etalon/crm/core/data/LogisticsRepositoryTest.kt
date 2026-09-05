@@ -114,4 +114,45 @@ class LogisticsRepositoryTest {
         val res = LogisticsRepository(FailingApi(), SpyOutbox(), NoopOrders()).createShipment("o1")
         assertTrue(res.isFailure)
     }
+
+    /**
+     * The Critical-severity regression this guards against: a queued dispatch is a double
+     * dispatch. Only `createShipment` had a direct assertion before; the other eight of the
+     * nine `LogisticsRepository` online-only methods (of the brief's thirteen — the remaining
+     * four are `DriversRepository`'s, covered below by construction) had none. Table-driven so
+     * a method added to this list later without a deliberate queued-vs-online decision shows up
+     * here rather than silently defaulting to whichever it happened to compile against.
+     */
+    @Test fun `every LogisticsRepository online-only method leaves the outbox untouched`() = runTest {
+        val outbox = SpyOutbox()
+        val repo = LogisticsRepository(FailingApi(), outbox, NoopOrders()) // FailingApi: the network call itself may fail, the outbox check does not depend on that
+        val onlineOnly: List<Pair<String, suspend () -> Result<*>>> = listOf(
+            "createShipment" to { repo.createShipment("o1") },
+            "deleteShipment" to { repo.deleteShipment("o1", "s1") },
+            "deliverShipment" to { repo.deliverShipment("o1", "s1") },
+            "deleteLoadedPhoto" to { repo.deleteLoadedPhoto("o1", "p1") },
+            "dispatchShipment" to { repo.dispatchShipment("o1", "s1", driverId = null, truckIdentifier = null, driverWillCollectCash = false, cashToCollect = null) },
+            "createDispatch" to { repo.createDispatch("o1", driverId = null, truckIdentifier = null, expectedCollection = Money.ZERO, notes = null) },
+            "markDispatchReturned" to { repo.markDispatchReturned("o1", "d1") },
+            "setDeliveryLocation" to { repo.setDeliveryLocation("o1", lat = null, lng = null, url = null, label = null) },
+            "resolveMapLink" to { repo.resolveMapLink("https://maps.google.com/x") },
+        )
+        onlineOnly.forEach { (name, call) ->
+            call()
+            assertTrue(outbox.calls.isEmpty(), "$name must never enqueue")
+        }
+    }
+
+    /**
+     * `DriversRepository`'s three mutations (the remaining four of the brief's thirteen
+     * online-only methods, with `drivers()` itself a read) cannot be spy-tested the way
+     * `LogisticsRepository`'s can: the class is never handed an `OutboxGateway` at all, so
+     * there is no seam to check. That absence *is* the guarantee — assert it structurally, so
+     * a future change that adds one (letting a driver mutation reach the outbox without a
+     * deliberate decision) fails this test instead of compiling in silently.
+     */
+    @Test fun `DriversRepository has no constructor path to the outbox`() {
+        val params = DriversRepository::class.java.declaredConstructors.single().parameterTypes.toList()
+        assertEquals(listOf(EtalonApi::class.java), params)
+    }
 }

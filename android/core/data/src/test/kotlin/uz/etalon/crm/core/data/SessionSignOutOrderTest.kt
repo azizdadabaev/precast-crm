@@ -26,10 +26,13 @@ import org.robolectric.annotation.Config
 import uz.etalon.crm.core.database.EtalonDatabase
 import uz.etalon.crm.core.database.dao.OrdersDao
 import uz.etalon.crm.core.database.dao.OutboxDao
+import uz.etalon.crm.core.database.entity.OutboxEntity
+import uz.etalon.crm.core.database.entity.OutboxState
 import uz.etalon.crm.core.datastore.InMemoryTokenStore
 import uz.etalon.crm.core.datastore.SessionPrefs
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.*
+import java.io.File
 import java.util.concurrent.Executor
 
 /** A no-op DataStore backing a real SessionPrefs without touching disk. */
@@ -43,14 +46,20 @@ private class FakeDataStore : DataStore<Preferences> {
     }
 }
 
-/** signOut() never calls the API; every method here is unreachable and errors if hit. */
-private class UnusedApi(private val gate: CompletableDeferred<Unit>, private val page: OrdersPageDto) : EtalonApi {
+/** signOut() never calls the API; every method here is unreachable and errors if hit.
+ *  [loginResponse], when set, lets the sign-in-wipe test drive a real `login()` success
+ *  without a second near-duplicate fake implementing all 25 `EtalonApi` members. */
+private class UnusedApi(
+    private val gate: CompletableDeferred<Unit>? = null,
+    private val page: OrdersPageDto = OrdersPageDto(emptyList(), 0, 1, 20, 0),
+    private val loginResponse: LoginResponse? = null,
+) : EtalonApi {
     override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto {
-        gate.await()
+        gate?.await()
         return this.page
     }
     override suspend fun order(id: String) = error("unused")
-    override suspend fun login(body: LoginRequest) = error("unused")
+    override suspend fun login(body: LoginRequest) = loginResponse ?: error("unused")
     override suspend fun me() = error("unused")
     override suspend fun bootstrap() = error("unused")
     override suspend fun changePin(body: ChangePinRequest) = error("unused")
@@ -98,6 +107,15 @@ private object DirectExecutor : Executor {
     override fun execute(command: Runnable) = command.run()
 }
 
+/** Task 7 owns the real scheduler; these tests only need signOut()/login() to run, never an
+ *  actual WorkManager enqueue. */
+private object NoOpScheduler : OutboxScheduler {
+    override fun schedule(id: String) {}
+}
+
+private fun testOutboxRepository(dao: OutboxDao) =
+    OutboxRepository(dao, NoOpScheduler, File(System.getProperty("java.io.tmpdir"), "outbox-test-${System.nanoTime()}"), Json { ignoreUnknownKeys = true })
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class SessionSignOutOrderTest {
@@ -138,7 +156,8 @@ class SessionSignOutOrderTest {
         val apiGate = CompletableDeferred<Unit>()
         val api = UnusedApi(apiGate, OrdersPageDto(listOf(summary), 1, 1, 20, 1))
         val orders = OrdersRepository(api, realDao, Json { ignoreUnknownKeys = true }, "https://x")
-        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders)
+        val outbox = testOutboxRepository(db.outboxDao())
+        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders, outbox)
 
         val refreshJob = launch { orders.refreshList(OrdersFilter()) }
         runCurrent() // the refresh is now parked inside the API call
@@ -155,6 +174,38 @@ class SessionSignOutOrderTest {
         assertTrue(
             "the previous session's rows must not survive signOut()",
             realDao.observeList(OrdersFilter().listKey).first().isEmpty(),
+        )
+    }
+
+    /**
+     * Task 5 carry-over: `db.wipe()` clears orders and the outbox in two separate DAO
+     * transactions, so a process death between them (or between the wipe and the file
+     * cleanup) can strand the previous user's outbox rows. Tokens are cleared before any of
+     * that runs, so the app lands back on the PIN screen — this proves `login()` wipes again
+     * before the new session's first authenticated fetch, catching exactly that gap.
+     */
+    @Test fun `a row left in the outbox by an interrupted sign-out does not survive the next sign-in`() = runTest {
+        val db = realDatabase()
+        db.outboxDao().upsert(OutboxEntity(
+            id = "stray", kind = "LOAD_TRUCK", orderId = "o1", payloadJson = "{}",
+            state = OutboxState.QUEUED, createdAt = 0, updatedAt = 0,
+        ))
+
+        val loginResponse = LoginResponse(
+            token = "tok",
+            user = UserDto(id = "u1", name = "Азиз", role = "OWNER", permissions = emptyList(), mustChangePassword = false),
+            redirectTo = "/",
+        )
+        val api = UnusedApi(loginResponse = loginResponse)
+        val orders = OrdersRepository(api, db.ordersDao(), Json { ignoreUnknownKeys = true }, "https://x")
+        val outbox = testOutboxRepository(db.outboxDao())
+        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders, outbox)
+
+        session.login("owner", "1234").getOrThrow()
+
+        assertTrue(
+            "a stray row left by an interrupted sign-out must not survive the next sign-in",
+            db.outboxDao().observeAll().first().isEmpty(),
         )
     }
 }

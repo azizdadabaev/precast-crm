@@ -12,6 +12,7 @@ import uz.etalon.crm.core.model.OutboxKind
 import uz.etalon.crm.core.model.PendingUpload
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -35,6 +36,18 @@ class OutboxRepository @Inject constructor(
     private val json: Json,
 ) : OutboxGateway {
 
+    /** Bumped by [clearCache]. An enqueue captures the epoch before it starts and rolls its
+     *  write back if the epoch moved meanwhile — otherwise an enqueue already in flight when
+     *  sign-out wipes the outbox can land its row right after the wipe, and Task 7's worker
+     *  would then upload the previous user's photo/cash figure under whoever signs in next. */
+    private val epoch = AtomicLong(0)
+
+    /** Called from `SessionRepository.signOut()`, alongside `orders.clearCache()`: bumping the
+     *  epoch here is what makes the race in [enqueue] detectable. This repository holds no
+     *  in-memory cache of its own to drop — the DAO is the only state — so there is nothing
+     *  else to clear. */
+    fun clearCache() { epoch.incrementAndGet() }
+
     fun observeForOrder(orderId: String): Flow<List<PendingUpload>> =
         dao.observeForOrder(orderId).map { rows -> rows.map { it.toPending() } }
 
@@ -49,6 +62,7 @@ class OutboxRepository @Inject constructor(
         kind: OutboxKind, orderId: String, shipmentId: String?,
         photo: PreparedImage?, payload: JsonObject,
     ): String {
+        val started = epoch.get()
         val id = UUID.randomUUID().toString()
         val stored = photo?.let { moveIntoOutbox(it.file, id) }
         val now = System.currentTimeMillis()
@@ -61,6 +75,14 @@ class OutboxRepository @Inject constructor(
                 createdAt = now, updatedAt = now,
             )
         )
+        if (epoch.get() != started) {
+            // Signed out while this row was being written: it belongs to the session that
+            // signOut() just wiped. Roll it back instead of scheduling it for whoever signs
+            // in next — never leave the moved file or the row behind.
+            dao.delete(id)
+            stored?.delete()
+            error("Чиқиш вақтида бекор қилинди · Cancelled: signed out mid-enqueue")
+        }
         scheduler.schedule(id)
         return id
     }
