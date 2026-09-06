@@ -10,8 +10,10 @@ import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.*
 import uz.etalon.crm.feature.logistics.location.DeliveryLocationViewModel
 import uz.etalon.crm.feature.logistics.location.DeviceLocation
+import uz.etalon.crm.feature.logistics.location.RefreshOrderUseCase
 import uz.etalon.crm.feature.logistics.location.ResolveMapLinkUseCase
 import uz.etalon.crm.feature.logistics.location.SetDeliveryLocationUseCase
+import uz.etalon.crm.feature.logistics.location.formatPinForDisplay
 import uz.etalon.crm.feature.logistics.location.parseCoordinatePair
 import java.math.BigDecimal
 import java.time.Instant
@@ -38,6 +40,16 @@ class DeliveryLocationParseTest {
         // A single comma with no space could be "41.69" (comma-decimal) or "41, 69" (a pair) —
         // the parser must never guess, so this is rejected outright.
         assertNull(parseCoordinatePair("41,69"))
+    }
+    @Test fun `the pin this screen displays round-trips through its own parser`() {
+        // formatPinForDisplay renders comma-decimal numbers joined by a comma separator — the
+        // exact form COMMA_DECIMAL_PAIR exists to accept, so a pin can be copied out and typed
+        // straight back in. This is the case a reviewer caught missing: without that pattern,
+        // this assertion fails because the parser only accepted dot-decimal comma-pairs.
+        val displayed = formatPinForDisplay(41.311, 69.279)
+        val parsed = parseCoordinatePair(displayed)
+        assertEquals(41.311, parsed?.lat)
+        assertEquals(69.279, parsed?.lng)
     }
 }
 
@@ -67,7 +79,8 @@ class DeliveryLocationViewModelTest {
         deviceLocation: DeviceLocation = DeviceLocation { Result.success(LatLng(0.0, 0.0)) },
         resolveLink: ResolveMapLinkUseCase = ResolveMapLinkUseCase { Result.success(LatLng(0.0, 0.0)) },
         setLocation: SetDeliveryLocationUseCase = SetDeliveryLocationUseCase { _, _, _, _ -> Result.success(Unit) },
-    ) = DeliveryLocationViewModel(deviceLocation, resolveLink, setLocation)
+        refreshOrder: RefreshOrderUseCase = RefreshOrderUseCase {},
+    ) = DeliveryLocationViewModel(deviceLocation, resolveLink, setLocation, refreshOrder)
 
     @Test fun `use my location writes the returned pair into state`() = runTest {
         val vm = vm(deviceLocation = DeviceLocation { Result.success(LatLng(41.311, 69.279)) })
@@ -75,6 +88,15 @@ class DeliveryLocationViewModelTest {
         advanceUntilIdle()
         assertEquals(41.311, vm.state.value.lat)
         assertEquals(69.279, vm.state.value.lng)
+    }
+
+    @Test fun `a device-location failure (permission denied) surfaces its message and sets no pin`() = runTest {
+        val vm = vm(deviceLocation = DeviceLocation { Result.failure(IllegalStateException("Жойни аниқлаш учун рухсат керак")) })
+        vm.useMyLocation()
+        advanceUntilIdle()
+
+        assertFalse(vm.state.value.hasPin)
+        assertEquals("Жойни аниқлаш учун рухсат керак", vm.state.value.error)
     }
 
     @Test fun `a pasted link is sent to resolveMapLink and its result becomes the pin`() = runTest {
@@ -208,6 +230,56 @@ class DeliveryLocationViewModelTest {
         vm.save()
         advanceUntilIdle()
         assertEquals(1, calls)
+    }
+
+    @Test fun `resolveLink is blocked while offline, the same way save and clear are`() = runTest {
+        var calls = 0
+        val vm = vm(resolveLink = ResolveMapLinkUseCase { calls++; Result.success(LatLng(1.0, 2.0)) })
+        vm.onOrderResource(Resource.Error<OrderDetail>(null, AppError.Network("Интернет йўқ")))
+
+        vm.onLinkInputChange("https://maps.app.goo.gl/x")
+        vm.resolveLink()
+        advanceUntilIdle()
+
+        assertEquals(0, calls)
+        assertFalse(vm.state.value.hasPin)
+        assertNotNull(vm.state.value.error)
+    }
+
+    @Test fun `refresh runs once on construction, and again on demand`() = runTest {
+        var calls = 0
+        val vm = vm(refreshOrder = RefreshOrderUseCase { calls++ })
+        advanceUntilIdle()
+        assertEquals(1, calls)
+
+        vm.refresh()
+        advanceUntilIdle()
+        assertEquals(2, calls)
+    }
+
+    @Test fun `the screen reads as loading, not empty, before the order stream's first tick`() = runTest {
+        val vm = vm()
+        assertTrue(vm.state.value.isLoading)
+        assertFalse(vm.state.value.showEmptyState)
+    }
+
+    @Test fun `a fetch failure keeps its own message and a retry, and never reads as empty`() = runTest {
+        val vm = vm()
+        vm.onOrderResource(Resource.Error<OrderDetail>(null, AppError.Server("сервер хатоси", 500)))
+
+        assertFalse(vm.state.value.isLoading)
+        assertFalse(vm.state.value.showEmptyState)
+        assertEquals("сервер хатоси", vm.state.value.resourceError)
+        assertFalse(vm.state.value.isOffline) // a 500 is not the same fact as "no network"
+    }
+
+    @Test fun `empty reads as empty only once the fetch has actually succeeded with no pin`() = runTest {
+        val vm = vm()
+        vm.onOrderResource(Resource.Success(fakeOrderDetail()))
+
+        assertFalse(vm.state.value.isLoading)
+        assertNull(vm.state.value.resourceError)
+        assertTrue(vm.state.value.showEmptyState)
     }
 
     @Test fun `save guards against double submission`() = runTest {

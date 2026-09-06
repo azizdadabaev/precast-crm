@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -52,10 +53,8 @@ import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
 import uz.etalon.crm.core.designsystem.theme.EtalonType
-import uz.etalon.crm.core.ui.format.formatDecimal
 import uz.etalon.crm.feature.capture.isPermanentlyDenied
 import uz.etalon.crm.feature.logistics.R
-import java.math.BigDecimal
 
 @Composable
 fun DeliveryLocationRoute(
@@ -71,6 +70,7 @@ fun DeliveryLocationRoute(
     DeliveryLocationScreen(
         s = s,
         onBack = onBack,
+        onRefresh = vm::refresh,
         onUseMyLocation = vm::useMyLocation,
         onLinkInputChange = vm::onLinkInputChange,
         onResolveLink = vm::resolveLink,
@@ -87,6 +87,7 @@ fun DeliveryLocationRoute(
 fun DeliveryLocationScreen(
     s: DeliveryLocationUiState,
     onBack: () -> Unit,
+    onRefresh: () -> Unit,
     onUseMyLocation: () -> Unit,
     onLinkInputChange: (String) -> Unit,
     onResolveLink: () -> Unit,
@@ -149,69 +150,87 @@ fun DeliveryLocationScreen(
             }
         },
     ) { pad ->
-        Column(
-            Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            // Static, like DispatchScreen's own offline banner: online-only actions (save, clear)
-            // must read as blocked the instant connectivity is lost, not only after a failed tap.
-            if (s.isOffline) ErrorBanner(stringResource(R.string.offline_action_blocked))
-            val error = s.error
-            if (error != null) ErrorBanner(error)
+        // Mirrors OrderDetailScreen's own single-order fetch: the spinner shows only while there is
+        // no cache yet to render underneath it (s.isLoading), never once any pin (or its absence) is
+        // actually known.
+        PullToRefreshBox(isRefreshing = s.isLoading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
+            Column(
+                Modifier.padding(16.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                // The order-detail fetch this screen seeds its pin from — any failure (401/403/422/
+                // 500, not only offline), with a retry, the same way ShipmentsScreen/DriversScreen
+                // surface their own resource error. Independent of this, the rest of the screen
+                // still works: device location, link resolution and manual entry need no order data.
+                val resourceError = s.resourceError
+                if (resourceError != null) ErrorBanner(resourceError, onRetry = onRefresh)
+                // Static, like DispatchScreen's own offline banner: online-only actions (save,
+                // clear, resolve) must read as blocked the instant connectivity is lost, not only
+                // after a failed tap.
+                if (s.isOffline) ErrorBanner(stringResource(R.string.offline_action_blocked))
+                val error = s.error
+                if (error != null) ErrorBanner(error)
 
-            Text(
-                if (s.hasPin) "${formatDecimal(BigDecimal.valueOf(s.lat!!), 5)}, ${formatDecimal(BigDecimal.valueOf(s.lng!!), 5)}"
-                else stringResource(R.string.location_none),
-                style = EtalonType.monoDisplay,
-            )
+                when {
+                    s.hasPin -> Text(formatPinForDisplay(s.lat!!, s.lng!!), style = EtalonType.monoDisplay)
+                    s.showEmptyState -> Text(stringResource(R.string.location_none), style = EtalonType.monoDisplay)
+                    // Loading, or the fetch failed: saying "no pin" here would be a lie about what
+                    // is merely unknown — the banner above already explains the real state.
+                }
 
-            PrimaryButton(
-                text = stringResource(R.string.location_my_position),
-                enabled = !permanentlyDenied && !s.busy,
-                loading = s.busy,
-                onClick = { if (granted) onUseMyLocation() else permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
-            )
-            if (permanentlyDenied) {
-                Text(
-                    stringResource(R.string.location_permission_needed),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                PrimaryButton(
+                    text = stringResource(R.string.location_my_position),
+                    enabled = !permanentlyDenied && !s.busy,
+                    loading = s.busy,
+                    onClick = { if (granted) onUseMyLocation() else permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                )
+                if (permanentlyDenied) {
+                    Text(
+                        stringResource(R.string.location_permission_needed),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                OutlinedTextField(
+                    value = s.linkInput, onValueChange = onLinkInputChange,
+                    label = { Text(stringResource(R.string.location_paste_link)) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+                SecondaryButton(
+                    text = stringResource(R.string.location_resolve), onClick = onResolveLink,
+                    enabled = s.linkInput.isNotBlank() && !s.busy && !s.isOffline, loading = s.busy,
+                )
+
+                OutlinedTextField(
+                    value = s.manualInput, onValueChange = onManualInputChange,
+                    label = { Text(stringResource(R.string.location_manual)) },
+                    // Both accepted forms shown explicitly: the pin above is rendered comma-decimal
+                    // (see formatPinForDisplay), and operators on an Uzbek keyboard type commas as
+                    // decimal points too — an operator copying either style back in must not be
+                    // rejected for guessing the "wrong" one.
+                    supportingText = { Text(stringResource(R.string.location_manual_hint)) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { onApplyManualInput() }),
+                )
+
+                OutlinedTextField(
+                    value = s.label, onValueChange = onLabelChange,
+                    label = { Text(stringResource(R.string.location_label)) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                )
+
+                SecondaryButton(
+                    text = stringResource(R.string.action_navigate), leading = Icons.Filled.Navigation,
+                    enabled = s.hasPin,
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${s.lat},${s.lng}?q=${s.lat},${s.lng}"))) },
+                )
+
+                DangerButton(
+                    text = stringResource(R.string.action_clear_location), onClick = onClear,
+                    enabled = s.canClear, loading = s.busy,
                 )
             }
-
-            OutlinedTextField(
-                value = s.linkInput, onValueChange = onLinkInputChange,
-                label = { Text(stringResource(R.string.location_paste_link)) },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-            SecondaryButton(
-                text = stringResource(R.string.location_resolve), onClick = onResolveLink,
-                enabled = s.linkInput.isNotBlank() && !s.busy, loading = s.busy,
-            )
-
-            OutlinedTextField(
-                value = s.manualInput, onValueChange = onManualInputChange,
-                label = { Text(stringResource(R.string.location_manual)) },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { onApplyManualInput() }),
-            )
-
-            OutlinedTextField(
-                value = s.label, onValueChange = onLabelChange,
-                label = { Text(stringResource(R.string.location_label)) },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-
-            SecondaryButton(
-                text = stringResource(R.string.action_navigate), leading = Icons.Filled.Navigation,
-                enabled = s.hasPin,
-                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${s.lat},${s.lng}?q=${s.lat},${s.lng}"))) },
-            )
-
-            DangerButton(
-                text = stringResource(R.string.action_clear_location), onClick = onClear,
-                enabled = s.canClear, loading = s.busy,
-            )
         }
     }
 }

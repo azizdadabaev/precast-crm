@@ -49,6 +49,7 @@
     <string name="location_paste_link">Харита ҳаволасини қўйинг</string>
     <string name="location_resolve">Ҳал қилиш</string>
     <string name="location_manual">Координаталар (кенглик, узунлик)</string>
+    <string name="location_manual_hint">Мисол: 41.311, 69.279 ёки 41,311 69,279</string>
     <string name="location_label">Белги (масалан «кўк дарвоза»)</string>
     <string name="location_none">Жой белгиланмаган</string>
     <string name="location_permission_needed">Жойни аниқлаш учун рухсат керак</string>
