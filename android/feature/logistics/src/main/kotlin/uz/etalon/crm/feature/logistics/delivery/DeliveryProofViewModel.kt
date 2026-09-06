@@ -1,0 +1,140 @@
+package uz.etalon.crm.feature.logistics.delivery
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import uz.etalon.crm.core.data.LogisticsRepository
+import uz.etalon.crm.core.data.OrdersRepository
+import uz.etalon.crm.core.data.toAppError
+import uz.etalon.crm.core.image.ImagePrep
+import uz.etalon.crm.core.image.PreparedImage
+import uz.etalon.crm.core.model.DeliveryCash
+import uz.etalon.crm.core.model.Money
+
+data class DeliveryProofUiState(
+    val photo: PreparedImage? = null,
+    val amountDigits: String = "",
+    val noCashCollected: Boolean = false,
+    val note: String = "",
+    val driverReturned: Boolean = false,
+    val expected: Money = Money.ZERO,
+    val submitting: Boolean = false,
+    val error: String? = null,
+    val done: Boolean = false,
+) {
+    /** An empty field and a typed zero are the same fact to the server: nothing collected yet.
+     *  The comma the keypad uses for a decimal point never reaches [Money.parse], which only
+     *  understands the plain-decimal strings the server itself sends. */
+    val amount: Money get() = if (amountDigits.isEmpty()) Money.ZERO else Money.parse(amountDigits.replace(',', '.'))
+    val shortfall: Money get() = (expected - amount).coerceAtLeastZero()
+}
+
+/**
+ * The same three rules the delivery-proof route enforces, applied before the
+ * upload is queued. Without this a queued proof could sit for an hour and then
+ * be rejected for a note the operator is no longer standing there to write.
+ */
+fun validateDeliveryCash(cash: DeliveryCash): String? = when {
+    cash.amount.isNegative -> "Сумма манфий бўлиши мумкин эмас"
+    cash.noCashCollected && !cash.amount.isZero -> "«Нақд олинмади» билан сумма бир вақтда бўлмайди"
+    cash.noCashCollected && cash.note.trim().length < 3 -> "Нима учун нақд олинмаганини ёзинг"
+    else -> null
+}
+
+fun interface DeliveryProofUseCase {
+    suspend operator fun invoke(photo: PreparedImage, cash: DeliveryCash): Result<String>
+}
+
+open class DeliveryProofViewModel(
+    private val orderId: String,
+    expected: Money,
+    submit: DeliveryProofUseCase,
+) : ViewModel() {
+    // Kept under a different name from the public submit() below: a same-named constructor
+    // parameter and member function resolve fine by arity, but there is no reason to rely on it.
+    private val submitProof = submit
+
+    private val _state = MutableStateFlow(DeliveryProofUiState(expected = expected))
+    val state: StateFlow<DeliveryProofUiState> = _state.asStateFlow()
+
+    fun onPhoto(p: PreparedImage) = _state.update { it.copy(photo = p, error = null) }
+    fun retake() = _state.update { it.copy(photo = null, error = null) }
+    fun setAmountDigits(digits: String) = _state.update { it.copy(amountDigits = digits, error = null) }
+
+    /** Turning "no cash collected" on clears any amount already typed, so the two facts —
+     *  collected zero vs. did not collect — can never sit contradicted in the same state. */
+    fun setNoCashCollected(v: Boolean) = _state.update {
+        it.copy(noCashCollected = v, amountDigits = if (v) "" else it.amountDigits, error = null)
+    }
+
+    fun setNote(v: String) = _state.update { it.copy(note = v, error = null) }
+    fun setDriverReturned(v: Boolean) = _state.update { it.copy(driverReturned = v) }
+
+    /** The order detail this screen was opened from may still be loading its dispatch when the
+     *  camera comes up first; the expected collection is applied live as it resolves, exactly
+     *  like ShipmentLoadViewModel's allowance. */
+    fun applyExpected(e: Money) = _state.update { it.copy(expected = e) }
+
+    fun submit() {
+        val s = _state.value
+        val photo = s.photo
+        if (photo == null) {
+            _state.update { it.copy(error = "Аввал расм олинг") }
+            return
+        }
+        val cash = DeliveryCash(amount = s.amount, noCashCollected = s.noCashCollected, note = s.note, driverReturned = s.driverReturned)
+        val problem = validateDeliveryCash(cash)
+        if (problem != null) {
+            _state.update { it.copy(error = problem) }
+            return
+        }
+        if (s.submitting) return
+        _state.update { it.copy(submitting = true, error = null) }
+        viewModelScope.launch {
+            submitProof(photo, cash).fold(
+                onSuccess = { _state.update { st -> st.copy(submitting = false, done = true) } },
+                onFailure = { t -> _state.update { st -> st.copy(submitting = false, error = t.toAppError().message) } },
+            )
+        }
+    }
+}
+
+/**
+ * `deliveryProof` returns a bare outbox id, not an order — there is no server-side relation to
+ * rebuild one from. The order this proof belongs to is re-fetched by whoever owns the detail
+ * screen this route returns to, once the outbox actually sends it; nothing here fabricates one.
+ */
+@HiltViewModel(assistedFactory = HiltDeliveryProofViewModel.Factory::class)
+class HiltDeliveryProofViewModel @AssistedInject constructor(
+    private val orders: OrdersRepository,
+    logistics: LogisticsRepository,
+    val imagePrep: ImagePrep,
+    @Assisted("orderId") orderId: String,
+) : DeliveryProofViewModel(
+    orderId,
+    expected = Money.ZERO,
+    submit = DeliveryProofUseCase { photo, cash -> logistics.deliveryProof(orderId, photo, cash) },
+) {
+    init {
+        // The order is already cached from the screen the operator just came from, so this
+        // resolves near-instantly; it also keeps tracking a concurrent dispatch update.
+        viewModelScope.launch {
+            orders.detail(orderId).collect { r ->
+                r.dataOrNull?.let { applyExpected(it.dispatch?.expectedCollection ?: Money.ZERO) }
+            }
+        }
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(@Assisted("orderId") orderId: String): HiltDeliveryProofViewModel
+    }
+}
