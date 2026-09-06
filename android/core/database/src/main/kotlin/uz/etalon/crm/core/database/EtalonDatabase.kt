@@ -10,8 +10,8 @@ import uz.etalon.crm.core.database.entity.OutboxEntity
 
 @Database(
     entities = [OrderSummaryEntity::class, OrderDetailEntity::class, OutboxEntity::class],
-    version = 3,
-    exportSchema = false,
+    version = 4,
+    exportSchema = true,
 )
 abstract class EtalonDatabase : RoomDatabase() {
     abstract fun ordersDao(): OrdersDao

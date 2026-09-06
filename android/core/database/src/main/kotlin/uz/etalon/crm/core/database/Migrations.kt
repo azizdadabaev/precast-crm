@@ -1,0 +1,36 @@
+package uz.etalon.crm.core.database
+
+import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
+
+/**
+ * Why this file exists at all.
+ *
+ * Up to schema 3 the builder carried `fallbackToDestructiveMigration(dropAllTables = true)`. That
+ * was harmless while `etalon.db` held nothing but a re-fetchable order cache: a version bump threw
+ * the cache away and the next refresh refilled it. Phase 1b changed what the file contains. The
+ * `outbox` table is now the ONLY durable copy of a delivery photo the operator has taken and of the
+ * cash figure they counted against it — the JPEG on disk is meaningless without the row that names
+ * its order, its owner and its payload. Under the old builder a routine app update that bumped the
+ * schema would have dropped those rows with no error, no log and no trace in the UI, and orphaned
+ * the files.
+ *
+ * So there is no destructive fallback any more. Every version step needs an entry in [ALL], and a
+ * bump without one fails loudly when the database is opened instead of quietly deleting an
+ * operator's un-sent cash proof. The cache tables stay cheap to treat roughly — emptying them costs
+ * one refresh — but that has to be written down as a migration, not inherited from a builder flag
+ * that cannot tell the two kinds of table apart.
+ */
+internal val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(connection: SQLiteConnection) {
+        // The cache, and only the cache. Its shape is unchanged, so this is not a schema step —
+        // it is the honest, table-by-table replacement for what the destructive fallback used to
+        // do wholesale, written so that `outbox` is visibly not in the list.
+        connection.execSQL("DELETE FROM order_summaries")
+        connection.execSQL("DELETE FROM order_details")
+    }
+}
+
+/** Every migration the builder installs. Add each new step here as the schema version rises. */
+val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4)
