@@ -99,10 +99,17 @@ fun SignedInShell(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
             entryDecorators = rememberEntryDecorators(),
-            // A key with no entry can only appear on a restored back stack whose owner has since
-            // lost the permission that registered it (Drivers, below). Nav3's default is to throw;
-            // saying so in Uzbek is better than crashing an operator out of the app.
-            entryProvider = entryProvider(fallback = { key -> NavEntry(key) { NoAccessScreen() } }) {
+            // Drivers is the one key that legitimately has no entry: it is registered per
+            // permission (below), so a back stack restored for an operator who has since lost
+            // driver.view would land on nothing, and crashing them out of the app is worse than
+            // an Uzbek notice. Every OTHER unregistered key is a wiring mistake and must still
+            // fail loudly here rather than be swallowed as a silent "no access".
+            entryProvider = entryProvider(
+                fallback = { key ->
+                    if (key !is Drivers) error("No NavEntry registered for $key")
+                    NavEntry(key) { NoAccessScreen() }
+                },
+            ) {
                 entry<Orders> { OrdersListRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
                 entry<OrderDetail> { k ->
                     OrderDetailRoute(

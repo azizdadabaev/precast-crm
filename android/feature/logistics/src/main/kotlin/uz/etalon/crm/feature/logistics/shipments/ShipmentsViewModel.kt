@@ -10,10 +10,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.LogisticsRepository
 import uz.etalon.crm.core.data.OrdersRepository
+import uz.etalon.crm.core.data.OutboxRepository
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.OrderDetail
@@ -27,6 +29,8 @@ data class ShipmentsUiState(
     val resource: Resource<OrderDetail> = Resource.Loading(null),
     val actionError: String? = null,
     val busy: Boolean = false,
+    /** Trucks whose load is sitting in this operator's outbox, unsent. */
+    val pendingShipmentIds: Set<String> = emptySet(),
 ) {
     val order: OrderDetail? get() = resource.dataOrNull
     val shipments: List<ShipmentLine> get() = order?.shipments.orEmpty()
@@ -42,12 +46,21 @@ data class ShipmentsUiState(
      *  trucks" when the truth is "couldn't check" — the state that fooled an operator standing
      *  at a truck with no signal. */
     val showEmptyState: Boolean get() = shipments.isEmpty() && !isLoading && resourceError == null
+
+    /**
+     * A truck whose load was queued offline still comes back from the server as PENDING, so its
+     * card would otherwise offer "load" a second time — and a second queued load carries a fresh
+     * idempotency key, so the server takes it and then refuses it ("Shipment is already LOADED").
+     * Deleting the truck is blocked for the same reason: it would strand the queued photo.
+     */
+    fun hasQueuedLoad(shipmentId: String): Boolean = shipmentId in pendingShipmentIds
 }
 
 @HiltViewModel(assistedFactory = ShipmentsViewModel.Factory::class)
 class ShipmentsViewModel @AssistedInject constructor(
     private val orders: OrdersRepository,
     private val logistics: LogisticsRepository,
+    outbox: OutboxRepository,
     @Assisted val orderId: String,
 ) : ViewModel() {
     @AssistedFactory
@@ -56,8 +69,13 @@ class ShipmentsViewModel @AssistedInject constructor(
     private val actionError = MutableStateFlow<String?>(null)
     private val busy = MutableStateFlow(false)
 
-    val state: StateFlow<ShipmentsUiState> = combine(orders.detail(orderId), actionError, busy) { resource, err, isBusy ->
-        ShipmentsUiState(resource, err, isBusy)
+    // The outbox rows carry the shipment id they were queued for, which is the only way this
+    // screen can tell a truck that was never loaded from one whose load has not been sent yet.
+    private val queuedLoads = outbox.observeForOrder(orderId)
+        .map { rows -> rows.mapNotNull { it.shipmentId }.toSet() }
+
+    val state: StateFlow<ShipmentsUiState> = combine(orders.detail(orderId), actionError, busy, queuedLoads) { resource, err, isBusy, queued ->
+        ShipmentsUiState(resource, err, isBusy, queued)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ShipmentsUiState())
 
     init { refresh() }

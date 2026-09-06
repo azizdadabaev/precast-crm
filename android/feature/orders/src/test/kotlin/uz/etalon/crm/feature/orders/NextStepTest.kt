@@ -136,16 +136,40 @@ class NextStepTest {
         assertEquals(NextStep.Blocked("Юборилмоқда…"), nextStepFor(order(OrderStatus.PLACED), editor, 1))
     }
 
-    @Test fun `a photo may be added while the order is live and the operator may edit`() {
-        listOf(OrderStatus.PLACED, OrderStatus.IN_PRODUCTION, OrderStatus.LOADED, OrderStatus.DISPATCHED).forEach { st ->
+    /** A bar reading "sending" under a banner reading "failed" tells two stories; the rejected row
+     *  gets its own wording, and still blocks, because retrying it is the way out — not a
+     *  second copy of the same action. */
+    @Test fun `a rejected upload blocks with its own wording, not the sending notice`() {
+        assertEquals(
+            NextStep.Blocked("Юборилмади"),
+            nextStepFor(order(OrderStatus.PLACED), editor, pendingUploads = 0, failedUploads = 1),
+        )
+        assertEquals(
+            NextStep.Blocked("Юборилмади"),
+            nextStepFor(order(OrderStatus.LOADED), editor, pendingUploads = 2, failedUploads = 1),
+        )
+    }
+
+    @Test fun `a rejected upload does not resurrect a bar on a finished order or without order edit`() {
+        assertEquals(NextStep.None, nextStepFor(order(OrderStatus.DELIVERED), editor, 0, failedUploads = 1))
+        assertEquals(NextStep.None, nextStepFor(order(OrderStatus.PLACED), reader, 0, failedUploads = 1))
+    }
+
+    /**
+     * The add-photo tile mirrors the server's `canAddLoadedPhoto`
+     * (precast-crm/src/lib/loaded-photos.ts): only LOADED, DISPATCHED and DELIVERED. The first
+     * truck photo goes through /load instead, so an earlier status is a guaranteed 422.
+     */
+    @Test fun `a photo may be added only once the order has been loaded`() {
+        listOf(OrderStatus.LOADED, OrderStatus.DISPATCHED, OrderStatus.DELIVERED).forEach { st ->
             assertTrue(canAddPhoto(order(st), editor), st.name)
         }
     }
 
-    @Test fun `a photo may not be added on a finished order or without order edit`() {
-        listOf(OrderStatus.DRAFT, OrderStatus.DELIVERED, OrderStatus.CANCELED, OrderStatus.UNKNOWN).forEach { st ->
+    @Test fun `a photo may not be added before the load, after cancellation, or without order edit`() {
+        listOf(OrderStatus.DRAFT, OrderStatus.PLACED, OrderStatus.IN_PRODUCTION, OrderStatus.CANCELED, OrderStatus.UNKNOWN).forEach { st ->
             assertFalse(canAddPhoto(order(st), editor), st.name)
         }
-        assertFalse(canAddPhoto(order(OrderStatus.PLACED), reader))
+        assertFalse(canAddPhoto(order(OrderStatus.LOADED), reader))
     }
 }

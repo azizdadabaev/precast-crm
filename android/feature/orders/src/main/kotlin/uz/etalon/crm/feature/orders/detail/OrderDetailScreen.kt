@@ -90,7 +90,10 @@ fun OrderDetailScreen(
     val o = r.dataOrNull
     val ctx = LocalContext.current
     val canEdit = me.can("order.edit")
-    val step = o?.let { nextStepFor(it, me, pending.size) } ?: NextStep.None
+    val unfinishedUploads = pending.count { !it.failed }
+    val failedUploads = pending.count { it.failed }
+    val firstFailed = pending.firstOrNull { it.failed }
+    val step = o?.let { nextStepFor(it, me, unfinishedUploads, failedUploads) } ?: NextStep.None
     val photos = o?.let { stripPhotos(it) }.orEmpty()
     var lightboxAt by remember { mutableStateOf<Int?>(null) }
     var deleteCandidate by remember { mutableStateOf<PhotoRef?>(null) }
@@ -112,12 +115,11 @@ fun OrderDetailScreen(
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
                 // 0 · outbox — a queued photo the operator must be able to see, retry or drop
                 if (pending.isNotEmpty()) item {
-                    val failed = pending.firstOrNull { it.failed }
                     OutboxBanner(
-                        pending = pending.count { !it.failed },
-                        failedMessage = failed?.let { it.error ?: stringResource(R.string.upload_failed) },
-                        onRetry = { failed?.let { onRetryUpload(it.id) } },
-                        onCancel = { failed?.let { onCancelUpload(it.id) } },
+                        pending = unfinishedUploads,
+                        failedMessage = firstFailed?.let { it.error ?: stringResource(R.string.upload_failed) },
+                        onRetry = { firstFailed?.let { onRetryUpload(it.id) } },
+                        onCancel = { firstFailed?.let { onCancelUpload(it.id) } },
                     )
                 }
                 if (r is Resource.Error) item { ErrorBanner(r.error.message, onRetry = onRefresh) }

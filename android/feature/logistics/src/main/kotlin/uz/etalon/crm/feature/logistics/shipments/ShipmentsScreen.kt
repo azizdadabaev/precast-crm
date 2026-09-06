@@ -81,7 +81,7 @@ fun ShipmentsScreen(
                 if (s.showEmptyState) item { EmptyState(stringResource(R.string.shipments_empty)) }
                 items(shipments, key = { it.id }) { sh ->
                     ShipmentCard(
-                        sh, actionsDisabled = actionsDisabled,
+                        sh, actionsDisabled = actionsDisabled, queuedLoad = s.hasQueuedLoad(sh.id),
                         onLoad = { onLoadShipment(sh.id) }, onDispatch = { onDispatch(sh.id) },
                         onDeliver = { onDeliver(sh.id) }, onDelete = { onDelete(sh.id) },
                     )
@@ -93,7 +93,7 @@ fun ShipmentsScreen(
 
 @Composable
 private fun ShipmentCard(
-    sh: ShipmentLine, actionsDisabled: Boolean,
+    sh: ShipmentLine, actionsDisabled: Boolean, queuedLoad: Boolean,
     onLoad: () -> Unit, onDispatch: () -> Unit, onDeliver: () -> Unit, onDelete: () -> Unit,
 ) {
     StatusStripeCard(stripe = toneColor(shipmentStatusTone(sh.status))) {
@@ -118,10 +118,18 @@ private fun ShipmentCard(
         // Loading and dispatching only navigate to another screen (loading is itself queue-safe
         // offline, per the module's rule); delete and deliver hit the network directly, so those
         // two — and only those two — are gated on [actionsDisabled].
+        //
+        // [queuedLoad] gates loading on top of that, for a different reason: the server has not
+        // seen the load yet, so the truck still reads PENDING here. Loading again would queue a
+        // second row with its own idempotency key, which the server accepts and then refuses
+        // ("Shipment is already LOADED"). Delete goes with it — it would strand the queued photo.
         when (sh.status) {
             ShipmentStatus.PENDING -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PrimaryButton(stringResource(R.string.action_load_shipment), onClick = onLoad, modifier = Modifier.weight(1f))
-                DangerButton(stringResource(R.string.action_delete_shipment), onClick = onDelete, enabled = !actionsDisabled, modifier = Modifier.weight(1f))
+                PrimaryButton(
+                    text = stringResource(if (queuedLoad) R.string.upload_sending else R.string.action_load_shipment),
+                    onClick = onLoad, enabled = !queuedLoad, modifier = Modifier.weight(1f),
+                )
+                DangerButton(stringResource(R.string.action_delete_shipment), onClick = onDelete, enabled = !actionsDisabled && !queuedLoad, modifier = Modifier.weight(1f))
             }
             ShipmentStatus.LOADED -> PrimaryButton(stringResource(R.string.action_dispatch_shipment), onClick = onDispatch)
             ShipmentStatus.DISPATCHED -> SecondaryButton(stringResource(R.string.action_deliver_shipment), onClick = onDeliver, enabled = !actionsDisabled)

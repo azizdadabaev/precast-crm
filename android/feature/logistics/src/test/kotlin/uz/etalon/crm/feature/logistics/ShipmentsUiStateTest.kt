@@ -65,4 +65,18 @@ class ShipmentsUiStateTest {
         assertTrue(ShipmentsUiState(Resource.Success(detail(OrderStatus.PLACED))).showEmptyState)
         assertFalse(ShipmentsUiState(Resource.Loading(null)).showEmptyState)
     }
+
+    /** A truck whose load is queued offline still comes back PENDING from the server, so only the
+     *  outbox can tell it apart from one that was never loaded. */
+    @Test fun `only the trucks with a queued load are marked`() {
+        val s = ShipmentsUiState(Resource.Success(detail(OrderStatus.PLACED)), pendingShipmentIds = setOf("s1", "s3"))
+        assertTrue(s.hasQueuedLoad("s1"))
+        assertTrue(s.hasQueuedLoad("s3"))
+        assertFalse(s.hasQueuedLoad("s2"))
+    }
+
+    @Test fun `with an empty outbox no truck is marked`() {
+        val s = ShipmentsUiState(Resource.Success(detail(OrderStatus.PLACED)))
+        assertFalse(s.hasQueuedLoad("s1"))
+    }
 }
