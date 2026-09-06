@@ -26,4 +26,22 @@
     <string name="delivery_no_cash_note">Сабабини ёзинг</string>
     <string name="delivery_driver_returned">Ҳайдовчи қайтди</string>
     <string name="action_mark_delivered">Етказилди</string>
+    <string name="drivers_title">Ҳайдовчилар</string>
+    <string name="drivers_empty">Ҳайдовчи йўқ.</string>
+    <string name="drivers_active_only">Фақат фаоллар</string>
+    <string name="driver_active_dispatches">%1$d та фаол жўнатма</string>
+    <string name="driver_discrepancies_30d">30 кунда %1$d та тафовут</string>
+    <string name="action_add_driver">Ҳайдовчи қўшиш</string>
+    <string name="action_deactivate_driver">Ўчириш</string>
+    <string name="action_activate_driver">Фаоллаштириш</string>
+    <string name="driver_name">Исм</string>
+    <string name="driver_phone">Телефон</string>
+    <string name="driver_notes">Изоҳ</string>
+    <string name="driver_none">Ҳайдовчисиз</string>
+    <string name="dispatch_title">Жўнатиш</string>
+    <string name="dispatch_truck">Машина рақами</string>
+    <string name="dispatch_will_collect_cash">Ҳайдовчи нақд йиғади</string>
+    <string name="dispatch_expected">Кутилган сумма</string>
+    <string name="action_dispatch">Жўнатиш</string>
+    <string name="offline_action_blocked">Интернет йўқ — бу амал онлайн бажарилади</string>
 </resources>

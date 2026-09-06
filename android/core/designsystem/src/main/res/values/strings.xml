@@ -9,6 +9,8 @@
     <string name="payment_paid">Тўланган</string>
     <string name="payment_partial">Қисман</string>
     <string name="payment_pending">Кутилмоқда</string>
+    <string name="driver_status_active">Фаол</string>
+    <string name="driver_status_inactive">Нофаол</string>
     <string name="action_retry">Қайта уриниш</string>
     <string name="action_confirm">Тасдиқлаш</string>
     <string name="action_cancel">Бекор қилиш</string>

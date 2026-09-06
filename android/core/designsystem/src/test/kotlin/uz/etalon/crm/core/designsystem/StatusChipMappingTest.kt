@@ -3,6 +3,7 @@ package uz.etalon.crm.core.designsystem
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.designsystem.components.ChipTone
+import uz.etalon.crm.core.designsystem.components.driverActiveTone
 import uz.etalon.crm.core.designsystem.components.orderStatusTone
 import uz.etalon.crm.core.designsystem.components.paymentStateTone
 import uz.etalon.crm.core.designsystem.components.shipmentStatusTone
@@ -31,5 +32,9 @@ class StatusChipMappingTest {
         assertEquals(ChipTone.GOLD, shipmentStatusTone(ShipmentStatus.DISPATCHED))
         assertEquals(ChipTone.SUCCESS, shipmentStatusTone(ShipmentStatus.DELIVERED))
         assertEquals(ChipTone.NEUTRAL, shipmentStatusTone(ShipmentStatus.UNKNOWN))
+    }
+    @Test fun `a driver's active flag is success, inactive is neutral`() {
+        assertEquals(ChipTone.SUCCESS, driverActiveTone(true))
+        assertEquals(ChipTone.NEUTRAL, driverActiveTone(false))
     }
 }

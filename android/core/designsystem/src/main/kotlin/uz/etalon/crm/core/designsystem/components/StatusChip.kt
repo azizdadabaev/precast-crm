@@ -70,6 +70,11 @@ fun shipmentStatusLabel(s: ShipmentStatus): Int = when (s) {
     ShipmentStatus.UNKNOWN -> R.string.status_unknown
 }
 
+/** A driver's own active/inactive flag — a plain Boolean, not an enum, since that is exactly
+ *  what [uz.etalon.crm.core.model.Driver.active] is. */
+fun driverActiveTone(active: Boolean): ChipTone = if (active) ChipTone.SUCCESS else ChipTone.NEUTRAL
+fun driverActiveLabel(active: Boolean): Int = if (active) R.string.driver_status_active else R.string.driver_status_inactive
+
 @Composable
 fun toneColor(t: ChipTone): Color {
     val ext = LocalEtalonColors.current
@@ -103,3 +108,5 @@ fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) {
     Chip(paymentStateTone(state), stringResource(paymentStateLabel(state)), modifier)
 @Composable fun ShipmentStatusChip(status: ShipmentStatus, modifier: Modifier = Modifier) =
     Chip(shipmentStatusTone(status), stringResource(shipmentStatusLabel(status)), modifier)
+@Composable fun DriverStatusChip(active: Boolean, modifier: Modifier = Modifier) =
+    Chip(driverActiveTone(active), stringResource(driverActiveLabel(active)), modifier)

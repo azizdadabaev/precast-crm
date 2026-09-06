@@ -7,6 +7,9 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:image"))
     implementation(project(":feature:capture"))
+    // Test-only: DispatchViewModelTest constructs a real ApiException to exercise the actual
+    // 409-conflict mapping in :core:data's toAppError(), the same way :feature:auth's tests do.
+    testImplementation(project(":core:network"))
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons)
