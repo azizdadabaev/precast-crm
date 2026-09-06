@@ -23,9 +23,16 @@ object OutboxState {
  * missing (cache eviction, manual clear) by the time the worker runs; callers
  * must check for that rather than assume the path resolves.
  */
-@Entity(tableName = "outbox", indices = [Index("orderId"), Index("state", "createdAt")])
+@Entity(tableName = "outbox", indices = [Index("orderId"), Index("ownerId"), Index("state", "createdAt")])
 data class OutboxEntity(
     @PrimaryKey val id: String,
+    /**
+     * The user who created this row. It decides who may send it: the worker claims only rows
+     * owned by the user whose token it is about to upload under, so one operator's cash figure
+     * can never be posted as another's. Non-null by design — a row nobody owns could only be
+     * claimed by guessing, so enqueuing without a signed-in user fails instead.
+     */
+    val ownerId: String,
     /** OutboxKind name — decides which endpoint the worker calls. */
     val kind: String,
     val orderId: String,

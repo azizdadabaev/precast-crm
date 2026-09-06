@@ -15,6 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import uz.etalon.crm.core.data.CurrentUser
 import uz.etalon.crm.core.data.OrdersGateway
 import uz.etalon.crm.core.database.EtalonDatabase
 import uz.etalon.crm.core.database.dao.OutboxDao
@@ -65,6 +66,9 @@ private class RecordingOrders : OrdersGateway {
     override suspend fun refreshDetail(id: String) { refreshed += id }
 }
 
+/** The operator every test row belongs to unless it says otherwise. */
+private const val SIGNED_IN = "u1"
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class OutboxWorkerTest {
@@ -75,20 +79,25 @@ class OutboxWorkerTest {
 
     /** A queued row always needs a file on disk — the worker fails permanently otherwise
      *  (MissingUploadFileException) — so every test row gets a real temp file. */
-    private fun row(id: String, orderId: String, state: String = OutboxState.QUEUED, created: Long = 0): OutboxEntity {
+    private fun row(
+        id: String, orderId: String, state: String = OutboxState.QUEUED, created: Long = 0,
+        owner: String = SIGNED_IN,
+    ): OutboxEntity {
         val file = File.createTempFile("outbox-$id", ".jpg").apply { deleteOnExit() }
         return OutboxEntity(
-            id = id, kind = "LOAD_TRUCK", orderId = orderId, shipmentId = null, paymentId = null,
+            id = id, ownerId = owner, kind = "LOAD_TRUCK", orderId = orderId, shipmentId = null, paymentId = null,
             filePath = file.absolutePath, payloadJson = "{}", state = state,
             attempts = 0, lastError = null, createdAt = created, updatedAt = created,
         )
     }
 
-    private fun worker(dao: OutboxDao, api: EtalonApi, orders: OrdersGateway): OutboxWorker {
+    private fun worker(
+        dao: OutboxDao, api: EtalonApi, orders: OrdersGateway, signedIn: String? = SIGNED_IN,
+    ): OutboxWorker {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = object : WorkerFactory() {
             override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
-                OutboxWorker(appContext, workerParameters, dao, api, orders, EtalonJson.create())
+                OutboxWorker(appContext, workerParameters, dao, api, orders, EtalonJson.create(), CurrentUser { signedIn })
         }
         return TestListenableWorkerBuilder<OutboxWorker>(context).setWorkerFactory(factory).build()
     }
@@ -140,6 +149,46 @@ class OutboxWorkerTest {
         val after = dao.byId("flaky")!!
         assertEquals(OutboxState.QUEUED, after.state)
         assertEquals(3, after.attempts)
+    }
+
+    /** The drain runs under one operator's token, so it may only send that operator's rows: the
+     *  other row's cash figure and photo would otherwise be posted as the wrong person. */
+    @Test fun `the worker leaves another operator's row untouched`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("theirs", "o1", created = 1, owner = "someone-else"))
+        dao.upsert(row("mine", "o2", created = 2, owner = SIGNED_IN))
+        val sent = mutableListOf<String>()
+        val api = object : StubApi() {
+            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String): LoadedPhotoDto {
+                sent += id
+                return LoadedPhotoDto("https://x/1.jpg")
+            }
+        }
+        val orders = RecordingOrders()
+
+        val result = worker(dao, api, orders).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(listOf("o2"), sent)
+        assertEquals(null, dao.byId("mine"))
+        assertEquals(OutboxState.QUEUED, dao.byId("theirs")?.state)
+        assertEquals(listOf("o2"), orders.refreshed)
+    }
+
+    /** No signed-in operator means no owner to drain for. That is an ordinary state (the app sits
+     *  on the PIN screen after a 401), so the run simply has nothing to do — it must not fail,
+     *  and it must not touch the queued rows waiting for their owner to come back. */
+    @Test fun `with nobody signed in the worker claims nothing`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("waiting", "o1", created = 1))
+        val orders = RecordingOrders()
+
+        // StubApi errors on any call, so an attempted upload would fail this test loudly.
+        val result = worker(dao, StubApi(), orders, signedIn = null).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(OutboxState.QUEUED, dao.byId("waiting")?.state)
+        assertEquals(emptyList<String>(), orders.refreshed)
     }
 
     @Test fun `two rows for the same order refresh it only once`() = runTest {

@@ -18,6 +18,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +31,7 @@ import uz.etalon.crm.core.database.entity.OutboxEntity
 import uz.etalon.crm.core.database.entity.OutboxState
 import uz.etalon.crm.core.datastore.InMemoryTokenStore
 import uz.etalon.crm.core.datastore.SessionPrefs
+import uz.etalon.crm.core.datastore.TokenStore
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.*
 import java.io.File
@@ -85,7 +87,7 @@ private class UnusedApi(
     override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = throw NotImplementedError("unused")
 }
 
-/** Wraps the real, Room-generated DAO to pin down the exact moment signOut()'s db.wipe() has
+/** Wraps the real, Room-generated DAO to pin down the exact moment signOut()'s db.clearOrderCache() has
  *  cleared `order_summaries` but has not yet returned — the same window the production race
  *  (wipe() landing before the epoch bump) depends on. Room's suspend DAO calls genuinely
  *  redispatch, so this is exercised with real suspension, not a hand-simulated ordering. */
@@ -107,14 +109,16 @@ private object DirectExecutor : Executor {
     override fun execute(command: Runnable) = command.run()
 }
 
-/** Task 7 owns the real scheduler; these tests only need signOut()/login() to run, never an
- *  actual WorkManager enqueue. */
-private object NoOpScheduler : OutboxScheduler {
-    override fun schedule(id: String) {}
+/** Reports the exact moment `login()` stores the new session's token — the first moment an
+ *  authenticated request, or a drain, could run under it. Whatever the outbox holds by then is
+ *  what the new operator's token could reach. */
+private class ProbingTokenStore(private val onSet: suspend () -> Unit) : TokenStore {
+    private val delegate = InMemoryTokenStore()
+    override suspend fun get() = delegate.get()
+    override suspend fun set(token: String) { onSet(); delegate.set(token) }
+    override suspend fun clear() = delegate.clear()
+    override val isLoggedIn: Flow<Boolean> get() = delegate.isLoggedIn
 }
-
-private fun testOutboxRepository(dao: OutboxDao) =
-    OutboxRepository(dao, NoOpScheduler, File(System.getProperty("java.io.tmpdir"), "outbox-test-${System.nanoTime()}"), Json { ignoreUnknownKeys = true })
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -129,8 +133,8 @@ class SessionSignOutOrderTest {
     ).setQueryExecutor(DirectExecutor).setTransactionExecutor(DirectExecutor).build()
 
     /** `outboxDao()` delegates to a genuinely Room-built in-memory database (unlike the gated
-     *  `ordersDao()` above) — wipe()'s outbox half is a real `@Transaction` DAO method and needs
-     *  a real underlying connection to run against; this test does not exercise outbox behavior. */
+     *  `ordersDao()` above) — the outbox purge is a real `@Transaction` DAO method and needs a
+     *  real underlying connection to run against; this test does not exercise outbox behavior. */
     private fun fakeSessionDatabase(dao: OrdersDao): EtalonDatabase {
         val real = realDatabase()
         return object : EtalonDatabase() {
@@ -156,8 +160,7 @@ class SessionSignOutOrderTest {
         val apiGate = CompletableDeferred<Unit>()
         val api = UnusedApi(apiGate, OrdersPageDto(listOf(summary), 1, 1, 20, 1))
         val orders = OrdersRepository(api, realDao, Json { ignoreUnknownKeys = true }, "https://x")
-        val outbox = testOutboxRepository(db.outboxDao())
-        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders, outbox)
+        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders)
 
         val refreshJob = launch { orders.refreshList(OrdersFilter()) }
         runCurrent() // the refresh is now parked inside the API call
@@ -177,35 +180,68 @@ class SessionSignOutOrderTest {
         )
     }
 
-    /**
-     * Task 5 carry-over: `db.wipe()` clears orders and the outbox in two separate DAO
-     * transactions, so a process death between them (or between the wipe and the file
-     * cleanup) can strand the previous user's outbox rows. Tokens are cleared before any of
-     * that runs, so the app lands back on the PIN screen — this proves `login()` wipes again
-     * before the new session's first authenticated fetch, catching exactly that gap.
-     */
-    @Test fun `a row left in the outbox by an interrupted sign-out does not survive the next sign-in`() = runTest {
-        val db = realDatabase()
+    private fun loginResponse(userId: String) = LoginResponse(
+        token = "tok",
+        user = UserDto(id = userId, name = "Азиз", role = "OWNER", permissions = emptyList(), mustChangePassword = false),
+        redirectTo = "/",
+    )
+
+    private suspend fun queuedRow(db: EtalonDatabase, id: String, owner: String): File {
+        val file = File.createTempFile("outbox-$id", ".jpg").apply { deleteOnExit(); writeBytes(ByteArray(4)) }
         db.outboxDao().upsert(OutboxEntity(
-            id = "stray", kind = "LOAD_TRUCK", orderId = "o1", payloadJson = "{}",
-            state = OutboxState.QUEUED, createdAt = 0, updatedAt = 0,
+            id = id, ownerId = owner, kind = "LOAD_TRUCK", orderId = "o1", payloadJson = "{}",
+            filePath = file.absolutePath, state = OutboxState.QUEUED, createdAt = 0, updatedAt = 0,
         ))
+        return file
+    }
 
-        val loginResponse = LoginResponse(
-            token = "tok",
-            user = UserDto(id = "u1", name = "Азиз", role = "OWNER", permissions = emptyList(), mustChangePassword = false),
-            redirectTo = "/",
-        )
-        val api = UnusedApi(loginResponse = loginResponse)
+    private fun session(db: EtalonDatabase, api: EtalonApi, tokens: TokenStore = InMemoryTokenStore()): SessionRepository {
         val orders = OrdersRepository(api, db.ordersDao(), Json { ignoreUnknownKeys = true }, "https://x")
-        val outbox = testOutboxRepository(db.outboxDao())
-        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders, outbox)
+        return SessionRepository(api, tokens, SessionPrefs(FakeDataStore()), db, orders)
+    }
 
-        session.login("owner", "1234").getOrThrow()
+    /**
+     * A queued row carries the previous operator's cash figure and photo. Signing in as someone
+     * else must destroy it — row and JPEG — and must do so before the new token exists, since
+     * that token is what a drain would upload it under.
+     */
+    @Test fun `signing in as a different operator destroys the previous operator's queued row and file`() = runTest {
+        val db = realDatabase()
+        val theirFile = queuedRow(db, "theirs", owner = "u2")
 
-        assertTrue(
-            "a stray row left by an interrupted sign-out must not survive the next sign-in",
-            db.outboxDao().observeAll().first().isEmpty(),
-        )
+        var pendingWhenTokenStored = -1
+        val tokens = ProbingTokenStore { pendingWhenTokenStored = db.outboxDao().countPending() }
+        session(db, UnusedApi(loginResponse = loginResponse("u1")), tokens).login("owner", "1234").getOrThrow()
+
+        assertTrue("the previous operator's row must not survive", db.outboxDao().observeAll().first().isEmpty())
+        assertTrue("its photo must not survive either", !theirFile.exists())
+        assertEquals("the purge must land before the new session's token exists", 0, pendingWhenTokenStored)
+    }
+
+    /**
+     * The routine path this whole design exists for: a 401 clears the session, the operator
+     * re-enters their PIN, and the delivery proof they queued offline is still there to send.
+     */
+    @Test fun `signing back in as the same operator keeps their queued row, still claimable`() = runTest {
+        val db = realDatabase()
+        val myFile = queuedRow(db, "mine", owner = "u1")
+
+        session(db, UnusedApi(loginResponse = loginResponse("u1"))).login("owner", "1234").getOrThrow()
+
+        assertEquals(listOf("mine"), db.outboxDao().observeAll().first().map { it.id })
+        assertTrue("the photo must still be on disk", myFile.exists())
+        assertEquals("and the row must still be sendable", "mine", db.outboxDao().claimNext(ownerId = "u1", at = 1)?.id)
+    }
+
+    /** Sign-out ends the session, not the operator's queued work: the rows wait for them. The
+     *  order cache still goes, which the racing-refresh test above pins down separately. */
+    @Test fun `signing out leaves the outbox alone`() = runTest {
+        val db = realDatabase()
+        val myFile = queuedRow(db, "mine", owner = "u1")
+
+        session(db, UnusedApi()).signOut()
+
+        assertEquals(listOf("mine"), db.outboxDao().observeAll().first().map { it.id })
+        assertTrue("the photo must survive sign-out", myFile.exists())
     }
 }

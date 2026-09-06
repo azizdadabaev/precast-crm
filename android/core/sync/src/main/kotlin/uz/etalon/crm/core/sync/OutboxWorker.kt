@@ -13,6 +13,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import uz.etalon.crm.core.data.CurrentUser
 import uz.etalon.crm.core.data.OrdersGateway
 import uz.etalon.crm.core.data.runCatchingCancellable
 import uz.etalon.crm.core.database.dao.OutboxDao
@@ -63,10 +64,14 @@ fun outcomeFor(t: Throwable): OutboxOutcome = when {
 private const val GENERIC_FAILURE_MESSAGE = "Хатолик юз берди"
 
 /**
- * Drains the whole outbox in one run rather than handling a single row: [OutboxDao.claimNext]
- * atomically claims the oldest QUEUED row and [OutboxDao.resetRunning] recovers rows a killed
- * process stranded in RUNNING, so a single scheduled worker naturally picks up every pending
- * upload — there is no per-row work request to key or cancel.
+ * Drains the signed-in operator's outbox rows in one run rather than handling a single row:
+ * [OutboxDao.claimNext] atomically claims their oldest QUEUED row and [OutboxDao.resetRunning]
+ * recovers rows a killed process stranded in RUNNING, so a single scheduled worker naturally
+ * picks up every pending upload — there is no per-row work request to key or cancel.
+ *
+ * Every upload here goes out under whatever token [EtalonApi] currently holds, so the drain is
+ * scoped to that operator's own rows: another operator's photo and cash figure are not merely
+ * skipped, they are unclaimable (the predicate lives in the claim query).
  */
 @HiltWorker
 class OutboxWorker @AssistedInject constructor(
@@ -76,9 +81,15 @@ class OutboxWorker @AssistedInject constructor(
     private val api: EtalonApi,
     private val orders: OrdersGateway,
     private val json: Json,
+    private val currentUser: CurrentUser,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        // Nobody signed in (the app is sitting on the PIN screen after a 401, say): there is no
+        // owner to drain for and no token to drain under. An ordinary state, not a failure — the
+        // rows wait, untouched, for their owner to come back and a fresh schedule() to run this.
+        val owner = currentUser.id() ?: return Result.success()
+
         dao.resetRunning(System.currentTimeMillis())
 
         // A row that keeps retrying (offline, a flaky 5xx) must not freeze every newer upload
@@ -92,7 +103,10 @@ class OutboxWorker @AssistedInject constructor(
         val touchedOrders = mutableSetOf<String>()
 
         while (true) {
-            val row = dao.claimNext(System.currentTimeMillis()) ?: break
+            // Re-read on every pass, not once: the session can end (or change hands) mid-drain,
+            // and continuing would send this operator's rows under whoever is signed in now.
+            if (currentUser.id() != owner) break
+            val row = dao.claimNext(owner, System.currentTimeMillis()) ?: break
             val outcome = runCatchingCancellable { send(row) }.fold(
                 onSuccess = { OutboxOutcome.Done },
                 onFailure = { outcomeFor(it) },

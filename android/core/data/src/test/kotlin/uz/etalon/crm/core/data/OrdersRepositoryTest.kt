@@ -134,7 +134,7 @@ class OrdersRepositoryTest {
         val dao = FakeDao(); val api = FakeApi().apply { page = OrdersPageDto(listOf(summary), 1, 1, 20, 1) }
         val repo = OrdersRepository(api, dao, Json { ignoreUnknownKeys = true }, "https://x")
         repo.refreshList(OrdersFilter())
-        dao.clearAllSummaries() // what SessionRepository.signOut()'s db.wipe() does to the DAO half of the cache
+        dao.clearAllSummaries() // what SessionRepository.signOut()'s db.clearOrderCache() does to the DAO half of the cache
         repo.clearCache()
         repo.list(OrdersFilter()).test {
             assertEquals(Resource.Loading<List<uz.etalon.crm.core.model.OrderSummary>>(null), awaitItem())

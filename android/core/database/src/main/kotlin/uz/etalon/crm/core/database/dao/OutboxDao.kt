@@ -20,24 +20,28 @@ interface OutboxDao {
     @Query("SELECT * FROM outbox WHERE id = :id")
     suspend fun byId(id: String): OutboxEntity?
 
-    @Query("SELECT * FROM outbox WHERE state = 'QUEUED' ORDER BY createdAt, id LIMIT 1")
-    suspend fun peekQueued(): OutboxEntity?
+    @Query("SELECT * FROM outbox WHERE state = 'QUEUED' AND ownerId = :ownerId ORDER BY createdAt, id LIMIT 1")
+    suspend fun peekQueued(ownerId: String): OutboxEntity?
 
-    @Query("UPDATE outbox SET state = 'RUNNING', updatedAt = :at WHERE id = :id AND state = 'QUEUED'")
-    suspend fun claimIfQueued(id: String, at: Long): Int
+    @Query("UPDATE outbox SET state = 'RUNNING', updatedAt = :at WHERE id = :id AND state = 'QUEUED' AND ownerId = :ownerId")
+    suspend fun claimIfQueued(id: String, ownerId: String, at: Long): Int
 
     /**
-     * Atomically claims the single oldest QUEUED row: peeks it, then flips it to
+     * Atomically claims [ownerId]'s single oldest QUEUED row: peeks it, then flips it to
      * RUNNING only if it is still QUEUED. Returns null when another caller
      * claimed it first (or nothing is queued), so the caller can tell it lost
      * the race instead of uploading the same file twice. This is the only way
      * to take a row off the queue — there is no separate peek+markRunning pair
      * to misuse.
+     *
+     * Both halves carry the owner predicate, so another operator's row is not merely skipped —
+     * it is never a candidate. That is what makes it impossible for a drain to upload one
+     * operator's photo and cash figure under a different operator's token.
      */
     @Transaction
-    suspend fun claimNext(at: Long): OutboxEntity? {
-        val candidate = peekQueued() ?: return null
-        return if (claimIfQueued(candidate.id, at) == 1) candidate.copy(state = OutboxState.RUNNING, updatedAt = at) else null
+    suspend fun claimNext(ownerId: String, at: Long): OutboxEntity? {
+        val candidate = peekQueued(ownerId) ?: return null
+        return if (claimIfQueued(candidate.id, ownerId, at) == 1) candidate.copy(state = OutboxState.RUNNING, updatedAt = at) else null
     }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -67,22 +71,23 @@ interface OutboxDao {
     @Query("SELECT COUNT(*) FROM outbox")
     fun observePendingCount(): Flow<Int>
 
-    @Query("SELECT filePath FROM outbox WHERE filePath IS NOT NULL")
-    suspend fun allFilePaths(): List<String>
+    @Query("SELECT filePath FROM outbox WHERE ownerId != :ownerId AND filePath IS NOT NULL")
+    suspend fun filePathsOwnedByOthers(ownerId: String): List<String>
 
-    @Query("DELETE FROM outbox")
-    suspend fun clearAll()
+    @Query("DELETE FROM outbox WHERE ownerId != :ownerId")
+    suspend fun deleteOwnedByOthers(ownerId: String)
 
     /**
-     * Sign-out path: the paths must be read before the rows are deleted (or
-     * there is nothing left to locate them by), so both happen in one
-     * transaction. Deleting the actual files is `:core:data`'s job — the DAO
-     * only reports which paths no longer have a row.
+     * Sign-in path: everything queued by anyone other than [ownerId] goes, whatever its state —
+     * the operator signing in must never be able to send it. The paths must be read before the
+     * rows are deleted (or there is nothing left to locate them by), so both happen in one
+     * transaction. Deleting the actual files is `:core:data`'s job — the DAO only reports which
+     * paths no longer have a row.
      */
     @Transaction
-    suspend fun wipeAndReturnPaths(): List<String> {
-        val paths = allFilePaths()
-        clearAll()
+    suspend fun purgeOwnedByOthers(ownerId: String): List<String> {
+        val paths = filePathsOwnedByOthers(ownerId)
+        deleteOwnedByOthers(ownerId)
         return paths
     }
 }

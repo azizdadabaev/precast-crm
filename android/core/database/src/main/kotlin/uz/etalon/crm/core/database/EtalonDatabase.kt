@@ -10,7 +10,7 @@ import uz.etalon.crm.core.database.entity.OutboxEntity
 
 @Database(
     entities = [OrderSummaryEntity::class, OrderDetailEntity::class, OutboxEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class EtalonDatabase : RoomDatabase() {
@@ -19,16 +19,24 @@ abstract class EtalonDatabase : RoomDatabase() {
 
     /**
      * Called on sign-out so the next user never sees the previous user's cache.
-     * The outbox goes with it: a queued photo belongs to the session that took
-     * it, and uploading it under a different token would misattribute the work.
-     *
-     * Returns the file paths the dropped outbox rows pointed at, so the caller
-     * (`:core:data`) can delete the actual JPEGs — the DAO only owns the table,
-     * not the files on disk.
+     * The outbox deliberately does NOT go with it: a queued upload belongs to the operator who
+     * made it (`OutboxEntity.ownerId`), and the routine reason a session ends is their own token
+     * expiring — destroying the row here would throw away a delivery proof they are about to
+     * come back and send. [purgeOutboxOwnedByOthers] is what keeps it out of anyone else's hands.
      */
-    suspend fun wipe(): List<String> {
+    suspend fun clearOrderCache() {
         ordersDao().clearAllSummaries()
         ordersDao().clearAllDetails()
-        return outboxDao().wipeAndReturnPaths()
     }
+
+    /**
+     * Called on sign-in, before the new session has a token: drops every outbox row queued by
+     * anyone other than [ownerId], so a different operator's photo and cash figure can never be
+     * uploaded under this one's credentials.
+     *
+     * Returns the file paths the dropped rows pointed at, so the caller (`:core:data`) can delete
+     * the actual JPEGs — the DAO only owns the table, not the files on disk.
+     */
+    suspend fun purgeOutboxOwnedByOthers(ownerId: String): List<String> =
+        outboxDao().purgeOwnedByOthers(ownerId)
 }

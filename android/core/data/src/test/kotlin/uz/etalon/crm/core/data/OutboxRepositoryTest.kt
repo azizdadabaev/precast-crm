@@ -19,7 +19,7 @@ import uz.etalon.crm.core.model.OutboxKind
 import java.io.File
 
 /** An in-memory stand-in for the real Room DAO, matching its actual surface
- *  (claimNext/resetRunning/wipeAndReturnPaths — not the nextQueued/markRunning
+ *  (claimNext/resetRunning/purgeOwnedByOthers — not the nextQueued/markRunning
  *  pair an earlier draft of this DAO had) so this fake cannot drift from what
  *  the production interface actually declares. */
 private class FakeOutboxDao : OutboxDao {
@@ -27,10 +27,11 @@ private class FakeOutboxDao : OutboxDao {
     override fun observeAll(): Flow<List<OutboxEntity>> = rows.map { it.values.sortedBy { r -> r.createdAt } }
     override fun observeForOrder(orderId: String) = rows.map { m -> m.values.filter { it.orderId == orderId }.sortedBy { it.createdAt } }
     override suspend fun byId(id: String) = rows.value[id]
-    override suspend fun peekQueued() = rows.value.values.filter { it.state == OutboxState.QUEUED }.minByOrNull { it.createdAt }
-    override suspend fun claimIfQueued(id: String, at: Long): Int {
+    override suspend fun peekQueued(ownerId: String) =
+        rows.value.values.filter { it.state == OutboxState.QUEUED && it.ownerId == ownerId }.minByOrNull { it.createdAt }
+    override suspend fun claimIfQueued(id: String, ownerId: String, at: Long): Int {
         val row = rows.value[id] ?: return 0
-        if (row.state != OutboxState.QUEUED) return 0
+        if (row.state != OutboxState.QUEUED || row.ownerId != ownerId) return 0
         rows.value = rows.value + (id to row.copy(state = OutboxState.RUNNING, updatedAt = at))
         return 1
     }
@@ -47,8 +48,11 @@ private class FakeOutboxDao : OutboxDao {
     }
     override suspend fun countPending() = rows.value.size
     override fun observePendingCount(): Flow<Int> = rows.map { it.size }
-    override suspend fun allFilePaths(): List<String> = rows.value.values.mapNotNull { it.filePath }
-    override suspend fun clearAll() { rows.value = emptyMap() }
+    override suspend fun filePathsOwnedByOthers(ownerId: String): List<String> =
+        rows.value.values.filter { it.ownerId != ownerId }.mapNotNull { it.filePath }
+    override suspend fun deleteOwnedByOthers(ownerId: String) {
+        rows.value = rows.value.filterValues { it.ownerId == ownerId }
+    }
     private inline fun patch(id: String, f: (OutboxEntity) -> OutboxEntity) {
         rows.value[id]?.let { rows.value = rows.value + (id to f(it)) }
     }
@@ -59,11 +63,15 @@ private class RecordingScheduler : OutboxScheduler {
     override fun schedule(id: String) { scheduled += id }
 }
 
+/** The signed-in operator, swappable mid-test to stand in for a sign-out. */
+private class FakeCurrentUser(var userId: String? = "u1") : CurrentUser {
+    override suspend fun id(): String? = userId
+}
+
 /** Wraps a real DAO to pin down the exact moment enqueue()'s `dao.upsert` has written the row
- *  but not yet returned — the same window the production race (a signOut() landing between the
- *  write and enqueue's post-write epoch check) depends on. Mirrors `SessionSignOutOrderTest`'s
- *  `GatedOrdersDao`: a suspend DAO call genuinely redispatches, so this is exercised with real
- *  suspension, not a hand-simulated ordering. */
+ *  but not yet returned — the same window a sign-out landing mid-enqueue depends on. Mirrors
+ *  `SessionSignOutOrderTest`'s `GatedOrdersDao`: a suspend DAO call genuinely redispatches, so
+ *  this is exercised with real suspension, not a hand-simulated ordering. */
 private class GatingOutboxDao(
     private val real: OutboxDao,
     private val reachedUpsert: CompletableDeferred<Unit>,
@@ -78,8 +86,10 @@ private class GatingOutboxDao(
 
 class OutboxRepositoryTest {
 
-    private fun repo(dao: OutboxDao, scheduler: OutboxScheduler, dir: File) =
-        OutboxRepository(dao, scheduler, dir, kotlinx.serialization.json.Json)
+    private fun repo(
+        dao: OutboxDao, scheduler: OutboxScheduler, dir: File,
+        currentUser: CurrentUser = FakeCurrentUser(),
+    ) = OutboxRepository(dao, scheduler, dir, kotlinx.serialization.json.Json, currentUser)
 
     @Test fun `enqueue moves the photo out of the cache and schedules the upload`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
         val cache = File(tmp, "cache").apply { mkdirs() }
@@ -100,6 +110,36 @@ class OutboxRepositoryTest {
         assertTrue(row.filePath!!.startsWith(outboxDir.absolutePath), "the file must live under files/, which the OS will not evict")
         assertEquals(16, File(row.filePath!!).length())
         assertEquals(listOf(id), scheduler.scheduled)
+    }
+
+    /** The row carries the operator who took the photo, so only that operator's token can ever
+     *  send it — the cash figure on a delivery proof must never be posted as someone else. */
+    @Test fun `enqueue stamps the signed-in operator as the row's owner`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+        val dao = FakeOutboxDao()
+        val id = repo(dao, RecordingScheduler(), File(tmp, "outbox"), FakeCurrentUser("driver-7"))
+            .enqueue(OutboxKind.DELIVERY_PROOF, "o1")
+
+        assertEquals("driver-7", dao.byId(id)!!.ownerId)
+    }
+
+    /** An unowned row could only ever be claimed by guessing whose it is. Failing the enqueue is
+     *  the honest outcome: the screen shows the operator the Uzbek message and nothing is queued. */
+    @Test fun `enqueue fails rather than writing a row nobody owns`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+        val cache = File(tmp, "cache").apply { mkdirs() }
+        val outboxDir = File(tmp, "outbox")
+        val photo = File(cache, "shot.jpg").apply { writeBytes(ByteArray(8)) }
+        val dao = FakeOutboxDao(); val scheduler = RecordingScheduler()
+
+        val thrown = runCatching {
+            repo(dao, scheduler, outboxDir, FakeCurrentUser(null))
+                .enqueue(OutboxKind.LOAD_TRUCK, "o1", photo = PreparedImage(photo, 1, 1, photo.length()))
+        }.exceptionOrNull()
+
+        assertNotNull(thrown, "enqueue must fail, not silently succeed, with nobody signed in")
+        assertTrue(thrown!!.message!!.any { it in 'А'..'я' }, "the operator-facing half of the message must be Uzbek Cyrillic")
+        assertTrue(dao.rows.value.isEmpty(), "no row may be written without an owner")
+        assertTrue(outboxDir.listFiles().orEmpty().isEmpty(), "no file may be left behind")
+        assertTrue(scheduler.scheduled.isEmpty(), "nothing may be scheduled")
     }
 
     @Test fun `the row id is a usable idempotency key`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
@@ -159,39 +199,31 @@ class OutboxRepositoryTest {
     }
 
     /**
-     * The reachable failure this guards: operator A's token expires, a background refresh
-     * 401s, `MainViewModel` calls `signOut()` — which wipes the outbox — in the same
-     * milliseconds A taps save on the delivery-proof screen. The JPEG is moved and the row is
-     * written *after* the wipe conceptually landed (here: `clearCache()` runs while the row's
-     * `dao.upsert` is suspended), so without a guard the row would survive into the next
-     * session and Task 7's worker would upload it under whoever signs in next.
+     * The reachable case this pins down: operator A's token expires, a background refresh 401s
+     * and `MainViewModel` calls `signOut()` in the same milliseconds A taps save on the
+     * delivery-proof screen. The row is stamped with A before the session ends, so it survives
+     * — losing it would be exactly the routine data loss ownership exists to prevent — and
+     * ownership, not the session, is what keeps it out of anyone else's drain.
      */
-    @Test fun `enqueue rolls back if sign-out lands mid-write`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+    @Test fun `a row enqueued as sign-out lands stays with the operator who made it`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
         val cache = File(tmp, "cache").apply { mkdirs() }
         val outboxDir = File(tmp, "outbox")
         val photo = File(cache, "shot.jpg").apply { writeBytes(ByteArray(8)) }
         val realDao = FakeOutboxDao()
         val reachedUpsert = CompletableDeferred<Unit>()
         val releaseUpsert = CompletableDeferred<Unit>()
-        val scheduler = RecordingScheduler()
-        val r = repo(GatingOutboxDao(realDao, reachedUpsert, releaseUpsert), scheduler, outboxDir)
+        val user = FakeCurrentUser("u1")
+        val r = repo(GatingOutboxDao(realDao, reachedUpsert, releaseUpsert), RecordingScheduler(), outboxDir, user)
 
-        var caught: Throwable? = null
-        val job = launch {
-            try {
-                r.enqueue(OutboxKind.LOAD_TRUCK, "o1", photo = PreparedImage(photo, 1, 1, photo.length()))
-            } catch (t: Throwable) {
-                caught = t
-            }
-        }
-        reachedUpsert.await() // the row is written; enqueue is paused right there, about to check the epoch
-        r.clearCache()        // the sign-out equivalent
+        val job = launch { r.enqueue(OutboxKind.LOAD_TRUCK, "o1", photo = PreparedImage(photo, 1, 1, photo.length())) }
+        reachedUpsert.await() // the row is written; enqueue is paused right there
+        user.userId = null    // the sign-out equivalent
         releaseUpsert.complete(Unit)
         job.join()
 
-        assertNotNull(caught, "enqueue must fail, not silently succeed, once sign-out lands mid-write")
-        assertTrue(realDao.rows.value.isEmpty(), "the row must not survive")
-        assertTrue(outboxDir.listFiles().orEmpty().isEmpty(), "the moved file must not survive")
-        assertTrue(scheduler.scheduled.isEmpty(), "a rolled-back row must never be scheduled")
+        val row = realDao.rows.value.values.single()
+        assertEquals("u1", row.ownerId)
+        assertTrue(File(row.filePath!!).exists(), "the photo must not be thrown away")
+        assertNull(realDao.claimNext(ownerId = "u2", at = 1), "and nobody else may ever send it")
     }
 }

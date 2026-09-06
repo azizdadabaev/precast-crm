@@ -21,7 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class SessionRepository @Inject constructor(
     private val api: EtalonApi, private val tokens: TokenStore, private val prefs: SessionPrefs, private val db: EtalonDatabase,
-    private val orders: OrdersRepository, private val outbox: OutboxRepository,
+    private val orders: OrdersRepository,
 ) {
     private val _me = MutableStateFlow<Me?>(null)
     val me: StateFlow<Me?> = _me.asStateFlow()
@@ -30,15 +30,23 @@ class SessionRepository @Inject constructor(
     /** The last authenticated user, surviving process death; see SessionPrefs.lastMe. */
     val lastMe: Flow<Me?> = prefs.lastMe
 
-    /** Wipes again before this session's first authenticated fetch. `signOut()` below clears
-     *  orders and the outbox in two separate DAO transactions; a process death between them
-     *  (or between the wipe and the file cleanup) would strand the previous user's rows —
-     *  their tokens are already cleared by then, so the app lands back here, on login(), and
-     *  nothing has scheduled the outbox yet. Repeating the wipe is idempotent and cheap on the
-     *  normal path (both tables are already empty), and closes that gap unconditionally. */
+    /**
+     * Everything that could still belong to somebody else is destroyed here, before this session
+     * has a token — that token is what a drain or an authenticated fetch would run under.
+     *
+     * The order cache is cleared unconditionally: `signOut()` already does it, but a process
+     * death between its two DAO calls would strand the previous user's rows, and the app lands
+     * back here with the tokens already gone. Repeating it is idempotent and cheap.
+     *
+     * The outbox is filtered by ownership instead of emptied. A queued delivery proof belongs to
+     * the operator who took it: a *different* operator signing in destroys it (rows and JPEGs),
+     * while the same operator signing back in — the routine path after a 401, since there is no
+     * token refresh — keeps it and sends it.
+     */
     suspend fun login(loginName: String, pin: String): Result<Me> = runCatchingCancellable {
-        db.wipe().forEach { path -> runCatching { File(path).delete() } }
         val res = api.login(LoginRequest(loginName.trim(), pin))
+        db.clearOrderCache()
+        db.purgeOutboxOwnedByOthers(res.user.id).forEach { path -> runCatching { File(path).delete() } }
         tokens.set(res.token)
         prefs.setLastLoginName(loginName.trim())
         res.user.toMe().also { _me.value = it; prefs.setLastMe(it) }
@@ -54,19 +62,18 @@ class SessionRepository @Inject constructor(
     }
 
     /** Local sign-out: the mobile JWT has no server-side logout; device unregistration is DeviceRepository's job.
-     *  db.wipe() clears the Room tables; orders.clearCache()/outbox.clearCache() clear each repository's own
-     *  in-memory guard (OrdersRepository's outcome maps; OutboxRepository's epoch) — all of it is needed or
-     *  the next signed-in user could briefly see the previous user's cached orders, or Task 7's worker could
-     *  upload a photo/cash figure the previous user queued under whoever signs in next.
-     *  setLastMe(null) drops the cached identity so the offline fallback cannot resurrect this session.
-     *  orders.clearCache() and outbox.clearCache() must both run BEFORE db.wipe(): a refresh or an enqueue
-     *  already in flight captured the old epoch, and bumping it first guarantees that write is rejected
-     *  instead of landing in the table db.wipe() just emptied.
-     *  db.wipe() also returns the outbox's queued JPEG paths: the DAO only owns the table, so deleting the
-     *  actual files is this repository's job. A missing or undeletable file must not fail sign-out. */
+     *  db.clearOrderCache() empties the cached orders; orders.clearCache() drops OrdersRepository's own
+     *  in-memory outcome maps — both are needed or the next signed-in user could briefly see the previous
+     *  user's orders. setLastMe(null) drops the cached identity so the offline fallback cannot resurrect this
+     *  session, and it is also what leaves the outbox with no current owner: the worker claims nothing until
+     *  someone signs in.
+     *  orders.clearCache() must run BEFORE db.clearOrderCache(): a refresh already in flight captured the old
+     *  epoch, and bumping it first guarantees that write is rejected instead of landing in the table
+     *  db.clearOrderCache() just emptied.
+     *  The outbox is deliberately left intact — a queued upload belongs to the operator who made it and
+     *  survives their session ending; `login()` destroys it only for a *different* operator. */
     suspend fun signOut() {
-        tokens.clear(); _me.value = null; prefs.setLastMe(null); orders.clearCache(); outbox.clearCache()
-        val orphanedFiles = db.wipe()
-        orphanedFiles.forEach { path -> runCatching { File(path).delete() } }
+        tokens.clear(); _me.value = null; prefs.setLastMe(null); orders.clearCache()
+        db.clearOrderCache()
     }
 }

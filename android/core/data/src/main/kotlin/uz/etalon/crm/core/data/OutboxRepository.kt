@@ -12,7 +12,6 @@ import uz.etalon.crm.core.model.OutboxKind
 import uz.etalon.crm.core.model.PendingUpload
 import java.io.File
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -34,19 +33,8 @@ class OutboxRepository @Inject constructor(
     private val scheduler: OutboxScheduler,
     @param:Named("outboxDir") private val outboxDir: File,
     private val json: Json,
+    private val currentUser: CurrentUser,
 ) : OutboxGateway {
-
-    /** Bumped by [clearCache]. An enqueue captures the epoch before it starts and rolls its
-     *  write back if the epoch moved meanwhile — otherwise an enqueue already in flight when
-     *  sign-out wipes the outbox can land its row right after the wipe, and Task 7's worker
-     *  would then upload the previous user's photo/cash figure under whoever signs in next. */
-    private val epoch = AtomicLong(0)
-
-    /** Called from `SessionRepository.signOut()`, alongside `orders.clearCache()`: bumping the
-     *  epoch here is what makes the race in [enqueue] detectable. This repository holds no
-     *  in-memory cache of its own to drop — the DAO is the only state — so there is nothing
-     *  else to clear. */
-    fun clearCache() { epoch.incrementAndGet() }
 
     fun observeForOrder(orderId: String): Flow<List<PendingUpload>> =
         dao.observeForOrder(orderId).map { rows -> rows.map { it.toPending() } }
@@ -57,32 +45,31 @@ class OutboxRepository @Inject constructor(
      * Records the upload and hands scheduling to WorkManager. The prepared photo
      * is moved out of the cache into files/, because the OS may clear the cache
      * while the phone waits for a signal and the photo is the whole point.
+     *
+     * The row is stamped with the operator signed in at this moment, and that stamp is what
+     * decides who may send it later. Nobody signed in means no owner to stamp, so the enqueue
+     * fails: a row nobody owns is unsendable, and writing one would only leave the operator
+     * believing their delivery proof was queued. The photo is left where the caller put it —
+     * nothing is moved before the owner is known.
      */
     override suspend fun enqueue(
         kind: OutboxKind, orderId: String, shipmentId: String?,
         photo: PreparedImage?, payload: JsonObject,
     ): String {
-        val started = epoch.get()
+        val ownerId = currentUser.id()
+            ?: error("Сеанс тугаган, қайтадан киринг · No signed-in user to own this upload")
         val id = UUID.randomUUID().toString()
         val stored = photo?.let { moveIntoOutbox(it.file, id) }
         val now = System.currentTimeMillis()
         dao.upsert(
             OutboxEntity(
-                id = id, kind = kind.name, orderId = orderId, shipmentId = shipmentId,
+                id = id, ownerId = ownerId, kind = kind.name, orderId = orderId, shipmentId = shipmentId,
                 paymentId = null, filePath = stored?.absolutePath,
                 payloadJson = json.encodeToString(JsonObject.serializer(), payload),
                 state = OutboxState.QUEUED, attempts = 0, lastError = null,
                 createdAt = now, updatedAt = now,
             )
         )
-        if (epoch.get() != started) {
-            // Signed out while this row was being written: it belongs to the session that
-            // signOut() just wiped. Roll it back instead of scheduling it for whoever signs
-            // in next — never leave the moved file or the row behind.
-            dao.delete(id)
-            stored?.delete()
-            error("Чиқиш вақтида бекор қилинди · Cancelled: signed out mid-enqueue")
-        }
         scheduler.schedule(id)
         return id
     }
