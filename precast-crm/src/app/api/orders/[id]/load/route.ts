@@ -30,10 +30,10 @@ export const POST = withPermission<{ id: string }>(
   "order.edit",
   withIdempotency<{ id: string }>(async (req: NextRequest, { user, params }) => {
     const order = await prisma.order.findUnique({ where: { id: params.id } });
-    if (!order) return fail("Order not found", 404);
+    if (!order) return fail("Буюртма топилмади · Order not found", 404);
     if (order.status !== "PLACED" && order.status !== "IN_PRODUCTION") {
       return fail(
-        `Order must be PLACED or IN_PRODUCTION to load (current: ${order.status})`,
+        `Буюртма ҳолати юклашга мос эмас (ҳозир: ${order.status}) · Order must be PLACED or IN_PRODUCTION to load (current: ${order.status})`,
         422,
       );
     }
@@ -42,7 +42,7 @@ export const POST = withPermission<{ id: string }>(
     try {
       formData = await req.formData();
     } catch {
-      return fail("Expected multipart/form-data", 400);
+      return fail("Расм юборилмади · Expected multipart/form-data", 400);
     }
 
     let uploadUrl: string;

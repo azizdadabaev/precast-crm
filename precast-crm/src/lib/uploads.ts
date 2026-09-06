@@ -107,22 +107,22 @@ export async function saveImageFromFormData(
   basename: string,
 ): Promise<{ url: string; filename: string; size: number; mime: string }> {
   if (!file || typeof file !== "object" || !("arrayBuffer" in file) || !("type" in file) || !("size" in file)) {
-    throw new UploadError("file is required", 422);
+    throw new UploadError("Расм танланмади · file is required", 422);
   }
   const f = file as File;
   const mime = (f.type || "").toLowerCase();
 
   if (!ALLOWED_IMAGE_MIME.has(mime)) {
     throw new UploadError(
-      `Only JPG, PNG, or WEBP images are accepted (got "${mime || "unknown"}")`,
+      `Фақат JPG, PNG ёки WEBP расм юборинг · Only JPG, PNG, or WEBP images are accepted (got "${mime || "unknown"}")`,
       422,
     );
   }
   if (f.size > MAX_IMAGE_SIZE_BYTES) {
-    throw new UploadError("Image is too large (max 8 MB)", 413);
+    throw new UploadError("Расм жуда катта (мак. 8 МБ) · Image is too large (max 8 MB)", 413);
   }
   if (f.size === 0) {
-    throw new UploadError("Image is empty", 422);
+    throw new UploadError("Расм бўш · Image is empty", 422);
   }
 
   const ext = IMG_EXT_BY_MIME[mime] ?? "jpg";
@@ -137,7 +137,7 @@ export async function saveImageFromFormData(
   // JPEG / PNG / WEBP before persisting, so a tampered client can't push a
   // non-image (e.g. .svg/.html) past the type check above.
   if (!imageExtFromBytes(buffer)) {
-    throw new UploadError("File does not appear to be a valid JPG, PNG, or WEBP image", 422);
+    throw new UploadError("Файл ҳақиқий JPG, PNG ёки WEBP расм эмас · File does not appear to be a valid JPG, PNG, or WEBP image", 422);
   }
   await fs.writeFile(filepath, buffer);
 

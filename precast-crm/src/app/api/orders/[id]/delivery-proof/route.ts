@@ -43,8 +43,8 @@ export const POST = withPermission<{ id: string }>(
     where: { id: params.id },
     include: { dispatch: true },
   });
-  if (!order) return fail("Order not found", 404);
-  if (order.status === "CANCELED") return fail("Cannot modify a canceled order", 422);
+  if (!order) return fail("Буюртма топилмади · Order not found", 404);
+  if (order.status === "CANCELED") return fail("Бекор қилинган буюртмани ўзгартириб бўлмайди · Cannot modify a canceled order", 422);
   // Accept LOADED (3-step UI: PLACED → LOADED → DELIVERED, no dispatch),
   // DISPATCHED (driver-assigned flow), and IN_PRODUCTION (legacy /
   // direct-to-delivery without going through load).
@@ -54,7 +54,7 @@ export const POST = withPermission<{ id: string }>(
     order.status !== "DISPATCHED"
   ) {
     return fail(
-      `Delivery proof can only be uploaded from LOADED, IN_PRODUCTION, or DISPATCHED (current: ${order.status})`,
+      `Буюртма ҳолати етказиш исботига мос эмас (ҳозир: ${order.status}) · Delivery proof can only be uploaded from LOADED, IN_PRODUCTION, or DISPATCHED (current: ${order.status})`,
       422,
     );
   }
@@ -63,7 +63,7 @@ export const POST = withPermission<{ id: string }>(
   try {
     formData = await req.formData();
   } catch {
-    return fail("Expected multipart/form-data", 400);
+    return fail("Расм юборилмади · Expected multipart/form-data", 400);
   }
 
   const file = formData.get("file");
@@ -85,13 +85,13 @@ export const POST = withPermission<{ id: string }>(
 
   if (noCashCollected) {
     if (cashAmount !== 0) {
-      return fail("noCashCollected and cashAmount > 0 are mutually exclusive", 422);
+      return fail("«Нақд олинмади» белгиланганда сумма нолдан катта бўлмаслиги керак · noCashCollected and cashAmount > 0 are mutually exclusive", 422);
     }
     if (!noCashCollectedNote || noCashCollectedNote.trim().length < 3) {
-      return fail("A note explaining why no cash was collected is required", 422);
+      return fail("Нақд олинмагани сабабини ёзинг · A note explaining why no cash was collected is required", 422);
     }
   }
-  if (cashAmount < 0) return fail("cashAmount cannot be negative", 422);
+  if (cashAmount < 0) return fail("Сумма манфий бўлиши мумкин эмас · cashAmount cannot be negative", 422);
 
   // Pull calc snapshot for inventory decrement
   const project = await prisma.project.findUniqueOrThrow({

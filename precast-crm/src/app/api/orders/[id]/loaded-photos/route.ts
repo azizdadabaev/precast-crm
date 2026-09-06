@@ -14,12 +14,15 @@ import { recordAudit } from "@/lib/audit";
  *  photo to an already-loaded order. Multipart: file. Does NOT change status. */
 export const POST = withPermission<{ id: string }>("order.edit", withIdempotency<{ id: string }>(async (req: NextRequest, { user, params }) => {
   const order = await prisma.order.findUnique({ where: { id: params.id }, select: { id: true, status: true, orderNumber: true } });
-  if (!order) return fail("Order not found", 404);
+  if (!order) return fail("Буюртма топилмади · Order not found", 404);
   if (!canAddLoadedPhoto(order.status)) {
-    return fail(`Order must be loaded first (current: ${order.status})`, 422);
+    return fail(
+      `Аввал буюртмани юкланган деб белгиланг (ҳозир: ${order.status}) · Order must be loaded first (current: ${order.status})`,
+      422,
+    );
   }
   let formData: FormData;
-  try { formData = await req.formData(); } catch { return fail("Expected multipart/form-data", 400); }
+  try { formData = await req.formData(); } catch { return fail("Расм юборилмади · Expected multipart/form-data", 400); }
   let url: string;
   try {
     const saved = await saveImageFromFormData(formData.get("file"), `orders/${params.id}`, `loaded-${Date.now()}`);

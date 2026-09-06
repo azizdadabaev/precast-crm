@@ -23,16 +23,16 @@ export const POST = withPermission<{ id: string; sid: string }>(
     const shipment = await prisma.shipment.findFirst({
       where: { id: params.sid, orderId: params.id },
     });
-    if (!shipment) return fail("Shipment not found", 404);
+    if (!shipment) return fail("Жўнатма топилмади · Shipment not found", 404);
     if (shipment.status !== "PENDING") {
-      return fail(`Shipment is already ${shipment.status}`, 422);
+      return fail(`Жўнатма аллақачон ${shipment.status} ҳолатида · Shipment is already ${shipment.status}`, 422);
     }
 
     let formData: FormData;
     try {
       formData = await req.formData();
     } catch {
-      return fail("Expected multipart/form-data", 400);
+      return fail("Расм юборилмади · Expected multipart/form-data", 400);
     }
 
     const beamsRaw = formData.get("loadedBeams");
@@ -44,7 +44,7 @@ export const POST = withPermission<{ id: string; sid: string }>(
       if (beamsRaw) loadedBeams = JSON.parse(String(beamsRaw));
       if (blocksRaw) loadedBlocks = parseInt(String(blocksRaw), 10);
     } catch {
-      return fail("Invalid loadedBeams JSON", 400);
+      return fail("Юкланган балкалар маълумоти нотўғри · Invalid loadedBeams JSON", 400);
     }
 
     // Over-load guard (defense-in-depth; the client also blocks this): this
@@ -61,7 +61,7 @@ export const POST = withPermission<{ id: string; sid: string }>(
         },
       },
     });
-    if (!order) return fail("Order not found", 404);
+    if (!order) return fail("Буюртма топилмади · Order not found", 404);
 
     const beamTotals: Record<string, number> = {};
     let blocksTotal = 0;
@@ -81,13 +81,16 @@ export const POST = withPermission<{ id: string; sid: string }>(
       const total = beamTotals[k] ?? 0;
       if ((otherBeams[k] ?? 0) + Number(v) > total) {
         return fail(
-          `Beam ${k}m over-loaded: already ${otherBeams[k] ?? 0} + ${v} exceeds order total ${total}`,
+          `${k} м балка ортиқча юкланди: ${otherBeams[k] ?? 0} + ${v} буюртмадаги ${total} тадан ошди · Beam ${k}m over-loaded: already ${otherBeams[k] ?? 0} + ${v} exceeds order total ${total}`,
           422,
         );
       }
     }
     if (otherBlocks + loadedBlocks > blocksTotal) {
-      return fail(`Blocks over-loaded: already ${otherBlocks} + ${loadedBlocks} exceeds order total ${blocksTotal}`, 422);
+      return fail(
+        `Блоклар ортиқча юкланди: ${otherBlocks} + ${loadedBlocks} буюртмадаги ${blocksTotal} тадан ошди · Blocks over-loaded: already ${otherBlocks} + ${loadedBlocks} exceeds order total ${blocksTotal}`,
+        422,
+      );
     }
 
     let uploadUrl: string;
