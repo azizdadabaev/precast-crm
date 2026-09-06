@@ -28,4 +28,11 @@ class KeypadInputTest {
         val long = "1".repeat(12)
         assertEquals(long, applyDigit(long, '9', false))
     }
+    @Test fun `the cap also blocks a decimal separator once the buffer is full`() {
+        val full = "1".repeat(12)
+        assertEquals(full, applyDigit(full, ',', true))
+    }
+    @Test fun `a second separator is rejected even with digits typed after the first`() {
+        assertEquals("1,5", applyDigit("1,5", ',', true))
+    }
 }

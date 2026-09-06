@@ -16,9 +16,9 @@ private const val MAX_DIGITS = 12
 
 /** Pure so the entry rules are unit-tested rather than driven through the UI. */
 fun applyDigit(current: String, digit: Char, allowDecimal: Boolean): String = when {
+    current.length >= MAX_DIGITS -> current
     digit == ',' || digit == '.' -> if (!allowDecimal || current.contains(',')) current else "${current.ifEmpty { "0" }},"
     !digit.isDigit() -> current
-    current.length >= MAX_DIGITS -> current
     current == "0" -> digit.toString()
     else -> current + digit
 }

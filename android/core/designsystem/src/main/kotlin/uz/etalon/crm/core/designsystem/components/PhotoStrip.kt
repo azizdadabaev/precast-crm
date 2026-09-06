@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CloudUpload
@@ -27,11 +28,16 @@ import uz.etalon.crm.core.designsystem.R
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 
 /**
- * One photo shown in a [PhotoStrip] or [Lightbox]. [pending] is true while the
- * photo still sits in the upload outbox and hasn't reached the server yet —
- * the strip dims it and marks it, rather than showing it as if it were sent.
+ * One photo shown in a [PhotoStrip] or [Lightbox].
+ *
+ * [id] is the server photo id once one exists — Task 15's long-press delete needs it —
+ * and is `null` for a photo still sitting in the upload outbox, because it genuinely
+ * has no server id yet; a queued local id would misrepresent it as addressable on the
+ * server when a delete or any other id-keyed call would fail against it.
+ * [pending] is true while the photo hasn't reached the server yet; the strip dims it
+ * and marks it rather than showing it as if it were already sent.
  */
-data class PhotoRef(val url: String, val pending: Boolean = false)
+data class PhotoRef(val id: String?, val url: String, val pending: Boolean = false)
 
 @Composable
 fun PhotoStrip(photos: List<PhotoRef>, onOpen: (Int) -> Unit, onAdd: (() -> Unit)? = null) {
@@ -49,12 +55,18 @@ fun PhotoStrip(photos: List<PhotoRef>, onOpen: (Int) -> Unit, onAdd: (() -> Unit
                         .clickable { onOpen(i) },
                 )
                 if (photo.pending) {
-                    Icon(
-                        Icons.Default.CloudUpload,
-                        contentDescription = stringResource(R.string.photo_pending),
-                        tint = Color.White,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
+                    Box(
+                        modifier = Modifier.align(Alignment.Center).size(36.dp)
+                            .background(Color.Black.copy(alpha = 0.55f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.CloudUpload,
+                            contentDescription = stringResource(R.string.photo_pending),
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         }
