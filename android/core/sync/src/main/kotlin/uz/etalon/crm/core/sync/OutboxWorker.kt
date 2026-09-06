@@ -149,7 +149,12 @@ class OutboxWorker @AssistedInject constructor(
         fun text(key: String, fallback: String = "") =
             (payload[key]?.jsonPrimitive?.content ?: fallback).toRequestBody(PLAIN)
 
-        when (OutboxKind.valueOf(row.kind)) {
+        when (OutboxKind.from(row.kind)) {
+            // Only reachable for a row a NEWER build wrote (the kind is a string, not an enum, so a
+            // future value needs no migration). This build has no endpoint for it; failing here
+            // sends it down outcomeFor's bug branch, which is a permanent Fail with the generic
+            // Uzbek message rather than a silent retry forever.
+            OutboxKind.UNKNOWN -> error("Unsupported outbox kind: ${row.kind}")
             OutboxKind.LOAD_TRUCK -> api.loadTruck(row.orderId, part, row.id, authorization)
             OutboxKind.ADD_LOADED_PHOTO -> api.addLoadedPhoto(row.orderId, part, row.id, authorization)
             OutboxKind.DELIVERY_PROOF -> api.deliveryProof(

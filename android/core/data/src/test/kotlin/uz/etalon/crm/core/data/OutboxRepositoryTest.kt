@@ -157,6 +157,56 @@ class OutboxRepositoryTest {
         assertTrue(dao.byId(id)!!.payloadJson.contains("1500000"))
     }
 
+    /** The link between what was queued and what the next truck is allowed to take: the load
+     *  screen's allowance subtracts these counts, and without them it offers the whole order and
+     *  earns a permanent 422 when the queue drains. */
+    @Test fun `a queued shipment load reports the beams and blocks it took`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+        val dao = FakeOutboxDao()
+        val r = repo(dao, RecordingScheduler(), File(tmp, "outbox"))
+        r.enqueue(
+            OutboxKind.LOAD_SHIPMENT, "o1", shipmentId = "s1",
+            payload = JsonObject(mapOf(
+                "loadedBeams" to JsonObject(mapOf("4.30" to JsonPrimitive(4))),
+                "loadedBlocks" to JsonPrimitive(50),
+            )),
+        )
+        r.observeForOrder("o1").test {
+            val item = awaitItem().single()
+            assertEquals(mapOf("4.30" to 4), item.loadedBeams)
+            assertEquals(50, item.loadedBlocks)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    /** Every other kind carries no counts, so nothing it queued may shrink a truck's allowance. */
+    @Test fun `a queued row of another kind reports no counts`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+        val dao = FakeOutboxDao()
+        val r = repo(dao, RecordingScheduler(), File(tmp, "outbox"))
+        r.enqueue(OutboxKind.DELIVERY_PROOF, "o1", payload = JsonObject(mapOf("cashAmount" to JsonPrimitive("100"))))
+        r.observeForOrder("o1").test {
+            val item = awaitItem().single()
+            assertTrue(item.loadedBeams.isEmpty())
+            assertEquals(0, item.loadedBlocks)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    /**
+     * `kind` is a string in the table precisely so a future value needs no schema migration.
+     * `valueOf` threw that away: a row written by a newer build would take down the flow — and with
+     * it the process — from inside a `stateIn` upstream, where nothing can catch it.
+     */
+    @Test fun `a kind this build does not know reads back as UNKNOWN instead of crashing`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+        val dao = FakeOutboxDao()
+        val r = repo(dao, RecordingScheduler(), File(tmp, "outbox"))
+        val id = r.enqueue(OutboxKind.LOAD_TRUCK, "o1")
+        dao.upsert(dao.byId(id)!!.copy(kind = "COLLECT_SIGNATURE"))
+        r.observeForOrder("o1").test {
+            assertEquals(OutboxKind.UNKNOWN, awaitItem().single().kind)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test fun `retry moves a failed row back to queued and reschedules it`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
         val dao = FakeOutboxDao(); val scheduler = RecordingScheduler()
         val r = repo(dao, scheduler, File(tmp, "outbox"))

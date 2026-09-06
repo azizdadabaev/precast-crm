@@ -9,10 +9,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.LogisticsRepository
 import uz.etalon.crm.core.data.OrdersRepository
+import uz.etalon.crm.core.data.OutboxRepository
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.image.ImagePrep
 import uz.etalon.crm.core.image.PreparedImage
@@ -84,6 +86,7 @@ open class ShipmentLoadViewModel(
 @HiltViewModel(assistedFactory = HiltShipmentLoadViewModel.Factory::class)
 class HiltShipmentLoadViewModel @AssistedInject constructor(
     private val orders: OrdersRepository,
+    private val outbox: OutboxRepository,
     logistics: LogisticsRepository,
     val imagePrep: ImagePrep,
     @Assisted("orderId") orderId: String,
@@ -97,10 +100,15 @@ class HiltShipmentLoadViewModel @AssistedInject constructor(
         // The order's rooms/shipments are already cached from the shipments list screen the
         // operator just came from, so this resolves near-instantly; it also keeps tracking the
         // allowance live so a concurrent update elsewhere is reflected here too.
+        //
+        // The outbox is combined in for the offline case: a load counted onto an earlier truck is
+        // sitting in the queue, invisible to the server, and without it the cap here would be the
+        // whole order total — a 422 that becomes permanent the moment the queue drains.
         viewModelScope.launch {
-            orders.detail(orderId).collect { r ->
-                r.dataOrNull?.let { applyAllowance(allowanceFor(it, excludingShipmentId = shipmentId)) }
-            }
+            combine(orders.detail(orderId), outbox.observeForOrder(orderId)) { r, queued -> r to queued }
+                .collect { (r, queued) ->
+                    r.dataOrNull?.let { applyAllowance(allowanceFor(it, excludingShipmentId = shipmentId, queued = queued)) }
+                }
         }
     }
 

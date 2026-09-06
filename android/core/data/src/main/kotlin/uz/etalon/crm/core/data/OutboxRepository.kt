@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import uz.etalon.crm.core.database.dao.OutboxDao
 import uz.etalon.crm.core.database.entity.OutboxEntity
 import uz.etalon.crm.core.database.entity.OutboxState
@@ -105,8 +108,23 @@ class OutboxRepository @Inject constructor(
         return dest
     }
 
-    private fun OutboxEntity.toPending() = PendingUpload(
-        id = id, kind = OutboxKind.valueOf(kind), orderId = orderId, shipmentId = shipmentId,
-        failed = state == OutboxState.FAILED, attempts = attempts, error = lastError,
-    )
+    private fun OutboxEntity.toPending(): PendingUpload {
+        // Nothing here suspends, so runCatching cannot swallow a CancellationException. A payload
+        // this build cannot parse (a row written by a newer version, a truncated write) must not
+        // take the whole flow down: the row is still shown, it just contributes no counts.
+        val payload = runCatching { json.decodeFromString(JsonObject.serializer(), payloadJson) }.getOrNull()
+        return PendingUpload(
+            id = id,
+            // A kind this build does not know is UNKNOWN, not a crash. `kind` is stored as a string
+            // precisely so a newer version's value needs no migration; valueOf would throw that
+            // benefit away from inside a stateIn upstream and take the process with it.
+            kind = OutboxKind.from(kind),
+            orderId = orderId, shipmentId = shipmentId,
+            failed = state == OutboxState.FAILED, attempts = attempts, error = lastError,
+            loadedBeams = payload?.get("loadedBeams")?.let { beams ->
+                runCatching { beams.jsonObject.mapValues { (_, v) -> v.jsonPrimitive.int } }.getOrNull()
+            }.orEmpty(),
+            loadedBlocks = payload?.get("loadedBlocks")?.let { runCatching { it.jsonPrimitive.int }.getOrNull() } ?: 0,
+        )
+    }
 }
