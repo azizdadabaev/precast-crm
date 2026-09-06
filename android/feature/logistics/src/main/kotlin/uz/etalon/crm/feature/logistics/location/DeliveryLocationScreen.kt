@@ -100,20 +100,40 @@ fun DeliveryLocationScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    fun fineLocationGranted() =
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    fun holds(permission: String) =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
-    var granted by remember { mutableStateOf(fineLocationGranted()) }
+    // Fine OR coarse, the same rule AndroidDeviceLocation applies. The screen used to check fine
+    // only, so an operator who tapped "Approximate" on the system dialog granted coarse, was never
+    // seen as granted, was re-asked until the system stopped showing the dialog, and then had the
+    // button permanently disabled — while the implementation underneath would have worked.
+    //
+    // Accepting coarse is the deliberate choice. It is less accurate than a delivery pin deserves,
+    // but the operator is standing at the address, sees the coordinates before tapping Save, and
+    // can correct them by hand or by pasting a map link. Refusing it would buy no better fix —
+    // Android gives an app no way to escalate from Approximate except sending the operator into
+    // system settings — and would leave the button dead for a permission they did grant.
+    fun locationGranted() =
+        holds(Manifest.permission.ACCESS_FINE_LOCATION) || holds(Manifest.permission.ACCESS_COARSE_LOCATION)
+
+    var granted by remember { mutableStateOf(locationGranted()) }
+    var approximateOnly by remember { mutableStateOf(locationGranted() && !holds(Manifest.permission.ACCESS_FINE_LOCATION)) }
     var requestedOnce by remember { mutableStateOf(false) }
     var permanentlyDenied by remember { mutableStateOf(false) }
 
+    /** Asked about the coarse permission: it is the weaker of the two and the one this screen will
+     *  settle for, so if the system will not even offer that dialog there is nothing left to ask. */
     fun currentShouldShowRationale(): Boolean {
         val activity = context.findActivity()
-        return activity != null && ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_FINE_LOCATION)
+        return activity != null && ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.ACCESS_COARSE_LOCATION)
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+    // Both permissions in one request, so Android 12+ shows the Precise/Approximate choice rather
+    // than a fine-only prompt whose "Approximate" answer reads back as a flat denial.
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        val isGranted = results.values.any { it }
         granted = isGranted
+        approximateOnly = isGranted && results[Manifest.permission.ACCESS_FINE_LOCATION] != true
         requestedOnce = true
         permanentlyDenied = isPermanentlyDenied(granted = isGranted, requested = true, shouldShowRationale = currentShouldShowRationale())
         if (isGranted) onUseMyLocation()
@@ -125,8 +145,9 @@ fun DeliveryLocationScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                val nowGranted = fineLocationGranted()
+                val nowGranted = locationGranted()
                 granted = nowGranted
+                approximateOnly = nowGranted && !holds(Manifest.permission.ACCESS_FINE_LOCATION)
                 permanentlyDenied = isPermanentlyDenied(granted = nowGranted, requested = requestedOnce, shouldShowRationale = currentShouldShowRationale())
             }
         }
@@ -182,11 +203,23 @@ fun DeliveryLocationScreen(
                     text = stringResource(R.string.location_my_position),
                     enabled = !permanentlyDenied && !s.busy,
                     loading = s.busy,
-                    onClick = { if (granted) onUseMyLocation() else permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
+                    onClick = {
+                        if (granted) onUseMyLocation()
+                        else permissionLauncher.launch(
+                            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                        )
+                    },
                 )
                 if (permanentlyDenied) {
                     Text(
                         stringResource(R.string.location_permission_needed),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (approximateOnly) {
+                    // The button works, but the operator should know the pin a truck will navigate
+                    // to is only as good as an approximate fix — and that they can fix it by hand.
+                    Text(
+                        stringResource(R.string.location_approximate_only),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

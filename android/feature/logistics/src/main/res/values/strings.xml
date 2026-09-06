@@ -54,6 +54,7 @@
     <string name="location_label">Белги (масалан «кўк дарвоза»)</string>
     <string name="location_none">Жой белгиланмаган</string>
     <string name="location_permission_needed">Жойни аниқлаш учун рухсат керак</string>
+    <string name="location_approximate_only">Жой тахминий аниқланади. Аниқроқ бўлиши учун созламалардан «Аниқ жой» рухсатини беринг ёки координатани қўлда киритинг.</string>
     <string name="location_failed">Жойни аниқлаш муваффақиятсиз тугади</string>
     <string name="action_navigate">Навигация</string>
     <string name="action_clear_location">Тозалаш</string>

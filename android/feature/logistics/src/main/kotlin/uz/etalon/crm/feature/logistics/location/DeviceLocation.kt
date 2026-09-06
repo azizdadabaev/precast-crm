@@ -25,6 +25,11 @@ import kotlin.coroutines.resume
  * — so [current] only ever runs once that permission is expected to already be granted; it
  * still re-checks defensively since a grant can be revoked from system settings while the app
  * is backgrounded, or `current()` could in principle be called before the screen's own check.
+ *
+ * FINE **or** COARSE counts as granted, and `DeliveryLocationScreen` gates on exactly the same
+ * rule — the two must not disagree, or an operator who chose "Approximate" hits a dead button on a
+ * permission that works. An approximate fix is accepted because the operator is at the address and
+ * reviews the coordinates before saving; the screen says so when that is all it got.
  */
 fun interface DeviceLocation {
     suspend fun current(): Result<LatLng>
