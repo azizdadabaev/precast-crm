@@ -40,6 +40,17 @@ data class LatLng(val lat: Double, val lng: Double)
  *  Phase 0 wrapped in withIdempotency; nothing else may be queued. */
 enum class OutboxKind { LOAD_TRUCK, ADD_LOADED_PHOTO, DELIVERY_PROOF, LOAD_SHIPMENT }
 
+/**
+ * The order statuses `POST /api/orders/{id}/shipments` accepts (see that route: it answers 422 with
+ * "Split shipments can only be created from PLACED, IN_PRODUCTION or DISPATCHED" for anything else —
+ * DISPATCHED is in the list because a later truck may be added once the first one has left).
+ *
+ * Lives here, in the module both `:feature:orders` and `:feature:logistics` already depend on, so
+ * the cockpit's "split this order" door and the shipment screen's own add button cannot drift apart.
+ */
+val SHIPMENT_CREATE_STATUSES: Set<OrderStatus> =
+    setOf(OrderStatus.PLACED, OrderStatus.IN_PRODUCTION, OrderStatus.DISPATCHED)
+
 data class PendingUpload(
     val id: String,
     val kind: OutboxKind,

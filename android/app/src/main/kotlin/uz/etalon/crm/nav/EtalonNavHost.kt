@@ -99,14 +99,15 @@ fun SignedInShell(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
             entryDecorators = rememberEntryDecorators(),
-            // Drivers is the one key that legitimately has no entry: it is registered per
-            // permission (below), so a back stack restored for an operator who has since lost
-            // driver.view would land on nothing, and crashing them out of the app is worse than
-            // an Uzbek notice. Every OTHER unregistered key is a wiring mistake and must still
-            // fail loudly here rather than be swallowed as a silent "no access".
+            // These keys legitimately have no entry sometimes: they are registered per permission
+            // (below), so a back stack restored for an operator who has since lost driver.view or
+            // dispatch.create would land on nothing, and crashing them out of the app is worse than
+            // an Uzbek notice. Every OTHER unregistered key is a wiring mistake and must still fail
+            // loudly here rather than be swallowed as a silent "no access".
             entryProvider = entryProvider(
                 fallback = { key ->
-                    if (key !is Drivers) error("No NavEntry registered for $key")
+                    val gated = key is Drivers || key is Shipments || key is ShipmentLoad || key is Dispatch
+                    if (!gated) error("No NavEntry registered for $key")
                     NavEntry(key) { NoAccessScreen() }
                 },
             ) {
@@ -129,25 +130,32 @@ fun SignedInShell(
                         onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
                     )
                 }
-                entry<Shipments> { k ->
-                    ShipmentsRoute(
-                        orderId = k.orderId,
-                        onLoadShipment = { backStack.add(ShipmentLoad(k.orderId, it)) },
-                        onDispatch = { backStack.add(Dispatch(k.orderId, it)) },
-                        onBack = { backStack.removeLastOrNull() },
-                    )
-                }
-                entry<ShipmentLoad> { k ->
-                    ShipmentLoadRoute(
-                        orderId = k.orderId, shipmentId = k.shipmentId,
-                        onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
-                    )
-                }
-                entry<Dispatch> { k ->
-                    DispatchRoute(
-                        orderId = k.orderId, shipmentId = k.shipmentId,
-                        onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
-                    )
+                // Every shipment and dispatch route is wrapped in withPermission("dispatch.create")
+                // server-side, and ROLE_TEMPLATES.SALES — the largest operator role — holds
+                // order.edit without it. Registered per permission for the same reason Drivers is:
+                // without it these screens do not exist, so no restored back stack can open them
+                // and walk the operator into a 403 that becomes a permanently failed upload.
+                if (me.can("dispatch.create")) {
+                    entry<Shipments> { k ->
+                        ShipmentsRoute(
+                            orderId = k.orderId,
+                            onLoadShipment = { backStack.add(ShipmentLoad(k.orderId, it)) },
+                            onDispatch = { backStack.add(Dispatch(k.orderId, it)) },
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
+                    entry<ShipmentLoad> { k ->
+                        ShipmentLoadRoute(
+                            orderId = k.orderId, shipmentId = k.shipmentId,
+                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                        )
+                    }
+                    entry<Dispatch> { k ->
+                        DispatchRoute(
+                            orderId = k.orderId, shipmentId = k.shipmentId,
+                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                        )
+                    }
                 }
                 entry<DeliveryProof> { k ->
                     DeliveryProofRoute(

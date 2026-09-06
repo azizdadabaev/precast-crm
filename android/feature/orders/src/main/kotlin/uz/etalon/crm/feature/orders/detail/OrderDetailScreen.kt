@@ -179,10 +179,25 @@ fun OrderDetailScreen(
                         }
                     }
                 }
-                // 4 · shipments — only once the order is actually split across trucks
-                if (o.shipments.isNotEmpty()) item {
-                    StatusStripeCard(stripe = LocalEtalonColors.current.border, onClick = onOpenShipments) {
+                // 4 · shipments. Once the order is split this lists the trucks; before it is split
+                // it is the ONLY way into the split flow (the web app has a dedicated button and
+                // Android had nothing), so it also renders empty for an operator who may create
+                // one. Tappable only with dispatch.create — every route behind it needs it.
+                val canOpenShipments = canOpenShipments(o, me)
+                if (o.shipments.isNotEmpty() || canOpenShipments) item {
+                    StatusStripeCard(
+                        stripe = LocalEtalonColors.current.border,
+                        onClick = if (canOpenShipments) onOpenShipments else null,
+                    ) {
                         SectionLabel(stringResource(R.string.shipments))
+                        if (o.shipments.isEmpty()) {
+                            Text(
+                                stringResource(R.string.split_into_shipments),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(vertical = 6.dp),
+                            )
+                        }
                         o.shipments.forEach { sh ->
                             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {

@@ -21,11 +21,16 @@ import javax.inject.Singleton
 /** Small seam so the repository's tests do not construct OrdersRepository. */
 interface OrdersGateway { suspend fun refreshDetail(id: String) }
 
+/** The permission every shipment and dispatch route is wrapped in server-side. Distinct from
+ *  `order.edit`: `ROLE_TEMPLATES.SALES` grants the latter and not this one. */
+private const val DISPATCH_CREATE = "dispatch.create"
+
 @Singleton
 class LogisticsRepository @Inject constructor(
     private val api: EtalonApi,
     private val outbox: OutboxGateway,
     private val orders: OrdersGateway,
+    private val permissions: PermissionGate,
 ) {
     // ── Queued: the server route is withIdempotency-wrapped ──────
 
@@ -48,10 +53,19 @@ class LogisticsRepository @Inject constructor(
             )
         }
 
+    /**
+     * The one queued route that is NOT `order.edit`: `POST /orders/{id}/shipments/{sid}/load` is
+     * wrapped in `withPermission("dispatch.create")`. Refused here rather than queued, because a
+     * queued 403 is not a recoverable error — `outcomeFor` makes it a permanent Fail, and that row
+     * then blocks the order's action bar and disables both Load and Delete on the truck, leaving
+     * deleting the photo as the only way out. The other three queued kinds need only `order.edit`,
+     * which the screens that reach them already gate on.
+     */
     suspend fun loadShipment(
         orderId: String, shipmentId: String, photo: PreparedImage?,
         beams: Map<String, Int>, blocks: Int,
     ): Result<String> = runCatchingCancellable {
+        if (!permissions.can(DISPATCH_CREATE)) error("Жўнатмаларни бошқаришга рухсат йўқ")
         val normalised = normaliseBeamKeys(beams.filterValues { it > 0 })
         outbox.enqueue(
             OutboxKind.LOAD_SHIPMENT, orderId, shipmentId = shipmentId, photo = photo,

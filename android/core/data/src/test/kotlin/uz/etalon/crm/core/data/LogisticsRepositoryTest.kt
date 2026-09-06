@@ -71,19 +71,25 @@ private class NoopOrders : OrdersGateway {
     override suspend fun refreshDetail(id: String) { refreshed += id }
 }
 
+/** An operator holding every permission — the case the pre-existing tests were written for. */
+private val GRANTED = PermissionGate { true }
+
+/** A SALES operator: `order.edit` and NOT `dispatch.create`, straight from ROLE_TEMPLATES. */
+private val SALES = PermissionGate { it == "order.edit" }
+
 class LogisticsRepositoryTest {
 
     @Test fun `loadTruck is queued, never sent directly`() = runTest {
         val outbox = SpyOutbox()
         val api = FailingApi()                       // any direct call fails the test
-        val id = LogisticsRepository(api, outbox, NoopOrders()).loadTruck("o1", photo = null).getOrThrow()
+        val id = LogisticsRepository(api, outbox, NoopOrders(), GRANTED).loadTruck("o1", photo = null).getOrThrow()
         assertEquals("outbox-1", id)
         assertEquals(OutboxKind.LOAD_TRUCK, outbox.calls.single().kind)
     }
 
     @Test fun `deliveryProof carries the cash fields in its payload`() = runTest {
         val outbox = SpyOutbox()
-        LogisticsRepository(FailingApi(), outbox, NoopOrders()).deliveryProof(
+        LogisticsRepository(FailingApi(), outbox, NoopOrders(), GRANTED).deliveryProof(
             "o1", photo = null,
             cash = DeliveryCash(amount = Money.parse("1500000"), driverReturned = true),
         ).getOrThrow()
@@ -94,7 +100,7 @@ class LogisticsRepositoryTest {
 
     @Test fun `loadShipment formats beam keys to two decimals`() = runTest {
         val outbox = SpyOutbox()
-        LogisticsRepository(FailingApi(), outbox, NoopOrders())
+        LogisticsRepository(FailingApi(), outbox, NoopOrders(), GRANTED)
             .loadShipment("o1", "s1", photo = null, beams = mapOf("3.3" to 5, "4" to 2), blocks = 120)
             .getOrThrow()
         val payload = outbox.calls.single().payload
@@ -103,15 +109,38 @@ class LogisticsRepositoryTest {
         assertFalse(payload.contains("\"3.3\":"))
     }
 
+    /**
+     * `POST /orders/{id}/shipments/{sid}/load` is wrapped in `withPermission("dispatch.create")`,
+     * which SALES does not hold. Queuing it anyway is not a recoverable mistake: the 403 comes back
+     * as a permanent Fail, and the failed row then blocks the order's action bar and disables both
+     * Load and Delete on that truck, leaving deleting the photo as the only way out. So the enqueue
+     * is refused before the photo is ever moved into the outbox.
+     */
+    @Test fun `loadShipment is refused for an operator without dispatch create`() = runTest {
+        val outbox = SpyOutbox()
+        val res = LogisticsRepository(FailingApi(), outbox, NoopOrders(), SALES)
+            .loadShipment("o1", "s1", photo = null, beams = mapOf("3.3" to 5), blocks = 10)
+        assertTrue(res.isFailure, "a load the server would answer 403 to must not be queued")
+        assertTrue(outbox.calls.isEmpty(), "nothing may reach the outbox")
+    }
+
+    @Test fun `loadShipment is queued for an operator who does hold dispatch create`() = runTest {
+        val outbox = SpyOutbox()
+        LogisticsRepository(FailingApi(), outbox, NoopOrders(), PermissionGate { it == "dispatch.create" })
+            .loadShipment("o1", "s1", photo = null, beams = mapOf("3.3" to 5), blocks = 10)
+            .getOrThrow()
+        assertEquals(OutboxKind.LOAD_SHIPMENT, outbox.calls.single().kind)
+    }
+
     @Test fun `createShipment goes straight to the network and refreshes the order`() = runTest {
         val api = RecordingApi(); val orders = NoopOrders()
-        LogisticsRepository(api, SpyOutbox(), orders).createShipment("o1").getOrThrow()
+        LogisticsRepository(api, SpyOutbox(), orders, GRANTED).createShipment("o1").getOrThrow()
         assertEquals(listOf("createShipment:o1"), api.calls)
         assertEquals(listOf("o1"), orders.refreshed)
     }
 
     @Test fun `an api failure comes back as a Result failure, not an exception`() = runTest {
-        val res = LogisticsRepository(FailingApi(), SpyOutbox(), NoopOrders()).createShipment("o1")
+        val res = LogisticsRepository(FailingApi(), SpyOutbox(), NoopOrders(), GRANTED).createShipment("o1")
         assertTrue(res.isFailure)
     }
 
@@ -125,7 +154,7 @@ class LogisticsRepositoryTest {
      */
     @Test fun `every LogisticsRepository online-only method leaves the outbox untouched`() = runTest {
         val outbox = SpyOutbox()
-        val repo = LogisticsRepository(FailingApi(), outbox, NoopOrders()) // FailingApi: the network call itself may fail, the outbox check does not depend on that
+        val repo = LogisticsRepository(FailingApi(), outbox, NoopOrders(), GRANTED) // FailingApi: the network call itself may fail, the outbox check does not depend on that
         val onlineOnly: List<Pair<String, suspend () -> Result<*>>> = listOf(
             "createShipment" to { repo.createShipment("o1") },
             "deleteShipment" to { repo.deleteShipment("o1", "s1") },

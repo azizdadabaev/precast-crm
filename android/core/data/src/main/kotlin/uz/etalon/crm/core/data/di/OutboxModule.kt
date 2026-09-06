@@ -12,6 +12,7 @@ import uz.etalon.crm.core.data.OrdersGateway
 import uz.etalon.crm.core.data.OrdersRepository
 import uz.etalon.crm.core.data.OutboxGateway
 import uz.etalon.crm.core.data.OutboxRepository
+import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionCurrentUser
 import java.io.File
 import javax.inject.Named
@@ -26,6 +27,9 @@ abstract class OutboxModule {
     /** Reads the persisted session identity rather than SessionRepository, which would close a
      *  dependency cycle (SessionRepository -> OutboxRepository -> CurrentUser). */
     @Binds @Singleton abstract fun currentUser(impl: SessionCurrentUser): CurrentUser
+
+    /** Same persisted identity, read for its permission set — see [PermissionGate]. */
+    @Binds @Singleton abstract fun permissionGate(impl: SessionCurrentUser): PermissionGate
 
     companion object {
         @Provides @Singleton @Named("outboxDir")

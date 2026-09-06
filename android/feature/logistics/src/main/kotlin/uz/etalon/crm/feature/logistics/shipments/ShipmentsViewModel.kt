@@ -19,11 +19,11 @@ import uz.etalon.crm.core.data.OutboxRepository
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.OrderDetail
-import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.model.SHIPMENT_CREATE_STATUSES
 import uz.etalon.crm.core.model.ShipmentLine
 
-private val ADD_SHIPMENT_STATUSES = setOf(OrderStatus.PLACED, OrderStatus.IN_PRODUCTION, OrderStatus.DISPATCHED)
+
 
 data class ShipmentsUiState(
     val resource: Resource<OrderDetail> = Resource.Loading(null),
@@ -41,7 +41,7 @@ data class ShipmentsUiState(
     val resourceError: String? get() = (resource as? Resource.Error)?.error?.message
     /** The only offline signal this screen has: a refresh that failed for lack of a network. */
     val isOffline: Boolean get() = (resource as? Resource.Error)?.error is AppError.Network
-    val canAddShipment: Boolean get() = !busy && !isOffline && (order?.summary?.status?.let { it in ADD_SHIPMENT_STATUSES } ?: false)
+    val canAddShipment: Boolean get() = !busy && !isOffline && (order?.summary?.status?.let { it in SHIPMENT_CREATE_STATUSES } ?: false)
     /** Never true alongside [resourceError]: an empty list next to an error banner reads as "no
      *  trucks" when the truth is "couldn't check" — the state that fooled an operator standing
      *  at a truck with no signal. */

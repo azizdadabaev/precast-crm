@@ -16,6 +16,7 @@ import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.feature.orders.detail.NextStep
 import uz.etalon.crm.feature.orders.detail.canAddPhoto
+import uz.etalon.crm.feature.orders.detail.canOpenShipments
 import uz.etalon.crm.feature.orders.detail.nextStepFor
 import java.math.BigDecimal
 import java.time.Instant
@@ -24,6 +25,8 @@ class NextStepTest {
     private fun me(vararg p: String) = Me("u", "n", Role.CUSTOM, p.toSet(), false)
     private val editor = me("order.view", "order.edit", "dispatch.create")
     private val reader = me("order.view")
+    /** ROLE_TEMPLATES.SALES: order.edit, and deliberately NOT dispatch.create. */
+    private val sales = me("order.view", "order.edit")
 
     private fun shipment(id: String, status: ShipmentStatus) = ShipmentLine(
         id = id, number = 1, status = status, loadedBlocks = null, loadedPhotoUrl = null,
@@ -171,5 +174,42 @@ class NextStepTest {
             assertFalse(canAddPhoto(order(st), editor), st.name)
         }
         assertFalse(canAddPhoto(order(OrderStatus.LOADED), reader))
+    }
+
+    /**
+     * Every route behind the shipment list — load, dispatch, deliver, delete — is wrapped in
+     * `withPermission("dispatch.create")` server-side, and ROLE_TEMPLATES.SALES (the largest
+     * operator role) grants `order.edit` WITHOUT it. Offering the bar to that operator walks them
+     * through shooting a photo and counting beams for a 403 that becomes a permanently failed row.
+     */
+    @Test fun `a split order offers nothing to an operator without dispatch create`() {
+        val split = order(OrderStatus.PLACED, shipments = listOf(shipment("s1", ShipmentStatus.PENDING)))
+        assertEquals(NextStep.None, nextStepFor(split, sales, 0))
+        assertEquals(NextStep.ManageShipments, nextStepFor(split, editor, 0))
+    }
+
+    /**
+     * The door into the split flow, including creating an order's FIRST shipment — the path
+     * Android had no entry point for at all. Statuses come from `POST /orders/{id}/shipments`,
+     * which answers 422 for anything outside PLACED / IN_PRODUCTION / DISPATCHED.
+     */
+    @Test fun `the shipments door opens only with dispatch create and on a creatable status`() {
+        listOf(OrderStatus.PLACED, OrderStatus.IN_PRODUCTION, OrderStatus.DISPATCHED).forEach { st ->
+            assertTrue(canOpenShipments(order(st), editor), st.name)
+            assertFalse(canOpenShipments(order(st), sales), "SALES may not create a shipment on $st")
+        }
+        listOf(OrderStatus.DRAFT, OrderStatus.LOADED, OrderStatus.DELIVERED, OrderStatus.CANCELED).forEach { st ->
+            assertFalse(canOpenShipments(order(st), editor), st.name)
+        }
+    }
+
+    /** Once trucks exist the list is worth opening on any status — that is where they are loaded,
+     *  dispatched and delivered — but still only for an operator the server will let act. */
+    @Test fun `an already split order keeps the door open on every status, permission allowing`() {
+        val trucks = listOf(shipment("s1", ShipmentStatus.PENDING))
+        listOf(OrderStatus.LOADED, OrderStatus.DELIVERED, OrderStatus.CANCELED).forEach { st ->
+            assertTrue(canOpenShipments(order(st, trucks), editor), st.name)
+            assertFalse(canOpenShipments(order(st, trucks), sales), st.name)
+        }
     }
 }

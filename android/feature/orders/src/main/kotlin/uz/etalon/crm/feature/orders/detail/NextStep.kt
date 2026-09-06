@@ -3,6 +3,7 @@ package uz.etalon.crm.feature.orders.detail
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.model.SHIPMENT_CREATE_STATUSES
 
 sealed interface NextStep {
     data object LoadTruck : NextStep
@@ -58,13 +59,34 @@ fun nextStepFor(order: OrderDetail, me: Me, pendingUploads: Int, failedUploads: 
     if (status == OrderStatus.DELIVERED || status == OrderStatus.CANCELED || status == OrderStatus.DRAFT) return NextStep.None
     if (failedUploads > 0) return NextStep.Blocked(BLOCKED_FAILED)
     if (pendingUploads > 0) return NextStep.Blocked(BLOCKED_UPLOADING)
-    if (order.shipments.isNotEmpty()) return NextStep.ManageShipments
+    // Every action behind this branch — loading a truck, dispatching it, delivering it, deleting
+    // it — is wrapped in withPermission("dispatch.create") on the server, and ROLE_TEMPLATES.SALES
+    // (the largest operator role) has order.edit WITHOUT it. Offering the split path to that
+    // operator walks them through shooting a photo and counting beams for a 403 they cannot act on.
+    if (order.shipments.isNotEmpty()) return if (me.can(DISPATCH_CREATE)) NextStep.ManageShipments else NextStep.None
     return when (status) {
         OrderStatus.PLACED, OrderStatus.IN_PRODUCTION -> NextStep.LoadTruck
         OrderStatus.LOADED, OrderStatus.DISPATCHED -> NextStep.DeliveryProof
         else -> NextStep.None
     }
 }
+
+/** The permission every shipment and dispatch route is wrapped in server-side. Not `order.edit`:
+ *  the two are granted separately and a SALES operator holds only the latter. */
+internal const val DISPATCH_CREATE = "dispatch.create"
+
+/**
+ * Whether the shipments section is a door rather than a read-only summary — the one entry point to
+ * the split-truck flow, including creating an order's FIRST shipment, which Android otherwise had
+ * no way to do at all (the web app has a dedicated button for it).
+ *
+ * Two conditions, both taken from the server. The permission is the same one every shipment route
+ * is wrapped in. The status set is what `POST /api/orders/{id}/shipments` accepts — offering the
+ * door on, say, a LOADED order would only produce a 422.
+ */
+fun canOpenShipments(order: OrderDetail, me: Me): Boolean =
+    me.can(DISPATCH_CREATE) &&
+        (order.shipments.isNotEmpty() || order.summary.status in SHIPMENT_CREATE_STATUSES)
 
 /** Whether the photo strip offers its "add" tile. Independent of [nextStepFor]: an extra photo is
  *  welcome on a truck that is already loaded, on its way, or delivered — statuses where the next
