@@ -25,6 +25,7 @@ exifinterface = "1.4.2"
 junit4 = "4.13.2"
 workmanager = "2.11.0"
 hiltWork = "1.4.0"
+camerax = "1.6.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version = "1.19.0" }
@@ -82,6 +83,11 @@ work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "w
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hiltWork" }
 hilt-androidx-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hiltWork" }
 work-testing = { module = "androidx.work:work-testing", version.ref = "workmanager" }
+camera-core = { module = "androidx.camera:camera-core", version.ref = "camerax" }
+camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
+camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
+camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+camera-compose = { module = "androidx.camera:camera-compose", version.ref = "camerax" }
 # build-logic classpath
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
