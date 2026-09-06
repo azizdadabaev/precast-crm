@@ -4,5 +4,4 @@
     <string name="capture_no_camera">Камера мавжуд эмас. Галереядан танланг.</string>
     <string name="capture_permission_denied">Камерага рухсат берилмаган. Созламалардан рухсат беринг ёки галереядан танланг.</string>
     <string name="capture_failed">Расмни ўқиб бўлмади. Қайта уриниб кўринг.</string>
-    <string name="action_close_capture">Ёпиш</string>
 </resources>
