@@ -68,10 +68,10 @@ private class UnusedApi(
     override suspend fun registerDevice(body: DeviceRegisterRequest) = error("unused")
     override suspend fun unregisterDevice(token: String) = error("unused")
 
-    override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String): LoadedPhotoDto = throw NotImplementedError("unused")
-    override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String): GalleryPhotoDto = throw NotImplementedError("unused")
-    override suspend fun deliveryProof(id: String, file: MultipartBody.Part, cashAmount: RequestBody, noCashCollected: RequestBody, noCashCollectedNote: RequestBody, driverReturned: RequestBody, idempotencyKey: String): OrderStatusDto = throw NotImplementedError("unused")
-    override suspend fun loadShipment(id: String, sid: String, file: MultipartBody.Part, loadedBeams: RequestBody, loadedBlocks: RequestBody, idempotencyKey: String): ShipmentDto = throw NotImplementedError("unused")
+    override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = throw NotImplementedError("unused")
+    override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): GalleryPhotoDto = throw NotImplementedError("unused")
+    override suspend fun deliveryProof(id: String, file: MultipartBody.Part, cashAmount: RequestBody, noCashCollected: RequestBody, noCashCollectedNote: RequestBody, driverReturned: RequestBody, idempotencyKey: String, authorization: String): OrderStatusDto = throw NotImplementedError("unused")
+    override suspend fun loadShipment(id: String, sid: String, file: MultipartBody.Part, loadedBeams: RequestBody, loadedBlocks: RequestBody, idempotencyKey: String, authorization: String): ShipmentDto = throw NotImplementedError("unused")
     override suspend fun deleteLoadedPhoto(id: String, photoId: String): DeletedIdDto = throw NotImplementedError("unused")
     override suspend fun createShipment(id: String): ShipmentDto = throw NotImplementedError("unused")
     override suspend fun deleteShipment(id: String, sid: String): DeletedDto = throw NotImplementedError("unused")
@@ -107,6 +107,11 @@ private class GatedOrdersDao(
  *  no real background thread races against the virtual scheduler. */
 private object DirectExecutor : Executor {
     override fun execute(command: Runnable) = command.run()
+}
+
+private class SchedulerSpy : OutboxScheduler {
+    val scheduled = mutableListOf<String>()
+    override fun schedule(id: String) { scheduled += id }
 }
 
 /** Reports the exact moment `login()` stores the new session's token — the first moment an
@@ -160,7 +165,7 @@ class SessionSignOutOrderTest {
         val apiGate = CompletableDeferred<Unit>()
         val api = UnusedApi(apiGate, OrdersPageDto(listOf(summary), 1, 1, 20, 1))
         val orders = OrdersRepository(api, realDao, Json { ignoreUnknownKeys = true }, "https://x")
-        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders)
+        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders, SchedulerSpy())
 
         val refreshJob = launch { orders.refreshList(OrdersFilter()) }
         runCurrent() // the refresh is now parked inside the API call
@@ -195,9 +200,12 @@ class SessionSignOutOrderTest {
         return file
     }
 
-    private fun session(db: EtalonDatabase, api: EtalonApi, tokens: TokenStore = InMemoryTokenStore()): SessionRepository {
+    private fun session(
+        db: EtalonDatabase, api: EtalonApi, tokens: TokenStore = InMemoryTokenStore(),
+        scheduler: OutboxScheduler = SchedulerSpy(),
+    ): SessionRepository {
         val orders = OrdersRepository(api, db.ordersDao(), Json { ignoreUnknownKeys = true }, "https://x")
-        return SessionRepository(api, tokens, SessionPrefs(FakeDataStore()), db, orders)
+        return SessionRepository(api, tokens, SessionPrefs(FakeDataStore()), db, orders, scheduler)
     }
 
     /**
@@ -225,12 +233,29 @@ class SessionSignOutOrderTest {
     @Test fun `signing back in as the same operator keeps their queued row, still claimable`() = runTest {
         val db = realDatabase()
         val myFile = queuedRow(db, "mine", owner = "u1")
+        val scheduler = SchedulerSpy()
 
-        session(db, UnusedApi(loginResponse = loginResponse("u1"))).login("owner", "1234").getOrThrow()
+        session(db, UnusedApi(loginResponse = loginResponse("u1")), scheduler = scheduler).login("owner", "1234").getOrThrow()
 
         assertEquals(listOf("mine"), db.outboxDao().observeAll().first().map { it.id })
         assertTrue("the photo must still be on disk", myFile.exists())
         assertEquals("and the row must still be sendable", "mine", db.outboxDao().claimNext(ownerId = "u1", at = 1)?.id)
+    }
+
+    /**
+     * Surviving is not enough — something has to send it. The drain that ran while the operator was
+     * on the PIN screen found no owner and returned success, which ends WorkManager's unique-work
+     * chain; without a kick here the preserved delivery proof sits QUEUED until the next enqueue or
+     * a process restart. That is Task 7's stranded-upload failure arriving through a new door.
+     */
+    @Test fun `signing in schedules a drain for the rows that survived`() = runTest {
+        val db = realDatabase()
+        queuedRow(db, "mine", owner = "u1")
+        val scheduler = SchedulerSpy()
+
+        session(db, UnusedApi(loginResponse = loginResponse("u1")), scheduler = scheduler).login("owner", "1234").getOrThrow()
+
+        assertEquals("a successful sign-in must nudge the outbox", 1, scheduler.scheduled.size)
     }
 
     /** Sign-out ends the session, not the operator's queued work: the rows wait for them. The

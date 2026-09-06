@@ -24,6 +24,7 @@ import uz.etalon.crm.core.database.entity.OutboxState
 import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.EtalonJson
+import uz.etalon.crm.core.network.TokenProvider
 import uz.etalon.crm.core.network.dto.*
 import java.io.File
 import kotlinx.serialization.json.JsonObject
@@ -41,10 +42,10 @@ private open class StubApi : EtalonApi {
     override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto = error("unused")
     override suspend fun order(id: String): OrderDetailDto = error("unused")
 
-    override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String): LoadedPhotoDto = error("unused")
-    override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String): GalleryPhotoDto = error("unused")
-    override suspend fun deliveryProof(id: String, file: MultipartBody.Part, cashAmount: RequestBody, noCashCollected: RequestBody, noCashCollectedNote: RequestBody, driverReturned: RequestBody, idempotencyKey: String): OrderStatusDto = error("unused")
-    override suspend fun loadShipment(id: String, sid: String, file: MultipartBody.Part, loadedBeams: RequestBody, loadedBlocks: RequestBody, idempotencyKey: String): ShipmentDto = error("unused")
+    override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = error("unused")
+    override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): GalleryPhotoDto = error("unused")
+    override suspend fun deliveryProof(id: String, file: MultipartBody.Part, cashAmount: RequestBody, noCashCollected: RequestBody, noCashCollectedNote: RequestBody, driverReturned: RequestBody, idempotencyKey: String, authorization: String): OrderStatusDto = error("unused")
+    override suspend fun loadShipment(id: String, sid: String, file: MultipartBody.Part, loadedBeams: RequestBody, loadedBlocks: RequestBody, idempotencyKey: String, authorization: String): ShipmentDto = error("unused")
 
     override suspend fun deleteLoadedPhoto(id: String, photoId: String): DeletedIdDto = error("unused")
     override suspend fun createShipment(id: String): ShipmentDto = error("unused")
@@ -68,6 +69,12 @@ private class RecordingOrders : OrdersGateway {
 
 /** The operator every test row belongs to unless it says otherwise. */
 private const val SIGNED_IN = "u1"
+
+/** The stored session token, mutable so a test can change it mid-drain. */
+private class FakeTokens(var value: String?) : TokenProvider {
+    override suspend fun token() = value
+    override suspend fun onUnauthorized() { value = null }
+}
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -93,11 +100,12 @@ class OutboxWorkerTest {
 
     private fun worker(
         dao: OutboxDao, api: EtalonApi, orders: OrdersGateway, signedIn: String? = SIGNED_IN,
+        tokens: TokenProvider = FakeTokens("tok"),
     ): OutboxWorker {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = object : WorkerFactory() {
             override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
-                OutboxWorker(appContext, workerParameters, dao, api, orders, EtalonJson.create(), CurrentUser { signedIn })
+                OutboxWorker(appContext, workerParameters, dao, api, orders, EtalonJson.create(), CurrentUser { signedIn }, tokens)
         }
         return TestListenableWorkerBuilder<OutboxWorker>(context).setWorkerFactory(factory).build()
     }
@@ -105,7 +113,7 @@ class OutboxWorkerTest {
     @Test fun `resetRunning runs before the first claim, so a row stranded by a killed process is not stuck forever`() = runTest {
         val dao = db().outboxDao()
         dao.upsert(row("stranded", "o1", OutboxState.RUNNING, created = 1))
-        val api = object : StubApi() { override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String) = LoadedPhotoDto("https://x/1.jpg") }
+        val api = object : StubApi() { override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String) = LoadedPhotoDto("https://x/1.jpg") }
         val orders = RecordingOrders()
 
         val result = worker(dao, api, orders).doWork()
@@ -122,7 +130,7 @@ class OutboxWorkerTest {
         dao.upsert(row("old-retries", "o1", created = 1))
         dao.upsert(row("new-succeeds", "o2", created = 2))
         val api = object : StubApi() {
-            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String): LoadedPhotoDto =
+            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto =
                 if (id == "o1") throw ApiException(500, "Server error") else LoadedPhotoDto("https://x/2.jpg")
         }
         val orders = RecordingOrders()
@@ -139,7 +147,7 @@ class OutboxWorkerTest {
         val dao = db().outboxDao()
         dao.upsert(row("flaky", "o1", created = 1).copy(attempts = 2))
         val api = object : StubApi() {
-            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String): LoadedPhotoDto =
+            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto =
                 throw ApiException(503, "Service unavailable")
         }
 
@@ -159,7 +167,7 @@ class OutboxWorkerTest {
         dao.upsert(row("mine", "o2", created = 2, owner = SIGNED_IN))
         val sent = mutableListOf<String>()
         val api = object : StubApi() {
-            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String): LoadedPhotoDto {
+            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto {
                 sent += id
                 return LoadedPhotoDto("https://x/1.jpg")
             }
@@ -173,6 +181,31 @@ class OutboxWorkerTest {
         assertEquals(null, dao.byId("mine"))
         assertEquals(OutboxState.QUEUED, dao.byId("theirs")?.state)
         assertEquals(listOf("o2"), orders.refreshed)
+    }
+
+    /**
+     * The credential is pinned when the drain starts and travels on the request itself, so a token
+     * that changes mid-drain (another operator signing in) cannot be substituted by the interceptor's
+     * live read between a row being claimed and its upload leaving. Without this, the second row here
+     * — this operator's photo and cash figure — would be posted as whoever signed in.
+     */
+    @Test fun `every upload carries the token the drain started with, not the stored one`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("a", "o1", created = 1))
+        dao.upsert(row("b", "o2", created = 2))
+        val tokens = FakeTokens("tokX")
+        val sentWith = mutableListOf<String>()
+        val api = object : StubApi() {
+            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto {
+                sentWith += authorization
+                tokens.value = "tokY" // another operator signs in while the drain is running
+                return LoadedPhotoDto("https://x/1.jpg")
+            }
+        }
+
+        worker(dao, api, RecordingOrders(), tokens = tokens).doWork()
+
+        assertEquals(listOf("Bearer tokX", "Bearer tokX"), sentWith)
     }
 
     /** No signed-in operator means no owner to drain for. That is an ordinary state (the app sits
@@ -196,7 +229,7 @@ class OutboxWorkerTest {
         dao.upsert(row("a", "o1", created = 1))
         dao.upsert(row("b", "o1", created = 2))
         val api = object : StubApi() {
-            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String) = LoadedPhotoDto("https://x/1.jpg")
+            override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String) = LoadedPhotoDto("https://x/1.jpg")
         }
         val orders = RecordingOrders()
 

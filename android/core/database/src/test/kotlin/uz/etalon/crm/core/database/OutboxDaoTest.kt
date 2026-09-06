@@ -37,7 +37,7 @@ class OutboxDaoTest {
         dao.upsert(row("b", "o1", created = 2))
         dao.upsert(row("a", "o1", created = 1))
         dao.upsert(row("c", "o2", created = 3))
-        dao.observeForOrder("o1").test {
+        dao.observeForOrder("o1", ownerId = "u1").test {
             assertEquals(listOf("a", "b"), awaitItem().map { it.id })
             cancelAndIgnoreRemainingEvents()
         }
@@ -47,8 +47,26 @@ class OutboxDaoTest {
         val dao = db().outboxDao()
         dao.upsert(row("b", "o1", created = 5))
         dao.upsert(row("a", "o1", created = 5))
-        dao.observeForOrder("o1").test {
+        dao.observeForOrder("o1", ownerId = "u1").test {
             assertEquals(listOf("a", "b"), awaitItem().map { it.id })
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    /** What the operator sees is their own queue. A row of someone else's that outlived a purge
+     *  (enqueued in flight as they signed in) must not show up as work this operator can neither
+     *  send nor retry. */
+    @Test fun `the observed queue and pending count cover only the caller's own rows`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("theirs", "o1", created = 1, owner = "u2"))
+        dao.upsert(row("mine", "o1", created = 2, owner = "u1"))
+
+        dao.observeForOrder("o1", ownerId = "u1").test {
+            assertEquals(listOf("mine"), awaitItem().map { it.id })
+            cancelAndIgnoreRemainingEvents()
+        }
+        dao.observePendingCount(ownerId = "u1").test {
+            assertEquals(1, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -84,6 +102,17 @@ class OutboxDaoTest {
         assertNull(dao.claimNext(ownerId = "u1", at = 10))
         assertEquals(OutboxState.QUEUED, dao.byId("theirs")?.state)
         assertEquals("theirs", dao.claimNext(ownerId = "u2", at = 11)?.id)
+    }
+
+    /** The claim is two statements and both must carry the owner. This pins the second one on its
+     *  own: even handed the row's id, the flip to RUNNING must refuse for the wrong owner. */
+    @Test fun `claimIfQueued refuses a row that belongs to another operator`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("theirs", "o1", owner = "u2"))
+
+        assertEquals(0, dao.claimIfQueued("theirs", ownerId = "u1", at = 10))
+        assertEquals(OutboxState.QUEUED, dao.byId("theirs")?.state)
+        assertEquals(1, dao.claimIfQueued("theirs", ownerId = "u2", at = 11))
     }
 
     @Test fun `claimNext takes the caller's oldest row, past an older row of another operator`() = runTest {

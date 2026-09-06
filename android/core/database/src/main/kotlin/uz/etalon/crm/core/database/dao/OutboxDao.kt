@@ -14,8 +14,10 @@ interface OutboxDao {
     @Query("SELECT * FROM outbox ORDER BY createdAt, id")
     fun observeAll(): Flow<List<OutboxEntity>>
 
-    @Query("SELECT * FROM outbox WHERE orderId = :orderId ORDER BY createdAt, id")
-    fun observeForOrder(orderId: String): Flow<List<OutboxEntity>>
+    /** Scoped to one owner: what the operator sees is their own queue. A row of someone else's
+     *  that outlived the sign-in purge is not theirs to see, retry or cancel. */
+    @Query("SELECT * FROM outbox WHERE orderId = :orderId AND ownerId = :ownerId ORDER BY createdAt, id")
+    fun observeForOrder(orderId: String, ownerId: String): Flow<List<OutboxEntity>>
 
     @Query("SELECT * FROM outbox WHERE id = :id")
     suspend fun byId(id: String): OutboxEntity?
@@ -68,8 +70,9 @@ interface OutboxDao {
     @Query("SELECT COUNT(*) FROM outbox")
     suspend fun countPending(): Int
 
-    @Query("SELECT COUNT(*) FROM outbox")
-    fun observePendingCount(): Flow<Int>
+    /** The operator's own pending badge — see [observeForOrder]. */
+    @Query("SELECT COUNT(*) FROM outbox WHERE ownerId = :ownerId")
+    fun observePendingCount(ownerId: String): Flow<Int>
 
     @Query("SELECT filePath FROM outbox WHERE ownerId != :ownerId AND filePath IS NOT NULL")
     suspend fun filePathsOwnedByOthers(ownerId: String): List<String>

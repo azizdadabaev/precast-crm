@@ -18,7 +18,12 @@ class AuthInterceptor(private val tokens: TokenProvider) : Interceptor {
         val req = chain.request()
         val isPublic = PUBLIC_PATHS.any { req.url.encodedPath == it }
         val keepsSession = isPublic || NO_SESSION_CLEAR_PATHS.any { req.url.encodedPath == it }
-        val token = if (isPublic) null else runBlocking { tokens.token() }
+        // A caller that set its own Authorization header pinned a specific credential on purpose —
+        // the outbox drain does, so a row claimed under one operator cannot be sent under the next
+        // one's token if the session changes hands mid-drain. Reading the store here and calling
+        // .header() would silently replace it. Public paths never carry one.
+        val pinned = !isPublic && req.header("Authorization") != null
+        val token = if (isPublic || pinned) null else runBlocking { tokens.token() }
         val authed = if (token != null) req.newBuilder().header("Authorization", "Bearer $token").build() else req
         val res = chain.proceed(authed)
         if (res.code == 401 && !keepsSession) runBlocking { tokens.onUnauthorized() }

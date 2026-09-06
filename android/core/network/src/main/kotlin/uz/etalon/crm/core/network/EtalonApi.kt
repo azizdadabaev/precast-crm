@@ -22,6 +22,12 @@ interface EtalonApi {
     // ── Camera uploads. Every one of these routes is withIdempotency-wrapped on
     // the server, which is exactly why they are the operations the outbox may
     // queue and retry. The key is a client UUID reused across retries.
+    //
+    // These four alone carry their credential explicitly: the outbox drain pins the token it
+    // started with and passes it here, because `AuthInterceptor` reads the store live, once per
+    // call, and a row claimed under one operator must not go out under the next one's token if
+    // the session changes hands mid-drain. The interceptor leaves an Authorization header the
+    // caller already set. Every other route omits it and gets the live token, as before.
 
     @Multipart
     @POST("/api/orders/{id}/load")
@@ -29,6 +35,7 @@ interface EtalonApi {
         @Path("id") id: String,
         @Part file: MultipartBody.Part,
         @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("Authorization") authorization: String,
     ): LoadedPhotoDto
 
     @Multipart
@@ -37,6 +44,7 @@ interface EtalonApi {
         @Path("id") id: String,
         @Part file: MultipartBody.Part,
         @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("Authorization") authorization: String,
     ): GalleryPhotoDto
 
     @Multipart
@@ -49,6 +57,7 @@ interface EtalonApi {
         @Part("noCashCollectedNote") noCashCollectedNote: RequestBody,
         @Part("driverReturned") driverReturned: RequestBody,
         @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("Authorization") authorization: String,
     ): OrderStatusDto
 
     @Multipart
@@ -60,6 +69,7 @@ interface EtalonApi {
         @Part("loadedBeams") loadedBeams: RequestBody,
         @Part("loadedBlocks") loadedBlocks: RequestBody,
         @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("Authorization") authorization: String,
     ): ShipmentDto
 
     // ── Online-only mutations (no server-side idempotency, so never queued)

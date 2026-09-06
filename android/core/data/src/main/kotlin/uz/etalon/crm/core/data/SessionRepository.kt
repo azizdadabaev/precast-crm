@@ -21,7 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class SessionRepository @Inject constructor(
     private val api: EtalonApi, private val tokens: TokenStore, private val prefs: SessionPrefs, private val db: EtalonDatabase,
-    private val orders: OrdersRepository,
+    private val orders: OrdersRepository, private val outboxScheduler: OutboxScheduler,
 ) {
     private val _me = MutableStateFlow<Me?>(null)
     val me: StateFlow<Me?> = _me.asStateFlow()
@@ -42,6 +42,12 @@ class SessionRepository @Inject constructor(
      * the operator who took it: a *different* operator signing in destroys it (rows and JPEGs),
      * while the same operator signing back in — the routine path after a 401, since there is no
      * token refresh — keeps it and sends it.
+     *
+     * The drain is scheduled last, and it is not optional. A drain that ran while this operator was
+     * on the PIN screen found no signed-in user, returned success, and thereby ended WorkManager's
+     * unique-work chain; without this kick their preserved delivery proof would sit QUEUED with
+     * nothing left to nudge it until the next enqueue or a process restart. It must come after
+     * `setLastMe`, or the worker it starts resolves no owner and does nothing.
      */
     suspend fun login(loginName: String, pin: String): Result<Me> = runCatchingCancellable {
         val res = api.login(LoginRequest(loginName.trim(), pin))
@@ -49,7 +55,7 @@ class SessionRepository @Inject constructor(
         db.purgeOutboxOwnedByOthers(res.user.id).forEach { path -> runCatching { File(path).delete() } }
         tokens.set(res.token)
         prefs.setLastLoginName(loginName.trim())
-        res.user.toMe().also { _me.value = it; prefs.setLastMe(it) }
+        res.user.toMe().also { _me.value = it; prefs.setLastMe(it); outboxScheduler.schedule(SIGN_IN_DRAIN) }
     }
 
     /** Cold start. A 401 here clears the token (AuthInterceptor) and the caller shows the PIN screen. */
@@ -75,5 +81,10 @@ class SessionRepository @Inject constructor(
     suspend fun signOut() {
         tokens.clear(); _me.value = null; prefs.setLastMe(null); orders.clearCache()
         db.clearOrderCache()
+    }
+
+    private companion object {
+        /** `OutboxScheduler` ignores the id (one unique work drains the whole queue); it is a label. */
+        const val SIGN_IN_DRAIN = "sign-in"
     }
 }

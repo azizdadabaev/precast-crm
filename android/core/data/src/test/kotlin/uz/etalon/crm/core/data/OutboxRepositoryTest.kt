@@ -25,7 +25,8 @@ import java.io.File
 private class FakeOutboxDao : OutboxDao {
     val rows = MutableStateFlow<Map<String, OutboxEntity>>(emptyMap())
     override fun observeAll(): Flow<List<OutboxEntity>> = rows.map { it.values.sortedBy { r -> r.createdAt } }
-    override fun observeForOrder(orderId: String) = rows.map { m -> m.values.filter { it.orderId == orderId }.sortedBy { it.createdAt } }
+    override fun observeForOrder(orderId: String, ownerId: String) =
+        rows.map { m -> m.values.filter { it.orderId == orderId && it.ownerId == ownerId }.sortedBy { it.createdAt } }
     override suspend fun byId(id: String) = rows.value[id]
     override suspend fun peekQueued(ownerId: String) =
         rows.value.values.filter { it.state == OutboxState.QUEUED && it.ownerId == ownerId }.minByOrNull { it.createdAt }
@@ -47,7 +48,7 @@ private class FakeOutboxDao : OutboxDao {
         patch(id) { it.copy(state = OutboxState.FAILED, lastError = error, attempts = it.attempts + 1, updatedAt = at) }
     }
     override suspend fun countPending() = rows.value.size
-    override fun observePendingCount(): Flow<Int> = rows.map { it.size }
+    override fun observePendingCount(ownerId: String): Flow<Int> = rows.map { m -> m.values.count { it.ownerId == ownerId } }
     override suspend fun filePathsOwnedByOthers(ownerId: String): List<String> =
         rows.value.values.filter { it.ownerId != ownerId }.mapNotNull { it.filePath }
     override suspend fun deleteOwnedByOthers(ownerId: String) {
@@ -194,6 +195,29 @@ class OutboxRepositoryTest {
             assertTrue(item.failed)
             assertEquals("Рухсат йўқ", item.error)
             assertEquals(1, item.attempts)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    /** The badge and the per-order list are the operator's own queue: another operator's row —
+     *  one that outlived the sign-in purge by landing in flight — is not theirs to see, retry or
+     *  cancel. With nobody signed in there is nothing to show at all. */
+    @Test fun `what the operator observes is only their own queue`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+        val dao = FakeOutboxDao()
+        val mine = repo(dao, RecordingScheduler(), File(tmp, "outbox"), FakeCurrentUser("u1"))
+        val id = mine.enqueue(OutboxKind.LOAD_TRUCK, "o1")
+        dao.upsert(dao.byId(id)!!.copy(id = "theirs", ownerId = "u2"))
+
+        mine.observeForOrder("o1").test {
+            assertEquals(listOf(id), awaitItem().map { it.id })
+            cancelAndIgnoreRemainingEvents()
+        }
+        mine.observePendingCount().test {
+            assertEquals(1, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        repo(dao, RecordingScheduler(), File(tmp, "outbox"), FakeCurrentUser(null)).observePendingCount().test {
+            assertEquals(0, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
     }

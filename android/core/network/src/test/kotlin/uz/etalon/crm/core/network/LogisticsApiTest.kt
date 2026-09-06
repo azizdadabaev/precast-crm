@@ -49,12 +49,15 @@ class LogisticsApiTest {
 
     @Test fun `loadTruck posts multipart with the idempotency header`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"loadedPhotoUrl":"/uploads/orders/o1/loaded-1.jpg"}}"""))
-        val res = api.loadTruck("o1", jpegPart(), "key-1")
+        val res = api.loadTruck("o1", jpegPart(), "key-1", "Bearer pinned")
         assertEquals("/uploads/orders/o1/loaded-1.jpg", res.loadedPhotoUrl)
         val rec = server.takeRequest()
         assertEquals("POST", rec.method)
         assertEquals("/api/orders/o1/load", rec.path)
         assertEquals("key-1", rec.getHeader("Idempotency-Key"))
+        // The drain pins its own credential onto the request rather than letting the interceptor
+        // read the store live; see AuthInterceptorTest.
+        assertEquals("Bearer pinned", rec.getHeader("Authorization"))
         assertTrue(rec.getHeader("Content-Type")!!.startsWith("multipart/form-data"))
         assertTrue(rec.body.readUtf8().contains("""name="file""""))
     }
@@ -68,6 +71,7 @@ class LogisticsApiTest {
             noCashCollectedNote = textPart(""),
             driverReturned = textPart("true"),
             idempotencyKey = "key-2",
+            authorization = "Bearer pinned",
         )
         val body = server.takeRequest().body.readUtf8()
         for (name in listOf("file", "cashAmount", "noCashCollected", "noCashCollectedNote", "driverReturned")) {
@@ -77,7 +81,7 @@ class LogisticsApiTest {
 
     @Test fun `loadShipment sends the beam map and block count as text parts`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"id":"s1","number":1,"status":"LOADED"}}"""))
-        api.loadShipment("o1", "s1", jpegPart(), textPart("""{"3.30":5}"""), textPart("120"), "key-3")
+        api.loadShipment("o1", "s1", jpegPart(), textPart("""{"3.30":5}"""), textPart("120"), "key-3", "Bearer pinned")
         val rec = server.takeRequest()
         assertEquals("/api/orders/o1/shipments/s1/load", rec.path)
         val body = rec.body.readUtf8()

@@ -1,6 +1,8 @@
 package uz.etalon.crm.core.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -36,10 +38,19 @@ class OutboxRepository @Inject constructor(
     private val currentUser: CurrentUser,
 ) : OutboxGateway {
 
-    fun observeForOrder(orderId: String): Flow<List<PendingUpload>> =
-        dao.observeForOrder(orderId).map { rows -> rows.map { it.toPending() } }
+    /** The signed-in operator's own queue for this order. The owner is resolved when collection
+     *  starts; with nobody signed in there is nothing of theirs to show. */
+    fun observeForOrder(orderId: String): Flow<List<PendingUpload>> = flow {
+        val owner = currentUser.id()
+        if (owner == null) emit(emptyList())
+        else emitAll(dao.observeForOrder(orderId, owner).map { rows -> rows.map { it.toPending() } })
+    }
 
-    fun observePendingCount(): Flow<Int> = dao.observePendingCount()
+    /** The signed-in operator's own pending badge — see [observeForOrder]. */
+    fun observePendingCount(): Flow<Int> = flow {
+        val owner = currentUser.id()
+        if (owner == null) emit(0) else emitAll(dao.observePendingCount(owner))
+    }
 
     /**
      * Records the upload and hands scheduling to WorkManager. The prepared photo

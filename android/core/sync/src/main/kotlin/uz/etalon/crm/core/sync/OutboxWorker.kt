@@ -22,6 +22,7 @@ import uz.etalon.crm.core.database.entity.OutboxState
 import uz.etalon.crm.core.model.OutboxKind
 import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.core.network.EtalonApi
+import uz.etalon.crm.core.network.TokenProvider
 import java.io.File
 import java.io.IOException
 
@@ -69,9 +70,12 @@ private const val GENERIC_FAILURE_MESSAGE = "Хатолик юз берди"
  * recovers rows a killed process stranded in RUNNING, so a single scheduled worker naturally
  * picks up every pending upload — there is no per-row work request to key or cancel.
  *
- * Every upload here goes out under whatever token [EtalonApi] currently holds, so the drain is
- * scoped to that operator's own rows: another operator's photo and cash figure are not merely
- * skipped, they are unclaimable (the predicate lives in the claim query).
+ * The drain is scoped to one operator's own rows — another operator's photo and cash figure are not
+ * merely skipped, they are unclaimable (the predicate lives in the claim query) — and it pins that
+ * operator's token when it starts, sending it explicitly on every upload. Both halves are needed:
+ * `AuthInterceptor` reads the token store live, once per call, so a row claimed while X was signed
+ * in and sent a moment after Y's token landed would otherwise be posted as Y, carrying X's cash
+ * figure, with no 401 to stop it.
  */
 @HiltWorker
 class OutboxWorker @AssistedInject constructor(
@@ -82,13 +86,18 @@ class OutboxWorker @AssistedInject constructor(
     private val orders: OrdersGateway,
     private val json: Json,
     private val currentUser: CurrentUser,
+    private val tokens: TokenProvider,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
         // Nobody signed in (the app is sitting on the PIN screen after a 401, say): there is no
         // owner to drain for and no token to drain under. An ordinary state, not a failure — the
-        // rows wait, untouched, for their owner to come back and a fresh schedule() to run this.
+        // rows wait, untouched, for their owner to come back. `SessionRepository.login()` schedules
+        // a fresh drain then, because returning success here ends WorkManager's unique-work chain.
         val owner = currentUser.id() ?: return Result.success()
+        // Pinned once, for the whole run, and sent on the request itself. Read per upload instead
+        // and the credential could change between claiming a row and sending it.
+        val authorization = tokens.token()?.let { "Bearer $it" } ?: return Result.success()
 
         dao.resetRunning(System.currentTimeMillis())
 
@@ -107,7 +116,7 @@ class OutboxWorker @AssistedInject constructor(
             // and continuing would send this operator's rows under whoever is signed in now.
             if (currentUser.id() != owner) break
             val row = dao.claimNext(owner, System.currentTimeMillis()) ?: break
-            val outcome = runCatchingCancellable { send(row) }.fold(
+            val outcome = runCatchingCancellable { send(row, authorization) }.fold(
                 onSuccess = { OutboxOutcome.Done },
                 onFailure = { outcomeFor(it) },
             )
@@ -132,7 +141,7 @@ class OutboxWorker @AssistedInject constructor(
         return Result.retry()
     }
 
-    private suspend fun send(row: OutboxEntity) {
+    private suspend fun send(row: OutboxEntity, authorization: String) {
         val payload = json.decodeFromString(JsonObject.serializer(), row.payloadJson)
         val file = row.filePath?.let(::File)?.takeIf { it.exists() } ?: throw MissingUploadFileException(row.filePath)
         val part = MultipartBody.Part.createFormData("file", file.name, file.asRequestBody(JPEG))
@@ -141,8 +150,8 @@ class OutboxWorker @AssistedInject constructor(
             (payload[key]?.jsonPrimitive?.content ?: fallback).toRequestBody(PLAIN)
 
         when (OutboxKind.valueOf(row.kind)) {
-            OutboxKind.LOAD_TRUCK -> api.loadTruck(row.orderId, part, row.id)
-            OutboxKind.ADD_LOADED_PHOTO -> api.addLoadedPhoto(row.orderId, part, row.id)
+            OutboxKind.LOAD_TRUCK -> api.loadTruck(row.orderId, part, row.id, authorization)
+            OutboxKind.ADD_LOADED_PHOTO -> api.addLoadedPhoto(row.orderId, part, row.id, authorization)
             OutboxKind.DELIVERY_PROOF -> api.deliveryProof(
                 id = row.orderId, file = part,
                 cashAmount = text("cashAmount", "0"),
@@ -150,6 +159,7 @@ class OutboxWorker @AssistedInject constructor(
                 noCashCollectedNote = text("noCashCollectedNote"),
                 driverReturned = text("driverReturned", "false"),
                 idempotencyKey = row.id,
+                authorization = authorization,
             )
             OutboxKind.LOAD_SHIPMENT -> api.loadShipment(
                 id = row.orderId, sid = requireNotNull(row.shipmentId),
@@ -157,6 +167,7 @@ class OutboxWorker @AssistedInject constructor(
                 loadedBeams = (payload["loadedBeams"]?.toString() ?: "{}").toRequestBody(PLAIN),
                 loadedBlocks = text("loadedBlocks", "0"),
                 idempotencyKey = row.id,
+                authorization = authorization,
             )
         }
     }
