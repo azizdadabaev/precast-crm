@@ -1,0 +1,8 @@
+<resources>
+    <string name="load_truck_title">Юк машинасига юклаш</string>
+    <string name="add_photo_title">Расм қўшиш</string>
+    <string name="action_retake">Қайта олиш</string>
+    <string name="action_mark_loaded">Юкланди деб белгилаш</string>
+    <string name="action_attach">Бириктириш</string>
+    <string name="upload_queued_hint">Расм навбатга қўйилади ва интернет пайдо бўлганда юборилади.</string>
+</resources>
