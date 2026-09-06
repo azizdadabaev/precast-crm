@@ -53,4 +53,16 @@ class ShipmentsUiStateTest {
     @Test fun `add is refused while offline even in an accepting status`() {
         assertFalse(ShipmentsUiState(Resource.Error(detail(OrderStatus.PLACED), AppError.Network("Интернет йўқ"))).canAddShipment)
     }
+
+    @Test fun `the empty state never shows beside an error, even with no cached shipments`() {
+        assertFalse(ShipmentsUiState(Resource.Error(null, AppError.Network("Интернет йўқ"))).showEmptyState)
+        assertFalse(ShipmentsUiState(Resource.Error(null, AppError.Server("хато", 500))).showEmptyState)
+        // Cached data survives the error, so still no false "no trucks" once real rows exist.
+        assertFalse(ShipmentsUiState(Resource.Error(detail(OrderStatus.PLACED), AppError.Network("Интернет йўқ"))).showEmptyState)
+    }
+
+    @Test fun `the empty state shows once loaded cleanly with nothing in it`() {
+        assertTrue(ShipmentsUiState(Resource.Success(detail(OrderStatus.PLACED))).showEmptyState)
+        assertFalse(ShipmentsUiState(Resource.Loading(null)).showEmptyState)
+    }
 }

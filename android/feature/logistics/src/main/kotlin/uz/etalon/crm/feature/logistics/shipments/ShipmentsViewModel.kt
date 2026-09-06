@@ -19,6 +19,7 @@ import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.model.ShipmentLine
 
 private val ADD_SHIPMENT_STATUSES = setOf(OrderStatus.PLACED, OrderStatus.IN_PRODUCTION, OrderStatus.DISPATCHED)
 
@@ -28,9 +29,19 @@ data class ShipmentsUiState(
     val busy: Boolean = false,
 ) {
     val order: OrderDetail? get() = resource.dataOrNull
+    val shipments: List<ShipmentLine> get() = order?.shipments.orEmpty()
+    /** No cache yet and the first fetch hasn't landed — the only state a pull-to-refresh spinner
+     *  should show, and one of two states (with [resourceError]) that must suppress the empty
+     *  state below. */
+    val isLoading: Boolean get() = resource is Resource.Loading && order == null
+    val resourceError: String? get() = (resource as? Resource.Error)?.error?.message
     /** The only offline signal this screen has: a refresh that failed for lack of a network. */
     val isOffline: Boolean get() = (resource as? Resource.Error)?.error is AppError.Network
     val canAddShipment: Boolean get() = !busy && !isOffline && (order?.summary?.status?.let { it in ADD_SHIPMENT_STATUSES } ?: false)
+    /** Never true alongside [resourceError]: an empty list next to an error banner reads as "no
+     *  trucks" when the truth is "couldn't check" — the state that fooled an operator standing
+     *  at a truck with no signal. */
+    val showEmptyState: Boolean get() = shipments.isEmpty() && !isLoading && resourceError == null
 }
 
 @HiltViewModel(assistedFactory = ShipmentsViewModel.Factory::class)

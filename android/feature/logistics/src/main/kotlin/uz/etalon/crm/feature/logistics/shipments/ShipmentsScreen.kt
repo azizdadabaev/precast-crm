@@ -25,7 +25,6 @@ import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
 import uz.etalon.crm.core.designsystem.components.shipmentStatusTone
 import uz.etalon.crm.core.designsystem.components.toneColor
-import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.feature.logistics.R
@@ -51,11 +50,7 @@ fun ShipmentsScreen(
     onDeliver: (String) -> Unit,
     onRefresh: () -> Unit,
 ) {
-    val shipments = s.order?.shipments.orEmpty()
-    // No cache yet and the first fetch hasn't landed: this is the only state PullToRefreshBox
-    // should show as spinning, and the only one that must suppress the empty state — otherwise
-    // a slow first load or an offline failure both briefly (or permanently) read as "no trucks".
-    val isLoading = s.resource is Resource.Loading && s.order == null
+    val shipments = s.shipments
     val actionsDisabled = s.busy || s.isOffline
     Scaffold(
         topBar = {
@@ -73,17 +68,17 @@ fun ShipmentsScreen(
             }
         },
     ) { pad ->
-        PullToRefreshBox(isRefreshing = isLoading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
+        PullToRefreshBox(isRefreshing = s.isLoading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                val resourceError = (s.resource as? Resource.Error)?.error?.message
+                val resourceError = s.resourceError
                 if (resourceError != null) item { ErrorBanner(resourceError, onRetry = onRefresh) }
                 val actionError = s.actionError
                 if (actionError != null) item { ErrorBanner(actionError) }
-                if (shipments.isEmpty() && !isLoading) item { EmptyState(stringResource(R.string.shipments_empty)) }
+                if (s.showEmptyState) item { EmptyState(stringResource(R.string.shipments_empty)) }
                 items(shipments, key = { it.id }) { sh ->
                     ShipmentCard(
                         sh, actionsDisabled = actionsDisabled,
