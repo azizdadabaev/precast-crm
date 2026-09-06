@@ -5,4 +5,17 @@
     <string name="action_mark_loaded">Юкланди деб белгилаш</string>
     <string name="action_attach">Бириктириш</string>
     <string name="upload_queued_hint">Расм навбатга қўйилади ва интернет пайдо бўлганда юборилади.</string>
+    <string name="shipments_title">Жўнатмалар</string>
+    <string name="shipments_empty">Жўнатма йўқ.</string>
+    <string name="shipment_n">Жўнатма %1$d</string>
+    <string name="shipment_status_pending">Кутилмоқда</string>
+    <string name="action_add_shipment">Жўнатма қўшиш</string>
+    <string name="action_load_shipment">Юклаш</string>
+    <string name="action_dispatch_shipment">Жўнатиш</string>
+    <string name="action_deliver_shipment">Етказилди</string>
+    <string name="action_delete_shipment">Ўчириш</string>
+    <string name="shipment_load_title">Жўнатмани юклаш</string>
+    <string name="beam_length_label">%1$s м балка</string>
+    <string name="blocks_label">Блок</string>
+    <string name="loaded_summary">%1$d балка · %2$d блок</string>
 </resources>
