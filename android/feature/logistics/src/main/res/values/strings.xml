@@ -44,4 +44,16 @@
     <string name="dispatch_expected">Кутилган сумма</string>
     <string name="action_dispatch">Жўнатиш</string>
     <string name="offline_action_blocked">Интернет йўқ — бу амал онлайн бажарилади</string>
+    <string name="location_title">Етказиш жойи</string>
+    <string name="location_my_position">Менинг жойим</string>
+    <string name="location_paste_link">Харита ҳаволасини қўйинг</string>
+    <string name="location_resolve">Ҳал қилиш</string>
+    <string name="location_manual">Координаталар (кенглик, узунлик)</string>
+    <string name="location_label">Белги (масалан «кўк дарвоза»)</string>
+    <string name="location_none">Жой белгиланмаган</string>
+    <string name="location_permission_needed">Жойни аниқлаш учун рухсат керак</string>
+    <string name="location_failed">Жойни аниқлаш муваффақиятсиз тугади</string>
+    <string name="action_navigate">Навигация</string>
+    <string name="action_clear_location">Тозалаш</string>
+    <string name="action_save">Сақлаш</string>
 </resources>
