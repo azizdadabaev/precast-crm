@@ -48,7 +48,7 @@ private class FakeOutboxDao : OutboxDao {
         patch(id) { it.copy(state = OutboxState.FAILED, lastError = error, attempts = it.attempts + 1, updatedAt = at) }
     }
     override suspend fun countPending() = rows.value.size
-    override fun observePendingCount(ownerId: String): Flow<Int> = rows.map { m -> m.values.count { it.ownerId == ownerId } }
+    override fun observePendingCount(ownerId: String): Flow<Int> = rows.map { m -> m.values.count { it.ownerId == ownerId && it.state != OutboxState.FAILED } }
     override suspend fun filePathsOwnedByOthers(ownerId: String): List<String> =
         rows.value.values.filter { it.ownerId != ownerId }.mapNotNull { it.filePath }
     override suspend fun deleteOwnedByOthers(ownerId: String) {

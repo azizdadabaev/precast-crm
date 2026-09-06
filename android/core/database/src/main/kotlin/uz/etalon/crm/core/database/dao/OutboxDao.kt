@@ -70,8 +70,12 @@ interface OutboxDao {
     @Query("SELECT COUNT(*) FROM outbox")
     suspend fun countPending(): Int
 
-    /** The operator's own pending badge — see [observeForOrder]. */
-    @Query("SELECT COUNT(*) FROM outbox WHERE ownerId = :ownerId")
+    /**
+     * The operator's own pending badge — see [observeForOrder]. FAILED rows are excluded: they are
+     * not on their way anywhere, so counting them would keep the sign-out warning on screen forever
+     * over a single rejected row the operator has already been shown on the order.
+     */
+    @Query("SELECT COUNT(*) FROM outbox WHERE ownerId = :ownerId AND state != 'FAILED'")
     fun observePendingCount(ownerId: String): Flow<Int>
 
     @Query("SELECT filePath FROM outbox WHERE ownerId != :ownerId AND filePath IS NOT NULL")

@@ -50,8 +50,15 @@ fun roleLabel(role: Role): Int = when (role) {
     Role.UNKNOWN -> R.string.role_unknown
 }
 
-/** Only the pending count is needed here — signing out wipes the outbox, so the operator has to
- *  be told how much would go with it. */
+/**
+ * Only the pending count is needed here. Signing out does NOT wipe the outbox — a queued upload
+ * belongs to the operator who made it and waits for them to come back (`SessionRepository.signOut`)
+ * — but they still need to know work is unsent before they hand the phone over, because a
+ * *different* operator signing in on it is what destroys it (`login`'s ownership purge).
+ *
+ * The count excludes rows the server already rejected: those are not on their way anywhere, and
+ * counting them would put this dialog in front of the operator on every sign-out from then on.
+ */
 @HiltViewModel
 class MoreViewModel @Inject constructor(outbox: OutboxRepository) : ViewModel() {
     val pendingUploads: StateFlow<Int> = outbox.observePendingCount()

@@ -52,9 +52,9 @@ class OrdersRepository @Inject constructor(
      *  land after the sign-out that cleared the maps and resurrect A's rows for user B. */
     private val epoch = AtomicLong(0)
 
-    /** Called on sign-out, alongside `EtalonDatabase.wipe()`: these outcome maps are `@Singleton`
+    /** Called on sign-out, alongside `EtalonDatabase.clearOrderCache()`: these outcome maps are `@Singleton`
      *  in-memory state, so the next signed-in user would otherwise see whatever the previous
-     *  user last fetched (wipe() only clears the Room tables, not this in-memory cache). */
+     *  user last fetched (clearOrderCache() only empties the Room cache tables, not this in-memory map). */
     fun clearCache() {
         epoch.incrementAndGet()
         listOutcomes.value = emptyMap()

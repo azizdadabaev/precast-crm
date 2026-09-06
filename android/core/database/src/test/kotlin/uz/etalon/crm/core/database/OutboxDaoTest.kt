@@ -71,6 +71,21 @@ class OutboxDaoTest {
         }
     }
 
+    /** The badge drives the sign-out warning. A row the server has already rejected is not on its
+     *  way anywhere and the operator has already been shown it on the order, so counting it would
+     *  put that dialog in front of them on every sign-out from then on. */
+    @Test fun `the pending count leaves out rows the server already rejected`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("queued", "o1", OutboxState.QUEUED, created = 1))
+        dao.upsert(row("running", "o1", OutboxState.RUNNING, created = 2))
+        dao.upsert(row("failed", "o1", OutboxState.FAILED, created = 3))
+
+        dao.observePendingCount(ownerId = "u1").test {
+            assertEquals(2, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test fun `claimNext skips rows that are already running or failed`() = runTest {
         val dao = db().outboxDao()
         dao.upsert(row("running", "o1", OutboxState.RUNNING, created = 1))

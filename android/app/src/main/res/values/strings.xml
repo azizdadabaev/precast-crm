@@ -23,7 +23,7 @@
     <string name="more_sign_out">Чиқиш</string>
     <string name="action_cancel">Бекор қилиш</string>
     <string name="sign_out_pending_title">Юборилмаган расмлар</string>
-    <string name="sign_out_pending_message">%1$d та расм ҳали юборилмаган. Чиқсангиз улар ўчирилади.</string>
+    <string name="sign_out_pending_message">%1$d та расм ҳали юборилмаган. Улар сақланиб қолади ва сиз қайта кирганингизда юборилади. Аммо шу телефонга бошқа ходим кирса, улар ўчирилади.</string>
     <string name="no_access">Бу бўлимга рухсат йўқ</string>
     <string name="coming_soon">Бу бўлим кейинги релизда</string>
     <string name="login_after_pin_change">Янги PIN билан киринг</string>
