@@ -91,9 +91,20 @@ fun DeliveryProofRoute(
                     stringResource(R.string.delivery_expected, formatMoney(s.expected)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (!s.shortfall.isZero) {
+                // Suppressed while "no cash collected" is on: the amount is forced to zero then,
+                // so both would otherwise read as "short by the full expected amount" right next
+                // to a switch saying nothing was collected — a contradiction, not a warning.
+                if (!s.noCashCollected && !s.shortfall.isZero) {
                     Text(
                         stringResource(R.string.delivery_shortfall, formatMoney(s.shortfall)),
+                        style = MaterialTheme.typography.bodyMedium, color = LocalEtalonColors.current.danger,
+                    )
+                }
+                // The fat-finger direction: an extra digit collects too much, not too little.
+                // Informational, like the shortfall line above it — never blocks submission.
+                if (!s.noCashCollected && !s.overCollected.isZero) {
+                    Text(
+                        stringResource(R.string.delivery_overcollected, formatMoney(s.overCollected)),
                         style = MaterialTheme.typography.bodyMedium, color = LocalEtalonColors.current.danger,
                     )
                 }
@@ -128,7 +139,9 @@ fun DeliveryProofRoute(
             title = stringResource(R.string.delivery_cash_label),
             initial = s.amountDigits.ifEmpty { s.expected.roundedWhole().toPlainString() },
             suffix = "UZS",
-            allowDecimal = true,
+            // Cash physically has no kopeks: whole UZS only, so the number this screen shows is
+            // always exactly the number that goes on the wire — no comma-to-dot conversion to trust.
+            allowDecimal = false,
             onConfirm = { vm.setAmountDigits(it); showKeypad = false },
             onDismiss = { showKeypad = false },
         )

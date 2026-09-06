@@ -44,6 +44,12 @@ class DeliveryProofViewModelTest {
         assertNotNull(validateDeliveryCash(DeliveryCash(amount = Money.parse("-1"))))
     }
 
+    // Distinct from the case above: a note does not buy a negative amount its way past the
+    // guard — the sign check is unconditional, not just a fallback for the flag-less path.
+    @Test fun `a negative amount is refused even with a note explaining it`() {
+        assertNotNull(validateDeliveryCash(DeliveryCash(amount = Money.parse("-250000"), note = "хатолик билан киритилди")))
+    }
+
     @Test fun `the keypad drives the amount and the shortfall against what was expected`() {
         val vm = DeliveryProofViewModel("o1", expected = Money.parse("2000000"), submit = { _, _ -> Result.success("ob") })
         vm.setAmountDigits("1500000")
@@ -51,10 +57,17 @@ class DeliveryProofViewModelTest {
         assertEquals(Money.parse("500000"), vm.state.value.shortfall)
     }
 
-    @Test fun `collecting more than expected reports no shortfall`() {
+    @Test fun `collecting more than expected reports no shortfall, but reports being over`() {
         val vm = DeliveryProofViewModel("o1", expected = Money.parse("1000000"), submit = { _, _ -> Result.success("ob") })
         vm.setAmountDigits("1200000")
         assertEquals(Money.ZERO, vm.state.value.shortfall)
+        assertEquals(Money.parse("200000"), vm.state.value.overCollected)
+    }
+
+    @Test fun `an amount at or under expected reports no over-collection`() {
+        val vm = DeliveryProofViewModel("o1", expected = Money.parse("1000000"), submit = { _, _ -> Result.success("ob") })
+        vm.setAmountDigits("1000000")
+        assertEquals(Money.ZERO, vm.state.value.overCollected)
     }
 
     @Test fun `an empty field reads as zero, exactly like a typed zero`() {
@@ -63,16 +76,38 @@ class DeliveryProofViewModelTest {
         assertEquals(Money.parse("400000"), vm.state.value.shortfall)
     }
 
+    // What this proves, and what it does not: the comma-to-dot swap and the resulting
+    // BigDecimal's value/scale match a string built with '.' directly. It does NOT prove no
+    // Double was ever involved — no equality check on a value a Decimal(14,2) column can hold
+    // could prove that, since every such value round-trips losslessly through a Double too.
+    // The real guarantee is structural (see the `amount` getter): replace(',', '.') feeds
+    // straight into a BigDecimal constructor, with no arithmetic ever performed as Double.
     @Test fun `a decimal amount survives the keypad's comma exactly`() {
         val vm = DeliveryProofViewModel("o1", expected = Money.ZERO, submit = { _, _ -> Result.success("ob") })
         vm.setAmountDigits("125000,5")
         assertEquals(Money.parse("125000.5"), vm.state.value.amount)
     }
 
+    // Same caveat as the decimal test above: this is a regression guard on the string-to-
+    // BigDecimal path (12 digits is the keypad's own cap), not proof a Double was never near it.
     @Test fun `a very large amount is carried without a floating-point hop`() {
         val vm = DeliveryProofViewModel("o1", expected = Money.ZERO, submit = { _, _ -> Result.success("ob") })
         vm.setAmountDigits("999999999999")
         assertEquals(Money.parse("999999999999"), vm.state.value.amount)
+    }
+
+    // The server always sends money as a scale-2 decimal string (e.g. "2000000.00"), never the
+    // scale-0 fixtures the rest of this file uses for brevity. Money.equals is BigDecimal.equals,
+    // which is scale-sensitive, so this exercises shortfall/overCollected's subtraction against
+    // real server-shaped data rather than only against round test numbers of the same scale.
+    @Test fun `shortfall and over-collection hold against a real scale-2 server fixture`() {
+        val vm = DeliveryProofViewModel("o1", expected = Money.parse("1000000.00"), submit = { _, _ -> Result.success("ob") })
+        vm.setAmountDigits("700000")
+        assertEquals(Money.parse("300000.00"), vm.state.value.shortfall)
+        assertEquals(Money.ZERO, vm.state.value.overCollected)
+        vm.setAmountDigits("1200000")
+        assertEquals(Money.ZERO, vm.state.value.shortfall)
+        assertEquals(Money.parse("200000.00"), vm.state.value.overCollected)
     }
 
     @Test fun `a validated proof is queued with its cash fields`() = runTest {
@@ -121,15 +156,28 @@ class DeliveryProofViewModelTest {
         assertNotNull(vm.state.value.error)
     }
 
-    @Test fun `a nonsense negative amount is refused before it is ever queued`() = runTest {
+    // Renamed from a name that claimed to test the negative-amount guard: it never entered a
+    // negative amount, and its one guard assertion was a verbatim duplicate of the dedicated
+    // negative-amount test above. What it actually exercises is the ordinary zero-amount,
+    // neither-flag path going all the way through submit() to the outbox, matching what
+    // `validateDeliveryCash(DeliveryCash())` above already says must be allowed.
+    @Test fun `a plain zero-amount submission reaches the outbox, exactly as validateDeliveryCash allows`() = runTest {
         var calls = 0
         val vm = DeliveryProofViewModel("o1", Money.ZERO, submit = { _, _ -> calls++; Result.success("ob") })
         vm.onPhoto(photo)
-        assertNotNull(validateDeliveryCash(DeliveryCash(amount = Money.parse("-500"))))
         vm.submit()
         advanceUntilIdle()
-        // Nothing negative can reach here through the keypad, but the guard is still exercised
-        // directly above; a normal (zero) submission from this state must still succeed.
+        assertEquals(1, calls)
+        assertTrue(vm.state.value.done)
+    }
+
+    @Test fun `a second tap while the first submission is still in flight is a no-op`() = runTest {
+        var calls = 0
+        val vm = DeliveryProofViewModel("o1", Money.ZERO, submit = { _, _ -> calls++; Result.success("ob") })
+        vm.onPhoto(photo)
+        vm.submit() // enters submitting=true synchronously, then suspends on the coroutine
+        vm.submit() // a second tap before the first has resolved must not enqueue a second proof
+        advanceUntilIdle()
         assertEquals(1, calls)
         assertTrue(vm.state.value.done)
     }

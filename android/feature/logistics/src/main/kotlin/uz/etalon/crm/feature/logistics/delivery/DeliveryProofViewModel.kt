@@ -32,9 +32,15 @@ data class DeliveryProofUiState(
 ) {
     /** An empty field and a typed zero are the same fact to the server: nothing collected yet.
      *  The comma the keypad uses for a decimal point never reaches [Money.parse], which only
-     *  understands the plain-decimal strings the server itself sends. */
-    val amount: Money get() = if (amountDigits.isEmpty()) Money.ZERO else Money.parse(amountDigits.replace(',', '.'))
+     *  understands the plain-decimal strings the server itself sends. Total, not partial: this
+     *  is read during composition, and restored state, a deeplink, or a future caller could hand
+     *  it a string [Money.parse] rejects — that must read as "nothing entered", never a crash. */
+    val amount: Money get() = amountDigits.replace(',', '.').let { d -> if (d.isEmpty()) Money.ZERO else runCatching { Money.parse(d) }.getOrDefault(Money.ZERO) }
     val shortfall: Money get() = (expected - amount).coerceAtLeastZero()
+    /** The fat-finger direction: an extra digit produces too much, not too little, and nothing
+     *  else in this screen calls that out. Informational only — a customer really can pay more —
+     *  so this never blocks submission the way [shortfall] never does either. */
+    val overCollected: Money get() = (amount - expected).coerceAtLeastZero()
 }
 
 /**
@@ -54,7 +60,7 @@ fun interface DeliveryProofUseCase {
 }
 
 open class DeliveryProofViewModel(
-    private val orderId: String,
+    orderId: String,
     expected: Money,
     submit: DeliveryProofUseCase,
 ) : ViewModel() {
@@ -70,13 +76,15 @@ open class DeliveryProofViewModel(
     fun setAmountDigits(digits: String) = _state.update { it.copy(amountDigits = digits, error = null) }
 
     /** Turning "no cash collected" on clears any amount already typed, so the two facts —
-     *  collected zero vs. did not collect — can never sit contradicted in the same state. */
+     *  collected zero vs. did not collect — can never sit contradicted in the same state.
+     *  Turning it back off clears the note the same way: a leftover reason next to
+     *  `noCashCollected = false` would be a contradictory record for nobody to explain later. */
     fun setNoCashCollected(v: Boolean) = _state.update {
-        it.copy(noCashCollected = v, amountDigits = if (v) "" else it.amountDigits, error = null)
+        it.copy(noCashCollected = v, amountDigits = if (v) "" else it.amountDigits, note = if (v) it.note else "", error = null)
     }
 
     fun setNote(v: String) = _state.update { it.copy(note = v, error = null) }
-    fun setDriverReturned(v: Boolean) = _state.update { it.copy(driverReturned = v) }
+    fun setDriverReturned(v: Boolean) = _state.update { it.copy(driverReturned = v, error = null) }
 
     /** The order detail this screen was opened from may still be loading its dispatch when the
      *  camera comes up first; the expected collection is applied live as it resolves, exactly
