@@ -183,6 +183,14 @@ fun PhotoCapture(
                                 try {
                                     val file = imageCapture.takePhotoTo(context.cacheDir, ContextCompat.getMainExecutor(context))
                                     val prepared = imagePrep.prepare(file).getOrThrow()
+                                    // The camera writes a full-resolution frame — several MB on a
+                                    // modern sensor — and only the prepared copy is ever cleaned
+                                    // up. Drop the original now that it has been read: keeping it
+                                    // fills the cache a photo at a time for no reader. On failure
+                                    // it is deliberately left, so the cache eviction that owns
+                                    // this directory can still take it while nothing depends on
+                                    // its being gone.
+                                    file.delete()
                                     onPhoto(prepared)
                                 } catch (e: CancellationException) {
                                     throw e

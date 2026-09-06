@@ -24,7 +24,6 @@ import java.io.File
  *  the production interface actually declares. */
 private class FakeOutboxDao : OutboxDao {
     val rows = MutableStateFlow<Map<String, OutboxEntity>>(emptyMap())
-    override fun observeAll(): Flow<List<OutboxEntity>> = rows.map { it.values.sortedBy { r -> r.createdAt } }
     override fun observeForOrder(orderId: String, ownerId: String) =
         rows.map { m -> m.values.filter { it.orderId == orderId && it.ownerId == ownerId }.sortedBy { it.createdAt } }
     override suspend fun byId(id: String) = rows.value[id]
@@ -47,7 +46,6 @@ private class FakeOutboxDao : OutboxDao {
     override suspend fun markFailed(id: String, error: String, at: Long) {
         patch(id) { it.copy(state = OutboxState.FAILED, lastError = error, attempts = it.attempts + 1, updatedAt = at) }
     }
-    override suspend fun countPending() = rows.value.size
     override fun observePendingCount(ownerId: String): Flow<Int> = rows.map { m -> m.values.count { it.ownerId == ownerId && it.state != OutboxState.FAILED } }
     override suspend fun filePathsOwnedByOthers(ownerId: String): List<String> =
         rows.value.values.filter { it.ownerId != ownerId }.mapNotNull { it.filePath }

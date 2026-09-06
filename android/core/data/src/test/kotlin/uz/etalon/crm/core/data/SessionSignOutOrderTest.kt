@@ -19,6 +19,8 @@ import kotlinx.serialization.json.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -217,13 +219,13 @@ class SessionSignOutOrderTest {
         val db = realDatabase()
         val theirFile = queuedRow(db, "theirs", owner = "u2")
 
-        var pendingWhenTokenStored = -1
-        val tokens = ProbingTokenStore { pendingWhenTokenStored = db.outboxDao().countPending() }
+        var theirRowWhenTokenStored: OutboxEntity? = null
+        val tokens = ProbingTokenStore { theirRowWhenTokenStored = db.outboxDao().byId("theirs") }
         session(db, UnusedApi(loginResponse = loginResponse("u1")), tokens).login("owner", "1234").getOrThrow()
 
-        assertTrue("the previous operator's row must not survive", db.outboxDao().observeAll().first().isEmpty())
+        assertNull("the previous operator's row must not survive", db.outboxDao().byId("theirs"))
         assertTrue("its photo must not survive either", !theirFile.exists())
-        assertEquals("the purge must land before the new session's token exists", 0, pendingWhenTokenStored)
+        assertNull("the purge must land before the new session's token exists", theirRowWhenTokenStored)
     }
 
     /**
@@ -237,7 +239,7 @@ class SessionSignOutOrderTest {
 
         session(db, UnusedApi(loginResponse = loginResponse("u1")), scheduler = scheduler).login("owner", "1234").getOrThrow()
 
-        assertEquals(listOf("mine"), db.outboxDao().observeAll().first().map { it.id })
+        assertNotNull("the operator's own row must survive", db.outboxDao().byId("mine"))
         assertTrue("the photo must still be on disk", myFile.exists())
         assertEquals("and the row must still be sendable", "mine", db.outboxDao().claimNext(ownerId = "u1", at = 1)?.id)
     }
@@ -266,7 +268,7 @@ class SessionSignOutOrderTest {
 
         session(db, UnusedApi()).signOut()
 
-        assertEquals(listOf("mine"), db.outboxDao().observeAll().first().map { it.id })
+        assertNotNull("the operator's own row must survive", db.outboxDao().byId("mine"))
         assertTrue("the photo must survive sign-out", myFile.exists())
     }
 }

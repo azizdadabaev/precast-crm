@@ -3,7 +3,7 @@ package uz.etalon.crm.core.model
 import java.time.Instant
 
 /** A photo attached to an order, with the id the delete endpoint needs. */
-data class LoadedPhoto(val id: String, val url: String, val kind: String?)
+data class LoadedPhoto(val id: String, val url: String)
 
 /** The single-truck dispatch record, when one exists. */
 data class DispatchInfo(

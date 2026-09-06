@@ -61,7 +61,7 @@ fun OrderDetailDto.toDomain(mediaBase: String, fetchedAt: Instant): OrderDetail 
             )
         },
         loadedPhotos = galleryPhotos.mapNotNull { p ->
-            MediaUrl.absolute(mediaBase, p.url)?.let { LoadedPhoto(p.id, it, p.kind) }
+            MediaUrl.absolute(mediaBase, p.url)?.let { LoadedPhoto(p.id, it) }
         },
         deliveryProofUrl = MediaUrl.absolute(mediaBase, deliveryProofUrl),
         events = events.map { OrderEventLine(it.id, it.type, it.message, it.actor?.name, it.createdAt.toInstant()) },

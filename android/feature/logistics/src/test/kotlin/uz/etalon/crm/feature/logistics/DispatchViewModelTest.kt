@@ -169,6 +169,28 @@ class DispatchViewModelTest {
         assertNotNull(vm.state.value.driversErrorMessage)
     }
 
+    /** The guard belongs in the ViewModel, not only on the disabled button: the button is not a
+     *  seam a test can reach, and neither dispatch route is idempotent, so a submit that got
+     *  through offline would be sent and fail rather than be refused. */
+    @Test fun `submitting while offline is refused before any dispatch call`() = runTest {
+        var calls = 0
+        val vm = DispatchViewModel(
+            shipmentId = null,
+            drivers = DispatchDriversUseCase { Result.failure(IOException("тармоқ йўқ")) },
+            createDispatch = CreateDispatchUseCase { _, _, _ -> calls++; Result.success(Unit) },
+            dispatchShipment = neverDispatchesShipment,
+        )
+        advanceUntilIdle()
+        vm.setAmountDigits("1500000")
+
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(0, calls, "nothing may reach the network while offline")
+        assertFalse(vm.state.value.done)
+        assertEquals("Интернет йўқ — бу амал онлайн бажарилади", vm.state.value.error)
+    }
+
     @Test fun `refreshDrivers retries the driver fetch and clears a previous failure`() = runTest {
         var shouldFail = true
         val vm = DispatchViewModel(

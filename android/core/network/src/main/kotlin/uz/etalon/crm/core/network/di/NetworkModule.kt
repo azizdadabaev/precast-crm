@@ -35,6 +35,17 @@ object NetworkModule {
             .addInterceptor(HttpLoggingInterceptor().apply { level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE })
             .build()
 
+    /**
+     * A separate client for image loads. It shares nothing with the API client on purpose: the
+     * envelope interceptor has no business rewriting a JPEG response, and AuthInterceptor's
+     * session-clearing 401 must never be triggered by a thumbnail. See [ImageAuthInterceptor].
+     */
+    @Provides @Singleton @Named("imageOkHttp") fun imageOkHttp(tokens: TokenProvider): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(ImageAuthInterceptor(tokens))
+            .build()
+
     @Provides @Singleton fun retrofit(client: OkHttpClient, json: Json, @Named("apiBaseUrl") base: String): Retrofit =
         Retrofit.Builder().baseUrl(base.trimEnd('/') + "/").client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType())).build()

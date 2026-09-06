@@ -103,9 +103,6 @@ class LogisticsRepository @Inject constructor(
         ))
     }
 
-    suspend fun markDispatchReturned(orderId: String, dispatchId: String): Result<Unit> =
-        mutate(orderId) { api.markDispatchReturned(dispatchId) }
-
     suspend fun setDeliveryLocation(
         orderId: String, lat: Double?, lng: Double?, url: String?, label: String?,
     ): Result<Unit> = mutate(orderId) { api.setDeliveryLocation(orderId, DeliveryLocationRequest(lat, lng, url, label).toJsonBody()) }

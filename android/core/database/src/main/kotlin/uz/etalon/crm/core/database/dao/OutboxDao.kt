@@ -11,9 +11,6 @@ import uz.etalon.crm.core.database.entity.OutboxState
 
 @Dao
 interface OutboxDao {
-    @Query("SELECT * FROM outbox ORDER BY createdAt, id")
-    fun observeAll(): Flow<List<OutboxEntity>>
-
     /** Scoped to one owner: what the operator sees is their own queue. A row of someone else's
      *  that outlived the sign-in purge is not theirs to see, retry or cancel. */
     @Query("SELECT * FROM outbox WHERE orderId = :orderId AND ownerId = :ownerId ORDER BY createdAt, id")
@@ -66,9 +63,6 @@ interface OutboxDao {
 
     @Query("UPDATE outbox SET state = 'FAILED', lastError = :error, attempts = attempts + 1, updatedAt = :at WHERE id = :id")
     suspend fun markFailed(id: String, error: String, at: Long)
-
-    @Query("SELECT COUNT(*) FROM outbox")
-    suspend fun countPending(): Int
 
     /**
      * The operator's own pending badge — see [observeForOrder]. FAILED rows are excluded: they are

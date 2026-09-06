@@ -146,8 +146,8 @@ class LogisticsRepositoryTest {
 
     /**
      * The Critical-severity regression this guards against: a queued dispatch is a double
-     * dispatch. Only `createShipment` had a direct assertion before; the other eight of the
-     * nine `LogisticsRepository` online-only methods (of the brief's thirteen — the remaining
+     * dispatch. Only `createShipment` had a direct assertion before; the other seven of the
+     * eight `LogisticsRepository` online-only methods (of the brief's thirteen — the remaining
      * four are `DriversRepository`'s, covered below by construction) had none. Table-driven so
      * a method added to this list later without a deliberate queued-vs-online decision shows up
      * here rather than silently defaulting to whichever it happened to compile against.
@@ -162,7 +162,6 @@ class LogisticsRepositoryTest {
             "deleteLoadedPhoto" to { repo.deleteLoadedPhoto("o1", "p1") },
             "dispatchShipment" to { repo.dispatchShipment("o1", "s1", driverId = null, truckIdentifier = null, driverWillCollectCash = false, cashToCollect = null) },
             "createDispatch" to { repo.createDispatch("o1", driverId = null, truckIdentifier = null, expectedCollection = Money.ZERO, notes = null) },
-            "markDispatchReturned" to { repo.markDispatchReturned("o1", "d1") },
             "setDeliveryLocation" to { repo.setDeliveryLocation("o1", lat = null, lng = null, url = null, label = null) },
             "resolveMapLink" to { repo.resolveMapLink("https://maps.google.com/x") },
         )
@@ -173,7 +172,7 @@ class LogisticsRepositoryTest {
     }
 
     /**
-     * `DriversRepository`'s three mutations (the remaining four of the brief's thirteen
+     * `DriversRepository`'s two mutations (part of the brief's thirteen
      * online-only methods, with `drivers()` itself a read) cannot be spy-tested the way
      * `LogisticsRepository`'s can: the class is never handed an `OutboxGateway` at all, so
      * there is no seam to check. That absence *is* the guarantee — assert it structurally, so

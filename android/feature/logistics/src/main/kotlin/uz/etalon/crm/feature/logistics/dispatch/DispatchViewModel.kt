@@ -18,6 +18,9 @@ import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.Driver
 import uz.etalon.crm.core.model.Money
 
+/** Same wording DriversViewModel, DeliveryLocationViewModel and ShipmentsViewModel use. */
+private const val OFFLINE_MESSAGE = "Интернет йўқ — бу амал онлайн бажарилади"
+
 data class DispatchUiState(
     val drivers: List<Driver> = emptyList(),
     val driverId: String? = null,
@@ -94,6 +97,13 @@ open class DispatchViewModel(
     fun submit() {
         val s = _state.value
         if (s.submitting) return
+        // In the ViewModel, not only on the button: neither dispatch route is idempotent, so with
+        // no network the action must be refused rather than sent and failed — and this is the seam
+        // a test can reach, the way DriversViewModel and DeliveryLocationViewModel already do it.
+        if (s.isOffline) {
+            _state.update { it.copy(error = OFFLINE_MESSAGE) }
+            return
+        }
         // Whole-order dispatch's expectedCollection is required by the server schema and the
         // Dispatch row is @unique per order — a zero mis-submit flips the order to DISPATCHED with
         // no way to undo it from the app (an admin has to walk the order back manually). Per-shipment
