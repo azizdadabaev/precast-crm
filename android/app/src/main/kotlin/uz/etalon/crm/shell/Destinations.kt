@@ -23,8 +23,18 @@ enum class Destination(val labelRes: Int, val shortLabelRes: Int, val requires: 
 private const val MAX_BEFORE_MORE = 4
 
 /** The permitted destinations in priority order, capped at four, with MORE always last. */
-fun destinationsFor(me: Me): List<Destination> {
-    val ordered = Destination.entries.filter { it != Destination.MORE }
-    val allowed = ordered.filter { it.requires == null || me.can(it.requires) }
-    return allowed.take(MAX_BEFORE_MORE) + Destination.MORE
+fun destinationsFor(me: Me): List<Destination> = allowedFor(me).take(MAX_BEFORE_MORE) + Destination.MORE
+
+/**
+ * What the "Яна" screen lists: everything this user may open that the bar had no room for.
+ * MORE itself is never in it — it is the screen you are already on — and neither is anything
+ * the user lacks the permission for.
+ */
+fun moreDestinationsFor(me: Me): List<Destination> {
+    val onBar = destinationsFor(me).toSet()
+    return allowedFor(me).filterNot { it in onBar }
 }
+
+private fun allowedFor(me: Me): List<Destination> = Destination.entries
+    .filter { it != Destination.MORE }
+    .filter { it.requires == null || me.can(it.requires) }

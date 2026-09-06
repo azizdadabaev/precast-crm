@@ -15,3 +15,14 @@ import kotlinx.serialization.Serializable
 
 /** A bottom-bar destination whose feature module has not landed yet. */
 @Serializable data class ComingSoon(val labelRes: Int) : Key
+
+// ── Logistics ────────────────────────────────────────────────────────────────
+/** [extra] distinguishes "mark this order loaded" from "just add one more photo to it". */
+@Serializable data class LoadTruck(val orderId: String, val extra: Boolean) : Key
+@Serializable data class Shipments(val orderId: String) : Key
+@Serializable data class ShipmentLoad(val orderId: String, val shipmentId: String) : Key
+/** A null [shipmentId] is the whole-order dispatch; a non-null one dispatches that truck. */
+@Serializable data class Dispatch(val orderId: String, val shipmentId: String? = null) : Key
+@Serializable data class DeliveryProof(val orderId: String) : Key
+@Serializable data class DeliveryLocation(val orderId: String) : Key
+@Serializable data object Drivers : Key

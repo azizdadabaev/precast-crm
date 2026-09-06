@@ -1,8 +1,10 @@
 package uz.etalon.crm.core.designsystem.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
@@ -39,8 +41,16 @@ import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
  */
 data class PhotoRef(val id: String?, val url: String, val pending: Boolean = false)
 
+/** [onLongPress] is the strip's secondary gesture — the order cockpit hangs "delete this photo"
+ *  off it. It stays null wherever a photo may only be looked at. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PhotoStrip(photos: List<PhotoRef>, onOpen: (Int) -> Unit, onAdd: (() -> Unit)? = null) {
+fun PhotoStrip(
+    photos: List<PhotoRef>,
+    onOpen: (Int) -> Unit,
+    onAdd: (() -> Unit)? = null,
+    onLongPress: ((Int) -> Unit)? = null,
+) {
     val ext = LocalEtalonColors.current
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         itemsIndexed(photos) { i, photo ->
@@ -52,7 +62,10 @@ fun PhotoStrip(photos: List<PhotoRef>, onOpen: (Int) -> Unit, onAdd: (() -> Unit
                     modifier = Modifier.size(104.dp).clip(MaterialTheme.shapes.medium)
                         .border(1.dp, ext.border, MaterialTheme.shapes.medium)
                         .alpha(if (photo.pending) 0.5f else 1f)
-                        .clickable { onOpen(i) },
+                        .combinedClickable(
+                            onClick = { onOpen(i) },
+                            onLongClick = onLongPress?.let { press -> { press(i) } },
+                        ),
                 )
                 if (photo.pending) {
                     Box(

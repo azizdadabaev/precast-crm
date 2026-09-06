@@ -19,7 +19,12 @@
     <string name="nav_gazoblok_short">Газоблок</string>
     <string name="nav_more_short">Яна</string>
     <string name="more_change_pin">PIN ни ўзгартириш</string>
+    <string name="more_drivers">Ҳайдовчилар</string>
     <string name="more_sign_out">Чиқиш</string>
+    <string name="action_cancel">Бекор қилиш</string>
+    <string name="sign_out_pending_title">Юборилмаган расмлар</string>
+    <string name="sign_out_pending_message">%1$d та расм ҳали юборилмаган. Чиқсангиз улар ўчирилади.</string>
+    <string name="no_access">Бу бўлимга рухсат йўқ</string>
     <string name="coming_soon">Бу бўлим кейинги релизда</string>
     <string name="login_after_pin_change">Янги PIN билан киринг</string>
     <string name="role_owner">Эгаси</string>

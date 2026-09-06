@@ -22,4 +22,16 @@
     <string name="total">Жами</string>
     <string name="photos">Расмлар</string>
     <string name="events">Тарих</string>
+    <string name="shipments">Жўнатмалар</string>
+    <string name="shipment_n">Жўнатма %1$d</string>
+    <string name="action_location">Етказиш жойи</string>
+    <string name="action_load_truck">Юкланди — расм олиш</string>
+    <string name="action_delivery_proof">Етказилди — исбот</string>
+    <string name="action_shipments">Жўнатмалар</string>
+    <string name="action_delete">Ўчириш</string>
+    <string name="action_cancel">Бекор қилиш</string>
+    <string name="delete_photo_title">Расмни ўчириш</string>
+    <string name="delete_photo_message">Бу расм ўчирилсинми?</string>
+    <string name="upload_failed">Расм юборилмади</string>
+    <string name="upload_sending">Юборилмоқда…</string>
 </resources>

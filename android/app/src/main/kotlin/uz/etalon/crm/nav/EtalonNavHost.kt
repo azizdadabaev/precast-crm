@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -26,11 +27,19 @@ import androidx.navigation3.ui.NavDisplay
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.feature.auth.ChangePinRoute
 import uz.etalon.crm.feature.auth.LoginRoute
+import uz.etalon.crm.feature.logistics.delivery.DeliveryProofRoute
+import uz.etalon.crm.feature.logistics.dispatch.DispatchRoute
+import uz.etalon.crm.feature.logistics.drivers.DriversRoute
+import uz.etalon.crm.feature.logistics.loadtruck.LoadTruckRoute
+import uz.etalon.crm.feature.logistics.location.DeliveryLocationRoute
+import uz.etalon.crm.feature.logistics.shipments.ShipmentLoadRoute
+import uz.etalon.crm.feature.logistics.shipments.ShipmentsRoute
 import uz.etalon.crm.feature.orders.detail.OrderDetailRoute
 import uz.etalon.crm.feature.orders.list.OrdersListRoute
 import uz.etalon.crm.shell.ComingSoonScreen
 import uz.etalon.crm.shell.Destination
-import uz.etalon.crm.shell.MoreScreen
+import uz.etalon.crm.shell.MoreRoute
+import uz.etalon.crm.shell.NoAccessScreen
 import uz.etalon.crm.shell.destinationsFor
 
 private fun Destination.icon(): ImageVector = when (this) {
@@ -90,10 +99,75 @@ fun SignedInShell(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
             entryDecorators = rememberEntryDecorators(),
-            entryProvider = entryProvider {
+            // A key with no entry can only appear on a restored back stack whose owner has since
+            // lost the permission that registered it (Drivers, below). Nav3's default is to throw;
+            // saying so in Uzbek is better than crashing an operator out of the app.
+            entryProvider = entryProvider(fallback = { key -> NavEntry(key) { NoAccessScreen() } }) {
                 entry<Orders> { OrdersListRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
-                entry<OrderDetail> { k -> OrderDetailRoute(orderId = k.id, onBack = { backStack.removeLastOrNull() }) }
-                entry<More> { MoreScreen(me, onChangePin = { backStack.add(ChangePin(forced = false)) }, onSignOut = onSignOut) }
+                entry<OrderDetail> { k ->
+                    OrderDetailRoute(
+                        orderId = k.id,
+                        me = me,
+                        onBack = { backStack.removeLastOrNull() },
+                        onLoadTruck = { backStack.add(LoadTruck(k.id, extra = false)) },
+                        onAddPhoto = { backStack.add(LoadTruck(k.id, extra = true)) },
+                        onDeliveryProof = { backStack.add(DeliveryProof(k.id)) },
+                        onOpenShipments = { backStack.add(Shipments(k.id)) },
+                        onOpenLocation = { backStack.add(DeliveryLocation(k.id)) },
+                    )
+                }
+                entry<LoadTruck> { k ->
+                    LoadTruckRoute(
+                        orderId = k.orderId, extraPhoto = k.extra,
+                        onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<Shipments> { k ->
+                    ShipmentsRoute(
+                        orderId = k.orderId,
+                        onLoadShipment = { backStack.add(ShipmentLoad(k.orderId, it)) },
+                        onDispatch = { backStack.add(Dispatch(k.orderId, it)) },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<ShipmentLoad> { k ->
+                    ShipmentLoadRoute(
+                        orderId = k.orderId, shipmentId = k.shipmentId,
+                        onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<Dispatch> { k ->
+                    DispatchRoute(
+                        orderId = k.orderId, shipmentId = k.shipmentId,
+                        onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<DeliveryProof> { k ->
+                    DeliveryProofRoute(
+                        orderId = k.orderId,
+                        onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                    )
+                }
+                entry<DeliveryLocation> { k ->
+                    DeliveryLocationRoute(
+                        orderId = k.orderId,
+                        onDone = { backStack.removeLastOrNull() }, onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+                // Registered only for an operator who may read the roster: without the permission
+                // the route does not exist, so no deep link or restored stack can open it.
+                if (me.can("driver.view")) {
+                    entry<Drivers> { DriversRoute(onBack = { backStack.removeLastOrNull() }) }
+                }
+                entry<More> {
+                    MoreRoute(
+                        me = me,
+                        onOpen = { d -> backStack.add(d.key()) },
+                        onOpenDrivers = { backStack.add(Drivers) },
+                        onChangePin = { backStack.add(ChangePin(forced = false)) },
+                        onSignOut = onSignOut,
+                    )
+                }
                 // The server bumps tokenVersion on a PIN change, so the current token is dead the
                 // moment this succeeds. Sign out deliberately instead of walking back into the app
                 // and hitting a silent 401.

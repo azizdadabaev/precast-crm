@@ -43,6 +43,47 @@ class DestinationsTest {
         assertEquals(Destination.MORE, d.last())
     }
 
+    /** Whatever the bar could not fit has to be reachable from "Яна" — otherwise a permitted
+     *  section simply disappears for a user with many permissions. */
+    @Test
+    fun `More lists exactly what the bar dropped`() {
+        val owner = me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view")
+        assertEquals(
+            listOf(Destination.PAYMENTS, Destination.PRODUCTION, Destination.GAZOBLOK),
+            moreDestinationsFor(owner),
+        )
+    }
+
+    /** The bar and the More list never overlap, and together they cover every allowed
+     *  destination exactly once. */
+    @Test
+    fun `the bar and More partition the allowed destinations`() {
+        listOf(
+            me(),
+            me("inventory.view"),
+            me("order.view"),
+            me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view"),
+        ).forEach { user ->
+            val bar = destinationsFor(user).filter { it != Destination.MORE }
+            val more = moreDestinationsFor(user)
+            assertEquals(emptyList<Destination>(), bar.filter { it in more })
+            val allowed = Destination.entries.filter { it != Destination.MORE && (it.requires == null || user.can(it.requires)) }
+            assertEquals(allowed, bar + more)
+        }
+    }
+
+    /** MORE is the screen the list is on; it must never list itself. */
+    @Test
+    fun `More never lists itself`() {
+        assertEquals(emptyList<Destination>(), moreDestinationsFor(me()).filter { it == Destination.MORE })
+    }
+
+    /** A user with only a couple of permissions has nothing left over for the More list. */
+    @Test
+    fun `a user whose destinations all fit the bar has an empty More list`() {
+        assertEquals(emptyList<Destination>(), moreDestinationsFor(me("inventory.view")))
+    }
+
     @Test
     fun `a user with order view starts on Orders`() {
         assertEquals(Orders, startKeyFor(me("order.view", "payment.view"), deepLinkOrderId = null))

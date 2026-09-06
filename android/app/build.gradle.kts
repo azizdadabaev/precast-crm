@@ -55,6 +55,8 @@ dependencies {
     implementation(project(":core:sync"))
     implementation(project(":feature:auth"))
     implementation(project(":feature:orders"))
+    implementation(project(":feature:logistics"))
+    implementation(project(":feature:capture"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)

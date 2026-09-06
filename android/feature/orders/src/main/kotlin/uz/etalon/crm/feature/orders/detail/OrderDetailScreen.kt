@@ -4,8 +4,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
@@ -21,41 +19,109 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import uz.etalon.crm.core.designsystem.components.*
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
+import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.model.PendingUpload
 import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.ui.format.*
 import uz.etalon.crm.feature.orders.R
 
-/** Adaptation: the brief's ViewModel reads `orderId` from a Nav `SavedStateHandle`. Task 10 (Nav 3)
- *  hasn't landed yet, so this route takes `orderId` explicitly and resolves the ViewModel through
- *  an assisted-injection factory (`OrderDetailViewModel.Factory`) instead — keeping this screen
- *  independent of Nav 3 wiring details. */
+/** Adaptation: the brief's ViewModel reads `orderId` from a Nav `SavedStateHandle`. Nav 3's
+ *  entryProvider hands the key to the entry instead, so this route takes `orderId` explicitly and
+ *  resolves the ViewModel through an assisted-injection factory (`OrderDetailViewModel.Factory`).
+ *  `me` comes down from the signed-in shell rather than being re-read from the session here — the
+ *  shell already holds the authoritative identity for the whole back stack. */
 @Composable
-fun OrderDetailRoute(orderId: String, onBack: () -> Unit, vm: OrderDetailViewModel = hiltViewModel<OrderDetailViewModel, OrderDetailViewModel.Factory>(creationCallback = { it.create(orderId) })) {
+fun OrderDetailRoute(
+    orderId: String,
+    me: Me,
+    onBack: () -> Unit,
+    onLoadTruck: () -> Unit,
+    onAddPhoto: () -> Unit,
+    onDeliveryProof: () -> Unit,
+    onOpenShipments: () -> Unit,
+    onOpenLocation: () -> Unit,
+    vm: OrderDetailViewModel = hiltViewModel<OrderDetailViewModel, OrderDetailViewModel.Factory>(creationCallback = { it.create(orderId) }),
+) {
     val r by vm.state.collectAsStateWithLifecycle()
-    OrderDetailScreen(r, onBack, vm::refresh)
+    val pending by vm.pending.collectAsStateWithLifecycle()
+    val actionError by vm.actionError.collectAsStateWithLifecycle()
+    OrderDetailScreen(
+        r = r, me = me, pending = pending, actionError = actionError,
+        onBack = onBack, onRefresh = vm::refresh,
+        onLoadTruck = onLoadTruck, onAddPhoto = onAddPhoto, onDeliveryProof = onDeliveryProof,
+        onOpenShipments = onOpenShipments, onOpenLocation = onOpenLocation,
+        onDeletePhoto = vm::deletePhoto, onRetryUpload = vm::retryUpload, onCancelUpload = vm::cancelUpload,
+    )
 }
 
 private val FLOW = listOf(OrderStatus.PLACED, OrderStatus.LOADED, OrderStatus.DELIVERED)
 private fun OrderStatus.collapsed() = when (this) { OrderStatus.IN_PRODUCTION -> OrderStatus.PLACED; OrderStatus.DISPATCHED -> OrderStatus.LOADED; else -> this }
 
+/** The delivery proof is not part of the gallery the server hands back, so it is appended as a
+ *  strip entry with no id — it is shown, never deleted from here. Guarded against the server one
+ *  day listing it in the gallery too, which would otherwise show it twice. */
+private fun stripPhotos(o: OrderDetail): List<PhotoRef> =
+    o.loadedPhotos.map { PhotoRef(it.id, it.url) } +
+        listOfNotNull(o.deliveryProofUrl?.takeIf { url -> o.loadedPhotos.none { it.url == url } }?.let { PhotoRef(null, it) })
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrderDetailScreen(r: Resource<OrderDetail>, onBack: () -> Unit, onRefresh: () -> Unit) {
+fun OrderDetailScreen(
+    r: Resource<OrderDetail>,
+    me: Me,
+    pending: List<PendingUpload>,
+    actionError: String?,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+    onLoadTruck: () -> Unit,
+    onAddPhoto: () -> Unit,
+    onDeliveryProof: () -> Unit,
+    onOpenShipments: () -> Unit,
+    onOpenLocation: () -> Unit,
+    onDeletePhoto: (String) -> Unit,
+    onRetryUpload: (String) -> Unit,
+    onCancelUpload: (String) -> Unit,
+) {
     val o = r.dataOrNull
     val ctx = LocalContext.current
-    Scaffold(topBar = {
-        TopAppBar(title = { Text(o?.summary?.orderNumber ?: "", style = EtalonType.monoTitle) },
-            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } })
-    }) { pad ->
+    val canEdit = me.can("order.edit")
+    val step = o?.let { nextStepFor(it, me, pending.size) } ?: NextStep.None
+    val photos = o?.let { stripPhotos(it) }.orEmpty()
+    var lightboxAt by remember { mutableStateOf<Int?>(null) }
+    var deleteCandidate by remember { mutableStateOf<PhotoRef?>(null) }
+    // Only a photo the server already knows can be deleted; a queued one has no id to delete by.
+    val onPhotoLongPress: ((Int) -> Unit)? = if (canEdit) {
+        { index -> photos.getOrNull(index)?.takeIf { p -> p.id != null }?.let { p -> deleteCandidate = p } }
+    } else {
+        null
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(title = { Text(o?.summary?.orderNumber ?: "", style = EtalonType.monoTitle) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } })
+        },
+        bottomBar = { NextStepBar(step, onLoadTruck, onDeliveryProof, onOpenShipments) },
+    ) { pad ->
         PullToRefreshBox(isRefreshing = r is Resource.Loading && o == null, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
             LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+                // 0 · outbox — a queued photo the operator must be able to see, retry or drop
+                if (pending.isNotEmpty()) item {
+                    val failed = pending.firstOrNull { it.failed }
+                    OutboxBanner(
+                        pending = pending.count { !it.failed },
+                        failedMessage = failed?.let { it.error ?: stringResource(R.string.upload_failed) },
+                        onRetry = { failed?.let { onRetryUpload(it.id) } },
+                        onCancel = { failed?.let { onCancelUpload(it.id) } },
+                    )
+                }
                 if (r is Resource.Error) item { ErrorBanner(r.error.message, onRetry = onRefresh) }
+                if (actionError != null) item { ErrorBanner(actionError) }
                 if (o == null) return@LazyColumn
                 // 1 · header
                 item {
@@ -64,7 +130,14 @@ fun OrderDetailScreen(r: Resource<OrderDetail>, onBack: () -> Unit, onRefresh: (
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(formatPhone(o.summary.client.phone), style = EtalonType.monoBody, color = MaterialTheme.colorScheme.primary)
                             IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:+${o.summary.client.phone}"))) }) { Icon(Icons.Default.Call, stringResource(R.string.action_call)) }
-                            if (o.deliveryLat != null && o.deliveryLng != null) IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${o.deliveryLat},${o.deliveryLng}?q=${o.deliveryLat},${o.deliveryLng}"))) }) { Icon(Icons.Default.Navigation, stringResource(R.string.action_navigate)) }
+                            // With order.edit the pin is editable, so the icon opens the location
+                            // screen (which offers navigation of its own). A read-only operator
+                            // keeps the straight hand-off to the maps app, and only when a pin exists.
+                            if (canEdit) {
+                                IconButton(onClick = onOpenLocation) { Icon(Icons.Default.Navigation, stringResource(R.string.action_location)) }
+                            } else if (o.deliveryLat != null && o.deliveryLng != null) {
+                                IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${o.deliveryLat},${o.deliveryLng}?q=${o.deliveryLat},${o.deliveryLng}"))) }) { Icon(Icons.Default.Navigation, stringResource(R.string.action_navigate)) }
+                            }
                         }
                         o.summary.client.address?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         Text(stringResource(R.string.scheduled_on, formatDate(o.summary.scheduledAt)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -104,7 +177,28 @@ fun OrderDetailScreen(r: Resource<OrderDetail>, onBack: () -> Unit, onRefresh: (
                         }
                     }
                 }
-                // 4 · rooms
+                // 4 · shipments — only once the order is actually split across trucks
+                if (o.shipments.isNotEmpty()) item {
+                    StatusStripeCard(stripe = LocalEtalonColors.current.border, onClick = onOpenShipments) {
+                        SectionLabel(stringResource(R.string.shipments))
+                        o.shipments.forEach { sh ->
+                            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(stringResource(R.string.shipment_n, sh.number), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    val who = listOfNotNull(sh.driverName, sh.truckIdentifier).joinToString(" · ")
+                                    if (who.isNotEmpty()) Text(who, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    // A load queued offline leaves the truck looking untouched; say so
+                                    // here so nobody loads it a second time from the shipment list.
+                                    if (pending.any { it.shipmentId == sh.id }) {
+                                        Text(stringResource(R.string.upload_sending), style = MaterialTheme.typography.bodySmall, color = LocalEtalonColors.current.warning)
+                                    }
+                                }
+                                ShipmentStatusChip(sh.status)
+                            }
+                        }
+                    }
+                }
+                // 5 · rooms
                 item {
                     StatusStripeCard(stripe = LocalEtalonColors.current.border) {
                         SectionLabel(stringResource(R.string.rooms))
@@ -124,15 +218,19 @@ fun OrderDetailScreen(r: Resource<OrderDetail>, onBack: () -> Unit, onRefresh: (
                         Row(Modifier.fillMaxWidth()) { Text(stringResource(R.string.total), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold); MoneyText(o.summary.totalPrice, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold)) }
                     }
                 }
-                // 5 · photos
-                val photos = o.loadedPhotoUrls + listOfNotNull(o.deliveryProofUrl)
-                if (photos.isNotEmpty()) item {
+                // 6 · photos
+                val canAdd = canAddPhoto(o, me)
+                if (photos.isNotEmpty() || canAdd) item {
                     SectionLabel(stringResource(R.string.photos))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                        items(photos) { url -> AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(120.dp)) }
-                    }
+                    Spacer(Modifier.height(6.dp))
+                    PhotoStrip(
+                        photos = photos,
+                        onOpen = { lightboxAt = it },
+                        onAdd = if (canAdd) onAddPhoto else null,
+                        onLongPress = onPhotoLongPress,
+                    )
                 }
-                // 6 · timeline
+                // 7 · timeline
                 item {
                     SectionLabel(stringResource(R.string.events))
                     o.events.take(20).forEach { e ->
@@ -140,6 +238,43 @@ fun OrderDetailScreen(r: Resource<OrderDetail>, onBack: () -> Unit, onRefresh: (
                     }
                 }
             }
+        }
+    }
+
+    lightboxAt?.let { at -> Lightbox(photos, at, onDismiss = { lightboxAt = null }) }
+    deleteCandidate?.let { photo ->
+        AlertDialog(
+            onDismissRequest = { deleteCandidate = null },
+            title = { Text(stringResource(R.string.delete_photo_title)) },
+            text = { Text(stringResource(R.string.delete_photo_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    photo.id?.let(onDeletePhoto)
+                    deleteCandidate = null
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+}
+
+/** The order's single next action. [NextStep.None] renders nothing at all — an empty bar would
+ *  eat thumb space and read as a disabled action. */
+@Composable
+private fun NextStepBar(
+    step: NextStep,
+    onLoadTruck: () -> Unit,
+    onDeliveryProof: () -> Unit,
+    onOpenShipments: () -> Unit,
+) {
+    if (step == NextStep.None) return
+    StickyActionBar {
+        when (step) {
+            NextStep.LoadTruck -> PrimaryButton(stringResource(R.string.action_load_truck), onLoadTruck)
+            NextStep.DeliveryProof -> PrimaryButton(stringResource(R.string.action_delivery_proof), onDeliveryProof)
+            NextStep.ManageShipments -> PrimaryButton(stringResource(R.string.action_shipments), onOpenShipments)
+            is NextStep.Blocked -> PrimaryButton(step.reason, onClick = {}, enabled = false)
+            NextStep.None -> Unit
         }
     }
 }
