@@ -23,7 +23,9 @@ fun allowanceFor(order: OrderDetail, excludingShipmentId: String?): Allowance {
     var takenBlocks = 0
     val takenBeams = mutableMapOf<String, Int>()
     order.shipments.filter { it.id != excludingShipmentId }.forEach { s ->
-        s.loadedBeams.forEach { (k, v) -> takenBeams.merge(key(java.math.BigDecimal(k)), v, Int::plus) }
+        // A key the server never would have written (corrupt cache, a future format change)
+        // must not crash this computation; skip it rather than let it count against nothing.
+        s.loadedBeams.forEach { (k, v) -> k.toBigDecimalOrNull()?.let { takenBeams.merge(key(it), v, Int::plus) } }
         takenBlocks += s.loadedBlocks ?: 0
     }
     return Allowance(

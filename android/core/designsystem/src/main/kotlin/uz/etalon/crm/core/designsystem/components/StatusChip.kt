@@ -18,6 +18,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
+import uz.etalon.crm.core.model.ShipmentStatus
 
 enum class ChipTone { PRIMARY, SUCCESS, WARNING, DANGER, GOLD, NEUTRAL }
 
@@ -52,6 +53,23 @@ fun paymentStateLabel(p: PaymentState): Int = when (p) {
     PaymentState.AWAITING_PAYMENT, PaymentState.UNKNOWN -> R.string.payment_pending
 }
 
+/** A truck's own PENDING/LOADED/DISPATCHED/DELIVERED progress (`ShipmentLine.status`),
+ *  distinct from the order-level [OrderStatus] above but sharing its words. */
+fun shipmentStatusTone(s: ShipmentStatus): ChipTone = when (s) {
+    ShipmentStatus.PENDING -> ChipTone.NEUTRAL
+    ShipmentStatus.LOADED -> ChipTone.WARNING
+    ShipmentStatus.DISPATCHED -> ChipTone.GOLD
+    ShipmentStatus.DELIVERED -> ChipTone.SUCCESS
+    ShipmentStatus.UNKNOWN -> ChipTone.NEUTRAL
+}
+fun shipmentStatusLabel(s: ShipmentStatus): Int = when (s) {
+    ShipmentStatus.PENDING -> R.string.payment_pending // same word, "Кутилмоқда" — no separate string
+    ShipmentStatus.LOADED -> R.string.status_loaded
+    ShipmentStatus.DISPATCHED -> R.string.status_dispatched
+    ShipmentStatus.DELIVERED -> R.string.status_delivered
+    ShipmentStatus.UNKNOWN -> R.string.status_unknown
+}
+
 @Composable
 fun toneColor(t: ChipTone): Color {
     val ext = LocalEtalonColors.current
@@ -83,3 +101,5 @@ fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) {
     Chip(orderStatusTone(status), stringResource(orderStatusLabel(status)), modifier)
 @Composable fun PaymentChip(state: PaymentState, modifier: Modifier = Modifier) =
     Chip(paymentStateTone(state), stringResource(paymentStateLabel(state)), modifier)
+@Composable fun ShipmentStatusChip(status: ShipmentStatus, modifier: Modifier = Modifier) =
+    Chip(shipmentStatusTone(status), stringResource(shipmentStatusLabel(status)), modifier)

@@ -5,8 +5,10 @@ import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.designsystem.components.ChipTone
 import uz.etalon.crm.core.designsystem.components.orderStatusTone
 import uz.etalon.crm.core.designsystem.components.paymentStateTone
+import uz.etalon.crm.core.designsystem.components.shipmentStatusTone
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
+import uz.etalon.crm.core.model.ShipmentStatus
 
 class StatusChipMappingTest {
     @Test fun `order statuses map to the web's chip variants`() {
@@ -22,5 +24,12 @@ class StatusChipMappingTest {
         assertEquals(ChipTone.SUCCESS, paymentStateTone(PaymentState.FULLY_PAID))
         assertEquals(ChipTone.PRIMARY, paymentStateTone(PaymentState.PARTIALLY_PAID))
         assertEquals(ChipTone.NEUTRAL, paymentStateTone(PaymentState.AWAITING_PAYMENT))
+    }
+    @Test fun `a shipment's own progress mirrors the order chip's words`() {
+        assertEquals(ChipTone.NEUTRAL, shipmentStatusTone(ShipmentStatus.PENDING))
+        assertEquals(ChipTone.WARNING, shipmentStatusTone(ShipmentStatus.LOADED))
+        assertEquals(ChipTone.GOLD, shipmentStatusTone(ShipmentStatus.DISPATCHED))
+        assertEquals(ChipTone.SUCCESS, shipmentStatusTone(ShipmentStatus.DELIVERED))
+        assertEquals(ChipTone.NEUTRAL, shipmentStatusTone(ShipmentStatus.UNKNOWN))
     }
 }

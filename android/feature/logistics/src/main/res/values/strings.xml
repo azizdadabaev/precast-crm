@@ -8,7 +8,6 @@
     <string name="shipments_title">Жўнатмалар</string>
     <string name="shipments_empty">Жўнатма йўқ.</string>
     <string name="shipment_n">Жўнатма %1$d</string>
-    <string name="shipment_status_pending">Кутилмоқда</string>
     <string name="action_add_shipment">Жўнатма қўшиш</string>
     <string name="action_load_shipment">Юклаш</string>
     <string name="action_dispatch_shipment">Жўнатиш</string>

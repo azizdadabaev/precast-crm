@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.LogisticsRepository
 import uz.etalon.crm.core.data.OrdersRepository
 import uz.etalon.crm.core.data.toAppError
+import uz.etalon.crm.core.image.ImagePrep
 import uz.etalon.crm.core.image.PreparedImage
 
 data class ShipmentLoadUiState(
@@ -84,6 +85,7 @@ open class ShipmentLoadViewModel(
 class HiltShipmentLoadViewModel @AssistedInject constructor(
     private val orders: OrdersRepository,
     logistics: LogisticsRepository,
+    val imagePrep: ImagePrep,
     @Assisted("orderId") orderId: String,
     @Assisted("shipmentId") shipmentId: String,
 ) : ShipmentLoadViewModel(

@@ -17,22 +17,20 @@ import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
-import uz.etalon.crm.core.image.ImagePrep
 import uz.etalon.crm.feature.capture.PhotoCapture
 import uz.etalon.crm.feature.logistics.R
 
 /**
- * Unlike [uz.etalon.crm.feature.logistics.loadtruck.LoadTruckRoute], `imagePrep` is a real
- * parameter here rather than read off the ViewModel: this route's Hilt view model has no reason
- * to hold one (it only counts beams and blocks), so the caller supplies it directly for
- * [PhotoCapture], which stays Hilt-free by design.
+ * `imagePrep` is not a parameter here: as in every logistics screen (see
+ * [uz.etalon.crm.feature.logistics.loadtruck.LoadTruckRoute]), [uz.etalon.crm.feature.capture.PhotoCapture]
+ * takes it in rather than injecting it itself so `:feature:capture` stays Hilt-free, and this
+ * route gets it from [HiltShipmentLoadViewModel]'s own Hilt-injected `imagePrep` property.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShipmentLoadRoute(
     orderId: String,
     shipmentId: String,
-    imagePrep: ImagePrep,
     onDone: () -> Unit,
     onCancel: () -> Unit,
     vm: HiltShipmentLoadViewModel = hiltViewModel<HiltShipmentLoadViewModel, HiltShipmentLoadViewModel.Factory>(
@@ -44,7 +42,7 @@ fun ShipmentLoadRoute(
 
     // Camera first, exactly like the single-photo screen: until a photo exists the viewfinder IS the screen.
     if (s.photo == null) {
-        PhotoCapture(imagePrep = imagePrep, onPhoto = vm::onPhoto, onCancel = onCancel)
+        PhotoCapture(imagePrep = vm.imagePrep, onPhoto = vm::onPhoto, onCancel = onCancel)
         return
     }
 
@@ -80,6 +78,10 @@ fun ShipmentLoadRoute(
             CountStepper(
                 label = stringResource(R.string.blocks_label), value = s.blocks,
                 onChange = vm::setBlocks, max = s.allowance.blocks,
+            )
+            Text(
+                stringResource(R.string.upload_queued_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

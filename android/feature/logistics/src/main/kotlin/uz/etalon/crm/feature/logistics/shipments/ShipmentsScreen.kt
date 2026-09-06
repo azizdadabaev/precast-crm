@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -14,36 +15,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import uz.etalon.crm.core.designsystem.components.Chip
-import uz.etalon.crm.core.designsystem.components.ChipTone
 import uz.etalon.crm.core.designsystem.components.DangerButton
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
+import uz.etalon.crm.core.designsystem.components.ShipmentStatusChip
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
+import uz.etalon.crm.core.designsystem.components.shipmentStatusTone
 import uz.etalon.crm.core.designsystem.components.toneColor
+import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.feature.logistics.R
-import uz.etalon.crm.core.designsystem.R as DesignSystemR
-
-private fun shipmentStatusTone(s: ShipmentStatus): ChipTone = when (s) {
-    ShipmentStatus.PENDING -> ChipTone.NEUTRAL
-    ShipmentStatus.LOADED -> ChipTone.WARNING
-    ShipmentStatus.DISPATCHED -> ChipTone.GOLD
-    ShipmentStatus.DELIVERED -> ChipTone.SUCCESS
-    ShipmentStatus.UNKNOWN -> ChipTone.NEUTRAL
-}
-
-private fun shipmentStatusLabel(s: ShipmentStatus): Int = when (s) {
-    ShipmentStatus.PENDING -> R.string.shipment_status_pending
-    ShipmentStatus.LOADED -> DesignSystemR.string.status_loaded
-    ShipmentStatus.DISPATCHED -> DesignSystemR.string.status_dispatched
-    ShipmentStatus.DELIVERED -> DesignSystemR.string.status_delivered
-    ShipmentStatus.UNKNOWN -> DesignSystemR.string.status_unknown
-}
 
 @Composable
 fun ShipmentsRoute(
@@ -51,7 +36,7 @@ fun ShipmentsRoute(
     vm: ShipmentsViewModel = hiltViewModel<ShipmentsViewModel, ShipmentsViewModel.Factory>(creationCallback = { it.create(orderId) }),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
-    ShipmentsScreen(s, onLoadShipment, onDispatch, onBack, vm::addShipment, vm::deleteShipment, vm::deliverShipment)
+    ShipmentsScreen(s, onLoadShipment, onDispatch, onBack, vm::addShipment, vm::deleteShipment, vm::deliverShipment, vm::refresh)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -64,8 +49,14 @@ fun ShipmentsScreen(
     onAdd: () -> Unit,
     onDelete: (String) -> Unit,
     onDeliver: (String) -> Unit,
+    onRefresh: () -> Unit,
 ) {
     val shipments = s.order?.shipments.orEmpty()
+    // No cache yet and the first fetch hasn't landed: this is the only state PullToRefreshBox
+    // should show as spinning, and the only one that must suppress the empty state — otherwise
+    // a slow first load or an offline failure both briefly (or permanently) read as "no trucks".
+    val isLoading = s.resource is Resource.Loading && s.order == null
+    val actionsDisabled = s.busy || s.isOffline
     Scaffold(
         topBar = {
             TopAppBar(
@@ -82,16 +73,24 @@ fun ShipmentsScreen(
             }
         },
     ) { pad ->
-        LazyColumn(
-            modifier = Modifier.padding(pad).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            val actionError = s.actionError
-            if (actionError != null) item { ErrorBanner(actionError) }
-            if (shipments.isEmpty()) item { EmptyState(stringResource(R.string.shipments_empty)) }
-            items(shipments, key = { it.id }) { sh ->
-                ShipmentCard(sh, busy = s.busy, onLoad = { onLoadShipment(sh.id) }, onDispatch = { onDispatch(sh.id) }, onDeliver = { onDeliver(sh.id) }, onDelete = { onDelete(sh.id) })
+        PullToRefreshBox(isRefreshing = isLoading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                val resourceError = (s.resource as? Resource.Error)?.error?.message
+                if (resourceError != null) item { ErrorBanner(resourceError, onRetry = onRefresh) }
+                val actionError = s.actionError
+                if (actionError != null) item { ErrorBanner(actionError) }
+                if (shipments.isEmpty() && !isLoading) item { EmptyState(stringResource(R.string.shipments_empty)) }
+                items(shipments, key = { it.id }) { sh ->
+                    ShipmentCard(
+                        sh, actionsDisabled = actionsDisabled,
+                        onLoad = { onLoadShipment(sh.id) }, onDispatch = { onDispatch(sh.id) },
+                        onDeliver = { onDeliver(sh.id) }, onDelete = { onDelete(sh.id) },
+                    )
+                }
             }
         }
     }
@@ -99,13 +98,13 @@ fun ShipmentsScreen(
 
 @Composable
 private fun ShipmentCard(
-    sh: ShipmentLine, busy: Boolean,
+    sh: ShipmentLine, actionsDisabled: Boolean,
     onLoad: () -> Unit, onDispatch: () -> Unit, onDeliver: () -> Unit, onDelete: () -> Unit,
 ) {
     StatusStripeCard(stripe = toneColor(shipmentStatusTone(sh.status))) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(stringResource(R.string.shipment_n, sh.number), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Chip(shipmentStatusTone(sh.status), stringResource(shipmentStatusLabel(sh.status)))
+            ShipmentStatusChip(sh.status)
         }
         if (sh.driverName != null || sh.truckIdentifier != null) {
             Text(
@@ -121,13 +120,16 @@ private fun ShipmentCard(
             )
         }
         Spacer(Modifier.height(8.dp))
+        // Loading and dispatching only navigate to another screen (loading is itself queue-safe
+        // offline, per the module's rule); delete and deliver hit the network directly, so those
+        // two — and only those two — are gated on [actionsDisabled].
         when (sh.status) {
             ShipmentStatus.PENDING -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton(stringResource(R.string.action_load_shipment), onClick = onLoad, modifier = Modifier.weight(1f))
-                DangerButton(stringResource(R.string.action_delete_shipment), onClick = onDelete, enabled = !busy, modifier = Modifier.weight(1f))
+                DangerButton(stringResource(R.string.action_delete_shipment), onClick = onDelete, enabled = !actionsDisabled, modifier = Modifier.weight(1f))
             }
             ShipmentStatus.LOADED -> PrimaryButton(stringResource(R.string.action_dispatch_shipment), onClick = onDispatch)
-            ShipmentStatus.DISPATCHED -> SecondaryButton(stringResource(R.string.action_deliver_shipment), onClick = onDeliver, enabled = !busy)
+            ShipmentStatus.DISPATCHED -> SecondaryButton(stringResource(R.string.action_deliver_shipment), onClick = onDeliver, enabled = !actionsDisabled)
             ShipmentStatus.DELIVERED, ShipmentStatus.UNKNOWN -> {}
         }
     }
