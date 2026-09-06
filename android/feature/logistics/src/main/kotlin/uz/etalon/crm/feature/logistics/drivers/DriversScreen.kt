@@ -49,8 +49,9 @@ import uz.etalon.crm.feature.logistics.R
 @Composable
 fun DriversRoute(onBack: () -> Unit, vm: HiltDriversViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val canManage by vm.canManage.collectAsStateWithLifecycle()
     DriversScreen(
-        s = s, canManage = vm.canManage, onBack = onBack, onRefresh = vm::refresh,
+        s = s, canManage = canManage, onBack = onBack, onRefresh = vm::refresh,
         onSetActiveOnly = vm::setActiveOnly, onCreate = vm::create, onSetActive = vm::setActive,
     )
 }
@@ -77,7 +78,7 @@ fun DriversScreen(
         bottomBar = {
             if (canManage) {
                 StickyActionBar {
-                    PrimaryButton(stringResource(R.string.action_add_driver), onClick = { showAdd = true }, enabled = !s.loading)
+                    PrimaryButton(stringResource(R.string.action_add_driver), onClick = { showAdd = true }, enabled = !s.loading && !s.isOffline)
                 }
             }
         },
@@ -98,7 +99,7 @@ fun DriversScreen(
                 if (error != null) item { ErrorBanner(error, onRetry = onRefresh) }
                 if (s.showEmptyState) item { EmptyState(stringResource(R.string.drivers_empty)) }
                 items(s.drivers, key = { it.id }) { d ->
-                    DriverCard(d, canManage = canManage, actionsDisabled = s.loading, onSetActive = { active -> onSetActive(d.id, active) })
+                    DriverCard(d, canManage = canManage, actionsDisabled = s.loading || s.isOffline, onSetActive = { active -> onSetActive(d.id, active) })
                 }
             }
         }
@@ -106,6 +107,7 @@ fun DriversScreen(
 
     if (showAdd) {
         AddDriverSheet(
+            submitting = s.loading,
             onDismiss = { showAdd = false },
             onCreate = { name, phone, notes -> onCreate(name, phone, notes); showAdd = false },
         )
@@ -146,7 +148,7 @@ private fun DriverCard(d: Driver, canManage: Boolean, actionsDisabled: Boolean, 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddDriverSheet(onDismiss: () -> Unit, onCreate: (name: String, phone: String, notes: String?) -> Unit) {
+private fun AddDriverSheet(submitting: Boolean, onDismiss: () -> Unit, onCreate: (name: String, phone: String, notes: String?) -> Unit) {
     var name by remember { mutableStateOf("") }
     var phoneDigits by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
@@ -175,6 +177,7 @@ private fun AddDriverSheet(onDismiss: () -> Unit, onCreate: (name: String, phone
             PrimaryButton(
                 stringResource(R.string.action_add_driver),
                 onClick = { onCreate(name, "998$phoneDigits", notes.ifBlank { null }) },
+                enabled = !submitting, loading = submitting,
             )
         }
     }

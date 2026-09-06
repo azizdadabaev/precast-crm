@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.network.ApiException
+import java.io.IOException
 import uz.etalon.crm.feature.logistics.dispatch.CreateDispatchUseCase
 import uz.etalon.crm.feature.logistics.dispatch.DispatchDriversUseCase
 import uz.etalon.crm.feature.logistics.dispatch.DispatchShipmentUseCase
@@ -86,6 +87,7 @@ class DispatchViewModelTest {
             dispatchShipment = neverDispatchesShipment,
         )
         advanceUntilIdle()
+        vm.setAmountDigits("500000") // a whole-order dispatch with no amount is refused before the network — see below
         vm.submit() // enters submitting=true synchronously, then suspends on the coroutine
         vm.submit() // a second tap before the first has resolved must not call the API twice
         advanceUntilIdle()
@@ -95,17 +97,93 @@ class DispatchViewModelTest {
     }
 
     @Test fun `a Conflict error is shown verbatim and done stays false`() = runTest {
-        val message = "Бу буюртма учун жўнатма аллақачон мавжуд"
+        // The exact bilingual string POST /api/orders/[id]/dispatch returns on a second dispatch
+        // (see route.ts: order.dispatch is @unique, so a re-submit hits this 409, not a retryable
+        // failure). ErrorMapper's uzbekMessage splits on " · " and keeps only the Uzbek half.
+        val serverMessage = "Бу буюртма учун жўнатма аллақачон мавжуд · This order already has a dispatch"
         val vm = DispatchViewModel(
             shipmentId = null, drivers = noDrivers,
-            createDispatch = CreateDispatchUseCase { _, _, _ -> Result.failure(ApiException(409, message)) },
+            createDispatch = CreateDispatchUseCase { _, _, _ -> Result.failure(ApiException(409, serverMessage)) },
+            dispatchShipment = neverDispatchesShipment,
+        )
+        advanceUntilIdle()
+        vm.setAmountDigits("500000")
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals("Бу буюртма учун жўнатма аллақачон мавжуд", vm.state.value.error)
+        assertFalse(vm.state.value.done)
+    }
+
+    @Test fun `a whole-order dispatch with no amount is refused before the network, and the button stays blocked`() = runTest {
+        val vm = DispatchViewModel(
+            shipmentId = null, drivers = noDrivers,
+            createDispatch = neverCreates,
             dispatchShipment = neverDispatchesShipment,
         )
         advanceUntilIdle()
         vm.submit()
         advanceUntilIdle()
 
-        assertEquals(message, vm.state.value.error)
+        assertNotNull(vm.state.value.error)
         assertFalse(vm.state.value.done)
+        assertFalse(vm.state.value.submitting)
+    }
+
+    @Test fun `a per-shipment dispatch with no cash is legitimate and is never refused for a zero amount`() = runTest {
+        var calls = 0
+        val vm = DispatchViewModel(
+            shipmentId = "s1", drivers = noDrivers, createDispatch = neverCreates,
+            dispatchShipment = DispatchShipmentUseCase { _, _, _, _ -> calls++; Result.success(Unit) },
+        )
+        advanceUntilIdle()
+        // willCollectCash stays off, amountDigits stays empty — this must still dispatch.
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(1, calls)
+        assertTrue(vm.state.value.done)
+    }
+
+    @Test fun `a non-network driver-fetch failure keeps its own message and does not report offline`() = runTest {
+        val vm = DispatchViewModel(
+            shipmentId = null,
+            drivers = DispatchDriversUseCase { Result.failure(ApiException(403, "Рухсат йўқ · Forbidden")) },
+            createDispatch = neverCreates, dispatchShipment = neverDispatchesShipment,
+        )
+        advanceUntilIdle()
+
+        assertEquals("Рухсат йўқ", vm.state.value.driversErrorMessage)
+        assertFalse(vm.state.value.isOffline)
+    }
+
+    @Test fun `a network driver-fetch failure reports offline and blocks submission`() = runTest {
+        val vm = DispatchViewModel(
+            shipmentId = null,
+            drivers = DispatchDriversUseCase { Result.failure(IOException("тармоқ йўқ")) },
+            createDispatch = neverCreates, dispatchShipment = neverDispatchesShipment,
+        )
+        advanceUntilIdle()
+
+        assertTrue(vm.state.value.isOffline)
+        assertNotNull(vm.state.value.driversErrorMessage)
+    }
+
+    @Test fun `refreshDrivers retries the driver fetch and clears a previous failure`() = runTest {
+        var shouldFail = true
+        val vm = DispatchViewModel(
+            shipmentId = null,
+            drivers = DispatchDriversUseCase { if (shouldFail) Result.failure(IOException("тармоқ йўқ")) else Result.success(emptyList()) },
+            createDispatch = neverCreates, dispatchShipment = neverDispatchesShipment,
+        )
+        advanceUntilIdle()
+        assertTrue(vm.state.value.isOffline)
+
+        shouldFail = false
+        vm.refreshDrivers()
+        advanceUntilIdle()
+
+        assertFalse(vm.state.value.isOffline)
+        assertNull(vm.state.value.driversErrorMessage)
     }
 }

@@ -27,15 +27,22 @@ data class DispatchUiState(
     val submitting: Boolean = false,
     val error: String? = null,
     val done: Boolean = false,
-    /** The only offline signal this screen has, exactly like ShipmentsUiState's: the active-driver
-     *  fetch failed for lack of a network. Neither dispatch route is idempotent (see
-     *  LogisticsRepository's online-only section), so the action is disabled outright rather than
-     *  queued — there is nothing here to retry silently later. */
-    val isOffline: Boolean = false,
+    /** The raw outcome of the last active-driver fetch, kept whole — not collapsed into a message
+     *  string or a network-only boolean — exactly like ShipmentsUiState keeps its `Resource.Error`
+     *  whole so both a display message and a retry-affordance survive for *any* failure (a 403, a
+     *  500, a decode error), not only the network case. [isOffline] is one narrower fact derived
+     *  from it. */
+    val driversFetchError: AppError? = null,
 ) {
     /** Mirrors DeliveryProofUiState.amount: the keypad's comma never reaches [Money.parse], and an
      *  empty or unparsable field reads as zero rather than crashing a restored/deeplinked state. */
     val amount: Money get() = amountDigits.replace(',', '.').let { d -> if (d.isEmpty()) Money.ZERO else runCatching { Money.parse(d) }.getOrDefault(Money.ZERO) }
+    val driversErrorMessage: String? get() = driversFetchError?.message
+    /** The one signal that blocks *submitting*: neither dispatch route is idempotent (see
+     *  LogisticsRepository's online-only section), so with no network the action is disabled
+     *  outright rather than queued. A non-network driver-fetch failure (403, 500…) still lets a
+     *  no-driver dispatch through — it only means the picker couldn't be filled. */
+    val isOffline: Boolean get() = driversFetchError is AppError.Network
 }
 
 fun interface DispatchDriversUseCase { suspend operator fun invoke(): Result<List<Driver>> }
@@ -63,11 +70,15 @@ open class DispatchViewModel(
     private val _state = MutableStateFlow(DispatchUiState())
     val state: StateFlow<DispatchUiState> = _state.asStateFlow()
 
-    init {
+    init { refreshDrivers() }
+
+    /** Also the retry action behind the driver-fetch error banner: a 403/500/decode failure, and
+     *  going offline itself, both need a way back other than leaving the screen. */
+    fun refreshDrivers() {
         viewModelScope.launch {
             listDrivers().fold(
-                onSuccess = { rows -> _state.update { it.copy(drivers = rows, isOffline = false) } },
-                onFailure = { t -> _state.update { it.copy(isOffline = t.toAppError() is AppError.Network) } },
+                onSuccess = { rows -> _state.update { it.copy(drivers = rows, driversFetchError = null) } },
+                onFailure = { t -> _state.update { it.copy(driversFetchError = t.toAppError()) } },
             )
         }
     }
@@ -83,6 +94,14 @@ open class DispatchViewModel(
     fun submit() {
         val s = _state.value
         if (s.submitting) return
+        // Whole-order dispatch's expectedCollection is required by the server schema and the
+        // Dispatch row is @unique per order — a zero mis-submit flips the order to DISPATCHED with
+        // no way to undo it from the app (an admin has to walk the order back manually). Per-shipment
+        // dispatch has no such field to guard: a shipment with no cash to collect is legitimate.
+        if (shipmentId == null && s.amount.isZero) {
+            _state.update { it.copy(error = "Кутилган суммани киритинг") }
+            return
+        }
         _state.update { it.copy(submitting = true, error = null) }
         val truck = s.truck.trim().ifEmpty { null }
         viewModelScope.launch {

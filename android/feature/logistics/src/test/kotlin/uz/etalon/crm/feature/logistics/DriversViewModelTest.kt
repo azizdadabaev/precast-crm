@@ -94,5 +94,44 @@ class DriversViewModelTest {
 
         assertEquals(existing, vm.state.value.drivers)
         assertNotNull(vm.state.value.error)
+        assertTrue(vm.state.value.isOffline)
+    }
+
+    @Test fun `creating a driver with a short phone is refused before the network is touched`() = runTest {
+        var calls = 0
+        val vm = DriversViewModel(
+            list = DriversListUseCase { Result.success(emptyList()) },
+            create = DriverCreateUseCase { _, _, _ -> calls++; Result.success(driver("d1", "x", true)) },
+            setActive = DriverSetActiveUseCase { _, _ -> Result.success(driver("d1", "x", true)) },
+        )
+        advanceUntilIdle()
+
+        // Phone is this product's unique client key: "998" + 5 typed digits is an 8-digit value,
+        // not the 12-digit shape formatPhone/ClientDto expect — it must never reach the network.
+        vm.create("Ҳайдовчи", "99812345", null)
+        advanceUntilIdle()
+
+        assertEquals(0, calls)
+        assertNotNull(vm.state.value.error)
+    }
+
+    @Test fun `creating and activating a driver are both refused while offline`() = runTest {
+        var createCalls = 0
+        var setActiveCalls = 0
+        val vm = DriversViewModel(
+            list = DriversListUseCase { Result.failure(IOException("тармоқ йўқ")) },
+            create = DriverCreateUseCase { _, _, _ -> createCalls++; Result.success(driver("d1", "x", true)) },
+            setActive = DriverSetActiveUseCase { _, _ -> setActiveCalls++; Result.success(driver("d1", "x", true)) },
+        )
+        advanceUntilIdle()
+        assertTrue(vm.state.value.isOffline)
+
+        vm.create("Ҳайдовчи", "998901112233", null)
+        vm.setActive("d1", false)
+        advanceUntilIdle()
+
+        assertEquals(0, createCalls)
+        assertEquals(0, setActiveCalls)
+        assertNotNull(vm.state.value.error)
     }
 }

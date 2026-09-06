@@ -61,7 +61,7 @@ fun DispatchRoute(
         s = s, isShipment = shipmentId != null, onCancel = onCancel,
         onSetDriverId = vm::setDriverId, onSetTruck = vm::setTruck,
         onSetWillCollectCash = vm::setWillCollectCash, onSetAmountDigits = vm::setAmountDigits,
-        onSubmit = vm::submit,
+        onSubmit = vm::submit, onRetryDrivers = vm::refreshDrivers,
     )
 }
 
@@ -76,12 +76,16 @@ fun DispatchScreen(
     onSetWillCollectCash: (Boolean) -> Unit,
     onSetAmountDigits: (String) -> Unit,
     onSubmit: () -> Unit,
+    onRetryDrivers: () -> Unit,
 ) {
     var showPicker by remember { mutableStateOf(false) }
     var showKeypad by remember { mutableStateOf(false) }
     // The whole-order route always requires an amount; the per-shipment route only collects one
     // when the driver-will-collect-cash switch is on — see HiltDispatchViewModel's DispatchUseCase.
     val amountApplies = !isShipment || s.willCollectCash
+    // Mirrors DispatchViewModel.submit()'s own guard: a whole-order dispatch with nothing typed
+    // must never reach the server, since a mis-submit there can't be undone from the app.
+    val canSubmit = !s.isOffline && (isShipment || !s.amount.isZero)
 
     Scaffold(
         topBar = {
@@ -94,7 +98,7 @@ fun DispatchScreen(
             StickyActionBar {
                 PrimaryButton(
                     text = stringResource(R.string.action_dispatch), onClick = onSubmit,
-                    enabled = !s.isOffline, loading = s.submitting,
+                    enabled = canSubmit, loading = s.submitting,
                 )
             }
         },
@@ -103,6 +107,10 @@ fun DispatchScreen(
             Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // The active-driver fetch's own outcome — any failure, not only offline — with a retry,
+            // so a 403/500/decode error is never silently swallowed and offline is never a dead end.
+            val driversError = s.driversErrorMessage
+            if (driversError != null) ErrorBanner(driversError, onRetry = onRetryDrivers)
             if (s.isOffline) ErrorBanner(stringResource(R.string.offline_action_blocked))
             val error = s.error
             if (error != null) ErrorBanner(error)

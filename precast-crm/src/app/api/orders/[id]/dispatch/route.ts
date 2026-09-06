@@ -36,7 +36,7 @@ export const POST = withPermission<{ id: string }>(
       );
     }
     if (order.dispatch) {
-      return fail("This order already has a dispatch", 409);
+      return fail("Бу буюртма учун жўнатма аллақачон мавжуд · This order already has a dispatch", 409);
     }
 
     const driver = body.driverId
