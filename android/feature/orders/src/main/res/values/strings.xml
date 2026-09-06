@@ -35,4 +35,5 @@
     <string name="delete_photo_message">Бу расм ўчирилсинми?</string>
     <string name="upload_failed">Расм юборилмади</string>
     <string name="upload_sending">Юборилмоқда…</string>
+    <string name="upload_failed_short">Юборилмади</string>
 </resources>

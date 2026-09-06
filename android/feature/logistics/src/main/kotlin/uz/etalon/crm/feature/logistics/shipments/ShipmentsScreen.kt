@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.DangerButton
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.OutboxBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.ShipmentStatusChip
@@ -35,7 +36,10 @@ fun ShipmentsRoute(
     vm: ShipmentsViewModel = hiltViewModel<ShipmentsViewModel, ShipmentsViewModel.Factory>(creationCallback = { it.create(orderId) }),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
-    ShipmentsScreen(s, onLoadShipment, onDispatch, onBack, vm::addShipment, vm::deleteShipment, vm::deliverShipment, vm::refresh)
+    ShipmentsScreen(
+        s, onLoadShipment, onDispatch, onBack, vm::addShipment, vm::deleteShipment, vm::deliverShipment, vm::refresh,
+        onRetryUpload = vm::retryUpload, onCancelUpload = vm::cancelUpload,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,6 +53,8 @@ fun ShipmentsScreen(
     onDelete: (String) -> Unit,
     onDeliver: (String) -> Unit,
     onRefresh: () -> Unit,
+    onRetryUpload: (String) -> Unit = {},
+    onCancelUpload: (String) -> Unit = {},
 ) {
     val shipments = s.shipments
     val actionsDisabled = s.busy || s.isOffline
@@ -74,6 +80,19 @@ fun ShipmentsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // The way out of a rejected load, on the screen the operator is standing on. It
+                // used to live only on the order-detail cockpit, so a truck reached from here was
+                // a dead end: its card said "sending" forever and neither retry nor cancel was in
+                // reach.
+                val failed = s.firstFailedUpload
+                if (s.pendingUploads.isNotEmpty()) item {
+                    OutboxBanner(
+                        pending = s.unfinishedUploads,
+                        failedMessage = failed?.let { it.error ?: stringResource(R.string.upload_failed) },
+                        onRetry = { failed?.let { onRetryUpload(it.id) } },
+                        onCancel = { failed?.let { onCancelUpload(it.id) } },
+                    )
+                }
                 val resourceError = s.resourceError
                 if (resourceError != null) item { ErrorBanner(resourceError, onRetry = onRefresh) }
                 val actionError = s.actionError
@@ -81,7 +100,8 @@ fun ShipmentsScreen(
                 if (s.showEmptyState) item { EmptyState(stringResource(R.string.shipments_empty)) }
                 items(shipments, key = { it.id }) { sh ->
                     ShipmentCard(
-                        sh, actionsDisabled = actionsDisabled, queuedLoad = s.hasQueuedLoad(sh.id),
+                        sh, actionsDisabled = actionsDisabled,
+                        unsentLoad = s.hasUnsentLoad(sh.id), failedLoad = s.hasFailedLoad(sh.id),
                         onLoad = { onLoadShipment(sh.id) }, onDispatch = { onDispatch(sh.id) },
                         onDeliver = { onDeliver(sh.id) }, onDelete = { onDelete(sh.id) },
                     )
@@ -93,7 +113,7 @@ fun ShipmentsScreen(
 
 @Composable
 private fun ShipmentCard(
-    sh: ShipmentLine, actionsDisabled: Boolean, queuedLoad: Boolean,
+    sh: ShipmentLine, actionsDisabled: Boolean, unsentLoad: Boolean, failedLoad: Boolean,
     onLoad: () -> Unit, onDispatch: () -> Unit, onDeliver: () -> Unit, onDelete: () -> Unit,
 ) {
     StatusStripeCard(stripe = toneColor(shipmentStatusTone(sh.status))) {
@@ -119,17 +139,28 @@ private fun ShipmentCard(
         // offline, per the module's rule); delete and deliver hit the network directly, so those
         // two — and only those two — are gated on [actionsDisabled].
         //
-        // [queuedLoad] gates loading on top of that, for a different reason: the server has not
+        // [unsentLoad] gates loading on top of that, for a different reason: the server has not
         // seen the load yet, so the truck still reads PENDING here. Loading again would queue a
         // second row with its own idempotency key, which the server accepts and then refuses
         // ("Shipment is already LOADED"). Delete goes with it — it would strand the queued photo.
+        //
+        // [failedLoad] is the same block with a different story. A row the server has already
+        // rejected is not on its way anywhere, so labelling it «Юборилмоқда…» — while the banner
+        // above reads «Юборилмади» — told the operator to keep waiting for something that had
+        // stopped. The banner is where the retry and the cancel are.
         when (sh.status) {
             ShipmentStatus.PENDING -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryButton(
-                    text = stringResource(if (queuedLoad) R.string.upload_sending else R.string.action_load_shipment),
-                    onClick = onLoad, enabled = !queuedLoad, modifier = Modifier.weight(1f),
+                    text = stringResource(
+                        when {
+                            failedLoad -> R.string.upload_failed_short
+                            unsentLoad -> R.string.upload_sending
+                            else -> R.string.action_load_shipment
+                        }
+                    ),
+                    onClick = onLoad, enabled = !unsentLoad, modifier = Modifier.weight(1f),
                 )
-                DangerButton(stringResource(R.string.action_delete_shipment), onClick = onDelete, enabled = !actionsDisabled && !queuedLoad, modifier = Modifier.weight(1f))
+                DangerButton(stringResource(R.string.action_delete_shipment), onClick = onDelete, enabled = !actionsDisabled && !unsentLoad, modifier = Modifier.weight(1f))
             }
             ShipmentStatus.LOADED -> PrimaryButton(stringResource(R.string.action_dispatch_shipment), onClick = onDispatch)
             ShipmentStatus.DISPATCHED -> SecondaryButton(stringResource(R.string.action_deliver_shipment), onClick = onDeliver, enabled = !actionsDisabled)

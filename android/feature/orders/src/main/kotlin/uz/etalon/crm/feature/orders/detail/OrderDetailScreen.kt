@@ -204,10 +204,24 @@ fun OrderDetailScreen(
                                     Text(stringResource(R.string.shipment_n, sh.number), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                     val who = listOfNotNull(sh.driverName, sh.truckIdentifier).joinToString(" · ")
                                     if (who.isNotEmpty()) Text(who, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    // A load queued offline leaves the truck looking untouched; say so
-                                    // here so nobody loads it a second time from the shipment list.
-                                    if (pending.any { it.shipmentId == sh.id }) {
-                                        Text(stringResource(R.string.upload_sending), style = MaterialTheme.typography.bodySmall, color = LocalEtalonColors.current.warning)
+                                    // A load queued offline leaves the truck looking untouched; say
+                                    // so here so nobody loads it a second time from the shipment
+                                    // list. A row the server has already rejected gets its own
+                                    // wording and colour — it is not on its way anywhere, and the
+                                    // outbox banner at the top of this screen is where the retry
+                                    // and the cancel are.
+                                    val truckRows = pending.filter { it.shipmentId == sh.id }
+                                    when {
+                                        truckRows.any { it.failed } -> Text(
+                                            stringResource(R.string.upload_failed_short),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                        truckRows.isNotEmpty() -> Text(
+                                            stringResource(R.string.upload_sending),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = LocalEtalonColors.current.warning,
+                                        )
                                     }
                                 }
                                 ShipmentStatusChip(sh.status)
