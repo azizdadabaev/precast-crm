@@ -4,7 +4,7 @@
 
 **Commit SHAs**
 - `9858542` — `Test(android) · Roborazzi screenshots for delivery proof, shipment load, shipments list and the order detail action bar`
-- (this report + e2e screenshots) — committed as a follow-up, see repo log for the exact SHA of `Test(android) · end-to-end run on the emulator, screenshots and defects found`
+- `f16139b` — `Test(android) · end-to-end run on the emulator, screenshots and defects found`
 
 **One-line summary:** Screenshot tests (12 new PNGs, verified via `recordRoborazziDebug` + `verifyRoborazziDebug`) all pass; the app was built, installed, and driven live on `anatome_api36` through all 15 requested end-to-end scenarios (build/install, launch, the offline-queue/process-death round trip, split shipments, delivery proof, drivers, delivery location, sign-out warning) — every one ran and every one that was supposed to succeed did; logcat shows zero `FATAL EXCEPTION` for the whole multi-hour session. Two real defects were found (missing "create first shipment" entry point on Android; loaded/delivery photo thumbnails never render because Coil sends no credential and the dev server's own middleware only honors the operator's bearer token on `/api/**`, not `/uploads/**`) and one English-only error string. The camera viewfinder did bind successfully on this emulator on a later attempt (after being black on the first attempt) — it was not a hard failure, but is still noted as unreliable per the known constraint, and the gallery/Photo Picker path was used for every actual upload in this run.
 
