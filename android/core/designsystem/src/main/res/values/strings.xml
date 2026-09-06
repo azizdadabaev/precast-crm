@@ -10,4 +10,17 @@
     <string name="payment_partial">Қисман</string>
     <string name="payment_pending">Кутилмоқда</string>
     <string name="action_retry">Қайта уриниш</string>
+    <string name="action_confirm">Тасдиқлаш</string>
+    <string name="action_cancel">Бекор қилиш</string>
+    <string name="action_close">Ёпиш</string>
+    <string name="action_backspace">Ўчириш</string>
+    <string name="action_increase">Кўпайтириш</string>
+    <string name="action_decrease">Камайтириш</string>
+    <string name="action_add_photo">Расм қўшиш</string>
+    <string name="photo_n">Расм %1$d</string>
+    <string name="photo_pending">Юборилмоқда</string>
+    <string name="stepper_max">Кўпи билан %1$d</string>
+    <plurals name="outbox_pending">
+        <item quantity="other">%1$d та расм юборилмоқда…</item>
+    </plurals>
 </resources>
