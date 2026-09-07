@@ -24,62 +24,90 @@ import uz.etalon.crm.nav.startKeyFor
 class DestinationsTest {
     private fun me(vararg p: String) = Me("u", "n", Role.CUSTOM, p.toSet(), false)
 
+    /** ROLE_TEMPLATES.OWNER, the only role holding `inbox.access`. Its bar used to be HOME,
+     *  ORDERS, CALCULATOR, INBOX — three placeholders and one screen — which pushed the payment
+     *  confirmation queue into «Яна» for the one person who confirms every payment. */
+    private val owner = me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view")
+
     @Test
-    fun `owner gets four plus More in priority order`() {
-        val d = destinationsFor(me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view"))
+    fun `the bar holds only destinations that have a screen, in priority order`() {
+        assertEquals(listOf(Destination.ORDERS, Destination.PAYMENTS, Destination.MORE), destinationsFor(owner))
+    }
+
+    /** The regression this rule exists for: the owner reaches the queue with one thumb, not
+     *  through an overflow menu behind three "кейинги релизда" notices. */
+    @Test
+    fun `the owner gets payments on the bar`() {
+        assertTrue(Destination.PAYMENTS in destinationsFor(owner))
+        assertFalse(Destination.PAYMENTS in moreDestinationsFor(owner))
+    }
+
+    /** A placeholder is never a bar slot, and is never lost either: «Яна» still lists it. */
+    @Test
+    fun `a placeholder is kept off the bar but stays in More`() {
+        val placeholders = listOf(
+            Destination.HOME, Destination.CALCULATOR, Destination.INBOX,
+            Destination.PRODUCTION, Destination.GAZOBLOK,
+        )
+        val bar = destinationsFor(owner)
+        val more = moreDestinationsFor(owner)
+        placeholders.forEach { d ->
+            assertFalse(d in bar, "$d has no screen yet and must not hold a bar slot")
+            assertTrue(d in more, "$d must still be reachable from «Яна»")
+        }
+    }
+
+    /** Every section a factory user may open is still a placeholder, so their bar is «Яна»
+     *  alone — and all three are waiting behind it. */
+    @Test
+    fun `a user whose every section is a placeholder gets a bar of More alone`() {
+        val factory = me("inventory.view")
+        assertEquals(listOf(Destination.MORE), destinationsFor(factory))
         assertEquals(
-            listOf(
-                Destination.HOME, Destination.ORDERS, Destination.CALCULATOR,
-                Destination.INBOX, Destination.MORE,
-            ),
-            d,
+            listOf(Destination.HOME, Destination.PRODUCTION, Destination.GAZOBLOK),
+            moreDestinationsFor(factory),
         )
     }
 
-    @Test
-    fun `factory user gets home, production, gazoblok, more`() {
-        assertEquals(
-            listOf(Destination.HOME, Destination.PRODUCTION, Destination.GAZOBLOK, Destination.MORE),
-            destinationsFor(me("inventory.view")),
-        )
-    }
-
-    /** Material 3's navigation bar holds five items; MORE is always one of them. */
+    /** Material 3's navigation bar holds five items; MORE is always one of them. The cap is not
+     *  what trims the bar today — only two sections have screens — but it must keep holding as
+     *  Phase 2 and 3 land and the filtered list grows past four. */
     @Test
     fun `never more than five items in the bar`() {
-        val d = destinationsFor(
-            me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view", "client.view"),
-        )
-        assertEquals(5, d.size)
-        assertEquals(Destination.MORE, d.last())
+        val everyone = Destination.entries.mapNotNull { it.requires }.toTypedArray()
+        listOf(me(), me("inventory.view"), owner, me(*everyone)).forEach { user ->
+            val d = destinationsFor(user)
+            assertTrue(d.size <= 5, "Material 3's navigation bar holds five items: $d")
+            assertEquals(Destination.MORE, d.last())
+        }
     }
 
-    /** Whatever the bar could not fit has to be reachable from "Яна" — otherwise a permitted
-     *  section simply disappears for a user with many permissions. */
+    /** Whatever the bar does not hold has to be reachable from "Яна" — otherwise a permitted
+     *  section simply disappears. */
     @Test
-    fun `More lists exactly what the bar dropped`() {
-        val owner = me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view")
+    fun `More lists exactly what the bar does not`() {
         assertEquals(
-            listOf(Destination.PAYMENTS, Destination.PRODUCTION, Destination.GAZOBLOK),
+            listOf(
+                Destination.HOME, Destination.CALCULATOR, Destination.INBOX,
+                Destination.PRODUCTION, Destination.GAZOBLOK,
+            ),
             moreDestinationsFor(owner),
         )
     }
 
     /** The bar and the More list never overlap, and together they cover every allowed
-     *  destination exactly once. */
+     *  destination exactly once. Compared as sets: the bar now takes the destinations that have
+     *  screens out of the middle of the priority order, so the two lists no longer concatenate
+     *  back into it. */
     @Test
     fun `the bar and More partition the allowed destinations`() {
-        listOf(
-            me(),
-            me("inventory.view"),
-            me("order.view"),
-            me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view"),
-        ).forEach { user ->
+        listOf(me(), me("inventory.view"), me("order.view"), owner).forEach { user ->
             val bar = destinationsFor(user).filter { it != Destination.MORE }
             val more = moreDestinationsFor(user)
             assertEquals(emptyList<Destination>(), bar.filter { it in more })
             val allowed = Destination.entries.filter { it != Destination.MORE && (it.requires == null || user.can(it.requires)) }
-            assertEquals(allowed, bar + more)
+            assertEquals(allowed.toSet(), (bar + more).toSet())
+            assertEquals(allowed.size, bar.size + more.size, "each allowed destination appears exactly once")
         }
     }
 
@@ -89,10 +117,23 @@ class DestinationsTest {
         assertEquals(emptyList<Destination>(), moreDestinationsFor(me()).filter { it == Destination.MORE })
     }
 
-    /** A user with only a couple of permissions has nothing left over for the More list. */
+    /**
+     * This replaces "a user whose destinations all fit the bar has an empty More list", whose
+     * premise no longer holds for anyone: HOME needs no permission and has no screen yet, so it
+     * sits in «Яна» for every user alive. The claim worth keeping is the narrower and stronger
+     * one — while the bar has room, nothing that HAS a screen is left behind in the overflow.
+     */
     @Test
-    fun `a user whose destinations all fit the bar has an empty More list`() {
-        assertEquals(emptyList<Destination>(), moreDestinationsFor(me("inventory.view")))
+    fun `nothing with a screen is left in More while the bar has room`() {
+        listOf(me(), me("inventory.view"), me("order.view"), owner).forEach { user ->
+            val bar = destinationsFor(user).filter { it != Destination.MORE }
+            if (bar.size == 4) return@forEach // the cap, not the placeholder rule, is trimming here
+            assertEquals(
+                emptyList<Destination>(),
+                moreDestinationsFor(user).filter { it.key() !is ComingSoon },
+                "a built section was buried in «Яна» with bar slots to spare",
+            )
+        }
     }
 
     @Test

@@ -3,7 +3,7 @@ package uz.etalon.crm.nav
 import androidx.navigation3.runtime.NavKey
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.shell.Destination
-import uz.etalon.crm.shell.destinationsFor
+import uz.etalon.crm.shell.allowedFor
 
 internal const val PERM_DRIVER_VIEW = "driver.view"
 internal const val PERM_DISPATCH_CREATE = "dispatch.create"
@@ -44,13 +44,19 @@ internal fun Me.canOpen(key: NavKey): Boolean = gatingPermission(key)?.let { can
 /**
  * Where a signed-in user lands. Orders is not universal — a DRIVER or INVENTORY user has no
  * `order.view` and must not be dropped on a screen they are not allowed to read, so they start
- * on their first real bottom-bar destination instead (a ComingSoon notice in slice 1a).
+ * on their first permitted destination instead (a ComingSoon notice, for a user whose sections
+ * have not been built yet).
+ *
+ * [allowedFor], not [destinationsFor]: the bar deliberately excludes placeholders, but the
+ * landing rule is about permission, not about which sections have shipped. An INVENTORY user
+ * whose every section is still a placeholder lands on their own section's notice rather than
+ * being tipped into the «Яна» menu.
  */
 fun startKeyFor(me: Me, deepLinkOrderId: String?): Key = when {
     me.can("order.view") && deepLinkOrderId != null -> OrderDetail(deepLinkOrderId)
     me.can("order.view") -> Orders
-    else -> destinationsFor(me)
-        .firstOrNull { it != Destination.HOME && it != Destination.MORE }
+    else -> allowedFor(me)
+        .firstOrNull { it != Destination.HOME }
         ?.key()
         ?: More
 }

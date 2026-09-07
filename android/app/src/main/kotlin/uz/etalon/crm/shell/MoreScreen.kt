@@ -36,6 +36,8 @@ import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Role
+import uz.etalon.crm.nav.PERM_DISCREPANCY_VIEW
+import uz.etalon.crm.nav.PERM_DRIVER_VIEW
 import javax.inject.Inject
 
 /** Uzbek label for a role; the enum constant itself is an English identifier and must not reach the UI. */
@@ -101,14 +103,14 @@ fun MoreScreen(
                 Text(stringResource(d.labelRes))
             }
         }
-        if (me.can("driver.view")) {
+        if (me.can(PERM_DRIVER_VIEW)) {
             OutlinedButton(onClick = onOpenDrivers, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 Text(stringResource(R.string.more_drivers))
             }
         }
         // The cash-discrepancy list has no bottom-bar slot of its own — the payments tab is the
         // confirmation queue — so this is its only door, gated on the same permission the entry is.
-        if (me.can("discrepancy.view")) {
+        if (me.can(PERM_DISCREPANCY_VIEW)) {
             OutlinedButton(onClick = onOpenDiscrepancies, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 Text(stringResource(R.string.more_discrepancies))
             }
