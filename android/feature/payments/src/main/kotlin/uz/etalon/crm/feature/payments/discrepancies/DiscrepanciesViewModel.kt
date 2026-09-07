@@ -94,8 +94,18 @@ data class DiscrepanciesUiState(
      *  from its real type — the same shape ConfirmQueueUiState uses. */
     val lastRefreshError: AppError? = null,
     val canResolve: Boolean = false,
+    /**
+     * The third state [canResolve] cannot express. "Not yet known" is not "no", and treating it
+     * as one flashed the no-permission notice at every owner for a frame on entry. The guard
+     * keeps reading the plain Boolean, which fails closed; only what is SHOWN waits.
+     */
+    val permissionsResolved: Boolean = false,
     val sheet: ResolveSheetState? = null,
 ) {
+    /** Shown only once the answer is known — and as a neutral notice, not an error: reading the
+     *  discrepancy list without being able to resolve is a real, intended account shape. */
+    val showNoResolvePermission: Boolean get() = permissionsResolved && !canResolve
+
     /** Never true alongside [error] or while loading: an empty list next to an error banner reads
      *  as "no discrepancies" when the truth is "couldn't check". */
     val showEmptyState: Boolean get() = items.isEmpty() && !loading && error == null
@@ -148,7 +158,10 @@ open class DiscrepanciesViewModel(
     val state: StateFlow<DiscrepanciesUiState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch { _state.update { it.copy(canResolve = can(DISCREPANCY_RESOLVE)) } }
+        viewModelScope.launch {
+            val resolve0 = can(DISCREPANCY_RESOLVE)
+            _state.update { it.copy(canResolve = resolve0, permissionsResolved = true) }
+        }
         refresh()
     }
 

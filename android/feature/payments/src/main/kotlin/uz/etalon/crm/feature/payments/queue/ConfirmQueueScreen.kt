@@ -31,6 +31,7 @@ import uz.etalon.crm.core.designsystem.components.DangerButton
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PaymentStatusChip
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
@@ -128,7 +129,7 @@ fun ConfirmQueueScreen(
                     val error = s.error
                     if (error != null) item { ErrorBanner(error, onRetry = onRefresh) }
                 }
-                if (!s.canConfirm) item { ErrorBanner(stringResource(R.string.queue_no_confirm_permission)) }
+                if (s.showNoConfirmPermission) item { NoticeBanner(stringResource(R.string.queue_no_confirm_permission)) }
                 // Never beside an error banner and never while loading: an empty list there reads
                 // as "no payments" when the truth is "couldn't check".
                 if (s.showEmptyState) item { EmptyState(stringResource(R.string.queue_empty)) }

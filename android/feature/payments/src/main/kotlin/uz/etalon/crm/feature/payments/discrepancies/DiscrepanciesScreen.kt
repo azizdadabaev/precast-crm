@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.DiscrepancyStatusChip
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.SectionLabel
@@ -60,14 +61,23 @@ import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.feature.payments.R
 import uz.etalon.crm.core.designsystem.R as DesignSystemR
 
-/** Each resolution's own explanation, alongside the one-word label [discrepancyStatusLabel]
- *  already gives every status chip in the app — reused here rather than a second mapping. */
-private val RESOLUTION_HINTS = mapOf(
-    DiscrepancyStatus.RESOLVED_RECOVERED to R.string.resolve_option_recovered_hint,
-    DiscrepancyStatus.RESOLVED_DISCOUNT to R.string.resolve_option_discount_hint,
-    DiscrepancyStatus.RESOLVED_WRITEOFF to R.string.resolve_option_writeoff_hint,
-    DiscrepancyStatus.DISPUTED to R.string.resolve_option_disputed_hint,
-)
+/**
+ * Each resolution's own explanation, alongside the one-word label [discrepancyStatusLabel]
+ * already gives every status chip in the app — reused here rather than a second mapping.
+ *
+ * An exhaustive `when`, not a map: a map is looked up at composition time, so a status added
+ * without a hint used to crash the sheet at runtime. Here the compiler refuses the build instead,
+ * which is where a missing string belongs. OPEN and UNKNOWN carry no hint because
+ * [RESOLUTION_OPTIONS] never offers them — re-opening is not a resolution.
+ */
+@androidx.annotation.StringRes
+private fun resolutionHint(status: DiscrepancyStatus): Int = when (status) {
+    DiscrepancyStatus.RESOLVED_RECOVERED -> R.string.resolve_option_recovered_hint
+    DiscrepancyStatus.RESOLVED_DISCOUNT -> R.string.resolve_option_discount_hint
+    DiscrepancyStatus.RESOLVED_WRITEOFF -> R.string.resolve_option_writeoff_hint
+    DiscrepancyStatus.DISPUTED -> R.string.resolve_option_disputed_hint
+    DiscrepancyStatus.OPEN, DiscrepancyStatus.UNKNOWN -> R.string.resolve_option_none_hint
+}
 
 /**
  * A screen reached from elsewhere in the app (the "Яна" menu), never a bottom-bar destination of
@@ -131,7 +141,7 @@ fun DiscrepanciesScreen(
                     val error = s.error
                     if (error != null) item { ErrorBanner(error, onRetry = onRefresh) }
                 }
-                if (!s.canResolve) item { ErrorBanner(stringResource(R.string.discrepancies_no_resolve_permission)) }
+                if (s.showNoResolvePermission) item { NoticeBanner(stringResource(R.string.discrepancies_no_resolve_permission)) }
                 // Never beside an error banner and never while loading: an empty list there reads
                 // as "no discrepancies" when the truth is "couldn't check".
                 if (s.showEmptyState) item { EmptyState(stringResource(R.string.discrepancies_empty)) }
@@ -282,7 +292,7 @@ private fun ResolveSheet(
                 ResolveOption(
                     selected = sheet.status == status,
                     label = stringResource(discrepancyStatusLabel(status)),
-                    hint = stringResource(requireNotNull(RESOLUTION_HINTS[status])),
+                    hint = stringResource(resolutionHint(status)),
                     onSelect = { onSetStatus(status) },
                 )
             }

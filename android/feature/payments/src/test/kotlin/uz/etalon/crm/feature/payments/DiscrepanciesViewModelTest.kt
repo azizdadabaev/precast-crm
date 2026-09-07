@@ -130,6 +130,19 @@ class DiscrepanciesViewModelTest {
         assertTrue(empty.state.value.showEmptyState)
     }
 
+    /** "Not yet known" is not "no" — the same rule the confirm queue and the record sheet follow. */
+    @Test fun `the no-permission notice waits until the permission is actually known`() = runTest {
+        val readOnly = viewModel(permissions = { false })
+        assertFalse(readOnly.state.value.permissionsResolved)
+        assertFalse(readOnly.state.value.showNoResolvePermission)
+        advanceUntilIdle()
+        assertTrue(readOnly.state.value.showNoResolvePermission)
+
+        val owner = viewModel(permissions = { true })
+        advanceUntilIdle()
+        assertFalse(owner.state.value.showNoResolvePermission)
+    }
+
     @Test fun `resolving sends the chosen status and the trimmed note`() = runTest {
         var sent: Triple<String, DiscrepancyStatus, String>? = null
         val row = item(id = "d1")

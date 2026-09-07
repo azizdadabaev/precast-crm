@@ -95,6 +95,12 @@ data class RecordPaymentUiState(
     val canRecord: Boolean = false,
     val canAutoConfirm: Boolean = false,
     /**
+     * The third state the flags above cannot express. "Not yet known" is not "no", and treating
+     * it as one flashed the no-permission notice at EVERY operator for a frame on entry. The
+     * guards keep reading plain Booleans, which fail closed; only what is SHOWN waits.
+     */
+    val permissionsResolved: Boolean = false,
+    /**
      * Whether `GET /api/drivers` may even be attempted — and so whether «Ҳайдовчидан» is offered
      * at all. SALES and DRIVER both hold `payment.record` WITHOUT `driver.view`, so exactly the
      * people who record payments earned a 403 on that fetch. It arrives as `Forbidden`, not
@@ -131,6 +137,10 @@ data class RecordPaymentUiState(
      *  operator can move, so it is still sent while the counter conversation is happening. */
     val isOffline: Boolean get() = detailError is AppError.Network || driversError is AppError.Network
     val loadErrorMessage: String? get() = (detailError ?: driversError)?.message
+
+    /** Shown only once the answer is actually known — and as a neutral notice, not an error: an
+     *  account without `payment.record` is working as designed, not broken. */
+    val showNoRecordPermission: Boolean get() = permissionsResolved && !canRecord
 
     /** A driver is collected only on the one source that has one, and bank/online has no
      *  physical hand-over to record — both mirror PaymentRecordSchema's refinements. */
@@ -220,7 +230,12 @@ open class RecordPaymentViewModel(
             // Resolved here with the other two, and the fetch gated on it rather than fired
             // unconditionally — see RecordPaymentUiState.canSeeDrivers for whose 403 that was.
             val drivers0 = can(DRIVER_VIEW)
-            _state.update { it.copy(canRecord = record0, canAutoConfirm = confirm0, canSeeDrivers = drivers0) }
+            _state.update {
+                it.copy(
+                    canRecord = record0, canAutoConfirm = confirm0, canSeeDrivers = drivers0,
+                    permissionsResolved = true,
+                )
+            }
             if (drivers0) refreshDrivers()
         }
     }

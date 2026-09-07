@@ -172,6 +172,23 @@ class ConfirmQueueViewModelTest {
         assertTrue(empty.state.value.showEmptyState)
     }
 
+    /**
+     * "Not yet known" is not "no". An ACCOUNTANT holds `payment.view` without `payment.confirm`
+     * by design and is meant to read this queue, so the notice is neither an error nor something
+     * to flash at every owner for a frame before the answer arrives.
+     */
+    @Test fun `the no-permission notice waits until the permission is actually known`() = runTest {
+        val readOnly = viewModel(permissions = { false })
+        assertFalse(readOnly.state.value.permissionsResolved)
+        assertFalse(readOnly.state.value.showNoConfirmPermission)
+        advanceUntilIdle()
+        assertTrue(readOnly.state.value.showNoConfirmPermission)
+
+        val owner = viewModel(permissions = { true })
+        advanceUntilIdle()
+        assertFalse(owner.state.value.showNoConfirmPermission)
+    }
+
     @Test fun `approving sends the adjusted amount, the action and the note`() = runTest {
         var sent: List<Any?>? = null
         val row = item(id = "p1", amount = "800000", expected = "1000000", fromDriver = true)

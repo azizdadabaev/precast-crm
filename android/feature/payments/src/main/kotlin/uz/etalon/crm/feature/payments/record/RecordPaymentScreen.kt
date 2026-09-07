@@ -48,6 +48,7 @@ import uz.etalon.crm.core.designsystem.components.DriverPicker
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.Lightbox
 import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
 import uz.etalon.crm.core.designsystem.components.PhotoRef
 import uz.etalon.crm.core.designsystem.components.PhotoStrip
@@ -212,7 +213,7 @@ fun RecordPaymentScreen(
             } else {
                 s.loadErrorMessage?.let { ErrorBanner(it, onRetry = onRetryLoad) }
             }
-            if (!s.canRecord) ErrorBanner(stringResource(R.string.no_record_permission))
+            if (s.showNoRecordPermission) NoticeBanner(stringResource(R.string.no_record_permission))
             s.error?.let { ErrorBanner(it) }
 
             s.order?.let { o ->

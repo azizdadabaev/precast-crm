@@ -378,6 +378,24 @@ class RecordPaymentViewModelTest {
         assertNotNull(vm.state.value.error)
     }
 
+    /**
+     * "Not yet known" is not "no". Rendering the notice off a bare `!canRecord` showed it to
+     * every operator for a frame on entry, and it stayed permanently for an accountant holding
+     * view-without-write by design — as a red error, for an account working exactly as intended.
+     */
+    @Test fun `the no-permission notice waits until the permission is actually known`() = runTest {
+        val denied = viewModel(permissions = { false })
+        assertFalse(denied.state.value.permissionsResolved)
+        assertFalse(denied.state.value.showNoRecordPermission) // nothing before the answer arrives
+        advanceUntilIdle()
+        assertTrue(denied.state.value.showNoRecordPermission)
+
+        val granted = viewModel(permissions = { true })
+        advanceUntilIdle()
+        assertTrue(granted.state.value.permissionsResolved)
+        assertFalse(granted.state.value.showNoRecordPermission)
+    }
+
     @Test fun `the confirm permission decides whether the payment lands confirmed`() = runTest {
         val owner = viewModel(permissions = { true })
         advanceUntilIdle()

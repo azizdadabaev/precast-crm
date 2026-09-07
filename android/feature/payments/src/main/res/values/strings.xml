@@ -113,4 +113,7 @@
     <string name="resolve_option_discount_hint">Эга чегирма сифатида тасдиқлади</string>
     <string name="resolve_option_writeoff_hint">Зарар сифатида ҳисобдан чиқарилди</string>
     <string name="resolve_option_disputed_hint">HR / интизомий чора</string>
+    <!-- OPEN and UNKNOWN are never offered as resolutions, so this is unreachable through
+         RESOLUTION_OPTIONS; the exhaustive `when` needs a branch for them all the same. -->
+    <string name="resolve_option_none_hint">Ҳал қилиш тури эмас</string>
 </resources>

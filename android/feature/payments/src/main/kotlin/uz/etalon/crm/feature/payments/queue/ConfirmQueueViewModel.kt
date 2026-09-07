@@ -148,8 +148,18 @@ data class ConfirmQueueUiState(
      *  from its real type — the same shape DriversUiState uses. */
     val lastRefreshError: AppError? = null,
     val canConfirm: Boolean = false,
+    /**
+     * The third state [canConfirm] cannot express. "Not yet known" is not "no", and treating it
+     * as one flashed the no-permission notice at every owner for a frame on entry. The guards
+     * keep reading the plain Boolean, which fails closed; only what is SHOWN waits.
+     */
+    val permissionsResolved: Boolean = false,
     val sheet: ConfirmSheetState? = null,
 ) {
+    /** Shown only once the answer is known — and as a neutral notice, not an error: an ACCOUNTANT
+     *  holds `payment.view` without `payment.confirm` by design, and reads this queue on purpose. */
+    val showNoConfirmPermission: Boolean get() = permissionsResolved && !canConfirm
+
     /** Never true alongside [error] or while loading: an empty list next to an error banner reads
      *  as "no payments" when the truth is "couldn't check". */
     val showEmptyState: Boolean get() = items.isEmpty() && !loading && error == null
@@ -196,7 +206,10 @@ open class ConfirmQueueViewModel(
     val state: StateFlow<ConfirmQueueUiState> = _state.asStateFlow()
 
     init {
-        viewModelScope.launch { _state.update { it.copy(canConfirm = can(PAYMENT_CONFIRM)) } }
+        viewModelScope.launch {
+            val confirm0 = can(PAYMENT_CONFIRM)
+            _state.update { it.copy(canConfirm = confirm0, permissionsResolved = true) }
+        }
         refresh()
     }
 
