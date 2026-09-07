@@ -1,0 +1,48 @@
+<resources>
+    <string name="record_payment_title">Тўловни қайд этиш</string>
+    <string name="action_record_payment">Қайд этиш</string>
+    <string name="action_retry_receipts">Чекларни қайта юбориш</string>
+    <string name="action_finish_without_receipts">Чексиз тугатиш</string>
+
+    <string name="record_amount_label">Сумма</string>
+    <string name="record_cap">Қайд этиш мумкин: %1$s</string>
+    <string name="record_remaining">Мижоз қарзи: %1$s</string>
+    <string name="record_cap_explained">Тасдиқ кутаётган тўловлар шу қолдиқдан чегирилган.</string>
+    <string name="record_over_cap">Ортиқча: %1$s</string>
+    <string name="record_quick_full">Тўлиқ</string>
+    <string name="record_quick_half">Ярми</string>
+
+    <string name="record_method_label">Усул</string>
+    <string name="method_cash">Нақд</string>
+    <string name="method_bank">Банк</string>
+    <string name="method_click">Click</string>
+    <string name="method_payme">Payme</string>
+    <string name="method_other">Бошқа</string>
+
+    <string name="record_source_label">Манба</string>
+    <string name="source_office_cash">Офисда нақд</string>
+    <string name="source_bank_online">Банк/онлайн</string>
+    <string name="source_from_driver">Ҳайдовчидан</string>
+
+    <string name="record_driver_label">Ҳайдовчи</string>
+    <string name="record_hand_over">Дарҳол офисга топширилди</string>
+
+    <string name="record_paid_on_label">Тўлов санаси</string>
+    <string name="record_paid_on_today">Бугун</string>
+    <string name="action_use_today">Бугун деб қолдириш</string>
+
+    <string name="record_notes_label">Изоҳ</string>
+    <string name="record_receipts_label">Чеклар</string>
+    <string name="record_receipt_hint">Чек расми тўлов қайд этилгандан кейин юборилади.</string>
+    <string name="remove_receipt_title">Чекни олиб ташлаш</string>
+    <string name="remove_receipt_message">Бу расм тўловга бириктирилмайди.</string>
+    <string name="action_remove">Олиб ташлаш</string>
+    <string name="action_cancel">Бекор қилиш</string>
+    <string name="action_confirm">Тайёр</string>
+
+    <string name="record_will_auto_confirm">Тўлов дарҳол тасдиқланади — сизда тасдиқлаш ҳуқуқи бор.</string>
+    <string name="record_will_be_pending">Тўлов эга тасдиғини кутади.</string>
+
+    <string name="offline_action_blocked">Интернет йўқ — бу амал онлайн бажарилади</string>
+    <string name="no_record_permission">Тўловни қайд этишга рухсат йўқ</string>
+</resources>
