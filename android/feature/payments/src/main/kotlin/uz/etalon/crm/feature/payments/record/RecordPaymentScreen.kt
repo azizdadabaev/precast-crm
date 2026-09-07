@@ -189,9 +189,14 @@ fun RecordPaymentScreen(
                             enabled = !s.submitting, loading = s.submitting, modifier = Modifier.weight(1f),
                         )
                     } else {
+                        // Enabled whenever a tap can produce an answer — the same shape both
+                        // sheets in this module use. Binding it to the validator instead greyed
+                        // the button out and took every message the validator produces with it:
+                        // an over-long note or a missing driver left a dead button and nothing
+                        // on screen saying why. `submit()` writes the reason into the banner.
                         PrimaryButton(
                             text = stringResource(R.string.action_record_payment), onClick = onSubmit,
-                            enabled = s.canSubmit, loading = s.submitting,
+                            enabled = !s.submitting && s.canRecord, loading = s.submitting,
                         )
                     }
                 }

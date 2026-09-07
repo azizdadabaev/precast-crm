@@ -41,7 +41,7 @@ private open class DiscStubApi : EtalonApi {
     override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = error("unused")
 
     override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> = error("unused")
-    override suspend fun recordPayment(body: PaymentRecordRequest): PaymentRowDto = error("unused")
+    override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = error("unused")
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = error("unused")
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = error("unused")
     override suspend fun handoverPayment(id: String): PaymentRowDto = error("unused")

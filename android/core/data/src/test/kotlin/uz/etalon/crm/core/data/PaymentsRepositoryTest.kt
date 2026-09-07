@@ -61,7 +61,7 @@ private open class PayStubApi : EtalonApi {
     override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = error("unused")
 
     override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> = error("unused")
-    override suspend fun recordPayment(body: PaymentRecordRequest): PaymentRowDto = error("unused")
+    override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = error("unused")
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = error("unused")
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = error("unused")
     override suspend fun handoverPayment(id: String): PaymentRowDto = error("unused")
@@ -79,7 +79,7 @@ private class PayRecordingApi : PayStubApi() {
     val calls = mutableListOf<String>()
     var row = PaymentRowDto(id = "p1", orderId = "o1", amount = "1000000", method = "CASH", status = "PENDING_CONFIRMATION", recordedAt = "2026-01-01T00:00:00Z")
 
-    override suspend fun recordPayment(body: PaymentRecordRequest): PaymentRowDto { calls += "recordPayment:${body.orderId}:${body.receiptUrls}"; return row }
+    override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto { calls += "recordPayment:${body.orderId}:${body.receiptUrls}:$idempotencyKey"; return row }
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto { calls += "confirmPayment:$id"; return row }
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto { calls += "rejectPayment:$id:${body.reason}"; return row }
     override suspend fun handoverPayment(id: String): PaymentRowDto { calls += "handoverPayment:$id"; return row }
@@ -113,7 +113,7 @@ class PaymentsRepositoryTest {
         val outbox = PaySpyOutbox()
         val api = PayRecordingApi() // succeeds, so every call below actually runs to completion
         val repo = PaymentsRepository(api, outbox, PayNoopOrders(), PAY_GRANTED, mediaBase = "https://api.example")
-        repo.record(input()).getOrThrow()
+        repo.record(input(), "idem-1").getOrThrow()
         repo.confirm("p1", null, null, null, null).getOrThrow()
         repo.reject("p1", "сабаб").getOrThrow()
         repo.handover("p1").getOrThrow()
@@ -138,7 +138,7 @@ class PaymentsRepositoryTest {
         // what stopped it.
         val api = PayRecordingApi()
         val repo = PaymentsRepository(api, PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.record" }, mediaBase = "https://api.example")
-        val r = repo.record(input())
+        val r = repo.record(input(), "idem-1")
         assertTrue(r.isFailure)
         assertEquals(0, api.calls.size, "the guard must refuse before the network, not merely fail after it: ${api.calls}")
     }
@@ -174,9 +174,9 @@ class PaymentsRepositoryTest {
     @Test fun `record returns the new payment id and sends receiptUrls empty`() = runTest {
         val api = PayRecordingApi()
         val orders = PayNoopOrders()
-        val id = PaymentsRepository(api, PaySpyOutbox(), orders, PAY_GRANTED, mediaBase = "https://api.example").record(input("o7")).getOrThrow()
+        val id = PaymentsRepository(api, PaySpyOutbox(), orders, PAY_GRANTED, mediaBase = "https://api.example").record(input("o7"), "idem-7").getOrThrow()
         assertEquals("p1", id)
-        assertEquals(listOf("recordPayment:o7:[]"), api.calls)
+        assertEquals(listOf("recordPayment:o7:[]:idem-7"), api.calls, "the caller's Idempotency-Key must reach the request unchanged")
         assertEquals(listOf("o1"), orders.refreshed) // PayRecordingApi's row.orderId is fixed at "o1"
     }
 
@@ -191,7 +191,7 @@ class PaymentsRepositoryTest {
     }
 
     @Test fun `an api failure comes back as a Result failure, not an exception`() = runTest {
-        val res = PaymentsRepository(PayFailingApi(), PaySpyOutbox(), PayNoopOrders(), PAY_GRANTED, mediaBase = "https://api.example").record(input())
+        val res = PaymentsRepository(PayFailingApi(), PaySpyOutbox(), PayNoopOrders(), PAY_GRANTED, mediaBase = "https://api.example").record(input(), "idem-1")
         assertTrue(res.isFailure)
     }
 

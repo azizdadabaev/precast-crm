@@ -243,6 +243,112 @@ class RecordPaymentViewModelTest {
         assertTrue(vm.state.value.done)
     }
 
+    /**
+     * The client half of the duplicate-payment defence. A retry after a LOST response must carry
+     * the key the first attempt used, or `withIdempotency` has nothing to match and the second
+     * attempt writes a second real payment.
+     */
+    @Test fun `a retry of the same submission sends the same idempotency key`() = runTest {
+        val keys = mutableListOf<String>()
+        val vm = viewModel(record = { Result.failure(java.io.IOException("dropped")) }, keys = keys)
+        advanceUntilIdle()
+        vm.applyOrder(Resource.Success(detail()))
+        vm.setAmountDigits("1200000")
+        vm.submit()
+        advanceUntilIdle()
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertEquals(keys[0], keys[1])
+        assertTrue(keys[0].isNotBlank())
+    }
+
+    /**
+     * ...and the other half of the same rule. `withIdempotency` caches refusals too, so a key
+     * held across a CORRECTED figure would replay the original 422 forever — the operator lowers
+     * an over-cap amount and is refused for an amount they no longer typed.
+     */
+    @Test fun `editing the submission mints a new idempotency key`() = runTest {
+        val keys = mutableListOf<String>()
+        val vm = viewModel(record = { Result.failure(IllegalStateException("сумма ортиқча")) }, keys = keys)
+        advanceUntilIdle()
+        vm.applyOrder(Resource.Success(detail()))
+        vm.setAmountDigits("1200000")
+        vm.submit()
+        advanceUntilIdle()
+        vm.setAmountDigits("900000")
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertNotEquals(keys[0], keys[1])
+    }
+
+    /** Process death between the send and the response is the case the key exists for: a fresh
+     *  key there would let the retry write a second payment against the same order. */
+    @Test fun `the idempotency key survives process death`() = runTest {
+        val saved = SavedStateHandle()
+        val first = mutableListOf<String>()
+        val vm = viewModel(record = { Result.failure(java.io.IOException("dropped")) }, saved = saved, keys = first)
+        advanceUntilIdle()
+        vm.applyOrder(Resource.Success(detail()))
+        vm.setAmountDigits("1200000")
+        vm.submit()
+        advanceUntilIdle()
+
+        val second = mutableListOf<String>()
+        val restored = viewModel(record = { Result.success("pay-1") }, saved = saved, keys = second)
+        advanceUntilIdle()
+        restored.applyOrder(Resource.Success(detail()))
+        restored.submit()
+        advanceUntilIdle()
+
+        assertEquals(first, second)
+    }
+
+    /**
+     * The button no longer hides the validator behind `enabled`, so every message it produces has
+     * to reach the banner on the tap. A note the server would refuse is the plainest case: the
+     * form looks complete and only the tap can explain the refusal.
+     */
+    @Test fun `a submission the validator refuses puts its reason on screen`() = runTest {
+        var calls = 0
+        val vm = viewModel(record = { calls++; Result.success("pay-1") })
+        advanceUntilIdle()
+        vm.applyOrder(Resource.Success(detail()))
+        vm.setAmountDigits("1000000")
+        vm.setNotes("ж".repeat(501))
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(0, calls)
+        assertEquals(validateRecord(vm.state.value), vm.state.value.error)
+        assertNotNull(vm.state.value.error)
+    }
+
+    /** The receipts are the one thing on this screen designed to survive a lost network — they
+     *  are queued, not sent. Refusing the retry as "online only" once the payment already exists
+     *  left the operator with nothing but the control that throws the photos away. */
+    @Test fun `an offline retry still attaches receipts to a payment already recorded`() = runTest {
+        var attempts = 0
+        val restored = SavedStateHandle(mapOf("record.paymentId" to "pay-3"))
+        val vm = viewModel(
+            attach = { _, _ -> attempts++; Result.success("outbox-1") },
+            drivers = { Result.failure(java.io.IOException("no net")) },
+            saved = restored,
+        )
+        advanceUntilIdle()
+        assertTrue(vm.state.value.isOffline)
+        vm.addReceipt(receipt)
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(1, attempts)
+        assertTrue(vm.state.value.done)
+        assertTrue(vm.state.value.receipts.isEmpty())
+    }
+
     @Test fun `recording is refused while offline instead of being queued`() = runTest {
         var calls = 0
         val vm = viewModel(record = { calls++; Result.success("pay-1") })
@@ -250,7 +356,6 @@ class RecordPaymentViewModelTest {
         vm.applyOrder(Resource.Error(detail(), AppError.Network("Интернет йўқ")))
         vm.setAmountDigits("1000000")
         assertTrue(vm.state.value.isOffline)
-        assertFalse(vm.state.value.canSubmit)
         vm.submit()
         advanceUntilIdle()
 
@@ -266,7 +371,6 @@ class RecordPaymentViewModelTest {
         vm.applyOrder(Resource.Success(detail()))
         vm.setAmountDigits("1000000")
         assertFalse(vm.state.value.canRecord)
-        assertFalse(vm.state.value.canSubmit)
         vm.submit()
         advanceUntilIdle()
 
@@ -393,9 +497,11 @@ class RecordPaymentViewModelTest {
         drivers: suspend () -> Result<List<Driver>> = { Result.success(emptyList()) },
         permissions: suspend (String) -> Boolean = { true },
         saved: SavedStateHandle = SavedStateHandle(),
+        /** Every Idempotency-Key the ViewModel handed the repository, in order. */
+        keys: MutableList<String> = mutableListOf(),
     ) = RecordPaymentViewModel(
         orderId = "o1",
-        record = RecordPaymentUseCase { record(it) },
+        record = RecordPaymentUseCase { input, key -> keys += key; record(input) },
         attach = AttachReceiptUseCase { id, photo -> attach(id, photo) },
         drivers = PaymentDriversUseCase { drivers() },
         permissions = PaymentPermissionsUseCase { permissions(it) },

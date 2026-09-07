@@ -32,14 +32,19 @@ class PaymentsRepository @Inject constructor(
     private val permissions: PermissionGate,
     @Named("apiBaseUrl") private val mediaBase: String,
 ) {
-    // ── Online only: no server-side idempotency, so never queued ──
+    // ── Online only: still sent live, never queued ────────────────
 
     /**
      * Returns the new payment's id so the caller can enqueue one ADD_PAYMENT_RECEIPT per captured
      * photo against it. `receiptUrls` always travels empty here: a queued upload returns an
      * outbox row id, never a URL, so it can never populate this request's `receiptUrls`.
+     *
+     * [idempotencyKey] is the caller's, not this method's, and that is deliberate: the key has to
+     * stay the same across a RETRY of one submission and differ for a genuinely new one, and only
+     * the screen holding the form knows which of the two a tap is. Minting one here would make
+     * every attempt look new and defend nothing.
      */
-    suspend fun record(input: PaymentRecordInput): Result<String> = runCatchingCancellable {
+    suspend fun record(input: PaymentRecordInput, idempotencyKey: String): Result<String> = runCatchingCancellable {
         if (!permissions.can(PAYMENT_RECORD)) error("Тўловни қайд этишга рухсат йўқ")
         val dto = api.recordPayment(
             PaymentRecordRequest(
@@ -52,7 +57,8 @@ class PaymentsRepository @Inject constructor(
                 notes = input.notes,
                 receiptUrls = emptyList(),
                 paidOn = input.paidOn,
-            )
+            ),
+            idempotencyKey = idempotencyKey,
         )
         orders.refreshDetail(dto.orderId)
         dto.id

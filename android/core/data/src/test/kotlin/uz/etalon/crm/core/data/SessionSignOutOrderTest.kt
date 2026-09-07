@@ -89,7 +89,7 @@ private class UnusedApi(
     override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = throw NotImplementedError("unused")
 
     override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> = throw NotImplementedError("unused")
-    override suspend fun recordPayment(body: PaymentRecordRequest): PaymentRowDto = throw NotImplementedError("unused")
+    override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = throw NotImplementedError("unused")
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = throw NotImplementedError("unused")
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = throw NotImplementedError("unused")
     override suspend fun handoverPayment(id: String): PaymentRowDto = throw NotImplementedError("unused")

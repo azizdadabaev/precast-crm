@@ -31,6 +31,7 @@ import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.core.ui.format.formatMoney
 import java.time.LocalDate
+import java.util.UUID
 
 /** Same wording the shipments, drivers, dispatch and delivery-location screens use. */
 private const val OFFLINE_MESSAGE = "Интернет йўқ — бу амал онлайн бажарилади"
@@ -52,6 +53,10 @@ internal const val MAX_BACKDATE_DAYS = 120L
 /** The two facts that must survive process death — see [RecordPaymentViewModel]'s state seed. */
 private const val KEY_PAYMENT_ID = "record.paymentId"
 private const val KEY_AMOUNT_DIGITS = "record.amountDigits"
+
+/** The Idempotency-Key in flight and the submission it belongs to — see [idempotencyKeyFor]. */
+private const val KEY_IDEMPOTENCY = "record.idempotencyKey"
+private const val KEY_IDEMPOTENCY_FOR = "record.idempotencyFor"
 
 /**
  * What the record-payment sheet holds.
@@ -105,11 +110,11 @@ data class RecordPaymentUiState(
     val overCap: Money get() = (amount - cap).coerceAtLeastZero()
 
     /** The only offline signal this screen has: a fetch that failed for lack of a network.
-     *  `POST /api/payments` is not `withIdempotency`-wrapped, so it can never be queued. */
+     *  `POST /api/payments` is now `withIdempotency`-wrapped, which makes a RETRY safe — it does
+     *  not make the record queueable: the cap it is validated against is a live figure another
+     *  operator can move, so it is still sent while the counter conversation is happening. */
     val isOffline: Boolean get() = detailError is AppError.Network || driversError is AppError.Network
     val loadErrorMessage: String? get() = (detailError ?: driversError)?.message
-
-    val canSubmit: Boolean get() = !submitting && !isOffline && canRecord && validateRecord(this) == null
 
     /** A driver is collected only on the one source that has one, and bank/online has no
      *  physical hand-over to record — both mirror PaymentRecordSchema's refinements. */
@@ -147,7 +152,7 @@ fun validateRecord(s: RecordPaymentUiState): String? {
 }
 
 fun interface RecordPaymentUseCase {
-    suspend operator fun invoke(input: PaymentRecordInput): Result<String>
+    suspend operator fun invoke(input: PaymentRecordInput, idempotencyKey: String): Result<String>
 }
 
 fun interface AttachReceiptUseCase {
@@ -276,14 +281,17 @@ open class RecordPaymentViewModel(
             _state.update { it.copy(error = NO_PERMISSION_MESSAGE) }
             return
         }
-        // `POST /api/payments` has no idempotency key behind it, so with no signal the record is
-        // refused outright rather than sent and failed. Only the receipt uploads may be queued.
-        if (s.isOffline) {
-            _state.update { it.copy(error = OFFLINE_MESSAGE) }
-            return
-        }
         val alreadyRecorded = s.paymentId
         if (alreadyRecorded == null) {
+            // The offline refusal belongs INSIDE this branch, beside the validation it shares a
+            // subject with. Above it, it also blocked the retry that only attaches receipts —
+            // the one operation on this screen designed to work without a network, since
+            // `attachReceipt` merely enqueues an outbox row — and the only way out of that was
+            // the control that throws the photos away.
+            if (s.isOffline) {
+                _state.update { it.copy(error = OFFLINE_MESSAGE) }
+                return
+            }
             val problem = validateRecord(s)
             if (problem != null) {
                 _state.update { it.copy(error = problem) }
@@ -303,7 +311,7 @@ open class RecordPaymentViewModel(
                     notes = s.notes.trim().ifEmpty { null },
                     paidOn = s.paidOn?.toString(),
                 )
-                recordPayment(input).getOrElse { t ->
+                recordPayment(input, idempotencyKeyFor(input)).getOrElse { t ->
                     _state.update { st -> st.copy(submitting = false, error = t.toAppError().message) }
                     return@launch
                 }
@@ -318,10 +326,32 @@ open class RecordPaymentViewModel(
     }
 
     /**
+     * The Idempotency-Key for ONE submission. `POST /api/payments` is `withIdempotency`-wrapped,
+     * so a retry carrying the key the first attempt used replays that attempt's response instead
+     * of writing a second payment — which is the entire defence against a response lost after the
+     * row committed.
+     *
+     * It therefore must not change between retries of the same figures, and must change once the
+     * operator edits them: the wrapper caches every non-5xx outcome, refusals included, so
+     * reusing a key after correcting an over-cap amount would replay the 422 forever. The
+     * submission itself is the discriminator, and it never leaves the device — only the opaque
+     * UUID is sent. Both facts ride in [saved] so process death cannot mint a fresh key for a
+     * submission the server may already have taken.
+     */
+    private fun idempotencyKeyFor(input: PaymentRecordInput): String {
+        val fingerprint = input.toString()
+        if (saved.get<String>(KEY_IDEMPOTENCY_FOR) != fingerprint) {
+            saved[KEY_IDEMPOTENCY_FOR] = fingerprint
+            saved[KEY_IDEMPOTENCY] = UUID.randomUUID().toString()
+        }
+        return requireNotNull(saved.get<String>(KEY_IDEMPOTENCY))
+    }
+
+    /**
      * Receipts attach AFTER recording, never before: `attachReceipt` enqueues an outbox row and
-     * returns that row's id, not a URL, so it could never fill the request's `receiptUrls`. The
-     * upload route is `withIdempotency`-wrapped, which is exactly why it may be queued while the
-     * record itself may not — so a network drop after the record lands still delivers the photos.
+     * returns that row's id, not a URL, so it could never fill the request's `receiptUrls`. Being
+     * queued, they are also the one part of this screen that works with no network at all — so a
+     * drop after the record lands still delivers the photos.
      */
     private suspend fun attachReceipts(paymentId: String) {
         val outstanding = _state.value.receipts
@@ -351,7 +381,7 @@ class HiltRecordPaymentViewModel @AssistedInject constructor(
     @Assisted("orderId") private val orderId: String,
 ) : RecordPaymentViewModel(
     orderId = orderId,
-    record = RecordPaymentUseCase { input -> payments.record(input) },
+    record = RecordPaymentUseCase { input, key -> payments.record(input, key) },
     attach = AttachReceiptUseCase { paymentId, photo -> payments.attachReceipt(paymentId, orderId, photo) },
     drivers = PaymentDriversUseCase { drivers.list(activeOnly = true) },
     permissions = PaymentPermissionsUseCase { action -> permissions.can(action) },

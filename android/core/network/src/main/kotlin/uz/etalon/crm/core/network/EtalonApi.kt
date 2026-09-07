@@ -120,8 +120,14 @@ interface EtalonApi {
     @GET("/api/payments")
     suspend fun payments(@Query("orderId") orderId: String? = null, @Query("status") status: String? = null): List<PaymentRowDto>
 
+    // `withIdempotency`-wrapped server-side, so the key is REQUIRED here rather than optional:
+    // the record screen offers a retry, and a response lost after the row committed would
+    // otherwise let one tap write two real payments against the order.
     @POST("/api/payments")
-    suspend fun recordPayment(@Body body: PaymentRecordRequest): PaymentRowDto
+    suspend fun recordPayment(
+        @Body body: PaymentRecordRequest,
+        @Header("Idempotency-Key") idempotencyKey: String,
+    ): PaymentRowDto
 
     @POST("/api/payments/{id}/confirm")
     suspend fun confirmPayment(@Path("id") id: String, @Body body: PaymentConfirmRequest): PaymentRowDto

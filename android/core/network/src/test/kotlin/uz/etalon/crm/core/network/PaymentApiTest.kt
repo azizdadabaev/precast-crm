@@ -55,22 +55,26 @@ class PaymentApiTest {
 
     @Test fun `recording a payment sends the amount as a bare exact decimal`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1234.56","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
-        val res = api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("1234.56"), method = "CASH", source = "IN_OFFICE_CASH"))
+        val res = api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("1234.56"), method = "CASH", source = "IN_OFFICE_CASH"), "idem-1")
         assertNull(res.order) // the bare row has no order key — must decode, not throw
-        val sent = server.takeRequest().body.readUtf8()
+        val rec = server.takeRequest()
+        // The route is withIdempotency-wrapped: without this header a retry after a lost
+        // response writes a SECOND real payment against the order.
+        assertEquals("idem-1", rec.getHeader("Idempotency-Key"))
+        val sent = rec.body.readUtf8()
         assertTrue(sent.contains("\"amount\":1234.56"), sent) // bare, unquoted, exact
         assertFalse(sent.contains("\"amount\":\"1234.56\""), sent)
     }
 
     @Test fun `a very large amount is not rendered in scientific notation`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"0","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
-        api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("999999999999.99"), method = "CASH", source = "IN_OFFICE_CASH"))
+        api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("999999999999.99"), method = "CASH", source = "IN_OFFICE_CASH"), "idem-1")
         assertTrue(server.takeRequest().body.readUtf8().contains("\"amount\":999999999999.99"))
     }
 
     @Test fun `recordPayment sends every optional field, including a null-safe default source`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"500.00","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
-        api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("500.00"), method = "CASH", source = "FROM_DRIVER_AT_DELIVERY", collectedByDriverId = "d1", notes = "изоҳ"))
+        api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("500.00"), method = "CASH", source = "FROM_DRIVER_AT_DELIVERY", collectedByDriverId = "d1", notes = "изоҳ"), "idem-1")
         val sent = server.takeRequest().body.readUtf8()
         assertTrue(sent.contains(""""source":"FROM_DRIVER_AT_DELIVERY""""), sent)
         assertTrue(sent.contains(""""collectedByDriverId":"d1""""), sent)
@@ -99,7 +103,7 @@ class PaymentApiTest {
 
     @Test fun `an ok-false body on a 200 is still a failure`() = runTest {
         server.enqueue(MockResponse().setResponseCode(200).setBody("""{"ok":false,"error":"Сумма ортиқча · Amount exceeds remaining"}""").addHeader("Content-Type", "application/json"))
-        val t = assertThrows<ApiException> { api.recordPayment(PaymentRecordRequest("o1", BigDecimal("1"), "CASH", "IN_OFFICE_CASH")) }
+        val t = assertThrows<ApiException> { api.recordPayment(PaymentRecordRequest("o1", BigDecimal("1"), "CASH", "IN_OFFICE_CASH"), "idem-1") }
         assertEquals("Сумма ортиқча", t.uzbekMessage)
     }
 
