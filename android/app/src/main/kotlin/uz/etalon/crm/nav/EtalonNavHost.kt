@@ -36,6 +36,9 @@ import uz.etalon.crm.feature.logistics.shipments.ShipmentLoadRoute
 import uz.etalon.crm.feature.logistics.shipments.ShipmentsRoute
 import uz.etalon.crm.feature.orders.detail.OrderDetailRoute
 import uz.etalon.crm.feature.orders.list.OrdersListRoute
+import uz.etalon.crm.feature.payments.discrepancies.DiscrepanciesRoute
+import uz.etalon.crm.feature.payments.queue.ConfirmQueueRoute
+import uz.etalon.crm.feature.payments.record.RecordPaymentRoute
 import uz.etalon.crm.shell.ComingSoonScreen
 import uz.etalon.crm.shell.Destination
 import uz.etalon.crm.shell.MoreRoute
@@ -99,15 +102,16 @@ fun SignedInShell(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
             entryDecorators = rememberEntryDecorators(),
-            // These keys legitimately have no entry sometimes: they are registered per permission
-            // (below), so a back stack restored for an operator who has since lost driver.view or
-            // dispatch.create would land on nothing, and crashing them out of the app is worse than
-            // an Uzbek notice. Every OTHER unregistered key is a wiring mistake and must still fail
+            // Some keys legitimately have no entry: they are registered per permission (below), so
+            // a back stack restored for an operator who has since lost driver.view, dispatch.create
+            // or payment.view would land on nothing, and crashing them out of the app is worse than
+            // an Uzbek notice. `gatingPermission` is the one list of those keys — shared with the
+            // guards below so the two cannot drift. Every OTHER unregistered key, and any gated key
+            // whose permission this operator DOES hold, is a wiring mistake and must still fail
             // loudly here rather than be swallowed as a silent "no access".
             entryProvider = entryProvider(
                 fallback = { key ->
-                    val gated = key is Drivers || key is Shipments || key is ShipmentLoad || key is Dispatch
-                    if (!gated) error("No NavEntry registered for $key")
+                    if (me.canOpen(key)) error("No NavEntry registered for $key")
                     NavEntry(key) { NoAccessScreen() }
                 },
             ) {
@@ -122,6 +126,7 @@ fun SignedInShell(
                         onDeliveryProof = { backStack.add(DeliveryProof(k.id)) },
                         onOpenShipments = { backStack.add(Shipments(k.id)) },
                         onOpenLocation = { backStack.add(DeliveryLocation(k.id)) },
+                        onRecordPayment = { backStack.add(RecordPayment(k.id)) },
                     )
                 }
                 entry<LoadTruck> { k ->
@@ -135,7 +140,7 @@ fun SignedInShell(
                 // order.edit without it. Registered per permission for the same reason Drivers is:
                 // without it these screens do not exist, so no restored back stack can open them
                 // and walk the operator into a 403 that becomes a permanently failed upload.
-                if (me.can("dispatch.create")) {
+                if (me.can(PERM_DISPATCH_CREATE)) {
                     entry<Shipments> { k ->
                         ShipmentsRoute(
                             orderId = k.orderId,
@@ -171,14 +176,40 @@ fun SignedInShell(
                 }
                 // Registered only for an operator who may read the roster: without the permission
                 // the route does not exist, so no deep link or restored stack can open it.
-                if (me.can("driver.view")) {
+                if (me.can(PERM_DRIVER_VIEW)) {
                     entry<Drivers> { DriversRoute(onBack = { backStack.removeLastOrNull() }) }
+                }
+                // The payments tab IS the confirmation queue. Approve and reject inside it need
+                // payment.confirm on top of this, which ConfirmQueueViewModel checks for itself —
+                // an ACCOUNTANT holds payment.view alone and reads the queue without acting on it.
+                if (me.can(PERM_PAYMENT_VIEW)) {
+                    entry<Payments> { ConfirmQueueRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                }
+                if (me.can(PERM_DISCREPANCY_VIEW)) {
+                    entry<Discrepancies> {
+                        DiscrepanciesRoute(
+                            onOpenOrder = { backStack.add(OrderDetail(it)) },
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
+                }
+                // A DRIVER holds payment.record and neither payment.view nor order.edit: collecting
+                // cash on site is their job, so this route is gated on its own permission rather
+                // than riding along with the queue's.
+                if (me.can(PERM_PAYMENT_RECORD)) {
+                    entry<RecordPayment> { k ->
+                        RecordPaymentRoute(
+                            orderId = k.orderId,
+                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                        )
+                    }
                 }
                 entry<More> {
                     MoreRoute(
                         me = me,
                         onOpen = { d -> backStack.add(d.key()) },
                         onOpenDrivers = { backStack.add(Drivers) },
+                        onOpenDiscrepancies = { backStack.add(Discrepancies) },
                         onChangePin = { backStack.add(ChangePin(forced = false)) },
                         onSignOut = onSignOut,
                     )

@@ -45,6 +45,7 @@ fun OrderDetailRoute(
     onDeliveryProof: () -> Unit,
     onOpenShipments: () -> Unit,
     onOpenLocation: () -> Unit,
+    onRecordPayment: () -> Unit,
     vm: OrderDetailViewModel = hiltViewModel<OrderDetailViewModel, OrderDetailViewModel.Factory>(creationCallback = { it.create(orderId) }),
 ) {
     val r by vm.state.collectAsStateWithLifecycle()
@@ -54,7 +55,7 @@ fun OrderDetailRoute(
         r = r, me = me, pending = pending, actionError = actionError,
         onBack = onBack, onRefresh = vm::refresh,
         onLoadTruck = onLoadTruck, onAddPhoto = onAddPhoto, onDeliveryProof = onDeliveryProof,
-        onOpenShipments = onOpenShipments, onOpenLocation = onOpenLocation,
+        onOpenShipments = onOpenShipments, onOpenLocation = onOpenLocation, onRecordPayment = onRecordPayment,
         onDeletePhoto = vm::deletePhoto, onRetryUpload = vm::retryUpload, onCancelUpload = vm::cancelUpload,
     )
 }
@@ -83,6 +84,7 @@ fun OrderDetailScreen(
     onDeliveryProof: () -> Unit,
     onOpenShipments: () -> Unit,
     onOpenLocation: () -> Unit,
+    onRecordPayment: () -> Unit,
     onDeletePhoto: (String) -> Unit,
     onRetryUpload: (String) -> Unit,
     onCancelUpload: (String) -> Unit,
@@ -174,8 +176,21 @@ fun OrderDetailScreen(
                                     MoneyText(p.amount)
                                     Text("${formatDateTime(p.recordedAt)}${p.recordedByName?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Chip(when (p.status) { uz.etalon.crm.core.model.PaymentStatus.CONFIRMED -> ChipTone.SUCCESS; uz.etalon.crm.core.model.PaymentStatus.REJECTED -> ChipTone.DANGER; else -> ChipTone.WARNING }, stringResource(when (p.status) { uz.etalon.crm.core.model.PaymentStatus.CONFIRMED -> R.string.payment_confirmed; uz.etalon.crm.core.model.PaymentStatus.REJECTED -> R.string.payment_rejected; else -> R.string.payment_pending_confirmation }))
+                                // The canonical mapping lives in :core:designsystem. The local copy
+                                // this replaces toned PENDING_CONFIRMATION as WARNING, against the
+                                // product rule that a pending payment is muted, and against what
+                                // the confirmation queue shows for the very same payment.
+                                PaymentStatusChip(p.status)
                             }
+                        }
+                        // The server refuses a payment on a canceled order and on a delivered one
+                        // that is already fully paid, so the door is not offered there.
+                        if (canRecordPayment(o, me)) {
+                            SecondaryButton(
+                                stringResource(R.string.order_action_record_payment),
+                                onClick = onRecordPayment,
+                                modifier = Modifier.padding(top = 12.dp),
+                            )
                         }
                     }
                 }

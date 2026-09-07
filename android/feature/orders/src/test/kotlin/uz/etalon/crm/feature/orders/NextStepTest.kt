@@ -17,6 +17,7 @@ import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.feature.orders.detail.NextStep
 import uz.etalon.crm.feature.orders.detail.canAddPhoto
 import uz.etalon.crm.feature.orders.detail.canOpenShipments
+import uz.etalon.crm.feature.orders.detail.canRecordPayment
 import uz.etalon.crm.feature.orders.detail.nextStepFor
 import java.math.BigDecimal
 import java.time.Instant
@@ -33,10 +34,14 @@ class NextStepTest {
         driverName = null, truckIdentifier = null,
     )
 
-    private fun order(status: OrderStatus, shipments: List<ShipmentLine> = emptyList()) = OrderDetail(
+    private fun order(
+        status: OrderStatus,
+        shipments: List<ShipmentLine> = emptyList(),
+        paymentState: PaymentState = PaymentState.AWAITING_PAYMENT,
+    ) = OrderDetail(
         summary = OrderSummary(
             id = "o1", orderNumber = "2026-09-0001", status = status,
-            paymentState = PaymentState.AWAITING_PAYMENT,
+            paymentState = paymentState,
             totalPrice = Money.parse("1000000"), confirmedPaid = Money.ZERO,
             totalArea = BigDecimal.ONE, totalBlocks = 1, totalBeams = 1,
             scheduledAt = Instant.EPOCH, placedAt = Instant.EPOCH,
@@ -211,5 +216,31 @@ class NextStepTest {
             assertTrue(canOpenShipments(order(st, trucks), editor), st.name)
             assertFalse(canOpenShipments(order(st, trucks), sales), st.name)
         }
+    }
+
+    // ── The record-payment door ───────────────────────────────────────────────
+
+    /** ROLE_TEMPLATES.DRIVER: `payment.record` and no `order.edit` at all. Collecting cash on
+     *  site is exactly their job, so the door must not hang off the editing permission. */
+    private val driver = me("order.view", "payment.record")
+
+    @Test fun `the record door needs payment record, not order edit`() {
+        assertTrue(canRecordPayment(order(OrderStatus.PLACED), driver))
+        assertFalse(canRecordPayment(order(OrderStatus.PLACED), sales), "SALES here is a stand-in for an operator without payment.record")
+    }
+
+    /** The two states `POST /api/payments` refuses outright. A door onto a guaranteed 422 is
+     *  worse than no door. */
+    @Test fun `the record door is shut on the two orders the server refuses`() {
+        assertFalse(canRecordPayment(order(OrderStatus.CANCELED), driver))
+        assertFalse(canRecordPayment(order(OrderStatus.DELIVERED, paymentState = PaymentState.FULLY_PAID), driver))
+    }
+
+    /** Delivered-but-still-owing is the commonest reason a driver records anything at all, and a
+     *  live order that is somehow already FULLY_PAID still accepts nothing but is not refused by
+     *  status — the server only pairs the two. */
+    @Test fun `a delivered order that still owes money keeps the door open`() {
+        assertTrue(canRecordPayment(order(OrderStatus.DELIVERED, paymentState = PaymentState.PARTIALLY_PAID), driver))
+        assertTrue(canRecordPayment(order(OrderStatus.DISPATCHED, paymentState = PaymentState.FULLY_PAID), driver))
     }
 }

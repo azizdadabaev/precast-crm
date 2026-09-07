@@ -26,3 +26,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class DeliveryProof(val orderId: String) : Key
 @Serializable data class DeliveryLocation(val orderId: String) : Key
 @Serializable data object Drivers : Key
+
+// ── Payments ─────────────────────────────────────────────────────────────────
+/** The bottom-bar tab (Destination.PAYMENTS). It *is* the confirmation queue — that screen was
+ *  built as a top-level destination, tabs and all — so there is no second key for the queue. */
+@Serializable data object Payments : Key
+@Serializable data class RecordPayment(val orderId: String) : Key
+@Serializable data object Discrepancies : Key

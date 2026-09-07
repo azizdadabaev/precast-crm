@@ -7,6 +7,9 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:image"))
     implementation(project(":feature:capture"))
+    // For BackHandler: the record sheet must ask about captured receipts on the system back
+    // gesture too, not only on the top bar's arrow.
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons)

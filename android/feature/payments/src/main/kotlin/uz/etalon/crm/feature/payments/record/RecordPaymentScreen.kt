@@ -1,5 +1,6 @@
 package uz.etalon.crm.feature.payments.record
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -139,6 +140,11 @@ fun RecordPaymentScreen(
     var lightboxAt by remember { mutableStateOf<Int?>(null) }
     var removeCandidate by remember { mutableStateOf<Int?>(null) }
     var confirmLeave by remember { mutableStateOf(false) }
+    // The top bar's arrow is not the only way out: a swipe from the screen edge is how most
+    // operators leave a screen, and once the payment row exists it must ask about the captured
+    // receipts there too — otherwise the swipe silently drops them and reads as if nothing was
+    // recorded at all. Disabled before the row exists, so the plain back still pops the stack.
+    BackHandler(enabled = s.paymentId != null) { confirmLeave = true }
     val ext = LocalEtalonColors.current
     // A local file path is a Uri with no scheme, which Coil resolves as a file — the same
     // rendering path the queued photos on the order screen take once they have a server URL.

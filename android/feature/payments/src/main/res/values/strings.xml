@@ -95,6 +95,7 @@
          exactly what is needed for the expected figure and the gap, and `discrepancy_note_*`
          already say what is needed for the resolution note, so this screen reads those
          instead of redefining them. -->
+    <string name="discrepancies_title">Нақд пул тафовутлари</string>
     <string name="discrepancies_empty">Тафовут йўқ</string>
     <string name="discrepancies_received">Олинган: %1$s</string>
     <string name="discrepancies_driver">Ҳайдовчи: %1$s</string>

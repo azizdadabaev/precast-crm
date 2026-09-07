@@ -37,7 +37,9 @@ import java.time.Instant
 class OrderDetailScreenshotTest {
     @get:Rule val rule = createComposeRule()
 
-    private val editor = Me("u1", "Оператор", Role.SALES, setOf("order.view", "order.edit"), false)
+    /** ROLE_TEMPLATES.SALES, which holds payment.record too — so these frames also capture the
+     *  record-payment door on the payments card. */
+    private val editor = Me("u1", "Оператор", Role.SALES, setOf("order.view", "order.edit", "payment.record"), false)
 
     private fun order(status: OrderStatus) = OrderDetail(
         summary = OrderSummary(
@@ -63,7 +65,8 @@ class OrderDetailScreenshotTest {
                 OrderDetailScreen(
                     r = Resource.Success(order(OrderStatus.PLACED)), me = editor, pending = pending, actionError = null,
                     onBack = {}, onRefresh = {}, onLoadTruck = {}, onAddPhoto = {}, onDeliveryProof = {},
-                    onOpenShipments = {}, onOpenLocation = {}, onDeletePhoto = {}, onRetryUpload = {}, onCancelUpload = {},
+                    onOpenShipments = {}, onOpenLocation = {}, onRecordPayment = {},
+                    onDeletePhoto = {}, onRetryUpload = {}, onCancelUpload = {},
                 )
             }
         }

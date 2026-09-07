@@ -1,13 +1,24 @@
 package uz.etalon.crm.shell
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.R
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Role
+import uz.etalon.crm.nav.ChangePin
 import uz.etalon.crm.nav.ComingSoon
+import uz.etalon.crm.nav.Discrepancies
+import uz.etalon.crm.nav.More
 import uz.etalon.crm.nav.OrderDetail
 import uz.etalon.crm.nav.Orders
+import uz.etalon.crm.nav.Payments
+import uz.etalon.crm.nav.RecordPayment
+import uz.etalon.crm.nav.canOpen
+import uz.etalon.crm.nav.gatingPermission
+import uz.etalon.crm.nav.key
 import uz.etalon.crm.nav.startKeyFor
 
 class DestinationsTest {
@@ -99,5 +110,49 @@ class DestinationsTest {
         // An INVENTORY user has no order.view; a deep link must not smuggle them onto the order screen.
         assertEquals(ComingSoon(R.string.nav_production), startKeyFor(me("inventory.view"), deepLinkOrderId = null))
         assertEquals(ComingSoon(R.string.nav_production), startKeyFor(me("inventory.view"), deepLinkOrderId = "o-42"))
+    }
+
+    // ── The payments slice: the tab is a real screen, and every route behind it is gated ──
+
+    @Test
+    fun `the payments tab is a real screen, not a coming-soon notice`() {
+        assertEquals(Payments, Destination.PAYMENTS.key())
+    }
+
+    /** An operator without `payment.view` must not merely lose the tab — the queue route must not
+     *  exist for them at all, so no restored back stack can open it either. */
+    @Test
+    fun `a user without payment view neither sees the tab nor can reach the queue`() {
+        val accountant = me("order.view", "payment.view", "discrepancy.view")
+        val driver = me("order.view", "payment.record")
+        assertTrue(Destination.PAYMENTS in destinationsFor(accountant) + moreDestinationsFor(accountant))
+        assertTrue(accountant.canOpen(Payments))
+        assertFalse(Destination.PAYMENTS in destinationsFor(driver) + moreDestinationsFor(driver))
+        assertFalse(driver.canOpen(Payments))
+    }
+
+    /** A DRIVER holds `payment.record` and nothing else on this slice: they may record against the
+     *  order they delivered, and may not read the owner's queue or the discrepancy list. */
+    @Test
+    fun `recording is gated on payment record, not on payment view`() {
+        val driver = me("order.view", "payment.record")
+        assertTrue(driver.canOpen(RecordPayment("o1")))
+        assertFalse(driver.canOpen(Discrepancies))
+        assertFalse(me("payment.view").canOpen(RecordPayment("o1")))
+    }
+
+    @Test
+    fun `discrepancies are gated on discrepancy view`() {
+        assertTrue(me("discrepancy.view").canOpen(Discrepancies))
+        assertFalse(me("payment.view").canOpen(Discrepancies))
+    }
+
+    /** The entryProvider fallback renders its Uzbek no-access notice for exactly the keys a
+     *  permission can legitimately withhold, and still crashes for anything else. A key that is
+     *  always registered must therefore never name a permission here. */
+    @Test
+    fun `an always-registered key names no gating permission`() {
+        listOf(Orders, OrderDetail("o1"), More, ChangePin(forced = false), ComingSoon(R.string.nav_production))
+            .forEach { assertNull(gatingPermission(it), "$it is registered unconditionally") }
     }
 }

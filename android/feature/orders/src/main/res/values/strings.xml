@@ -11,9 +11,9 @@
     <string name="remaining">Қолди</string>
     <string name="paid_of_total">Тўланган %1$s / %2$s</string>
     <string name="pending_amount">Тасдиқ кутилмоқда: %1$s</string>
-    <string name="payment_confirmed">Тасдиқланган</string>
-    <string name="payment_rejected">Рад этилган</string>
-    <string name="payment_pending_confirmation">Кутилмоқда</string>
+    <!-- The payment-status labels that stood here were a second copy of :core:designsystem's,
+         merged over them by name; the card now uses PaymentStatusChip, which reads the originals. -->
+    <string name="order_action_record_payment">Тўлов қайд этиш</string>
     <string name="rooms">Хоналар</string>
     <string name="room_n">Хона %1$d</string>
     <string name="total_area">Майдон</string>

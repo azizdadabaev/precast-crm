@@ -14,7 +14,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -22,6 +26,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -65,19 +70,21 @@ private val RESOLUTION_HINTS = mapOf(
 )
 
 /**
- * A screen reached from elsewhere in the app (a menu, a button), never a bottom-bar destination
- * of its own — exactly like `RecordPaymentRoute`, it takes no `onBack`: the caller's own nav
- * host supplies that.
+ * A screen reached from elsewhere in the app (the "Яна" menu), never a bottom-bar destination of
+ * its own. It draws its own back arrow: Nav3's NavDisplay renders the entry and nothing around it,
+ * so a screen that does not draw one has no visible way back at all.
  */
 @Composable
 fun DiscrepanciesRoute(
     onOpenOrder: (String) -> Unit,
+    onBack: () -> Unit,
     vm: HiltDiscrepanciesViewModel = hiltViewModel(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
     DiscrepanciesScreen(
         s = s,
         onOpenOrder = onOpenOrder,
+        onBack = onBack,
         onRefresh = vm::refresh,
         onOpenResolve = vm::openResolve,
         onCloseSheet = vm::closeSheet,
@@ -92,6 +99,7 @@ fun DiscrepanciesRoute(
 fun DiscrepanciesScreen(
     s: DiscrepanciesUiState,
     onOpenOrder: (String) -> Unit,
+    onBack: () -> Unit,
     onRefresh: () -> Unit,
     onOpenResolve: (Discrepancy) -> Unit,
     onCloseSheet: () -> Unit,
@@ -99,7 +107,16 @@ fun DiscrepanciesScreen(
     onSetNote: (String) -> Unit,
     onSubmitResolve: () -> Unit,
 ) {
-    Scaffold { pad ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.discrepancies_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
+                },
+            )
+        },
+    ) { pad ->
         PullToRefreshBox(isRefreshing = s.loading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),

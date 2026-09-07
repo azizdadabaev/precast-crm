@@ -3,6 +3,7 @@ package uz.etalon.crm.feature.orders.detail
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.SHIPMENT_CREATE_STATUSES
 
 sealed interface NextStep {
@@ -94,3 +95,26 @@ fun canOpenShipments(order: OrderDetail, me: Me): Boolean =
  *  narrower than "the order is live". */
 fun canAddPhoto(order: OrderDetail, me: Me): Boolean =
     me.can("order.edit") && order.summary.status in PHOTO_STATUSES
+
+/** The permission `POST /api/payments` is wrapped in, server-side. Deliberately not `order.edit`:
+ *  ROLE_TEMPLATES.DRIVER holds this and nothing else that writes. */
+internal const val PAYMENT_RECORD = "payment.record"
+
+/**
+ * Whether the payments card offers the record-a-payment door.
+ *
+ * The two status refusals are the server's own (`POST /api/payments`): a CANCELED order, and a
+ * DELIVERED order that is already FULLY_PAID. Offering the door there would walk an operator
+ * through the whole form — amount, method, receipt photos — for a 422 they cannot act on.
+ *
+ * The amount cap is deliberately NOT checked here. It is `recordableRemaining`, which moves every
+ * time a payment lands in the confirmation queue, and the record screen already shows it and
+ * refuses to submit above it; hiding the door on a cap of zero would leave an operator with a
+ * pending payment no way to see why.
+ */
+fun canRecordPayment(order: OrderDetail, me: Me): Boolean {
+    if (!me.can(PAYMENT_RECORD)) return false
+    val s = order.summary
+    if (s.status == OrderStatus.CANCELED) return false
+    return !(s.status == OrderStatus.DELIVERED && s.paymentState == PaymentState.FULLY_PAID)
+}

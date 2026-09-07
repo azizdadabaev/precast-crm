@@ -70,12 +70,13 @@ fun MoreRoute(
     me: Me,
     onOpen: (Destination) -> Unit,
     onOpenDrivers: () -> Unit,
+    onOpenDiscrepancies: () -> Unit,
     onChangePin: () -> Unit,
     onSignOut: () -> Unit,
     vm: MoreViewModel = hiltViewModel(),
 ) {
     val pending by vm.pendingUploads.collectAsStateWithLifecycle()
-    MoreScreen(me, pending, onOpen, onOpenDrivers, onChangePin, onSignOut)
+    MoreScreen(me, pending, onOpen, onOpenDrivers, onOpenDiscrepancies, onChangePin, onSignOut)
 }
 
 @Composable
@@ -84,6 +85,7 @@ fun MoreScreen(
     pendingUploads: Int,
     onOpen: (Destination) -> Unit,
     onOpenDrivers: () -> Unit,
+    onOpenDiscrepancies: () -> Unit,
     onChangePin: () -> Unit,
     onSignOut: () -> Unit,
 ) {
@@ -102,6 +104,13 @@ fun MoreScreen(
         if (me.can("driver.view")) {
             OutlinedButton(onClick = onOpenDrivers, modifier = Modifier.fillMaxWidth().height(48.dp)) {
                 Text(stringResource(R.string.more_drivers))
+            }
+        }
+        // The cash-discrepancy list has no bottom-bar slot of its own — the payments tab is the
+        // confirmation queue — so this is its only door, gated on the same permission the entry is.
+        if (me.can("discrepancy.view")) {
+            OutlinedButton(onClick = onOpenDiscrepancies, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                Text(stringResource(R.string.more_discrepancies))
             }
         }
         OutlinedButton(onClick = onChangePin, modifier = Modifier.fillMaxWidth().height(48.dp)) {
