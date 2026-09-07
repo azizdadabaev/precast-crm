@@ -191,6 +191,35 @@ class ConfirmQueueViewModelTest {
         assertNull(vm.state.value.sheet)
     }
 
+    /**
+     * The other half of that rule, on the send path rather than in `confirmBlocker`: an action
+     * picked while the payment looked short, and then adjusted away, must not reach the server.
+     * The route would open a Discrepancy row against a payment that met the expectation — a
+     * write-off or a discount recorded for a shortfall that no longer exists.
+     */
+    @Test fun `an action chosen and then adjusted away never reaches the server`() = runTest {
+        var sentAction: String? = "sentinel"
+        var sentNote: String? = "sentinel"
+        val row = item(id = "p12", amount = "800000", expected = "1000000", fromDriver = true)
+        val vm = viewModel(
+            queue = { Result.success(listOf(row)) },
+            confirm = { _, _, _, action, note -> sentAction = action; sentNote = note; Result.success(Unit) },
+        )
+        advanceUntilIdle()
+        vm.openApprove(row)
+        vm.setAction(DiscrepancyAction.WRITEOFF)
+        vm.setNote("ҳисобдан чиқарамиз")
+        // ...and then the owner recounts and finds the full amount after all.
+        vm.setAmountDigits("1000000")
+        vm.setAdjustmentNote("қайта саналди")
+        assertFalse(requireNotNull(vm.state.value.sheet).hasShortfall)
+        vm.submitApprove()
+        advanceUntilIdle()
+
+        assertNull(sentAction)
+        assertNull(sentNote)
+    }
+
     /** Unchanged amounts travel as null, exactly as the web dialog sends `undefined`: the route
      *  reads `body.amount != null` to decide whether the owner adjusted anything. */
     @Test fun `an unchanged amount is not sent as an adjustment`() = runTest {

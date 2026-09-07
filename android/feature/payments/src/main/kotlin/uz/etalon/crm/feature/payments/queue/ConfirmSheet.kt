@@ -16,11 +16,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,7 +100,28 @@ fun ConfirmSheet(
 
     val ext = LocalEtalonColors.current
     val rejecting = sheet.mode == ConfirmMode.REJECT
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+
+    // A swipe, a scrim tap and a back press are the same decision the Cancel button is, so they
+    // are held shut for the same reason: dismissing mid-flight drops the sheet the failure message
+    // is written into, and the confirmation then appears to have done nothing — the wrong failure
+    // mode on the one screen where the action cannot be taken back.
+    //
+    // Both halves are needed, and neither can leave the sheet hidden-but-composed. `hide()` and
+    // `settle()` each consult confirmValueChange (SheetDefaults.kt), so vetoing Hidden stops the
+    // swipe and the scrim tap before anything animates, and the scrim path never reaches
+    // onDismissRequest at all. The back press is the exception — ModalBottomSheet calls
+    // onDismissRequest unconditionally there — which is what the guard below catches.
+    //
+    // Nothing can strand the sheet: `submitting` is true only while a call is in flight, and both
+    // outcomes clear it (success closes the sheet, failure re-renders it carrying the reason).
+    val submittingNow by rememberUpdatedState(submitting)
+    val sheetState = rememberModalBottomSheetState(
+        confirmValueChange = { target -> target != SheetValue.Hidden || !submittingNow },
+    )
+    ModalBottomSheet(
+        sheetState = sheetState,
+        onDismissRequest = { if (!submittingNow) onDismiss() },
+    ) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)
                 .verticalScroll(rememberScrollState()),

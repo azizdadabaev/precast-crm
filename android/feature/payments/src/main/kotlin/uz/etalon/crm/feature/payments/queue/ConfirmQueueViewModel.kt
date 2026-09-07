@@ -49,20 +49,12 @@ enum class DiscrepancyAction { TRACK, DISCOUNT, WRITEOFF }
  * The shortfall against [finalAmount] — the figure the owner is about to confirm, which is not
  * necessarily the one that was recorded, so [PaymentQueueItem.shortfall] cannot answer it.
  *
- * The gate is the narrow one the confirm route enforces: a dispatch's `expectedCollection` is the
- * amount a DRIVER was sent out to collect on one delivery. In-office cash and bank transfers carry
- * no driver, so comparing them to it is meaningless — and would force the owner to justify a
- * discrepancy on a payment that is not short of anything. `fromDriver` is exactly the route's
- * `payment.collectedById != null`.
+ * The driver gate itself is NOT restated here: it lives once, in
+ * [PaymentQueueItem.expectedFromDriver], which [PaymentQueueItem.shortfall] reads too. Two
+ * expressions of one rule would be two things to keep in step.
  */
 fun shortfallOf(item: PaymentQueueItem, finalAmount: Money): Money =
     item.expectedFromDriver?.let { (it - finalAmount).coerceAtLeastZero() } ?: Money.ZERO
-
-/** The dispatch figure this payment may be measured against, or null when there is nothing to
- *  measure it against. The single place that gate is written, so a card and a sheet can never
- *  disagree about whether a payment is short. */
-val PaymentQueueItem.expectedFromDriver: Money?
-    get() = expectedCollection?.takeIf { fromDriver }
 
 /**
  * Every contextual rule `POST /api/payments/{id}/confirm` enforces, applied before the network:

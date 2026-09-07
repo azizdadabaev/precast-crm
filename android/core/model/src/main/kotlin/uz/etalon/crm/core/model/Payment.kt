@@ -47,9 +47,23 @@ data class PaymentQueueItem(
     val receiptUrls: List<String>,
     val rejectionReason: String?,
 ) {
-    /** Only a driver-collected payment measured against a dispatch can be short. */
+    /**
+     * The dispatch figure this payment may be measured against, or null when there is nothing to
+     * measure it against. `expectedCollection` is what a DRIVER was sent out to collect on one
+     * delivery, so `fromDriver` (the confirm route's `payment.collectedById != null`) is the whole
+     * gate: in-office cash and bank transfers carry no driver, and comparing them to it would
+     * force the confirmer to justify a discrepancy on a payment that is not short of anything.
+     *
+     * This is the ONE place that gate is written. [shortfall] below and the confirm sheet's own
+     * shortfall — measured against the amount being confirmed rather than the recorded one — both
+     * read it, so a queue card and its sheet can never disagree about whether a payment is short.
+     */
+    val expectedFromDriver: Money? get() = expectedCollection?.takeIf { fromDriver }
+
+    /** The shortfall as recorded. The confirm sheet needs the same figure against an amount the
+     *  owner is adjusting, which this cannot answer — it computes it from [expectedFromDriver]. */
     val shortfall: Money
-        get() = if (fromDriver && expectedCollection != null) (expectedCollection - amount).coerceAtLeastZero() else Money.ZERO
+        get() = expectedFromDriver?.let { (it - amount).coerceAtLeastZero() } ?: Money.ZERO
 }
 
 data class Discrepancy(
