@@ -16,8 +16,10 @@ import androidx.compose.ui.unit.sp
 import uz.etalon.crm.core.designsystem.R
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
+import uz.etalon.crm.core.model.DiscrepancyStatus
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
+import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.core.model.ShipmentStatus
 
 enum class ChipTone { PRIMARY, SUCCESS, WARNING, DANGER, GOLD, NEUTRAL }
@@ -75,6 +77,40 @@ fun shipmentStatusLabel(s: ShipmentStatus): Int = when (s) {
 fun driverActiveTone(active: Boolean): ChipTone = if (active) ChipTone.SUCCESS else ChipTone.NEUTRAL
 fun driverActiveLabel(active: Boolean): Int = if (active) R.string.driver_status_active else R.string.driver_status_inactive
 
+/** A single payment's own confirm/reject state — distinct from [paymentStateTone], the order-
+ *  level paid/partial/pending triad. Fixed product meaning: confirmed is the positive family,
+ *  pending is muted, rejected is the danger family. */
+fun paymentStatusTone(s: PaymentStatus): ChipTone = when (s) {
+    PaymentStatus.CONFIRMED -> ChipTone.SUCCESS
+    PaymentStatus.PENDING_CONFIRMATION -> ChipTone.NEUTRAL
+    PaymentStatus.REJECTED -> ChipTone.DANGER
+    PaymentStatus.UNKNOWN -> ChipTone.NEUTRAL
+}
+fun paymentStatusLabel(s: PaymentStatus): Int = when (s) {
+    PaymentStatus.CONFIRMED -> R.string.payment_confirmed
+    PaymentStatus.PENDING_CONFIRMATION -> R.string.payment_pending // same word, "Кутилмоқда" — no separate string
+    PaymentStatus.REJECTED -> R.string.payment_rejected
+    PaymentStatus.UNKNOWN -> R.string.status_unknown
+}
+
+/** Mirrors DISCREPANCY_STATUS_META in discrepancies/page.tsx. */
+fun discrepancyStatusTone(s: DiscrepancyStatus): ChipTone = when (s) {
+    DiscrepancyStatus.OPEN -> ChipTone.DANGER
+    DiscrepancyStatus.RESOLVED_RECOVERED -> ChipTone.SUCCESS
+    DiscrepancyStatus.RESOLVED_DISCOUNT -> ChipTone.PRIMARY
+    DiscrepancyStatus.RESOLVED_WRITEOFF -> ChipTone.NEUTRAL
+    DiscrepancyStatus.DISPUTED -> ChipTone.WARNING
+    DiscrepancyStatus.UNKNOWN -> ChipTone.NEUTRAL
+}
+fun discrepancyStatusLabel(s: DiscrepancyStatus): Int = when (s) {
+    DiscrepancyStatus.OPEN -> R.string.discrepancy_open
+    DiscrepancyStatus.RESOLVED_RECOVERED -> R.string.discrepancy_recovered
+    DiscrepancyStatus.RESOLVED_DISCOUNT -> R.string.discrepancy_discount
+    DiscrepancyStatus.RESOLVED_WRITEOFF -> R.string.discrepancy_writeoff
+    DiscrepancyStatus.DISPUTED -> R.string.discrepancy_disputed
+    DiscrepancyStatus.UNKNOWN -> R.string.status_unknown
+}
+
 @Composable
 fun toneColor(t: ChipTone): Color {
     val ext = LocalEtalonColors.current
@@ -110,3 +146,7 @@ fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) {
     Chip(shipmentStatusTone(status), stringResource(shipmentStatusLabel(status)), modifier)
 @Composable fun DriverStatusChip(active: Boolean, modifier: Modifier = Modifier) =
     Chip(driverActiveTone(active), stringResource(driverActiveLabel(active)), modifier)
+@Composable fun PaymentStatusChip(status: PaymentStatus, modifier: Modifier = Modifier) =
+    Chip(paymentStatusTone(status), stringResource(paymentStatusLabel(status)), modifier)
+@Composable fun DiscrepancyStatusChip(status: DiscrepancyStatus, modifier: Modifier = Modifier) =
+    Chip(discrepancyStatusTone(status), stringResource(discrepancyStatusLabel(status)), modifier)
