@@ -24,9 +24,9 @@ export const POST = withPermission<{ id: string }>(
       where: { id: params.id },
       include: { order: { include: { dispatch: true } } },
     });
-    if (!payment) return fail("Payment not found", 404);
+    if (!payment) return fail("Тўлов топилмади · Payment not found", 404);
     if (payment.status !== "PENDING_CONFIRMATION") {
-      return fail("Hand-over can only be recorded on a pending payment", 422);
+      return fail("Топшириш фақат тасдиқ кутаётган тўловга қайд этилади · Hand-over can only be recorded on a pending payment", 422);
     }
 
     const updated = await prisma.$transaction(async (tx) => {

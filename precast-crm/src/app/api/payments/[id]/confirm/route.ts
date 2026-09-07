@@ -30,16 +30,16 @@ export const POST = withPermission<{ id: string }>(
     where: { id: params.id },
     include: { order: { include: { dispatch: true } } },
   });
-  if (!payment) return fail("Payment not found", 404);
+  if (!payment) return fail("Тўлов топилмади · Payment not found", 404);
   if (payment.status !== "PENDING_CONFIRMATION") {
-    return fail(`Payment is already ${payment.status}`, 422);
+    return fail(`Тўлов аллақачон «${payment.status}» ҳолатида · Payment is already ${payment.status}`, 422);
   }
 
   const originalAmount = Number(payment.amount);
   const finalAmount = body.amount != null ? body.amount : originalAmount;
   const amountChanged = body.amount != null && body.amount !== originalAmount;
   if (amountChanged && (!body.adjustmentNote || body.adjustmentNote.trim().length < 5)) {
-    return fail("adjustmentNote (min 5 chars) is required when changing the amount", 422);
+    return fail("Суммани ўзгартирганда созлаш изоҳи (мин. 5 белги) керак · adjustmentNote (min 5 chars) is required when changing the amount", 422);
   }
 
   // Discrepancy detection — driver-collected payments only. The
@@ -60,12 +60,13 @@ export const POST = withPermission<{ id: string }>(
   if (hasShortfall) {
     if (!body.discrepancyAction) {
       return fail(
-        `Recorded ${finalAmount} is below expected ${expectedCollection}. Choose discrepancyAction (TRACK | DISCOUNT | WRITEOFF) to confirm, or reject.`,
+        `Қайд этилган ${finalAmount} кутилган ${expectedCollection} дан кам — тасдиқлаш учун тафовут амалини (TRACK | DISCOUNT | WRITEOFF) танланг ёки рад этинг · ` +
+          `Recorded ${finalAmount} is below expected ${expectedCollection}. Choose discrepancyAction (TRACK | DISCOUNT | WRITEOFF) to confirm, or reject.`,
         422,
       );
     }
     if (!body.discrepancyNote || body.discrepancyNote.trim().length < 5) {
-      return fail("discrepancyNote (min 5 chars) is required when discrepancyAction is set", 422);
+      return fail("Тафовут амали танланганда тафовут изоҳи (мин. 5 белги) керак · discrepancyNote (min 5 chars) is required when discrepancyAction is set", 422);
     }
   }
 

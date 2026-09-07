@@ -26,7 +26,7 @@ export const PATCH = withPermission<{ id: string }>(
     const existing = await prisma.discrepancy.findUnique({
       where: { id: params.id },
     });
-    if (!existing) return fail("Discrepancy not found", 404);
+    if (!existing) return fail("Тафовут топилмади · Discrepancy not found", 404);
 
     const isResolving = body.status !== "OPEN";
     const updated = await prisma.$transaction(async (tx) => {

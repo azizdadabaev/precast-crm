@@ -113,12 +113,12 @@ export const POST = withPermission("payment.record", withIdempotency(async (req:
       },
     },
   });
-  if (!order) return fail("Order not found", 404);
+  if (!order) return fail("Буюртма топилмади · Order not found", 404);
   if (order.status === "CANCELED") {
-    return fail("Cannot record payment on a canceled order", 422);
+    return fail("Бекор қилинган буюртмага тўлов қайд этилмайди · Cannot record payment on a canceled order", 422);
   }
   if (order.status === "DELIVERED" && order.paymentState === "FULLY_PAID") {
-    return fail("Order is already fully paid", 422);
+    return fail("Буюртма аллақачон тўлиқ тўланган · Order is already fully paid", 422);
   }
 
   // Verify the driver, if one was sent
@@ -127,8 +127,8 @@ export const POST = withPermission("payment.record", withIdempotency(async (req:
       where: { id: body.collectedByDriverId },
       select: { id: true, active: true },
     });
-    if (!d) return fail("Driver not found", 422);
-    if (!d.active) return fail("Driver is inactive", 422);
+    if (!d) return fail("Ҳайдовчи топилмади · Driver not found", 422);
+    if (!d.active) return fail("Ҳайдовчи фаол эмас · Driver is inactive", 422);
   }
 
   // Remaining = total − confirmedPaid − sum(PENDING). Blocks double-recording
@@ -138,7 +138,8 @@ export const POST = withPermission("payment.record", withIdempotency(async (req:
     Number(order.totalPrice) - Number(order.confirmedPaid) - pendingSum - Number(order.writeOffAmount);
   if (body.amount > remaining) {
     return fail(
-      `Amount (${body.amount}) exceeds remaining balance (${remaining}). ` +
+      `Сумма (${body.amount}) қолдиқдан (${remaining}) ошиб кетди · ` +
+        `Amount (${body.amount}) exceeds remaining balance (${remaining}). ` +
         `Total ${order.totalPrice}, confirmed ${order.confirmedPaid}, pending ${pendingSum}.`,
       422,
     );

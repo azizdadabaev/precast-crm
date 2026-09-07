@@ -25,9 +25,9 @@ export const POST = withPermission<{ id: string }>(
     const payment = await prisma.payment.findUnique({
       where: { id: params.id },
     });
-    if (!payment) return fail("Payment not found", 404);
+    if (!payment) return fail("Тўлов топилмади · Payment not found", 404);
     if (payment.status !== "PENDING_CONFIRMATION") {
-      return fail(`Payment is already ${payment.status}`, 422);
+      return fail(`Тўлов аллақачон «${payment.status}» ҳолатида · Payment is already ${payment.status}`, 422);
     }
 
     const updated = await prisma.$transaction(async (tx) => {
