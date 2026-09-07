@@ -18,6 +18,7 @@ import {
   PaymentRejectSchema, CommentCreateSchema, DriverCreateSchema, DriverUpdateSchema,
   DispatchCreateSchema, OrderStatusEnum, OrderPaymentStateEnum, PaymentStatusEnum,
   PaymentMethodEnum, RoleEnum, LanguageEnum, GalleryListSchema,
+  DiscrepancyUpdateSchema, DiscrepancyStatusEnum,
 } from "@/lib/validation";
 import { CalculateBatchSchema } from "@/app/api/calculate/batch/schema";
 import { DeliveryLocationBody } from "@/app/api/orders/[id]/delivery-location/schema";
@@ -130,6 +131,8 @@ registry.registerPath({ method: "post", path: "/api/payments/{id}/confirm", secu
 registry.registerPath({ method: "post", path: "/api/payments/{id}/reject", security: bearer, request: { params: z.object({ id: z.string() }), body: json(PaymentRejectSchema) }, responses: { 200: { description: "Rejected", ...json(envelope(Any)) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/payments/upload-receipt", security: bearer, request: { headers: z.object({ "Idempotency-Key": idem }), body: multipart({ file: File }) }, responses: { 200: { description: "Stored", ...json(envelope(z.object({ url: z.string() }))) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/payments/{id}/receipts", security: bearer, request: { params: z.object({ id: z.string() }), headers: z.object({ "Idempotency-Key": idem }), body: multipart({ file: File }) }, responses: { 200: { description: "Receipt", ...json(envelope(z.object({ id: z.string(), imageUrl: z.string() }))) }, ...errors } });
+registry.registerPath({ method: "get", path: "/api/discrepancies", security: bearer, request: { query: z.object({ status: DiscrepancyStatusEnum.optional() }) }, responses: { 200: { description: "Discrepancies", ...json(envelope(z.array(Any))) }, ...errors } });
+registry.registerPath({ method: "patch", path: "/api/discrepancies/{id}", security: bearer, request: { params: z.object({ id: z.string() }), body: json(DiscrepancyUpdateSchema) }, responses: { 200: { description: "Updated", ...json(envelope(Any)) }, ...errors } });
 
 // ── Clients / drivers / notifications / gallery / calc ─────────
 registry.registerPath({ method: "get", path: "/api/clients", security: bearer, request: { query: z.object({ q: z.string().optional(), phone: z.string().optional(), language: LanguageEnum.optional(), source: z.string().optional(), viloyat: z.string().optional(), page: z.number().int().optional(), pageSize: z.number().int().optional(), sortBy: z.string().optional(), sortDir: z.enum(["asc", "desc"]).optional() }) },
