@@ -33,26 +33,22 @@ class FormattersTest {
     private val now = Instant.parse("2026-09-07T07:00:00Z")
     private fun day(d: String) = Instant.parse("${d}T07:00:00Z")
 
-    @Test fun `a scheduled date inside the week reads as how soon, not which day`() {
-        assertEquals("бугун", formatScheduleDate(day("2026-09-07"), now))
-        assertEquals("эртага", formatScheduleDate(day("2026-09-08"), now))
-        assertEquals("кеча", formatScheduleDate(day("2026-09-06"), now))
-        assertEquals("3 кундан кейин", formatScheduleDate(day("2026-09-10"), now))
-        assertEquals("7 кундан кейин", formatScheduleDate(day("2026-09-14"), now))
-        assertEquals("4 кун олдин", formatScheduleDate(day("2026-09-03"), now))
+    @Test fun `a scheduled date is always a calendar date, never a relative phrase`() {
+        assertEquals("7 сен", formatScheduleDate(day("2026-09-07"), now))   // today
+        assertEquals("8 сен", formatScheduleDate(day("2026-09-08"), now))   // tomorrow
+        assertEquals("6 сен", formatScheduleDate(day("2026-09-06"), now))   // yesterday
+        assertEquals("15 сен", formatScheduleDate(day("2026-09-15"), now))
+        assertEquals("30 авг", formatScheduleDate(day("2026-08-30"), now))
     }
 
-    @Test fun `beyond the week it is absolute, and carries the year only when it differs`() {
-        assertEquals("15 сен", formatScheduleDate(day("2026-09-15"), now))       // 8 days out
-        assertEquals("7 кун олдин", formatScheduleDate(day("2026-08-31"), now))  // 7 back is still relative…
-        assertEquals("30 авг", formatScheduleDate(day("2026-08-30"), now))       // …8 back is not
+    @Test fun `the year is carried only when it is not the current one`() {
         assertEquals("15 мар 2027", formatScheduleDate(day("2027-03-15"), now))
         assertEquals("20 дек 2025", formatScheduleDate(day("2025-12-20"), now))
     }
 
-    @Test fun `relative days are counted in Tashkent time, not UTC`() {
-        // 23:30 UTC on 7 Sep is already 04:30 on 8 Sep in Tashkent (+05) — tomorrow, not today.
-        assertEquals("эртага", formatScheduleDate(Instant.parse("2026-09-07T23:30:00Z"), now))
+    @Test fun `the day is the Tashkent day, not the UTC one`() {
+        // 23:30 UTC on 7 Sep is already 04:30 on 8 Sep in Tashkent (+05).
+        assertEquals("8 сен", formatScheduleDate(Instant.parse("2026-09-07T23:30:00Z"), now))
     }
 
     @Test fun `an address keeps province and district ahead of the street, so the street truncates first`() {

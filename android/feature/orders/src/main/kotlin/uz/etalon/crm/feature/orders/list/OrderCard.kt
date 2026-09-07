@@ -31,7 +31,11 @@ fun OrderCard(o: OrderSummary, now: Instant = Instant.now(), onClick: () -> Unit
     StatusStripeCard(stripe = toneColor(orderStatusTone(o.status)), onClick = onClick) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(o.orderNumber, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
-            Text(formatScheduleDate(o.scheduledAt, now), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // The date sits a quarter of the way into the gap between the order number and
+            // the price, rather than hard against the number. Proportional, so it holds its
+            // position across screen widths and font scales.
+            Spacer(Modifier.weight(0.25f))
+            Text(formatScheduleDate(o.scheduledAt, now), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             MoneyText(o.totalPrice, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold))
         }
         Spacer(Modifier.height(4.dp))
