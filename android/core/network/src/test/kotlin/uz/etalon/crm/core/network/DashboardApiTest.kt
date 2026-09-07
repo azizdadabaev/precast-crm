@@ -66,7 +66,7 @@ class DashboardApiTest {
                 .trimMargin().replace("\n", ""),
         ))
         val dto = api.dashboard()
-        assertEquals(2, dto.todayDeliveries.count)
+        assertEquals(2, dto.todayDeliveries.orders.size)
         assertEquals(BigDecimal("45.7"), dto.todayDeliveries.totalArea)
         assertEquals(BigDecimal("20.3"), dto.todayDeliveries.orders[0].totalArea)
         assertEquals(BigDecimal("150000"), dto.openDiscrepancies.totalAmount)
@@ -90,6 +90,6 @@ class DashboardApiTest {
                 .trimMargin().replace("\n", ""),
         ))
         val dto = api.dashboard()
-        assertEquals(0, dto.todayDeliveries.count)
+        assertEquals(BigDecimal.ZERO, dto.todayDeliveries.totalArea)
     }
 }

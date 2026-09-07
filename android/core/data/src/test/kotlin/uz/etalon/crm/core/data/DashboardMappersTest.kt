@@ -23,7 +23,7 @@ import java.math.BigDecimal
 class DashboardMappersTest {
     private val dto = DashboardDto(
         todayDeliveries = TodayDeliveriesDto(
-            count = 2, totalArea = BigDecimal("45.7"), date = "2026-09-07",
+            totalArea = BigDecimal("45.7"),
             orders = listOf(TodayDeliveryOrderDto("o1", "A-1", "Client", BigDecimal("20.3"))),
         ),
         openDiscrepancies = OpenDiscrepanciesDto(count = 11, totalAmount = BigDecimal("111000")),

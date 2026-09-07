@@ -63,6 +63,11 @@ fun HomeScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // First, as on every other list in this app. It used to sit BELOW the money
+                // tiles, which meant a failed refresh left a stale receivables figure at the top
+                // of the screen with the reason it was stale underneath it.
+                val error = s.error
+                if (error != null) item { ErrorBanner(error, onRetry = onRefresh) }
                 item {
                     Text(
                         if (s.pendingUploads > 0) {
@@ -75,8 +80,6 @@ fun HomeScreen(
                     )
                 }
                 s.tiles?.let { tiles -> item { HomeTilesSection(tiles) } }
-                val error = s.error
-                if (error != null) item { ErrorBanner(error, onRetry = onRefresh) }
                 item { SectionLabel(stringResource(R.string.home_today_section)) }
                 // "No orders today" and "cannot check today's orders" are different facts and
                 // must never share a string: an empty column beside a withheld permission reads

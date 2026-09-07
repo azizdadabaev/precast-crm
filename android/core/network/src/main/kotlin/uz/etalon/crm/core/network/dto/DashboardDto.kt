@@ -25,11 +25,15 @@ data class TodayDeliveryOrderDto(
     @Serializable(with = BigDecimalSerializer::class) val totalArea: BigDecimal,
 )
 
+/**
+ * The payload also carries `count` and `date`. Neither is modelled: `HomeViewModel` counts the
+ * rows it actually renders (`s.today.size`) rather than trusting a separate figure to agree with
+ * the array, and nothing shows the date — Home says «Бугун». `ignoreUnknownKeys` lets both pass.
+ * A required field nothing reads is a decode that can fail for no gain.
+ */
 @Serializable
 data class TodayDeliveriesDto(
-    val count: Int,
     @Serializable(with = BigDecimalSerializer::class) val totalArea: BigDecimal,
-    val date: String,
     val orders: List<TodayDeliveryOrderDto> = emptyList(),
 )
 
