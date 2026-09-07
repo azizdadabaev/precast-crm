@@ -11,6 +11,7 @@ import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.Discrepancy
 import uz.etalon.crm.core.model.DiscrepancyStatus
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.feature.payments.discrepancies.*
 import java.time.Instant
 
@@ -285,6 +286,34 @@ class DiscrepanciesViewModelTest {
         vm.submitResolve()
         advanceUntilIdle()
         assertEquals(2, fetches)
+    }
+
+    /**
+     * The same rule the confirm queue follows. A discrepancy the server no longer has, or no
+     * longer accepts a resolution for, leaves the row on screen still offering «Ҳал қилиш» — and
+     * the owner retries a write that can never land. The sheet closes, the list is re-read, and
+     * the reason survives the refresh that clears every other error.
+     */
+    @Test fun `a resolution the server refuses as stale closes the sheet and re-reads the list`() = runTest {
+        val row = item(id = "d9")
+        var fetches = 0
+        val vm = viewModel(
+            list = { fetches++; Result.success(listOf(row)) },
+            resolve = { _, _, _ -> Result.failure(ApiException(404, "Тафовут топилмади · Discrepancy not found")) },
+        )
+        advanceUntilIdle()
+        assertEquals(1, fetches)
+
+        vm.openResolve(row)
+        vm.setStatus(DiscrepancyStatus.RESOLVED_WRITEOFF)
+        vm.setNote("зарар сифатида")
+        vm.submitResolve()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.sheet)
+        assertEquals(2, fetches)
+        assertEquals("Тафовут топилмади", vm.state.value.error)
+        assertFalse(vm.state.value.busy)
     }
 
     @Test fun `a failed resolution keeps the sheet open with what was typed`() = runTest {

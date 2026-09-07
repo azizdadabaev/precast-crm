@@ -13,6 +13,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons)
+    // Tests only: ApiException is how a real 404/409/422 reaches toAppError, and the queue and
+    // discrepancy screens now behave differently for those than for a network drop.
+    testImplementation(project(":core:network"))
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.robolectric)

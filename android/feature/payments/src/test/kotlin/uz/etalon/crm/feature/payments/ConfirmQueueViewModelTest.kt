@@ -13,6 +13,7 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PaymentMethod
 import uz.etalon.crm.core.model.PaymentQueueItem
 import uz.etalon.crm.core.model.PaymentStatus
+import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.feature.payments.queue.*
 import java.time.Instant
 
@@ -377,6 +378,53 @@ class ConfirmQueueViewModelTest {
         vm.submitApprove()
         advanceUntilIdle()
         assertEquals(2, fetches)
+    }
+
+    /**
+     * "Someone else already confirmed this" is the failure that most needs the list re-read: the
+     * route answers 422, the row stays on screen still looking actionable, and the owner retries
+     * an action that can never succeed. The sheet closes, the list is pulled fresh, and the
+     * reason survives the refresh that clears every other error.
+     */
+    @Test fun `a payment someone else already confirmed closes the sheet and re-reads the list`() = runTest {
+        val row = item(id = "p11", amount = "1000000")
+        var fetches = 0
+        val vm = viewModel(
+            queue = { fetches++; Result.success(listOf(row)) },
+            confirm = { _, _, _, _, _ ->
+                Result.failure(ApiException(422, "Тўлов аллақачон «CONFIRMED» ҳолатида · Payment is already CONFIRMED"))
+            },
+        )
+        advanceUntilIdle()
+        assertEquals(1, fetches)
+
+        vm.openApprove(row)
+        vm.submitApprove()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.sheet)
+        assertEquals(2, fetches)
+        assertEquals("Тўлов аллақачон «CONFIRMED» ҳолатида", vm.state.value.error)
+        assertFalse(vm.state.value.busy)
+    }
+
+    /** The same rule on the other write, so rejecting cannot drift from confirming. */
+    @Test fun `a rejection the server refuses as stale also re-reads the list`() = runTest {
+        val row = item(id = "p12", amount = "1000000")
+        var fetches = 0
+        val vm = viewModel(
+            queue = { fetches++; Result.success(listOf(row)) },
+            reject = { _, _ -> Result.failure(ApiException(404, "Тўлов топилмади · Payment not found")) },
+        )
+        advanceUntilIdle()
+        vm.openReject(row)
+        vm.setRejectReason("нотўғри сумма")
+        vm.submitReject()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.sheet)
+        assertEquals(2, fetches)
+        assertEquals("Тўлов топилмади", vm.state.value.error)
     }
 
     @Test fun `a failed approval keeps the sheet open with what was typed`() = runTest {

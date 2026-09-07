@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.PaymentsRepository
 import uz.etalon.crm.core.data.PermissionGate
+import uz.etalon.crm.core.data.isConflictClass
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.Money
@@ -207,12 +208,16 @@ open class ConfirmQueueViewModel(
         refresh()
     }
 
-    fun refresh() {
-        _state.update { it.copy(loading = true, error = null) }
+    fun refresh() = reload(carry = null)
+
+    /** [carry] is a message the refresh must NOT erase — the reason the list is being re-read in
+     *  the first place, when a write failed because the row had already moved on. */
+    private fun reload(carry: String?) {
+        _state.update { it.copy(loading = true, error = carry) }
         viewModelScope.launch {
             loadQueue(_state.value.tab).fold(
                 onSuccess = { rows ->
-                    _state.update { it.copy(items = rows, loading = false, error = null, lastRefreshError = null) }
+                    _state.update { it.copy(items = rows, loading = false, error = carry, lastRefreshError = null) }
                 },
                 onFailure = { t ->
                     val e = t.toAppError()
@@ -287,8 +292,15 @@ open class ConfirmQueueViewModel(
         return sheet
     }
 
-    /** Runs the write, then re-fetches: a payment that stayed in the pending tab would be
-     *  confirmed a second time, and the route answers that with "Payment is already CONFIRMED". */
+    /**
+     * Runs the write, then re-fetches: a payment that stayed in the pending tab would be
+     * confirmed a second time, and the route answers that with "Тўлов аллақачон CONFIRMED".
+     *
+     * A FAILURE re-fetches too when it is conflict-class — and that is the failure that most
+     * needs it. "Someone else already confirmed this" leaves the row on screen still looking
+     * actionable, so the owner retries an action that can never succeed. The sheet stays open
+     * only for a network-class failure, where retrying is the whole point.
+     */
     private fun runAction(call: suspend () -> Result<Unit>) {
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
@@ -298,8 +310,13 @@ open class ConfirmQueueViewModel(
                     refresh()
                 },
                 onFailure = { t ->
-                    val message = t.toAppError().message
-                    _state.update { it.copy(busy = false, sheet = it.sheet?.copy(error = message)) }
+                    val e = t.toAppError()
+                    if (e.isConflictClass) {
+                        _state.update { it.copy(busy = false, sheet = null) }
+                        reload(carry = e.message)
+                    } else {
+                        _state.update { it.copy(busy = false, sheet = it.sheet?.copy(error = e.message)) }
+                    }
                 },
             )
         }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.DiscrepanciesRepository
 import uz.etalon.crm.core.data.PermissionGate
+import uz.etalon.crm.core.data.isConflictClass
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.Discrepancy
@@ -151,12 +152,16 @@ open class DiscrepanciesViewModel(
         refresh()
     }
 
-    fun refresh() {
-        _state.update { it.copy(loading = true, error = null) }
+    fun refresh() = reload(carry = null)
+
+    /** [carry] is a message the refresh must NOT erase — the reason the list is being re-read in
+     *  the first place, when a resolve failed because the row had already moved on. */
+    private fun reload(carry: String?) {
+        _state.update { it.copy(loading = true, error = carry) }
         viewModelScope.launch {
             loadList().fold(
                 onSuccess = { rows ->
-                    _state.update { it.copy(items = sortedForList(rows), loading = false, error = null, lastRefreshError = null) }
+                    _state.update { it.copy(items = sortedForList(rows), loading = false, error = carry, lastRefreshError = null) }
                 },
                 onFailure = { t ->
                     val e = t.toAppError()
@@ -182,9 +187,18 @@ open class DiscrepanciesViewModel(
                     _state.update { it.copy(busy = false, sheet = null) }
                     refresh()
                 },
+                // Same rule the confirm queue follows: a conflict-class failure means this row has
+                // already moved on, so the sheet closes and the list is re-read rather than
+                // leaving the owner retrying a resolve that can never land. Only a network-class
+                // failure keeps the sheet open, where the retry is the whole point.
                 onFailure = { t ->
-                    val message = t.toAppError().message
-                    _state.update { it.copy(busy = false, sheet = it.sheet?.copy(error = message)) }
+                    val e = t.toAppError()
+                    if (e.isConflictClass) {
+                        _state.update { it.copy(busy = false, sheet = null) }
+                        reload(carry = e.message)
+                    } else {
+                        _state.update { it.copy(busy = false, sheet = it.sheet?.copy(error = e.message)) }
+                    }
                 },
             )
         }
