@@ -38,6 +38,7 @@ fun PaymentRowDto.toDomain(mediaBase: String) = PaymentQueueItem(
         confirmedBy = confirmedBy?.name,
     ),
     receiptUrls = receipts.mapNotNull { MediaUrl.absolute(mediaBase, it.imageUrl) },
+    orderReceiptUrls = order?.receipts.orEmpty().mapNotNull { MediaUrl.absolute(mediaBase, it.imageUrl) },
     rejectionReason = rejectionReason,
 )
 

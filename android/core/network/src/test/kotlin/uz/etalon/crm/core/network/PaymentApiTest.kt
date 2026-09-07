@@ -120,6 +120,15 @@ class PaymentApiTest {
         assertTrue(p.receipts.isEmpty())
     }
 
+    /** The list route includes `order.receipts where paymentId is null` — bot-forwarded proof
+     *  that predates any payment row, which the confirm sheet shows alongside the payment's own. */
+    @Test fun `payments list decodes the order's unlinked receipts`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":[{"id":"p1","orderId":"o1","amount":"60.00","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-02T00:00:00.000Z","receipts":[{"id":"r1","imageUrl":"/uploads/receipts/a.jpg","paymentId":"p1"}],"order":{"orderNumber":"B-2026-09-0001","client":{"name":"А"},"receipts":[{"id":"r2","imageUrl":"/uploads/inbox/b.jpg"}]}}]}"""))
+        val p = api.payments().single()
+        assertEquals(listOf("/uploads/receipts/a.jpg"), p.receipts.map { it.imageUrl })
+        assertEquals(listOf("/uploads/inbox/b.jpg"), p.order?.receipts?.map { it.imageUrl })
+    }
+
     @Test fun `confirmPayment posts the adjustment and discrepancy fields as bare json`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"450000.00","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
         val res = api.confirmPayment("p1", PaymentConfirmRequest(amount = BigDecimal("450000.00"), adjustmentNote = "recount", discrepancyAction = "TRACK", discrepancyNote = "short by 50000"))

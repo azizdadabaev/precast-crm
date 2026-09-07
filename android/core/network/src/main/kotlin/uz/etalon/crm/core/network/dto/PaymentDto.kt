@@ -77,4 +77,12 @@ data class PaymentOrderRefDto(
     val orderNumber: String,
     val client: PaymentOrderClientRefDto,
     val dispatch: PaymentOrderDispatchRefDto? = null,
+    /**
+     * The order's UNLINKED receipts — `order.receipts where paymentId is null` on the list route.
+     * This is bot-forwarded proof that arrived before any payment row existed, and the web's own
+     * confirm dialog puts it in front of the confirmer alongside the payment's own receipts.
+     * Without it the phone shows an owner less evidence than the desk does while they decide
+     * whether cash actually arrived.
+     */
+    val receipts: List<ReceiptDto> = emptyList(),
 )

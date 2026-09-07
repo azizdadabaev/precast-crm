@@ -119,7 +119,7 @@ class PaymentScreenshotTest {
         paidOn = Instant.parse("2026-09-03T15:20:00Z"), expectedCollection = Money.parse("9000000.00"),
         fromDriver = true,
         custody = CustodyChain(collectedBy = "Жасур (ҳайдовчи)", recordedBy = "Жасур", handedOverTo = null, confirmedBy = null),
-        receiptUrls = emptyList(), rejectionReason = null,
+        receiptUrls = emptyList(), orderReceiptUrls = emptyList(), rejectionReason = null,
     )
 
     private fun queueState() = ConfirmQueueUiState(

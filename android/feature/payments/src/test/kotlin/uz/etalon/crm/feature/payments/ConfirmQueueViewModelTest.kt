@@ -517,7 +517,7 @@ class ConfirmQueueViewModelTest {
             handedOverTo = null,
             confirmedBy = null,
         ),
-        receiptUrls = emptyList(),
+        receiptUrls = emptyList(), orderReceiptUrls = emptyList(),
         rejectionReason = null,
     )
 }

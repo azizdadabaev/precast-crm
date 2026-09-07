@@ -45,8 +45,19 @@ data class PaymentQueueItem(
     val fromDriver: Boolean,
     val custody: CustodyChain,
     val receiptUrls: List<String>,
+    /**
+     * The ORDER's unlinked receipts — proof forwarded by the Telegram bot before any payment row
+     * existed, so it belongs to no payment and would otherwise never be seen on the phone. The
+     * web's confirm dialog shows it beside [receiptUrls]; the confirm sheet does the same, or the
+     * owner decides on cash with less evidence than the desk has.
+     */
+    val orderReceiptUrls: List<String>,
     val rejectionReason: String?,
 ) {
+    /** Every photo that bears on this payment, in the order the web's dialog shows them: the
+     *  payment's own first, then the order-level proof that predates it. */
+    val allReceiptUrls: List<String> get() = receiptUrls + orderReceiptUrls
+
     /**
      * The dispatch figure this payment may be measured against, or null when there is nothing to
      * measure it against. `expectedCollection` is what a DRIVER was sent out to collect on one

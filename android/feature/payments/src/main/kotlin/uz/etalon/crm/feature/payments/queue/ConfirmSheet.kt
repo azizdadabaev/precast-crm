@@ -77,7 +77,10 @@ fun ConfirmSheet(
 ) {
     var showKeypad by remember { mutableStateOf(false) }
     var lightboxAt by remember { mutableStateOf<Int?>(null) }
-    val receipts = sheet.item.receiptUrls.map { PhotoRef(id = null, url = it) }
+    // The payment's own receipts AND the order's unlinked ones — bot-forwarded proof that arrived
+    // before this row existed. The web's confirm dialog shows both in one strip; showing only the
+    // first gives an owner less evidence on the phone than they would have at the desk.
+    val receipts = sheet.item.allReceiptUrls.map { PhotoRef(id = null, url = it) }
 
     if (showKeypad) {
         NumericKeypadSheet(

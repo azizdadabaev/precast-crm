@@ -203,4 +203,32 @@ class PaymentsRepositoryTest {
         assertFalse(mapped.fromDriver)
         assertEquals(Money.ZERO, mapped.shortfall)
     }
+
+    /**
+     * `GET /api/payments` deliberately includes the ORDER's unlinked receipts — bot-forwarded
+     * proof that arrived before any payment row existed. Dropping them left the confirm sheet
+     * showing an owner less evidence than the web's dialog does while they decide about cash.
+     */
+    @Test fun `the order's unlinked receipts survive the mapping, after the payment's own`() {
+        val dto = PaymentRowDto(
+            id = "p3", orderId = "o1", amount = "500000", method = "CASH", status = "PENDING_CONFIRMATION",
+            recordedAt = "2026-01-01T00:00:00Z",
+            receipts = listOf(ReceiptDto("r1", "/uploads/receipts/linked.jpg")),
+            order = PaymentOrderRefDto(
+                "1042", PaymentOrderClientRefDto("Client"), null,
+                receipts = listOf(ReceiptDto("r2", "/uploads/inbox/forwarded.jpg")),
+            ),
+        )
+        val mapped = dto.toDomain("https://api.example")
+        assertEquals(listOf("https://api.example/uploads/receipts/linked.jpg"), mapped.receiptUrls)
+        assertEquals(listOf("https://api.example/uploads/inbox/forwarded.jpg"), mapped.orderReceiptUrls)
+        assertEquals(
+            listOf(
+                "https://api.example/uploads/receipts/linked.jpg",
+                "https://api.example/uploads/inbox/forwarded.jpg",
+            ),
+            mapped.allReceiptUrls,
+            "the sheet shows the payment's own proof first, then the order-level proof",
+        )
+    }
 }
