@@ -64,7 +64,7 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = unused("discrepancies")
     override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = unused("updateDiscrepancy")
 
-    override suspend fun clients(q: String?, phone: String?): List<ClientRowDto> = unused("clients")
+    override suspend fun clients(q: String?, page: Int, pageSize: Int): ClientsPageDto = unused("clients")
     override suspend fun createClient(body: ClientWriteRequest): ClientRowDto = unused("createClient")
     override suspend fun client(id: String): ClientDetailDto = unused("client")
     override suspend fun updateClient(id: String, body: ClientWriteRequest): ClientRowDto = unused("updateClient")

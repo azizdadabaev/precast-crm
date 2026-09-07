@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.ClientInput
+import uz.etalon.crm.core.network.CLIENTS_PAGE_SIZE
 import uz.etalon.crm.core.network.dto.*
 import uz.etalon.crm.core.testing.FakeEtalonApi
 
@@ -19,11 +20,11 @@ private class ClientRecordingApi : ClientStubApi() {
     val calls = mutableListOf<String>()
     var createResult = ClientRowDto(id = "c1", name = "Navoi Build", phone = "998901112233")
     var updateResult = ClientRowDto(id = "c1", name = "Navoi Build", phone = "998901112233")
-    var listResult = listOf<ClientRowDto>()
+    var listResult = ClientsPageDto(rows = emptyList(), total = 0, page = 1, pageSize = 50, pageCount = 1)
     var detailResult = ClientDetailDto(id = "c1", name = "Navoi Build", phone = "998901112233")
 
-    override suspend fun clients(q: String?, phone: String?): List<ClientRowDto> {
-        calls += "clients:$q:$phone"; return listResult
+    override suspend fun clients(q: String?, page: Int, pageSize: Int): ClientsPageDto {
+        calls += "clients:$q:$page:$pageSize"; return listResult
     }
     override suspend fun createClient(body: ClientWriteRequest): ClientRowDto {
         calls += "createClient:${body.name}:${body.phone}:${body.address}:${body.notes}"; return createResult
@@ -104,10 +105,24 @@ class ClientsRepositoryTest {
 
     // ── The rest: standard repository shape, mirroring the other suites ─────
 
-    @Test fun `list passes the query through untranslated`() = runTest {
+    @Test fun `list passes the query through untranslated and asks for one bounded page`() = runTest {
         val api = ClientRecordingApi()
         ClientsRepository(api, CLIENT_GRANTED).list("Navoi").getOrThrow()
-        assertEquals(listOf("clients:Navoi:null"), api.calls)
+        // The page arguments are not decoration: without `page` the route answers a bare array of
+        // EVERY client row, and this list has no cache to spare the operator the re-download.
+        assertEquals(listOf("clients:Navoi:1:$CLIENTS_PAGE_SIZE"), api.calls)
+    }
+
+    /** `total` counts the MATCHES server-side, not the rows on this page — the screen needs the
+     *  difference to say the list it is showing is not all of them. */
+    @Test fun `list carries the server's match count through, not the row count`() = runTest {
+        val row = ClientRowDto(id = "c1", name = "Navoi Build", phone = "998901112233")
+        val api = ClientRecordingApi().apply {
+            listResult = ClientsPageDto(rows = listOf(row), total = 312, page = 1, pageSize = 50, pageCount = 7)
+        }
+        val page = ClientsRepository(api, CLIENT_GRANTED).list(null).getOrThrow()
+        assertEquals(1, page.items.size)
+        assertEquals(312, page.total)
     }
 
     @Test fun `detail maps the id straight through`() = runTest {
@@ -139,8 +154,10 @@ class ClientsRepositoryTest {
         // throwing. list() still goes through the same mapper as any _count-bearing row, so
         // prove the default survives an explicit construction here too.
         val row = ClientRowDto(id = "c1", name = "Navoi Build", phone = "998901112233")
-        val api = ClientRecordingApi().apply { listResult = listOf(row) }
-        val rows = ClientsRepository(api, CLIENT_GRANTED).list(null).getOrThrow()
-        assertEquals(0, rows.single().orderCount)
+        val api = ClientRecordingApi().apply {
+            listResult = ClientsPageDto(rows = listOf(row), total = 1, page = 1, pageSize = 50, pageCount = 1)
+        }
+        val page = ClientsRepository(api, CLIENT_GRANTED).list(null).getOrThrow()
+        assertEquals(0, page.items.single().orderCount)
     }
 }

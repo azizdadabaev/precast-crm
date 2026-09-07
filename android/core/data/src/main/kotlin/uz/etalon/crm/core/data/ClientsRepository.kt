@@ -4,7 +4,7 @@ import uz.etalon.crm.core.data.mapper.normalizePhone
 import uz.etalon.crm.core.data.mapper.toDomain
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientInput
-import uz.etalon.crm.core.model.ClientSummary
+import uz.etalon.crm.core.model.ClientPage
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.ClientWriteRequest
 import javax.inject.Inject
@@ -28,8 +28,15 @@ class ClientsRepository @Inject constructor(
 
     // ── Online only: sent live, never queued ───────────────────────
 
-    suspend fun list(query: String?): Result<List<ClientSummary>> =
-        runCatchingCancellable { api.clients(q = query).map { it.toDomain() } }
+    /**
+     * One bounded page of clients — never the whole table. `GET /api/clients` answers a bare
+     * array of every row when `page` is absent, and this list has no Room cache while the bottom
+     * bar destroys its NavEntry on each tab switch, so an unbounded read would re-download every
+     * customer on every switch. [uz.etalon.crm.core.model.ClientPage.total] carries how many
+     * matched, so the screen can say when there are more than it holds.
+     */
+    suspend fun list(query: String?): Result<ClientPage> =
+        runCatchingCancellable { api.clients(q = query).toDomain() }
 
     suspend fun detail(id: String): Result<ClientDetail> =
         runCatchingCancellable { api.client(id).toDomain() }

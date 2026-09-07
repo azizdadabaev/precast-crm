@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientOrderLine
+import uz.etalon.crm.core.model.ClientPage
 import uz.etalon.crm.core.model.ClientSummary
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderStatus
@@ -194,6 +195,38 @@ class ClientsViewModelTest {
         assertEquals(2, vm.state.value.items.map { it.id }.toSet().size)
     }
 
+    // ── one bounded page ──────────────────────────────────────────────────────────
+
+    /**
+     * The app fetches ONE page of clients, so the bottom of the list is not necessarily the end
+     * of the customers. Left unsaid, that is the same harm the empty state guards against: an
+     * operator who scrolls to the bottom without finding their customer concludes the customer
+     * is not in the CRM, and adds a second row for one who already has one.
+     */
+    @Test fun `a truncated first page says so`() = runTest {
+        val rows = List(50) { row(id = "c$it", phone = "9989011122%02d".format(it)) }
+        val vm = viewModel(list = { Result.success(rows) }, total = 312)
+        advanceUntilIdle()
+        assertTrue(vm.state.value.showTruncatedNotice)
+        assertEquals(312, vm.state.value.total)
+    }
+
+    @Test fun `a page that holds every match says nothing`() = runTest {
+        val vm = viewModel(list = { Result.success(listOf(row())) })
+        advanceUntilIdle()
+        assertFalse(vm.state.value.showTruncatedNotice)
+    }
+
+    /** Never beside an error banner or a spinner — a `total` left over from the last successful
+     *  fetch would otherwise claim a truncation the failed one knows nothing about. */
+    @Test fun `no truncation notice while loading or while an error shows`() = runTest {
+        val vm = viewModel(list = { Result.failure(IOException("no net")) }, total = 312)
+        assertFalse(vm.state.value.showTruncatedNotice, "still loading")
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.error)
+        assertFalse(vm.state.value.showTruncatedNotice, "an error banner is showing")
+    }
+
     // ── permissions ───────────────────────────────────────────────────────────────
 
     /** "Not yet known" is not "yes": the add action must never flash for an operator who cannot
@@ -251,11 +284,14 @@ class ClientsViewModelTest {
 
     // ── fixtures ──────────────────────────────────────────────────────────────────
 
+    /** [total] is what the server says MATCHED, which is only the same as the number of rows
+     *  when the whole result fit on the one page this app fetches. */
     private fun viewModel(
         list: suspend (String?) -> Result<List<ClientSummary>> = { Result.success(emptyList()) },
+        total: Int? = null,
         permissions: suspend (String) -> Boolean = { true },
     ) = ClientsViewModel(
-        list = ClientsListUseCase { list(it) },
+        list = ClientsListUseCase { q -> list(q).map { rows -> ClientPage(rows, total ?: rows.size) } },
         permissions = ClientsPermissionUseCase { permissions(it) },
     )
 

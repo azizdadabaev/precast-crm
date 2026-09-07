@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.ChipTone
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
@@ -118,6 +119,13 @@ fun ClientsScreen(
                 // there reads as "not in the CRM" when the truth is "couldn't check".
                 if (s.showEmptyState) item { EmptyState(stringResource(R.string.clients_empty)) }
                 items(s.items, key = { it.id }) { c -> ClientCard(c) { onOpenClient(c.id) } }
+                // Only one bounded page is fetched (CLIENTS_PAGE_SIZE), so the end of this list
+                // is not necessarily the end of the customers. Said at the bottom, which is
+                // exactly where an operator who has not found their customer would otherwise
+                // conclude that customer is not in the CRM.
+                if (s.showTruncatedNotice) {
+                    item { NoticeBanner(stringResource(R.string.clients_truncated, s.total, s.items.size)) }
+                }
             }
         }
     }

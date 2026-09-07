@@ -14,6 +14,7 @@ import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
+import uz.etalon.crm.core.model.ClientPage
 import uz.etalon.crm.core.model.ClientSummary
 import javax.inject.Inject
 
@@ -31,6 +32,12 @@ data class ClientsUiState(
     /** Exactly what the operator typed — never normalised, never stripped. See [ClientsViewModel]. */
     val query: String = "",
     val items: List<ClientSummary> = emptyList(),
+    /**
+     * How many clients the server says MATCH the current query. The app fetches one bounded page
+     * ([uz.etalon.crm.core.network.CLIENTS_PAGE_SIZE]), so this can exceed `items.size` — see
+     * [showTruncatedNotice].
+     */
+    val total: Int = 0,
     /** A request is actually in flight. This is what drives the refresh spinner. */
     val loading: Boolean = true,
     /**
@@ -64,10 +71,19 @@ data class ClientsUiState(
 
     /** Shown only once the answer is known, so the button never appears and then vanishes. */
     val showAddAction: Boolean get() = permissionsResolved && canCreate
+
+    /**
+     * The server holds more matches than this screen fetched. Said out loud rather than left to
+     * the operator to notice: a customer missing from a truncated list reads as "not in the CRM",
+     * and an operator who believes that adds a second row for a customer who already has one —
+     * the same harm [showEmptyState] guards against. Narrowing with the search field is the
+     * answer, which is what the notice tells them.
+     */
+    val showTruncatedNotice: Boolean get() = !loading && !searching && error == null && items.size < total
 }
 
 fun interface ClientsListUseCase {
-    suspend operator fun invoke(query: String?): Result<List<ClientSummary>>
+    suspend operator fun invoke(query: String?): Result<ClientPage>
 }
 
 fun interface ClientsPermissionUseCase {
@@ -129,8 +145,13 @@ open class ClientsViewModel(
             // A blank field is "no filter", not a search for the empty string.
             val q = _state.value.query.trim().ifBlank { null }
             loadClients(q).fold(
-                onSuccess = { rows ->
-                    _state.update { it.copy(items = rows, loading = false, error = null, lastRefreshError = null) }
+                onSuccess = { page ->
+                    _state.update {
+                        it.copy(
+                            items = page.items, total = page.total,
+                            loading = false, error = null, lastRefreshError = null,
+                        )
+                    }
                 },
                 onFailure = { t ->
                     val e = t.toAppError()

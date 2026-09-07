@@ -23,6 +23,24 @@ data class ClientRowDto(
     @SerialName("_count") val counts: ClientCountsDto = ClientCountsDto(),
 )
 
+/**
+ * `GET /api/clients?page=…` — the envelope `src/lib/table-query.ts` builds. `sources` (the values
+ * behind the web table's Манба filter) is not modelled: this client has no source filter, and
+ * `ignoreUnknownKeys` lets it pass unread.
+ *
+ * `total` is the number of clients MATCHING the query server-side, which is larger than `rows`
+ * whenever there are more than one page of them — that difference is what the list tells the
+ * operator instead of silently showing a truncated table.
+ */
+@Serializable
+data class ClientsPageDto(
+    val rows: List<ClientRowDto>,
+    val total: Int,
+    val page: Int,
+    val pageSize: Int,
+    val pageCount: Int,
+)
+
 /** One entry of `GET /api/clients/{id}`'s `orders` (the route takes the 20 most recent, full
  *  Order scalars, no `select`) — only the fields the client's order list renders. */
 @Serializable

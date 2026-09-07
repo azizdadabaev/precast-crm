@@ -36,12 +36,32 @@ class ClientApiTest {
 
     @Test fun `clients list decodes each row's order count from _count`() = runTest {
         server.enqueue(ok(
-            """{"ok":true,"data":[{"id":"c1","name":"Client","phone":"998901112233","address":"Toshkent","_count":{"deals":0,"orders":4}}]}""",
+            """{"ok":true,"data":{"rows":[{"id":"c1","name":"Client","phone":"998901112233","address":"Toshkent","_count":{"deals":0,"orders":4}}],
+              |"total":1,"page":1,"pageSize":50,"pageCount":1,"sources":["Instagram"]}}"""
+                .trimMargin().replace("\n", ""),
         ))
-        val list = api.clients(q = "Client")
-        assertEquals(1, list.size)
-        assertEquals(4, list[0].counts.orders)
-        assertEquals("/api/clients?q=Client", server.takeRequest().path)
+        val page = api.clients(q = "Client")
+        assertEquals(1, page.rows.size)
+        assertEquals(4, page.rows[0].counts.orders)
+        assertEquals(1, page.total)
+    }
+
+    /**
+     * `page` is what opts `GET /api/clients` into the paginated envelope at all — without it the
+     * route answers a bare array of EVERY client (`isPaginated` in src/lib/table-query.ts). This
+     * pins the query it actually sends: drop `page` and the response stops being an object, so
+     * the decode above fails too, but the URL is the reason and belongs in its own assertion.
+     */
+    @Test fun `the clients request always asks for a bounded page`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":{"rows":[],"total":0,"page":1,"pageSize":50,"pageCount":1,"sources":[]}}"""))
+        api.clients(q = "Client")
+        assertEquals("/api/clients?q=Client&page=1&pageSize=$CLIENTS_PAGE_SIZE", server.takeRequest().path)
+    }
+
+    @Test fun `a blank query still sends the page bound`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":{"rows":[],"total":0,"page":1,"pageSize":50,"pageCount":1,"sources":[]}}"""))
+        api.clients()
+        assertEquals("/api/clients?page=1&pageSize=$CLIENTS_PAGE_SIZE", server.takeRequest().path)
     }
 
     // POST /api/clients returns the raw Prisma row on both its create and its

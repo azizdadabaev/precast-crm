@@ -12,6 +12,13 @@ data class ClientSummary(
     val orderCount: Int,
 )
 
+/**
+ * One bounded page of GET /api/clients. [total] is how many clients MATCH the query server-side;
+ * the app fetches only the first page, so [total] greater than `items.size` means the list on
+ * screen is not all of them and the operator has to be told so.
+ */
+data class ClientPage(val items: List<ClientSummary>, val total: Int)
+
 /** One order line on GET /api/clients/{id} — the parts the client's order list renders. */
 data class ClientOrderLine(
     val id: String,

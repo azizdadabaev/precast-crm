@@ -5,6 +5,7 @@
     <string name="clients_search_hint">Исм ёки телефон рақами</string>
     <string name="clients_empty">Мижоз топилмади</string>
     <string name="clients_action_add">Мижоз қўшиш</string>
+    <string name="clients_truncated">%1$d та мижоздан %2$d таси кўрсатилди. Керакли мижозни қидирув орқали топинг</string>
     <string name="client_order_count">%1$d та буюртма</string>
     <string name="client_orders_section">Буюртмалар</string>
     <string name="client_no_orders">Буюртма йўқ</string>

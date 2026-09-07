@@ -6,6 +6,13 @@ import okhttp3.RequestBody
 import retrofit2.http.*
 import uz.etalon.crm.core.network.dto.*
 
+/**
+ * How many client rows the first (and only) page of `GET /api/clients` fetches. The server's own
+ * default is 50 (`DEFAULT_PAGE_SIZE` in src/lib/table-query.ts) and its cap is 200; this sends
+ * the figure explicitly so the bound is stated on the client rather than inherited.
+ */
+const val CLIENTS_PAGE_SIZE = 50
+
 interface EtalonApi {
     @POST("/api/auth/login") suspend fun login(@Body body: LoginRequest): LoginResponse
     @GET("/api/auth/me") suspend fun me(): UserDto
@@ -161,8 +168,29 @@ interface EtalonApi {
     suspend fun updateDiscrepancy(@Path("id") id: String, @Body body: DiscrepancyUpdateRequest): DiscrepancyDto
 
     // ── Home & clients (Phase 1d) ──────────────────────────────────
+
+    /**
+     * `GET /api/clients`. **`page` is never omitted.** Sending it opts into the server's
+     * paginated envelope (`isPaginated` in src/lib/table-query.ts); WITHOUT it the route answers
+     * a bare array of EVERY client row, each carrying a `_count` aggregate. This client has no
+     * Room cache and the bottom bar destroys the Clients NavEntry on every tab switch, so an
+     * unbounded call would re-download the whole customer table each time an operator moved
+     * between tabs — on a phone, on their own data.
+     *
+     * One bounded page, not Paging 3: the list is search-first (`q` is what an operator actually
+     * uses to find a customer), and a scrolling pager with a Room-backed cache is its own slice.
+     * [ClientsPageDto.total] is the count MATCHING the query server-side, so a caller can tell
+     * the operator when there is more than it fetched.
+     *
+     * `?phone=` is deliberately absent: it exists for the web calculator's dedup autocomplete,
+     * and `q` already matches trailing phone digits (`phoneMatchForms`) as well as names.
+     */
     @GET("/api/clients")
-    suspend fun clients(@Query("q") q: String? = null, @Query("phone") phone: String? = null): List<ClientRowDto>
+    suspend fun clients(
+        @Query("q") q: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = CLIENTS_PAGE_SIZE,
+    ): ClientsPageDto
 
     @POST("/api/clients")
     suspend fun createClient(@Body body: ClientWriteRequest): ClientRowDto

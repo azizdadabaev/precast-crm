@@ -2,12 +2,14 @@ package uz.etalon.crm.core.data.mapper
 
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientOrderLine
+import uz.etalon.crm.core.model.ClientPage
 import uz.etalon.crm.core.model.ClientSummary
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.network.dto.ClientDetailDto
 import uz.etalon.crm.core.network.dto.ClientOrderLineDto
 import uz.etalon.crm.core.network.dto.ClientRowDto
+import uz.etalon.crm.core.network.dto.ClientsPageDto
 import java.time.Instant
 
 /**
@@ -37,6 +39,10 @@ fun normalizePhone(input: String): String {
 fun ClientRowDto.toDomain() = ClientSummary(
     id = id, name = name, phone = phone, address = address, orderCount = counts.orders,
 )
+
+/** `GET /api/clients?page=…`. `total` is carried through unchanged — it counts the matches, not
+ *  the rows on this page, and the list uses the difference to say the table is truncated. */
+fun ClientsPageDto.toDomain() = ClientPage(items = rows.map { it.toDomain() }, total = total)
 
 fun ClientOrderLineDto.toDomain() = ClientOrderLine(
     id = id, orderNumber = orderNumber, status = OrderStatus.from(status),
