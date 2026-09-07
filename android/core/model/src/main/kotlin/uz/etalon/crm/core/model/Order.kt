@@ -64,6 +64,15 @@ data class OrderDetail(
 ) {
     val pendingAmount: Money get() = payments.filter { it.status == PaymentStatus.PENDING_CONFIRMATION }.fold(Money.ZERO) { a, p -> a + p.amount }
     val remaining: Money get() = (summary.totalPrice - summary.confirmedPaid - writeOffAmount).coerceAtLeastZero()
+    /**
+     * What the server will still accept on a new payment:
+     * total − confirmed − writeOff − everything already awaiting confirmation.
+     * [remaining] deliberately does not subtract the queue — it is what the customer
+     * still owes — so using it as a form cap 422s whenever a payment is pending.
+     * Mirrors the check in src/app/api/payments/route.ts.
+     */
+    val recordableRemaining: Money
+        get() = (summary.totalPrice - summary.confirmedPaid - writeOffAmount - pendingAmount).coerceAtLeastZero()
     /** Kept for 1a's screens: a flat URL list derived from [loadedPhotos]. */
     val loadedPhotoUrls: List<String> get() = loadedPhotos.map { it.url }
 }
