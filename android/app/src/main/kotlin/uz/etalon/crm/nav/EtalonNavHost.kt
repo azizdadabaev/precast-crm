@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Factory
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -27,6 +28,9 @@ import androidx.navigation3.ui.NavDisplay
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.feature.auth.ChangePinRoute
 import uz.etalon.crm.feature.auth.LoginRoute
+import uz.etalon.crm.feature.clients.detail.ClientDetailRoute
+import uz.etalon.crm.feature.clients.list.ClientsRoute
+import uz.etalon.crm.feature.home.HomeRoute
 import uz.etalon.crm.feature.logistics.delivery.DeliveryProofRoute
 import uz.etalon.crm.feature.logistics.dispatch.DispatchRoute
 import uz.etalon.crm.feature.logistics.drivers.DriversRoute
@@ -51,6 +55,7 @@ private fun Destination.icon(): ImageVector = when (this) {
     Destination.CALCULATOR -> Icons.Default.Calculate
     Destination.INBOX -> Icons.Default.ChatBubble
     Destination.PAYMENTS -> Icons.Default.AccountBalanceWallet
+    Destination.CLIENTS -> Icons.Default.People
     Destination.PRODUCTION -> Icons.Default.Factory
     Destination.GAZOBLOK -> Icons.Default.ViewInAr
     Destination.MORE -> Icons.Default.MoreHoriz
@@ -115,6 +120,11 @@ fun SignedInShell(
                     NavEntry(key) { NoAccessScreen() }
                 },
             ) {
+                // Home needs no permission at all — the «Бугун» column is for everyone; only its
+                // tiles are gated, and HomeViewModel handles that itself (dashboard.viewBasic
+                // or dashboard.view gates the one endpoint that carries both the tiles and
+                // today's deliveries — see HomeViewModel's KDoc).
+                entry<Home> { HomeRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
                 entry<Orders> { OrdersListRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
                 entry<OrderDetail> { k ->
                     OrderDetailRoute(
@@ -134,6 +144,19 @@ fun SignedInShell(
                         orderId = k.orderId, extraPhoto = k.extra,
                         onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
                     )
+                }
+                // Registered only for an operator who may read the client list, the Drivers
+                // pattern: without client.view the route does not exist, so no restored back
+                // stack or deep link can open it either.
+                if (me.can(PERM_CLIENT_VIEW)) {
+                    entry<Clients> { ClientsRoute(onOpenClient = { backStack.add(ClientDetail(it)) }) }
+                    entry<ClientDetail> { k ->
+                        ClientDetailRoute(
+                            clientId = k.id,
+                            onBack = { backStack.removeLastOrNull() },
+                            onOpenOrder = { backStack.add(OrderDetail(it)) },
+                        )
+                    }
                 }
                 // Every shipment and dispatch route is wrapped in withPermission("dispatch.create")
                 // server-side, and ROLE_TEMPLATES.SALES — the largest operator role — holds

@@ -3,17 +3,19 @@ package uz.etalon.crm.nav
 import androidx.navigation3.runtime.NavKey
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.shell.Destination
-import uz.etalon.crm.shell.allowedFor
 
 internal const val PERM_DRIVER_VIEW = "driver.view"
 internal const val PERM_DISPATCH_CREATE = "dispatch.create"
 internal const val PERM_PAYMENT_VIEW = "payment.view"
 internal const val PERM_PAYMENT_RECORD = "payment.record"
 internal const val PERM_DISCREPANCY_VIEW = "discrepancy.view"
+internal const val PERM_CLIENT_VIEW = "client.view"
 
 /** The key a bottom-bar destination opens. The rest have no feature module yet. */
 internal fun Destination.key(): Key = when (this) {
+    Destination.HOME -> Home
     Destination.ORDERS -> Orders
+    Destination.CLIENTS -> Clients
     Destination.PAYMENTS -> Payments
     Destination.MORE -> More
     else -> ComingSoon(labelRes)
@@ -35,6 +37,7 @@ internal fun gatingPermission(key: NavKey): String? = when (key) {
     is Payments -> PERM_PAYMENT_VIEW
     is RecordPayment -> PERM_PAYMENT_RECORD
     is Discrepancies -> PERM_DISCREPANCY_VIEW
+    is Clients, is ClientDetail -> PERM_CLIENT_VIEW
     else -> null
 }
 
@@ -42,21 +45,18 @@ internal fun gatingPermission(key: NavKey): String? = when (key) {
 internal fun Me.canOpen(key: NavKey): Boolean = gatingPermission(key)?.let { can(it) } ?: true
 
 /**
- * Where a signed-in user lands. Orders is not universal — a DRIVER or INVENTORY user has no
- * `order.view` and must not be dropped on a screen they are not allowed to read, so they start
- * on their first permitted destination instead (a ComingSoon notice, for a user whose sections
- * have not been built yet).
+ * Where a signed-in user lands. Orders is not universal — a user with no `order.view` must not
+ * be dropped on a screen they are not allowed to read, so a deep link to one is not honoured
+ * either.
  *
- * [allowedFor], not [destinationsFor]: the bar deliberately excludes placeholders, but the
- * landing rule is about permission, not about which sections have shipped. An INVENTORY user
- * whose every section is still a placeholder lands on their own section's notice rather than
- * being tipped into the «Яна» menu.
+ * The fallback is simply Home: it needs no permission and, since this slice, is a real screen
+ * rather than a placeholder — Home used to be excluded here for exactly the opposite reason (it
+ * had no screen yet, so landing on it meant landing on nothing). Every role in `ROLE_TEMPLATES`
+ * holds `order.view`, so today this branch is reached only by a CUSTOM role built with none of
+ * the permissions a start key could use.
  */
 fun startKeyFor(me: Me, deepLinkOrderId: String?): Key = when {
     me.can("order.view") && deepLinkOrderId != null -> OrderDetail(deepLinkOrderId)
     me.can("order.view") -> Orders
-    else -> allowedFor(me)
-        .firstOrNull { it != Destination.HOME }
-        ?.key()
-        ?: More
+    else -> Home
 }

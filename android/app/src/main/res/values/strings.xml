@@ -5,6 +5,7 @@
     <string name="nav_calculator">Калькулятор</string>
     <string name="nav_inbox">Хабарлар</string>
     <string name="nav_payments">Тўловлар</string>
+    <string name="nav_clients">Мижозлар</string>
     <string name="nav_production">Ишлаб чиқариш</string>
     <string name="nav_gazoblok">Газоблок</string>
     <string name="nav_more">Яна</string>
@@ -15,6 +16,7 @@
     <string name="nav_calculator_short">Ҳисоб</string>
     <string name="nav_inbox_short">Хабар</string>
     <string name="nav_payments_short">Тўлов</string>
+    <string name="nav_clients_short">Мижоз</string>
     <string name="nav_production_short">И.Ч.</string>
     <string name="nav_gazoblok_short">Газоблок</string>
     <string name="nav_more_short">Яна</string>

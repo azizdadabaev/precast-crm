@@ -9,9 +9,15 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object Login : Key
 @Serializable data class ChangePin(val forced: Boolean) : Key
+@Serializable data object Home : Key
 @Serializable data object Orders : Key
 @Serializable data class OrderDetail(val id: String) : Key
 @Serializable data object More : Key
+
+// ── Clients ──────────────────────────────────────────────────────────────────
+/** The bottom-bar tab (Destination.CLIENTS). Carries no back arrow, like Orders and Payments. */
+@Serializable data object Clients : Key
+@Serializable data class ClientDetail(val id: String) : Key
 
 /** A bottom-bar destination whose feature module has not landed yet. */
 @Serializable data class ComingSoon(val labelRes: Int) : Key

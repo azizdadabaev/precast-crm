@@ -15,6 +15,12 @@ enum class Destination(val labelRes: Int, val shortLabelRes: Int, val requires: 
     CALCULATOR(R.string.nav_calculator, R.string.nav_calculator_short, "calculator.use"),
     INBOX(R.string.nav_inbox, R.string.nav_inbox_short, "inbox.access"),
     PAYMENTS(R.string.nav_payments, R.string.nav_payments_short, "payment.view"),
+    // The spec's §5.1 table lists Clients only as an example under "More" — but it is broadly
+    // held (every ROLE_TEMPLATES role but DRIVER) and phone-first client lookup is a field task
+    // an operator reaches for as often as Orders, so it is worth its own bar slot rather than an
+    // extra tap into «Яна» every time. Declared here, after Payments, so the bar's priority order
+    // still matches the spec for everything the spec does name.
+    CLIENTS(R.string.nav_clients, R.string.nav_clients_short, "client.view"),
     PRODUCTION(R.string.nav_production, R.string.nav_production_short, "inventory.view"),
     GAZOBLOK(R.string.nav_gazoblok, R.string.nav_gazoblok_short, null),
     MORE(R.string.nav_more, R.string.nav_more_short, null),

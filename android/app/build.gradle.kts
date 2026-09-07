@@ -58,6 +58,8 @@ dependencies {
     implementation(project(":feature:logistics"))
     implementation(project(":feature:payments"))
     implementation(project(":feature:capture"))
+    implementation(project(":feature:clients"))
+    implementation(project(":feature:home"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
