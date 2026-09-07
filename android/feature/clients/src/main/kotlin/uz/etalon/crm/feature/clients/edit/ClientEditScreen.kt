@@ -45,6 +45,33 @@ import uz.etalon.crm.feature.clients.R
 /** Which of the two linked catalogues the sheet is currently browsing, if either. */
 private enum class RegionPick { VILOYAT, TUMAN }
 
+/**
+ * What the sheet does once the ViewModel reports a save. Lifted out of the `LaunchedEffect` so
+ * the ORDER of the two calls is reachable by a test — see ClientEditViewModelTest.
+ *
+ * `consume` runs FIRST. [onSaved] dismisses the sheet and navigates, which can dispose this
+ * composable and cancel the effect mid-way; a clear placed after it could land in that gap and
+ * leave `savedId` standing. The ViewModel belongs to the screen's back-stack entry, not to the
+ * sheet, so a value left standing outlives the dismissal, and the next open replays the
+ * completion against it before `openCreate`'s blanking reaches the collected state — the sheet
+ * becomes single-use per screen. That is the Critical this slice already had to fix once, and
+ * swapping these two lines back is all it takes to reintroduce it.
+ *
+ * A dedup hit returns without doing either: nothing was created, so the sheet stays open and
+ * says whose number it is. The operator leaves through the explicit action instead.
+ */
+internal fun completeSave(
+    savedId: String?,
+    existingClientName: String?,
+    consume: () -> Unit,
+    onSaved: (String) -> Unit,
+) {
+    val id = savedId ?: return
+    if (existingClientName != null) return
+    consume()
+    onSaved(id)
+}
+
 private val ROW_MIN = 48.dp
 
 /**
@@ -52,7 +79,8 @@ private val ROW_MIN = 48.dp
  *
  * [client] null means create. On success the sheet reports the id it was given and the host opens
  * that client — never a «қўшилди» toast, because `POST /api/clients` dedups on the normalised
- * phone and may have returned a client that already existed.
+ * phone. When it DID dedup, the sheet stays open, names the client already holding the number and
+ * offers to open them, rather than reporting a save that never happened — see [completeSave].
  *
  * The region picker REPLACES this sheet rather than stacking on it, the same way the payment
  * keypad does: a second bottom sheet over an open one is not a shape this app uses, and nothing
@@ -74,14 +102,8 @@ fun ClientEditSheet(
     // dismissal — the form is blanked and reseeded every time the sheet opens.
     LaunchedEffect(client?.id) { if (client == null) vm.openCreate() else vm.openEdit(client) }
     LaunchedEffect(isOffline) { vm.setOffline(isOffline) }
-    // Consume BEFORE acting: `onSaved` dismisses the sheet, and the id must already be cleared by
-    // then. Left standing it would outlive the sheet — the ViewModel belongs to the screen's
-    // back-stack entry, not to this composable — and the next open would replay the completion
-    // against a stale value before `openCreate`'s blanking reached the collected state.
     LaunchedEffect(s.savedId) {
-        val id = s.savedId ?: return@LaunchedEffect
-        vm.consumeSaved()
-        onSaved(id)
+        completeSave(s.savedId, s.existingClientName, consume = vm::consumeSaved, onSaved = onSaved)
     }
 
     val pick = picking
@@ -112,6 +134,11 @@ fun ClientEditSheet(
                 style = MaterialTheme.typography.titleMedium,
             )
             s.error?.let { ErrorBanner(it) }
+            // The number is already on file. Said HERE, beside the form that was just filled in,
+            // rather than by closing onto a detail screen under a stranger's name: one mistyped
+            // digit reaches this, and so do two firms sharing an owner's mobile. Nothing was
+            // created — the name, address and notes just typed were discarded by the server.
+            s.existingClientName?.let { NoticeBanner(stringResource(R.string.client_phone_on_file, it)) }
             // The stored number is not nine local digits, and PATCH sends the phone on every
             // save — so nothing else about this client can be changed until it is corrected.
             // Said here, on open, rather than only when the save is refused.
@@ -149,14 +176,25 @@ fun ClientEditSheet(
                 label = { Text(stringResource(R.string.client_field_notes)) },
                 modifier = Modifier.fillMaxWidth(),
             )
-            // Guarded on the button as well as in the ViewModel: neither client route is
-            // server-side idempotent, so a double tap must not become two writes.
-            PrimaryButton(
-                text = stringResource(R.string.client_action_save),
-                onClick = vm::submit,
-                enabled = s.canSave,
-                loading = s.submitting,
-            )
+            // After a dedup hit there is nothing left to save — `submit()` refuses a second
+            // attempt anyway — so the action becomes the one thing still worth doing: open the
+            // client that holds the number, which is where the operator can check and correct.
+            val existingId = s.savedId
+            if (s.existingClientName != null && existingId != null) {
+                PrimaryButton(
+                    text = stringResource(R.string.client_action_open_existing),
+                    onClick = { vm.consumeSaved(); onSaved(existingId) },
+                )
+            } else {
+                // Guarded on the button as well as in the ViewModel: neither client route is
+                // server-side idempotent, so a double tap must not become two writes.
+                PrimaryButton(
+                    text = stringResource(R.string.client_action_save),
+                    onClick = vm::submit,
+                    enabled = s.canSave,
+                    loading = s.submitting,
+                )
+            }
         }
     }
 }

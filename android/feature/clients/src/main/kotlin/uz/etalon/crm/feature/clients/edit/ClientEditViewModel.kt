@@ -12,6 +12,7 @@ import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
+import uz.etalon.crm.core.model.ClientCreated
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientInput
 import javax.inject.Inject
@@ -82,8 +83,14 @@ data class ClientEditState(
     val permissionsResolved: Boolean = false,
     val isOffline: Boolean = false,
     /** The id the server answered with. The host reads it, opens that client, and dismisses.
-     *  On a create it may be a client that ALREADY EXISTED — see [ClientEditViewModel]. */
+     *  On a create it may be a client that ALREADY EXISTED — see [existingClientName]. */
     val savedId: String? = null,
+    /**
+     * Set only when `POST /api/clients` answered with a client that ALREADY held this phone —
+     * the name that client is filed under, which is not the name that was typed. Nothing was
+     * created, and the sheet says so instead of closing onto a stranger's detail screen.
+     */
+    val existingClientName: String? = null,
 ) {
     val isEditing: Boolean get() = clientId != null
 
@@ -141,7 +148,7 @@ fun validateClient(s: ClientEditState): String? {
 }
 
 fun interface ClientCreateUseCase {
-    suspend operator fun invoke(input: ClientInput): Result<String>
+    suspend operator fun invoke(input: ClientInput): Result<ClientCreated>
 }
 
 fun interface ClientUpdateUseCase {
@@ -157,9 +164,15 @@ fun interface ClientEditPermissionUseCase {
  * field that identifies a customer.
  *
  * A successful create is NOT proof a client was created: `POST /api/clients` looks the normalised
- * phone up first and, when it finds a row, answers with that existing row — ignoring the name and
- * address submitted. So this reports only [ClientEditState.savedId] and the host opens that
- * client, where the operator sees what is actually stored. Nothing here says «қўшилди».
+ * phone up first and, when it finds a row, answers with that existing row — ignoring the name,
+ * address and notes submitted. So nothing here says «қўшилди»; on a real create the host opens
+ * the new client, where the operator sees what is actually stored.
+ *
+ * When the row that came back is one that already held the number, the sheet does NOT close.
+ * Closing onto a detail screen filed under a stranger's name — which one mistyped digit is enough
+ * to reach, and which two firms sharing an owner's mobile reach legitimately — told the operator
+ * nothing at all. [ClientEditState.existingClientName] names that client, next to the form the
+ * operator just filled in, and the save button becomes an explicit "open them" instead.
  */
 open class ClientEditViewModel(
     create: ClientCreateUseCase,
@@ -268,9 +281,23 @@ open class ClientEditViewModel(
         val id = s.clientId
         _state.update { it.copy(submitting = true, error = null) }
         viewModelScope.launch {
-            val result = if (id == null) createClient(input) else updateClient(id, input).map { id }
+            // An edit answers for the row it was aimed at, so it can never be a dedup hit; only
+            // the create path can come back as "this number is already someone else's".
+            val result = if (id == null) {
+                createClient(input)
+            } else {
+                updateClient(id, input).map { ClientCreated(id = id, name = input.name, alreadyExisted = false) }
+            }
             result.fold(
-                onSuccess = { savedId -> _state.update { it.copy(submitting = false, savedId = savedId) } },
+                onSuccess = { saved ->
+                    _state.update {
+                        it.copy(
+                            submitting = false,
+                            savedId = saved.id,
+                            existingClientName = saved.name.takeIf { _ -> saved.alreadyExisted },
+                        )
+                    }
+                },
                 onFailure = { t ->
                     // What was typed is deliberately kept: a network drop is exactly the case
                     // where the operator wants to tap save again, not retype the form.
@@ -291,7 +318,7 @@ open class ClientEditViewModel(
      * second tap on edit would flash it closed. The host consumes before it acts, so nothing can
      * be cancelled in between.
      */
-    fun consumeSaved() = _state.update { it.copy(savedId = null) }
+    fun consumeSaved() = _state.update { it.copy(savedId = null, existingClientName = null) }
 
     /** Everything the server can answer with, in Uzbek — including the one 409 whose message is
      *  English on both sides of the separator the UI splits on. */

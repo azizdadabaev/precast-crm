@@ -137,10 +137,10 @@ fun ClientsScreen(
             onDismiss = { adding = false },
             onSaved = { id ->
                 adding = false
-                // No «қўшилди»: POST /api/clients dedups on the normalised phone and may have
-                // answered with a client that already existed, ignoring the name and address
-                // just submitted. Opening that client is the honest confirmation — it shows
-                // what is actually stored. The list behind it is stale either way.
+                // Still no «қўшилди» toast: opening the client is the honest confirmation,
+                // because it shows what is actually stored. A dedup hit never reaches here
+                // unannounced — the sheet says so first and the operator taps through
+                // deliberately. The list behind it is stale either way.
                 onRefresh()
                 onOpenClient(id)
             },

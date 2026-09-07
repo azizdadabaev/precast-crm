@@ -25,6 +25,8 @@
     <string name="client_field_street">Кўча, уй, хонадон</string>
     <string name="client_field_notes">Изоҳ</string>
     <string name="client_action_save">Сақлаш</string>
+    <string name="client_phone_on_file">Бу рақам аллақачон рўйхатда: %1$s. Янги мижоз қўшилмади</string>
+    <string name="client_action_open_existing">Ўша мижозни очиш</string>
     <string name="client_region_unset">Танланмаган</string>
     <string name="client_region_search">Қидириш</string>
     <string name="client_region_clear">Тозалаш</string>

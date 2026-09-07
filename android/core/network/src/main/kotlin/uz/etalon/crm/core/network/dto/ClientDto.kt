@@ -20,6 +20,10 @@ data class ClientRowDto(
     val name: String,
     val phone: String,
     val address: String? = null,
+    /** Present on every one of these responses for the same reason `address` is — no route
+     *  narrows the Prisma row with a `select`. Read only by the create path, which compares the
+     *  row it got back against what it sent to tell a real create from a dedup hit. */
+    val notes: String? = null,
     @SerialName("_count") val counts: ClientCountsDto = ClientCountsDto(),
 )
 

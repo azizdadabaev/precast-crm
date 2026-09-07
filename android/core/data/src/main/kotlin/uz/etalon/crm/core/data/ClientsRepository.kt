@@ -2,6 +2,7 @@ package uz.etalon.crm.core.data
 
 import uz.etalon.crm.core.data.mapper.normalizePhone
 import uz.etalon.crm.core.data.mapper.toDomain
+import uz.etalon.crm.core.model.ClientCreated
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientInput
 import uz.etalon.crm.core.model.ClientPage
@@ -48,14 +49,30 @@ class ClientsRepository @Inject constructor(
      * `POST /api/clients` by the normalized phone, and sending the raw typed form would let one
      * customer get created twice under two spellings of the same number.
      *
-     * The returned id may belong to a client that ALREADY EXISTED. `POST /api/clients` looks the
+     * The returned client may be one that ALREADY EXISTED. `POST /api/clients` looks the
      * normalised phone up first and, when it finds a row, answers 200 with that row — ignoring
-     * the name and address that were submitted. A success here is therefore not proof anything
-     * was created, and no caller may report one as «қўшилди».
+     * the name, address and notes that were submitted. A success here is therefore not proof
+     * anything was created, and no caller may report one as «қўшилди».
+     *
+     * Which of the two happened is decided by comparing the row that came back against what was
+     * sent, rather than by discarding it and keeping only the id. On a real create the server
+     * stores `{...body, phone: normalised}` untouched, so all three fields match; a difference in
+     * any of them means the phone is already on file under a different customer, and
+     * [uz.etalon.crm.core.model.ClientCreated.alreadyExisted] says so with the name it is filed
+     * under. The phone itself is never compared — the server normalises it on the way in, which
+     * is exactly why the dedup fired.
      */
-    suspend fun create(input: ClientInput): Result<String> = runCatchingCancellable {
+    suspend fun create(input: ClientInput): Result<ClientCreated> = runCatchingCancellable {
         if (!permissions.can(CLIENT_CREATE)) error("Мижоз қўшишга рухсат йўқ")
-        api.createClient(input.toRequest()).id
+        val sent = input.toRequest()
+        val row = api.createClient(sent)
+        ClientCreated(
+            id = row.id,
+            name = row.name,
+            alreadyExisted = row.name != sent.name ||
+                row.address != sent.address ||
+                row.notes != sent.notes,
+        )
     }
 
     /**

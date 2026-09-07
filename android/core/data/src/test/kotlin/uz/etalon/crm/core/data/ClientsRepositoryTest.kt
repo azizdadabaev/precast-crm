@@ -132,10 +132,57 @@ class ClientsRepositoryTest {
         assertEquals(listOf("client:c1"), api.calls)
     }
 
-    @Test fun `create returns the new client's id`() = runTest {
-        val api = ClientRecordingApi().apply { createResult = ClientRowDto(id = "c9", name = "X", phone = "998900000000") }
-        val id = ClientsRepository(api, CLIENT_GRANTED).create(input()).getOrThrow()
-        assertEquals("c9", id)
+    @Test fun `a real create returns the new client and claims nothing else`() = runTest {
+        // The server stores `{...body, phone: normalised}` untouched, so the row it answers with
+        // repeats every field that was sent. That is what "nothing was discarded" looks like.
+        val api = ClientRecordingApi().apply {
+            createResult = ClientRowDto(
+                id = "c9", name = "Navoi Build", phone = "998901112233",
+                address = "Тошкент шаҳри", notes = "эрталаб",
+            )
+        }
+        val created = ClientsRepository(api, CLIENT_GRANTED)
+            .create(input(address = "Тошкент шаҳри", notes = "эрталаб"))
+            .getOrThrow()
+        assertEquals("c9", created.id)
+        assertFalse(created.alreadyExisted)
+    }
+
+    /**
+     * The whole point of returning the row. `POST /api/clients` answers 200 with the EXISTING
+     * client when the normalised phone is already on file, discarding the name and address just
+     * typed — one mistyped digit is enough, and so are two firms sharing an owner's mobile. The
+     * repository must be able to tell the operator, and to name whose number it is.
+     */
+    @Test fun `a create that only found an existing client says so, with that client's name`() = runTest {
+        val api = ClientRecordingApi().apply {
+            createResult = ClientRowDto(id = "already-on-file", name = "Бошқа мижоз", phone = "998901112233")
+        }
+        val created = ClientsRepository(api, CLIENT_GRANTED).create(input(name = "Navoi Build")).getOrThrow()
+        assertTrue(created.alreadyExisted)
+        assertEquals("already-on-file", created.id)
+        assertEquals("Бошқа мижоз", created.name)
+    }
+
+    /** A differing address alone is enough — the name can match while the row is a different
+     *  customer's, and the address the operator typed was still thrown away. */
+    @Test fun `a dedup hit is caught by the address too, not only the name`() = runTest {
+        val api = ClientRecordingApi().apply {
+            createResult = ClientRowDto(id = "c1", name = "Navoi Build", phone = "998901112233", address = "Самарқанд")
+        }
+        val created = ClientsRepository(api, CLIENT_GRANTED)
+            .create(input(address = "Тошкент шаҳри"))
+            .getOrThrow()
+        assertTrue(created.alreadyExisted)
+    }
+
+    /** ...and by the notes, which no other surface reads back at all. */
+    @Test fun `a dedup hit is caught by the notes too`() = runTest {
+        val api = ClientRecordingApi().apply {
+            createResult = ClientRowDto(id = "c1", name = "Navoi Build", phone = "998901112233", notes = null)
+        }
+        val created = ClientsRepository(api, CLIENT_GRANTED).create(input(notes = "эрталаб")).getOrThrow()
+        assertTrue(created.alreadyExisted)
     }
 
     @Test fun `update succeeds without surfacing the response row`() = runTest {

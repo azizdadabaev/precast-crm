@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import uz.etalon.crm.core.model.ClientCreated
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientInput
 import uz.etalon.crm.core.network.ApiException
@@ -24,6 +25,7 @@ import uz.etalon.crm.feature.clients.edit.ClientEditPermissionUseCase
 import uz.etalon.crm.feature.clients.edit.ClientEditState
 import uz.etalon.crm.feature.clients.edit.ClientEditViewModel
 import uz.etalon.crm.feature.clients.edit.ClientUpdateUseCase
+import uz.etalon.crm.feature.clients.edit.completeSave
 import uz.etalon.crm.feature.clients.edit.composeAddress
 import uz.etalon.crm.feature.clients.edit.parseAddress
 import uz.etalon.crm.feature.clients.edit.validateClient
@@ -196,7 +198,7 @@ class ClientEditViewModelTest {
 
     @Test fun `create sends the twelve-digit phone and the composed address`() = runTest {
         var sent: ClientInput? = null
-        val vm = viewModel(create = { sent = it; Result.success("c9") })
+        val vm = viewModel(create = { sent = it; Result.success(created()) })
         advanceUntilIdle()
         vm.openCreate()
         vm.setName("  Навоий Build  ")
@@ -224,11 +226,12 @@ class ClientEditViewModelTest {
     /**
      * `POST /api/clients` dedups on the normalised phone and answers 200 with the EXISTING row,
      * ignoring the name and address that were submitted — so a success is not proof anything was
-     * created. The ViewModel therefore reports only the id, and the sheet's host opens that
-     * client rather than announcing «қўшилди».
+     * created. The id is still reported (the operator can open the client that holds the number),
+     * but the name it is filed under comes with it, so the sheet can say what happened instead of
+     * closing onto a stranger's detail screen.
      */
-    @Test fun `a create that only found an existing client still reports that client's id`() = runTest {
-        val vm = viewModel(create = { Result.success("already-on-file") })
+    @Test fun `a create that only found an existing client names that client`() = runTest {
+        val vm = viewModel(create = { Result.success(alreadyOnFile()) })
         advanceUntilIdle()
         vm.openCreate()
         vm.setName("Бошқа ном")
@@ -236,6 +239,60 @@ class ClientEditViewModelTest {
         vm.submit()
         advanceUntilIdle()
         assertEquals("already-on-file", vm.state.value.savedId)
+        assertEquals("Бошқа мижоз", vm.state.value.existingClientName)
+    }
+
+    /** The mirror: a genuine create must NOT raise the notice, or every added client would claim
+     *  the number was already on file. */
+    @Test fun `a real create raises no already-on-file notice`() = runTest {
+        val vm = viewModel(create = { Result.success(created()) })
+        advanceUntilIdle()
+        vm.openCreate()
+        vm.setName("Навоий Build")
+        vm.setPhoneDigits("901112233")
+        vm.submit()
+        advanceUntilIdle()
+        assertEquals("c9", vm.state.value.savedId)
+        assertNull(vm.state.value.existingClientName)
+    }
+
+    /**
+     * The sheet's completion handler, at the seam a test can reach.
+     *
+     * `consumeSaved()` must run BEFORE `onSaved` — `onSaved` dismisses the sheet and navigates,
+     * which can dispose the composable and cancel the effect, so a clear placed after it could
+     * land in that gap and leave the id standing. This ViewModel outlives the sheet (it belongs
+     * to the screen's back-stack entry), so a standing id makes the next open replay the
+     * completion: the sheet becomes single-use per screen. That is this slice's one Critical, and
+     * swapping the two lines in [completeSave] is all it takes to bring it back.
+     */
+    @Test fun `the saved id is consumed before the host is told`() {
+        val order = mutableListOf<String>()
+        completeSave(
+            savedId = "c9", existingClientName = null,
+            consume = { order += "consume" }, onSaved = { order += "onSaved" },
+        )
+        assertEquals(listOf("consume", "onSaved"), order)
+    }
+
+    /** Nothing was created, so nothing is reported: the sheet stays open and says whose number
+     *  it is. The id is still held, for the explicit "open them" action. */
+    @Test fun `a dedup hit neither consumes nor reports`() {
+        val order = mutableListOf<String>()
+        completeSave(
+            savedId = "already-on-file", existingClientName = "Бошқа мижоз",
+            consume = { order += "consume" }, onSaved = { order += "onSaved" },
+        )
+        assertEquals(emptyList<String>(), order)
+    }
+
+    @Test fun `no save at all reports nothing`() {
+        val order = mutableListOf<String>()
+        completeSave(
+            savedId = null, existingClientName = null,
+            consume = { order += "consume" }, onSaved = { order += "onSaved" },
+        )
+        assertEquals(emptyList<String>(), order)
     }
 
     @Test fun `editing seeds the form from the stored client and updates by id`() = runTest {
@@ -317,7 +374,7 @@ class ClientEditViewModelTest {
      * client added a minute ago instead of opening an empty form.
      */
     @Test fun `the completion is consumed, so a reopened sheet cannot replay it`() = runTest {
-        val vm = viewModel(create = { Result.success("c9") })
+        val vm = viewModel(create = { Result.success(created()) })
         advanceUntilIdle()
         vm.openCreate()
         vm.setName("Навоий Build")
@@ -414,7 +471,7 @@ class ClientEditViewModelTest {
     @Test fun `create is refused without client create, before the network`() = runTest {
         var called = false
         val vm = viewModel(
-            create = { called = true; Result.success("c9") },
+            create = { called = true; Result.success(created()) },
             permissions = { it != "client.create" },
         )
         advanceUntilIdle()
@@ -446,7 +503,7 @@ class ClientEditViewModelTest {
      *  save is refused with a reason rather than sent and failed. */
     @Test fun `a save is refused while the module knows it is offline`() = runTest {
         var called = false
-        val vm = viewModel(create = { called = true; Result.success("c9") })
+        val vm = viewModel(create = { called = true; Result.success(created()) })
         advanceUntilIdle()
         vm.openCreate()
         vm.setName("Навоий Build")
@@ -462,7 +519,7 @@ class ClientEditViewModelTest {
      *  twice, is not something the server deduplicates for an EDIT. Guarded here as well as on
      *  the button, because this is the seam a test can reach. */
     @Test fun `a second submit while the first is in flight never goes out`() = runTest {
-        val gate = CompletableDeferred<Result<String>>()
+        val gate = CompletableDeferred<Result<ClientCreated>>()
         var calls = 0
         val vm = viewModel(create = { calls++; gate.await() })
         advanceUntilIdle()
@@ -478,7 +535,7 @@ class ClientEditViewModelTest {
         advanceUntilIdle()
         assertEquals(1, calls)
 
-        gate.complete(Result.success("c9"))
+        gate.complete(Result.success(created()))
         advanceUntilIdle()
         assertFalse(vm.state.value.submitting)
         assertEquals("c9", vm.state.value.savedId)
@@ -488,7 +545,7 @@ class ClientEditViewModelTest {
         var fail = true
         var calls = 0
         val vm = viewModel(
-            create = { calls++; if (fail) Result.failure(java.io.IOException("no net")) else Result.success("c9") },
+            create = { calls++; if (fail) Result.failure(java.io.IOException("no net")) else Result.success(created()) },
         )
         advanceUntilIdle()
         vm.openCreate()
@@ -519,8 +576,16 @@ class ClientEditViewModelTest {
 
     // ── fixtures ──────────────────────────────────────────────────────────────────
 
+    /** A real create: the server stored what was sent and answered with it. */
+    private fun created(id: String = "c9", name: String = "Навоий Build") =
+        ClientCreated(id = id, name = name, alreadyExisted = false)
+
+    /** A dedup hit: the phone was already on file under [name], and nothing was created. */
+    private fun alreadyOnFile(id: String = "already-on-file", name: String = "Бошқа мижоз") =
+        ClientCreated(id = id, name = name, alreadyExisted = true)
+
     private fun viewModel(
-        create: suspend (ClientInput) -> Result<String> = { Result.success("c9") },
+        create: suspend (ClientInput) -> Result<ClientCreated> = { Result.success(created()) },
         update: suspend (String, ClientInput) -> Result<Unit> = { _, _ -> Result.success(Unit) },
         permissions: suspend (String) -> Boolean = { true },
     ) = ClientEditViewModel(
