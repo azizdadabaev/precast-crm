@@ -19,6 +19,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -36,7 +39,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.ChipTone
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
+import uz.etalon.crm.core.designsystem.components.StickyActionBar
 import uz.etalon.crm.core.designsystem.components.toneColor
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.ClientSummary
@@ -44,6 +49,7 @@ import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.feature.clients.R
 import uz.etalon.crm.feature.clients.dial
+import uz.etalon.crm.feature.clients.edit.ClientEditSheet
 
 /**
  * Finding a customer, by the number they called from or by their name.
@@ -73,6 +79,7 @@ fun ClientsScreen(
     onRefresh: () -> Unit,
     onOpenClient: (String) -> Unit,
 ) {
+    var adding by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             OutlinedTextField(
@@ -83,6 +90,20 @@ fun ClientsScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             )
+        },
+        bottomBar = {
+            // Offered only once `client.create` is known to be held: a button that appears and
+            // then vanishes is worse than one that arrives a frame late. Disabled while offline
+            // because POST /api/clients is not `withIdempotency`-wrapped and may not be queued.
+            if (s.showAddAction) {
+                StickyActionBar {
+                    PrimaryButton(
+                        text = stringResource(R.string.clients_action_add),
+                        onClick = { adding = true },
+                        enabled = !s.isOffline,
+                    )
+                }
+            }
         },
     ) { pad ->
         PullToRefreshBox(isRefreshing = s.loading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
@@ -99,6 +120,23 @@ fun ClientsScreen(
                 items(s.items, key = { it.id }) { c -> ClientCard(c) { onOpenClient(c.id) } }
             }
         }
+    }
+
+    if (adding) {
+        ClientEditSheet(
+            client = null,
+            isOffline = s.isOffline,
+            onDismiss = { adding = false },
+            onSaved = { id ->
+                adding = false
+                // No «қўшилди»: POST /api/clients dedups on the normalised phone and may have
+                // answered with a client that already existed, ignoring the name and address
+                // just submitted. Opening that client is the honest confirmation — it shows
+                // what is actually stored. The list behind it is stale either way.
+                onRefresh()
+                onOpenClient(id)
+            },
+        )
     }
 }
 

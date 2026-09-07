@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,6 +23,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +51,7 @@ import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.core.ui.format.formatScheduleDate
 import uz.etalon.crm.feature.clients.R
 import uz.etalon.crm.feature.clients.dial
+import uz.etalon.crm.feature.clients.edit.ClientEditSheet
 
 /** The minimum comfortable touch target, per spec §6 — the call button is the one control on
  *  this screen an operator uses while holding a phone in one hand. */
@@ -75,6 +80,7 @@ fun ClientDetailScreen(
 ) {
     val ctx = LocalContext.current
     val client = s.client
+    var editing by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -87,6 +93,16 @@ fun ClientDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.client_action_back))
+                    }
+                },
+                actions = {
+                    // Only once `client.edit` is known to be held, and only once there is a
+                    // client to edit. Disabled offline: PATCH /api/clients/{id} is not
+                    // `withIdempotency`-wrapped, so it may not be queued.
+                    if (s.showEditAction && client != null) {
+                        IconButton(onClick = { editing = true }, enabled = !s.isOffline) {
+                            Icon(Icons.Default.Edit, stringResource(R.string.client_action_edit))
+                        }
                     }
                 },
             )
@@ -136,6 +152,20 @@ fun ClientDetailScreen(
                 }
             }
         }
+    }
+
+    if (editing && client != null) {
+        ClientEditSheet(
+            client = client,
+            isOffline = s.isOffline,
+            onDismiss = { editing = false },
+            onSaved = {
+                editing = false
+                // Re-read rather than patching the screen from what was sent: PATCH answers with
+                // the stored row, and the server normalises the phone on the way in.
+                onRefresh()
+            },
+        )
     }
 }
 

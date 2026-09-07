@@ -2,7 +2,6 @@
     <!-- Every name here is scoped with a clients_/client_ prefix. Android merges string
          resources by name across modules and the one nearer :app wins, so an unscoped name
          (action_save, action_call) would silently take over another feature's wording. -->
-    <string name="clients_title">Мижозлар</string>
     <string name="clients_search_hint">Исм ёки телефон рақами</string>
     <string name="clients_empty">Мижоз топилмади</string>
     <string name="clients_action_add">Мижоз қўшиш</string>
@@ -14,4 +13,20 @@
     <string name="client_action_back">Орқага</string>
     <string name="client_address_label">Манзил</string>
     <string name="client_notes_label">Изоҳ</string>
+
+    <!-- the create / edit sheet -->
+    <string name="client_create_title">Янги мижоз</string>
+    <string name="client_edit_title">Мижозни таҳрирлаш</string>
+    <string name="client_field_name">Мижоз номи</string>
+    <string name="client_field_phone">Телефон рақами</string>
+    <string name="client_field_viloyat">Вилоят</string>
+    <string name="client_field_tuman">Туман</string>
+    <string name="client_field_street">Кўча, уй, хонадон</string>
+    <string name="client_field_notes">Изоҳ</string>
+    <string name="client_action_save">Сақлаш</string>
+    <string name="client_region_unset">Танланмаган</string>
+    <string name="client_region_search">Қидириш</string>
+    <string name="client_region_clear">Тозалаш</string>
+    <string name="client_region_empty">Ҳеч нарса топилмади</string>
+    <string name="client_keep_notice">Манзил ва изоҳни бу ердан ўчириб бўлмайди — фақат ўзгартириш мумкин</string>
 </resources>
