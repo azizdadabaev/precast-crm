@@ -87,4 +87,26 @@
     <string name="reject_sheet_title">Тўловни рад этиш</string>
     <string name="reject_reason_label">Сабаб (мажбурий, мин. 3 белги)</string>
     <string name="reject_reason_hint">масалан: Ҳайдовчи квитанциядаги сумма бошқача деди</string>
+
+    <!-- ── Discrepancies ──────────────────────────────────────────────────────
+         Same collision rule as the confirm queue above: every name here is prefixed so it
+         cannot silently relabel a string in :core:designsystem, :feature:orders,
+         :feature:logistics or :app. `queue_expected` and `queue_shortfall` already say
+         exactly what is needed for the expected figure and the gap, and `discrepancy_note_*`
+         already say what is needed for the resolution note, so this screen reads those
+         instead of redefining them. -->
+    <string name="discrepancies_empty">Тафовут йўқ</string>
+    <string name="discrepancies_received">Олинган: %1$s</string>
+    <string name="discrepancies_driver">Ҳайдовчи: %1$s</string>
+    <string name="discrepancies_resolution_note">Изоҳ: %1$s</string>
+    <string name="discrepancies_no_resolve_permission">Тафовутларни ҳал қилишга рухсат йўқ</string>
+
+    <string name="discrepancy_action_resolve">Ҳал қилиш</string>
+    <string name="discrepancy_resolve_sheet_title">Тафовутни ҳал қилиш</string>
+    <string name="discrepancy_resolve_status_label">Ҳал қилиш тури</string>
+
+    <string name="resolve_option_recovered_hint">Мижоз қолганини тўлади</string>
+    <string name="resolve_option_discount_hint">Эга чегирма сифатида тасдиқлади</string>
+    <string name="resolve_option_writeoff_hint">Зарар сифатида ҳисобдан чиқарилди</string>
+    <string name="resolve_option_disputed_hint">HR / интизомий чора</string>
 </resources>
