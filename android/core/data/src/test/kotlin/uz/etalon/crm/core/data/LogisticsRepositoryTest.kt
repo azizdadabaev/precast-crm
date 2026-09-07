@@ -18,7 +18,7 @@ import uz.etalon.crm.core.network.dto.*
 private class SpyOutbox : OutboxGateway {
     data class Enqueued(val kind: OutboxKind, val orderId: String, val shipmentId: String?, val payload: String)
     val calls = mutableListOf<Enqueued>()
-    override suspend fun enqueue(kind: OutboxKind, orderId: String, shipmentId: String?, photo: PreparedImage?, payload: JsonObject): String {
+    override suspend fun enqueue(kind: OutboxKind, orderId: String, shipmentId: String?, paymentId: String?, photo: PreparedImage?, payload: JsonObject): String {
         calls += Enqueued(kind, orderId, shipmentId, payload.toString()); return "outbox-${calls.size}"
     }
 }

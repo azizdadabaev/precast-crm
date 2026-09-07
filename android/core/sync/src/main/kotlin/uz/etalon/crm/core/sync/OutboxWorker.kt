@@ -174,6 +174,12 @@ class OutboxWorker @AssistedInject constructor(
                 idempotencyKey = row.id,
                 authorization = authorization,
             )
+            OutboxKind.ADD_PAYMENT_RECEIPT -> api.addPaymentReceipt(
+                id = requireNotNull(row.paymentId),
+                file = part,
+                idempotencyKey = row.id,
+                authorization = authorization,
+            )
         }
     }
 

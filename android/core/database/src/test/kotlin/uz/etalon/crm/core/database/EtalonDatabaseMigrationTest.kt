@@ -81,6 +81,34 @@ class EtalonDatabaseMigrationTest {
         }
     }
 
+    /** The same invariant, for the row a payment-receipt capture writes: `kind` is a String column
+     *  precisely so this step needs no DDL, but that only holds if the row itself — owner, file,
+     *  cash payload, state — survives the bump untouched. */
+    @Test fun `bumping the schema from 4 to 5 keeps a queued payment receipt`() {
+        val payload = """{"note":"receipt"}"""
+        helper.createDatabase(4).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO outbox
+                    (id, ownerId, kind, orderId, shipmentId, paymentId, filePath, payloadJson,
+                     state, attempts, lastError, createdAt, updatedAt)
+                VALUES ('row-2', 'u1', 'ADD_PAYMENT_RECEIPT', 'o1', NULL, 'p1',
+                        '/data/outbox/row-2.jpg', '$payload', 'QUEUED', 0, NULL, 10, 10)
+                """.trimIndent()
+            )
+        }
+
+        helper.runMigrationsAndValidate(5, listOf(MIGRATION_4_5)).use { db ->
+            db.prepare("SELECT ownerId, filePath, payloadJson, state FROM outbox WHERE id = 'row-2'").use { stmt ->
+                assertTrue("the queued payment receipt must survive the version bump", stmt.step())
+                assertEquals("u1", stmt.getText(0))
+                assertEquals("/data/outbox/row-2.jpg", stmt.getText(1))
+                assertEquals("the payload must come through unchanged", payload, stmt.getText(2))
+                assertEquals("QUEUED", stmt.getText(3))
+            }
+        }
+    }
+
     private inline fun <T> SQLiteConnection.use(block: (SQLiteConnection) -> T): T =
         try { block(this) } finally { close() }
 }

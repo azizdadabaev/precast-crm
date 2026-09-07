@@ -247,4 +247,50 @@ class OutboxWorkerTest {
 
         assertEquals(listOf("o1"), orders.refreshed)
     }
+
+    /** A payment-receipt row posts to the payment it was captured for, not the order route the
+     *  other three kinds use — and its idempotency key and pinned authorization follow the same
+     *  contract as every other queued kind, so a retried drain never double-attaches the photo. */
+    @Test fun `a queued payment receipt is posted against its payment and the order refreshes`() = runTest {
+        val dao = db().outboxDao()
+        val file = File.createTempFile("outbox-receipt", ".jpg").apply { deleteOnExit() }
+        dao.upsert(row("receipt-1", "o1", created = 1).copy(kind = "ADD_PAYMENT_RECEIPT", paymentId = "p1", filePath = file.absolutePath))
+        var sentPaymentId: String? = null
+        var sentKey: String? = null
+        var sentAuth: String? = null
+        val api = object : StubApi() {
+            override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto {
+                sentPaymentId = id; sentKey = idempotencyKey; sentAuth = authorization
+                return ReceiptDto("r1", "/uploads/receipts/x.jpg")
+            }
+        }
+        val orders = RecordingOrders()
+
+        val result = worker(dao, api, orders, tokens = FakeTokens("tokX")).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals("p1", sentPaymentId)
+        assertEquals("receipt-1", sentKey)
+        assertEquals("Bearer tokX", sentAuth)
+        assertEquals(null, dao.byId("receipt-1"))
+        assertEquals(listOf("o1"), orders.refreshed)
+    }
+
+    /** The same missing-file rule every other queued kind gets — a vanished JPEG can never
+     *  succeed on retry — must also hold for a payment receipt, so it fails permanently with the
+     *  Uzbek message instead of blocking the queue forever. */
+    @Test fun `a payment receipt whose file has vanished fails permanently`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(row("receipt-2", "o1", created = 1).copy(kind = "ADD_PAYMENT_RECEIPT", paymentId = "p1", filePath = "/no/such/file.jpg"))
+        val orders = RecordingOrders()
+
+        // StubApi errors on any call, so reaching the network would fail this test loudly.
+        val result = worker(dao, StubApi(), orders).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        val after = dao.byId("receipt-2")!!
+        assertEquals(OutboxState.FAILED, after.state)
+        assertEquals("Сурат топилмади, қайта суратга олинг", after.lastError)
+        assertEquals(emptyList<String>(), orders.refreshed)
+    }
 }

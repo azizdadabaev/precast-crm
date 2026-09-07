@@ -148,6 +148,16 @@ class OutboxRepositoryTest {
         assertTrue(id.length <= 128, "must fit the server's 128-character cap")
     }
 
+    /** A payment-receipt row is claimed by the payment it belongs to, not the shipment column —
+     *  the worker resolves `POST /api/payments/{paymentId}/receipts` from this field. */
+    @Test fun `enqueue stamps the payment id when one is given`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
+        val dao = FakeOutboxDao()
+        val id = repo(dao, RecordingScheduler(), File(tmp, "outbox"))
+            .enqueue(OutboxKind.ADD_PAYMENT_RECEIPT, "o1", paymentId = "p1")
+
+        assertEquals("p1", dao.byId(id)!!.paymentId)
+    }
+
     @Test fun `payload survives the round trip`(@org.junit.jupiter.api.io.TempDir tmp: File) = runTest {
         val dao = FakeOutboxDao()
         val payload = JsonObject(mapOf("cashAmount" to JsonPrimitive("1500000"), "driverReturned" to JsonPrimitive(true)))

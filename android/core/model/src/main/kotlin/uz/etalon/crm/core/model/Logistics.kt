@@ -36,14 +36,14 @@ data class DeliveryCash(
 
 data class LatLng(val lat: Double, val lng: Double)
 
-/** The four operations the outbox may queue. Each maps to a server route that
- *  Phase 0 wrapped in withIdempotency; nothing else may be queued.
+/** The operations the outbox may queue. Each maps to a server route that
+ *  Phase 0/1c wrapped in withIdempotency; nothing else may be queued.
  *
  *  [UNKNOWN] is never enqueued. It is what a row written by a NEWER build of the app reads back as
  *  — the kind is stored as a string precisely so a future value needs no schema migration, and
  *  [from] is what makes that promise good instead of throwing out of a flow. */
 enum class OutboxKind {
-    LOAD_TRUCK, ADD_LOADED_PHOTO, DELIVERY_PROOF, LOAD_SHIPMENT, UNKNOWN;
+    LOAD_TRUCK, ADD_LOADED_PHOTO, DELIVERY_PROOF, LOAD_SHIPMENT, ADD_PAYMENT_RECEIPT, UNKNOWN;
     companion object { fun from(s: String) = entries.firstOrNull { it.name == s } ?: UNKNOWN }
 }
 

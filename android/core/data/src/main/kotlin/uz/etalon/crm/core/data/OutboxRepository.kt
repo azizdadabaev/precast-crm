@@ -27,7 +27,7 @@ interface OutboxScheduler { fun schedule(id: String) }
 /** The seam LogisticsRepository talks to, so its tests need no file system. */
 interface OutboxGateway {
     suspend fun enqueue(
-        kind: OutboxKind, orderId: String, shipmentId: String? = null,
+        kind: OutboxKind, orderId: String, shipmentId: String? = null, paymentId: String? = null,
         photo: PreparedImage? = null, payload: JsonObject = JsonObject(emptyMap()),
     ): String
 }
@@ -67,7 +67,7 @@ class OutboxRepository @Inject constructor(
      * nothing is moved before the owner is known.
      */
     override suspend fun enqueue(
-        kind: OutboxKind, orderId: String, shipmentId: String?,
+        kind: OutboxKind, orderId: String, shipmentId: String?, paymentId: String?,
         photo: PreparedImage?, payload: JsonObject,
     ): String {
         val ownerId = currentUser.id()
@@ -78,7 +78,7 @@ class OutboxRepository @Inject constructor(
         dao.upsert(
             OutboxEntity(
                 id = id, ownerId = ownerId, kind = kind.name, orderId = orderId, shipmentId = shipmentId,
-                paymentId = null, filePath = stored?.absolutePath,
+                paymentId = paymentId, filePath = stored?.absolutePath,
                 payloadJson = json.encodeToString(JsonObject.serializer(), payload),
                 state = OutboxState.QUEUED, attempts = 0, lastError = null,
                 createdAt = now, updatedAt = now,
