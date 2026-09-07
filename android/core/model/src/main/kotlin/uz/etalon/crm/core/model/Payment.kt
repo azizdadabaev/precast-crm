@@ -2,7 +2,14 @@ package uz.etalon.crm.core.model
 
 import java.time.Instant
 
-/** What the record-payment form collects. Mirrors PaymentRecordSchema. */
+/**
+ * What the record-payment form collects. Mirrors PaymentRecordSchema, minus `receiptUrls`: a
+ * receipt photo always attaches AFTER recording, via `PaymentsRepository.attachReceipt` queuing
+ * one `ADD_PAYMENT_RECEIPT` per photo against the new payment's id — a queued upload returns an
+ * outbox row id, never a URL, so this input could never actually carry one. Leaving the field
+ * here would only invite a caller to populate it and have the value silently dropped, since
+ * `record` sends the request's `receiptUrls` as `emptyList()` unconditionally.
+ */
 data class PaymentRecordInput(
     val orderId: String,
     val amount: Money,
@@ -11,7 +18,6 @@ data class PaymentRecordInput(
     val handOverNow: Boolean = false,
     val collectedByDriverId: String? = null,
     val notes: String? = null,
-    val receiptUrls: List<String> = emptyList(),
     val paidOn: String? = null,
 )
 

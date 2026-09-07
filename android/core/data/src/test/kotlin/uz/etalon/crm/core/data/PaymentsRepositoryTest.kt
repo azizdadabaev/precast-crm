@@ -132,10 +132,15 @@ class PaymentsRepositoryTest {
     }
 
     @Test fun `recording without payment record permission is refused before the network`() = runTest {
-        val api = PayFailingApi()
+        // PayRecordingApi, not PayFailingApi: a FailingApi cannot tell a refusal from a network
+        // error, since either way the call throws and the Result comes back failed. Only a
+        // recording double that would have SUCCEEDED can prove the guard, not the exception, is
+        // what stopped it.
+        val api = PayRecordingApi()
         val repo = PaymentsRepository(api, PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.record" }, mediaBase = "https://api.example")
         val r = repo.record(input())
         assertTrue(r.isFailure)
+        assertEquals(0, api.calls.size, "the guard must refuse before the network, not merely fail after it: ${api.calls}")
     }
 
     @Test fun `attaching a receipt without payment record permission is refused before it is queued`() = runTest {
@@ -147,9 +152,11 @@ class PaymentsRepositoryTest {
     }
 
     @Test fun `confirming without payment confirm permission is refused before the network`() = runTest {
-        val repo = PaymentsRepository(PayFailingApi(), PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.confirm" }, mediaBase = "https://api.example")
+        val api = PayRecordingApi() // a recording double, not FailingApi — see `recording without...`'s comment
+        val repo = PaymentsRepository(api, PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.confirm" }, mediaBase = "https://api.example")
         assertTrue(repo.confirm("p1", null, null, null, null).isFailure)
         assertTrue(repo.reject("p1", "сабаб").isFailure)
+        assertEquals(0, api.calls.size, "neither confirm nor reject may reach the network: ${api.calls}")
     }
 
     @Test fun `handover is gated on payment record, not payment confirm`() = runTest {
@@ -158,8 +165,10 @@ class PaymentsRepositoryTest {
         val deniedConfirm = PaymentsRepository(PayRecordingApi(), PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.confirm" }, mediaBase = "https://api.example")
         assertTrue(deniedConfirm.handover("p1").isSuccess, "payment.confirm must not gate handover")
 
-        val deniedRecord = PaymentsRepository(PayFailingApi(), PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.record" }, mediaBase = "https://api.example")
+        val recordingApi = PayRecordingApi() // a recording double, not FailingApi — see `recording without...`'s comment
+        val deniedRecord = PaymentsRepository(recordingApi, PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.record" }, mediaBase = "https://api.example")
         assertTrue(deniedRecord.handover("p1").isFailure, "payment.record must gate handover")
+        assertEquals(0, recordingApi.calls.size, "payment.record must refuse before the network: ${recordingApi.calls}")
     }
 
     @Test fun `record returns the new payment id and sends receiptUrls empty`() = runTest {

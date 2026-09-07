@@ -41,7 +41,14 @@ fun PaymentRowDto.toDomain(mediaBase: String) = PaymentQueueItem(
     rejectionReason = rejectionReason,
 )
 
-/** `order` is MISSING on the PATCH mutation response — same reasoning as PaymentRowDto's. */
+/**
+ * `order` is MISSING on the PATCH mutation response — same reasoning as PaymentRowDto's, except
+ * here there is no `include`-based route to fall back on being the common case: `PATCH
+ * /api/discrepancies/{id}` never carries `order`, full stop. That is exactly why
+ * `DiscrepanciesRepository.resolve` deliberately does NOT call this — it would degrade every
+ * single resolve to a raw order id and an empty client name. This function is only ever called
+ * from the GET /api/discrepancies list route, where `order` is always present.
+ */
 fun DiscrepancyDto.toDomain() = Discrepancy(
     id = id,
     orderId = orderId,

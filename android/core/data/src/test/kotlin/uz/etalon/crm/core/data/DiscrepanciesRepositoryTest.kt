@@ -76,18 +76,22 @@ private val DISC_GRANTED = PermissionGate { true }
 class DiscrepanciesRepositoryTest {
 
     @Test fun `resolve is refused for an operator without discrepancy resolve`() = runTest {
-        val repo = DiscrepanciesRepository(DiscFailingApi(), DiscNoopOrders(), PermissionGate { it != "discrepancy.resolve" })
+        // DiscRecordingApi, not DiscFailingApi: a FailingApi cannot tell a refusal from a network
+        // error — either way the call throws and the Result comes back failed. Only a recording
+        // double that would have SUCCEEDED can prove the guard, not the exception, stopped it.
+        val api = DiscRecordingApi()
+        val repo = DiscrepanciesRepository(api, DiscNoopOrders(), PermissionGate { it != "discrepancy.resolve" })
         val res = repo.resolve("d1", DiscrepancyStatus.RESOLVED_RECOVERED, "Мижоз тўлади")
         assertTrue(res.isFailure, "a write the server would answer 403 to must fail before the network")
+        assertEquals(0, api.calls.size, "the guard must refuse before the network: ${api.calls}")
     }
 
     @Test fun `resolve calls the api and refreshes the order the response row names`() = runTest {
         val api = DiscRecordingApi()
         val orders = DiscNoopOrders()
-        val result = DiscrepanciesRepository(api, orders, DISC_GRANTED)
+        DiscrepanciesRepository(api, orders, DISC_GRANTED)
             .resolve("d1", DiscrepancyStatus.RESOLVED_RECOVERED, "Мижоз тўлади")
             .getOrThrow()
-        assertEquals("d1", result.id)
         assertEquals(listOf("updateDiscrepancy:d1:RESOLVED_RECOVERED:Мижоз тўлади"), api.calls)
         assertEquals(listOf("o1"), orders.refreshed)
     }
