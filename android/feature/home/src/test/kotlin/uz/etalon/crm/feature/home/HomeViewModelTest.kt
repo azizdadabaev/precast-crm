@@ -86,8 +86,32 @@ class HomeViewModelTest {
         assertEquals(emptyList<TodayDelivery>(), vm.state.value.today)
         assertNull(vm.state.value.tiles, "absent, not a HomeTiles(0, ZERO, 0, ZERO, ZERO, 0)")
         assertNull(vm.state.value.error, "no dashboard access is a fact, not a failure")
-        assertTrue(vm.state.value.showEmptyState)
         assertFalse(vm.state.value.loading)
+    }
+
+    /**
+     * "Nothing scheduled today" and "cannot check today's orders" are different facts and must
+     * render as different strings — a driver reading «Бугунга буюртма йўқ» when the truth is
+     * "not allowed to see" believes there is nothing on their route when there may be several.
+     * [HomeUiState.showEmptyState] and [HomeUiState.showNoAccessState] must therefore never both
+     * be true, and the no-access flag — not the empty one — is what fires when the permission is
+     * withheld.
+     */
+    @Test fun `the no-access state and the genuine empty state never share a rendering`() = runTest {
+        val noAccess = viewModel(permissions = { false })
+        advanceUntilIdle()
+        assertTrue(noAccess.state.value.showNoAccessState, "the withheld-permission case must render its own text")
+        assertFalse(noAccess.state.value.showEmptyState, "must not also claim there is nothing scheduled")
+
+        val genuinelyEmpty = viewModel(home = { Result.success(summary(today = emptyList())) })
+        advanceUntilIdle()
+        assertTrue(genuinelyEmpty.state.value.showEmptyState)
+        assertFalse(genuinelyEmpty.state.value.showNoAccessState)
+
+        val hasDeliveries = viewModel(home = { Result.success(summary()) })
+        advanceUntilIdle()
+        assertFalse(hasDeliveries.state.value.showEmptyState)
+        assertFalse(hasDeliveries.state.value.showNoAccessState)
     }
 
     @Test fun `dashboard viewBasic alone is enough to see the tiles`() = runTest {
@@ -116,6 +140,8 @@ class HomeViewModelTest {
         assertFalse(vm.state.value.hasDashboardAccess)
         assertNull(vm.state.value.tiles)
         assertEquals(emptyList<TodayDelivery>(), vm.state.value.today)
+        assertTrue(vm.state.value.showNoAccessState, "renders the withheld-permission text, not the empty one")
+        assertFalse(vm.state.value.showEmptyState)
     }
 
     // ── field-for-field, not a same-typed neighbour ──────────────────────────────────

@@ -88,7 +88,9 @@ fun SignedInShell(
         navigationSuiteItems = {
             destinations.forEach { d ->
                 val target = d.key()
-                val selected = current == target || (d == Destination.ORDERS && current is OrderDetail)
+                val selected = current == target ||
+                    (d == Destination.ORDERS && current is OrderDetail) ||
+                    (d == Destination.CLIENTS && current is ClientDetail)
                 item(
                     selected = selected,
                     // Add first, then trim: clear-then-add would leave the stack momentarily

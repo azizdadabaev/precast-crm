@@ -1,8 +1,8 @@
 package uz.etalon.crm.feature.home
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,12 +23,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.AreaText
+import uz.etalon.crm.core.designsystem.components.ChipTone
 import uz.etalon.crm.core.designsystem.components.CountText
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
+import uz.etalon.crm.core.designsystem.components.toneColor
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.TodayDelivery
@@ -72,13 +74,16 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                s.tiles?.let { tiles -> item { HomeTilesRow(tiles) } }
+                s.tiles?.let { tiles -> item { HomeTilesSection(tiles) } }
                 val error = s.error
                 if (error != null) item { ErrorBanner(error, onRetry = onRefresh) }
                 item { SectionLabel(stringResource(R.string.home_today_section)) }
-                // Never beside an error banner and never while loading: an empty column there
-                // would read as "nothing scheduled" when the truth could be "couldn't check".
-                if (s.showEmptyState) item { EmptyState(stringResource(R.string.home_today_empty)) }
+                // "No orders today" and "cannot check today's orders" are different facts and
+                // must never share a string: an empty column beside a withheld permission reads
+                // as "nothing scheduled" when the truth is "not allowed to see". No error
+                // affordance either way — a driver cannot act on either state.
+                if (s.showNoAccessState) item { EmptyState(stringResource(R.string.home_today_no_access)) }
+                else if (s.showEmptyState) item { EmptyState(stringResource(R.string.home_today_empty)) }
                 items(s.today, key = { it.orderId }) { delivery ->
                     TodayDeliveryRow(delivery, onClick = { onOpenOrder(delivery.orderId) })
                 }
@@ -87,36 +92,39 @@ fun HomeScreen(
     }
 }
 
+/**
+ * Full-width, one per row — not a three-across grid. Three tiles side by side on a 411dp phone
+ * leave roughly 90dp of text each, which fits neither a real receivables figure
+ * (`formatMoney` on a nine-digit UZS total is fifteen characters) nor an area past four digits.
+ * Full width comfortably fits both at [EtalonType.monoTitle], and every card gets the same
+ * single-line label + single-line value shape, so the three no longer disagree on height the way
+ * a wrapped "БУГУНГИ ЕТКАЗИШЛАР" against an unwrapped "ҚАРЗДОРЛИК" did in three narrow columns.
+ */
 @Composable
-private fun HomeTilesRow(tiles: HomeTiles) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        HomeTile(
-            label = stringResource(R.string.home_tile_today),
-            modifier = Modifier.weight(1f),
-        ) {
+private fun HomeTilesSection(tiles: HomeTiles) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        HomeTile(label = stringResource(R.string.home_tile_today)) {
             AreaText(tiles.todayArea, style = EtalonType.monoTitle, color = MaterialTheme.colorScheme.onSurface)
             CountText(tiles.todayCount)
         }
-        HomeTile(
-            label = stringResource(R.string.home_tile_discrepancies),
-            modifier = Modifier.weight(1f),
-        ) {
+        HomeTile(label = stringResource(R.string.home_tile_discrepancies)) {
             MoneyText(tiles.openDiscrepancyTotal, style = EtalonType.monoTitle)
             CountText(tiles.openDiscrepancies)
         }
-        HomeTile(
-            label = stringResource(R.string.home_tile_receivables),
-            modifier = Modifier.weight(1f),
-        ) {
+        HomeTile(label = stringResource(R.string.home_tile_receivables)) {
             MoneyText(tiles.receivables, style = EtalonType.monoTitle, color = LocalEtalonColors.current.danger)
             CountText(tiles.receivableOrders)
         }
     }
 }
 
+// Neither this tile nor a today's-delivery row carries a real status — the spec's capacity-tier
+// stripe for the delivery row is not built yet — so both use the deliberate no-status colour
+// (ClientsScreen and ClientDetailScreen's own "not a status" cards) rather than colorScheme.primary,
+// which would imply a meaning neither card has.
 @Composable
-private fun HomeTile(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    StatusStripeCard(stripe = MaterialTheme.colorScheme.primary, modifier = modifier) {
+private fun HomeTile(label: String, content: @Composable () -> Unit) {
+    StatusStripeCard(stripe = toneColor(ChipTone.NEUTRAL)) {
         SectionLabel(label)
         content()
     }
@@ -124,7 +132,7 @@ private fun HomeTile(label: String, modifier: Modifier = Modifier, content: @Com
 
 @Composable
 private fun TodayDeliveryRow(delivery: TodayDelivery, onClick: () -> Unit) {
-    StatusStripeCard(stripe = MaterialTheme.colorScheme.primary, onClick = onClick) {
+    StatusStripeCard(stripe = toneColor(ChipTone.NEUTRAL), onClick = onClick) {
         Text(
             delivery.orderNumber, style = MaterialTheme.typography.titleMedium,
             maxLines = 1, overflow = TextOverflow.Ellipsis,

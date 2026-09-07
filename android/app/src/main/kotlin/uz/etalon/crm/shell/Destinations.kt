@@ -5,9 +5,9 @@ import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.nav.ComingSoon
 import uz.etalon.crm.nav.key
 
-/** Bottom-bar destinations. Only ORDERS, PAYMENTS and MORE have screens so far; the rest
- *  are declared so the bar is stable across slices and route to a "coming in the next
- *  release" notice via ComingSoonScreen until their feature module lands.
+/** Bottom-bar destinations. HOME, ORDERS, PAYMENTS and CLIENTS have screens; CALCULATOR, INBOX,
+ *  PRODUCTION and GAZOBLOK are declared so the bar is stable across slices and route to a
+ *  "coming in the next release" notice via ComingSoonScreen until their feature module lands.
  *  Declaration order is the priority order from spec §5.1. */
 enum class Destination(val labelRes: Int, val shortLabelRes: Int, val requires: String?) {
     HOME(R.string.nav_home, R.string.nav_home_short, null),

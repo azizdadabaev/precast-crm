@@ -35,6 +35,11 @@ class DashboardMappersTest {
         val s = dto.toDomain()
         assertEquals(1, s.today.size)
         assertEquals("o1", s.today.single().orderId)
+        // orderNumber and clientName are adjacent Strings on TodayDelivery — exactly the shape
+        // that swaps silently and would print the client's name in the order-number slot of
+        // every row on Home. Distinct fixture values make either swap fail here.
+        assertEquals("A-1", s.today.single().orderNumber)
+        assertEquals("Client", s.today.single().clientName)
         assertEquals(BigDecimal("20.3"), s.today.single().area)
         assertEquals(BigDecimal("45.7"), s.todayArea)
         assertEquals(11, s.openDiscrepancies)
