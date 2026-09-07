@@ -135,19 +135,16 @@ interface EtalonApi {
     @POST("/api/payments/{id}/reject")
     suspend fun rejectPayment(@Path("id") id: String, @Body body: PaymentRejectRequest): PaymentRowDto
 
-    @POST("/api/payments/{id}/handover")
-    suspend fun handoverPayment(@Path("id") id: String): PaymentRowDto
+    // POST /api/payments/{id}/handover is deliberately absent: the app has no office hand-over
+    // surface, and a declaration with no caller is dead code. The route is still there for the
+    // web, and this comes back the day a screen needs it.
+    //
+    // POST /api/payments/upload-receipt is absent for the same reason: a receipt always attaches
+    // to an existing payment through the route below, whose response the outbox can act on. The
+    // loose upload returns a bare URL that nothing on this client has anywhere to put.
 
     // Multipart uploads carry their own Authorization header — see the loadTruck/addLoadedPhoto/
     // deliveryProof/loadShipment comment above; the outbox drain pins the token explicitly.
-    @Multipart
-    @POST("/api/payments/upload-receipt")
-    suspend fun uploadReceipt(
-        @Part file: MultipartBody.Part,
-        @Header("Idempotency-Key") idempotencyKey: String,
-        @Header("Authorization") authorization: String,
-    ): ReceiptUrlDto
-
     @Multipart
     @POST("/api/payments/{id}/receipts")
     suspend fun addPaymentReceipt(

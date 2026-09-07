@@ -58,8 +58,6 @@ private open class StubApi : EtalonApi {
     override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = error("unused")
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = error("unused")
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = error("unused")
-    override suspend fun handoverPayment(id: String): PaymentRowDto = error("unused")
-    override suspend fun uploadReceipt(file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptUrlDto = error("unused")
     override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto = error("unused")
     override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = error("unused")
     override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = error("unused")

@@ -92,8 +92,6 @@ private class UnusedApi(
     override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = throw NotImplementedError("unused")
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = throw NotImplementedError("unused")
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = throw NotImplementedError("unused")
-    override suspend fun handoverPayment(id: String): PaymentRowDto = throw NotImplementedError("unused")
-    override suspend fun uploadReceipt(file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptUrlDto = throw NotImplementedError("unused")
     override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto = throw NotImplementedError("unused")
     override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = throw NotImplementedError("unused")
     override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = throw NotImplementedError("unused")

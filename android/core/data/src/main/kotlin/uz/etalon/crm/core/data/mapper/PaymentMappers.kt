@@ -13,9 +13,9 @@ import uz.etalon.crm.core.network.dto.PaymentRowDto
 import java.time.Instant
 
 /**
- * `order` is populated on the GET /api/payments list route but MISSING on the four mutation
- * responses (record/confirm/reject/handover return the bare Payment row with no `include`) — see
- * PaymentRowDto's doc. `queue`/`forOrder` only ever call this on the list route, so the fallback
+ * `order` is populated on the GET /api/payments list route but MISSING on the three mutation
+ * responses (record/confirm/reject return the bare Payment row with no `include`) — see
+ * PaymentRowDto's doc. `queue` only ever calls this on the list route, so the fallback
  * below is defensive, not exercised in practice.
  */
 fun PaymentRowDto.toDomain(mediaBase: String) = PaymentQueueItem(

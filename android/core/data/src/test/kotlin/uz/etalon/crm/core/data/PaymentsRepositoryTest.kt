@@ -64,8 +64,6 @@ private open class PayStubApi : EtalonApi {
     override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = error("unused")
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = error("unused")
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = error("unused")
-    override suspend fun handoverPayment(id: String): PaymentRowDto = error("unused")
-    override suspend fun uploadReceipt(file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptUrlDto = error("unused")
     override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto = error("unused")
     override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = error("unused")
     override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = error("unused")
@@ -82,7 +80,6 @@ private class PayRecordingApi : PayStubApi() {
     override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto { calls += "recordPayment:${body.orderId}:${body.receiptUrls}:$idempotencyKey"; return row }
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto { calls += "confirmPayment:$id"; return row }
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto { calls += "rejectPayment:$id:${body.reason}"; return row }
-    override suspend fun handoverPayment(id: String): PaymentRowDto { calls += "handoverPayment:$id"; return row }
     override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> { calls += "payments:$orderId:$status"; return listOf(row) }
 }
 
@@ -107,8 +104,9 @@ private fun preparedImage(): PreparedImage {
 class PaymentsRepositoryTest {
 
     /** The single most important test in this slice: an online-only payment write is not a
-     *  recoverable error to queue — a queued replay of `record`/`confirm`/`reject`/`handover` is
-     *  a duplicate payment, because none of those routes carry server-side idempotency. */
+     *  recoverable error to queue. `confirm` and `reject` carry no server-side idempotency at all,
+     *  and `record` — though now wrapped — is validated against a live cap another operator can
+     *  move, so a queued replay of any of them is a decision taken against stale figures. */
     @Test fun `every online-only payment method leaves the outbox untouched`() = runTest {
         val outbox = PaySpyOutbox()
         val api = PayRecordingApi() // succeeds, so every call below actually runs to completion
@@ -116,9 +114,7 @@ class PaymentsRepositoryTest {
         repo.record(input(), "idem-1").getOrThrow()
         repo.confirm("p1", null, null, null, null).getOrThrow()
         repo.reject("p1", "сабаб").getOrThrow()
-        repo.handover("p1").getOrThrow()
         repo.queue(null).getOrThrow()
-        repo.forOrder("o1").getOrThrow()
         assertTrue(outbox.calls.isEmpty(), "an online-only payment write must never be queued: ${outbox.calls}")
     }
 
@@ -159,18 +155,6 @@ class PaymentsRepositoryTest {
         assertEquals(0, api.calls.size, "neither confirm nor reject may reach the network: ${api.calls}")
     }
 
-    @Test fun `handover is gated on payment record, not payment confirm`() = runTest {
-        // The server route notes hand-over records custody, not approval, and uses the same
-        // permission as recording cash — see PaymentsRepository.handover's doc.
-        val deniedConfirm = PaymentsRepository(PayRecordingApi(), PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.confirm" }, mediaBase = "https://api.example")
-        assertTrue(deniedConfirm.handover("p1").isSuccess, "payment.confirm must not gate handover")
-
-        val recordingApi = PayRecordingApi() // a recording double, not FailingApi — see `recording without...`'s comment
-        val deniedRecord = PaymentsRepository(recordingApi, PaySpyOutbox(), PayNoopOrders(), PermissionGate { it != "payment.record" }, mediaBase = "https://api.example")
-        assertTrue(deniedRecord.handover("p1").isFailure, "payment.record must gate handover")
-        assertEquals(0, recordingApi.calls.size, "payment.record must refuse before the network: ${recordingApi.calls}")
-    }
-
     @Test fun `record returns the new payment id and sends receiptUrls empty`() = runTest {
         val api = PayRecordingApi()
         val orders = PayNoopOrders()
@@ -180,14 +164,13 @@ class PaymentsRepositoryTest {
         assertEquals(listOf("o1"), orders.refreshed) // PayRecordingApi's row.orderId is fixed at "o1"
     }
 
-    @Test fun `confirm reject and handover each refresh the order the response row names`() = runTest {
+    @Test fun `confirm and reject each refresh the order the response row names`() = runTest {
         val api = PayRecordingApi()
         val orders = PayNoopOrders()
         val repo = PaymentsRepository(api, PaySpyOutbox(), orders, PAY_GRANTED, mediaBase = "https://api.example")
         repo.confirm("p1", null, null, null, null).getOrThrow()
         repo.reject("p1", "сабаб").getOrThrow()
-        repo.handover("p1").getOrThrow()
-        assertEquals(listOf("o1", "o1", "o1"), orders.refreshed)
+        assertEquals(listOf("o1", "o1"), orders.refreshed)
     }
 
     @Test fun `an api failure comes back as a Result failure, not an exception`() = runTest {

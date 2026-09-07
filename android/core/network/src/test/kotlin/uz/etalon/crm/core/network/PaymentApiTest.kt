@@ -48,7 +48,7 @@ class PaymentApiTest {
             byteArrayOf(0xFF.toByte(), 0xD8.toByte()).toRequestBody("image/jpeg".toMediaType()),
         )
 
-    // The five mutation responses below (record/confirm/reject/handover/updateDiscrepancy) use the
+    // The four mutation responses below (record/confirm/reject/updateDiscrepancy) use the
     // bare Prisma row exactly as the server sends it — no "order" key at all, since none of those
     // routes `include` it. A fixture that fabricates an "order" object here would hide a decode
     // crash that happens for real after the money has already landed server-side.
@@ -89,16 +89,6 @@ class PaymentApiTest {
         assertEquals("key-123", rec.getHeader("Idempotency-Key"))
         assertEquals("Bearer tok", rec.getHeader("Authorization"))
         assertTrue(rec.getHeader("Content-Type")!!.startsWith("multipart/form-data"))
-    }
-
-    @Test fun `uploadReceipt also carries the pinned token and posts to the top-level route`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"url":"/uploads/receipts/x.jpg"}}"""))
-        val res = api.uploadReceipt(filePart(), "key-9", "Bearer pinned")
-        assertEquals("/uploads/receipts/x.jpg", res.url)
-        val rec = server.takeRequest()
-        assertEquals("/api/payments/upload-receipt", rec.path)
-        assertEquals("key-9", rec.getHeader("Idempotency-Key"))
-        assertEquals("Bearer pinned", rec.getHeader("Authorization"))
     }
 
     @Test fun `an ok-false body on a 200 is still a failure`() = runTest {
@@ -157,14 +147,6 @@ class PaymentApiTest {
         val rec = server.takeRequest()
         assertEquals("/api/payments/p1/reject", rec.path)
         assertTrue(rec.body.readUtf8().contains(""""reason":"noto'g'ri summa""""))
-    }
-
-    @Test fun `handoverPayment posts with no body to the handover path`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1.00","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
-        api.handoverPayment("p1")
-        val rec = server.takeRequest()
-        assertEquals("POST", rec.method)
-        assertEquals("/api/payments/p1/handover", rec.path)
     }
 
     @Test fun `discrepancies list is filtered by status and decodes money as strings`() = runTest {

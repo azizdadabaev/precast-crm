@@ -34,17 +34,14 @@ data class PaymentConfirmRequest(
 /** Body of POST /api/payments/{id}/reject (PaymentRejectSchema). */
 @Serializable data class PaymentRejectRequest(val reason: String)
 
-/** Response of POST /api/payments/upload-receipt. */
-@Serializable data class ReceiptUrlDto(val url: String)
-
 /**
- * Response of every payment endpoint: GET /api/payments (list, `include`-based) and the four
- * mutations — POST /api/payments, .../confirm, .../reject, .../handover — which return the bare
+ * Response of every payment endpoint: GET /api/payments (list, `include`-based) and the three
+ * mutations this client calls — POST /api/payments, .../confirm, .../reject — which return the bare
  * `Payment` row from `tx.payment.create`/`tx.payment.update` with NO `include` at all.
  * `amount`/`originalAmount` stay String here (server serializes Decimal as a JSON string);
  * converting to Money is the repository layer's job, not this module's.
  *
- * Every nested field below needs its `null` default chiefly because of the four *mutation*
+ * Every nested field below needs its `null` default chiefly because of the three *mutation*
  * responses: without an `include`, Prisma's returned row simply has no `collectedByDriver` /
  * `recordedBy` / `handedOverTo` / `confirmedBy` / `order` property at all, and JSON.stringify
  * drops an absent (`undefined`) key entirely — so these keys are MISSING on every mutation

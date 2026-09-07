@@ -16,8 +16,8 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
-/** Recording cash, marking a driver-collected payment handed over to the office, and attaching a
- *  receipt photo are all wrapped in this one permission server-side. */
+/** Recording cash and attaching a receipt photo are both wrapped in this one permission
+ *  server-side. */
 private const val PAYMENT_RECORD = "payment.record"
 
 /** Approving or rejecting a pending payment — the owner/admin side of the workflow
@@ -76,21 +76,12 @@ class PaymentsRepository @Inject constructor(
         mutate { api.rejectPayment(id, PaymentRejectRequest(reason)) }
     }
 
-    /**
-     * `payment.record`, not `payment.confirm`: the server route's own doc says hand-over records
-     * custody, not approval — "same operators who record cash also mark its arrival at the
-     * office", with the actual approval left to /confirm (payment.confirm).
-     */
-    suspend fun handover(id: String): Result<Unit> = runCatchingCancellable {
-        if (!permissions.can(PAYMENT_RECORD)) error("Топширишни қайд этишга рухсат йўқ")
-        mutate { api.handoverPayment(id) }
-    }
+    // There is deliberately no `handover`: the app has no office hand-over surface, and a method
+    // no screen calls is dead code. The route is still there for the web. Likewise no `forOrder`
+    // — the order cockpit reads its payments off the order detail it already holds.
 
     suspend fun queue(status: PaymentStatus?): Result<List<PaymentQueueItem>> =
         runCatchingCancellable { api.payments(orderId = null, status = status?.name).map { it.toDomain(mediaBase) } }
-
-    suspend fun forOrder(orderId: String): Result<List<PaymentQueueItem>> =
-        runCatchingCancellable { api.payments(orderId = orderId, status = null).map { it.toDomain(mediaBase) } }
 
     // ── Queued: the server route is withIdempotency-wrapped ───────
 
