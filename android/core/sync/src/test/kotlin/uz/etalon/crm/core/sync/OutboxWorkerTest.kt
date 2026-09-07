@@ -9,7 +9,6 @@ import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import kotlinx.coroutines.test.runTest
 import okhttp3.MultipartBody
-import okhttp3.RequestBody
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,55 +25,11 @@ import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.EtalonJson
 import uz.etalon.crm.core.network.TokenProvider
 import uz.etalon.crm.core.network.dto.*
+import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.io.File
-import kotlinx.serialization.json.JsonObject
 
-/** Every member errors by default, so a test only overrides the routes its row actually calls —
- *  mirrors :core:data's LogisticsRepositoryTest.StubApi (test source sets are not shared across
- *  Gradle modules, so this is its own copy, not a reuse). */
-private open class StubApi : EtalonApi {
-    override suspend fun login(body: LoginRequest): LoginResponse = error("unused")
-    override suspend fun me(): UserDto = error("unused")
-    override suspend fun bootstrap(): BootstrapDto = error("unused")
-    override suspend fun changePin(body: ChangePinRequest): ChangedDto = error("unused")
-    override suspend fun registerDevice(body: DeviceRegisterRequest): DeviceDto = error("unused")
-    override suspend fun unregisterDevice(token: String): DeletedDto = error("unused")
-    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto = error("unused")
-    override suspend fun order(id: String): OrderDetailDto = error("unused")
-
-    override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = error("unused")
-    override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): GalleryPhotoDto = error("unused")
-    override suspend fun deliveryProof(id: String, file: MultipartBody.Part, cashAmount: RequestBody, noCashCollected: RequestBody, noCashCollectedNote: RequestBody, driverReturned: RequestBody, idempotencyKey: String, authorization: String): OrderStatusDto = error("unused")
-    override suspend fun loadShipment(id: String, sid: String, file: MultipartBody.Part, loadedBeams: RequestBody, loadedBlocks: RequestBody, idempotencyKey: String, authorization: String): ShipmentDto = error("unused")
-
-    override suspend fun deleteLoadedPhoto(id: String, photoId: String): DeletedIdDto = error("unused")
-    override suspend fun createShipment(id: String): ShipmentDto = error("unused")
-    override suspend fun deleteShipment(id: String, sid: String): DeletedDto = error("unused")
-    override suspend fun dispatchShipment(id: String, sid: String, body: ShipmentDispatchRequest): DispatchedDto = error("unused")
-    override suspend fun deliverShipment(id: String, sid: String): DeliveredDto = error("unused")
-    override suspend fun createDispatch(id: String, body: DispatchCreateRequest): DispatchDto = error("unused")
-    override suspend fun markDispatchReturned(id: String): DispatchDto = error("unused")
-    override suspend fun setDeliveryLocation(id: String, body: JsonObject): DeliveryLocationDto = error("unused")
-    override suspend fun resolveMapLink(body: ResolveLinkRequest): LatLngDto = error("unused")
-    override suspend fun drivers(activeOnly: String?): List<DriverListItemDto> = error("unused")
-    override suspend fun createDriver(body: DriverCreateRequest): DriverListItemDto = error("unused")
-    override suspend fun updateDriver(id: String, body: DriverUpdateRequest): DriverListItemDto = error("unused")
-    override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = error("unused")
-
-    override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> = error("unused")
-    override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = error("unused")
-    override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = error("unused")
-    override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = error("unused")
-    override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto = error("unused")
-    override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = error("unused")
-    override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = error("unused")
-
-    override suspend fun clients(q: String?, phone: String?): List<ClientRowDto> = error("unused")
-    override suspend fun createClient(body: ClientWriteRequest): ClientRowDto = error("unused")
-    override suspend fun client(id: String): ClientDetailDto = error("unused")
-    override suspend fun updateClient(id: String, body: ClientWriteRequest): ClientRowDto = error("unused")
-    override suspend fun dashboard(): DashboardDto = error("unused")
-}
+/** Every member of [FakeEtalonApi] throws, so a test overrides only the routes its row calls. */
+private open class StubApi : FakeEtalonApi()
 
 private class RecordingOrders : OrdersGateway {
     val refreshed = mutableListOf<String>()

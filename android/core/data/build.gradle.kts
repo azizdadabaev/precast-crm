@@ -7,5 +7,8 @@ dependencies {
     // compile against EtalonDatabase (extends RoomDatabase) for SessionRepository's db.wipe().
     testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core); testImplementation(libs.room.testing)
     testImplementation(libs.datastore.preferences); testImplementation(libs.okhttp)
+    // FakeEtalonApi — the one EtalonApi double. Widening that interface used to break every
+    // hand-written copy in every module; now it costs one member in :core:testing.
+    testImplementation(project(":core:testing"))
     testRuntimeOnly(libs.junit.vintage.engine)
 }

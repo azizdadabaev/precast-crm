@@ -2,8 +2,6 @@ package uz.etalon.crm.core.data
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
-import okhttp3.MultipartBody
-import okhttp3.RequestBody
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.data.mapper.toDomain
@@ -14,8 +12,8 @@ import uz.etalon.crm.core.model.PaymentMethod
 import uz.etalon.crm.core.model.PaymentRecordInput
 import uz.etalon.crm.core.model.PaymentSource
 import uz.etalon.crm.core.model.PaymentStatus
-import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.*
+import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.io.File
 
 /** Records what was enqueued, so the queued-versus-online boundary is asserted rather than
@@ -31,49 +29,7 @@ private class PaySpyOutbox : OutboxGateway {
 /** Every member errors with IllegalStateException by default (Kotlin's `error(...)`), so
  *  PayFailingApi below needs no overrides at all. Mirrors LogisticsRepositoryTest's PayStubApi — that
  *  class is file-private, so this module needs its own copy. */
-private open class PayStubApi : EtalonApi {
-    override suspend fun login(body: LoginRequest): LoginResponse = error("unused")
-    override suspend fun me(): UserDto = error("unused")
-    override suspend fun bootstrap(): BootstrapDto = error("unused")
-    override suspend fun changePin(body: ChangePinRequest): ChangedDto = error("unused")
-    override suspend fun registerDevice(body: DeviceRegisterRequest): DeviceDto = error("unused")
-    override suspend fun unregisterDevice(token: String): DeletedDto = error("unused")
-    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto = error("unused")
-    override suspend fun order(id: String): OrderDetailDto = error("unused")
-
-    override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = error("unused")
-    override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): GalleryPhotoDto = error("unused")
-    override suspend fun deliveryProof(id: String, file: MultipartBody.Part, cashAmount: RequestBody, noCashCollected: RequestBody, noCashCollectedNote: RequestBody, driverReturned: RequestBody, idempotencyKey: String, authorization: String): OrderStatusDto = error("unused")
-    override suspend fun loadShipment(id: String, sid: String, file: MultipartBody.Part, loadedBeams: RequestBody, loadedBlocks: RequestBody, idempotencyKey: String, authorization: String): ShipmentDto = error("unused")
-
-    override suspend fun deleteLoadedPhoto(id: String, photoId: String): DeletedIdDto = error("unused")
-    override suspend fun createShipment(id: String): ShipmentDto = error("unused")
-    override suspend fun deleteShipment(id: String, sid: String): DeletedDto = error("unused")
-    override suspend fun dispatchShipment(id: String, sid: String, body: ShipmentDispatchRequest): DispatchedDto = error("unused")
-    override suspend fun deliverShipment(id: String, sid: String): DeliveredDto = error("unused")
-    override suspend fun createDispatch(id: String, body: DispatchCreateRequest): DispatchDto = error("unused")
-    override suspend fun markDispatchReturned(id: String): DispatchDto = error("unused")
-    override suspend fun setDeliveryLocation(id: String, body: JsonObject): DeliveryLocationDto = error("unused")
-    override suspend fun resolveMapLink(body: ResolveLinkRequest): LatLngDto = error("unused")
-    override suspend fun drivers(activeOnly: String?): List<DriverListItemDto> = error("unused")
-    override suspend fun createDriver(body: DriverCreateRequest): DriverListItemDto = error("unused")
-    override suspend fun updateDriver(id: String, body: DriverUpdateRequest): DriverListItemDto = error("unused")
-    override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = error("unused")
-
-    override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> = error("unused")
-    override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = error("unused")
-    override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = error("unused")
-    override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = error("unused")
-    override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto = error("unused")
-    override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = error("unused")
-    override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = error("unused")
-
-    override suspend fun clients(q: String?, phone: String?): List<ClientRowDto> = error("unused")
-    override suspend fun createClient(body: ClientWriteRequest): ClientRowDto = error("unused")
-    override suspend fun client(id: String): ClientDetailDto = error("unused")
-    override suspend fun updateClient(id: String, body: ClientWriteRequest): ClientRowDto = error("unused")
-    override suspend fun dashboard(): DashboardDto = error("unused")
-}
+private open class PayStubApi : FakeEtalonApi()
 
 /** Any direct call fails the test — proves an operation went through the outbox instead, or was
  *  refused before ever reaching the network. */

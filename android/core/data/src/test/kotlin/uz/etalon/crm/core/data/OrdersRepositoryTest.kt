@@ -11,9 +11,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import okhttp3.MultipartBody
-import okhttp3.RequestBody
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.database.dao.OrdersDao
@@ -23,8 +20,8 @@ import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.network.ApiException
-import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.*
+import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.io.IOException
 
 private class FakeDao : OrdersDao {
@@ -43,7 +40,7 @@ private class FakeDao : OrdersDao {
     override suspend fun clearAllDetails() { details.value = emptyMap() }
 }
 
-private open class FakeApi : EtalonApi {
+private open class FakeApi : FakeEtalonApi() {
     var page: OrdersPageDto = OrdersPageDto(emptyList(), 0, 1, 20, 0)
     var fail: Throwable? = null
 
@@ -51,44 +48,6 @@ private open class FakeApi : EtalonApi {
     var gate: CompletableDeferred<Unit>? = null
     override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto { gate?.await(); fail?.let { throw it }; return this.page }
     override suspend fun order(id: String): OrderDetailDto { fail?.let { throw it }; throw ApiException(404, "Топилмади · Not found") }
-    override suspend fun login(body: LoginRequest) = error("unused")
-    override suspend fun me() = error("unused")
-    override suspend fun bootstrap() = error("unused")
-    override suspend fun changePin(body: ChangePinRequest) = error("unused")
-    override suspend fun registerDevice(body: DeviceRegisterRequest) = error("unused")
-    override suspend fun unregisterDevice(token: String) = error("unused")
-
-    override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = throw NotImplementedError("unused")
-    override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): GalleryPhotoDto = throw NotImplementedError("unused")
-    override suspend fun deliveryProof(id: String, file: MultipartBody.Part, cashAmount: RequestBody, noCashCollected: RequestBody, noCashCollectedNote: RequestBody, driverReturned: RequestBody, idempotencyKey: String, authorization: String): OrderStatusDto = throw NotImplementedError("unused")
-    override suspend fun loadShipment(id: String, sid: String, file: MultipartBody.Part, loadedBeams: RequestBody, loadedBlocks: RequestBody, idempotencyKey: String, authorization: String): ShipmentDto = throw NotImplementedError("unused")
-    override suspend fun deleteLoadedPhoto(id: String, photoId: String): DeletedIdDto = throw NotImplementedError("unused")
-    override suspend fun createShipment(id: String): ShipmentDto = throw NotImplementedError("unused")
-    override suspend fun deleteShipment(id: String, sid: String): DeletedDto = throw NotImplementedError("unused")
-    override suspend fun dispatchShipment(id: String, sid: String, body: ShipmentDispatchRequest): DispatchedDto = throw NotImplementedError("unused")
-    override suspend fun deliverShipment(id: String, sid: String): DeliveredDto = throw NotImplementedError("unused")
-    override suspend fun createDispatch(id: String, body: DispatchCreateRequest): DispatchDto = throw NotImplementedError("unused")
-    override suspend fun markDispatchReturned(id: String): DispatchDto = throw NotImplementedError("unused")
-    override suspend fun setDeliveryLocation(id: String, body: JsonObject): DeliveryLocationDto = throw NotImplementedError("unused")
-    override suspend fun resolveMapLink(body: ResolveLinkRequest): LatLngDto = throw NotImplementedError("unused")
-    override suspend fun drivers(activeOnly: String?): List<DriverListItemDto> = throw NotImplementedError("unused")
-    override suspend fun createDriver(body: DriverCreateRequest): DriverListItemDto = throw NotImplementedError("unused")
-    override suspend fun updateDriver(id: String, body: DriverUpdateRequest): DriverListItemDto = throw NotImplementedError("unused")
-    override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = throw NotImplementedError("unused")
-
-    override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> = throw NotImplementedError("unused")
-    override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = throw NotImplementedError("unused")
-    override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = throw NotImplementedError("unused")
-    override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto = throw NotImplementedError("unused")
-    override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto = throw NotImplementedError("unused")
-    override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = throw NotImplementedError("unused")
-    override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = throw NotImplementedError("unused")
-
-    override suspend fun clients(q: String?, phone: String?): List<ClientRowDto> = throw NotImplementedError("unused")
-    override suspend fun createClient(body: ClientWriteRequest): ClientRowDto = throw NotImplementedError("unused")
-    override suspend fun client(id: String): ClientDetailDto = throw NotImplementedError("unused")
-    override suspend fun updateClient(id: String, body: ClientWriteRequest): ClientRowDto = throw NotImplementedError("unused")
-    override suspend fun dashboard(): DashboardDto = throw NotImplementedError("unused")
 }
 
 /** A DAO whose list-read is broken, to prove refreshList()'s failure path never depends on it. */

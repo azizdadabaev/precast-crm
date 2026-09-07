@@ -16,6 +16,8 @@ dependencies {
     // against a real in-memory Room database, the same way :core:data/:core:database test their
     // DAOs and repositories.
     testImplementation(libs.work.testing)
+    // FakeEtalonApi — see :core:data's own note.
+    testImplementation(project(":core:testing"))
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.room.testing)
