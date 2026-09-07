@@ -3,7 +3,6 @@ package uz.etalon.crm.feature.orders.list
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -11,10 +10,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.components.*
 import uz.etalon.crm.core.designsystem.theme.EtalonType
@@ -22,7 +24,6 @@ import uz.etalon.crm.core.model.OrderSummary
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.core.ui.format.formatScheduleDate
-import uz.etalon.crm.feature.orders.R
 import java.time.Instant
 
 /**
@@ -46,7 +47,6 @@ private fun dial(ctx: Context, phone: String) {
 @Composable
 fun OrderCard(o: OrderSummary, now: Instant = Instant.now(), onClick: () -> Unit) {
     val ctx = LocalContext.current
-    val callLabel = stringResource(R.string.action_call)
     StatusStripeCard(stripe = toneColor(orderStatusTone(o.status)), onClick = onClick) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(o.orderNumber, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
@@ -57,24 +57,26 @@ fun OrderCard(o: OrderSummary, now: Instant = Instant.now(), onClick: () -> Unit
             Text(formatScheduleDate(o.scheduledAt, now), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             MoneyText(o.totalPrice, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold))
         }
+        Spacer(Modifier.height(4.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // The name yields and the phone does not: the phone is a tap target, and a
-            // half-shown number is a number you cannot trust before dialling it.
-            Text(o.client.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                formatPhone(o.client.phone),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                modifier = Modifier
-                    // Nested inside the card's own click: this consumes the tap, so the
-                    // phone dials and does not also open the order. The padding is the
-                    // touch target — 12.dp of it carries a 20.dp line to ~44.dp.
-                    .clickable(onClickLabel = callLabel, role = Role.Button) { dial(ctx, o.client.phone) }
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-            )
+            // One line, exactly as it reads without the link: only the number is annotated,
+            // so the name and phone still flow together and truncate together. The link
+            // consumes its own taps, so the number dials and the rest of the card opens
+            // the order.
+            val line = buildAnnotatedString {
+                append(o.client.name)
+                append(" · ")
+                withLink(
+                    LinkAnnotation.Clickable(
+                        tag = "phone",
+                        styles = TextLinkStyles(SpanStyle(color = MaterialTheme.colorScheme.primary)),
+                    ) { dial(ctx, o.client.phone) },
+                ) { append(formatPhone(o.client.phone)) }
+            }
+            Text(line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             AreaText(o.totalArea)
         }
+        Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(formatAddressLine(o.client.address).orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             PaymentChip(o.paymentState)
