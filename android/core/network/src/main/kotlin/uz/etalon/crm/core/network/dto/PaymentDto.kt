@@ -38,16 +38,22 @@ data class PaymentConfirmRequest(
 @Serializable data class ReceiptUrlDto(val url: String)
 
 /**
- * Response of GET /api/payments (and every payment mutation) — the confirmer's chain-of-custody
- * view. `amount`/`originalAmount` stay String here (server serializes Decimal as a JSON string);
+ * Response of every payment endpoint: GET /api/payments (list, `include`-based) and the four
+ * mutations — POST /api/payments, .../confirm, .../reject, .../handover — which return the bare
+ * `Payment` row from `tx.payment.create`/`tx.payment.update` with NO `include` at all.
+ * `amount`/`originalAmount` stay String here (server serializes Decimal as a JSON string);
  * converting to Money is the repository layer's job, not this module's.
  *
- * The route builds this with Prisma `include`, so `collectedByDriver`, `recordedBy`,
- * `handedOverTo` and `confirmedBy` are simply ABSENT on rows that never had them — not null —
- * which is exactly why each one needs a default here, not just nullability.
+ * Every nested field below needs its `null` default chiefly because of the four *mutation*
+ * responses: without an `include`, Prisma's returned row simply has no `collectedByDriver` /
+ * `recordedBy` / `handedOverTo` / `confirmedBy` / `order` property at all, and JSON.stringify
+ * drops an absent (`undefined`) key entirely — so these keys are MISSING on every mutation
+ * response, not present-as-null. (On the `include`-based list route they usually are present,
+ * and a genuinely empty to-one relation there is an explicit JSON `null`, not a missing key —
+ * but the decoder needs to tolerate both a missing key and a JSON null either way.)
  */
 @Serializable
-data class PaymentDto(
+data class PaymentRowDto(
     val id: String,
     val orderId: String,
     val amount: String,
@@ -62,13 +68,11 @@ data class PaymentDto(
     val handedOverTo: NameDto? = null,
     val confirmedBy: NameDto? = null,
     val receipts: List<ReceiptDto> = emptyList(),
-    val order: PaymentOrderRefDto,
+    val order: PaymentOrderRefDto? = null,
 )
 
 @Serializable data class PaymentOrderClientRefDto(val name: String)
 
-/** Dispatch is absent (not null) on an order that was never dispatched — same reasoning as the
- *  four actor fields above. */
 @Serializable data class PaymentOrderDispatchRefDto(val expectedCollection: String)
 
 @Serializable
@@ -77,7 +81,3 @@ data class PaymentOrderRefDto(
     val client: PaymentOrderClientRefDto,
     val dispatch: PaymentOrderDispatchRefDto? = null,
 )
-
-// ── Discrepancies ───────────────────────────────────────────────
-/** Body of PATCH /api/discrepancies/{id} (DiscrepancyUpdateSchema). */
-@Serializable data class DiscrepancyUpdateRequest(val status: String, val resolutionNote: String)

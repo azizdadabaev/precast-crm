@@ -118,37 +118,37 @@ interface EtalonApi {
     // ── Payments & discrepancies ─────────────────────────────────
 
     @GET("/api/payments")
-    suspend fun payments(@Query("orderId") orderId: String? = null, @Query("status") status: String? = null): List<PaymentDto>
+    suspend fun payments(@Query("orderId") orderId: String? = null, @Query("status") status: String? = null): List<PaymentRowDto>
 
     @POST("/api/payments")
-    suspend fun recordPayment(@Body body: PaymentRecordRequest): PaymentDto
+    suspend fun recordPayment(@Body body: PaymentRecordRequest): PaymentRowDto
 
     @POST("/api/payments/{id}/confirm")
-    suspend fun confirmPayment(@Path("id") id: String, @Body body: PaymentConfirmRequest): PaymentDto
+    suspend fun confirmPayment(@Path("id") id: String, @Body body: PaymentConfirmRequest): PaymentRowDto
 
     @POST("/api/payments/{id}/reject")
-    suspend fun rejectPayment(@Path("id") id: String, @Body body: PaymentRejectRequest): PaymentDto
+    suspend fun rejectPayment(@Path("id") id: String, @Body body: PaymentRejectRequest): PaymentRowDto
 
     @POST("/api/payments/{id}/handover")
-    suspend fun handoverPayment(@Path("id") id: String): PaymentDto
+    suspend fun handoverPayment(@Path("id") id: String): PaymentRowDto
 
     // Multipart uploads carry their own Authorization header — see the loadTruck/addLoadedPhoto/
     // deliveryProof/loadShipment comment above; the outbox drain pins the token explicitly.
     @Multipart
     @POST("/api/payments/upload-receipt")
     suspend fun uploadReceipt(
+        @Part file: MultipartBody.Part,
         @Header("Idempotency-Key") idempotencyKey: String,
         @Header("Authorization") authorization: String,
-        @Part file: MultipartBody.Part,
     ): ReceiptUrlDto
 
     @Multipart
     @POST("/api/payments/{id}/receipts")
     suspend fun addPaymentReceipt(
         @Path("id") id: String,
+        @Part file: MultipartBody.Part,
         @Header("Idempotency-Key") idempotencyKey: String,
         @Header("Authorization") authorization: String,
-        @Part file: MultipartBody.Part,
     ): ReceiptDto
 
     @GET("/api/discrepancies")

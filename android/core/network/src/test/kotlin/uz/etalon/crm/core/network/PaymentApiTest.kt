@@ -48,22 +48,28 @@ class PaymentApiTest {
             byteArrayOf(0xFF.toByte(), 0xD8.toByte()).toRequestBody("image/jpeg".toMediaType()),
         )
 
+    // The five mutation responses below (record/confirm/reject/handover/updateDiscrepancy) use the
+    // bare Prisma row exactly as the server sends it — no "order" key at all, since none of those
+    // routes `include` it. A fixture that fabricates an "order" object here would hide a decode
+    // crash that happens for real after the money has already landed server-side.
+
     @Test fun `recording a payment sends the amount as a bare exact decimal`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1234.56","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z","order":{"orderNumber":"B-2026-09-0001","client":{"name":"Азизов Б."}}}}"""))
-        api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("1234.56"), method = "CASH", source = "IN_OFFICE_CASH"))
+        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1234.56","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
+        val res = api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("1234.56"), method = "CASH", source = "IN_OFFICE_CASH"))
+        assertNull(res.order) // the bare row has no order key — must decode, not throw
         val sent = server.takeRequest().body.readUtf8()
         assertTrue(sent.contains("\"amount\":1234.56"), sent) // bare, unquoted, exact
         assertFalse(sent.contains("\"amount\":\"1234.56\""), sent)
     }
 
     @Test fun `a very large amount is not rendered in scientific notation`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"0","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-07T10:00:00.000Z","order":{"orderNumber":"B-2026-09-0001","client":{"name":"Азизов Б."}}}}"""))
+        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"0","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
         api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("999999999999.99"), method = "CASH", source = "IN_OFFICE_CASH"))
         assertTrue(server.takeRequest().body.readUtf8().contains("\"amount\":999999999999.99"))
     }
 
     @Test fun `recordPayment sends every optional field, including a null-safe default source`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"500.00","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z","order":{"orderNumber":"B-2026-09-0001","client":{"name":"Азизов Б."}}}}"""))
+        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"500.00","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
         api.recordPayment(PaymentRecordRequest(orderId = "o1", amount = BigDecimal("500.00"), method = "CASH", source = "FROM_DRIVER_AT_DELIVERY", collectedByDriverId = "d1", notes = "изоҳ"))
         val sent = server.takeRequest().body.readUtf8()
         assertTrue(sent.contains(""""source":"FROM_DRIVER_AT_DELIVERY""""), sent)
@@ -73,7 +79,7 @@ class PaymentApiTest {
 
     @Test fun `a receipt upload carries the caller's pinned token and its idempotency key`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"id":"r1","imageUrl":"/uploads/receipts/x.jpg"}}"""))
-        api.addPaymentReceipt("p1", "key-123", "Bearer tok", filePart())
+        api.addPaymentReceipt("p1", filePart(), "key-123", "Bearer tok")
         val rec = server.takeRequest()
         assertEquals("/api/payments/p1/receipts", rec.path)
         assertEquals("key-123", rec.getHeader("Idempotency-Key"))
@@ -83,7 +89,7 @@ class PaymentApiTest {
 
     @Test fun `uploadReceipt also carries the pinned token and posts to the top-level route`() = runTest {
         server.enqueue(ok("""{"ok":true,"data":{"url":"/uploads/receipts/x.jpg"}}"""))
-        val res = api.uploadReceipt("key-9", "Bearer pinned", filePart())
+        val res = api.uploadReceipt(filePart(), "key-9", "Bearer pinned")
         assertEquals("/uploads/receipts/x.jpg", res.url)
         val rec = server.takeRequest()
         assertEquals("/api/payments/upload-receipt", rec.path)
@@ -103,25 +109,28 @@ class PaymentApiTest {
         assertEquals("/api/payments?orderId=o1&status=PENDING_CONFIRMATION", server.takeRequest().path)
     }
 
-    @Test fun `payments list decodes chain-of-custody rows whose actors and dispatch were never set`() = runTest {
-        // No collectedByDriver/recordedBy/handedOverTo/confirmedBy and no order.dispatch key at
-        // all — the route's Prisma include leaves them absent, not null, on rows without them.
-        server.enqueue(ok("""{"ok":true,"data":[{"id":"p1","orderId":"o1","amount":"60.00","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-02T00:00:00.000Z","order":{"orderNumber":"B-2026-09-0001","client":{"name":"А"}}}]}"""))
+    @Test fun `payments list decodes chain-of-custody rows whose actors were never set`() = runTest {
+        // The list route IS include-based and does send order — a genuinely empty to-one
+        // relation (no collectedByDriver/recordedBy/handedOverTo/confirmedBy, no dispatch) comes
+        // back as an explicit JSON null there, not a missing key; the decoder must tolerate both
+        // that and the mutation responses' missing key the same way.
+        server.enqueue(ok("""{"ok":true,"data":[{"id":"p1","orderId":"o1","amount":"60.00","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-02T00:00:00.000Z","collectedByDriver":null,"recordedBy":null,"handedOverTo":null,"confirmedBy":null,"order":{"orderNumber":"B-2026-09-0001","client":{"name":"А"},"dispatch":null}}]}"""))
         val list = api.payments()
         val p = list.single()
         assertNull(p.collectedByDriver)
         assertNull(p.recordedBy)
         assertNull(p.handedOverTo)
         assertNull(p.confirmedBy)
-        assertNull(p.order.dispatch)
+        assertNull(p.order?.dispatch)
         assertEquals("60.00", p.amount)
         assertTrue(p.receipts.isEmpty())
     }
 
     @Test fun `confirmPayment posts the adjustment and discrepancy fields as bare json`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"450000.00","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-07T10:00:00.000Z","order":{"orderNumber":"B-2026-09-0001","client":{"name":"А"}}}}"""))
+        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"450000.00","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
         val res = api.confirmPayment("p1", PaymentConfirmRequest(amount = BigDecimal("450000.00"), adjustmentNote = "recount", discrepancyAction = "TRACK", discrepancyNote = "short by 50000"))
         assertEquals("CONFIRMED", res.status)
+        assertNull(res.order)
         val rec = server.takeRequest()
         assertEquals("/api/payments/p1/confirm", rec.path)
         val sent = rec.body.readUtf8()
@@ -130,14 +139,14 @@ class PaymentApiTest {
     }
 
     @Test fun `confirmPayment with no adjustment sends an empty-ish body without amount`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1.00","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-07T10:00:00.000Z","order":{"orderNumber":"B-2026-09-0001","client":{"name":"А"}}}}"""))
+        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1.00","method":"CASH","status":"CONFIRMED","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
         api.confirmPayment("p1", PaymentConfirmRequest())
         val sent = server.takeRequest().body.readUtf8()
         assertFalse(sent.contains("\"amount\""), sent) // explicitNulls = false drops the unset amount
     }
 
     @Test fun `rejectPayment posts the reason and reads back the rejection`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1.00","method":"CASH","status":"REJECTED","recordedAt":"2026-09-07T10:00:00.000Z","rejectionReason":"noto'g'ri summa","order":{"orderNumber":"B-2026-09-0001","client":{"name":"А"}}}}"""))
+        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1.00","method":"CASH","status":"REJECTED","recordedAt":"2026-09-07T10:00:00.000Z","rejectionReason":"noto'g'ri summa"}}"""))
         val res = api.rejectPayment("p1", PaymentRejectRequest("noto'g'ri summa"))
         assertEquals("REJECTED", res.status)
         assertEquals("noto'g'ri summa", res.rejectionReason)
@@ -147,7 +156,7 @@ class PaymentApiTest {
     }
 
     @Test fun `handoverPayment posts with no body to the handover path`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1.00","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z","order":{"orderNumber":"B-2026-09-0001","client":{"name":"А"}}}}"""))
+        server.enqueue(ok("""{"ok":true,"data":{"id":"p1","orderId":"o1","amount":"1.00","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-07T10:00:00.000Z"}}"""))
         api.handoverPayment("p1")
         val rec = server.takeRequest()
         assertEquals("POST", rec.method)
@@ -164,10 +173,11 @@ class PaymentApiTest {
         assertNull(d.resolvedBy)
     }
 
-    @Test fun `updateDiscrepancy patches the status and resolution note`() = runTest {
-        server.enqueue(ok("""{"ok":true,"data":{"id":"d1","orderId":"o1","expectedAmount":"500000.00","receivedAmount":"450000.00","shortfall":"50000.00","status":"RESOLVED_RECOVERED","reportedAt":"2026-09-07T10:00:00.000Z","resolutionNote":"customer paid the rest","order":{"orderNumber":"B-2026-09-0001","totalPrice":"1000000.00","confirmedPaid":"500000.00","paymentState":"FULLY_PAID","client":{"id":"c1","name":"А","phone":"998901112233"}}}}"""))
+    @Test fun `updateDiscrepancy patches the status and decodes the bare row it actually gets back`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":{"id":"d1","orderId":"o1","expectedAmount":"500000.00","receivedAmount":"450000.00","shortfall":"50000.00","status":"RESOLVED_RECOVERED","reportedAt":"2026-09-07T10:00:00.000Z","resolutionNote":"customer paid the rest"}}"""))
         val res = api.updateDiscrepancy("d1", DiscrepancyUpdateRequest(status = "RESOLVED_RECOVERED", resolutionNote = "customer paid the rest"))
         assertEquals("RESOLVED_RECOVERED", res.status)
+        assertNull(res.order) // PATCH returns the bare tx.discrepancy.update row — no include
         val rec = server.takeRequest()
         assertEquals("PATCH", rec.method)
         assertEquals("/api/discrepancies/d1", rec.path)
