@@ -5,6 +5,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 /** House number format (spec §6.5): space thousands, comma decimal, unit suffix.
  *  Device ICU is deliberately not used — the server does the same. */
@@ -51,4 +52,39 @@ fun formatDate(t: Instant): String {
 fun formatDateTime(t: Instant): String {
     val z = t.atZone(TASHKENT)
     return "${formatDate(t)}, ${"%02d".format(z.hour)}:${"%02d".format(z.minute)}"
+}
+
+/**
+ * A scheduled date as it is read in a list sorted by `scheduledAt`: the operator's
+ * question is how soon, not which calendar day. Inside a week the answer is relative;
+ * beyond it the date is absolute, carrying the year only when it is not the current
+ * one — every row already repeats the year in its order number.
+ */
+fun formatScheduleDate(t: Instant, now: Instant = Instant.now()): String {
+    val day = t.atZone(TASHKENT).toLocalDate()
+    val today = now.atZone(TASHKENT).toLocalDate()
+    val delta = ChronoUnit.DAYS.between(today, day)
+    val dayMonth = "${day.dayOfMonth} ${UZ_MONTHS_SHORT[day.monthValue - 1]}"
+    return when {
+        delta == 0L -> "бугун"
+        delta == 1L -> "эртага"
+        delta == -1L -> "кеча"
+        delta in 2L..7L -> "$delta кундан кейин"
+        delta in -7L..-2L -> "${-delta} кун олдин"
+        day.year == today.year -> dayMonth
+        else -> "$dayMonth ${day.year}"
+    }
+}
+
+/**
+ * A client address for a single-line row. The web widget stores it as
+ * `"<Viloyat>, <Tuman>, <street>"` (src/lib/regions/index.ts), so joining the parts
+ * with the card's own "·" separator leaves the street last — when the row runs out of
+ * width it is the street that truncates and the province and district survive, which
+ * is what a delivery operator is actually scanning for. Addresses written before that
+ * widget existed carry no comma and pass through unchanged.
+ */
+fun formatAddressLine(raw: String?): String? {
+    val parts = raw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+    return if (parts.isEmpty()) null else parts.joinToString(" · ")
 }

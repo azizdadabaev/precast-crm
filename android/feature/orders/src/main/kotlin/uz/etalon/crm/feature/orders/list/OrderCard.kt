@@ -12,14 +12,26 @@ import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.components.*
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.OrderSummary
-import uz.etalon.crm.core.ui.format.formatDate
+import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatPhone
+import uz.etalon.crm.core.ui.format.formatScheduleDate
+import java.time.Instant
 
+/**
+ * The scheduled date sits on the order-number row rather than beside the address,
+ * so the whole of the last row's free width belongs to the address. Sharing that row
+ * meant the address — the longest and most variable field on the card — was left with
+ * whatever the two chips did not take, and the canonical "<Viloyat>, <Tuman>, <street>"
+ * form is far longer than that.
+ *
+ * [now] is a parameter so a screenshot baseline is not hostage to the day it is recorded.
+ */
 @Composable
-fun OrderCard(o: OrderSummary, onClick: () -> Unit) {
+fun OrderCard(o: OrderSummary, now: Instant = Instant.now(), onClick: () -> Unit) {
     StatusStripeCard(stripe = toneColor(orderStatusTone(o.status)), onClick = onClick) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(o.orderNumber, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(o.orderNumber, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold), color = MaterialTheme.colorScheme.primary)
+            Text(formatScheduleDate(o.scheduledAt, now), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             MoneyText(o.totalPrice, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold))
         }
         Spacer(Modifier.height(4.dp))
@@ -29,7 +41,7 @@ fun OrderCard(o: OrderSummary, onClick: () -> Unit) {
         }
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(formatDate(o.scheduledAt) + (o.client.address?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(formatAddressLine(o.client.address).orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             PaymentChip(o.paymentState)
             StatusChip(o.status)
         }

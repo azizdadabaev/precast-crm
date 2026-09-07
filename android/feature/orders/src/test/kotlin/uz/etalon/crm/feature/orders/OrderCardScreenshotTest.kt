@@ -25,16 +25,22 @@ import java.time.Instant
 class OrderCardScreenshotTest {
     @get:Rule val rule = createComposeRule()
 
+    // A canonical "<Viloyat>, <Tuman>, <street>" address — the long shape the card has to
+    // survive, not the short legacy one.
     private val o = OrderSummary(
         "o1", "2026-09-0041", OrderStatus.LOADED, PaymentState.PARTIALLY_PAID,
         Money.parse("12400000.00"), Money.parse("6000000.00"),
         BigDecimal("86.400"), 210, 10,
         Instant.parse("2026-09-04T00:00:00Z"), Instant.parse("2026-09-01T00:00:00Z"),
-        ClientRef("c", "Азизов Бахтиёр Рустамович", "998901112233", "Тошкент, Яшнобод"),
+        ClientRef("c", "Азизов Бахтиёр Рустамович", "998901112233", "Андижон вилояти, Балиқчи тумани, Бобур кўчаси 14"),
     )
 
+    // Fixed, so the baseline does not change meaning with the day it is recorded on.
+    // Two days before the order's scheduled date, i.e. the card renders "2 кундан кейин".
+    private val now = Instant.parse("2026-09-02T00:00:00Z")
+
     private fun shoot(name: String, dark: Boolean) {
-        rule.setContent { EtalonTheme(darkTheme = dark) { OrderCard(o) {} } }
+        rule.setContent { EtalonTheme(darkTheme = dark) { OrderCard(o, now) {} } }
         rule.onRoot().captureRoboImage("screenshots/order_card_$name.png")
     }
 
