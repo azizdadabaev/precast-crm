@@ -1,4 +1,4 @@
-package uz.etalon.crm.feature.logistics.drivers
+package uz.etalon.crm.core.designsystem.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -18,14 +18,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import uz.etalon.crm.core.designsystem.R
 import uz.etalon.crm.core.model.Driver
-import uz.etalon.crm.feature.logistics.R
 
 /**
- * Both dispatch endpoints accept a null driverId, so "no driver" is a first-class row here,
- * not an absence of selection. Owns its ModalBottomSheet exactly like NumericKeypadSheet does —
- * the caller shows/hides it with an `if (showPicker)` around the call site, and dismissing
- * without tapping a row (back gesture, tap outside) re-confirms whatever was already selected.
+ * "No driver" is a first-class row here, not an absence of selection: both dispatch endpoints
+ * accept a null driverId outright, and on the record-payment sheet it is the unset state the
+ * form's own validation then refuses for a driver-collected payment. Owns its ModalBottomSheet
+ * exactly like NumericKeypadSheet does — the caller shows/hides it with an `if (showPicker)`
+ * around the call site, and dismissing without tapping a row (back gesture, tap outside)
+ * re-confirms whatever was already selected.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -1,5 +1,6 @@
 package uz.etalon.crm.feature.payments.record
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.assisted.Assisted
@@ -47,6 +48,10 @@ private const val MAX_NOTES = 500
 /** MAX_BACKDATE_DAYS in src/lib/payment-attribution.ts — a date older than this is far likelier
  *  a typo than a real backdate, and the server refuses it with a 422. */
 internal const val MAX_BACKDATE_DAYS = 120L
+
+/** The two facts that must survive process death — see [RecordPaymentViewModel]'s state seed. */
+private const val KEY_PAYMENT_ID = "record.paymentId"
+private const val KEY_AMOUNT_DIGITS = "record.amountDigits"
 
 /**
  * What the record-payment sheet holds.
@@ -164,13 +169,27 @@ open class RecordPaymentViewModel(
     drivers: PaymentDriversUseCase,
     permissions: PaymentPermissionsUseCase,
     today: LocalDate = LocalDate.now(TASHKENT),
+    private val saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
     private val recordPayment = record
     private val attachReceipt = attach
     private val listDrivers = drivers
     private val can = permissions
 
-    private val _state = MutableStateFlow(RecordPaymentUiState(today = today))
+    /**
+     * Seeded from [saved], not from defaults: after process death the fact that a payment row
+     * already exists is the one piece of state that cannot be re-derived, and losing it turns
+     * the operator's next tap into a SECOND payment against the order. The cap is only a partial
+     * defence — it does not stop a duplicate *partial* payment. The typed amount rides along so
+     * the figure is not lost with it.
+     */
+    private val _state = MutableStateFlow(
+        RecordPaymentUiState(
+            today = today,
+            amountDigits = saved.get<String>(KEY_AMOUNT_DIGITS).orEmpty(),
+            paymentId = saved.get<String>(KEY_PAYMENT_ID),
+        )
+    )
     val state: StateFlow<RecordPaymentUiState> = _state.asStateFlow()
 
     init {
@@ -182,8 +201,16 @@ open class RecordPaymentViewModel(
         refreshDrivers()
     }
 
-    /** Also the retry behind the load-error banner. Only active drivers: the server refuses an
-     *  inactive one with a 422. */
+    /**
+     * The retry behind the load-error banner. [RecordPaymentUiState.isOffline] can come from
+     * either fetch, so refreshing only the drivers would leave a form blocked by a failed ORDER
+     * fetch permanently blocked — the operator pressing a button that cannot clear the condition
+     * it is offered for. The Hilt subclass overrides this to refresh the order detail too; here,
+     * where there is no repository, the drivers are the only fetch there is.
+     */
+    open fun retryLoad() = refreshDrivers()
+
+    /** Only active drivers: the server refuses an inactive one with a 422. */
     fun refreshDrivers() {
         viewModelScope.launch {
             listDrivers().fold(
@@ -205,7 +232,11 @@ open class RecordPaymentViewModel(
         )
     }
 
-    fun setAmountDigits(v: String) = _state.update { it.copy(amountDigits = v, error = null) }
+    fun setAmountDigits(v: String) {
+        saved[KEY_AMOUNT_DIGITS] = v
+        _state.update { it.copy(amountDigits = v, error = null) }
+    }
+
     fun setMethod(v: PaymentMethod) = _state.update { it.copy(method = v, error = null) }
 
     /** Clears the two fields the new source makes illegal, exactly like DispatchViewModel's
@@ -279,6 +310,8 @@ open class RecordPaymentViewModel(
             }
             // From here the payment row EXISTS. Everything below only attaches receipts to it —
             // a retry must never run the record call again, or the order gets a second payment.
+            // Persisted before anything else can fail, so process death cannot lose the fact.
+            saved[KEY_PAYMENT_ID] = paymentId
             _state.update { it.copy(paymentId = paymentId) }
             attachReceipts(paymentId)
         }
@@ -309,23 +342,31 @@ open class RecordPaymentViewModel(
 
 @HiltViewModel(assistedFactory = HiltRecordPaymentViewModel.Factory::class)
 class HiltRecordPaymentViewModel @AssistedInject constructor(
-    orders: OrdersRepository,
+    private val orders: OrdersRepository,
     payments: PaymentsRepository,
     drivers: DriversRepository,
     permissions: PermissionGate,
     val imagePrep: ImagePrep,
-    @Assisted("orderId") orderId: String,
+    saved: SavedStateHandle,
+    @Assisted("orderId") private val orderId: String,
 ) : RecordPaymentViewModel(
     orderId = orderId,
     record = RecordPaymentUseCase { input -> payments.record(input) },
     attach = AttachReceiptUseCase { paymentId, photo -> payments.attachReceipt(paymentId, orderId, photo) },
     drivers = PaymentDriversUseCase { drivers.list(activeOnly = true) },
     permissions = PaymentPermissionsUseCase { action -> permissions.can(action) },
+    saved = saved,
 ) {
     init {
         viewModelScope.launch { orders.detail(orderId).collect { applyOrder(it) } }
         // The cached order is what the operator just came from, but the cap depends on what is
         // already in the owner's confirm queue — a figure another operator can have moved since.
+        viewModelScope.launch { orders.refreshDetail(orderId) }
+    }
+
+    /** Both fetches, because either one failing for lack of a network blocks the form. */
+    override fun retryLoad() {
+        super.retryLoad()
         viewModelScope.launch { orders.refreshDetail(orderId) }
     }
 

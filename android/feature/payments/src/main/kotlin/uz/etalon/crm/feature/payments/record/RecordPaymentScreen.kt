@@ -1,5 +1,6 @@
 package uz.etalon.crm.feature.payments.record
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.etalon.crm.core.designsystem.components.DriverPicker
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.Lightbox
 import uz.etalon.crm.core.designsystem.components.MoneyText
@@ -59,10 +61,10 @@ import uz.etalon.crm.core.model.PaymentSource
 import uz.etalon.crm.core.ui.format.formatDate
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.feature.capture.PhotoCapture
-import uz.etalon.crm.feature.logistics.drivers.DriverPicker
 import uz.etalon.crm.feature.payments.R
 import java.time.LocalDate
 import java.time.ZoneOffset
+import uz.etalon.crm.core.designsystem.R as DesignSystemR
 
 /**
  * `imagePrep` is not a parameter here, exactly like every logistics screen in Phase 1b: the route
@@ -93,7 +95,11 @@ fun RecordPaymentRoute(
 
     RecordPaymentScreen(
         s = s,
-        onCancel = onCancel,
+        // Leaving once the row exists is not a cancel: the payment is recorded either way, and
+        // the only thing still at stake is the receipts. The screen asks before calling this;
+        // routing it through `finishWithoutReceipts` means the caller is told the payment
+        // landed, instead of a plain back that reads as if nothing happened.
+        onLeave = if (s.paymentId != null) vm::finishWithoutReceipts else onCancel,
         onSetAmountDigits = vm::setAmountDigits,
         onSetMethod = vm::setMethod,
         onSetSource = vm::setSource,
@@ -105,7 +111,7 @@ fun RecordPaymentRoute(
         onRemoveReceipt = vm::removeReceipt,
         onSubmit = vm::submit,
         onFinishWithoutReceipts = vm::finishWithoutReceipts,
-        onRetryLoad = vm::refreshDrivers,
+        onRetryLoad = vm::retryLoad,
     )
 }
 
@@ -113,7 +119,7 @@ fun RecordPaymentRoute(
 @Composable
 fun RecordPaymentScreen(
     s: RecordPaymentUiState,
-    onCancel: () -> Unit,
+    onLeave: () -> Unit,
     onSetAmountDigits: (String) -> Unit,
     onSetMethod: (PaymentMethod) -> Unit,
     onSetSource: (PaymentSource) -> Unit,
@@ -132,6 +138,7 @@ fun RecordPaymentScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var lightboxAt by remember { mutableStateOf<Int?>(null) }
     var removeCandidate by remember { mutableStateOf<Int?>(null) }
+    var confirmLeave by remember { mutableStateOf(false) }
     val ext = LocalEtalonColors.current
     // A local file path is a Uri with no scheme, which Coil resolves as a file — the same
     // rendering path the queued photos on the order screen take once they have a server URL.
@@ -142,29 +149,45 @@ fun RecordPaymentScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.record_payment_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null) }
+                    // The arrow is reachable exactly when an error banner is showing, which is
+                    // when an operator is most likely to try again — so once the payment exists
+                    // it asks rather than silently dropping the captured receipts.
+                    IconButton(onClick = { if (s.paymentId != null) confirmLeave = true else onLeave() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
                 },
             )
         },
         bottomBar = {
-            StickyActionBar {
-                // Once the payment row exists the only thing left is the receipts, and the
-                // primary action changes meaning: it retries the upload, it never re-records.
-                if (s.paymentId != null) {
-                    SecondaryButton(
-                        stringResource(R.string.action_finish_without_receipts),
-                        onClick = onFinishWithoutReceipts,
-                        modifier = Modifier.weight(1f),
-                    )
-                    PrimaryButton(
-                        text = stringResource(R.string.action_retry_receipts), onClick = onSubmit,
-                        enabled = !s.submitting, loading = s.submitting, modifier = Modifier.weight(1f),
-                    )
-                } else {
-                    PrimaryButton(
-                        text = stringResource(R.string.action_record_payment), onClick = onSubmit,
-                        enabled = s.canSubmit, loading = s.submitting,
-                    )
+            // Which of the two outcomes this will be is decided by the recorder's own
+            // permissions server-side. It sits here, not at the foot of the scrolling column,
+            // because that is where it is off-screen at the one moment it matters: the tap.
+            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                Text(
+                    stringResource(if (s.canAutoConfirm) R.string.record_will_auto_confirm else R.string.record_will_be_pending),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (s.canAutoConfirm) ext.success else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                StickyActionBar {
+                    // Once the payment row exists the only thing left is the receipts, and the
+                    // primary action changes meaning: it retries the upload, it never re-records.
+                    if (s.paymentId != null) {
+                        SecondaryButton(
+                            stringResource(R.string.action_finish_without_receipts),
+                            onClick = onFinishWithoutReceipts,
+                            modifier = Modifier.weight(1f),
+                        )
+                        PrimaryButton(
+                            text = stringResource(R.string.action_retry_receipts), onClick = onSubmit,
+                            enabled = !s.submitting, loading = s.submitting, modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        PrimaryButton(
+                            text = stringResource(R.string.action_record_payment), onClick = onSubmit,
+                            enabled = s.canSubmit, loading = s.submitting,
+                        )
+                    }
                 }
             }
         },
@@ -174,7 +197,7 @@ fun RecordPaymentScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (s.isOffline) {
-                ErrorBanner(stringResource(R.string.offline_action_blocked), onRetry = onRetryLoad)
+                ErrorBanner(stringResource(R.string.payments_offline_blocked), onRetry = onRetryLoad)
             } else {
                 s.loadErrorMessage?.let { ErrorBanner(it, onRetry = onRetryLoad) }
             }
@@ -254,7 +277,7 @@ fun RecordPaymentScreen(
                     SectionLabel(stringResource(R.string.record_driver_label))
                     SecondaryButton(
                         text = s.drivers.find { it.id == s.driverId }?.name
-                            ?: stringResource(uz.etalon.crm.feature.logistics.R.string.driver_none),
+                            ?: stringResource(DesignSystemR.string.driver_none),
                         onClick = { showDriverPicker = true },
                         leading = Icons.Filled.Person,
                     )
@@ -301,14 +324,6 @@ fun RecordPaymentScreen(
                 )
             }
 
-            // Which of the two outcomes this will be is decided by the recorder's own
-            // permissions server-side; saying so up front is the only way the operator is not
-            // surprised by it afterwards.
-            Text(
-                stringResource(if (s.canAutoConfirm) R.string.record_will_auto_confirm else R.string.record_will_be_pending),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (s.canAutoConfirm) ext.success else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 
@@ -352,11 +367,11 @@ fun RecordPaymentScreen(
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { onSetPaidOn(LocalDate.ofEpochDay(it.floorDiv(MILLIS_PER_DAY))) }
                     showDatePicker = false
-                }) { Text(stringResource(R.string.action_confirm)) }
+                }) { Text(stringResource(R.string.record_paid_on_done)) }
             },
             dismissButton = {
                 TextButton(onClick = { onSetPaidOn(null); showDatePicker = false }) {
-                    Text(stringResource(R.string.action_use_today))
+                    Text(stringResource(R.string.record_paid_on_use_today))
                 }
             },
         ) { DatePicker(pickerState) }
@@ -373,7 +388,22 @@ fun RecordPaymentScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { removeCandidate = null }) { Text(stringResource(R.string.action_cancel)) }
+                TextButton(onClick = { removeCandidate = null }) { Text(stringResource(DesignSystemR.string.action_cancel)) }
+            },
+        )
+    }
+    if (confirmLeave) {
+        AlertDialog(
+            onDismissRequest = { confirmLeave = false },
+            title = { Text(stringResource(R.string.leave_recorded_title)) },
+            text = { Text(stringResource(R.string.leave_recorded_message)) },
+            confirmButton = {
+                TextButton(onClick = { confirmLeave = false; onLeave() }) {
+                    Text(stringResource(R.string.action_leave))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmLeave = false }) { Text(stringResource(DesignSystemR.string.action_cancel)) }
             },
         )
     }

@@ -29,7 +29,11 @@
 
     <string name="record_paid_on_label">Тўлов санаси</string>
     <string name="record_paid_on_today">Бугун</string>
-    <string name="action_use_today">Бугун деб қолдириш</string>
+    <string name="record_paid_on_use_today">Бугун деб қолдириш</string>
+    <!-- Module-scoped on purpose: `action_confirm` and `action_cancel` already belong to
+         :core:designsystem, and resources merge by NAME across every module in the APK — a
+         second definition here would silently relabel every confirm button in the app. -->
+    <string name="record_paid_on_done">Тайёр</string>
 
     <string name="record_notes_label">Изоҳ</string>
     <string name="record_receipts_label">Чеклар</string>
@@ -37,12 +41,17 @@
     <string name="remove_receipt_title">Чекни олиб ташлаш</string>
     <string name="remove_receipt_message">Бу расм тўловга бириктирилмайди.</string>
     <string name="action_remove">Олиб ташлаш</string>
-    <string name="action_cancel">Бекор қилиш</string>
-    <string name="action_confirm">Тайёр</string>
+
+    <string name="leave_recorded_title">Тўлов қайд этилди</string>
+    <string name="leave_recorded_message">Чиқсангиз, олинган чек расмлари тўловга бириктирилмайди.</string>
+    <string name="action_leave">Чиқиш</string>
 
     <string name="record_will_auto_confirm">Тўлов дарҳол тасдиқланади — сизда тасдиқлаш ҳуқуқи бор.</string>
     <string name="record_will_be_pending">Тўлов эга тасдиғини кутади.</string>
 
-    <string name="offline_action_blocked">Интернет йўқ — бу амал онлайн бажарилади</string>
+    <!-- Same sentence :feature:logistics shows, under a module-scoped name: this module no
+         longer depends on that one, and two identical definitions of one name would leave a
+         later reword in either module silently changing the other's banner. -->
+    <string name="payments_offline_blocked">Интернет йўқ — бу амал онлайн бажарилади</string>
     <string name="no_record_permission">Тўловни қайд этишга рухсат йўқ</string>
 </resources>

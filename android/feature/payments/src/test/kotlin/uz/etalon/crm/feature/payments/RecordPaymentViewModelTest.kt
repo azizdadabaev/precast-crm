@@ -1,5 +1,6 @@
 package uz.etalon.crm.feature.payments
 
+import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
@@ -114,6 +115,22 @@ class RecordPaymentViewModelTest {
             assertNotNull(message, "expected a refusal for $s")
             assertTrue(cyrillic.containsMatchIn(message!!), "not Uzbek Cyrillic: $message")
         }
+    }
+
+    /**
+     * The two quick chips are the fastest way to a wrong figure — one tap and the whole balance
+     * is entered — so both are pinned to the cap, and to the cap AFTER the pending queue is
+     * subtracted. Rounded DOWN, so "full" can never land a hair above what the server accepts.
+     */
+    @Test fun `the quick chips fill the recordable cap and half of it`() {
+        val s = form(total = "10000000", confirmed = "4000000", pending = listOf("1500001"), amount = "")
+        assertEquals(Money.parse("4499999"), s.cap)
+        assertEquals("4499999", s.fullAmountDigits)
+        assertEquals("2249999", s.halfAmountDigits)
+        // And what the chips produce is itself accepted — a chip that fills an invalid amount
+        // would be worse than no chip at all.
+        assertNull(validateRecord(s.copy(amountDigits = s.fullAmountDigits)))
+        assertNull(validateRecord(s.copy(amountDigits = s.halfAmountDigits)))
     }
 
     /** Mirrors DeliveryProofUiState.amount: read during composition, so it must never throw. */
@@ -299,6 +316,65 @@ class RecordPaymentViewModelTest {
         assertEquals("2026-09-05", sent.paidOn)
     }
 
+    /**
+     * Process death after the record lands is the one case where the cap is no defence: it does
+     * not stop a duplicate PARTIAL payment. The already-recorded id has to come back with the
+     * ViewModel, or the operator's next tap writes a second row against a real order.
+     */
+    @Test fun `a payment already recorded before process death is never recorded again`() = runTest {
+        var records = 0
+        var attached = 0
+        val restored = SavedStateHandle(mapOf("record.paymentId" to "pay-3", "record.amountDigits" to "800000"))
+        val vm = viewModel(
+            record = { records++; Result.success("pay-4") },
+            attach = { _, _ -> attached++; Result.success("outbox-1") },
+            saved = restored,
+        )
+        advanceUntilIdle()
+        assertEquals("pay-3", vm.state.value.paymentId)
+        assertEquals("800000", vm.state.value.amountDigits)
+
+        vm.applyOrder(Resource.Success(detail()))
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(0, records)
+        assertEquals(0, attached) // nothing left to attach: the photos did not survive either
+        assertTrue(vm.state.value.done)
+    }
+
+    @Test fun `the entered amount and the new payment id are both handed to saved state`() = runTest {
+        val saved = SavedStateHandle()
+        val vm = viewModel(record = { Result.success("pay-5") }, saved = saved)
+        advanceUntilIdle()
+        vm.applyOrder(Resource.Success(detail()))
+        vm.setAmountDigits("650000")
+        assertEquals("650000", saved.get<String>("record.amountDigits"))
+
+        vm.submit()
+        advanceUntilIdle()
+        assertEquals("pay-5", saved.get<String>("record.paymentId"))
+    }
+
+    /** The retry must be able to clear the very condition it is offered for. In the base
+     *  ViewModel the drivers are the only fetch; the Hilt subclass overrides it to refresh the
+     *  order detail too, which is the case that was permanently stuck. */
+    @Test fun `retrying the load re-fetches and can clear an offline drivers failure`() = runTest {
+        var attempts = 0
+        val vm = viewModel(drivers = {
+            attempts++
+            if (attempts == 1) Result.failure(java.io.IOException("no net")) else Result.success(emptyList())
+        })
+        advanceUntilIdle()
+        assertTrue(vm.state.value.isOffline)
+
+        vm.retryLoad()
+        advanceUntilIdle()
+        assertEquals(2, attempts)
+        assertFalse(vm.state.value.isOffline)
+        assertNull(vm.state.value.loadErrorMessage)
+    }
+
     @Test fun `the active drivers are loaded for the picker`() = runTest {
         val vm = viewModel(drivers = { Result.success(listOf(driver("d1", "Аброр"))) })
         advanceUntilIdle()
@@ -316,6 +392,7 @@ class RecordPaymentViewModelTest {
         attach: suspend (String, PreparedImage) -> Result<String> = { _, _ -> Result.success("outbox-1") },
         drivers: suspend () -> Result<List<Driver>> = { Result.success(emptyList()) },
         permissions: suspend (String) -> Boolean = { true },
+        saved: SavedStateHandle = SavedStateHandle(),
     ) = RecordPaymentViewModel(
         orderId = "o1",
         record = RecordPaymentUseCase { record(it) },
@@ -323,6 +400,7 @@ class RecordPaymentViewModelTest {
         drivers = PaymentDriversUseCase { drivers() },
         permissions = PaymentPermissionsUseCase { permissions(it) },
         today = today,
+        saved = saved,
     )
 
     private fun form(

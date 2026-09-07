@@ -33,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.etalon.crm.core.designsystem.components.DriverPicker
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
@@ -41,7 +42,7 @@ import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.feature.logistics.R
-import uz.etalon.crm.feature.logistics.drivers.DriverPicker
+import uz.etalon.crm.core.designsystem.R as DesignSystemR
 
 /**
  * `shipmentId == null` dispatches the whole order (LogisticsRepository.createDispatch); a
@@ -115,7 +116,7 @@ fun DispatchScreen(
             val error = s.error
             if (error != null) ErrorBanner(error)
 
-            val selectedDriverName = s.drivers.find { it.id == s.driverId }?.name ?: stringResource(R.string.driver_none)
+            val selectedDriverName = s.drivers.find { it.id == s.driverId }?.name ?: stringResource(DesignSystemR.string.driver_none)
             SecondaryButton(text = selectedDriverName, onClick = { showPicker = true }, leading = Icons.Filled.Person)
 
             OutlinedTextField(

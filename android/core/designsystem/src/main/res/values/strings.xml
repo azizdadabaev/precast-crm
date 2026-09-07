@@ -31,6 +31,7 @@
     <string name="action_increase">Кўпайтириш</string>
     <string name="action_decrease">Камайтириш</string>
     <string name="action_add_photo">Расм қўшиш</string>
+    <string name="driver_none">Ҳайдовчисиз</string>
     <string name="photo_n">Расм %1$d</string>
     <string name="photo_pending">Юборилмоқда</string>
     <string name="stepper_max">Кўпи билан %1$d</string>
