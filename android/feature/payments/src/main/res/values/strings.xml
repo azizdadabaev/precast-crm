@@ -104,6 +104,9 @@
     <string name="discrepancy_action_resolve">Ҳал қилиш</string>
     <string name="discrepancy_resolve_sheet_title">Тафовутни ҳал қилиш</string>
     <string name="discrepancy_resolve_status_label">Ҳал қилиш тури</string>
+    <!-- Shown read-only in the resolve sheet when a discrepancy is being re-resolved, so
+         replacing an earlier decision is never silent. -->
+    <string name="discrepancy_existing_resolution_label">Аввалги қарор</string>
 
     <string name="resolve_option_recovered_hint">Мижоз қолганини тўлади</string>
     <string name="resolve_option_discount_hint">Эга чегирма сифатида тасдиқлади</string>

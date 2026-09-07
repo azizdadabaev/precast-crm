@@ -252,6 +252,14 @@ private fun ResolveSheet(
                 style = EtalonType.monoBody, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            // The sheet always opens blank, so without this an owner replacing an earlier
+            // decision (say RESOLVED_DISCOUNT → RESOLVED_WRITEOFF) would never see what they are
+            // overwriting — the route replaces the resolver, the timestamp and the note with no
+            // warning that this is a second pass.
+            if (sheet.hasExistingResolution) {
+                ExistingResolution(sheet.discrepancy)
+            }
+
             SectionLabel(stringResource(R.string.discrepancy_resolve_status_label))
             RESOLUTION_OPTIONS.forEach { status ->
                 ResolveOption(
@@ -281,6 +289,27 @@ private fun ResolveSheet(
                     enabled = !submitting, loading = submitting, modifier = Modifier.weight(1f),
                 )
             }
+        }
+    }
+}
+
+/**
+ * The decision an owner is about to replace, shown read-only above the fresh choices. Not a
+ * card of its own — a bordered block, the same visual weight [ResolveOption] gives an
+ * unselected row, so it reads as "already decided" rather than as another option to tap.
+ */
+@Composable
+private fun ExistingResolution(d: Discrepancy) {
+    val ext = LocalEtalonColors.current
+    Column(
+        Modifier.fillMaxWidth().border(1.dp, ext.border, MaterialTheme.shapes.medium)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        SectionLabel(stringResource(R.string.discrepancy_existing_resolution_label))
+        DiscrepancyStatusChip(d.status)
+        d.resolutionNote?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

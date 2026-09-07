@@ -97,6 +97,23 @@ class DiscrepanciesViewModelTest {
         assertEquals(listOf(row), vm.state.value.items)
     }
 
+    /** OPEN and DISPUTED are both still actionable — a long resolved history must not bury them.
+     *  Within each group nothing reorders the server's own `reportedAt` order: the sort is
+     *  stable, and the fixture below checks exactly that by giving each group more than one
+     *  row and asserting their relative order survived. */
+    @Test fun `open and disputed rows sort before resolved ones, each group keeping the server order`() = runTest {
+        val rows = listOf(
+            item(id = "r1", status = DiscrepancyStatus.RESOLVED_RECOVERED),
+            item(id = "o1", status = DiscrepancyStatus.OPEN),
+            item(id = "r2", status = DiscrepancyStatus.RESOLVED_WRITEOFF),
+            item(id = "d1", status = DiscrepancyStatus.DISPUTED),
+            item(id = "o2", status = DiscrepancyStatus.OPEN),
+        )
+        val vm = viewModel(list = { Result.success(rows) })
+        advanceUntilIdle()
+        assertEquals(listOf("o1", "d1", "o2", "r1", "r2"), vm.state.value.items.map { it.id })
+    }
+
     /** The defect found twice in Phase 1b: an empty list beside an error banner reads as "no
      *  discrepancies" when the truth is "couldn't check". */
     @Test fun `no empty state while loading or while an error shows`() = runTest {
@@ -171,6 +188,24 @@ class DiscrepanciesViewModelTest {
         vm.openResolve(row)
         vm.setStatus(DiscrepancyStatus.RESOLVED_DISCOUNT)
         vm.setNote("ха")
+        vm.submitResolve()
+        advanceUntilIdle()
+
+        assertEquals(0, calls)
+        assertNotNull(vm.state.value.sheet?.error)
+    }
+
+    /** `resolveBlocker` is proven at the pure-function level above; this pins that the ViewModel
+     *  seam actually applies it — the server trims before measuring, so five spaces must be
+     *  refused, not accepted and stored as an empty note. */
+    @Test fun `an all-whitespace note never reaches the network`() = runTest {
+        var calls = 0
+        val row = item(id = "d3b")
+        val vm = viewModel(list = { Result.success(listOf(row)) }, resolve = { _, _, _ -> calls++; Result.success(Unit) })
+        advanceUntilIdle()
+        vm.openResolve(row)
+        vm.setStatus(DiscrepancyStatus.RESOLVED_RECOVERED)
+        vm.setNote("     ")
         vm.submitResolve()
         advanceUntilIdle()
 
@@ -270,6 +305,19 @@ class DiscrepanciesViewModelTest {
         assertEquals("жумагача тўлайди", sheet.note)
         assertNotNull(sheet.error)
         assertFalse(vm.state.value.busy)
+    }
+
+    /** OPEN is the only status with nothing to show — every other status was reached through a
+     *  resolve pass, so it has a decision to display before offering a new one. UNKNOWN falls on
+     *  the same side as OPEN: there is nothing meaningful to show for a status the app does not
+     *  recognise. */
+    @Test fun `hasExistingResolution is true only when the discrepancy already carries a resolution`() {
+        assertFalse(ResolveSheetState(item(status = DiscrepancyStatus.OPEN)).hasExistingResolution)
+        assertFalse(ResolveSheetState(item(status = DiscrepancyStatus.UNKNOWN)).hasExistingResolution)
+        assertTrue(ResolveSheetState(item(status = DiscrepancyStatus.RESOLVED_RECOVERED)).hasExistingResolution)
+        assertTrue(ResolveSheetState(item(status = DiscrepancyStatus.RESOLVED_DISCOUNT)).hasExistingResolution)
+        assertTrue(ResolveSheetState(item(status = DiscrepancyStatus.RESOLVED_WRITEOFF)).hasExistingResolution)
+        assertTrue(ResolveSheetState(item(status = DiscrepancyStatus.DISPUTED)).hasExistingResolution)
     }
 
     // ── fixtures ──────────────────────────────────────────────────────────────────

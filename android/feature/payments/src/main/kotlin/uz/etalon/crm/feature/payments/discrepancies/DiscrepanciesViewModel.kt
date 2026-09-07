@@ -72,6 +72,16 @@ data class ResolveSheetState(
     val error: String? = null,
 ) {
     val blocker: String? get() = resolveBlocker(status, note)
+
+    /**
+     * True when this discrepancy already went through a resolve pass. The sheet always opens
+     * blank — [status] and [note] start empty regardless — so without this, an owner replacing
+     * an earlier RESOLVED_DISCOUNT with RESOLVED_WRITEOFF would never see the decision they are
+     * overwriting; the route replaces the resolver, the timestamp and the note with no warning.
+     * The screen reads this to show the existing status and note, read-only, before the choices.
+     */
+    val hasExistingResolution: Boolean
+        get() = discrepancy.status != DiscrepancyStatus.OPEN && discrepancy.status != DiscrepancyStatus.UNKNOWN
 }
 
 data class DiscrepanciesUiState(
@@ -93,6 +103,19 @@ data class DiscrepanciesUiState(
      *  never be queued — with no signal it is refused rather than sent and failed. */
     val isOffline: Boolean get() = lastRefreshError is AppError.Network
 }
+
+/** OPEN and DISPUTED both still need attention — DISPUTED means an HR/disciplinary process is
+ *  under way, not that the cash question is settled. */
+private fun isUnfinished(status: DiscrepancyStatus) =
+    status == DiscrepancyStatus.OPEN || status == DiscrepancyStatus.DISPUTED
+
+/**
+ * Unfinished rows (OPEN, DISPUTED) before resolved ones, so the actionable rows do not sink
+ * under a long resolved history. `sortedBy` is a stable sort, so within each group the server's
+ * own `reportedAt` order — the list route's own ordering — is left untouched.
+ */
+private fun sortedForList(rows: List<Discrepancy>): List<Discrepancy> =
+    rows.sortedBy { if (isUnfinished(it.status)) 0 else 1 }
 
 fun interface DiscrepancyListUseCase {
     suspend operator fun invoke(): Result<List<Discrepancy>>
@@ -133,7 +156,7 @@ open class DiscrepanciesViewModel(
         viewModelScope.launch {
             loadList().fold(
                 onSuccess = { rows ->
-                    _state.update { it.copy(items = rows, loading = false, error = null, lastRefreshError = null) }
+                    _state.update { it.copy(items = sortedForList(rows), loading = false, error = null, lastRefreshError = null) }
                 },
                 onFailure = { t ->
                     val e = t.toAppError()
