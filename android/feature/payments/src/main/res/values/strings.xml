@@ -54,4 +54,37 @@
          later reword in either module silently changing the other's banner. -->
     <string name="payments_offline_blocked">Интернет йўқ — бу амал онлайн бажарилади</string>
     <string name="no_record_permission">Тўловни қайд этишга рухсат йўқ</string>
+
+    <!-- ── The confirm queue ──────────────────────────────────────────────────
+         Every name below is prefixed so it cannot collide with :core:designsystem,
+         :feature:orders, :feature:logistics or :app — resources merge by NAME across
+         the whole APK, and the module nearer :app silently wins. Where a word already
+         exists in the design system (Тасдиқлаш, Кутилмоқда, Тасдиқланган, Рад этилган,
+         Бекор қилиш) the queue reads THAT string instead of redefining it. -->
+    <string name="queue_empty">Тўлов йўқ</string>
+    <string name="queue_recorded">Қайд этилди: %1$s</string>
+    <string name="queue_expected">Кутилган: %1$s</string>
+    <string name="queue_shortfall">Камомад: %1$s</string>
+    <string name="queue_rejection_reason">Сабаб: %1$s</string>
+    <string name="queue_action_reject">Рад этиш</string>
+    <string name="queue_no_confirm_permission">Тўловларни тасдиқлашга рухсат йўқ</string>
+
+    <string name="confirm_sheet_title">Тўловни тасдиқлаш</string>
+    <string name="confirm_adjustment_note_label">Созлаш изоҳи (мажбурий, мин. 5 белги)</string>
+    <string name="confirm_adjustment_note_hint">масалан: Оператор хатоси — квитанциядан тузатилди</string>
+    <string name="confirm_receipts_label">Чеклар</string>
+
+    <string name="discrepancy_action_label">Тафовут амали</string>
+    <string name="discrepancy_action_track">Тасдиқлаш + очиқ тафовут</string>
+    <string name="discrepancy_action_track_hint">Ҳолат: ОЧИҚ — кейинроқ йиғилади</string>
+    <string name="discrepancy_action_discount">Тасдиқлаш + чегирма сифатида</string>
+    <string name="discrepancy_action_discount_hint">Ҳолат: ЧЕГИРМА — буюртмани созлайди</string>
+    <string name="discrepancy_action_writeoff">Тасдиқлаш + ҳисобдан чиқариш</string>
+    <string name="discrepancy_action_writeoff_hint">Ҳолат: ҲИСОБДАН ЧИҚАРИЛДИ — зарарни қабул қилиш</string>
+    <string name="discrepancy_note_label">Тафовут изоҳи (мажбурий, мин. 5 белги)</string>
+    <string name="discrepancy_note_hint">масалан: Мижоз жумагача қолганини тўлашга рози бўлди</string>
+
+    <string name="reject_sheet_title">Тўловни рад этиш</string>
+    <string name="reject_reason_label">Сабаб (мажбурий, мин. 3 белги)</string>
+    <string name="reject_reason_hint">масалан: Ҳайдовчи квитанциядаги сумма бошқача деди</string>
 </resources>
