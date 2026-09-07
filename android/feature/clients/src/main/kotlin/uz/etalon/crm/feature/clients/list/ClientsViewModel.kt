@@ -31,7 +31,14 @@ data class ClientsUiState(
     /** Exactly what the operator typed — never normalised, never stripped. See [ClientsViewModel]. */
     val query: String = "",
     val items: List<ClientSummary> = emptyList(),
+    /** A request is actually in flight. This is what drives the refresh spinner. */
     val loading: Boolean = true,
+    /**
+     * A debounced search is waiting out its delay — no request yet. Kept apart from [loading] so
+     * the pull-to-refresh spinner does not run for the whole of every keystroke's debounce, while
+     * [showEmptyState] still knows the list on screen is about to be replaced.
+     */
+    val searching: Boolean = false,
     val error: String? = null,
     /** The raw error from the last fetch, kept (not only its message) so [isOffline] is derived
      *  from its real type — the same shape ConfirmQueueUiState and DriversUiState use. */
@@ -44,10 +51,12 @@ data class ClientsUiState(
      */
     val permissionsResolved: Boolean = false,
 ) {
-    /** Never true alongside [error] and never while loading. An empty client list beside an error
-     *  banner reads as "this customer is not in the CRM" — and an operator who believes that
-     *  creates a second row for a customer who already has one. */
-    val showEmptyState: Boolean get() = items.isEmpty() && !loading && error == null
+    /** Never true alongside [error], never while loading, and never while a search is still
+     *  pending. An empty client list beside an error banner reads as "this customer is not in the
+     *  CRM" — and an operator who believes that creates a second row for a customer who already
+     *  has one. The same goes for «Мижоз топилмади» flashed under a query that has not been
+     *  asked yet. */
+    val showEmptyState: Boolean get() = items.isEmpty() && !loading && !searching && error == null
 
     /** Create and edit are both online-only — neither client route is `withIdempotency`-wrapped
      *  server-side, so neither may be queued. */
@@ -109,9 +118,14 @@ open class ClientsViewModel(
 
     private fun load(delayFirst: Boolean) {
         loadJob?.cancel()
-        _state.update { it.copy(loading = true) }
+        // The spinner belongs to the request, not to the wait before it: a keystroke must not
+        // spin the pull-to-refresh indicator for 300 ms every time.
+        _state.update { it.copy(searching = delayFirst, loading = !delayFirst) }
         loadJob = viewModelScope.launch {
-            if (delayFirst) delay(CLIENT_SEARCH_DEBOUNCE_MS)
+            if (delayFirst) {
+                delay(CLIENT_SEARCH_DEBOUNCE_MS)
+                _state.update { it.copy(searching = false, loading = true) }
+            }
             // A blank field is "no filter", not a search for the empty string.
             val q = _state.value.query.trim().ifBlank { null }
             loadClients(q).fold(

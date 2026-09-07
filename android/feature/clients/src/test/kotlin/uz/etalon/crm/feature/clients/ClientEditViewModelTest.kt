@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientInput
+import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.feature.clients.edit.ClientCreateUseCase
 import uz.etalon.crm.feature.clients.edit.ClientEditPermissionUseCase
 import uz.etalon.crm.feature.clients.edit.ClientEditState
@@ -83,6 +84,27 @@ class ClientEditViewModelTest {
         assertEquals(first.name, second.name)
     }
 
+    /** Only the fields that actually hold something: telling an operator their notes cannot be
+     *  deleted when they never wrote any is noise on the one screen that must read clearly. */
+    @Test fun `the keep notice names only the fields that were populated`() {
+        assertFalse(form().addressLocked)
+        assertFalse(form().notesLocked)
+        // Creating: nothing is stored yet, so nothing is locked, whatever is typed.
+        assertFalse(form(street = "Юнусобод 12-7", notes = "изоҳ").addressLocked)
+
+        val addressOnly = form(clientId = "c1", originalAddress = "Тошкент шаҳри, Юнусобод 12-7")
+        assertTrue(addressOnly.addressLocked)
+        assertFalse(addressOnly.notesLocked)
+
+        val notesOnly = form(clientId = "c1", originalNotes = "эски изоҳ")
+        assertFalse(notesOnly.addressLocked)
+        assertTrue(notesOnly.notesLocked)
+
+        val both = form(clientId = "c1", originalAddress = "Тошкент шаҳри", originalNotes = "эски изоҳ")
+        assertTrue(both.addressLocked)
+        assertTrue(both.notesLocked)
+    }
+
     @Test fun `every refusal is written in Uzbek Cyrillic`() {
         val messages = listOfNotNull(
             validateClient(form(name = "")),
@@ -126,15 +148,37 @@ class ClientEditViewModelTest {
         )
     }
 
-    @Test fun `a Latin address parses too, and a bare tuman snaps to its viloyat`() {
+    @Test fun `a Latin address parses too, in the alphabet it was written in`() {
         val latin = parseAddress("Toshkent shahri, Yunusobod tumani, Yunusobod 12-7")
         assertEquals("Toshkent shahri", latin.viloyat)
         assertEquals("Yunusobod tumani", latin.tuman)
+        assertEquals(
+            "Toshkent shahri, Yunusobod tumani, Yunusobod 12-7",
+            composeAddress(latin.viloyat, latin.tuman, latin.street),
+        )
+    }
 
+    /**
+     * The one branch that is NOT a faithful round trip, asserted as such rather than left
+     * implicit. A bare tuman with no viloyat head parses with its parent filled in, so the next
+     * save writes the completed three-part form. It only ever ADDS the region the tuman already
+     * implies — it cannot change which place the address names — and it turns a shape the web
+     * parses through a fallback branch into the canonical one.
+     */
+    @Test fun `a bare tuman snaps to its viloyat, and the next save writes the completed form`() {
         val bare = parseAddress("Юнусобод тумани, Юнусобод 12-7")
         assertEquals("Тошкент шаҳри", bare.viloyat)
         assertEquals("Юнусобод тумани", bare.tuman)
         assertEquals("Юнусобод 12-7", bare.street)
+
+        val recomposed = composeAddress(bare.viloyat, bare.tuman, bare.street)
+        assertEquals("Тошкент шаҳри, Юнусобод тумани, Юнусобод 12-7", recomposed)
+        // Completed, never changed: it reparses to the same three parts, and is now stable.
+        assertEquals(bare, parseAddress(recomposed))
+
+        // The Latin spelling snaps to a Latin viloyat, so the alphabet is not switched either.
+        val bareLatin = parseAddress("Yunusobod tumani, Yunusobod 12-7")
+        assertEquals("Toshkent shahri", bareLatin.viloyat)
     }
 
     /** An address written before the region widget existed has no recognisable head. It must
@@ -246,6 +290,125 @@ class ClientEditViewModelTest {
         assertNotNull(vm.state.value.error)
         assertFalse(called, "the clear must not reach a PATCH that would drop it")
         assertNull(vm.state.value.savedId)
+    }
+
+    @Test fun `clearing a note that was set is refused rather than silently ignored`() = runTest {
+        var called = false
+        val vm = viewModel(update = { _, _ -> called = true; Result.success(Unit) })
+        advanceUntilIdle()
+        vm.openEdit(
+            ClientDetail(
+                id = "c1", name = "Навоий Build", phone = "998901112233",
+                address = null, notes = "эрталаб қўнғироқ", orders = emptyList(),
+            ),
+        )
+        vm.setNotes("   ")
+        vm.submit()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.error)
+        assertFalse(called, "the clear must not reach a PATCH that would drop it")
+        assertNull(vm.state.value.savedId)
+    }
+
+    /**
+     * The sheet is opened and dismissed many times against ONE ViewModel: it is resolved against
+     * the screen's back-stack entry, not the sheet, so a completion left standing would replay
+     * itself on the next open — a second tap on «Мижоз қўшиш» would navigate straight to the
+     * client added a minute ago instead of opening an empty form.
+     */
+    @Test fun `the completion is consumed, so a reopened sheet cannot replay it`() = runTest {
+        val vm = viewModel(create = { Result.success("c9") })
+        advanceUntilIdle()
+        vm.openCreate()
+        vm.setName("Навоий Build")
+        vm.setPhoneDigits("901112233")
+        vm.submit()
+        advanceUntilIdle()
+        assertEquals("c9", vm.state.value.savedId)
+
+        vm.consumeSaved()
+        assertNull(vm.state.value.savedId)
+
+        // Reopened on the same ViewModel: nothing left over, and the form is blank again.
+        vm.openCreate()
+        assertNull(vm.state.value.savedId)
+        assertEquals("", vm.state.value.name)
+        assertEquals("", vm.state.value.phoneDigits)
+    }
+
+    /**
+     * `PATCH` sends the phone on every save, so a stored number that is not nine local digits
+     * would be rewritten by the server — silently changing the customer's identity. The save
+     * stays blocked, but the operator is told WHY on open rather than discovering it when a name
+     * correction is refused.
+     */
+    @Test fun `a malformed stored phone is surfaced on open and blocks the save`() = runTest {
+        var called = false
+        val vm = viewModel(update = { _, _ -> called = true; Result.success(Unit) })
+        advanceUntilIdle()
+        vm.openEdit(
+            ClientDetail(
+                id = "c1", name = "Навоий Build", phone = "99890111223",
+                address = null, notes = null, orders = emptyList(),
+            ),
+        )
+        assertTrue(vm.state.value.storedPhoneInvalid)
+        assertEquals("99890111223", vm.state.value.phoneDigits, "show what is stored, not a tidied version")
+
+        vm.setName("Навоий Build MChJ")
+        vm.submit()
+        advanceUntilIdle()
+        assertFalse(called, "the server would rewrite the phone; block the save")
+        assertNotNull(vm.state.value.error)
+
+        // The notice retires the moment the number it complains about is corrected.
+        vm.setPhoneDigits("901112233")
+        assertFalse(vm.state.value.storedPhoneInvalid)
+        vm.submit()
+        advanceUntilIdle()
+        assertTrue(called)
+    }
+
+    @Test fun `a well-formed stored phone raises no notice`() = runTest {
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.openEdit(client())
+        assertFalse(vm.state.value.storedPhoneInvalid)
+        assertEquals("901112233", vm.state.value.phoneDigits)
+    }
+
+    /**
+     * `Client.phone` is `@unique` and PATCH does not pre-check it, so Prisma's P2002 surfaces as
+     * a 409 whose message is English on BOTH sides of the " · " the UI splits on — meaning
+     * `uzbekMessage` would show the raw database wording to the operator. Reachable by an
+     * ordinary correction: one mistyped digit that happens to be somebody else's number.
+     */
+    @Test fun `a phone that belongs to another client fails in Uzbek, not in English`() = runTest {
+        val vm = viewModel(
+            update = { _, _ ->
+                Result.failure(ApiException(409, "Unique constraint violation: phone"))
+            },
+        )
+        advanceUntilIdle()
+        vm.openEdit(client())
+        vm.submit()
+        advanceUntilIdle()
+        val message = vm.state.value.error.orEmpty()
+        assertTrue(CYRILLIC.containsMatchIn(message), "the raw server wording reached the operator: $message")
+        assertFalse(message.contains("Unique constraint"), message)
+    }
+
+    /** Every other failure keeps the server's own Uzbek message — the mapping above is a patch
+     *  for one specific English string, not a blanket replacement. */
+    @Test fun `an unrelated conflict keeps the server's own message`() = runTest {
+        val vm = viewModel(
+            update = { _, _ -> Result.failure(ApiException(409, "Мижоз аллақачон ўчирилган · Client already deleted")) },
+        )
+        advanceUntilIdle()
+        vm.openEdit(client())
+        vm.submit()
+        advanceUntilIdle()
+        assertEquals("Мижоз аллақачон ўчирилган", vm.state.value.error)
     }
 
     @Test fun `create is refused without client create, before the network`() = runTest {

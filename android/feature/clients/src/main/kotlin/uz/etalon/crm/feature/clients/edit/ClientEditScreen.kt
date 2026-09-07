@@ -74,7 +74,15 @@ fun ClientEditSheet(
     // dismissal — the form is blanked and reseeded every time the sheet opens.
     LaunchedEffect(client?.id) { if (client == null) vm.openCreate() else vm.openEdit(client) }
     LaunchedEffect(isOffline) { vm.setOffline(isOffline) }
-    LaunchedEffect(s.savedId) { s.savedId?.let(onSaved) }
+    // Consume BEFORE acting: `onSaved` dismisses the sheet, and the id must already be cleared by
+    // then. Left standing it would outlive the sheet — the ViewModel belongs to the screen's
+    // back-stack entry, not to this composable — and the next open would replay the completion
+    // against a stale value before `openCreate`'s blanking reached the collected state.
+    LaunchedEffect(s.savedId) {
+        val id = s.savedId ?: return@LaunchedEffect
+        vm.consumeSaved()
+        onSaved(id)
+    }
 
     val pick = picking
     if (pick != null) {
@@ -104,10 +112,14 @@ fun ClientEditSheet(
                 style = MaterialTheme.typography.titleMedium,
             )
             s.error?.let { ErrorBanner(it) }
-            // Both fields keep their stored value on a clear (a null is omitted from the PATCH
-            // body), so say so before the operator empties one rather than only when the save
-            // is refused.
-            if (s.showKeepNotice) NoticeBanner(stringResource(R.string.client_keep_notice))
+            // The stored number is not nine local digits, and PATCH sends the phone on every
+            // save — so nothing else about this client can be changed until it is corrected.
+            // Said here, on open, rather than only when the save is refused.
+            if (s.storedPhoneInvalid) NoticeBanner(stringResource(R.string.client_stored_phone_invalid))
+            // A stored address or note keeps its value on a clear (a null is omitted from the
+            // PATCH body), so say so before the operator empties one — and name only the field
+            // they actually filled in.
+            keepNoticeRes(s)?.let { NoticeBanner(stringResource(it)) }
 
             OutlinedTextField(
                 value = s.name, onValueChange = vm::setName,
@@ -147,6 +159,15 @@ fun ClientEditSheet(
             )
         }
     }
+}
+
+/** Which fields the operator is being told they cannot empty — only the ones that hold
+ *  something, or nothing at all when neither does. */
+private fun keepNoticeRes(s: ClientEditState): Int? = when {
+    s.addressLocked && s.notesLocked -> R.string.client_keep_notice_both
+    s.addressLocked -> R.string.client_keep_notice_address
+    s.notesLocked -> R.string.client_keep_notice_notes
+    else -> null
 }
 
 /**

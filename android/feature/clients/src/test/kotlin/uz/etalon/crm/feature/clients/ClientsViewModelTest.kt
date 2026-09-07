@@ -135,6 +135,30 @@ class ClientsViewModelTest {
         assertEquals(listOf("Навоий"), asked, "exactly one fetch, for the settled query")
     }
 
+    /**
+     * The refresh spinner belongs to the request, not to the wait before it. Driving it from the
+     * debounce made it run for 300 ms on every single keystroke — a permanently spinning
+     * indicator for anyone typing a nine-digit phone.
+     */
+    @Test fun `the refresh spinner does not run through the debounce`() = runTest {
+        val vm = viewModel(list = { Result.success(emptyList()) })
+        advanceUntilIdle()
+        assertFalse(vm.state.value.loading)
+
+        vm.setQuery("Навоий")
+        assertFalse(vm.state.value.loading, "the spinner started before the request did")
+        assertTrue(vm.state.value.searching)
+        // ...and «Мижоз топилмади» must not flash under a query that has not been asked yet.
+        assertFalse(vm.state.value.showEmptyState)
+
+        advanceTimeBy(CLIENT_SEARCH_DEBOUNCE_MS + 1)
+        assertFalse(vm.state.value.searching)
+
+        advanceUntilIdle()
+        assertFalse(vm.state.value.loading)
+        assertTrue(vm.state.value.showEmptyState)
+    }
+
     @Test fun `pull to refresh does not wait for the debounce`() = runTest {
         val asked = mutableListOf<String?>()
         val vm = viewModel(list = { q -> asked += q; Result.success(emptyList()) })

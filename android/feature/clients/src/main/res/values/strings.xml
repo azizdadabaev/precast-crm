@@ -28,5 +28,8 @@
     <string name="client_region_search">Қидириш</string>
     <string name="client_region_clear">Тозалаш</string>
     <string name="client_region_empty">Ҳеч нарса топилмади</string>
-    <string name="client_keep_notice">Манзил ва изоҳни бу ердан ўчириб бўлмайди — фақат ўзгартириш мумкин</string>
+    <string name="client_keep_notice_both">Манзил ва изоҳни бу ердан ўчириб бўлмайди — фақат ўзгартириш мумкин</string>
+    <string name="client_keep_notice_address">Манзилни бу ердан ўчириб бўлмайди — фақат ўзгартириш мумкин</string>
+    <string name="client_keep_notice_notes">Изоҳни бу ердан ўчириб бўлмайди — фақат ўзгартириш мумкин</string>
+    <string name="client_stored_phone_invalid">Сақланган телефон рақами нотўғри. Уни тузатмасдан бошқа ўзгаришларни сақлаб бўлмайди</string>
 </resources>

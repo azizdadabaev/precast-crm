@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.toAppError
+import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientInput
 import javax.inject.Inject
@@ -22,6 +23,19 @@ private const val OFFLINE_MESSAGE = "Интернет йўқ — бу амал �
  *  cannot make and the repository never has to be the first to say no. */
 private const val NO_CREATE_MESSAGE = "Мижоз қўшишга рухсат йўқ"
 private const val NO_EDIT_MESSAGE = "Мижозни таҳрирлашга рухсат йўқ"
+
+/**
+ * `Client.phone` is `@unique` and `PATCH /api/clients/{id}` does not pre-check it, so a number
+ * that already belongs to another client comes back as Prisma's P2002 → 409 with this English
+ * string. It carries no " · " separator, so `ApiException.uzbekMessage` hands the English half
+ * through verbatim — and this is reachable by an ordinary correction, at the moment an operator
+ * is most likely to mistype a digit. `phone` is the only unique column on `Client`.
+ *
+ * (The create path effectively cannot reach it: `POST /api/clients` looks the normalised phone
+ * up first and returns the existing row rather than colliding.)
+ */
+private const val UNIQUE_VIOLATION_PREFIX = "Unique constraint violation"
+private const val PHONE_TAKEN_MESSAGE = "Бу телефон рақами бошқа мижозга бириктирилган"
 
 private const val CLIENT_CREATE = "client.create"
 private const val CLIENT_EDIT = "client.edit"
@@ -52,6 +66,14 @@ data class ClientEditState(
      *  refuse a clear that `PATCH` would silently drop — see its doc. */
     val originalAddress: String = "",
     val originalNotes: String = "",
+    /**
+     * The stored phone did not read as nine local digits when the sheet opened — a legacy
+     * landline, a foreign number, a truncated one. [phoneDigits] shows what is actually stored
+     * rather than a tidied version of it, and the save stays blocked until it is corrected,
+     * because `PATCH` sends the phone on every save and the server would rewrite it. Surfaced on
+     * open so the operator learns that before typing, not when the save is refused.
+     */
+    val storedPhoneInvalid: Boolean = false,
     val submitting: Boolean = false,
     val error: String? = null,
     val canCreate: Boolean = false,
@@ -72,9 +94,13 @@ data class ClientEditState(
 
     val canSave: Boolean get() = permissionsResolved && permitted && !submitting && !isOffline
 
-    /** Both fields keep their stored value on a clear, so say so where the operator can see it
-     *  before typing rather than only when the save is refused. */
-    val showKeepNotice: Boolean get() = isEditing && (originalAddress.isNotBlank() || originalNotes.isNotBlank())
+    /**
+     * A stored value that a clear cannot remove, so the sheet says so where the operator can see
+     * it before typing rather than only when the save is refused. Two flags rather than one:
+     * telling someone their notes cannot be deleted when they never wrote any is noise.
+     */
+    val addressLocked: Boolean get() = isEditing && originalAddress.isNotBlank()
+    val notesLocked: Boolean get() = isEditing && originalNotes.isNotBlank()
 }
 
 /**
@@ -161,10 +187,12 @@ open class ClientEditViewModel(
 
     fun openEdit(client: ClientDetail) = _state.update {
         val parsed = parseAddress(client.address)
+        val seededPhone = localDigits(client.phone)
         blank(it).copy(
             clientId = client.id,
             name = client.name,
-            phoneDigits = localDigits(client.phone),
+            phoneDigits = seededPhone,
+            storedPhoneInvalid = seededPhone.length != LOCAL_PHONE_DIGITS,
             viloyat = parsed.viloyat,
             tuman = parsed.tuman,
             street = parsed.street,
@@ -179,7 +207,11 @@ open class ClientEditViewModel(
     fun setOffline(v: Boolean) = _state.update { it.copy(isOffline = v) }
 
     fun setName(v: String) = edit { it.copy(name = v) }
-    fun setPhoneDigits(v: String) = edit { it.copy(phoneDigits = v) }
+
+    /** The stored-phone notice retires the moment the number it complains about is fixed. */
+    fun setPhoneDigits(v: String) = edit {
+        it.copy(phoneDigits = v, storedPhoneInvalid = it.storedPhoneInvalid && v.length != LOCAL_PHONE_DIGITS)
+    }
     fun setStreet(v: String) = edit { it.copy(street = v) }
     fun setNotes(v: String) = edit { it.copy(notes = v) }
 
@@ -242,10 +274,36 @@ open class ClientEditViewModel(
                 onFailure = { t ->
                     // What was typed is deliberately kept: a network drop is exactly the case
                     // where the operator wants to tap save again, not retype the form.
-                    _state.update { it.copy(submitting = false, error = t.toAppError().message) }
+                    val message = uzbekFailure(t)
+                    _state.update { it.copy(submitting = false, error = message) }
                 },
             )
         }
+    }
+
+    /**
+     * The host has acted on [ClientEditState.savedId] — clear it.
+     *
+     * This ViewModel is resolved against the SCREEN's back-stack entry, so it (and the id)
+     * outlive the sheet that produced them. Left standing, the next open would replay the
+     * completion against the stale value it is still holding: a second tap on «Мижоз қўшиш»
+     * would navigate straight to the previously added client instead of opening the sheet, and a
+     * second tap on edit would flash it closed. The host consumes before it acts, so nothing can
+     * be cancelled in between.
+     */
+    fun consumeSaved() = _state.update { it.copy(savedId = null) }
+
+    /** Everything the server can answer with, in Uzbek — including the one 409 whose message is
+     *  English on both sides of the separator the UI splits on. */
+    private fun uzbekFailure(t: Throwable): String {
+        val e = t.toAppError()
+        if (e is AppError.Conflict &&
+            e.message.startsWith(UNIQUE_VIOLATION_PREFIX) &&
+            e.message.contains("phone")
+        ) {
+            return PHONE_TAKEN_MESSAGE
+        }
+        return e.message
     }
 
     private fun blank(s: ClientEditState) = ClientEditState(

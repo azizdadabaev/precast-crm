@@ -39,6 +39,14 @@ fun composeAddress(viloyat: String, tuman: String, street: String): String =
  * 2. It has no legacy 14-city fallback (`src/lib/uzbekistan-cities.ts`). An address that
  *    predates the region widget simply lands whole in [ParsedAddress.street] — which composes
  *    back to the identical string, so it survives an edit untouched either way.
+ *
+ * One case is NOT a faithful round trip, and it is kept because the TS does the same and the
+ * result is better data: an address stored as a BARE TUMAN («Юнусобод тумани, Юнусобод 12-7»,
+ * with no viloyat head) parses with its parent viloyat filled in, so the next save writes the
+ * completed three-part form. That is a silent rewrite of the kind note 1 above declines to make
+ * — the difference is that this one only ever ADDS the region the tuman already implies, cannot
+ * change which place the address names, and turns a shape the web parses by a fallback branch
+ * into the canonical one. It is asserted as a round trip in the tests rather than left implicit.
  */
 fun parseAddress(address: String?): ParsedAddress {
     val raw = address?.trim().orEmpty()
