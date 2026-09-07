@@ -22,10 +22,12 @@ import java.io.File
  * both the photo (its file path lives in the row) and the money figure, with nothing on screen to
  * say so. The order cache in the same file is the opposite — throwing it away costs one refresh.
  *
- * This runs the real 3 → 4 step against a real SQLite file built from the committed schema 3, so a
- * future migration that drops or rewrites `outbox` fails here. Going back to
- * `fallbackToDestructiveMigration` fails here too: with no migration registered for the step,
- * `runMigrationsAndValidate` throws instead of quietly recreating the tables.
+ * This runs the real registered chain — `ALL_MIGRATIONS`, the same array the production builder
+ * installs via `.addMigrations(*ALL_MIGRATIONS)` — against a real SQLite file built from the
+ * committed schema 3, so a future migration that drops or rewrites `outbox`, or one that is written
+ * but never added to that array, fails here. Going back to `fallbackToDestructiveMigration` fails
+ * here too: with no migration registered for a step, `runMigrationsAndValidate` throws instead of
+ * quietly recreating the tables.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -55,7 +57,7 @@ class EtalonDatabaseMigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(4, listOf(MIGRATION_3_4)).use { db ->
+        helper.runMigrationsAndValidate(4, ALL_MIGRATIONS.toList()).use { db ->
             db.prepare("SELECT ownerId, filePath, payloadJson, state FROM outbox WHERE id = 'row-1'").use { stmt ->
                 assertTrue("the queued delivery proof must survive the version bump", stmt.step())
                 assertEquals("u1", stmt.getText(0))
@@ -73,7 +75,7 @@ class EtalonDatabaseMigrationTest {
             db.execSQL("INSERT INTO order_details (id, json, cachedAt) VALUES ('o1', '{}', 10)")
         }
 
-        helper.runMigrationsAndValidate(4, listOf(MIGRATION_3_4)).use { db ->
+        helper.runMigrationsAndValidate(4, ALL_MIGRATIONS.toList()).use { db ->
             db.prepare("SELECT COUNT(*) FROM order_details").use { stmt ->
                 assertTrue(stmt.step())
                 assertEquals(0, stmt.getInt(0))
@@ -98,7 +100,7 @@ class EtalonDatabaseMigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(5, listOf(MIGRATION_4_5)).use { db ->
+        helper.runMigrationsAndValidate(5, ALL_MIGRATIONS.toList()).use { db ->
             db.prepare("SELECT ownerId, filePath, payloadJson, state FROM outbox WHERE id = 'row-2'").use { stmt ->
                 assertTrue("the queued payment receipt must survive the version bump", stmt.step())
                 assertEquals("u1", stmt.getText(0))

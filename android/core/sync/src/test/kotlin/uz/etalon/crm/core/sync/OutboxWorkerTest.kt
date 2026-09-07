@@ -293,4 +293,24 @@ class OutboxWorkerTest {
         assertEquals("Сурат топилмади, қайта суратга олинг", after.lastError)
         assertEquals(emptyList<String>(), orders.refreshed)
     }
+
+    /** A row of this kind should never lack a `paymentId` — `LogisticsRepository`/`PaymentRepository`
+     *  always enqueue one — but if a bug or a hand-written row ever did, `requireNotNull` must fail
+     *  the row permanently via `outcomeFor`'s bug branch, not throw an unhandled NPE out of the drain
+     *  or retry forever against a route it can never resolve. */
+    @Test fun `a payment receipt with no payment id fails permanently instead of crashing the drain`() = runTest {
+        val dao = db().outboxDao()
+        val file = File.createTempFile("outbox-receipt", ".jpg").apply { deleteOnExit() }
+        dao.upsert(row("receipt-3", "o1", created = 1).copy(kind = "ADD_PAYMENT_RECEIPT", paymentId = null, filePath = file.absolutePath))
+        val orders = RecordingOrders()
+
+        // StubApi errors on any call, so reaching the network would fail this test loudly.
+        val result = worker(dao, StubApi(), orders).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        val after = dao.byId("receipt-3")!!
+        assertEquals(OutboxState.FAILED, after.state)
+        assertEquals("Хатолик юз берди", after.lastError)
+        assertEquals(emptyList<String>(), orders.refreshed)
+    }
 }

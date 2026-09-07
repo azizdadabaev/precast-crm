@@ -32,7 +32,7 @@ internal val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
-/** 4 → 5 adds two OutboxKind values. `kind` is a String column and unknown values
+/** 4 → 5 adds one OutboxKind value. `kind` is a String column and unknown values
  *  already read back as UNKNOWN, so no table changes — but the migration must exist,
  *  because the destructive fallback is gone and a missing one fails at open. */
 internal val MIGRATION_4_5 = object : Migration(4, 5) {
