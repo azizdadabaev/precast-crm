@@ -25,7 +25,7 @@ export const GET = withPermission<Ctx["params"]>(
         orders: { orderBy: { placedAt: "desc" }, take: 20 },
       },
     });
-    if (!client) return fail("Client not found", 404);
+    if (!client) return fail("Мижоз топилмади · Client not found", 404);
     return ok(client);
   },
 );
@@ -66,7 +66,7 @@ export const DELETE = withPermission<Ctx["params"]>(
       where: { id: params.id },
       select: { id: true, name: true },
     });
-    if (!client) return fail("Client not found", 404);
+    if (!client) return fail("Мижоз топилмади · Client not found", 404);
 
     // Owner-only hard delete used to clear test data: removes the client
     // along with its orders, projects (+ calculations), deals, and any

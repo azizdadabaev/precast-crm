@@ -54,11 +54,15 @@ export function handler<T extends unknown[]>(
           return fail(`Unique constraint violation: ${target}`, 409);
         }
         if (err.code === "P2025") {
-          return fail("Record not found", 404);
+          // Deliberately generic: P2025 fires from any update/delete whose row
+          // has gone, across orders, payments, drivers and the rest. Bilingual
+          // like every other message the operator can see — the Android client
+          // renders only the half before " · " and used to show the English.
+          return fail("Ёзув топилмади · Record not found", 404);
         }
       }
       console.error("[API ERROR]", err);
-      return fail("Internal server error", 500);
+      return fail("Сервер хатоси · Internal server error", 500);
     }
   };
 }
