@@ -1,0 +1,8 @@
+<resources>
+    <string name="home_today_section">Бугун</string>
+    <string name="home_today_empty">Бугунга буюртма йўқ</string>
+    <string name="home_outbox_clear">Юборилмаган расм йўқ</string>
+    <string name="home_tile_today">Бугунги етказишлар</string>
+    <string name="home_tile_discrepancies">Очиқ фарқлар</string>
+    <string name="home_tile_receivables">Қарздорлик</string>
+</resources>

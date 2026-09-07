@@ -1,0 +1,48 @@
+package uz.etalon.crm.core.data
+
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
+import uz.etalon.crm.core.data.mapper.toDomain
+import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.network.dto.DashboardDto
+import uz.etalon.crm.core.network.dto.OpenDiscrepanciesDto
+import uz.etalon.crm.core.network.dto.OrdersByPaymentStateDto
+import uz.etalon.crm.core.network.dto.OutstandingReceivablesDto
+import uz.etalon.crm.core.network.dto.TodayDeliveriesDto
+import uz.etalon.crm.core.network.dto.TodayDeliveryOrderDto
+import java.math.BigDecimal
+
+/**
+ * `HomeSummary` has five same-typed `Int` fields and two `Money` fields, all mutually swappable
+ * in a way `toDomain()` would compile fine either way — Task 4's reviewer asked for exactly this
+ * test before a screen renders receivables off it. Every fixture value below is distinct, so a
+ * mapper that swaps any two of them (e.g. `paidOrders` for `partialOrders`, or
+ * `openDiscrepancyTotal` for `receivables`) fails here rather than in front of an operator
+ * reading a wrong balance on Home.
+ */
+class DashboardMappersTest {
+    private val dto = DashboardDto(
+        todayDeliveries = TodayDeliveriesDto(
+            count = 2, totalArea = BigDecimal("45.7"), date = "2026-09-07",
+            orders = listOf(TodayDeliveryOrderDto("o1", "A-1", "Client", BigDecimal("20.3"))),
+        ),
+        openDiscrepancies = OpenDiscrepanciesDto(count = 11, totalAmount = BigDecimal("111000")),
+        outstandingReceivables = OutstandingReceivablesDto(total = BigDecimal("222000"), orderCount = 22),
+        ordersByPaymentState = OrdersByPaymentStateDto(paid = 33, partial = 44, awaiting = 55),
+    )
+
+    @Test fun `each field lands in the summary field it belongs to, not a same-typed neighbour`() {
+        val s = dto.toDomain()
+        assertEquals(1, s.today.size)
+        assertEquals("o1", s.today.single().orderId)
+        assertEquals(BigDecimal("20.3"), s.today.single().area)
+        assertEquals(BigDecimal("45.7"), s.todayArea)
+        assertEquals(11, s.openDiscrepancies)
+        assertEquals(Money.parse("111000"), s.openDiscrepancyTotal)
+        assertEquals(Money.parse("222000"), s.receivables)
+        assertEquals(22, s.receivableOrders)
+        assertEquals(33, s.paidOrders)
+        assertEquals(44, s.partialOrders)
+        assertEquals(55, s.awaitingOrders)
+    }
+}
