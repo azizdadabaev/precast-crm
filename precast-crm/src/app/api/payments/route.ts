@@ -18,7 +18,13 @@ import { emitNotifications, usersWithPermission } from "@/lib/notifications";
  * Returns payments newest-first with chain-of-custody refs included so
  * the /payments confirmer page can render the chain panel without an
  * extra query.
+ *
+ * Capped at LIST_LIMIT rows. Unbounded, the confirmed tab grows with every
+ * payment the business ever takes and is re-fetched on every tab switch and
+ * pull-to-refresh — on a phone, over mobile data.
  */
+const LIST_LIMIT = 500;
+
 export const GET = withPermission("payment.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const orderId = searchParams.get("orderId") ?? undefined;
@@ -31,6 +37,7 @@ export const GET = withPermission("payment.view", async (req: NextRequest) => {
   const payments = await prisma.payment.findMany({
     where,
     orderBy: { recordedAt: "desc" },
+    take: LIST_LIMIT,
     include: {
       order: {
         select: {

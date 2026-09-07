@@ -8,7 +8,12 @@ import { withPermission } from "@/lib/api-auth";
 /**
  * GET /api/discrepancies — discrepancy.view
  *   ?status=OPEN | RESOLVED_RECOVERED | RESOLVED_DISCOUNT | RESOLVED_WRITEOFF | DISPUTED
+ *
+ * Capped at LIST_LIMIT rows, newest-first: both callers fetch the whole list and
+ * filter client-side, so unbounded it grows with every shortfall ever flagged.
  */
+const LIST_LIMIT = 500;
+
 export const GET = withPermission("discrepancy.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") ?? undefined;
@@ -16,6 +21,7 @@ export const GET = withPermission("discrepancy.view", async (req: NextRequest) =
   const discrepancies = await prisma.discrepancy.findMany({
     where: status ? { status: status as never } : undefined,
     orderBy: { reportedAt: "desc" },
+    take: LIST_LIMIT,
     include: {
       order: {
         select: {
