@@ -86,6 +86,9 @@ class PaymentScreenshotTest {
         today = fixedToday,
         canRecord = true,
         canAutoConfirm = false,
+        // An operator holding driver.view, so the baseline keeps all three source chips. Without
+        // it «Ҳайдовчидан» is withheld, and the baseline would stop showing the whole row.
+        canSeeDrivers = true,
     )
 
     private fun shootRecord(name: String, dark: Boolean, fontScale: Float? = null) {

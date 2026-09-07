@@ -479,6 +479,31 @@ class RecordPaymentViewModelTest {
         assertNull(vm.state.value.loadErrorMessage)
     }
 
+    /**
+     * SALES and DRIVER both hold payment.record WITHOUT driver.view — exactly the people who
+     * record payments. Firing the fetch anyway earned them a 403, which is Forbidden rather than
+     * Network, so the form still submitted while a permanent banner sat over it offering a retry
+     * that could only ever earn the same 403.
+     */
+    @Test fun `an operator without driver view never fetches the drivers`() = runTest {
+        var fetches = 0
+        val vm = viewModel(
+            drivers = { fetches++; Result.success(emptyList()) },
+            permissions = { action -> action != "driver.view" },
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, fetches)
+        assertFalse(vm.state.value.canSeeDrivers)
+        assertTrue(vm.state.value.canRecord)
+        assertNull(vm.state.value.loadErrorMessage)
+
+        // ...and the retry behind the banner cannot re-fire it either.
+        vm.retryLoad()
+        advanceUntilIdle()
+        assertEquals(0, fetches)
+    }
+
     @Test fun `the active drivers are loaded for the picker`() = runTest {
         val vm = viewModel(drivers = { Result.success(listOf(driver("d1", "Аброр"))) })
         advanceUntilIdle()

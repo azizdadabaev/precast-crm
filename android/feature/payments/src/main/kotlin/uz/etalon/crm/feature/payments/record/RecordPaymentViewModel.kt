@@ -43,6 +43,10 @@ private const val NO_PERMISSION_MESSAGE = "Тўловни қайд этишга 
 private const val PAYMENT_RECORD = "payment.record"
 private const val PAYMENT_CONFIRM = "payment.confirm"
 
+/** `GET /api/drivers` is gated on this, and neither SALES nor DRIVER holds it — though both hold
+ *  `payment.record`. See [RecordPaymentUiState.canSeeDrivers]. */
+private const val DRIVER_VIEW = "driver.view"
+
 /** `notes: z.string().max(500)` in PaymentRecordSchema. */
 private const val MAX_NOTES = 500
 
@@ -90,6 +94,18 @@ data class RecordPaymentUiState(
      *  offered and then withdrawn is worse than one that appears a frame late. */
     val canRecord: Boolean = false,
     val canAutoConfirm: Boolean = false,
+    /**
+     * Whether `GET /api/drivers` may even be attempted — and so whether «Ҳайдовчидан» is offered
+     * at all. SALES and DRIVER both hold `payment.record` WITHOUT `driver.view`, so exactly the
+     * people who record payments earned a 403 on that fetch. It arrives as `Forbidden`, not
+     * `Network`, so the form still submitted, but a permanent banner sat over it with a retry
+     * that could only ever earn the same 403; and the source chip stayed on offer, leading to a
+     * validator demanding a driver from a list that could never be filled.
+     *
+     * Nothing real is lost by withholding the chip: a driver's own collection reaches the server
+     * through the delivery-proof route, which sets the collector server-side.
+     */
+    val canSeeDrivers: Boolean = false,
     /** Set once the server has created the row. From that moment the payment exists, and
      *  [submit] must never create a second one — only finish attaching the receipts. */
     val paymentId: String? = null,
@@ -201,9 +217,12 @@ open class RecordPaymentViewModel(
         viewModelScope.launch {
             val record0 = can(PAYMENT_RECORD)
             val confirm0 = can(PAYMENT_CONFIRM)
-            _state.update { it.copy(canRecord = record0, canAutoConfirm = confirm0) }
+            // Resolved here with the other two, and the fetch gated on it rather than fired
+            // unconditionally — see RecordPaymentUiState.canSeeDrivers for whose 403 that was.
+            val drivers0 = can(DRIVER_VIEW)
+            _state.update { it.copy(canRecord = record0, canAutoConfirm = confirm0, canSeeDrivers = drivers0) }
+            if (drivers0) refreshDrivers()
         }
-        refreshDrivers()
     }
 
     /**
@@ -213,7 +232,9 @@ open class RecordPaymentViewModel(
      * it is offered for. The Hilt subclass overrides this to refresh the order detail too; here,
      * where there is no repository, the drivers are the only fetch there is.
      */
-    open fun retryLoad() = refreshDrivers()
+    open fun retryLoad() {
+        if (_state.value.canSeeDrivers) refreshDrivers()
+    }
 
     /** Only active drivers: the server refuses an inactive one with a 422. */
     fun refreshDrivers() {

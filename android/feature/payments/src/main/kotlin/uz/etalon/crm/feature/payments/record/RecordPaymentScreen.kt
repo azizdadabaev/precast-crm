@@ -275,9 +275,13 @@ fun RecordPaymentScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel(stringResource(R.string.record_source_label))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SOURCES.forEach { (source, label) ->
-                        ChoiceChip(stringResource(label), s.source == source) { onSetSource(source) }
-                    }
+                    // «Ҳайдовчидан» is withheld without driver.view: the picker behind it can
+                    // never be filled for that operator, so the chip would only lead to a
+                    // validator asking for a driver they cannot choose.
+                    SOURCES.filter { s.canSeeDrivers || it.first != PaymentSource.FROM_DRIVER_AT_DELIVERY }
+                        .forEach { (source, label) ->
+                            ChoiceChip(stringResource(label), s.source == source) { onSetSource(source) }
+                        }
                 }
             }
 
