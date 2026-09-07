@@ -18,7 +18,7 @@ import {
   PaymentRejectSchema, CommentCreateSchema, DriverCreateSchema, DriverUpdateSchema,
   DispatchCreateSchema, OrderStatusEnum, OrderPaymentStateEnum, PaymentStatusEnum,
   PaymentMethodEnum, RoleEnum, LanguageEnum, GalleryListSchema,
-  DiscrepancyUpdateSchema, DiscrepancyStatusEnum,
+  DiscrepancyUpdateSchema, DiscrepancyStatusEnum, ContactExportSchema,
 } from "@/lib/validation";
 import { CalculateBatchSchema } from "@/app/api/calculate/batch/schema";
 import { DeliveryLocationBody } from "@/app/api/orders/[id]/delivery-location/schema";
@@ -140,6 +140,7 @@ registry.registerPath({ method: "get", path: "/api/clients", security: bearer, r
 registry.registerPath({ method: "post", path: "/api/clients", security: bearer, request: { body: json(ClientCreateSchema) }, responses: { 201: { description: "Client", ...json(envelope(Any)) }, 200: { description: "Existing client (same phone)", ...json(envelope(Any)) }, ...errors } });
 registry.registerPath({ method: "get", path: "/api/clients/{id}", security: bearer, request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: "Client", ...json(envelope(Any)) }, ...errors } });
 registry.registerPath({ method: "patch", path: "/api/clients/{id}", security: bearer, request: { params: z.object({ id: z.string() }), body: json(ClientUpdateSchema) }, responses: { 200: { description: "Client", ...json(envelope(Any)) }, ...errors } });
+registry.registerPath({ method: "post", path: "/api/clients/export", security: bearer, request: { body: json(ContactExportSchema) }, responses: { 200: { description: "Formatted contacts text + exported count", ...json(envelope(z.object({ text: z.string(), exported: z.number() }))) }, ...errors } });
 registry.registerPath({ method: "get", path: "/api/drivers", security: bearer, request: { query: z.object({ activeOnly: z.enum(["true", "false"]).optional() }) }, responses: { 200: { description: "Drivers", ...json(envelope(z.array(Any))) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/drivers", security: bearer, request: { body: json(DriverCreateSchema) }, responses: { 201: { description: "Driver", ...json(envelope(Any)) }, ...errors } });
 registry.registerPath({ method: "get", path: "/api/notifications", security: bearer, request: { query: z.object({ limit: z.number().int().optional(), unreadOnly: z.enum(["true", "false"]).optional() }) }, responses: { 200: { description: "Feed", ...json(envelope(z.object({ items: z.array(Notification), unreadCount: z.number() }))) }, ...errors } });
@@ -192,6 +193,14 @@ registry.registerPath({ method: "patch", path: "/api/drivers/{id}/deactivate", s
 registry.registerPath({ method: "post", path: "/api/payments/{id}/handover", security: bearer,
   request: { params: z.object({ id: z.string() }) },
   responses: { 200: { description: "Payment", ...json(envelope(Any)) }, 404: { description: "Payment not found", ...json(ApiError) }, ...errors } });
+
+// ── Phase 1d: dashboard ──────────────────────────────────────────
+// withPermissionAny(['dashboard.viewBasic', 'dashboard.view']) — either
+// permission admits the caller, so this is not `security: bearer` alone
+// in spirit but the same bearer auth as everywhere else; the permission
+// check happens inside the handler, same as every other route here.
+registry.registerPath({ method: "get", path: "/api/dashboard", security: bearer,
+  responses: { 200: { description: "Dashboard payload (KPIs, trends, today's deliveries)", ...json(envelope(Any)) }, ...errors } });
 
 // Keep these referenced so tree-shaking never drops the enum components.
 registry.register("PaymentMethod", PaymentMethodEnum);
