@@ -1,0 +1,17 @@
+<resources>
+    <!-- Every name here is scoped with a clients_/client_ prefix. Android merges string
+         resources by name across modules and the one nearer :app wins, so an unscoped name
+         (action_save, action_call) would silently take over another feature's wording. -->
+    <string name="clients_title">Мижозлар</string>
+    <string name="clients_search_hint">Исм ёки телефон рақами</string>
+    <string name="clients_empty">Мижоз топилмади</string>
+    <string name="clients_action_add">Мижоз қўшиш</string>
+    <string name="client_order_count">%1$d та буюртма</string>
+    <string name="client_orders_section">Буюртмалар</string>
+    <string name="client_no_orders">Буюртма йўқ</string>
+    <string name="client_action_call">Қўнғироқ қилиш</string>
+    <string name="client_action_edit">Таҳрирлаш</string>
+    <string name="client_action_back">Орқага</string>
+    <string name="client_address_label">Манзил</string>
+    <string name="client_notes_label">Изоҳ</string>
+</resources>

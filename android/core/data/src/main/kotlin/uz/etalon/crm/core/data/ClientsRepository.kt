@@ -40,23 +40,34 @@ class ClientsRepository @Inject constructor(
      * here. The phone itself is normalised before it ever reaches the request: the server dedups
      * `POST /api/clients` by the normalized phone, and sending the raw typed form would let one
      * customer get created twice under two spellings of the same number.
+     *
+     * The returned id may belong to a client that ALREADY EXISTED. `POST /api/clients` looks the
+     * normalised phone up first and, when it finds a row, answers 200 with that row — ignoring
+     * the name and address that were submitted. A success here is therefore not proof anything
+     * was created, and no caller may report one as «қўшилди».
      */
     suspend fun create(input: ClientInput): Result<String> = runCatchingCancellable {
         if (!permissions.can(CLIENT_CREATE)) error("Мижоз қўшишга рухсат йўқ")
         api.createClient(input.toRequest()).id
     }
 
+    /**
+     * The response row is discarded: nothing on this screen reads it back, and `PATCH` answers
+     * with the stored row rather than with what was sent.
+     *
+     * `address` and `notes` cannot be CLEARED through here. The shared JSON config sets
+     * `explicitNulls = false`, so a null is omitted from the body rather than sent, and
+     * `ClientUpdateSchema` being `.partial()` means an absent key leaves the column untouched.
+     * That is the safe default — an edit sheet cannot wipe an address by accident — but it also
+     * means a UI must not offer "delete the address", because the delete would silently not happen.
+     */
     suspend fun update(id: String, input: ClientInput): Result<Unit> = runCatchingCancellable {
         if (!permissions.can(CLIENT_EDIT)) error("Мижозни таҳрирлашга рухсат йўқ")
-        mutate { api.updateClient(id, input.toRequest()) }
+        api.updateClient(id, input.toRequest())
+        Unit
     }
 
     private fun ClientInput.toRequest() = ClientWriteRequest(
         name = name, phone = normalizePhone(phone), address = address, notes = notes,
     )
-
-    /** Discards the response row; mirrors LogisticsRepository's `mutate` — `call`'s declared type
-     *  is `suspend () -> Unit`, and Kotlin's unit-coercion for lambda literals lets the call site
-     *  above pass a body that returns `ClientRowDto` unchanged, the value simply discarded. */
-    private suspend fun mutate(call: suspend () -> Unit) = call()
 }

@@ -15,9 +15,13 @@ import java.time.Instant
  * display one. Phone is this product's unique customer identity (names may legitimately
  * repeat), and the server dedups `POST /api/clients` by the normalized phone: sending anything
  * else here would let the same customer get created twice under two spellings of one number.
+ *
+ * ASCII digits only, deliberately not `Char.isDigit()`: Kotlin's is Unicode-aware and would
+ * accept an Arabic-Indic or Devanagari digit that the server's `/\D+/` never does, so the two
+ * sides would normalise one pasted string to two different phones — two rows for one customer.
  */
 fun normalizePhone(input: String): String {
-    val d = input.filter { it.isDigit() }
+    val d = input.filter { it in '0'..'9' }
     return when {
         d.isEmpty() -> ""
         d.length == 12 && d.startsWith("998") -> d
