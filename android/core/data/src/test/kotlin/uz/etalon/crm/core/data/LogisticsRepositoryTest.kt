@@ -61,6 +61,12 @@ private open class StubApi : EtalonApi {
     override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto = error("unused")
     override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = error("unused")
     override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = error("unused")
+
+    override suspend fun clients(q: String?, phone: String?): List<ClientRowDto> = error("unused")
+    override suspend fun createClient(body: ClientWriteRequest): ClientRowDto = error("unused")
+    override suspend fun client(id: String): ClientDetailDto = error("unused")
+    override suspend fun updateClient(id: String, body: ClientWriteRequest): ClientRowDto = error("unused")
+    override suspend fun dashboard(): DashboardDto = error("unused")
 }
 
 /** Any direct call fails the test — proves an operation went through the outbox instead. */

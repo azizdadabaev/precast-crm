@@ -83,6 +83,12 @@ private open class FakeApi : EtalonApi {
     override suspend fun addPaymentReceipt(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): ReceiptDto = throw NotImplementedError("unused")
     override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = throw NotImplementedError("unused")
     override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = throw NotImplementedError("unused")
+
+    override suspend fun clients(q: String?, phone: String?): List<ClientRowDto> = throw NotImplementedError("unused")
+    override suspend fun createClient(body: ClientWriteRequest): ClientRowDto = throw NotImplementedError("unused")
+    override suspend fun client(id: String): ClientDetailDto = throw NotImplementedError("unused")
+    override suspend fun updateClient(id: String, body: ClientWriteRequest): ClientRowDto = throw NotImplementedError("unused")
+    override suspend fun dashboard(): DashboardDto = throw NotImplementedError("unused")
 }
 
 /** A DAO whose list-read is broken, to prove refreshList()'s failure path never depends on it. */
