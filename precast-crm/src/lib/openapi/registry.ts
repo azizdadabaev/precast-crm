@@ -126,7 +126,7 @@ registry.registerPath({ method: "post", path: "/api/orders/{id}/comments", secur
 
 // ── Payments ────────────────────────────────────────────────────
 registry.registerPath({ method: "get", path: "/api/payments", security: bearer, request: { query: z.object({ orderId: z.string().optional(), status: PaymentStatusEnum.optional() }) }, responses: { 200: { description: "Payments", ...json(envelope(z.array(Any))) }, ...errors } });
-registry.registerPath({ method: "post", path: "/api/payments", security: bearer, request: { body: json(PaymentRecordSchema) }, responses: { 201: { description: "Payment", ...json(envelope(Any)) }, ...errors } });
+registry.registerPath({ method: "post", path: "/api/payments", security: bearer, request: { headers: z.object({ "Idempotency-Key": idem }), body: json(PaymentRecordSchema) }, responses: { 201: { description: "Payment", ...json(envelope(Any)) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/payments/{id}/confirm", security: bearer, request: { params: z.object({ id: z.string() }), body: json(PaymentConfirmSchema) }, responses: { 200: { description: "Confirmed", ...json(envelope(Any)) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/payments/{id}/reject", security: bearer, request: { params: z.object({ id: z.string() }), body: json(PaymentRejectSchema) }, responses: { 200: { description: "Rejected", ...json(envelope(Any)) }, ...errors } });
 registry.registerPath({ method: "post", path: "/api/payments/upload-receipt", security: bearer, request: { headers: z.object({ "Idempotency-Key": idem }), body: multipart({ file: File }) }, responses: { 200: { description: "Stored", ...json(envelope(z.object({ url: z.string() }))) }, ...errors } });

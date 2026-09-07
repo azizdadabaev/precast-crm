@@ -6,6 +6,7 @@ import { PaymentRecordSchema } from "@/lib/validation";
 import { validatePaidOn, PAID_ON_ERRORS } from "@/lib/payment-attribution";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { can } from "@/lib/permissions";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 
@@ -93,8 +94,14 @@ export const GET = withPermission("payment.view", async (req: NextRequest) => {
  *   - amount <= remaining (= totalPrice − confirmedPaid − sum of PENDING)
  *     so we can't double-record while a previous record is still awaiting confirmation
  *   - handOverNow stamps the office hand-over fields atomically (in-office cash only)
+ *
+ * Wrapped in `withIdempotency` for the same reason the two receipt routes are: the Android
+ * record screen offers a retry, and a response lost after the row has already committed would
+ * otherwise turn one tap into two real payments — silently inflating Order.confirmedPaid when
+ * the recorder is an owner, whose entries auto-confirm with no queue to catch it. Requests
+ * without the header are untouched, so the web is unaffected.
  */
-export const POST = withPermission("payment.record", async (req: NextRequest, { user }) => {
+export const POST = withPermission("payment.record", withIdempotency(async (req: NextRequest, { user }) => {
   const body = PaymentRecordSchema.parse(await req.json());
 
   const order = await prisma.order.findUnique({
@@ -258,7 +265,7 @@ export const POST = withPermission("payment.record", async (req: NextRequest, { 
   }
 
   return created(payment);
-});
+}));
 
 function buildEventMessage(body: {
   amount: number;

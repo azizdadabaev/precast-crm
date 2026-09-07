@@ -7,6 +7,7 @@ const ROUTES = [
   "src/app/api/orders/[id]/load/route.ts",
   "src/app/api/orders/[id]/loaded-photos/route.ts",
   "src/app/api/orders/[id]/shipments/[sid]/load/route.ts",
+  "src/app/api/payments/route.ts",
   "src/app/api/payments/upload-receipt/route.ts",
   "src/app/api/payments/[id]/receipts/route.ts",
   "src/app/api/orders/[id]/comments/route.ts",
