@@ -159,4 +159,20 @@ interface EtalonApi {
 
     @PATCH("/api/discrepancies/{id}")
     suspend fun updateDiscrepancy(@Path("id") id: String, @Body body: DiscrepancyUpdateRequest): DiscrepancyDto
+
+    // ── Home & clients (Phase 1d) ──────────────────────────────────
+    @GET("/api/clients")
+    suspend fun clients(@Query("q") q: String? = null, @Query("phone") phone: String? = null): List<ClientRowDto>
+
+    @POST("/api/clients")
+    suspend fun createClient(@Body body: ClientWriteRequest): ClientRowDto
+
+    @GET("/api/clients/{id}")
+    suspend fun client(@Path("id") id: String): ClientDetailDto
+
+    @PATCH("/api/clients/{id}")
+    suspend fun updateClient(@Path("id") id: String, @Body body: ClientWriteRequest): ClientRowDto
+
+    @GET("/api/dashboard")
+    suspend fun dashboard(): DashboardDto
 }
