@@ -75,6 +75,16 @@ private open class FakeApi : EtalonApi {
     override suspend fun createDriver(body: DriverCreateRequest): DriverListItemDto = throw NotImplementedError("unused")
     override suspend fun updateDriver(id: String, body: DriverUpdateRequest): DriverListItemDto = throw NotImplementedError("unused")
     override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = throw NotImplementedError("unused")
+
+    override suspend fun payments(orderId: String?, status: String?): List<PaymentDto> = throw NotImplementedError("unused")
+    override suspend fun recordPayment(body: PaymentRecordRequest): PaymentDto = throw NotImplementedError("unused")
+    override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentDto = throw NotImplementedError("unused")
+    override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentDto = throw NotImplementedError("unused")
+    override suspend fun handoverPayment(id: String): PaymentDto = throw NotImplementedError("unused")
+    override suspend fun uploadReceipt(idempotencyKey: String, authorization: String, file: MultipartBody.Part): ReceiptUrlDto = throw NotImplementedError("unused")
+    override suspend fun addPaymentReceipt(id: String, idempotencyKey: String, authorization: String, file: MultipartBody.Part): ReceiptDto = throw NotImplementedError("unused")
+    override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = throw NotImplementedError("unused")
+    override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = throw NotImplementedError("unused")
 }
 
 /** A DAO whose list-read is broken, to prove refreshList()'s failure path never depends on it. */

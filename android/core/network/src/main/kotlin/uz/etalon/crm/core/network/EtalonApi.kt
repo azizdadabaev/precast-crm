@@ -114,4 +114,46 @@ interface EtalonApi {
 
     @PATCH("/api/drivers/{id}/deactivate")
     suspend fun setDriverActive(@Path("id") id: String, @Body body: DriverActiveRequest): DriverListItemDto
+
+    // ── Payments & discrepancies ─────────────────────────────────
+
+    @GET("/api/payments")
+    suspend fun payments(@Query("orderId") orderId: String? = null, @Query("status") status: String? = null): List<PaymentDto>
+
+    @POST("/api/payments")
+    suspend fun recordPayment(@Body body: PaymentRecordRequest): PaymentDto
+
+    @POST("/api/payments/{id}/confirm")
+    suspend fun confirmPayment(@Path("id") id: String, @Body body: PaymentConfirmRequest): PaymentDto
+
+    @POST("/api/payments/{id}/reject")
+    suspend fun rejectPayment(@Path("id") id: String, @Body body: PaymentRejectRequest): PaymentDto
+
+    @POST("/api/payments/{id}/handover")
+    suspend fun handoverPayment(@Path("id") id: String): PaymentDto
+
+    // Multipart uploads carry their own Authorization header — see the loadTruck/addLoadedPhoto/
+    // deliveryProof/loadShipment comment above; the outbox drain pins the token explicitly.
+    @Multipart
+    @POST("/api/payments/upload-receipt")
+    suspend fun uploadReceipt(
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("Authorization") authorization: String,
+        @Part file: MultipartBody.Part,
+    ): ReceiptUrlDto
+
+    @Multipart
+    @POST("/api/payments/{id}/receipts")
+    suspend fun addPaymentReceipt(
+        @Path("id") id: String,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("Authorization") authorization: String,
+        @Part file: MultipartBody.Part,
+    ): ReceiptDto
+
+    @GET("/api/discrepancies")
+    suspend fun discrepancies(@Query("status") status: String? = null): List<DiscrepancyDto>
+
+    @PATCH("/api/discrepancies/{id}")
+    suspend fun updateDiscrepancy(@Path("id") id: String, @Body body: DiscrepancyUpdateRequest): DiscrepancyDto
 }

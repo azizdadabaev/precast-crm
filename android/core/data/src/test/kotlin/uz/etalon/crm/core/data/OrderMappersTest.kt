@@ -30,7 +30,7 @@ class OrderMappersTest {
             roomsSubtotal = "100.00", discountAmount = "0", deliveryCost = "0", otherCost = "0", writeOffAmount = "10.00",
             deliveryProofUrl = "/uploads/orders/o1/delivery-1.jpg",
             galleryPhotos = listOf(GalleryPhotoDto("g1", "/uploads/orders/o1/loaded-1.jpg")),
-            payments = listOf(PaymentDto("p1", "60.00", "CASH", "CONFIRMED", "2026-09-02T00:00:00.000Z", NameDto("u1", "Азиз"), listOf(ReceiptDto("r1", "/uploads/receipts/u1/x.jpg")))))
+            payments = listOf(OrderPaymentDto("p1", "60.00", "CASH", "CONFIRMED", "2026-09-02T00:00:00.000Z", NameDto("u1", "Азиз"), listOf(ReceiptDto("r1", "/uploads/receipts/u1/x.jpg")))))
         val o = d.toDomain("https://etalontbm.uz", Instant.EPOCH)
         assertEquals(Money.parse("30.00"), o.remaining)
         assertEquals("https://etalontbm.uz/uploads/orders/o1/loaded-1.jpg", o.loadedPhotoUrls.single())

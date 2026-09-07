@@ -60,6 +60,16 @@ private open class StubApi : EtalonApi {
     override suspend fun createDriver(body: DriverCreateRequest): DriverListItemDto = error("unused")
     override suspend fun updateDriver(id: String, body: DriverUpdateRequest): DriverListItemDto = error("unused")
     override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = error("unused")
+
+    override suspend fun payments(orderId: String?, status: String?): List<PaymentDto> = error("unused")
+    override suspend fun recordPayment(body: PaymentRecordRequest): PaymentDto = error("unused")
+    override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentDto = error("unused")
+    override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentDto = error("unused")
+    override suspend fun handoverPayment(id: String): PaymentDto = error("unused")
+    override suspend fun uploadReceipt(idempotencyKey: String, authorization: String, file: MultipartBody.Part): ReceiptUrlDto = error("unused")
+    override suspend fun addPaymentReceipt(id: String, idempotencyKey: String, authorization: String, file: MultipartBody.Part): ReceiptDto = error("unused")
+    override suspend fun discrepancies(status: String?): List<DiscrepancyDto> = error("unused")
+    override suspend fun updateDiscrepancy(id: String, body: DiscrepancyUpdateRequest): DiscrepancyDto = error("unused")
 }
 
 private class RecordingOrders : OrdersGateway {

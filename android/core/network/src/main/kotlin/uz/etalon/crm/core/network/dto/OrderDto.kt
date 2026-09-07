@@ -14,7 +14,9 @@ import kotlinx.serialization.Serializable
 @Serializable data class CalculationDto(val name: String? = null, val innerWidth: String, val innerLength: String, val pattern: String, val beamLength: String, val beamCount: Int, val totalBlocks: Int, val billedArea: String, val subtotal: String)
 @Serializable data class ProjectDto(val calculations: List<CalculationDto> = emptyList())
 @Serializable data class ReceiptDto(val id: String, val imageUrl: String)
-@Serializable data class PaymentDto(val id: String, val amount: String, val method: String, val status: String, val recordedAt: String, val recordedBy: NameDto? = null, val receipts: List<ReceiptDto> = emptyList())
+// Renamed from PaymentDto to avoid colliding with the richer PaymentDto in PaymentDto.kt
+// (the GET /api/payments confirmer view) — same package, so both can't share the name.
+@Serializable data class OrderPaymentDto(val id: String, val amount: String, val method: String, val status: String, val recordedAt: String, val recordedBy: NameDto? = null, val receipts: List<ReceiptDto> = emptyList())
 @Serializable data class DriverDto(val id: String, val name: String)
 @Serializable
 data class ShipmentDto(
@@ -49,7 +51,7 @@ data class GalleryPhotoDto(
     val roomsSubtotal: String, val discountAmount: String, val deliveryCost: String, val otherCost: String, val writeOffAmount: String = "0",
     val deliveryProofUrl: String? = null,
     val project: ProjectDto = ProjectDto(),
-    val payments: List<PaymentDto> = emptyList(),
+    val payments: List<OrderPaymentDto> = emptyList(),
     val shipments: List<ShipmentDto> = emptyList(),
     val events: List<OrderEventDto> = emptyList(),
     val galleryPhotos: List<GalleryPhotoDto> = emptyList(),
