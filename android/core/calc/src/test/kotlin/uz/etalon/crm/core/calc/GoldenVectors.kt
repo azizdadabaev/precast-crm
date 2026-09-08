@@ -1,6 +1,7 @@
 package uz.etalon.crm.core.calc
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
@@ -29,6 +30,37 @@ data class SlabGolden(
 )
 
 /**
+ * One case from `docs/api/gazoblok-golden.json`. Unlike [SlabCase], `gazoblok-engine.ts` exports
+ * several distinct functions (`fn`) with different input shapes and result shapes — some a bare
+ * number, some a nested object, some an object with array fields — so `input`/`result` are kept
+ * as raw [JsonElement]s for the parity test to decode per `fn`, rather than flattened into a
+ * `Map<String, JsonPrimitive>` the way the single-shaped slab cases are.
+ */
+data class GazoblokCase(
+    val name: String,
+    val fn: String,
+    val input: JsonObject,
+    val result: JsonElement,
+)
+
+/** One case from `gazoblok-golden.json`'s `rejects` — the exception type is always
+ *  [uz.etalon.crm.core.calc.gazoblok.GazoblokError]; [error] is that exception's message,
+ *  captured verbatim from the real thrown error. */
+data class GazoblokReject(
+    val name: String,
+    val fn: String,
+    val input: JsonObject,
+    val error: String,
+)
+
+data class GazoblokGolden(
+    val version: Int,
+    val catalogue: JsonObject,
+    val cases: List<GazoblokCase>,
+    val rejects: List<GazoblokReject>,
+)
+
+/**
  * Loads the golden vectors the server exports for parity testing against the Kotlin port of
  * `calculation-engine.ts`. `build.gradle.kts` declares `docs/api/calc-golden.json` as a `Test`
  * task input so Gradle re-runs this suite whenever the server regenerates the file — without
@@ -36,6 +68,7 @@ data class SlabGolden(
  */
 object GoldenVectors {
     val slab: SlabGolden by lazy { loadSlab() }
+    val gazoblok: GazoblokGolden by lazy { loadGazoblok() }
 
     private fun loadSlab(): SlabGolden {
         val root = Json.parseToJsonElement(goldenFile("calc-golden.json").readText()).jsonObject
@@ -51,6 +84,34 @@ object GoldenVectors {
             version = root.getValue("version").jsonPrimitive.int,
             pricing = root.getValue("pricing").jsonObject,
             cases = cases,
+        )
+    }
+
+    private fun loadGazoblok(): GazoblokGolden {
+        val root = Json.parseToJsonElement(goldenFile("gazoblok-golden.json").readText()).jsonObject
+        val cases = root.getValue("cases").jsonArray.map { element ->
+            val case = element.jsonObject
+            GazoblokCase(
+                name = case.getValue("name").jsonPrimitive.content,
+                fn = case.getValue("fn").jsonPrimitive.content,
+                input = case.getValue("input").jsonObject,
+                result = case.getValue("result"),
+            )
+        }
+        val rejects = root.getValue("rejects").jsonArray.map { element ->
+            val reject = element.jsonObject
+            GazoblokReject(
+                name = reject.getValue("name").jsonPrimitive.content,
+                fn = reject.getValue("fn").jsonPrimitive.content,
+                input = reject.getValue("input").jsonObject,
+                error = reject.getValue("error").jsonPrimitive.content,
+            )
+        }
+        return GazoblokGolden(
+            version = root.getValue("version").jsonPrimitive.int,
+            catalogue = root.getValue("catalogue").jsonObject,
+            cases = cases,
+            rejects = rejects,
         )
     }
 
