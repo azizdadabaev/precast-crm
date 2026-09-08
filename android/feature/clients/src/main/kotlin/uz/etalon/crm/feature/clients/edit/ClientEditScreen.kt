@@ -263,10 +263,11 @@ private fun RegionPickerSheet(
                 )
             }
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                items(matches, key = { it.first }) { (uz, latin) ->
+                // Latin stays a search key only (matched above) — never shown. The web's
+                // AddressInput does the same: Cyrillic is the only spelling on screen.
+                items(matches, key = { it.first }) { (uz, _) ->
                     ListItem(
                         headlineContent = { Text(uz) },
-                        supportingContent = { Text(latin, style = MaterialTheme.typography.bodySmall) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = ROW_MIN)
                             .clickable { onPick(uz) },
                     )
