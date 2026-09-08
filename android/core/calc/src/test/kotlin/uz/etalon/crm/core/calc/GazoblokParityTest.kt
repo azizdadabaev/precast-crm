@@ -108,10 +108,12 @@ private fun invokeForReject(fn: String, input: JsonObject) {
 
 // ── estimateWall ─────────────────────────────────────────────────
 
+/** Also used by BoundaryTest, to get a real [WallEstimateResult] to run through `.money()`. */
+fun callEstimateWall(input: JsonObject): WallEstimateResult =
+    estimateWall(input.getValue("product").jsonObject.toBlockProduct(), input.getValue("wall").jsonObject.toWallEstimateInput())
+
 private fun assertWallResult(c: GazoblokCase) {
-    val product = c.input.getValue("product").jsonObject.toBlockProduct()
-    val wall = c.input.getValue("wall").jsonObject.toWallEstimateInput()
-    val r: WallEstimateResult = estimateWall(product, wall)
+    val r: WallEstimateResult = callEstimateWall(c.input)
     val expected = c.result.jsonObject
     assertEquals(expected.keys, r.toWireMap().keys, "${c.name}: field set")
     assertEquals(expected.getValue("wallAreaM2").jsonPrimitive.double, r.wallAreaM2, "${c.name}: wallAreaM2")
@@ -124,7 +126,8 @@ private fun assertWallResult(c: GazoblokCase) {
 
 // ── orderTotal ───────────────────────────────────────────────────
 
-private fun callOrderTotal(input: JsonObject): BlockOrderTotal {
+/** Also used by BoundaryTest, to get a real [BlockOrderTotal] to run through `.money()`. */
+fun callOrderTotal(input: JsonObject): BlockOrderTotal {
     val lines = input.getValue("lines").jsonArray.map {
         val o = it.jsonObject
         OrderLineInput(unitPrice = o.getValue("unitPrice").jsonPrimitive.double, quantity = o.getValue("quantity").jsonPrimitive.double)
@@ -152,7 +155,8 @@ private fun assertOrderTotalResult(c: GazoblokCase) {
 
 // ── estimateProject ──────────────────────────────────────────────
 
-private fun callEstimateProject(input: JsonObject): ProjectEstimateResult {
+/** Also used by BoundaryTest, to get a real [ProjectEstimateResult] to run through `.money()`. */
+fun callEstimateProject(input: JsonObject): ProjectEstimateResult {
     val walls = input.getValue("walls").jsonArray.map { it.jsonObject.toWallInput() }
     val products = input.getValue("products").jsonObject.toProductsMap()
     val opts = input.getValue("opts").jsonObject.toProjectEstimateOpts()
@@ -202,7 +206,8 @@ private fun assertEstimateProjectResult(c: GazoblokCase) {
 
 // ── Input decoding ───────────────────────────────────────────────
 
-private fun JsonObject.toBlockProduct(): BlockProduct = BlockProduct(
+/** Also used by BoundaryTest, to decode a `pricePerM3`/`estimateWall` case's product input. */
+fun JsonObject.toBlockProduct(): BlockProduct = BlockProduct(
     lengthM = getValue("lengthM").jsonPrimitive.double,
     heightM = getValue("heightM").jsonPrimitive.double,
     thicknessM = getValue("thicknessM").jsonPrimitive.double,

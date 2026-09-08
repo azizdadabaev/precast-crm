@@ -1,6 +1,10 @@
 package uz.etalon.crm.core.calc
 
 import java.math.BigDecimal
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.DynamicTest
@@ -100,6 +104,79 @@ class BoundaryTest {
             assertEquals(tierPrice(it, fromGolden.m2PriceTiers), tierPrice(it, fromAndroid.m2PriceTiers))
         }
     }
+
+    // ── Gazoblok ─────────────────────────────────────────────────
+    //
+    // Same technique as the slab TestFactories above, replayed over docs/api/gazoblok-golden.json
+    // instead of hand-built fixtures: the actual gazoblok engine functions are called through the
+    // shared decode helpers in GazoblokParityTest.kt, then run through Boundary.kt's gazoblok
+    // conversions, and asserted against the vector's own wire literal.
+
+    @TestFactory
+    fun `every gazoblok pricePerM3 golden vector converts to Money losslessly`() =
+        GoldenVectors.gazoblok.cases.filter { it.fn == "pricePerM3" }.map { c ->
+            DynamicTest.dynamicTest(c.name) {
+                val money = c.input.toBlockProduct().pricePerM3Money()
+                assertMoneyEquals(c.result.jsonPrimitive.content, money, c.name)
+            }
+        }
+
+    @TestFactory
+    fun `every gazoblok lineTotal golden vector converts to Money losslessly`() =
+        GoldenVectors.gazoblok.cases.filter { it.fn == "lineTotal" }.map { c ->
+            DynamicTest.dynamicTest(c.name) {
+                val unitPrice = c.input.getValue("unitPrice").jsonPrimitive.double
+                val quantity = c.input.getValue("quantity").jsonPrimitive.double
+                assertMoneyEquals(c.result.jsonPrimitive.content, lineTotalMoney(unitPrice, quantity), c.name)
+            }
+        }
+
+    @TestFactory
+    fun `every gazoblok estimateWall golden vector converts to Money losslessly`() =
+        GoldenVectors.gazoblok.cases.filter { it.fn == "estimateWall" }.map { c ->
+            DynamicTest.dynamicTest(c.name) {
+                val r = callEstimateWall(c.input)
+                val expectedPrice = c.result.jsonObject.getValue("price").jsonPrimitive.content
+                assertMoneyEquals(expectedPrice, r.money().price, c.name)
+            }
+        }
+
+    @TestFactory
+    fun `every gazoblok orderTotal golden vector converts to Money losslessly`() =
+        GoldenVectors.gazoblok.cases.filter { it.fn == "orderTotal" }.map { c ->
+            DynamicTest.dynamicTest(c.name) {
+                val m = callOrderTotal(c.input).money()
+                val expected = c.result.jsonObject
+                assertMoneyEquals(expected.getValue("linesSubtotal").jsonPrimitive.content, m.linesSubtotal, c.name)
+                assertMoneyEquals(expected.getValue("discountAmount").jsonPrimitive.content, m.discountAmount, c.name)
+                assertMoneyEquals(expected.getValue("deliveryCost").jsonPrimitive.content, m.deliveryCost, c.name)
+                assertMoneyEquals(expected.getValue("total").jsonPrimitive.content, m.total, c.name)
+                // discountPercent stays BigDecimal, not Money — same reasoning as the slab side's
+                // ProjectMoney.discountPercent (see the class doc above).
+                val expectedPercent = BigDecimal(expected.getValue("discountPercent").jsonPrimitive.content)
+                assertEquals(0, expectedPercent.compareTo(m.discountPercent)) {
+                    "${c.name}: expected discountPercent $expectedPercent got ${m.discountPercent}"
+                }
+                // totalBlocks stays Double — a block count, not an amount.
+                assertEquals(expected.getValue("totalBlocks").jsonPrimitive.double, m.totalBlocks, "${c.name}: totalBlocks")
+            }
+        }
+
+    @TestFactory
+    fun `every gazoblok estimateProject golden vector converts to Money losslessly`() =
+        GoldenVectors.gazoblok.cases.filter { it.fn == "estimateProject" }.map { c ->
+            DynamicTest.dynamicTest(c.name) {
+                val m = callEstimateProject(c.input).money()
+                val expected = c.result.jsonObject
+                val expectedPerSize = expected.getValue("perSize").jsonArray
+                assertEquals(expectedPerSize.size, m.perSize.size, "${c.name}: perSize length")
+                expectedPerSize.forEachIndexed { i, el ->
+                    val expectedPrice = el.jsonObject.getValue("price").jsonPrimitive.content
+                    assertMoneyEquals(expectedPrice, m.perSize[i].price, "${c.name}: perSize[$i]")
+                }
+                assertMoneyEquals(expected.getValue("totalPrice").jsonPrimitive.content, m.totalPrice, c.name)
+            }
+        }
 }
 
 /** The `Pricing` the server's bootstrap sends for the default tiers — same wire strings as
