@@ -15,9 +15,19 @@ dependencies {
 // Test task inputs is what makes Gradle re-run this suite when the server regenerates either
 // file; without it, a parity break sails through as "up to date", which is the exact failure
 // ServerContractTest's own input declaration (:core:network) exists to avoid for its own sources.
+//
+// EngineDriftTest reads the TS sources THEMSELVES (not just the exported vectors) so a constant
+// edited without a regeneration — a tier price, PITCH, a gazoblok default — still fails instead
+// of the JSON and the Kotlin quietly agreeing with each other while both are wrong. Declaring
+// them as inputs the same way is what makes Gradle re-run on a source edit rather than reporting
+// "up to date".
 tasks.withType<Test>().configureEach {
     inputs.files(rootProject.file("../docs/api/calc-golden.json"))
         .withPropertyName("goldenVectors").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.files(rootProject.file("../docs/api/gazoblok-golden.json"))
         .withPropertyName("gazoblokGoldenVectors").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(rootProject.file("../precast-crm/src/services/calculation-engine.ts"))
+        .withPropertyName("calculationEngineSource").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(rootProject.file("../precast-crm/src/services/gazoblok-engine.ts"))
+        .withPropertyName("gazoblokEngineSource").withPathSensitivity(PathSensitivity.RELATIVE)
 }
