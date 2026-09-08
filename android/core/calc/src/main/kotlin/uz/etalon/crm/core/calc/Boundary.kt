@@ -22,7 +22,7 @@ import uz.etalon.crm.core.model.Pricing
  * two decimals ever reaches this boundary — the correct loud failure for a non-`round2`'d double,
  * rather than a silent rounding that could shave a sum invoiced to a customer.
  */
-fun moneyOf(d: Double): Money = Money(BigDecimal.valueOf(d).setScale(2, RoundingMode.UNNECESSARY))
+internal fun moneyOf(d: Double): Money = Money(BigDecimal.valueOf(d).setScale(2, RoundingMode.UNNECESSARY))
 
 /** Android's `BigDecimal`/`Money` pricing (`core:model` `Session.kt`) → the engine's `Double` config. */
 fun Pricing.toPriceConfig(): PriceConfig = PriceConfig(

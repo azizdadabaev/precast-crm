@@ -2,8 +2,10 @@ package uz.etalon.crm.core.calc
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -28,6 +30,28 @@ data class SlabGolden(
     val pricing: JsonObject,
     val cases: List<SlabCase>,
 )
+
+/**
+ * One case from `calc-golden.json`'s `project` block: [projectTotal] replayed over a list of
+ * room SUBTOTALS rather than full [SlabResult]s — `projectTotal` only ever reads `room.subtotal`,
+ * so the exporter (see the header comment in `precast-crm/scripts/export-calc-golden.ts`) records
+ * a plain `number[]` and this loader builds dummy rooms carrying only that field.
+ *
+ * [discountAmountOverride] is `null` only when the wire value is JSON `null`; a wire `0` decodes
+ * to `0.0`, not `null`. Two vectors exist specifically to pin that distinction — an override of
+ * `0` and of a negative number both fall through to the percent branch because `projectTotal`
+ * tests `> 0`, not "is present" — so collapsing JSON `null` and `0` here would make those two
+ * vectors indistinguishable from every case that omits an override.
+ */
+data class ProjectCase(
+    val name: String,
+    val roomSubtotals: List<Double>,
+    val discountPercent: Double,
+    val discountAmountOverride: Double?,
+    val result: Map<String, JsonPrimitive>,
+)
+
+data class ProjectGolden(val cases: List<ProjectCase>)
 
 /**
  * One case from `docs/api/gazoblok-golden.json`. Unlike [SlabCase], `gazoblok-engine.ts` exports
@@ -67,11 +91,17 @@ data class GazoblokGolden(
  * that declaration a parity break sails through as "up to date".
  */
 object GoldenVectors {
-    val slab: SlabGolden by lazy { loadSlab() }
+    val slab: SlabGolden by lazy { parseSlab(calcGoldenRoot) }
+    val project: ProjectGolden by lazy { parseProject(calcGoldenRoot) }
     val gazoblok: GazoblokGolden by lazy { loadGazoblok() }
 
-    private fun loadSlab(): SlabGolden {
-        val root = Json.parseToJsonElement(goldenFile("calc-golden.json").readText()).jsonObject
+    /** `calc-golden.json` parsed once; [slab] and [project] both read off this same root instead
+     *  of each re-reading and re-parsing the file. */
+    private val calcGoldenRoot: JsonObject by lazy {
+        Json.parseToJsonElement(goldenFile("calc-golden.json").readText()).jsonObject
+    }
+
+    private fun parseSlab(root: JsonObject): SlabGolden {
         val cases = root.getValue("cases").jsonArray.map { element ->
             val case = element.jsonObject
             SlabCase(
@@ -85,6 +115,22 @@ object GoldenVectors {
             pricing = root.getValue("pricing").jsonObject,
             cases = cases,
         )
+    }
+
+    private fun parseProject(root: JsonObject): ProjectGolden {
+        val cases = root.getValue("project").jsonObject.getValue("cases").jsonArray.map { element ->
+            val case = element.jsonObject
+            val input = case.getValue("input").jsonObject
+            val overrideElement = input.getValue("discount_amount_override")
+            ProjectCase(
+                name = case.getValue("name").jsonPrimitive.content,
+                roomSubtotals = input.getValue("room_subtotals").jsonArray.map { it.jsonPrimitive.double },
+                discountPercent = input.getValue("discount_percent").jsonPrimitive.double,
+                discountAmountOverride = if (overrideElement is JsonNull) null else overrideElement.jsonPrimitive.double,
+                result = case.getValue("result").jsonObject.mapValues { it.value.jsonPrimitive },
+            )
+        }
+        return ProjectGolden(cases = cases)
     }
 
     private fun loadGazoblok(): GazoblokGolden {
