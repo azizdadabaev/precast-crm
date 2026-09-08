@@ -49,8 +49,8 @@ class SlabParityTest {
     }
 }
 
-/** Decodes a case's raw `input` object into a [SlabInput]. */
-private fun Map<String, JsonPrimitive>.toSlabInput(): SlabInput = SlabInput(
+/** Decodes a case's raw `input` object into a [SlabInput]. Also used by BoundaryTest. */
+fun Map<String, JsonPrimitive>.toSlabInput(): SlabInput = SlabInput(
     innerWidth = getValue("inner_width").double,
     innerLength = getValue("inner_length").double,
     bearing = this["bearing"]?.double,
@@ -60,8 +60,8 @@ private fun Map<String, JsonPrimitive>.toSlabInput(): SlabInput = SlabInput(
     forceStartBeam = this["force_start_beam"]?.boolean,
 )
 
-/** Decodes the golden file's `pricing` block into a [PriceConfig]. */
-private fun JsonObject.toPriceConfig(): PriceConfig = PriceConfig(
+/** Decodes the golden file's `pricing` block into a [PriceConfig]. Also used by BoundaryTest. */
+fun JsonObject.toPriceConfig(): PriceConfig = PriceConfig(
     m2PriceTiers = getValue("m2_price_tiers").jsonArray.map { it.jsonObject.toPriceTier() },
     extraBeamPriceTiers = getValue("extra_beam_price_tiers").jsonArray.map { it.jsonObject.toPriceTier() },
     blockUnitPrice = getValue("block_unit_price").jsonPrimitive.double,
