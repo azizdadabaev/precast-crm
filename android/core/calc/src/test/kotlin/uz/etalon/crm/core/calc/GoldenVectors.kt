@@ -19,10 +19,18 @@ import java.io.File
  * output by name against whatever this Kotlin port computes, rather than this loader silently
  * dropping a field nobody remembered to type into a hand-written data class.
  */
+/**
+ * [pricing] is non-null only for the handful of cases the exporter computed against an
+ * owner-edited [PriceConfig] rather than [SlabGolden.pricing] (`docs/api/calc-golden.json`'s
+ * `export-calc-golden.ts` header comment documents the schema) — proving `calculateSlab` actually
+ * honours its `priceConfig` argument rather than silently reading the module default. A `null`
+ * here means "computed with `SlabGolden.pricing`", same as every case before this field existed.
+ */
 data class SlabCase(
     val name: String,
     val input: Map<String, JsonPrimitive>,
     val result: Map<String, JsonPrimitive>,
+    val pricing: JsonObject?,
 )
 
 data class SlabGolden(
@@ -108,6 +116,7 @@ object GoldenVectors {
                 name = case.getValue("name").jsonPrimitive.content,
                 input = case.getValue("input").jsonObject.mapValues { it.value.jsonPrimitive },
                 result = case.getValue("result").jsonObject.mapValues { it.value.jsonPrimitive },
+                pricing = case["pricing"]?.jsonObject,
             )
         }
         return SlabGolden(

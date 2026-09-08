@@ -26,6 +26,20 @@
 //
 // Gazoblok cases: see buildGazoblokGolden() below — a parallel, self-
 // contained export to docs/api/gazoblok-golden.json for gazoblok-engine.ts.
+//
+// Custom-pricing cases (`customPricingCases`): every case above runs against
+// DEFAULT_PRICE_CONFIG, which is also what `pricing` at the file's root
+// holds — so a Kotlin port that silently read its own default config
+// instead of the `priceConfig` argument would still pass all of them.
+// `customPricingCases` covers `calculateSlab`'s second argument itself: each
+// entry supplies its own owner-edited `PriceConfig` (different prices, and a
+// moved tier boundary so tier SELECTION differs too, not just the price
+// inside the same bracket) and the exported `GoldenCase` carries that
+// config on a `pricing` field. A case with no `pricing` field (every case
+// above) means "computed with DEFAULT_PRICE_CONFIG, same as the root
+// `pricing` block" — existing consumers of the file are unaffected. The
+// Kotlin side replays each case with its own `pricing` when present, or the
+// root block otherwise.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
@@ -53,7 +67,7 @@ import {
   type ProjectEstimateOpts,
 } from "../src/services/gazoblok-engine";
 
-export interface GoldenCase { name: string; input: SlabInput; result: SlabResult }
+export interface GoldenCase { name: string; input: SlabInput; result: SlabResult; pricing?: PriceConfig }
 
 export interface ProjectGoldenCaseInput {
   room_subtotals: number[];
@@ -181,6 +195,40 @@ const inputs: Array<{ name: string; input: SlabInput }> = [
 
 export const GOLDEN_CASES = inputs;
 
+// ── Custom-pricing cases (calculateSlab's priceConfig argument) ────
+//
+// An owner-edited tier table: every price differs from DEFAULT_PRICE_CONFIG,
+// and the first tier's boundary moves from 4.30 to 5.00 — at beam_length
+// 4.80 (inner_width 4.5, default bearing 0.15) that's the difference between
+// landing in tier 1 (this config) and tier 2 (the default config), so a port
+// that ignored priceConfig and fell back to its own module default would
+// pick the wrong TIER, not just the wrong price inside the right one.
+const CUSTOM_PRICE_CONFIG: PriceConfig = {
+  m2_price_tiers: [
+    { max_beam_length: 5.00, price: 155_000 },
+    { max_beam_length: 6.00, price: 195_000 },
+    { max_beam_length: 7.00, price: 215_000 },
+    { max_beam_length: 8.00, price: 235_000 },
+    { max_beam_length: 9.00, price: 255_000 },
+  ],
+  extra_beam_price_tiers: [
+    { max_beam_length: 5.00, price: 65_000 },
+    { max_beam_length: 6.00, price: 85_000 },
+    { max_beam_length: 7.00, price: 105_000 },
+    { max_beam_length: 8.00, price: 125_000 },
+    { max_beam_length: 9.00, price: 145_000 },
+  ],
+  block_unit_price: 6_500,
+};
+
+const customPricingCases: Array<{ name: string; input: SlabInput; pricing: PriceConfig }> = [
+  {
+    name: "owner-edited pricing (moved tier boundary) picks a different m2 tier than the default config",
+    input: { inner_width: 4.5, inner_length: 5.0 },
+    pricing: CUSTOM_PRICE_CONFIG,
+  },
+];
+
 // ── Project vectors (projectTotal) ─────────────────────────────────
 //
 // One case per bullet in the task-4 brief: a percent discount, an amount
@@ -274,11 +322,19 @@ export function buildGolden(): GoldenFile {
   return {
     version: 1,
     pricing: DEFAULT_PRICE_CONFIG,
-    cases: inputs.map((c) => ({
-      name: c.name,
-      input: c.input,
-      result: calculateSlab(c.input, DEFAULT_PRICE_CONFIG),
-    })),
+    cases: [
+      ...inputs.map((c) => ({
+        name: c.name,
+        input: c.input,
+        result: calculateSlab(c.input, DEFAULT_PRICE_CONFIG),
+      })),
+      ...customPricingCases.map((c) => ({
+        name: c.name,
+        input: c.input,
+        result: calculateSlab(c.input, c.pricing),
+        pricing: c.pricing,
+      })),
+    ],
     project: buildProjectGolden(),
   };
 }

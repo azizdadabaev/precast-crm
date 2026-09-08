@@ -36,7 +36,9 @@ class BoundaryTest {
     fun `every money field of every golden vector converts to Money losslessly`() =
         GoldenVectors.slab.cases.map { c ->
             DynamicTest.dynamicTest(c.name) {
-                val m = calculateSlab(c.input.toSlabInput(), GoldenVectors.slab.pricing.toPriceConfig()).money()
+                // Same per-case pricing fallback as SlabParityTest — see GoldenVectors.SlabCase.pricing.
+                val priceConfig = (c.pricing ?: GoldenVectors.slab.pricing).toPriceConfig()
+                val m = calculateSlab(c.input.toSlabInput(), priceConfig).money()
                 assertMoneyEquals(c.result.getValue("subtotal").content, m.subtotal, c.name)
                 assertMoneyEquals(c.result.getValue("m2_cost").content, m.m2Cost, c.name)
                 assertMoneyEquals(c.result.getValue("pattern_extra_cost").content, m.patternExtraCost, c.name)

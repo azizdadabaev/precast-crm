@@ -2503,6 +2503,90 @@
         "subtotal": 9728540,
         "is_extras_only": false
       }
+    },
+    {
+      "name": "owner-edited pricing (moved tier boundary) picks a different m2 tier than the default config",
+      "input": {
+        "inner_width": 4.5,
+        "inner_length": 5
+      },
+      "result": {
+        "inner_width": 4.5,
+        "inner_length": 5,
+        "bearing": 0.15,
+        "correction": 0,
+        "extra_beams": 0,
+        "force_start_beam": false,
+        "effective_length": 5,
+        "pitches": 8,
+        "remainder": 0.36,
+        "pattern": "GBG",
+        "pattern_auto": "GBG",
+        "beam_length": 4.8,
+        "blocks_per_row": 23,
+        "beam_count": 8,
+        "block_rows": 9,
+        "total_blocks": 207,
+        "monolith_length": 5.09,
+        "billed_length": 5.09,
+        "monolith_area": 24.432,
+        "billed_area": 24.432,
+        "concrete_volume": 1.222,
+        "m2_price": 155000,
+        "extra_beam_price_per_m": 65000,
+        "m2_cost": 3786960,
+        "pattern_extra_cost": 0,
+        "manual_extra_beams_cost": 0,
+        "subtotal": 3786960,
+        "is_extras_only": false
+      },
+      "pricing": {
+        "m2_price_tiers": [
+          {
+            "max_beam_length": 5,
+            "price": 155000
+          },
+          {
+            "max_beam_length": 6,
+            "price": 195000
+          },
+          {
+            "max_beam_length": 7,
+            "price": 215000
+          },
+          {
+            "max_beam_length": 8,
+            "price": 235000
+          },
+          {
+            "max_beam_length": 9,
+            "price": 255000
+          }
+        ],
+        "extra_beam_price_tiers": [
+          {
+            "max_beam_length": 5,
+            "price": 65000
+          },
+          {
+            "max_beam_length": 6,
+            "price": 85000
+          },
+          {
+            "max_beam_length": 7,
+            "price": 105000
+          },
+          {
+            "max_beam_length": 8,
+            "price": 125000
+          },
+          {
+            "max_beam_length": 9,
+            "price": 145000
+          }
+        ],
+        "block_unit_price": 6500
+      }
     }
   ],
   "project": {

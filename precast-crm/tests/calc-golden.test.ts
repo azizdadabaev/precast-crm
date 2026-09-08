@@ -17,7 +17,7 @@ describe("calc golden vectors", () => {
   it("results are reproducible from the engine", () => {
     const g = buildGolden();
     for (const c of g.cases) {
-      expect(calculateSlab(c.input, DEFAULT_PRICE_CONFIG)).toEqual(c.result);
+      expect(calculateSlab(c.input, c.pricing ?? DEFAULT_PRICE_CONFIG)).toEqual(c.result);
     }
     expect(g.pricing).toEqual(DEFAULT_PRICE_CONFIG);
   });

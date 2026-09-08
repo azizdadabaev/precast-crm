@@ -25,7 +25,11 @@ class SlabParityTest {
     @TestFactory
     fun `every slab golden vector replays bit for bit`() = GoldenVectors.slab.cases.map { c ->
         DynamicTest.dynamicTest(c.name) {
-            val r = calculateSlab(c.input.toSlabInput(), GoldenVectors.slab.pricing.toPriceConfig())
+            // A case's own `pricing` (an owner-edited PriceConfig) wins when present — this is
+            // what proves calculateSlab actually reads its priceConfig argument rather than
+            // silently falling back to DEFAULT_PRICE_CONFIG; see GoldenVectors.SlabCase.pricing.
+            val priceConfig = (c.pricing ?: GoldenVectors.slab.pricing).toPriceConfig()
+            val r = calculateSlab(c.input.toSlabInput(), priceConfig)
             val actual = r.toWireMap() // Map<String, Any> keyed by the 28 snake_case names
             assertEquals(c.result.keys, actual.keys, "field set")
             for ((k, expected) in c.result) assertEquals(expected.asKotlin(), actual[k], "${c.name}: $k")
