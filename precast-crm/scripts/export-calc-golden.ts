@@ -400,6 +400,23 @@ const gazoblokCaseSpecs: Array<{ name: string; fn: GazoblokFn; input: unknown; r
     return { name: "estimateProject groups blocks by size — one perSize entry per product", fn: "estimateProject" as const, input: { walls, products: productsObj, opts }, run: () => estimateProject(walls, new Map(Object.entries(productsObj)), opts) };
   })(),
   (() => {
+    // The multi-product case above happens to insert the pricier product first, so insertion
+    // order already equals sorted (price-descending) order — deleting the `perSize.sort(...)`
+    // call would still pass it. Here the CHEAPER product's wall (B, 100mm) is listed first and
+    // the pricier one (A, 300mm) second, so `perSize` must actually be reordered by price for
+    // this case to pass: without the sort, perSize would come out [B, A] instead of [A, B].
+    const walls: WallInput[] = [
+      { id: "w1", productId: "B", lengthM: 5, heightM: 2, openings: [] },
+      { id: "w2", productId: "A", lengthM: 4, heightM: 2, openings: [] },
+    ];
+    const productsObj = {
+      A: { lengthM: 0.6, heightM: 0.25, thicknessM: 0.3, pricePerBlock: 30_000, label: "300mm" },
+      B: { lengthM: 0.6, heightM: 0.25, thicknessM: 0.1, pricePerBlock: 12_000, label: "100mm" },
+    };
+    const opts: ProjectEstimateOpts = { jointMm: 2, wastePct: 5 };
+    return { name: "estimateProject sorts perSize by price even when the cheaper product's wall is listed first", fn: "estimateProject" as const, input: { walls, products: productsObj, opts }, run: () => estimateProject(walls, new Map(Object.entries(productsObj)), opts) };
+  })(),
+  (() => {
     const walls: WallInput[] = [
       { id: "w1", productId: "A", lengthM: 3, heightM: 2, openings: [] },
       { id: "w2", productId: "A", lengthM: 3, heightM: 2, openings: [] },

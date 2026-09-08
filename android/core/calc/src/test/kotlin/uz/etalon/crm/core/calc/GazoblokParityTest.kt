@@ -32,6 +32,7 @@ import uz.etalon.crm.core.calc.gazoblok.estimateWall
 import uz.etalon.crm.core.calc.gazoblok.lineTotal
 import uz.etalon.crm.core.calc.gazoblok.orderTotal
 import uz.etalon.crm.core.calc.gazoblok.pricePerM3
+import uz.etalon.crm.core.calc.gazoblok.toWireMap
 
 /**
  * Replays every case in `docs/api/gazoblok-golden.json` — the vectors the server exports by
@@ -112,6 +113,7 @@ private fun assertWallResult(c: GazoblokCase) {
     val wall = c.input.getValue("wall").jsonObject.toWallEstimateInput()
     val r: WallEstimateResult = estimateWall(product, wall)
     val expected = c.result.jsonObject
+    assertEquals(expected.keys, r.toWireMap().keys, "${c.name}: field set")
     assertEquals(expected.getValue("wallAreaM2").jsonPrimitive.double, r.wallAreaM2, "${c.name}: wallAreaM2")
     assertEquals(expected.getValue("blockFaceAreaM2").jsonPrimitive.double, r.blockFaceAreaM2, "${c.name}: blockFaceAreaM2")
     assertEquals(expected.getValue("wastePct").jsonPrimitive.double, r.wastePct, "${c.name}: wastePct")
@@ -139,6 +141,7 @@ private fun callOrderTotal(input: JsonObject): BlockOrderTotal {
 private fun assertOrderTotalResult(c: GazoblokCase) {
     val r = callOrderTotal(c.input)
     val expected = c.result.jsonObject
+    assertEquals(expected.keys, r.toWireMap().keys, "${c.name}: field set")
     assertEquals(expected.getValue("linesSubtotal").jsonPrimitive.double, r.linesSubtotal, "${c.name}: linesSubtotal")
     assertEquals(expected.getValue("discountPercent").jsonPrimitive.double, r.discountPercent, "${c.name}: discountPercent")
     assertEquals(expected.getValue("discountAmount").jsonPrimitive.double, r.discountAmount, "${c.name}: discountAmount")
@@ -162,6 +165,7 @@ private fun callEstimateProject(input: JsonObject): ProjectEstimateResult {
 private fun assertEstimateProjectResult(c: GazoblokCase) {
     val r = callEstimateProject(c.input)
     val expected = c.result.jsonObject
+    assertEquals(expected.keys, r.toWireMap().keys, "${c.name}: field set")
 
     val expectedPerSize = expected.getValue("perSize").jsonArray
     assertEquals(expectedPerSize.size, r.perSize.size, "${c.name}: perSize length")

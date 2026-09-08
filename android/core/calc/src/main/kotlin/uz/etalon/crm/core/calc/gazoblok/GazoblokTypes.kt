@@ -142,3 +142,41 @@ data class BlockOrderTotal(
     val total: Double,
     val totalBlocks: Double,
 )
+
+// ── Wire maps for the golden-vector field-set guard ─────────────────
+//
+// Same technique as uz.etalon.crm.core.calc.SlabResult.toWireMap: a hand-maintained field-name
+// list that GazoblokParityTest compares by KEY SET against the golden JSON's result object, so a
+// field the port forgot — or one a future exporter change adds — is a set mismatch instead of a
+// silent pass. Field names already match gazoblok-engine.ts's camelCase keys one for one, so this
+// is an identity mapping rather than a snake_case translation.
+
+/** Wire representation of [WallEstimateResult] for the `estimateWall` field-set guard. */
+fun WallEstimateResult.toWireMap(): Map<String, Any> = mapOf(
+    "wallAreaM2" to wallAreaM2,
+    "blockFaceAreaM2" to blockFaceAreaM2,
+    "wastePct" to wastePct,
+    "blocksNeeded" to blocksNeeded,
+    "volumeM3" to volumeM3,
+    "price" to price,
+)
+
+/** Wire representation of [BlockOrderTotal] for the `orderTotal` field-set guard. */
+fun BlockOrderTotal.toWireMap(): Map<String, Any> = mapOf(
+    "linesSubtotal" to linesSubtotal,
+    "discountPercent" to discountPercent,
+    "discountAmount" to discountAmount,
+    "deliveryCost" to deliveryCost,
+    "total" to total,
+    "totalBlocks" to totalBlocks,
+)
+
+/** Wire representation of [ProjectEstimateResult] for the `estimateProject` field-set guard. */
+fun ProjectEstimateResult.toWireMap(): Map<String, Any> = mapOf(
+    "perSize" to perSize,
+    "glue" to glue,
+    "totalBlocks" to totalBlocks,
+    "totalVolumeM3" to totalVolumeM3,
+    "totalPrice" to totalPrice,
+    "warnings" to warnings,
+)

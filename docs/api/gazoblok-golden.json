@@ -503,6 +503,77 @@
       }
     },
     {
+      "name": "estimateProject sorts perSize by price even when the cheaper product's wall is listed first",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "B",
+            "lengthM": 5,
+            "heightM": 2,
+            "openings": []
+          },
+          {
+            "id": "w2",
+            "productId": "A",
+            "lengthM": 4,
+            "heightM": 2,
+            "openings": []
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.25,
+            "thicknessM": 0.3,
+            "pricePerBlock": 30000,
+            "label": "300mm"
+          },
+          "B": {
+            "lengthM": 0.6,
+            "heightM": 0.25,
+            "thicknessM": 0.1,
+            "pricePerBlock": 12000,
+            "label": "100mm"
+          }
+        },
+        "opts": {
+          "jointMm": 2,
+          "wastePct": 5
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "300mm",
+            "netAreaM2": 8,
+            "blocksNeeded": 56,
+            "volumeM3": 2.52,
+            "price": 1680000
+          },
+          {
+            "productId": "B",
+            "label": "100mm",
+            "netAreaM2": 10,
+            "blocksNeeded": 70,
+            "volumeM3": 1.05,
+            "price": 840000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 18,
+          "kg": 30.6,
+          "bags": 2
+        },
+        "totalBlocks": 126,
+        "totalVolumeM3": 3.57,
+        "totalPrice": 2520000,
+        "warnings": []
+      }
+    },
+    {
       "name": "estimateProject applies waste ONCE per size after aggregating walls",
       "fn": "estimateProject",
       "input": {
