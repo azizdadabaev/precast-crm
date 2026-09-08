@@ -3,9 +3,12 @@ package uz.etalon.crm.core.calc
 /**
  * Half-away-from-zero rounding, ported verbatim from the JS engine's `roundN` (avoids JS/Kotlin
  * banker's rounding). `Math.round(Double): Long` is the only Kotlin rounding that agrees with JS
- * `Math.round` on a non-negative operand — `roundToInt`/`roundToLong`/`Math.rint`/any
- * `RoundingMode` all disagree on some half-way value, which is why this operates on
- * `Math.abs(n)` and restores the sign afterwards rather than rounding `n` directly.
+ * `Math.round` on a non-negative operand — `Math.rint`/any `RoundingMode` disagree on some
+ * half-way value; `roundToInt`/`roundToLong` are actually ties-toward-positive-infinity on the
+ * JVM and would agree with `Math.round` on an abs'd operand too, so the reason to prefer
+ * `Math.round` here is its return type and large-magnitude behaviour, not the tie rule — which is
+ * why this operates on `Math.abs(n)` and restores the sign afterwards rather than rounding `n`
+ * directly.
  */
 fun roundN(n: Double, decimals: Int): Double {
     val f = Math.pow(10.0, decimals.toDouble())
