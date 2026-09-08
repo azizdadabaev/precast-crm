@@ -43,10 +43,12 @@ class StatusChipMappingTest {
         assertEquals(ChipTone.SUCCESS, driverActiveTone(true))
         assertEquals(ChipTone.NEUTRAL, driverActiveTone(false))
     }
-    @Test fun `a payment's own confirm-reject state is confirmed=success, pending=neutral, rejected=danger`() {
+    @Test fun `a payment's own confirm-reject state is confirmed=success, pending=warning, rejected=danger`() {
         assertEquals(ChipTone.SUCCESS, paymentStatusTone(PaymentStatus.CONFIRMED))
         assertEquals(R.string.payment_confirmed, paymentStatusLabel(PaymentStatus.CONFIRMED))
-        assertEquals(ChipTone.NEUTRAL, paymentStatusTone(PaymentStatus.PENDING_CONFIRMATION))
+        // Warning, not neutral: this is the owner's confirm queue — a recorded payment waiting
+        // on them, distinct from paymentStateTone's AWAITING_PAYMENT (an order simply unpaid).
+        assertEquals(ChipTone.WARNING, paymentStatusTone(PaymentStatus.PENDING_CONFIRMATION))
         assertEquals(R.string.payment_pending, paymentStatusLabel(PaymentStatus.PENDING_CONFIRMATION))
         assertEquals(ChipTone.DANGER, paymentStatusTone(PaymentStatus.REJECTED))
         assertEquals(R.string.payment_rejected, paymentStatusLabel(PaymentStatus.REJECTED))

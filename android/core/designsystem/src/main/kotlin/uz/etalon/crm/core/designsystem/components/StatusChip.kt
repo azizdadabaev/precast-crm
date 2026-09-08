@@ -79,10 +79,16 @@ fun driverActiveLabel(active: Boolean): Int = if (active) R.string.driver_status
 
 /** A single payment's own confirm/reject state — distinct from [paymentStateTone], the order-
  *  level paid/partial/pending triad. Fixed product meaning: confirmed is the positive family,
- *  pending is muted, rejected is the danger family. */
+ *  pending is muted, rejected is the danger family.
+ *
+ *  PENDING_CONFIRMATION here is deliberately WARNING, not NEUTRAL like [paymentStateTone]'s
+ *  AWAITING_PAYMENT: this is a recorded payment sitting in the owner's confirm queue — it is
+ *  work waiting to be done, not an order that simply hasn't been paid yet. The web renders it
+ *  amber with a warning border in payments/orders/gazoblok pages for the same reason. Do not
+ *  "fix" the two pendings into agreement — they answer different questions. */
 fun paymentStatusTone(s: PaymentStatus): ChipTone = when (s) {
     PaymentStatus.CONFIRMED -> ChipTone.SUCCESS
-    PaymentStatus.PENDING_CONFIRMATION -> ChipTone.NEUTRAL
+    PaymentStatus.PENDING_CONFIRMATION -> ChipTone.WARNING
     PaymentStatus.REJECTED -> ChipTone.DANGER
     PaymentStatus.UNKNOWN -> ChipTone.NEUTRAL
 }
