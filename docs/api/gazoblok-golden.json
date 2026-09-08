@@ -1,0 +1,985 @@
+{
+  "version": 1,
+  "catalogue": {
+    "B_600x300x200": {
+      "lengthM": 0.6,
+      "heightM": 0.3,
+      "thicknessM": 0.2,
+      "pricePerBlock": 18000
+    },
+    "B_600x300x100": {
+      "lengthM": 0.6,
+      "heightM": 0.3,
+      "thicknessM": 0.1,
+      "pricePerBlock": 9000
+    }
+  },
+  "cases": [
+    {
+      "name": "blockVolumeM3 600x300x200",
+      "fn": "blockVolumeM3",
+      "input": {
+        "lengthM": 0.6,
+        "heightM": 0.3,
+        "thicknessM": 0.2,
+        "pricePerBlock": 18000
+      },
+      "result": 0.036
+    },
+    {
+      "name": "blockVolumeM3 600x300x100",
+      "fn": "blockVolumeM3",
+      "input": {
+        "lengthM": 0.6,
+        "heightM": 0.3,
+        "thicknessM": 0.1,
+        "pricePerBlock": 9000
+      },
+      "result": 0.018
+    },
+    {
+      "name": "pricePerM3 600x300x200",
+      "fn": "pricePerM3",
+      "input": {
+        "lengthM": 0.6,
+        "heightM": 0.3,
+        "thicknessM": 0.2,
+        "pricePerBlock": 18000
+      },
+      "result": 500000
+    },
+    {
+      "name": "pricePerM3 600x300x100",
+      "fn": "pricePerM3",
+      "input": {
+        "lengthM": 0.6,
+        "heightM": 0.3,
+        "thicknessM": 0.1,
+        "pricePerBlock": 9000
+      },
+      "result": 500000
+    },
+    {
+      "name": "blocksPerM3 600x300x200",
+      "fn": "blocksPerM3",
+      "input": {
+        "lengthM": 0.6,
+        "heightM": 0.3,
+        "thicknessM": 0.2,
+        "pricePerBlock": 18000
+      },
+      "result": 27.78
+    },
+    {
+      "name": "blocksPerM3 600x300x100",
+      "fn": "blocksPerM3",
+      "input": {
+        "lengthM": 0.6,
+        "heightM": 0.3,
+        "thicknessM": 0.1,
+        "pricePerBlock": 9000
+      },
+      "result": 55.56
+    },
+    {
+      "name": "estimateWall 10x3 no openings no waste → 167 blocks",
+      "fn": "estimateWall",
+      "input": {
+        "product": {
+          "lengthM": 0.6,
+          "heightM": 0.3,
+          "thicknessM": 0.2,
+          "pricePerBlock": 18000
+        },
+        "wall": {
+          "lengthM": 10,
+          "heightM": 3,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "wallAreaM2": 30,
+        "blockFaceAreaM2": 0.18,
+        "wastePct": 0,
+        "blocksNeeded": 167,
+        "volumeM3": 6.012,
+        "price": 3006000
+      }
+    },
+    {
+      "name": "estimateWall default 5% waste when wastePct omitted",
+      "fn": "estimateWall",
+      "input": {
+        "product": {
+          "lengthM": 0.6,
+          "heightM": 0.3,
+          "thicknessM": 0.2,
+          "pricePerBlock": 18000
+        },
+        "wall": {
+          "lengthM": 10,
+          "heightM": 3
+        }
+      },
+      "result": {
+        "wallAreaM2": 30,
+        "blockFaceAreaM2": 0.18,
+        "wastePct": 5,
+        "blocksNeeded": 175,
+        "volumeM3": 6.3,
+        "price": 3150000
+      }
+    },
+    {
+      "name": "estimateWall subtracts openings from wall area",
+      "fn": "estimateWall",
+      "input": {
+        "product": {
+          "lengthM": 0.6,
+          "heightM": 0.3,
+          "thicknessM": 0.2,
+          "pricePerBlock": 18000
+        },
+        "wall": {
+          "lengthM": 10,
+          "heightM": 3,
+          "openingsM2": 3,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "wallAreaM2": 27,
+        "blockFaceAreaM2": 0.18,
+        "wastePct": 0,
+        "blocksNeeded": 150,
+        "volumeM3": 5.4,
+        "price": 2700000
+      }
+    },
+    {
+      "name": "estimateWall floors wall area at 0 when openings exceed wall",
+      "fn": "estimateWall",
+      "input": {
+        "product": {
+          "lengthM": 0.6,
+          "heightM": 0.3,
+          "thicknessM": 0.2,
+          "pricePerBlock": 18000
+        },
+        "wall": {
+          "lengthM": 2,
+          "heightM": 2,
+          "openingsM2": 10,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "wallAreaM2": 0,
+        "blockFaceAreaM2": 0.18,
+        "wastePct": 0,
+        "blocksNeeded": 0,
+        "volumeM3": 0,
+        "price": 0
+      }
+    },
+    {
+      "name": "lineTotal multiplies unit price by quantity",
+      "fn": "lineTotal",
+      "input": {
+        "unitPrice": 18000,
+        "quantity": 3
+      },
+      "result": 54000
+    },
+    {
+      "name": "orderTotal sums lines and counts blocks",
+      "fn": "orderTotal",
+      "input": {
+        "lines": [
+          {
+            "unitPrice": 18000,
+            "quantity": 100
+          },
+          {
+            "unitPrice": 15000,
+            "quantity": 50
+          }
+        ],
+        "opts": {}
+      },
+      "result": {
+        "linesSubtotal": 2550000,
+        "discountPercent": 0,
+        "discountAmount": 0,
+        "deliveryCost": 0,
+        "total": 2550000,
+        "totalBlocks": 150
+      }
+    },
+    {
+      "name": "orderTotal applies a percentage discount",
+      "fn": "orderTotal",
+      "input": {
+        "lines": [
+          {
+            "unitPrice": 18000,
+            "quantity": 100
+          },
+          {
+            "unitPrice": 15000,
+            "quantity": 50
+          }
+        ],
+        "opts": {
+          "discountPercent": 10
+        }
+      },
+      "result": {
+        "linesSubtotal": 2550000,
+        "discountPercent": 10,
+        "discountAmount": 255000,
+        "deliveryCost": 0,
+        "total": 2295000,
+        "totalBlocks": 150
+      }
+    },
+    {
+      "name": "orderTotal adds delivery after the discount",
+      "fn": "orderTotal",
+      "input": {
+        "lines": [
+          {
+            "unitPrice": 18000,
+            "quantity": 100
+          },
+          {
+            "unitPrice": 15000,
+            "quantity": 50
+          }
+        ],
+        "opts": {
+          "discountPercent": 10,
+          "deliveryCost": 100000
+        }
+      },
+      "result": {
+        "linesSubtotal": 2550000,
+        "discountPercent": 10,
+        "discountAmount": 255000,
+        "deliveryCost": 100000,
+        "total": 2395000,
+        "totalBlocks": 150
+      }
+    },
+    {
+      "name": "orderTotal an explicit amount wins over a percentage",
+      "fn": "orderTotal",
+      "input": {
+        "lines": [
+          {
+            "unitPrice": 18000,
+            "quantity": 100
+          },
+          {
+            "unitPrice": 15000,
+            "quantity": 50
+          }
+        ],
+        "opts": {
+          "discountPercent": 10,
+          "discountAmount": 300000
+        }
+      },
+      "result": {
+        "linesSubtotal": 2550000,
+        "discountPercent": 11.76,
+        "discountAmount": 300000,
+        "deliveryCost": 0,
+        "total": 2250000,
+        "totalBlocks": 150
+      }
+    },
+    {
+      "name": "orderTotal caps the discount amount at the subtotal",
+      "fn": "orderTotal",
+      "input": {
+        "lines": [
+          {
+            "unitPrice": 18000,
+            "quantity": 100
+          },
+          {
+            "unitPrice": 15000,
+            "quantity": 50
+          }
+        ],
+        "opts": {
+          "discountAmount": 9999999
+        }
+      },
+      "result": {
+        "linesSubtotal": 2550000,
+        "discountPercent": 100,
+        "discountAmount": 2550000,
+        "deliveryCost": 0,
+        "total": 0,
+        "totalBlocks": 150
+      }
+    },
+    {
+      "name": "estimateProject single wall, joint-aware, no openings, waste 0",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 5,
+            "heightM": 2,
+            "openings": []
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.2,
+            "thicknessM": 0.2,
+            "pricePerBlock": 20000,
+            "label": "600x200x200"
+          }
+        },
+        "opts": {
+          "jointMm": 3,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "600x200x200",
+            "netAreaM2": 10,
+            "blocksNeeded": 82,
+            "volumeM3": 1.968,
+            "price": 1640000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 10,
+          "kg": 17,
+          "bags": 1
+        },
+        "totalBlocks": 82,
+        "totalVolumeM3": 1.968,
+        "totalPrice": 1640000,
+        "warnings": []
+      }
+    },
+    {
+      "name": "estimateProject subtracts a door opening (w×h×qty) from the wall",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 5,
+            "heightM": 2,
+            "openings": [
+              {
+                "kind": "DOOR",
+                "widthM": 0.9,
+                "heightM": 2.1,
+                "qty": 1
+              }
+            ]
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.2,
+            "thicknessM": 0.2,
+            "pricePerBlock": 20000,
+            "label": "A"
+          }
+        },
+        "opts": {
+          "jointMm": 3,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "A",
+            "netAreaM2": 8.11,
+            "blocksNeeded": 67,
+            "volumeM3": 1.608,
+            "price": 1340000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 8.11,
+          "kg": 13.79,
+          "bags": 1
+        },
+        "totalBlocks": 67,
+        "totalVolumeM3": 1.608,
+        "totalPrice": 1340000,
+        "warnings": []
+      }
+    },
+    {
+      "name": "estimateProject groups blocks by size — one perSize entry per product",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 5,
+            "heightM": 2,
+            "openings": []
+          },
+          {
+            "id": "w2",
+            "productId": "B",
+            "lengthM": 4,
+            "heightM": 2,
+            "openings": []
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.25,
+            "thicknessM": 0.3,
+            "pricePerBlock": 30000,
+            "label": "300mm"
+          },
+          "B": {
+            "lengthM": 0.6,
+            "heightM": 0.25,
+            "thicknessM": 0.1,
+            "pricePerBlock": 12000,
+            "label": "100mm"
+          }
+        },
+        "opts": {
+          "jointMm": 2,
+          "wastePct": 5
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "300mm",
+            "netAreaM2": 10,
+            "blocksNeeded": 70,
+            "volumeM3": 3.15,
+            "price": 2100000
+          },
+          {
+            "productId": "B",
+            "label": "100mm",
+            "netAreaM2": 8,
+            "blocksNeeded": 56,
+            "volumeM3": 0.84,
+            "price": 672000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 18,
+          "kg": 30.6,
+          "bags": 2
+        },
+        "totalBlocks": 126,
+        "totalVolumeM3": 3.99,
+        "totalPrice": 2772000,
+        "warnings": []
+      }
+    },
+    {
+      "name": "estimateProject applies waste ONCE per size after aggregating walls",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 3,
+            "heightM": 2,
+            "openings": []
+          },
+          {
+            "id": "w2",
+            "productId": "A",
+            "lengthM": 3,
+            "heightM": 2,
+            "openings": []
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.2,
+            "thicknessM": 0.2,
+            "pricePerBlock": 1000,
+            "label": "A"
+          }
+        },
+        "opts": {
+          "jointMm": 3,
+          "wastePct": 5
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "A",
+            "netAreaM2": 12,
+            "blocksNeeded": 103,
+            "volumeM3": 2.472,
+            "price": 103000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 12,
+          "kg": 20.4,
+          "bags": 1
+        },
+        "totalBlocks": 103,
+        "totalVolumeM3": 2.472,
+        "totalPrice": 103000,
+        "warnings": []
+      }
+    },
+    {
+      "name": "estimateProject computes glue kg and 25kg bags from total net area",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 5,
+            "heightM": 2,
+            "openings": []
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.2,
+            "thicknessM": 0.2,
+            "pricePerBlock": 1000,
+            "label": "A"
+          }
+        },
+        "opts": {
+          "jointMm": 3,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "A",
+            "netAreaM2": 10,
+            "blocksNeeded": 82,
+            "volumeM3": 1.968,
+            "price": 82000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 10,
+          "kg": 17,
+          "bags": 1
+        },
+        "totalBlocks": 82,
+        "totalVolumeM3": 1.968,
+        "totalPrice": 82000,
+        "warnings": []
+      }
+    },
+    {
+      "name": "estimateProject clamps net area to 0 and warns when openings exceed the wall",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 2,
+            "heightM": 2,
+            "openings": [
+              {
+                "kind": "WINDOW",
+                "widthM": 3,
+                "heightM": 3,
+                "qty": 1
+              }
+            ]
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.2,
+            "thicknessM": 0.2,
+            "pricePerBlock": 1000,
+            "label": "A"
+          }
+        },
+        "opts": {
+          "jointMm": 3,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "A",
+            "netAreaM2": 0,
+            "blocksNeeded": 0,
+            "volumeM3": 0,
+            "price": 0
+          }
+        ],
+        "glue": {
+          "netAreaM2": 0,
+          "kg": 0,
+          "bags": 0
+        },
+        "totalBlocks": 0,
+        "totalVolumeM3": 0,
+        "totalPrice": 0,
+        "warnings": [
+          {
+            "wallId": "w1",
+            "code": "OPENINGS_EXCEED_WALL",
+            "message": "Очиқликлар девордан катта · Openings exceed the wall"
+          }
+        ]
+      }
+    },
+    {
+      "name": "estimateProject warns and skips a wall whose product is missing/unknown",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "GHOST",
+            "lengthM": 5,
+            "heightM": 2,
+            "openings": []
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.2,
+            "thicknessM": 0.2,
+            "pricePerBlock": 1000,
+            "label": "A"
+          }
+        },
+        "opts": {}
+      },
+      "result": {
+        "perSize": [],
+        "glue": {
+          "netAreaM2": 0,
+          "kg": 0,
+          "bags": 0
+        },
+        "totalBlocks": 0,
+        "totalVolumeM3": 0,
+        "totalPrice": 0,
+        "warnings": [
+          {
+            "wallId": "w1",
+            "code": "NO_BLOCK_SIZE",
+            "message": "Блок ўлчами танланмаган · No block size selected"
+          }
+        ]
+      }
+    },
+    {
+      "name": "estimateProject defaults to STANDARD orientation when absent",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 10,
+            "heightM": 1,
+            "openings": []
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.3,
+            "thicknessM": 0.2,
+            "pricePerBlock": 1000,
+            "label": "20sm"
+          }
+        },
+        "opts": {
+          "jointMm": 2,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "20sm",
+            "netAreaM2": 10,
+            "blocksNeeded": 56,
+            "volumeM3": 2.016,
+            "price": 56000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 10,
+          "kg": 17,
+          "bags": 1
+        },
+        "totalBlocks": 56,
+        "totalVolumeM3": 2.016,
+        "totalPrice": 56000,
+        "warnings": []
+      }
+    },
+    {
+      "name": "estimateProject STANDARD orientation faces length×height",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 10,
+            "heightM": 1,
+            "openings": [],
+            "orientation": "STANDARD"
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.3,
+            "thicknessM": 0.2,
+            "pricePerBlock": 1000,
+            "label": "20sm"
+          }
+        },
+        "opts": {
+          "jointMm": 2,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "20sm",
+            "netAreaM2": 10,
+            "blocksNeeded": 56,
+            "volumeM3": 2.016,
+            "price": 56000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 10,
+          "kg": 17,
+          "bags": 1
+        },
+        "totalBlocks": 56,
+        "totalVolumeM3": 2.016,
+        "totalPrice": 56000,
+        "warnings": []
+      }
+    },
+    {
+      "name": "estimateProject ROTATED orientation faces length×thickness",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 10,
+            "heightM": 1,
+            "openings": [],
+            "orientation": "ROTATED"
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.3,
+            "thicknessM": 0.2,
+            "pricePerBlock": 1000,
+            "label": "20sm"
+          }
+        },
+        "opts": {
+          "jointMm": 2,
+          "wastePct": 0
+        }
+      },
+      "result": {
+        "perSize": [
+          {
+            "productId": "A",
+            "label": "20sm",
+            "netAreaM2": 10,
+            "blocksNeeded": 83,
+            "volumeM3": 2.988,
+            "price": 83000
+          }
+        ],
+        "glue": {
+          "netAreaM2": 10,
+          "kg": 17,
+          "bags": 1
+        },
+        "totalBlocks": 83,
+        "totalVolumeM3": 2.988,
+        "totalPrice": 83000,
+        "warnings": []
+      }
+    }
+  ],
+  "rejects": [
+    {
+      "name": "blockVolumeM3 rejects zero thickness",
+      "fn": "blockVolumeM3",
+      "input": {
+        "lengthM": 0.6,
+        "heightM": 0.3,
+        "thicknessM": 0,
+        "pricePerBlock": 18000
+      },
+      "error": "block dimensions must be positive numbers (meters)"
+    },
+    {
+      "name": "blockVolumeM3 rejects negative length",
+      "fn": "blockVolumeM3",
+      "input": {
+        "lengthM": -1,
+        "heightM": 0.3,
+        "thicknessM": 0.2,
+        "pricePerBlock": 18000
+      },
+      "error": "block dimensions must be positive numbers (meters)"
+    },
+    {
+      "name": "estimateWall rejects non-positive length",
+      "fn": "estimateWall",
+      "input": {
+        "product": {
+          "lengthM": 0.6,
+          "heightM": 0.3,
+          "thicknessM": 0.2,
+          "pricePerBlock": 18000
+        },
+        "wall": {
+          "lengthM": 0,
+          "heightM": 3
+        }
+      },
+      "error": "wall length must be a positive number (meters)"
+    },
+    {
+      "name": "estimateWall rejects non-positive height",
+      "fn": "estimateWall",
+      "input": {
+        "product": {
+          "lengthM": 0.6,
+          "heightM": 0.3,
+          "thicknessM": 0.2,
+          "pricePerBlock": 18000
+        },
+        "wall": {
+          "lengthM": 10,
+          "heightM": -1
+        }
+      },
+      "error": "wall height must be a positive number (meters)"
+    },
+    {
+      "name": "estimateWall rejects negative openings area",
+      "fn": "estimateWall",
+      "input": {
+        "product": {
+          "lengthM": 0.6,
+          "heightM": 0.3,
+          "thicknessM": 0.2,
+          "pricePerBlock": 18000
+        },
+        "wall": {
+          "lengthM": 10,
+          "heightM": 3,
+          "openingsM2": -1
+        }
+      },
+      "error": "openings area must be a non-negative number (m²)"
+    },
+    {
+      "name": "lineTotal rejects a non-integer quantity",
+      "fn": "lineTotal",
+      "input": {
+        "unitPrice": 18000,
+        "quantity": 1.5
+      },
+      "error": "quantity must be a non-negative integer"
+    },
+    {
+      "name": "lineTotal rejects a negative quantity",
+      "fn": "lineTotal",
+      "input": {
+        "unitPrice": 18000,
+        "quantity": -1
+      },
+      "error": "quantity must be a non-negative integer"
+    },
+    {
+      "name": "estimateProject rejects a non-positive wall length",
+      "fn": "estimateProject",
+      "input": {
+        "walls": [
+          {
+            "id": "w1",
+            "productId": "A",
+            "lengthM": 0,
+            "heightM": 2,
+            "openings": []
+          }
+        ],
+        "products": {
+          "A": {
+            "lengthM": 0.6,
+            "heightM": 0.2,
+            "thicknessM": 0.2,
+            "pricePerBlock": 1000,
+            "label": "A"
+          }
+        },
+        "opts": {}
+      },
+      "error": "wall length must be a positive number (meters)"
+    }
+  ]
+}

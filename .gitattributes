@@ -5,6 +5,7 @@
 # compared byte-for-byte by `golden:check` / `openapi:check`. Without pinning,
 # a Windows checkout rewrites them to CRLF and both checks fail on a clean tree.
 docs/api/calc-golden.json text eol=lf
+docs/api/gazoblok-golden.json text eol=lf
 docs/api/openapi.json text eol=lf
 
 # Room writes the exported schema with LF. The same trap: a Windows checkout would
