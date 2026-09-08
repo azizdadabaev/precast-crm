@@ -15,11 +15,13 @@ import uz.etalon.crm.core.model.Pricing
 /**
  * The one place a calc-engine `Double` becomes `Money`. Everywhere else in `:core:calc` money is
  * a `Double` on purpose — bit-parity with `calculation-engine.ts`/`gazoblok-engine.ts` is the
- * correctness criterion, checked against 92 golden vectors. Everywhere else in the app money is
- * `Money` over `BigDecimal` — `Double` money is banned there. This file, and only this file,
- * crosses that line — for both the slab engine (below) and the gazoblok engine (further down).
+ * correctness criterion, checked against every golden vector the server exports. Everywhere else
+ * in the app money is `Money` over `BigDecimal` — `Double` money is banned there. This file, and
+ * only this file, crosses that line — for both the slab engine (below) and the gazoblok engine
+ * (further down).
  *
- * Every engine money field has already passed through [round2] before it reaches here, so the
+ * Every engine money field has already passed through [round2] before it reaches here (the one
+ * exception is documented on [BlockOrderMoney]), so the
  * `Double` is the nearest double to a value with at most two decimals. [BigDecimal.valueOf] goes
  * through `Double.toString` — the shortest decimal string that round-trips to that double — which
  * for such a value is exactly the two-decimal string. So `Money(BigDecimal.valueOf(d).setScale(2))`
@@ -103,7 +105,14 @@ fun ProjectEstimateResult.money(): ProjectEstimateMoney = ProjectEstimateMoney(
 
 /** [BlockOrderTotal]'s fields, converted to [Money] — except [discountPercent] (a percentage,
  *  not an amount — stays `BigDecimal`, same reasoning as [ProjectMoney.discountPercent]) and
- *  [totalBlocks] (a block count, not an amount — stays `Double`). */
+ *  [totalBlocks] (a block count, not an amount — stays `Double`).
+ *
+ *  [deliveryCost] is the one exception to this file's "already `round2`'d" rule: `orderTotal`
+ *  echoes the caller's delivery fee through `max(0.0, …)` without rounding it — verbatim from the
+ *  TypeScript, which does the same — so a fee that arrived with float noise (`87500.00000000001`
+ *  out of any arithmetic) would trip [moneyOf]'s `UNNECESSARY` scale and throw. It is rounded here
+ *  instead. This cannot move [total], which the engine already rounded with the raw fee included;
+ *  at worst the displayed parts differ from the displayed total by a tiyin. */
 data class BlockOrderMoney(
     val linesSubtotal: Money,
     val discountPercent: BigDecimal,
@@ -117,7 +126,7 @@ fun BlockOrderTotal.money(): BlockOrderMoney = BlockOrderMoney(
     linesSubtotal = moneyOf(linesSubtotal),
     discountPercent = BigDecimal.valueOf(discountPercent),
     discountAmount = moneyOf(discountAmount),
-    deliveryCost = moneyOf(deliveryCost),
+    deliveryCost = moneyOf(round2(deliveryCost)),
     total = moneyOf(total),
     totalBlocks = totalBlocks,
 )

@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 import org.junit.jupiter.api.Test
+import uz.etalon.crm.core.calc.gazoblok.OrderLineInput
+import uz.etalon.crm.core.calc.gazoblok.orderTotal
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.model.PriceTier as ModelPriceTier
@@ -70,6 +72,23 @@ class BoundaryTest {
                 }
             }
         }
+
+    @Test
+    fun `a delivery fee carrying float noise converts instead of throwing`() {
+        // deliveryCost is the one money field orderTotal does not round2 — it echoes the caller's
+        // fee through max(0.0, …), verbatim from the TypeScript. A fee that came out of division
+        // (one truck's 250 000 split across three orders) carries far more decimals than moneyOf's
+        // UNNECESSARY scale accepts, so the boundary rounds this field itself. Without that, this
+        // throws ArithmeticException.
+        val onePartOfATruck = 250_000.0 / 3.0 // 83333.33333333333
+        val m = orderTotal(
+            lines = listOf(OrderLineInput(unitPrice = 18_000.0, quantity = 3.0)),
+            deliveryCost = onePartOfATruck,
+        ).money()
+        assertMoneyEquals("83333.33", m.deliveryCost, "delivery fee out of a division")
+        // The engine's own total is unaffected — it was rounded with the raw fee included.
+        assertMoneyEquals("137333.33", m.total, "total with a divided delivery fee")
+    }
 
     @Test
     fun `the conversion is exact at the Decimal(14,2) ceiling and on a fractional cost`() {

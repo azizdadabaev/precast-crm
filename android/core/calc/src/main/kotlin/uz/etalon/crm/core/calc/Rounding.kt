@@ -13,9 +13,13 @@ package uz.etalon.crm.core.calc
  * Requires [n] to be finite. `Math.round(Double): Long` clamps rather than propagating like JS
  * does — `NaN` rounds to `0`, `±Infinity` rounds to `Long.MIN/MAX_VALUE` — so a NaN/Infinity that
  * reached this function would silently become a *number* (often 0) instead of the loud failure a
- * non-finite money/quantity value deserves. Every caller in this module already validates its
- * inputs as finite before rounding, so this can never fire on a real vector; it exists to catch a
- * future caller that forgets to.
+ * non-finite money/quantity value deserves. No golden vector can reach it — all of them feed
+ * finite values — but two inputs are unvalidated in the TypeScript and so unvalidated here too:
+ * `calculateSlab`'s `correction` and the `pricePerBlock` that `estimateWall`/`estimateProject`
+ * read off a catalogue product. For those, a non-finite value makes JS propagate `NaN` into the
+ * result while this port throws. That is a deliberate departure from bit-parity, and the only one
+ * in this module: a `NaN` price silently rounds to a *free* quote, which is the one failure nobody
+ * notices in a live order.
  */
 internal fun roundN(n: Double, decimals: Int): Double {
     require(n.isFinite()) { "roundN: n must be finite, got $n" }
