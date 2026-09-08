@@ -24,6 +24,11 @@ class OrderMappersTest {
     @Test fun `unknown enum values do not crash`() {
         assertEquals(OrderStatus.UNKNOWN, dto.copy(status = "SOMETHING_NEW").toDomain().status)
     }
+    @Test fun `a summary's write-off amount reduces remaining, same as the detail's`() {
+        // totalPrice 12 400 000 − confirmedPaid 6 000 000 (unchanged from the fixture above) − writeOff 1 000 000
+        val o = dto.copy(writeOffAmount = "1000000.00").toDomain()
+        assertEquals(Money.parse("5400000.00"), o.remaining)
+    }
     @Test fun `detail makes media urls absolute and computes remaining with write-off`() {
         val d = OrderDetailDto("o1", "2026-09-0041", "LOADED", "PARTIALLY_PAID", "100.00", "60.00", "10.000", 1, 1,
             "2026-09-04T00:00:00.000Z", "2026-09-01T00:00:00.000Z", ClientDto("c1", "A", "998901112233", null),

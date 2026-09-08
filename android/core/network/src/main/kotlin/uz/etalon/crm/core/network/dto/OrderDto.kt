@@ -5,8 +5,12 @@ import kotlinx.serialization.Serializable
 @Serializable data class ClientDto(val id: String, val name: String, val phone: String, val address: String? = null)
 @Serializable data class OrderSummaryDto(
     val id: String, val orderNumber: String, val status: String, val paymentState: String,
-    val totalPrice: String, val confirmedPaid: String, val totalArea: String, val totalBlocks: Int, val totalBeams: Int,
+    val totalPrice: String, val confirmedPaid: String,
+    val totalArea: String, val totalBlocks: Int, val totalBeams: Int,
     val scheduledAt: String, val placedAt: String, val client: ClientDto,
+    // Kept last (with a default) so the existing positional-argument test fixtures still
+    // compile unchanged.
+    val writeOffAmount: String = "0",
 )
 @Serializable data class OrdersPageDto(val items: List<OrderSummaryDto>, val total: Int, val page: Int, val pageSize: Int, val totalPages: Int)
 

@@ -23,6 +23,21 @@ class RecordableRemainingTest {
         val d = detailWith(total = "1000000", confirmed = "0", writeOff = "0", pending = emptyList(), rejected = listOf("400000"))
         assertEquals(Money.parse("1000000"), d.recordableRemaining)
     }
+
+    /** [OrderSummary] has no caller today, but its own `remaining` must agree with
+     *  [OrderDetail.remaining] on the same order — see the server's `remainingBalance`
+     *  (src/lib/payment-state.ts). Pinned so a future caller doesn't inherit an overstated
+     *  balance on a settled order. */
+    @Test fun `a settled order's summary shows nothing owed once the write-off covers it`() {
+        val summary = OrderSummary(
+            id = "o1", orderNumber = "ORD-1", status = OrderStatus.PLACED, paymentState = PaymentState.FULLY_PAID,
+            totalPrice = Money.parse("5000000"), confirmedPaid = Money.parse("4100000"), writeOffAmount = Money.parse("900000"),
+            totalArea = java.math.BigDecimal.ZERO, totalBlocks = 0, totalBeams = 0,
+            scheduledAt = Instant.EPOCH, placedAt = Instant.EPOCH,
+            client = ClientRef(id = "c1", name = "Client", phone = "+998900000000", address = null),
+        )
+        assertEquals(Money.ZERO, summary.remaining)
+    }
 }
 
 private fun detailWith(

@@ -19,7 +19,17 @@ data class OrderSummary(
     val scheduledAt: Instant,
     val placedAt: Instant,
     val client: ClientRef,
-) { val remaining: Money get() = (totalPrice - confirmedPaid).coerceAtLeastZero() }
+    /** Mirrors [OrderDetail.writeOffAmount] — see [remaining]. Kept last, with a default, so
+     *  the many existing positional-argument fixtures that don't care about write-offs don't
+     *  all need updating for this field's sake; the two real sources (OrderSummaryDto,
+     *  OrderDetailDto) always pass it explicitly. */
+    val writeOffAmount: Money = Money.ZERO,
+) {
+    /** total − confirmed − writeOff, clamped at 0 — matches the server's `remainingBalance`
+     *  (src/lib/payment-state.ts) and [OrderDetail.remaining]. A leftover balance that was
+     *  deliberately written off ("settle remaining") must not still read as owed here. */
+    val remaining: Money get() = (totalPrice - confirmedPaid - writeOffAmount).coerceAtLeastZero()
+}
 
 data class RoomLine(
     val name: String?, val innerWidth: BigDecimal, val innerLength: BigDecimal, val pattern: String,
