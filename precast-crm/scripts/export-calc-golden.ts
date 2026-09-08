@@ -87,6 +87,7 @@ const inputs: Array<{ name: string; input: SlabInput }> = [
   // below for the case that actually does.
   { name: "spec-test-4 GBG at R=0.32 (below the bump threshold)", input: { inner_width: 4.0, inner_length: 6.7 } },
   { name: "spec-test-5 correction", input: { inner_width: 4.0, inner_length: 5.8, correction: 0.15 } },
+  { name: "negative correction shortens the room", input: { inner_width: 4.0, inner_length: 5.8, correction: -0.15 } },
   // Pattern overrides
   { name: "override GB on GBG geometry", input: { inner_width: 4.2, inner_length: 6.2, pattern: "GB" } },
   { name: "override BGB on GB geometry", input: { inner_width: 4.2, inner_length: 5.8, pattern: "BGB" } },
@@ -231,6 +232,18 @@ const projectCases: Array<{
     room_subtotals: [],
     discount_percent: 0,
     discount_amount_override: null,
+  },
+  {
+    name: "falsy-zero override falls through to the percent branch (0 is not > 0)",
+    room_subtotals: [bgbSubtotal],
+    discount_percent: 10,
+    discount_amount_override: 0,
+  },
+  {
+    name: "negative override falls through to the percent branch (not > 0)",
+    room_subtotals: [bgbSubtotal],
+    discount_percent: 10,
+    discount_amount_override: -500_000,
   },
 ];
 

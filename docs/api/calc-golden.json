@@ -235,6 +235,44 @@
       }
     },
     {
+      "name": "negative correction shortens the room",
+      "input": {
+        "inner_width": 4,
+        "inner_length": 5.8,
+        "correction": -0.15
+      },
+      "result": {
+        "inner_width": 4,
+        "inner_length": 5.8,
+        "bearing": 0.15,
+        "correction": -0.15,
+        "extra_beams": 0,
+        "force_start_beam": false,
+        "effective_length": 5.65,
+        "pitches": 9,
+        "remainder": 0.43,
+        "pattern": "GBG",
+        "pattern_auto": "GBG",
+        "beam_length": 4.3,
+        "blocks_per_row": 20,
+        "beam_count": 9,
+        "block_rows": 10,
+        "total_blocks": 200,
+        "monolith_length": 5.67,
+        "billed_length": 5.67,
+        "monolith_area": 24.381,
+        "billed_area": 24.381,
+        "concrete_volume": 1.219,
+        "m2_price": 140000,
+        "extra_beam_price_per_m": 60000,
+        "m2_cost": 3413340,
+        "pattern_extra_cost": 0,
+        "manual_extra_beams_cost": 0,
+        "subtotal": 3413340,
+        "is_extras_only": false
+      }
+    },
+    {
       "name": "override GB on GBG geometry",
       "input": {
         "inner_width": 4.2,
@@ -2562,6 +2600,38 @@
           "discount_percent": 0,
           "discount_amount": 0,
           "total": 0
+        }
+      },
+      {
+        "name": "falsy-zero override falls through to the percent branch (0 is not > 0)",
+        "input": {
+          "room_subtotals": [
+            3749600
+          ],
+          "discount_percent": 10,
+          "discount_amount_override": 0
+        },
+        "result": {
+          "rooms_subtotal": 3749600,
+          "discount_percent": 10,
+          "discount_amount": 374960,
+          "total": 3374640
+        }
+      },
+      {
+        "name": "negative override falls through to the percent branch (not > 0)",
+        "input": {
+          "room_subtotals": [
+            3749600
+          ],
+          "discount_percent": 10,
+          "discount_amount_override": -500000
+        },
+        "result": {
+          "rooms_subtotal": 3749600,
+          "discount_percent": 10,
+          "discount_amount": 374960,
+          "total": 3374640
         }
       }
     ]
