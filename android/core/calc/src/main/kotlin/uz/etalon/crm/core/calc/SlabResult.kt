@@ -61,7 +61,7 @@ data class SlabResult(
  * `asKotlin()` always decodes a JSON number as `Double`; [SlabResult] itself keeps them typed
  * `Int` as the real domain type for callers elsewhere in this module.
  */
-fun SlabResult.toWireMap(): Map<String, Any> = mapOf(
+internal fun SlabResult.toWireMap(): Map<String, Any> = mapOf(
     "inner_width" to innerWidth,
     "inner_length" to innerLength,
     "bearing" to bearing,

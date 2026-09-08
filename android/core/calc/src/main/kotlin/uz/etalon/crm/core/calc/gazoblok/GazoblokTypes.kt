@@ -152,7 +152,7 @@ data class BlockOrderTotal(
 // is an identity mapping rather than a snake_case translation.
 
 /** Wire representation of [WallEstimateResult] for the `estimateWall` field-set guard. */
-fun WallEstimateResult.toWireMap(): Map<String, Any> = mapOf(
+internal fun WallEstimateResult.toWireMap(): Map<String, Any> = mapOf(
     "wallAreaM2" to wallAreaM2,
     "blockFaceAreaM2" to blockFaceAreaM2,
     "wastePct" to wastePct,
@@ -162,7 +162,7 @@ fun WallEstimateResult.toWireMap(): Map<String, Any> = mapOf(
 )
 
 /** Wire representation of [BlockOrderTotal] for the `orderTotal` field-set guard. */
-fun BlockOrderTotal.toWireMap(): Map<String, Any> = mapOf(
+internal fun BlockOrderTotal.toWireMap(): Map<String, Any> = mapOf(
     "linesSubtotal" to linesSubtotal,
     "discountPercent" to discountPercent,
     "discountAmount" to discountAmount,
@@ -172,7 +172,7 @@ fun BlockOrderTotal.toWireMap(): Map<String, Any> = mapOf(
 )
 
 /** Wire representation of [ProjectEstimateResult] for the `estimateProject` field-set guard. */
-fun ProjectEstimateResult.toWireMap(): Map<String, Any> = mapOf(
+internal fun ProjectEstimateResult.toWireMap(): Map<String, Any> = mapOf(
     "perSize" to perSize,
     "glue" to glue,
     "totalBlocks" to totalBlocks,

@@ -9,12 +9,20 @@ package uz.etalon.crm.core.calc
  * `Math.round` here is its return type and large-magnitude behaviour, not the tie rule — which is
  * why this operates on `Math.abs(n)` and restores the sign afterwards rather than rounding `n`
  * directly.
+ *
+ * Requires [n] to be finite. `Math.round(Double): Long` clamps rather than propagating like JS
+ * does — `NaN` rounds to `0`, `±Infinity` rounds to `Long.MIN/MAX_VALUE` — so a NaN/Infinity that
+ * reached this function would silently become a *number* (often 0) instead of the loud failure a
+ * non-finite money/quantity value deserves. Every caller in this module already validates its
+ * inputs as finite before rounding, so this can never fire on a real vector; it exists to catch a
+ * future caller that forgets to.
  */
-fun roundN(n: Double, decimals: Int): Double {
+internal fun roundN(n: Double, decimals: Int): Double {
+    require(n.isFinite()) { "roundN: n must be finite, got $n" }
     val f = Math.pow(10.0, decimals.toDouble())
     val sign = if (n < 0) -1.0 else 1.0
     return (sign * Math.round(Math.abs(n) * f)) / f
 }
 
-fun round2(n: Double): Double = roundN(n, 2)
-fun round3(n: Double): Double = roundN(n, 3)
+internal fun round2(n: Double): Double = roundN(n, 2)
+internal fun round3(n: Double): Double = roundN(n, 3)
