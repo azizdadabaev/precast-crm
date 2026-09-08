@@ -308,7 +308,7 @@ private fun ResolveSheet(
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 SecondaryButton(
-                    stringResource(DesignSystemR.string.action_cancel), onClick = onDismiss,
+                    stringResource(DesignSystemR.string.ds_action_cancel), onClick = onDismiss,
                     enabled = !submitting, modifier = Modifier.weight(1f),
                 )
                 PrimaryButton(

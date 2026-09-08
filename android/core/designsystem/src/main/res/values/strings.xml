@@ -25,7 +25,7 @@
     <string name="custody_stage_description">%1$s: %2$s</string>
     <string name="action_retry">Қайта уриниш</string>
     <string name="action_confirm">Тасдиқлаш</string>
-    <string name="action_cancel">Бекор қилиш</string>
+    <string name="ds_action_cancel">Бекор қилиш</string>
     <string name="action_close">Ёпиш</string>
     <string name="action_backspace">Ўчириш</string>
     <string name="action_increase">Кўпайтириш</string>

@@ -38,7 +38,7 @@ fun OutboxBanner(pending: Int, failedMessage: String?, onRetry: () -> Unit, onCa
         }
         if (failedMessage != null) {
             TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.ds_action_cancel)) }
         }
     }
 }

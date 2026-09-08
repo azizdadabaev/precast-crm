@@ -8,5 +8,5 @@
     <string name="change_pin_current">Жорий PIN</string>
     <string name="change_pin_new">Янги PIN</string>
     <string name="change_pin_confirm">Янги PIN (такрор)</string>
-    <string name="action_save">Сақлаш</string>
+    <string name="auth_action_save">Сақлаш</string>
 </resources>

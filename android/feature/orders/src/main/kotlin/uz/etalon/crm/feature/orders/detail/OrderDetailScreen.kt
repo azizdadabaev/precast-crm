@@ -119,7 +119,7 @@ fun OrderDetailScreen(
                 if (pending.isNotEmpty()) item {
                     OutboxBanner(
                         pending = unfinishedUploads,
-                        failedMessage = firstFailed?.let { it.error ?: stringResource(R.string.upload_failed) },
+                        failedMessage = firstFailed?.let { it.error ?: stringResource(R.string.orders_upload_failed) },
                         onRetry = { firstFailed?.let { onRetryUpload(it.id) } },
                         onCancel = { firstFailed?.let { onCancelUpload(it.id) } },
                     )
@@ -140,7 +140,7 @@ fun OrderDetailScreen(
                             if (canEdit) {
                                 IconButton(onClick = onOpenLocation) { Icon(Icons.Default.Navigation, stringResource(R.string.action_location)) }
                             } else if (o.deliveryLat != null && o.deliveryLng != null) {
-                                IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${o.deliveryLat},${o.deliveryLng}?q=${o.deliveryLat},${o.deliveryLng}"))) }) { Icon(Icons.Default.Navigation, stringResource(R.string.action_navigate)) }
+                                IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${o.deliveryLat},${o.deliveryLng}?q=${o.deliveryLat},${o.deliveryLng}"))) }) { Icon(Icons.Default.Navigation, stringResource(R.string.orders_action_navigate)) }
                             }
                         }
                         o.summary.client.address?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -216,7 +216,7 @@ fun OrderDetailScreen(
                         o.shipments.forEach { sh ->
                             Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(stringResource(R.string.shipment_n, sh.number), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    Text(stringResource(R.string.orders_shipment_n, sh.number), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                     val who = listOfNotNull(sh.driverName, sh.truckIdentifier).joinToString(" · ")
                                     if (who.isNotEmpty()) Text(who, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     // A load queued offline leaves the truck looking untouched; say
@@ -228,12 +228,12 @@ fun OrderDetailScreen(
                                     val truckRows = pending.filter { it.shipmentId == sh.id }
                                     when {
                                         truckRows.any { it.failed } -> Text(
-                                            stringResource(R.string.upload_failed_short),
+                                            stringResource(R.string.orders_upload_failed_short),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.error,
                                         )
                                         truckRows.isNotEmpty() -> Text(
-                                            stringResource(R.string.upload_sending),
+                                            stringResource(R.string.orders_upload_sending),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = LocalEtalonColors.current.warning,
                                         )
@@ -299,7 +299,7 @@ fun OrderDetailScreen(
                     deleteCandidate = null
                 }) { Text(stringResource(R.string.action_delete)) }
             },
-            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text(stringResource(R.string.action_cancel)) } },
+            dismissButton = { TextButton(onClick = { deleteCandidate = null }) { Text(stringResource(R.string.orders_action_cancel)) } },
         )
     }
 }

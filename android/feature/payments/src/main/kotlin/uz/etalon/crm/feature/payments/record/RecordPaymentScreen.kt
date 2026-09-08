@@ -404,7 +404,7 @@ fun RecordPaymentScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { removeCandidate = null }) { Text(stringResource(DesignSystemR.string.action_cancel)) }
+                TextButton(onClick = { removeCandidate = null }) { Text(stringResource(DesignSystemR.string.ds_action_cancel)) }
             },
         )
     }
@@ -419,7 +419,7 @@ fun RecordPaymentScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { confirmLeave = false }) { Text(stringResource(DesignSystemR.string.action_cancel)) }
+                TextButton(onClick = { confirmLeave = false }) { Text(stringResource(DesignSystemR.string.ds_action_cancel)) }
             },
         )
     }

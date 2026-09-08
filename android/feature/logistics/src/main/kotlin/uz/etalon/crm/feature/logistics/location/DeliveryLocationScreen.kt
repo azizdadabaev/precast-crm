@@ -165,7 +165,7 @@ fun DeliveryLocationScreen(
         bottomBar = {
             StickyActionBar {
                 PrimaryButton(
-                    text = stringResource(R.string.action_save), onClick = onSave,
+                    text = stringResource(R.string.logistics_action_save), onClick = onSave,
                     enabled = s.canSave, loading = s.busy,
                 )
             }
@@ -254,7 +254,7 @@ fun DeliveryLocationScreen(
                 )
 
                 SecondaryButton(
-                    text = stringResource(R.string.action_navigate), leading = Icons.Filled.Navigation,
+                    text = stringResource(R.string.logistics_action_navigate), leading = Icons.Filled.Navigation,
                     enabled = s.hasPin,
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${s.lat},${s.lng}?q=${s.lat},${s.lng}"))) },
                 )

@@ -134,7 +134,7 @@ fun MoreScreen(
             confirmButton = {
                 TextButton(onClick = { confirmSignOut = false; onSignOut() }) { Text(stringResource(R.string.more_sign_out)) }
             },
-            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text(stringResource(R.string.action_cancel)) } },
+            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text(stringResource(R.string.app_action_cancel)) } },
         )
     }
 }

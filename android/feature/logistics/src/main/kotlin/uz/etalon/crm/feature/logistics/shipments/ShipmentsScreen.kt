@@ -88,7 +88,7 @@ fun ShipmentsScreen(
                 if (s.pendingUploads.isNotEmpty()) item {
                     OutboxBanner(
                         pending = s.unfinishedUploads,
-                        failedMessage = failed?.let { it.error ?: stringResource(R.string.upload_failed) },
+                        failedMessage = failed?.let { it.error ?: stringResource(R.string.logistics_upload_failed) },
                         onRetry = { failed?.let { onRetryUpload(it.id) } },
                         onCancel = { failed?.let { onCancelUpload(it.id) } },
                     )
@@ -118,7 +118,7 @@ private fun ShipmentCard(
 ) {
     StatusStripeCard(stripe = toneColor(shipmentStatusTone(sh.status))) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(stringResource(R.string.shipment_n, sh.number), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.logistics_shipment_n, sh.number), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             ShipmentStatusChip(sh.status)
         }
         if (sh.driverName != null || sh.truckIdentifier != null) {
@@ -153,8 +153,8 @@ private fun ShipmentCard(
                 PrimaryButton(
                     text = stringResource(
                         when {
-                            failedLoad -> R.string.upload_failed_short
-                            unsentLoad -> R.string.upload_sending
+                            failedLoad -> R.string.logistics_upload_failed_short
+                            unsentLoad -> R.string.logistics_upload_sending
                             else -> R.string.action_load_shipment
                         }
                     ),

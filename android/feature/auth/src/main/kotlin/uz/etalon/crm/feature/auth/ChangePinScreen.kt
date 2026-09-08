@@ -29,7 +29,7 @@ fun ChangePinRoute(forced: Boolean, onDone: () -> Unit, vm: HiltChangePinViewMod
             pinField(s.next, vm::setNext, R.string.change_pin_new)
             pinField(s.confirm, vm::setConfirm, R.string.change_pin_confirm)
             if (s.error != null) ErrorBanner(s.error!!)
-            Button(onClick = { vm.submit(forced) }, enabled = !s.isSubmitting, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(stringResource(R.string.action_save)) }
+            Button(onClick = { vm.submit(forced) }, enabled = !s.isSubmitting, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(stringResource(R.string.auth_action_save)) }
         }
     }
 }
