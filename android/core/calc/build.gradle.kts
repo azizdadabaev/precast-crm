@@ -1,6 +1,10 @@
 plugins { id("etalon.android.library") }
 android { namespace = "uz.etalon.crm.core.calc" }
 dependencies {
+    // Boundary.kt is the only file in this module that touches Money — RoomMoney/ProjectMoney
+    // expose it in their public signatures, so this is `api`, not `implementation`.
+    api(project(":core:model"))
+
     // Test-only: GoldenVectors decodes docs/api/calc-golden.json to replay the TS engine's
     // recorded outputs against this Kotlin port. This module has no serialization at runtime.
     testImplementation(libs.kotlinx.serialization.json)
