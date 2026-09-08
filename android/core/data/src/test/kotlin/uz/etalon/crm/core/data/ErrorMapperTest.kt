@@ -25,4 +25,12 @@ class ErrorMapperTest {
     @Test fun `IOException is Network with an Uzbek message`() {
         assertEquals(AppError.Network("Интернет йўқ"), IOException("timeout").toAppError())
     }
+    @Test fun `an unmapped throwable with a message passes it through — DeviceLocation relies on this for its Uzbek text`() {
+        val e = IllegalStateException("Жойни аниқлаш учун рухсат керак").toAppError()
+        assertEquals(AppError.Server("Жойни аниқлаш учун рухсат керак", 0), e)
+    }
+    @Test fun `an unmapped throwable with no message falls back to a generic Uzbek one`() {
+        val e = IllegalStateException().toAppError()
+        assertEquals(AppError.Server("Хатолик", 0), e)
+    }
 }

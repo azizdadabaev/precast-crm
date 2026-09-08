@@ -21,6 +21,19 @@ fun Throwable.toAppError(): AppError = when (this) {
         else -> AppError.Server(uzbekMessage, status)
     }
     is IOException -> AppError.Network("Интернет йўқ")
+    // NOT dead code: DeviceLocation.kt deliberately throws a plain IllegalStateException whose
+    // message IS the Uzbek string to show (location_permission_needed / location_failed), and
+    // the delivery-location screen relies on that message reaching the user here unchanged —
+    // see DeliveryLocationViewModelTest's device-location/resolver failure cases. Any exception
+    // reaching this branch is expected, by that convention, to already carry Uzbek text; the
+    // null-message case is the only one this fallback exists for.
+    //
+    // That convention is not enforced by the type system — core/calc's CalculationError, for
+    // one, carries an internal ENGLISH validation message and would leak it here unchanged were
+    // it ever thrown from a screen. It has no caller today (the calculator UI isn't wired up
+    // yet), so this is a known, currently-dormant gap rather than a live one; closing it needs a
+    // marker distinguishing "already Uzbek, safe to show" throwables from everything else, which
+    // is a wider change than this fallback line.
     else -> AppError.Server(message ?: "Хатолик", 0)
 }
 
