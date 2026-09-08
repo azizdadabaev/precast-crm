@@ -7,15 +7,20 @@ import java.math.BigDecimal
 import java.time.Instant
 
 class FormattersTest {
-    @Test fun `money uses space thousands, no decimals, UZS suffix`() {
-        assertEquals("542 200 000 UZS", formatMoney(Money.parse("542200000.00")))
+    @Test fun `money uses non-breaking-space thousands, no decimals, UZS suffix`() {
+        // U+00A0, not a plain space — matches the web's Intl.NumberFormat grouping so a figure
+        // like this can't wrap across lines mid-number.
+        assertEquals("542 200 000 UZS", formatMoney(Money.parse("542200000.00")))
         assertEquals("0 UZS", formatMoney(Money.ZERO))
-        assertEquals("1 250 001 UZS", formatMoney(Money.parse("1250000.50")))   // half-away-from-zero, like round2→display
+        assertEquals("1 250 001 UZS", formatMoney(Money.parse("1250000.50")))   // half-away-from-zero, like round2→display
     }
-    @Test fun `area uses comma decimal and м²`() {
+    @Test fun `area uses comma decimal, 2 places, and м²`() {
         assertEquals("12,5 м²", formatArea(BigDecimal("12.500")))
         assertEquals("86,4 м²", formatArea(BigDecimal("86.4")))
         assertEquals("100 м²", formatArea(BigDecimal("100.000")))
+        // The web shows 2 decimals (formatNumber(o.totalArea, 2)) — staff cross-check the same
+        // order's area on the phone and on the desk, so a real 2nd digit must survive here too.
+        assertEquals("24,75 м²", formatArea(BigDecimal("24.75")))
     }
     @Test fun `count uses та`() { assertEquals("12 та", formatCount(12)) }
     @Test fun `phone renders +998 90 111 22 33 from digits`() {

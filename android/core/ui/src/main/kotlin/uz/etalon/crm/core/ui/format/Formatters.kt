@@ -1,6 +1,8 @@
 package uz.etalon.crm.core.ui.format
 
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.ui.regions.findTumanByName
+import uz.etalon.crm.core.ui.regions.findViloyatByName
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
@@ -11,11 +13,16 @@ import java.time.ZoneId
 val TASHKENT: ZoneId = ZoneId.of("Asia/Tashkent")
 val UZ_MONTHS_SHORT = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
+// U+00A0 non-breaking space, written as an escape rather than a literal invisible character.
+// Matches the web's Intl.NumberFormat("ru-RU", …) grouping separator, so a long figure like
+// "542 200 000 UZS" can't wrap across lines mid-number.
+private const val NBSP = '\u00A0'
+
 private fun groupThousands(whole: String): String {
     val neg = whole.startsWith("-")
     val digits = whole.trimStart('-')
     val sb = StringBuilder()
-    digits.reversed().forEachIndexed { i, c -> if (i > 0 && i % 3 == 0) sb.append(' '); sb.append(c) }
+    digits.reversed().forEachIndexed { i, c -> if (i > 0 && i % 3 == 0) sb.append(NBSP); sb.append(c) }
     return (if (neg) "-" else "") + sb.reverse()
 }
 
@@ -29,7 +36,9 @@ fun formatDecimal(v: BigDecimal, maxDigits: Int = 1): String {
     return if (parts.size == 2 && parts[1].isNotEmpty()) "$whole,${parts[1]}" else whole
 }
 
-fun formatArea(m2: BigDecimal): String = formatDecimal(m2, 1) + " м²"
+// 2 decimals — matches the web's formatNumber(o.totalArea, 2) in the orders list and print
+// sheet. Staff cross-check the same order's area on the phone and on the desk.
+fun formatArea(m2: BigDecimal): String = formatDecimal(m2, 2) + " м²"
 fun formatCount(n: Int): String = groupThousands(n.toString()) + " та"
 
 /** Digits-only storage → `+998 90 111 22 33`. Mirrors src/lib/phone.ts formatPhone. */
@@ -65,6 +74,14 @@ fun formatScheduleDate(t: Instant, now: Instant = Instant.now()): String {
     return if (day.year == today.year) dayMonth else "$dayMonth ${day.year}"
 }
 
+/** A viloyat/tuman head converted to Cyrillic for display, or [part] unchanged if it isn't a
+ *  recognised region name (i.e. it's the street). Mirrors the web's `addressToCyrillic`
+ *  (src/lib/regions/index.ts) — a web-side bug can canonicalise a stored address's region
+ *  parts to Latin, and this CRM's rule is Uzbek Cyrillic everywhere, so every render path
+ *  needs the same correction. Never touches what is stored — display only. */
+private fun cyrillicRegionPart(part: String): String =
+    findViloyatByName(part)?.nameUz ?: findTumanByName(part)?.nameUz ?: part
+
 /**
  * A client address for a single-line row. The web widget stores it as
  * `"<Viloyat>, <Tuman>, <street>"` (src/lib/regions/index.ts), so joining the parts
@@ -72,8 +89,13 @@ fun formatScheduleDate(t: Instant, now: Instant = Instant.now()): String {
  * width it is the street that truncates and the province and district survive, which
  * is what a delivery operator is actually scanning for. Addresses written before that
  * widget existed carry no comma and pass through unchanged.
+ *
+ * Only the first two parts can be a viloyat/tuman head, so only those are checked against
+ * the region catalogue and converted to Cyrillic; the street (and anything else) passes
+ * through untouched.
  */
 fun formatAddressLine(raw: String?): String? {
     val parts = raw?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
-    return if (parts.isEmpty()) null else parts.joinToString(" · ")
+    if (parts.isEmpty()) return null
+    return parts.mapIndexed { i, p -> if (i < 2) cyrillicRegionPart(p) else p }.joinToString(" · ")
 }
