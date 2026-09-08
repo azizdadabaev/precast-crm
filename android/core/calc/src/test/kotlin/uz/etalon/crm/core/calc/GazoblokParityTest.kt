@@ -7,7 +7,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
@@ -57,9 +56,9 @@ class GazoblokParityTest {
         }
 
     @Test
-    fun `the vector file carries the 26 cases and 8 rejects Task 4's exporter produced`() {
-        assertTrue(GoldenVectors.gazoblok.cases.size >= 26, "cases")
-        assertTrue(GoldenVectors.gazoblok.rejects.size >= 8, "rejects")
+    fun `the vector file carries exactly the 27 cases and 8 rejects the exporter produced`() {
+        assertEquals(27, GoldenVectors.gazoblok.cases.size, "cases")
+        assertEquals(8, GoldenVectors.gazoblok.rejects.size, "rejects")
     }
 
     @Test

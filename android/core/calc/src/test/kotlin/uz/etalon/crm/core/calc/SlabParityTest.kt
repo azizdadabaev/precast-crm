@@ -9,7 +9,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestFactory
@@ -37,8 +36,8 @@ class SlabParityTest {
     }
 
     @Test
-    fun `the vector file carries exactly the cases Phase 0 exported, and every result has 28 fields`() {
-        assertTrue(GoldenVectors.slab.cases.size >= 26)
+    fun `the vector file carries exactly the 66 cases the exporter produced, and every result has 28 fields`() {
+        assertEquals(66, GoldenVectors.slab.cases.size)
         GoldenVectors.slab.cases.forEach { assertEquals(28, it.result.size, it.name) }
     }
 
