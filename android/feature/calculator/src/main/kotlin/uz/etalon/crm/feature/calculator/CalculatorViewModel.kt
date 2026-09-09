@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -202,6 +201,19 @@ open class CalculatorViewModel(
      */
     private var draftGeneration = 0
 
+    /**
+     * Whether Room is known to hold NOTHING for this operator right now — set by [clearAll], which
+     * deletes the row itself, and by the autosave collector when it clears the row; cleared again
+     * the moment anything is written back.
+     *
+     * The autosave collector used to drop an empty draft by VALUE (`filter { it != EMPTY_DRAFT }`),
+     * which stopped [clearAll]'s own row from being re-created but also swallowed a genuine write:
+     * an operator deleting the last room by hand left the rooms sitting in Room, and they came back
+     * on the next restart. Filtering on the CAUSE instead — is the row already empty? — writes that
+     * one and still leaves [clearAll]'s alone.
+     */
+    private var draftRowCleared = false
+
     /** The one in-flight phone lookup, whether debounced or an explicit retry. A new keystroke —
      *  or a retry — cancels whatever is still running, so a stale answer for a number the operator
      *  has already changed can never land. */
@@ -220,14 +232,29 @@ open class CalculatorViewModel(
         // AFTER the restore has already applied, so the empty default state this ViewModel is
         // seeded with is never the thing that gets persisted and clobbers a real draft.
         viewModelScope.launch {
-            observeDraft().first()?.let { restoreDraft(it) }
+            val restored = observeDraft().first()
+            if (restored != null) restoreDraft(restored)
+            // Nothing restored means there is no row of this operator's to keep in sync — see
+            // [draftRowCleared], which the collector below reads before it clears anything.
+            draftRowCleared = restored == null
             // distinctUntilChanged: a keypad keystroke that does not change the committed value,
             // expandedRowId, saving and saveMessage all touch [_state] without changing what
-            // toDraft() would write — none of that belongs in Room. filter: EMPTY_DRAFT is what
-            // clearAll leaves behind, and this is the collector that would otherwise re-create the
-            // Room row it just deleted the moment its own debounce next elapses — see clearAll's doc.
-            _state.map { it.toDraft() }.distinctUntilChanged().filter { it != EMPTY_DRAFT }
-                .debounce(AUTOSAVE_DEBOUNCE_MS).collect { draft -> persistDraft(draft) }
+            // toDraft() would write — none of that belongs in Room.
+            _state.map { it.toDraft() }.distinctUntilChanged()
+                .debounce(AUTOSAVE_DEBOUNCE_MS)
+                .collect { draft ->
+                    if (draft == EMPTY_DRAFT) {
+                        // An empty quote is a DELETE, not an empty row — and only when the row is
+                        // still there, so clearAll (which deletes it itself) is not repeated.
+                        if (!draftRowCleared) {
+                            clearDraftUseCase()
+                            draftRowCleared = true
+                        }
+                    } else {
+                        persistDraft(draft)
+                        draftRowCleared = false
+                    }
+                }
         }
         // Rejections outlive the quote they came from: by the time the server refuses a queued
         // order the calculator has long been cleared, so this is the only surface that can tell
@@ -426,6 +453,7 @@ open class CalculatorViewModel(
      *  itself, and a spinner left running forever over an empty quote would be its own bug. */
     fun clearAll() {
         draftGeneration++
+        draftRowCleared = true
         _state.update {
             it.copy(
                 rows = emptyList(), expandedRowId = null, keypad = null, keypadText = "",
@@ -481,9 +509,12 @@ open class CalculatorViewModel(
                         // process death in the gap before the debounce would otherwise have
                         // flushed it — mirrors RecordPaymentViewModel persisting KEY_PAYMENT_ID
                         // the moment the row is known to exist.
-                        val withId = draft.copy(projectId = id)
-                        persistDraft(withId)
                         _state.update { it.copy(saving = false, projectId = id, saveMessage = SAVE_SUCCESS_MESSAGE) }
+                        // The CURRENT quote, not the one captured when the request went out: the
+                        // operator keeps typing while the save is in flight, and writing the stale
+                        // snapshot back would undo up to a debounce window of their edits.
+                        persistDraft(_state.value.toDraft())
+                        draftRowCleared = false
                     }
                     // else: clearAll ran while this save was in flight. The quote it would UPDATE
                     // no longer exists on screen or in Room — writing the id/content here would
@@ -789,8 +820,8 @@ private fun CalculatorUiState.toDraft(): CalculatorDraft = CalculatorDraft(
     projectId = projectId,
 )
 
-/** What `clearAll` leaves behind — the autosave collector filters this out so the empty draft it
- *  produces is never written back to Room, re-creating the row `clearAll` just deleted. */
+/** A quote with nothing in it — no rooms, no client, no discounts. The autosave collector treats
+ *  this as a DELETE rather than a row to write: see [CalculatorViewModel.draftRowCleared]. */
 private val EMPTY_DRAFT: CalculatorDraft = CalculatorUiState().toDraft()
 
 /**

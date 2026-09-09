@@ -423,6 +423,73 @@ class CalculatorViewModelTest {
         assertEquals(beforeClear, upserts, "the empty draft clearAll leaves behind must not be persisted back")
     }
 
+    /**
+     * The mirror of the test above, and the case the value-based `filter { it != EMPTY_DRAFT }`
+     * silently swallowed: the operator deleting the LAST room is a real write, not clearAll's
+     * leftovers. Dropped, the rooms stayed in Room and came back on the next restart.
+     */
+    @Test fun `deleting every room by hand clears the Room row instead of leaving the rooms in it`() = runTest {
+        var upserts = 0
+        var deletes = 0
+        val v = vm(persistDraft = PersistDraftUseCase { upserts++ }, clearDraft = ClearDraftUseCase { deletes++ })
+        advanceUntilIdle()
+        v.addRoom()
+        advanceTimeBy(600); advanceUntilIdle()
+        assertEquals(1, upserts)
+        assertEquals(0, deletes)
+
+        v.deleteRoom(v.state.value.rows.single().id)
+        advanceTimeBy(600); advanceUntilIdle()
+
+        assertEquals(1, upserts, "an empty quote is a delete, not a row to write")
+        assertEquals(1, deletes, "without this the deleted rooms are still in Room")
+    }
+
+    /** The same thing end to end, against a store the two ViewModels share: type a room, delete it,
+     *  restart. The rooms must be gone. */
+    @Test fun `a quote emptied by hand does not resurrect after a restart`() = runTest {
+        var stored: CalculatorDraft? = null
+        val persist = PersistDraftUseCase { d -> stored = d }
+        val clear = ClearDraftUseCase { stored = null }
+
+        val v = vm(observeDraft = ObserveDraftUseCase { flowOf(null) }, persistDraft = persist, clearDraft = clear)
+        advanceUntilIdle()
+        v.addRoom()
+        advanceTimeBy(600); advanceUntilIdle()
+        assertNotNull(stored, "the room reached Room in the first place")
+
+        v.deleteRoom(v.state.value.rows.single().id)
+        advanceTimeBy(600); advanceUntilIdle()
+
+        val restarted = vm(observeDraft = ObserveDraftUseCase { flowOf(stored) }, persistDraft = persist, clearDraft = clear)
+        advanceUntilIdle()
+
+        assertTrue(restarted.state.value.rows.isEmpty(), "the rooms the operator deleted must not come back")
+    }
+
+    /** The autosave debounce is 500 ms wide; a save started at the beginning of one lands after the
+     *  operator has already typed more. Writing the CAPTURED draft back would undo that much of
+     *  their work every time a save returns. */
+    @Test fun `a save's own write carries the edits made while it was in flight`() = runTest {
+        val saveResult = CompletableDeferred<Result<String>>()
+        val writes = mutableListOf<CalculatorDraft>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, _ -> saveResult.await() }, persistDraft = PersistDraftUseCase { d -> writes += d })
+        advanceUntilIdle()
+        v.readyToSave()
+
+        v.saveDraft()
+        v.addRoom()                 // the operator keeps working while the request is out
+        val typedDuring = v.state.value.rows.size
+
+        saveResult.complete(Result.success("proj-1"))
+        advanceUntilIdle()
+
+        // The save's OWN write — the first one carrying the id it just received, before the
+        // autosave debounce that follows it writes the same state again.
+        val saveWrite = writes.first { it.projectId == "proj-1" }
+        assertEquals(typedDuring, saveWrite.rows.size, "the room added mid-save must survive the save's own write")
+    }
+
     // ── Task 8: the Idempotency-Key fingerprints the wire, not the local draft ─────
 
     @Test fun `a retry of the same submission sends the same idempotency key`() = runTest {
