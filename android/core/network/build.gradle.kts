@@ -19,5 +19,8 @@ tasks.withType<Test>().configureEach {
     inputs.files(
         rootProject.file("../precast-crm/src/lib/dashboard-data.ts"),
         rootProject.file("../precast-crm/prisma/schema.prisma"),
+        // CalculatorContractTest reads this one — the calculator DTOs' field names against the
+        // real Zod schemas, the same reason the two files above are declared.
+        rootProject.file("../precast-crm/src/lib/validation.ts"),
     ).withPropertyName("serverContractSources").withPathSensitivity(PathSensitivity.RELATIVE)
 }

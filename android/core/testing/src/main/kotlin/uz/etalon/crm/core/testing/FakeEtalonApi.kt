@@ -69,4 +69,6 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun client(id: String): ClientDetailDto = unused("client")
     override suspend fun updateClient(id: String, body: ClientWriteRequest): ClientRowDto = unused("updateClient")
     override suspend fun dashboard(): DashboardDto = unused("dashboard")
+
+    override suspend fun saveProjectDraft(body: SaveProjectDraftRequest, idempotencyKey: String): ProjectSavedDto = unused("saveProjectDraft")
 }

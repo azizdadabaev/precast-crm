@@ -206,4 +206,20 @@ interface EtalonApi {
 
     @GET("/api/dashboard")
     suspend fun dashboard(): DashboardDto
+
+    // ── Calculator draft (Phase 2b Task 8) ─────────────────────────
+
+    /**
+     * `withIdempotency`-wrapped server-side (Phase 2b Task 1), same reason `recordPayment`
+     * requires the header: the calculator saves a draft over a field connection and may retry,
+     * and a response lost after the Project row committed would otherwise save one quote twice
+     * under two ids. A 409 `IDEMPOTENT_IN_PROGRESS` means a retry arrived while the first attempt
+     * was still running — the caller must treat that as "try again shortly", never as a permanent
+     * failure.
+     */
+    @POST("/api/projects")
+    suspend fun saveProjectDraft(
+        @Body body: SaveProjectDraftRequest,
+        @Header("Idempotency-Key") idempotencyKey: String,
+    ): ProjectSavedDto
 }
