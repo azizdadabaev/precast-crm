@@ -12,11 +12,13 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.testing.FakeEtalonApi
 import uz.etalon.crm.feature.calculator.KeypadTarget.Field.LENGTH
 import uz.etalon.crm.feature.calculator.KeypadTarget.Field.WIDTH
 import java.math.BigDecimal
@@ -58,6 +60,7 @@ class TotalsSheetStateTest {
     private fun vm() = CalculatorViewModel(
         session = TotalsSheetFakeSessionPricing(defaultAndroidPricing()),
         permissions = PermissionGate { true },
+        clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
     )
 
     /** Adds a new room and drives its ЭНИ/БЎЙИ through the docked keypad — comma-decimal text, so

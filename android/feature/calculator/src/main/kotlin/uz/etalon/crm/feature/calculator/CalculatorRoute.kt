@@ -37,6 +37,7 @@ fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hil
         onOpenField = { id, field -> vm.openKeypad(KeypadTarget(id, field)) },
         onKeypadValue = vm::setKeypadText,
         onKeypadConfirm = vm::nextField,
+        clientBar = { ClientBar(state = s, vm = vm) },
         totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
     )
 }

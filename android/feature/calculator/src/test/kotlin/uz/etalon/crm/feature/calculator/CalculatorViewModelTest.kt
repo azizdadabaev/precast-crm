@@ -16,11 +16,13 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.testing.FakeEtalonApi
 import uz.etalon.crm.feature.calculator.KeypadTarget.Field.LENGTH
 import uz.etalon.crm.feature.calculator.KeypadTarget.Field.WIDTH
 import java.math.BigDecimal
@@ -59,10 +61,12 @@ class CalculatorViewModelTest {
 
     /** The bootstrap `Pricing` built from the same strings the server sends ("4.30", "140000"),
      *  so `toPriceConfig()` reproduces DEFAULT_PRICE_CONFIG — the equality Phase 2a's
-     *  `BoundaryTest` already pins. */
+     *  `BoundaryTest` already pins. None of these tests exercise the client bar, so [ClientsRepository]
+     *  is wired to a [FakeEtalonApi] that throws by name if anything ever calls it. */
     private fun vm(canWrite: Boolean = true) = CalculatorViewModel(
         session = FakeSessionPricing(defaultAndroidPricing()),
         permissions = PermissionGate { it == "order.create" && canWrite },
+        clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
     )
 
     @Test fun `rooms are auto-named Хона N and numbering does not reuse a deleted name`() = runTest {

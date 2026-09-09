@@ -233,6 +233,11 @@ private fun DimensionField(
  * wrong slot) and is walked forward to whatever index this row lands on next, so a continuous
  * drag across several rows keeps calling [onMove] with the row's current position rather than
  * the one it started at.
+ *
+ * [index] and [onMove] are room-local — positions within [CalculatorUiState.rows] — but
+ * [listState]'s `layoutInfo` reports OVERALL `LazyColumn` item indices, one further along because
+ * `ClientBar`'s `stickyHeader` sits at item 0 (see [ROOM_LIST_HEADER_OFFSET]). Every read of
+ * `layoutInfo` here adds the offset; every value hitting [onMove] has it subtracted back off.
  */
 @Composable
 private fun DragHandle(index: Int, rowId: String, listState: LazyListState, onMove: (Int, Int) -> Unit, modifier: Modifier = Modifier) {
@@ -255,14 +260,17 @@ private fun DragHandle(index: Int, rowId: String, listState: LazyListState, onMo
                         change.consume()
                         accumulatedY += dragAmount.y
                         val info = listState.layoutInfo
-                        val dragged = info.visibleItemsInfo.firstOrNull { it.index == dragFromIndex } ?: return@detectDragGesturesAfterLongPress
+                        val dragged = info.visibleItemsInfo.firstOrNull { it.index == dragFromIndex + ROOM_LIST_HEADER_OFFSET }
+                            ?: return@detectDragGesturesAfterLongPress
                         val draggedCenter = dragged.offset + dragged.size / 2 + accumulatedY
                         val target = info.visibleItemsInfo.firstOrNull { other ->
-                            other.index != dragFromIndex && draggedCenter >= other.offset && draggedCenter <= other.offset + other.size
+                            other.index != dragged.index && other.index >= ROOM_LIST_HEADER_OFFSET &&
+                                draggedCenter >= other.offset && draggedCenter <= other.offset + other.size
                         }
                         if (target != null) {
-                            onMove(dragFromIndex, target.index)
-                            dragFromIndex = target.index
+                            val targetLocal = target.index - ROOM_LIST_HEADER_OFFSET
+                            onMove(dragFromIndex, targetLocal)
+                            dragFromIndex = targetLocal
                             accumulatedY = 0f
                         }
                     },

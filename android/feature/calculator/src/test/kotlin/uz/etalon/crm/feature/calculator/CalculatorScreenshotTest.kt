@@ -16,15 +16,19 @@ import uz.etalon.crm.core.calc.beamSchedule
 import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
+import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.testing.FakeEtalonApi
 
 /** [CalculatorScreen] itself carries no `CalculatorViewModel` — `RoomCard`/`RoomExtras` take a
  *  plain [RoomExtrasCallbacks] instead. This vm exists only because `totalsSheetContent` renders
- *  `TotalsSheet`, which still takes one (`TotalsSheet.kt`'s own signature, untouched here); nothing
- *  in these frames ever calls into any of its methods either way. */
+ *  `TotalsSheet` and `clientBar` renders `ClientBar` (`TotalsSheet.kt`/`ClientBar.kt`'s own
+ *  signatures, untouched here); nothing in these frames ever calls into any of its methods either
+ *  way — the client bar fixtures below never reach nine digits, so [ClientsRepository] is wired
+ *  to a [FakeEtalonApi] that throws by name if anything ever did. */
 private class InertSessionPricing : SessionPricing {
     override val pricing: StateFlow<Pricing?> = MutableStateFlow(null)
 }
@@ -116,7 +120,10 @@ class CalculatorScreenshotTest {
     }
 
     private fun content(s: CalculatorUiState, dark: Boolean) {
-        val vm = CalculatorViewModel(session = InertSessionPricing(), permissions = PermissionGate { false })
+        val vm = CalculatorViewModel(
+            session = InertSessionPricing(), permissions = PermissionGate { false },
+            clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { false }),
+        )
         rule.setContent {
             EtalonTheme(darkTheme = dark) {
                 CalculatorScreen(
@@ -125,6 +132,7 @@ class CalculatorScreenshotTest {
                     onAddRoom = {}, onDuplicateRoom = {}, onDeleteRoom = {}, onMoveRoom = { _, _ -> },
                     onSetName = { _, _ -> }, onToggleExpanded = {}, onOpenField = { _, _ -> },
                     onKeypadValue = {}, onKeypadConfirm = {},
+                    clientBar = { ClientBar(state = s, vm = vm) },
                     totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
                 )
             }

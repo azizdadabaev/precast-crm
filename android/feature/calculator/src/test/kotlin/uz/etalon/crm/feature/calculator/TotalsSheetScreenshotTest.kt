@@ -24,10 +24,12 @@ import uz.etalon.crm.core.calc.beamSchedule
 import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
+import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.testing.FakeEtalonApi
 
 private class TotalsSheetInertSessionPricing : SessionPricing {
     override val pricing: StateFlow<Pricing?> = MutableStateFlow(null)
@@ -82,7 +84,10 @@ class TotalsSheetScreenshotTest {
         )
     }
 
-    private fun vm() = CalculatorViewModel(session = TotalsSheetInertSessionPricing(), permissions = PermissionGate { false })
+    private fun vm() = CalculatorViewModel(
+        session = TotalsSheetInertSessionPricing(), permissions = PermissionGate { false },
+        clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { false }),
+    )
 
     private fun shootCollapsed(name: String, dark: Boolean) {
         rule.setContent {

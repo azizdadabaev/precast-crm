@@ -18,11 +18,13 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.calc.M2_OVERRIDE_TIERS
 import uz.etalon.crm.core.calc.Pattern
+import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.testing.FakeEtalonApi
 import uz.etalon.crm.feature.calculator.KeypadTarget.Field.LENGTH
 import uz.etalon.crm.feature.calculator.KeypadTarget.Field.WIDTH
 import java.math.BigDecimal
@@ -63,6 +65,7 @@ class RoomExtrasStateTest {
     private fun vm() = CalculatorViewModel(
         session = RoomExtrasFakeSessionPricing(defaultAndroidPricing()),
         permissions = PermissionGate { true },
+        clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
     )
 
     private fun room(v: CalculatorViewModel): String = v.state.value.rows[0].id

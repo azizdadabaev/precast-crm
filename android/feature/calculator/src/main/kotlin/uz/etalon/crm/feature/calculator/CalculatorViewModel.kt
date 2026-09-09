@@ -3,6 +3,8 @@ package uz.etalon.crm.feature.calculator
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,8 +22,11 @@ import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.calc.roundDownToGrid
 import uz.etalon.crm.core.calc.roundUpToGrid
 import uz.etalon.crm.core.calc.toPriceConfig
+import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
+import uz.etalon.crm.core.data.toAppError
+import uz.etalon.crm.core.ui.regions.parseAddress
 import java.util.UUID
 import javax.inject.Inject
 
@@ -32,6 +37,15 @@ private const val ORDER_CREATE = "order.create"
 /** `RoomCalcInputBaseSchema.m2PriceReason`'s cap on the server (validation.ts) — `internal` so
  *  `RateOverrideSheet` can enforce the same limit on the reason field it collects. */
 internal const val MAX_REASON = 200
+
+/** `normalizePhone` turns exactly nine digits into `998` + those nine — the same figure
+ *  `ClientEditViewModel`'s own `LOCAL_PHONE_DIGITS` uses. */
+private const val CLIENT_PHONE_DIGITS = 9
+
+/** How long the client bar waits after the ninth digit before asking `findByPhone` — long enough
+ *  that a nine-digit phone is one request, not nine; short enough the operator does not notice.
+ *  `internal` so the test measures the real figure, mirroring `CLIENT_SEARCH_DEBOUNCE_MS`. */
+internal const val CLIENT_PHONE_LOOKUP_DEBOUNCE_MS = 400L
 
 /**
  * Rooms, the docked keypad's walk, live pricing and totals for a quote — the state and behaviour
@@ -51,12 +65,18 @@ internal const val MAX_REASON = 200
 class CalculatorViewModel @Inject constructor(
     private val session: SessionPricing,
     private val permissions: PermissionGate,
+    private val clients: ClientsRepository,
 ) : ViewModel() {
 
     private var priceConfig: PriceConfig = DEFAULT_PRICE_CONFIG
 
     /** Only ever increases — see `addRoom`'s doc for why a deleted room's number is never reused. */
     private var nextRoomSeq = 1
+
+    /** The one in-flight phone lookup, whether debounced or an explicit retry. A new keystroke —
+     *  or a retry — cancels whatever is still running, so a stale answer for a number the operator
+     *  has already changed can never land. */
+    private var clientLookupJob: Job? = null
 
     private val _state = MutableStateFlow(CalculatorUiState())
     val state: StateFlow<CalculatorUiState> = _state.asStateFlow()
@@ -255,6 +275,80 @@ class CalculatorViewModel @Inject constructor(
             schedule = emptyList(), error = null,
         )
     }
+
+    // ── The client bar: who the quote is for ───────────────────────
+
+    /**
+     * The nine local digits, already filtered/truncated by the bar's own field (copied
+     * field-for-field from `ClientEditSheet`'s phone field — this method just stores what it is
+     * handed, exactly as `ClientEditViewModel.setPhoneDigits` does).
+     *
+     * On the ninth digit this debounces and asks [ClientsRepository.findByPhone]. A hit fills the
+     * name and address from the stored client; a miss clears [CalculatorUiState.matchedClientId]
+     * without touching anything the operator typed — a new customer is not an error.
+     */
+    fun setClientPhoneDigits(v: String) {
+        if (v == _state.value.clientPhoneDigits) return
+        updateClientState { it.copy(clientPhoneDigits = v, matchedClientId = null, clientLookupError = null) }
+        clientLookupJob?.cancel()
+        if (v.length == CLIENT_PHONE_DIGITS) {
+            clientLookupJob = viewModelScope.launch {
+                delay(CLIENT_PHONE_LOOKUP_DEBOUNCE_MS)
+                lookupClientByPhone(v)
+            }
+        }
+    }
+
+    /** The lookup error banner's retry — the same lookup, without the debounce: the operator
+     *  already waited once and is asking again on purpose. */
+    fun retryClientLookup() {
+        val digits = _state.value.clientPhoneDigits
+        if (digits.length != CLIENT_PHONE_DIGITS) return
+        clientLookupJob?.cancel()
+        clientLookupJob = viewModelScope.launch { lookupClientByPhone(digits) }
+    }
+
+    private suspend fun lookupClientByPhone(digits: String) {
+        clients.findByPhone(digits).fold(
+            onSuccess = { hit ->
+                _state.update { it.copy(clientLookupError = null) }
+                if (hit != null) {
+                    updateClientState {
+                        it.copy(clientName = hit.name, clientAddress = parseAddress(hit.address), matchedClientId = hit.id)
+                    }
+                }
+            },
+            onFailure = { t -> _state.update { it.copy(clientLookupError = t.toAppError().message) } },
+        )
+    }
+
+    fun setClientName(v: String) = updateClientState { it.copy(clientName = v) }
+    fun setClientViloyat(v: String) = updateClientState { s -> s.copy(clientAddress = s.clientAddress.copy(viloyat = v)) }
+    fun setClientTuman(v: String) = updateClientState { s -> s.copy(clientAddress = s.clientAddress.copy(tuman = v)) }
+    fun setClientStreet(v: String) = updateClientState { s -> s.copy(clientAddress = s.clientAddress.copy(street = v)) }
+
+    /** The pencil on the collapsed line. Reopens without blanking anything — [reopenClientBar]
+     *  only ever clears the collapse flag, never the phone/name/address it is showing. */
+    fun reopenClientBar() = _state.update { it.copy(clientBarCollapsed = false) }
+
+    /**
+     * A phone and a name both present is a rising EDGE, not a level: it fires [transform] and
+     * then collapses the bar only the moment that condition newly becomes true, never on every
+     * update while it stays true. That is what lets the pencil's reopen stick — editing a field
+     * (the name, the address) while the phone stays complete never re-crosses the edge, so it
+     * cannot snap shut again under the operator's fingers. It re-fires only if the phone is edited
+     * back below nine digits and then completed again.
+     */
+    private fun updateClientState(transform: (CalculatorUiState) -> CalculatorUiState) {
+        _state.update { s ->
+            val wasReady = clientReady(s)
+            val next = transform(s)
+            if (!wasReady && clientReady(next)) next.copy(clientBarCollapsed = true) else next
+        }
+    }
+
+    private fun clientReady(s: CalculatorUiState) =
+        s.clientPhoneDigits.length == CLIENT_PHONE_DIGITS && s.clientName.isNotBlank()
 
     /** Recomputes only the row named [id] through the engine, then re-aggregates [CalculatorUiState.totals]
      *  and [CalculatorUiState.schedule] over the full row list — never every row, which the engine

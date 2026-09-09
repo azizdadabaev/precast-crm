@@ -6,6 +6,7 @@ import uz.etalon.crm.core.calc.ProjectTotals
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
+import uz.etalon.crm.core.ui.regions.ParsedAddress
 
 /** The width/length bump step, in metres — see `CalculatorViewModel.bumpWidth`. */
 enum class Grid(val step: Double) { CM10(0.1), CM5(0.05) }
@@ -44,6 +45,23 @@ data class CalculatorUiState(
     val schedule: List<BeamScheduleLine> = emptyList(),
     val canWrite: Boolean = false,          // order.create
     val error: String? = null,
+
+    // ── The client bar: who the quote is for — see `ClientBar.kt` and
+    // `CalculatorViewModel`'s client-bar section. ──
+    /** The NINE local digits only, exactly like `ClientEditState.phoneDigits` — the `+998` the
+     *  bar shows is display-only. */
+    val clientPhoneDigits: String = "",
+    val clientName: String = "",
+    val clientAddress: ParsedAddress = ParsedAddress("", "", ""),
+    /** Set once `findByPhone` finds this exact number already on file — cleared the moment the
+     *  phone is edited away from that match, since it no longer names the same customer. */
+    val matchedClientId: String? = null,
+    /** A failed lookup, shown as a retryable banner. Never blocks typing — only a real answer
+     *  (hit or miss) clears it. */
+    val clientLookupError: String? = null,
+    /** Collapses the bar to one line once a phone and a name are both present — see
+     *  `CalculatorViewModel.updateClientState`. The pencil on the collapsed line reopens it. */
+    val clientBarCollapsed: Boolean = false,
 ) {
     val totalWeightKg: Double get() = totals.monolithArea * KG_PER_M2
 

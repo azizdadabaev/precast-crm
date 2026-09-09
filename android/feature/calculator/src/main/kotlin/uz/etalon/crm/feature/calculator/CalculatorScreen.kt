@@ -1,5 +1,6 @@
 package uz.etalon.crm.feature.calculator
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +49,15 @@ import uz.etalon.crm.core.designsystem.components.NumericKeypad
 internal val CALC_SHEET_PEEK_HEIGHT: Dp = 48.dp + 12.dp + 48.dp
 
 /**
+ * [clientBar]'s `stickyHeader` below is the room `LazyColumn`'s own item index 0, so a room at
+ * position `i` within [CalculatorUiState.rows] sits at overall list index `i + ROOM_LIST_HEADER_OFFSET`.
+ * Two places need this translation: the keypad's auto-scroll effect just below, and `RoomCard.kt`'s
+ * `DragHandle`, which reads/writes [androidx.compose.foundation.lazy.LazyListState.layoutInfo]
+ * (overall indices) but calls back with room-local ones (`onMove`, `CalculatorViewModel.moveRoom`).
+ */
+internal const val ROOM_LIST_HEADER_OFFSET = 1
+
+/**
  * The room list, docked directly above the keypad rather than a `ModalBottomSheet` — see
  * `NumericKeypadSheet.kt`'s KDoc for why — with the totals sheet ([TotalsSheet]) as a second,
  * PERSISTENT bottom sheet beneath it (`BottomSheetScaffold`, never `Hidden` — see
@@ -56,8 +66,12 @@ internal val CALC_SHEET_PEEK_HEIGHT: Dp = 48.dp + 12.dp + 48.dp
  * other feature's `*Route`/`*Screen` split — only [CalculatorRoute] knows about the ViewModel.
  * The screen renders [CalculatorUiState] and sends events back through the callbacks; it computes
  * nothing itself — every figure a room card shows came off the engine already.
+ *
+ * [clientBar] is [ClientBar] handed in the same way [totalsSheetContent] hands in `TotalsSheet`:
+ * a slot built by [CalculatorRoute] (which alone holds the `CalculatorViewModel`), rendered here
+ * as this `LazyColumn`'s own `stickyHeader` so it stays pinned above the rooms while they scroll.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CalculatorScreen(
     s: CalculatorUiState,
@@ -71,15 +85,18 @@ fun CalculatorScreen(
     onOpenField: (String, KeypadTarget.Field) -> Unit,
     onKeypadValue: (String) -> Unit,
     onKeypadConfirm: () -> Unit,
+    clientBar: @Composable () -> Unit,
     totalsSheetContent: @Composable ColumnScope.() -> Unit,
 ) {
     val listState = rememberLazyListState()
     // Keeps the room the keypad is walking through on screen: a Кейинги from the last visible
     // room's ЭНИ to the next room's БЎЙИ must not leave the operator staring at a field that
-    // scrolled out from under the docked keypad.
+    // scrolled out from under the docked keypad. +ROOM_LIST_HEADER_OFFSET — see that constant's
+    // own doc — or this lands one room early.
     LaunchedEffect(s.keypad?.rowId) {
         s.keypad?.rowId?.let { id ->
-            s.rows.indexOfFirst { it.id == id }.takeIf { i -> i >= 0 }?.let { listState.animateScrollToItem(it) }
+            s.rows.indexOfFirst { it.id == id }.takeIf { i -> i >= 0 }
+                ?.let { listState.animateScrollToItem(it + ROOM_LIST_HEADER_OFFSET) }
         }
     }
 
@@ -104,6 +121,7 @@ fun CalculatorScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    stickyHeader { clientBar() }
                     if (s.rows.isEmpty()) item { EmptyState(stringResource(R.string.calc_empty)) }
                     itemsIndexed(s.rows, key = { _, row -> row.id }) { index, row ->
                         RoomCard(

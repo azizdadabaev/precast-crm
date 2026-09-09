@@ -59,4 +59,12 @@
     <string name="calc_schedule_empty">Ҳозирча балка йўқ.</string>
     <string name="calc_total_blocks">Ғишт · жами</string>
     <string name="calc_weight_formula">%1$s × 180 = %2$s</string>
+    <!-- the client bar — who the quote is for -->
+    <string name="calc_client_phone">Телефон рақами</string>
+    <string name="calc_client_name">Мижоз номи</string>
+    <string name="calc_client_viloyat">Вилоят</string>
+    <string name="calc_client_tuman">Туман</string>
+    <string name="calc_client_street">Кўча, уй, хонадон</string>
+    <string name="calc_client_edit">Мижозни ўзгартириш</string>
+    <string name="calc_client_bar_separator"> · </string>
 </resources>
