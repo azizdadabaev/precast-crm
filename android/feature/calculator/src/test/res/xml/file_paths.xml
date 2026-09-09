@@ -1,0 +1,6 @@
+<paths>
+    <!-- Test-only mirror of app/src/main/res/xml/file_paths.xml: this Robolectric test runs inside
+         :feature:calculator's own test manifest, which does not see :app's manifest/resources (the
+         dependency direction is the other way around) — see QuoteImageTest.kt's own comment. -->
+    <cache-path name="quotes" path="quotes/" />
+</paths>

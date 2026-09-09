@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Test-only manifest. `:feature:calculator` has no `src/main/AndroidManifest.xml` of its own — the
+  real `<provider>` for FileProvider lives in `app/src/main/AndroidManifest.xml`, since only `:app`
+  is ever installed. A Robolectric unit test running inside THIS module, though, resolves
+  `PackageManager` entirely from THIS module's own (test) manifest — it never sees :app's, because
+  :app depends on :feature:calculator, not the other way round. Without this, `writeQuotePng`'s
+  `FileProvider.getUriForFile` cannot resolve any authority at all under Robolectric. See
+  QuoteImageTest.kt's own comment for the fuller reasoning.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>
