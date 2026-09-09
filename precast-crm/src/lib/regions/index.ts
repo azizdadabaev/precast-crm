@@ -159,16 +159,33 @@ export function composeAddress(
 }
 
 /**
+ * Like parseAddress(), but maps viloyat/tuman through their Cyrillic
+ * .nameUz instead of returning parseAddress's Latin .name. Handles both
+ * Latin (legacy storage) and already-Cyrillic input — safe to call on any
+ * address regardless of how it was written. streetDetail is free text and
+ * passes through untouched.
+ *
+ * For widgets that display and write Cyrillic exclusively (e.g.
+ * AddressInput): seeding local state from this instead of parseAddress()
+ * directly avoids silently flipping a stored address's script the next
+ * time an unrelated field (like the street) is edited and re-composed.
+ */
+export function parseAddressToCyrillic(address: string): ParsedAddress {
+  const { viloyat, tuman, streetDetail } = parseAddress(address);
+  const v = viloyat ? findViloyatByName(viloyat) : null;
+  const t = tuman ? findTumanByName(tuman) : null;
+  return { viloyat: v?.nameUz ?? viloyat, tuman: t?.nameUz ?? tuman, streetDetail };
+}
+
+/**
  * Convert a stored address string to Cyrillic for display.
  * Handles both Latin (legacy storage) and already-Cyrillic strings —
  * safe to call on any address regardless of how it was written.
  */
 export function addressToCyrillic(address: string): string {
   if (!address) return address;
-  const { viloyat, tuman, streetDetail } = parseAddress(address);
-  const v = viloyat ? findViloyatByName(viloyat) : null;
-  const t = tuman ? findTumanByName(tuman) : null;
-  return composeAddress(v?.nameUz ?? viloyat, t?.nameUz ?? tuman, streetDetail);
+  const { viloyat, tuman, streetDetail } = parseAddressToCyrillic(address);
+  return composeAddress(viloyat, tuman, streetDetail);
 }
 
 /** Bilingual label "Cyrillic · Latin" for a viloyat. */

@@ -46,7 +46,7 @@ import {
   getTumans,
   getViloyatForTuman,
   getViloyats,
-  parseAddress,
+  parseAddressToCyrillic,
   type Tuman,
   type Viloyat,
 } from "@/lib/regions";
@@ -70,7 +70,7 @@ export function AddressInput({
   // Parse the incoming value once, then own each field locally so the
   // user can type into the street field without round-tripping every
   // keystroke through the parent's onChange.
-  const initial = React.useMemo(() => parseAddress(value), []);
+  const initial = React.useMemo(() => parseAddressToCyrillic(value), []);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: only initial seed
 
   const [viloyat, setViloyat] = React.useState<string>(initial.viloyat);
@@ -83,7 +83,7 @@ export function AddressInput({
   React.useEffect(() => {
     const composed = composeAddress(viloyat, tuman, streetDetail);
     if (composed === value) return;
-    const next = parseAddress(value);
+    const next = parseAddressToCyrillic(value);
     setViloyat(next.viloyat);
     setTuman(next.tuman);
     setStreetDetail(next.streetDetail);

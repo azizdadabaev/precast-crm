@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   VILOYATS,
   TUMANS,
+  addressToCyrillic,
   composeAddress,
   findTumanByName,
   findViloyatByName,
@@ -9,6 +10,7 @@ import {
   getViloyatForTuman,
   getViloyats,
   parseAddress,
+  parseAddressToCyrillic,
   tumanLabel,
   viloyatLabel,
 } from "../src/lib/regions";
@@ -194,6 +196,50 @@ describe("parseAddress / composeAddress", () => {
         composeAddress(parsed.viloyat, parsed.tuman, parsed.streetDetail),
       ).toBe(original);
     }
+  });
+});
+
+describe("parseAddressToCyrillic", () => {
+  // Regression: AddressInput seeded its local state from parseAddress(),
+  // which canonicalizes viloyat/tuman to Latin .name regardless of the
+  // input script. Saving any unrelated field (e.g. the street) then
+  // re-composed the address with that Latin viloyat/tuman, silently
+  // flipping an already-Cyrillic stored address to Latin.
+  // parseAddressToCyrillic() is the seam that keeps the script Cyrillic.
+  it("keeps a Cyrillic address Cyrillic (round-trips unchanged)", () => {
+    const out = parseAddressToCyrillic("Тошкент шаҳри, Юнусобод тумани, Юнусобод 12-7");
+    expect(out).toEqual({
+      viloyat: "Тошкент шаҳри",
+      tuman: "Юнусобод тумани",
+      streetDetail: "Юнусобод 12-7",
+    });
+  });
+
+  it("converts a legacy Latin-stored address to Cyrillic", () => {
+    const out = parseAddressToCyrillic("Toshkent shahri, Yunusobod tumani, Yunusobod 12-7");
+    expect(out).toEqual({
+      viloyat: "Тошкент шаҳри",
+      tuman: "Юнусобод тумани",
+      streetDetail: "Yunusobod 12-7",
+    });
+  });
+
+  it("leaves the free-text street part untouched, in whatever script it was typed", () => {
+    const out = parseAddressToCyrillic("Тошкент шаҳри, Юнусобод тумани, Yangi ko'cha 5");
+    expect(out.streetDetail).toBe("Yangi ko'cha 5");
+  });
+
+  it("passes an unmatched address straight through as streetDetail", () => {
+    const out = parseAddressToCyrillic("Кимнингдир уйи, 5-хонадон");
+    expect(out).toEqual({ viloyat: "", tuman: "", streetDetail: "Кимнингдир уйи, 5-хонадон" });
+  });
+
+  it("agrees with addressToCyrillic's composed output", () => {
+    const address = "Toshkent shahri, Yunusobod tumani, Yunusobod 12-7";
+    const parts = parseAddressToCyrillic(address);
+    expect(composeAddress(parts.viloyat, parts.tuman, parts.streetDetail)).toBe(
+      addressToCyrillic(address),
+    );
   });
 });
 
