@@ -132,7 +132,8 @@ class CalculatorScreenshotTest {
                     onAddRoom = {}, onDuplicateRoom = {}, onDeleteRoom = {}, onMoveRoom = { _, _ -> },
                     onSetName = { _, _ -> }, onToggleExpanded = {}, onOpenField = { _, _ -> },
                     onKeypadValue = {}, onKeypadConfirm = {},
-                    clientBar = { ClientBar(state = s, vm = vm) },
+                    clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = {}) },
+                    clientBarExpanded = { ClientBarExpanded(state = s, vm = vm) },
                     totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
                 )
             }

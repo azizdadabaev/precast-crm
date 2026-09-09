@@ -49,10 +49,12 @@ import uz.etalon.crm.core.designsystem.components.NumericKeypad
 internal val CALC_SHEET_PEEK_HEIGHT: Dp = 48.dp + 12.dp + 48.dp
 
 /**
- * [clientBar]'s `stickyHeader` below is the room `LazyColumn`'s own item index 0, so a room at
- * position `i` within [CalculatorUiState.rows] sits at overall list index `i + ROOM_LIST_HEADER_OFFSET`.
- * Two places need this translation: the keypad's auto-scroll effect just below, and `RoomCard.kt`'s
- * `DragHandle`, which reads/writes [androidx.compose.foundation.lazy.LazyListState.layoutInfo]
+ * The client bar occupies the room `LazyColumn`'s own item index 0 — either as a `stickyHeader`
+ * ([clientBarCollapsed]) or as a plain scrolling `item` ([clientBarExpanded]), exactly one of the
+ * two per [CalculatorUiState.clientBarCollapsed] (see the `LazyColumn` body below) — so a room at
+ * position `i` within [CalculatorUiState.rows] sits at overall list index `i + ROOM_LIST_HEADER_OFFSET`
+ * either way. Two places need this translation: the keypad's auto-scroll effect just below, and
+ * `RoomCard.kt`'s `DragHandle`, which reads/writes [androidx.compose.foundation.lazy.LazyListState.layoutInfo]
  * (overall indices) but calls back with room-local ones (`onMove`, `CalculatorViewModel.moveRoom`).
  */
 internal const val ROOM_LIST_HEADER_OFFSET = 1
@@ -67,9 +69,14 @@ internal const val ROOM_LIST_HEADER_OFFSET = 1
  * The screen renders [CalculatorUiState] and sends events back through the callbacks; it computes
  * nothing itself — every figure a room card shows came off the engine already.
  *
- * [clientBar] is [ClientBar] handed in the same way [totalsSheetContent] hands in `TotalsSheet`:
- * a slot built by [CalculatorRoute] (which alone holds the `CalculatorViewModel`), rendered here
- * as this `LazyColumn`'s own `stickyHeader` so it stays pinned above the rooms while they scroll.
+ * [clientBarCollapsed] and [clientBarExpanded] are `ClientBar.kt`'s `ClientBarCollapsed`/
+ * `ClientBarExpanded`, handed in the same way [totalsSheetContent] hands in `TotalsSheet`: slots
+ * built by [CalculatorRoute] (which alone holds the `CalculatorViewModel`). Only ONE of the two
+ * ever renders at a time (below), and only the collapsed one-liner is ever pinned as a
+ * `stickyHeader` — the five-field expanded form is an ordinary item that scrolls away like any
+ * room card. Pinning the expanded form too used to fill the entire viewport under the docked
+ * keypad and hide every room; since the bar starts expanded (it collapses only once a phone AND a
+ * name are on file), that was the state at the start of every quote.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -85,7 +92,8 @@ fun CalculatorScreen(
     onOpenField: (String, KeypadTarget.Field) -> Unit,
     onKeypadValue: (String) -> Unit,
     onKeypadConfirm: () -> Unit,
-    clientBar: @Composable () -> Unit,
+    clientBarCollapsed: @Composable () -> Unit,
+    clientBarExpanded: @Composable () -> Unit,
     totalsSheetContent: @Composable ColumnScope.() -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -116,13 +124,23 @@ fun CalculatorScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
+                    // No horizontal inset here — unlike before, the client bar's own background
+                    // (`ClientBar.kt`) must span the FULL width edge to edge whether it's the
+                    // pinned collapsed row or the scrolling expanded form, so each item insets
+                    // itself by 16dp instead (matching `ClientBar.kt`'s own 16dp content padding).
                     // Extra bottom room so the FAB — which floats over the list, not the layout —
                     // never sits on top of the last card's «Қўшимча» row.
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
+                    contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    stickyHeader { clientBar() }
-                    if (s.rows.isEmpty()) item { EmptyState(stringResource(R.string.calc_empty)) }
+                    // Only the collapsed one-liner is ever pinned — see [ROOM_LIST_HEADER_OFFSET]'s
+                    // own doc. Either branch occupies exactly one list index before the rooms.
+                    if (s.clientBarCollapsed) {
+                        stickyHeader { clientBarCollapsed() }
+                    } else {
+                        item { clientBarExpanded() }
+                    }
+                    if (s.rows.isEmpty()) item { EmptyState(stringResource(R.string.calc_empty), modifier = Modifier.padding(horizontal = 16.dp)) }
                     itemsIndexed(s.rows, key = { _, row -> row.id }) { index, row ->
                         RoomCard(
                             row = row, index = index, listState = listState,
@@ -133,6 +151,7 @@ fun CalculatorScreen(
                             onDuplicate = { onDuplicateRoom(row.id) },
                             onDelete = { onDeleteRoom(row.id) },
                             onMove = onMoveRoom,
+                            modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
                 }

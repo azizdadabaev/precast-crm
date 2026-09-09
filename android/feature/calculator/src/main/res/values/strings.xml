@@ -66,5 +66,4 @@
     <string name="calc_client_tuman">Туман</string>
     <string name="calc_client_street">Кўча, уй, хонадон</string>
     <string name="calc_client_edit">Мижозни ўзгартириш</string>
-    <string name="calc_client_bar_separator"> · </string>
 </resources>
