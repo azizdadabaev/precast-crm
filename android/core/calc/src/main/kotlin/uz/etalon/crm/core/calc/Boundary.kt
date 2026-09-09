@@ -47,6 +47,18 @@ internal fun moneyOf(d: Double): Money = Money(BigDecimal.valueOf(d).setScale(2,
  */
 fun tierPriceMoney(price: Double): Money = moneyOf(price)
 
+/**
+ * An operator-entered whole-UZS amount from the totals sheet — discount amount, delivery cost,
+ * or other cost, typed on `TotalsSheet`'s modal keypad (`allowDecimal = false`, the same "cash
+ * has no kopeks" rule `RecordPaymentScreen` uses for a payment amount). Unlike [moneyOf]/
+ * [tierPriceMoney] this `Double` never passed through the calc engine's [round2] — it is raw UI
+ * input, not an already-rounded engine result — so it deliberately does NOT go through [moneyOf]'s
+ * `RoundingMode.UNNECESSARY`: nothing here promises exactly two decimals, only that none ever
+ * appear because the keypad itself disallows them. [Double.toLong] truncates toward zero, which
+ * is exact (never lossy) precisely because of that keypad restriction.
+ */
+fun operatorAmountMoney(d: Double): Money = Money(BigDecimal.valueOf(d.toLong()))
+
 /** Android's `BigDecimal`/`Money` pricing (`core:model` `Session.kt`) → the engine's `Double` config. */
 fun Pricing.toPriceConfig(): PriceConfig = PriceConfig(
     m2PriceTiers = m2Tiers.map { PriceTier(it.maxBeamLength.toDouble(), it.price.amount.toDouble()) },

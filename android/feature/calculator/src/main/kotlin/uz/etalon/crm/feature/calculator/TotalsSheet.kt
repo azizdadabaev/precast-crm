@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.calc.money
+import uz.etalon.crm.core.calc.operatorAmountMoney
 import uz.etalon.crm.core.calc.totalPriceMoney
 import uz.etalon.crm.core.designsystem.components.AreaText
 import uz.etalon.crm.core.designsystem.components.CountText
@@ -37,7 +38,6 @@ import uz.etalon.crm.core.ui.format.formatDecimal
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatPercent
 import uz.etalon.crm.core.ui.format.formatWeightKg
-import uz.etalon.crm.core.model.Money
 import java.math.BigDecimal
 
 /** Which of the totals sheet's four money fields the modal keypad is editing — the discount's two
@@ -49,17 +49,16 @@ private enum class TotalsKeypadField { DISCOUNT_PERCENT, DISCOUNT_AMOUNT, DELIVE
  *  unparsable pad commits as `0.0` rather than leaving the field untouched. */
 private fun parseKeypadValue(text: String): Double = text.replace(',', '.').toDoubleOrNull() ?: 0.0
 
-/** The sheet's four editable money fields (discount amount, delivery, other) are all whole-UZS —
- *  their keypads use `allowDecimal = false`, same "cash has no kopeks" rule
- *  `RecordPaymentScreen` uses — so truncating through [Long] is exact, never lossy. */
-private fun Double.asWholeMoney(): Money = Money.parse(toLong().toString())
-
 /**
  * The persistent, draggable, never-dismissible totals sheet — hosted as `BottomSheetScaffold`'s
- * `sheetContent` in [CalculatorScreen] with `sheetPeekHeight = 88.dp`. The collapsed peek (this
- * composable's first row) and the rest of the content below it are laid out in one column; the
- * scaffold's peek height is what visually clips the rest away until the operator drags the sheet
- * up — this composable renders unconditionally, it never branches on the sheet's own state.
+ * `sheetContent` in [CalculatorScreen] with `sheetPeekHeight = CALC_SHEET_PEEK_HEIGHT` (declared in
+ * `CalculatorScreen.kt`, alongside the scaffold that consumes it). The collapsed peek (this
+ * composable's first row) and the rest of the content below it are laid
+ * out in one column; the scaffold's peek height is what visually clips the rest away until the
+ * operator drags the sheet up — this composable renders unconditionally, it never branches on the
+ * sheet's own state. This `Column`'s own top padding (`vertical = 12.dp`, below) and the peek
+ * `Row`'s `heightIn(min = 48.dp)` are two of the three numbers `CALC_SHEET_PEEK_HEIGHT` budgets —
+ * moving either without updating that constant clips the peek again (see its own KDoc).
  *
  * The headline number is [CalculatorUiState.orderTotals]' `totalPrice` — the order-PLACEMENT
  * total (`Order.totalPrice`, delivery and other included) — NOT `totals.projTotal.total`, which
@@ -119,7 +118,7 @@ fun TotalsSheet(state: CalculatorUiState, vm: CalculatorViewModel, actions: @Com
                     )
                     DiscountMode.AMOUNT -> EditableValueRow(
                         label = stringResource(R.string.calc_discount_amount),
-                        valueText = formatMoney(state.discountAmount.asWholeMoney()),
+                        valueText = formatMoney(operatorAmountMoney(state.discountAmount)),
                         onClick = { keypadField = TotalsKeypadField.DISCOUNT_AMOUNT },
                     )
                 }
@@ -127,12 +126,12 @@ fun TotalsSheet(state: CalculatorUiState, vm: CalculatorViewModel, actions: @Com
 
             EditableValueRow(
                 label = stringResource(R.string.calc_delivery_cost),
-                valueText = formatMoney(state.deliveryCost.asWholeMoney()),
+                valueText = formatMoney(operatorAmountMoney(state.deliveryCost)),
                 onClick = { keypadField = TotalsKeypadField.DELIVERY },
             )
             EditableValueRow(
                 label = stringResource(R.string.calc_other_cost),
-                valueText = formatMoney(state.otherCost.asWholeMoney()),
+                valueText = formatMoney(operatorAmountMoney(state.otherCost)),
                 onClick = { keypadField = TotalsKeypadField.OTHER },
             )
 
@@ -178,7 +177,13 @@ fun TotalsSheet(state: CalculatorUiState, vm: CalculatorViewModel, actions: @Com
                                 stringResource(R.string.calc_schedule_row, line.lengthKey.replace('.', ',')),
                                 style = EtalonType.monoBody,
                             )
-                            Text(stringResource(R.string.calc_pieces, line.beams), style = EtalonType.monoBody)
+                            // formatDecimal groups thousands the same way CountText's formatCount
+                            // does for the total-blocks row below — a bare `%1$s` with the raw Int
+                            // (the previous code) bypasses that grouping entirely.
+                            Text(
+                                stringResource(R.string.calc_pieces, formatDecimal(BigDecimal.valueOf(line.beams.toLong()), 0)),
+                                style = EtalonType.monoBody,
+                            )
                         }
                     }
                     if (state.totals.blocks > 0) {
@@ -246,7 +251,10 @@ private fun LabelValueRow(label: String, value: @Composable () -> Unit) {
 }
 
 /** A tappable label/value row that opens the modal keypad — the same shape as `RoomExtras.kt`'s
- *  `EditableValueRow`, duplicated locally per this module's existing per-file convention. */
+ *  `EditableValueRow`, duplicated locally per this module's existing per-file convention. No
+ *  horizontal padding — unlike `RoomExtras.kt`'s copy, this row sits beside [LabelValueRow]'s
+ *  (rooms subtotal, total weight), which has none either; the label/value text must start and end
+ *  flush with them; only the touch target keeps its own vertical breathing room. */
 @Composable
 private fun EditableValueRow(label: String, valueText: String, onClick: () -> Unit) {
     Row(
@@ -254,7 +262,7 @@ private fun EditableValueRow(label: String, valueText: String, onClick: () -> Un
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
             .heightIn(min = 48.dp)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
