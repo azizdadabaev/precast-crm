@@ -19,5 +19,17 @@ class BeamScheduleTest {
         assertEquals(s.map { it.lengthKey }, s.map { it.lengthKey }.sortedByDescending { it.toDouble() })
         assertEquals(rows.sumOf { it.result!!.beamCount }, s.sumOf { it.beams })
     }
+    /**
+     * The case single-digit lengths cannot catch: 4.30/6.30 sort the same whether the comparison
+     * is numeric or lexicographic. 10.30 and 9.30 do not — `"10.30" < "9.30"` as text — so a
+     * `sortedByDescending { it.lengthKey }` slipping in where `sortedByDescending { it.toDouble() }`
+     * belongs would put the longest beam last on the production list.
+     */
+    @Test fun `a two-digit beam length sorts numerically, not as text`() {
+        val rows = listOf(9.0, 10.0).mapIndexed { i, w ->
+            recomputeRow(SlabRow(id = "r$i", name = "Хона", innerWidth = w, innerLength = 6.0))
+        }
+        assertEquals(listOf("10.30", "9.30"), beamSchedule(rows).map { it.lengthKey })
+    }
     @Test fun `rows with no result contribute nothing`() = assertEquals(emptyList<BeamScheduleLine>(), beamSchedule(listOf(SlabRow("a", "Хона"))))
 }
