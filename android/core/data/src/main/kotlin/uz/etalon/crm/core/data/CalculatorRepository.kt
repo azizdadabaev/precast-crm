@@ -187,6 +187,10 @@ class CalculatorRepository @Inject constructor(
         }
         if (scheduledAt.isBlank()) error("Етказиб бериш санасини танланг")
         return PlaceOrderRequest(
+            // The draft the operator already saved, when there is one — without it the route
+            // creates a SECOND DRAFT Project for a quote that already has one. See
+            // `PlaceOrderRequest.projectId`'s own KDoc.
+            projectId = draft.projectId,
             clientName = draft.clientName.trim(),
             clientPhone = phone,
             clientAddress = draft.clientAddress.trim(),

@@ -493,6 +493,28 @@ class CalculatorViewModelTest {
         assertEquals(listOf("Хона 1"), sent!!.draft.rows.map { it.name })
     }
 
+    /**
+     * Save, then order. The placement must carry the projectId the save returned, or the server
+     * creates a SECOND `DRAFT` Project for the very same quote — one duplicate row in production
+     * per save-then-order. The ViewModel is what has to keep that id and hand it on.
+     */
+    @Test fun `an order placed after a save carries the saved projectId`() = runTest {
+        var sent: PlaceOrderInput? = null
+        val v = vm(
+            saveDraft = SaveDraftUseCase { _, _ -> Result.success("proj-9") },
+            placeOrder = PlaceOrderUseCase { input, _ -> sent = input; Result.success("order-1") },
+        )
+        advanceUntilIdle()
+        v.readyToPlace()
+
+        v.saveDraft(); advanceUntilIdle()
+        assertEquals("proj-9", v.state.value.projectId)
+
+        v.placeOrder(scheduledAt, ""); advanceUntilIdle()
+
+        assertEquals("proj-9", sent!!.draft.projectId)
+    }
+
     /** A lost signal is the case the queue exists for, so the sheet is offered it. A server
      *  refusal is not: queueing that same body would only fail again, later, unwatched. */
     @Test fun `only a network failure offers the queue`() = runTest {

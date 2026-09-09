@@ -63,7 +63,7 @@ class CalculatorContractTest {
         // exactly the kind of change this pins.
         val order = zodObjectBody(validation, "PlaceOrderSchema")
         for (f in listOf(
-            "clientName", "clientPhone", "clientAddress", "rooms", "discountPercent", "discountAmount",
+            "projectId", "clientName", "clientPhone", "clientAddress", "rooms", "discountPercent", "discountAmount",
             "deliveryCost", "otherCost", "scheduledAt", "notes", "paidAmount", "receiptUrls",
         )) assertField(order, f, "PlaceOrderRequest.$f")
     }
@@ -80,6 +80,21 @@ class CalculatorContractTest {
             Regex("""scheduledAt:\s*z\.coerce\.date\(\),""").containsMatchIn(order),
             "PlaceOrderSchema.scheduledAt is no longer a bare required `z.coerce.date()` — " +
                 "PlaceOrderSheet's mandatory date picker needs revisiting.\nSearched:\n$order",
+        )
+    }
+
+    /**
+     * `PlaceOrderRequest.projectId` is what stops a save-then-order leaving a duplicate `DRAFT`
+     * Project behind: `POST /api/orders` reuses the named project and rewrites its calculations
+     * instead of creating a second one. If that branch ever goes away, sending the field becomes
+     * meaningless — and, worse, silently so — which is what this pins.
+     */
+    @Test fun `placing an order still reuses the project it is given`() {
+        val createOrder = serverFile("precast-crm/src/lib/create-order.ts")
+        assertTrue(
+            Regex("""if\s*\(input\.projectId\)""").containsMatchIn(createOrder),
+            "create-order.ts no longer branches on input.projectId — PlaceOrderRequest sends it " +
+                "precisely so the saved draft is reused rather than duplicated.",
         )
     }
 

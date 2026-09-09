@@ -84,11 +84,12 @@ private fun placeInput(
     rows: List<SlabRow>, notes: String = "", scheduledAt: String = SCHEDULED_AT,
     deliveryCost: Double = 0.0, otherCost: Double = 0.0, clientName: String = "Aziz",
     clientAddress: String = "Тошкент, Юнусобод, 12-уй", clientPhone: String = "901234567",
+    projectId: String? = null,
 ) = PlaceOrderInput(
     draft = CalculatorDraft(
         rows = rows, clientPhone = clientPhone, clientName = clientName, clientAddress = clientAddress,
         discountPercent = 0.0, discountAmount = 0.0, deliveryCost = deliveryCost, otherCost = otherCost,
-        projectId = null,
+        projectId = projectId,
     ),
     scheduledAt = scheduledAt,
     notes = notes,
@@ -262,6 +263,27 @@ class CalculatorRepositoryTest {
 
         assertEquals(0, BigDecimal.ZERO.compareTo(api.lastRequest!!.paidAmount))
         assertEquals(emptyList<String>(), api.lastRequest!!.receiptUrls)
+    }
+
+    /**
+     * Save, then order: the placement must name the project the save created. Without this the
+     * route's `if (input.projectId)` branch never runs and `POST /api/orders` creates a SECOND
+     * `DRAFT` Project for the same quote — one duplicate row in production per save-then-order.
+     */
+    @Test fun `placeOrder sends the saved draft's projectId so the order reuses that project`() = runTest {
+        val api = CalcPlacingApi()
+        repo(api).placeOrder(placeInput(rows = listOf(room("A")), projectId = "proj-9"), "idem-order-1").getOrThrow()
+
+        assertEquals("proj-9", api.lastRequest!!.projectId)
+    }
+
+    /** A quote that was never saved has no project to attach to — null, not an empty string, which
+     *  `z.string().optional()` would take as a real (missing) id. */
+    @Test fun `placeOrder sends no projectId when the quote was never saved as a draft`() = runTest {
+        val api = CalcPlacingApi()
+        repo(api).placeOrder(placeInput(rows = listOf(room("A"))), "idem-order-1").getOrThrow()
+
+        assertNull(api.lastRequest!!.projectId)
     }
 
     @Test fun `placeOrder is refused without order_create, before the network`() = runTest {

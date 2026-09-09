@@ -78,9 +78,17 @@ data class SaveProjectDraftRequest(
  * refinement only demands a `paymentMethod` once `paidAmount > 0`, so a field this class could
  * only ever leave null would be dead weight — the same rule that keeps `SaveProjectDraftSchema.name`
  * out of [SaveProjectDraftRequest].
+ *
+ * [projectId] is the one nullable field here that is NOT dead weight: it carries the draft the
+ * operator already saved (the very row `SaveProjectDraftRequest.projectId` created).
+ * `POST /api/orders` branches on it (`src/lib/create-order.ts`) — given one, the placement REUSES
+ * that Project and rewrites its calculations; given none, the route creates a SECOND `DRAFT`
+ * Project for the same quote, so every save-then-order left a duplicate row behind. Null means
+ * what it says: this quote was never saved as a draft, so there is no project to place it against.
  */
 @Serializable
 data class PlaceOrderRequest(
+    val projectId: String? = null,
     val clientName: String,
     val clientPhone: String,
     val clientAddress: String,
