@@ -39,5 +39,17 @@ internal val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(connection: SQLiteConnection) { /* no schema change */ }
 }
 
+/** 5 → 6 adds the calculator draft table. Additive only — nothing existing is touched, and the
+ *  outbox in the same file is untouched by design. */
+internal val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `calculator_draft` (" +
+                "`ownerId` TEXT NOT NULL, `draftJson` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`ownerId`))"
+        )
+    }
+}
+
 /** Every migration the builder installs. Add each new step here as the schema version rises. */
-val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5)
+val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)

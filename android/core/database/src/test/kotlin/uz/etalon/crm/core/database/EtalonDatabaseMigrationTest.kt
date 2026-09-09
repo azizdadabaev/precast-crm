@@ -100,7 +100,7 @@ class EtalonDatabaseMigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(5, ALL_MIGRATIONS.toList()).use { db ->
+        helper.runMigrationsAndValidate(6, ALL_MIGRATIONS.toList()).use { db ->
             db.prepare("SELECT ownerId, filePath, payloadJson, state FROM outbox WHERE id = 'row-2'").use { stmt ->
                 assertTrue("the queued payment receipt must survive the version bump", stmt.step())
                 assertEquals("u1", stmt.getText(0))
@@ -108,6 +108,25 @@ class EtalonDatabaseMigrationTest {
                 assertEquals("the payload must come through unchanged", payload, stmt.getText(2))
                 assertEquals("QUEUED", stmt.getText(3))
             }
+        }
+    }
+
+    /** The calculator draft table (schema 6) must not disturb a row already queued under the
+     *  older schema — the same "additive only" guarantee [MIGRATION_5_6]'s own KDoc states. */
+    @Test fun `schema 6 adds the draft table without disturbing a queued upload`() {
+        helper.createDatabase(5).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO outbox
+                    (id, ownerId, kind, orderId, shipmentId, paymentId, filePath, payloadJson,
+                     state, attempts, lastError, createdAt, updatedAt)
+                VALUES ('row-2','u1','LOAD_TRUCK','o1',NULL,NULL,'/p.jpg','{}','QUEUED',0,NULL,10,10)
+                """.trimIndent()
+            )
+        }
+        helper.runMigrationsAndValidate(6, ALL_MIGRATIONS.toList()).use { db ->
+            db.prepare("SELECT COUNT(*) FROM calculator_draft").use { s -> assertTrue(s.step()); assertEquals(0, s.getInt(0)) }
+            db.prepare("SELECT state FROM outbox WHERE id = 'row-2'").use { s -> assertTrue(s.step()); assertEquals("QUEUED", s.getText(0)) }
         }
     }
 

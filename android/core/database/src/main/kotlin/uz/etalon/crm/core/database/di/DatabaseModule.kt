@@ -9,6 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import uz.etalon.crm.core.database.ALL_MIGRATIONS
 import uz.etalon.crm.core.database.EtalonDatabase
+import uz.etalon.crm.core.database.dao.CalculatorDraftDao
 import uz.etalon.crm.core.database.dao.OrdersDao
 import uz.etalon.crm.core.database.dao.OutboxDao
 import javax.inject.Singleton
@@ -27,4 +28,5 @@ object DatabaseModule {
             .build()
     @Provides fun ordersDao(db: EtalonDatabase): OrdersDao = db.ordersDao()
     @Provides fun outboxDao(db: EtalonDatabase): OutboxDao = db.outboxDao()
+    @Provides fun calculatorDraftDao(db: EtalonDatabase): CalculatorDraftDao = db.calculatorDraftDao()
 }

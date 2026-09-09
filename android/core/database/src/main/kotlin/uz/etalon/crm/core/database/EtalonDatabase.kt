@@ -2,20 +2,23 @@ package uz.etalon.crm.core.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import uz.etalon.crm.core.database.dao.CalculatorDraftDao
 import uz.etalon.crm.core.database.dao.OrdersDao
 import uz.etalon.crm.core.database.dao.OutboxDao
+import uz.etalon.crm.core.database.entity.CalculatorDraftEntity
 import uz.etalon.crm.core.database.entity.OrderDetailEntity
 import uz.etalon.crm.core.database.entity.OrderSummaryEntity
 import uz.etalon.crm.core.database.entity.OutboxEntity
 
 @Database(
-    entities = [OrderSummaryEntity::class, OrderDetailEntity::class, OutboxEntity::class],
-    version = 5,
+    entities = [OrderSummaryEntity::class, OrderDetailEntity::class, OutboxEntity::class, CalculatorDraftEntity::class],
+    version = 6,
     exportSchema = true,
 )
 abstract class EtalonDatabase : RoomDatabase() {
     abstract fun ordersDao(): OrdersDao
     abstract fun outboxDao(): OutboxDao
+    abstract fun calculatorDraftDao(): CalculatorDraftDao
 
     /**
      * Called on sign-out so the next user never sees the previous user's cache.
