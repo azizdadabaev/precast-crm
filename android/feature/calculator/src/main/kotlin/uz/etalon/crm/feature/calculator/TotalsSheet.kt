@@ -303,7 +303,7 @@ fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SecondaryButton(
                 text = stringResource(R.string.calc_action_clear), onClick = vm::clearAll,
-                modifier = Modifier.weight(1f),
+                enabled = !state.saving, modifier = Modifier.weight(1f),
             )
             PrimaryButton(
                 text = stringResource(R.string.calc_action_save), onClick = vm::saveDraft,

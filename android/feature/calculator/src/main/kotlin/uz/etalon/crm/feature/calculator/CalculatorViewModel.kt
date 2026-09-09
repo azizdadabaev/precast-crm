@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -131,6 +133,18 @@ open class CalculatorViewModel(
     /** Only ever increases — see `addRoom`'s doc for why a deleted room's number is never reused. */
     private var nextRoomSeq = 1
 
+    /**
+     * Bumped by [clearAll] — the real defence against the trap where a save's response lands
+     * AFTER the operator has already cleared the quote for the next customer. The button being
+     * disabled by [CalculatorUiState.saving] narrows the window but is not the guard: Compose
+     * recomposition trails a state change by at least a frame, so a tap can still land on
+     * `clearAll` while a save is in flight. [saveDraft] captures the generation it started with;
+     * its `onSuccess`/`onFailure` only apply their result if the generation is still the one they
+     * captured — otherwise the quote they would write onto no longer exists, and applying it would
+     * resurrect exactly what `clearAll` just deleted.
+     */
+    private var draftGeneration = 0
+
     /** The one in-flight phone lookup, whether debounced or an explicit retry. A new keystroke —
      *  or a retry — cancels whatever is still running, so a stale answer for a number the operator
      *  has already changed can never land. */
@@ -150,7 +164,13 @@ open class CalculatorViewModel(
         // seeded with is never the thing that gets persisted and clobbers a real draft.
         viewModelScope.launch {
             observeDraft().first()?.let { restoreDraft(it) }
-            _state.map { it.toDraft() }.debounce(AUTOSAVE_DEBOUNCE_MS).collect { draft -> persistDraft(draft) }
+            // distinctUntilChanged: a keypad keystroke that does not change the committed value,
+            // expandedRowId, saving and saveMessage all touch [_state] without changing what
+            // toDraft() would write — none of that belongs in Room. filter: EMPTY_DRAFT is what
+            // clearAll leaves behind, and this is the collector that would otherwise re-create the
+            // Room row it just deleted the moment its own debounce next elapses — see clearAll's doc.
+            _state.map { it.toDraft() }.distinctUntilChanged().filter { it != EMPTY_DRAFT }
+                .debounce(AUTOSAVE_DEBOUNCE_MS).collect { draft -> persistDraft(draft) }
         }
         // Collected once, here: until it lands every row prices against DEFAULT_PRICE_CONFIG,
         // which is what an operator's real bootstrap Pricing reproduces anyway (see
@@ -332,8 +352,17 @@ open class CalculatorViewModel(
      *  brief. `canWrite` is left alone — it is resolved from the session, not part of the
      *  calculator's own data — and `nextRoomSeq` is left alone too, for the same reason deleting
      *  a room never reuses its number. Clears the persisted Room draft too, so reopening the
-     *  screen does not bring the just-cleared quote back. */
+     *  screen does not bring the just-cleared quote back.
+     *
+     *  Takes effect immediately, even with a save in flight — the operator moving on to the next
+     *  customer must not be stuck waiting on a spinner for a quote they have already abandoned.
+     *  What makes that safe is [draftGeneration]: bumping it here means the in-flight save's own
+     *  `onSuccess`/`onFailure` (see [saveDraft]) will find their captured generation stale and
+     *  discard their result instead of writing it onto the fresh quote below. `saving` is reset
+     *  here for the same reason — nothing else ever will, once that stale completion discards
+     *  itself, and a spinner left running forever over an empty quote would be its own bug. */
     fun clearAll() {
+        draftGeneration++
         _state.update {
             it.copy(
                 rows = emptyList(), expandedRowId = null, keypad = null, keypadText = "",
@@ -344,7 +373,7 @@ open class CalculatorViewModel(
                 schedule = emptyList(), error = null,
                 clientPhoneDigits = "", clientName = "", clientAddress = ParsedAddress("", "", ""),
                 matchedClientId = null, clientLookupError = null, clientBarCollapsed = false,
-                projectId = null, saveMessage = null,
+                projectId = null, saveMessage = null, saving = false,
             )
         }
         viewModelScope.launch { clearDraftUseCase() }
@@ -375,20 +404,32 @@ open class CalculatorViewModel(
             return
         }
         val draft = s.toDraft()
+        // Captured before the request goes out — see clearAll's own doc for why a result that
+        // comes back after the operator has cleared the quote must be discarded, not applied.
+        val generation = draftGeneration
         _state.update { it.copy(saving = true, error = null, saveMessage = null) }
         viewModelScope.launch {
             saveDraftUseCase(draft, idempotencyKeyFor(draft)).fold(
                 onSuccess = { id ->
-                    // Persisted immediately, not left to the autosave debounce: from here a
-                    // second save must UPDATE this project, and that fact must survive a process
-                    // death in the gap before the debounce would otherwise have flushed it —
-                    // mirrors RecordPaymentViewModel persisting KEY_PAYMENT_ID the moment the row
-                    // is known to exist.
-                    val withId = draft.copy(projectId = id)
-                    persistDraft(withId)
-                    _state.update { it.copy(saving = false, projectId = id, saveMessage = SAVE_SUCCESS_MESSAGE) }
+                    if (draftGeneration == generation) {
+                        // Persisted immediately, not left to the autosave debounce: from here a
+                        // second save must UPDATE this project, and that fact must survive a
+                        // process death in the gap before the debounce would otherwise have
+                        // flushed it — mirrors RecordPaymentViewModel persisting KEY_PAYMENT_ID
+                        // the moment the row is known to exist.
+                        val withId = draft.copy(projectId = id)
+                        persistDraft(withId)
+                        _state.update { it.copy(saving = false, projectId = id, saveMessage = SAVE_SUCCESS_MESSAGE) }
+                    }
+                    // else: clearAll ran while this save was in flight. The quote it would UPDATE
+                    // no longer exists on screen or in Room — writing the id/content here would
+                    // resurrect exactly what the operator just deleted.
                 },
-                onFailure = { t -> _state.update { it.copy(saving = false, error = t.toAppError().message) } },
+                onFailure = { t ->
+                    if (draftGeneration == generation) {
+                        _state.update { it.copy(saving = false, error = t.toAppError().message) }
+                    }
+                },
             )
         }
     }
@@ -544,6 +585,10 @@ private fun CalculatorUiState.toDraft(): CalculatorDraft = CalculatorDraft(
     otherCost = otherCost,
     projectId = projectId,
 )
+
+/** What `clearAll` leaves behind — the autosave collector filters this out so the empty draft it
+ *  produces is never written back to Room, re-creating the row `clearAll` just deleted. */
+private val EMPTY_DRAFT: CalculatorDraft = CalculatorUiState().toDraft()
 
 @HiltViewModel
 class HiltCalculatorViewModel @Inject constructor(

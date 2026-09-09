@@ -1,5 +1,7 @@
 package uz.etalon.crm.feature.calculator
 
+import androidx.lifecycle.SavedStateHandle
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,12 +78,24 @@ class CalculatorViewModelTest {
         persistDraft: PersistDraftUseCase = PersistDraftUseCase { },
         clearDraft: ClearDraftUseCase = ClearDraftUseCase { },
         saveDraft: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.success("proj-1") },
+        saved: SavedStateHandle = SavedStateHandle(),
     ) = CalculatorViewModel(
         session = FakeSessionPricing(defaultAndroidPricing()),
         permissions = PermissionGate { it == "order.create" && canWrite },
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
         observeDraft = observeDraft, persistDraft = persistDraft, clearDraftUseCase = clearDraft, saveDraftUseCase = saveDraft,
+        saved = saved,
     )
+
+    /** Adds one priced room («Хона 1», 4×6) and returns its id — the shape every save/idempotency
+     *  test below needs before `saveDraft` will let a request through (`SlabRow.canPersist`). */
+    private fun CalculatorViewModel.addPricedRoom(): String {
+        addRoom()
+        val id = state.value.rows[0].id
+        openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(::keypadDigit); commitKeypad()
+        openKeypad(KeypadTarget(id, LENGTH)); "6".forEach(::keypadDigit); commitKeypad()
+        return id
+    }
 
     @Test fun `rooms are auto-named Хона N and numbering does not reuse a deleted name`() = runTest {
         val v = vm(); v.addRoom(); v.addRoom()
@@ -262,4 +276,72 @@ class CalculatorViewModelTest {
         assertEquals(0.0, v.state.value.discountAmount)
         assertTrue(cleared, "the Room draft must go too, or reopening the screen brings the just-cleared quote back")
     }
+
+    /**
+     * The bug the whole `draftGeneration` mechanism exists for: a save started for one customer
+     * must not land on the fresh quote the operator has since started for the next one.
+     * `saveDraft` never resolves until the test completes it, so `clearAll` genuinely runs while
+     * the request is in flight — not just before the ViewModel had a chance to send it.
+     */
+    @Test fun `clearing mid-save is not resurrected once the stale save completes`() = runTest {
+        val saveResult = CompletableDeferred<Result<String>>()
+        var persisted: CalculatorDraft? = null
+        var roomDeleted = false
+        val v = vm(
+            saveDraft = SaveDraftUseCase { _, _ -> saveResult.await() },
+            persistDraft = PersistDraftUseCase { d -> persisted = d },
+            clearDraft = ClearDraftUseCase { roomDeleted = true },
+        )
+        advanceUntilIdle()
+        v.addPricedRoom()
+
+        v.saveDraft()
+        assertTrue(v.state.value.saving)
+
+        v.clearAll()
+        advanceUntilIdle() // let clearAll's own `clearDraftUseCase()` launch run; saveResult is still pending
+        assertTrue(v.state.value.rows.isEmpty(), "Тозалаш takes effect immediately, even mid-save")
+        assertFalse(v.state.value.saving, "the abandoned save's spinner must not linger over the fresh quote")
+        assertTrue(roomDeleted)
+
+        saveResult.complete(Result.success("proj-1"))
+        advanceUntilIdle()
+
+        assertNull(v.state.value.projectId, "the stale save must not stamp its id onto the quote started since")
+        assertTrue(v.state.value.rows.isEmpty())
+        assertNull(persisted, "the stale save's onSuccess must not resurrect the deleted Room row")
+    }
+
+    @Test fun `a save that fails after clearAll must not surface its error over the fresh quote`() = runTest {
+        val saveResult = CompletableDeferred<Result<String>>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, _ -> saveResult.await() })
+        advanceUntilIdle()
+        v.addPricedRoom()
+        v.saveDraft()
+        v.clearAll()
+
+        saveResult.complete(Result.failure(IllegalStateException("сервер хатоси")))
+        advanceUntilIdle()
+
+        assertNull(v.state.value.error)
+        assertFalse(v.state.value.saving)
+    }
+
+    @Test fun `clearAll's Room row is not re-created by the autosave debounce that follows it`() = runTest {
+        var upserts = 0
+        var deletes = 0
+        val v = vm(persistDraft = PersistDraftUseCase { upserts++ }, clearDraft = ClearDraftUseCase { deletes++ })
+        advanceUntilIdle()
+        v.addRoom()
+        advanceTimeBy(600); advanceUntilIdle() // let the new room's own autosave flush first
+        val beforeClear = upserts
+
+        v.clearAll()
+        advanceUntilIdle()
+        assertEquals(1, deletes)
+
+        advanceTimeBy(600); advanceUntilIdle() // past the debounce window clearAll leaves pending
+        assertEquals(beforeClear, upserts, "the empty draft clearAll leaves behind must not be persisted back")
+    }
+
 }
