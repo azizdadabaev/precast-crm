@@ -58,15 +58,43 @@ class CalculatorContractTest {
         for (f in listOf("projectId", "clientName", "clientPhone", "clientAddress", "rooms", "discountPercent", "discountAmount")) {
             assertField(draft, f, "SaveProjectDraftRequest.$f")
         }
-        // PlaceOrderSchema is not sent by this client today (Place Order is a later task) — asserted
-        // here anyway because SaveProjectDraftRequest's shape is a deliberate subset of it, and a
-        // divergence between the two server-side is exactly the kind of change that would otherwise
-        // only surface once Place Order is built.
+        // `PlaceOrderRequest` sends every one of these, and `SaveProjectDraftRequest`'s shape is a
+        // deliberate subset of the same object — a divergence between the two server-side is
+        // exactly the kind of change this pins.
         val order = zodObjectBody(validation, "PlaceOrderSchema")
         for (f in listOf(
             "clientName", "clientPhone", "clientAddress", "rooms", "discountPercent", "discountAmount",
-            "deliveryCost", "otherCost", "scheduledAt", "notes", "paidAmount",
-        )) assertField(order, f, "PlaceOrderSchema.$f")
+            "deliveryCost", "otherCost", "scheduledAt", "notes", "paidAmount", "receiptUrls",
+        )) assertField(order, f, "PlaceOrderRequest.$f")
+    }
+
+    /**
+     * `scheduledAt` is the one field on `PlaceOrderSchema` with no default and no `.optional()`,
+     * which is why `PlaceOrderSheet` refuses to submit without a date instead of quietly sending
+     * "today" — a real production commitment nobody chose. If the server ever grows a default here,
+     * that refusal becomes needless friction and this test is where that is noticed.
+     */
+    @Test fun `scheduledAt is still required, which is why the sheet demands a date`() {
+        val order = zodObjectBody(validation, "PlaceOrderSchema")
+        assertTrue(
+            Regex("""scheduledAt:\s*z\.coerce\.date\(\),""").containsMatchIn(order),
+            "PlaceOrderSchema.scheduledAt is no longer a bare required `z.coerce.date()` — " +
+                "PlaceOrderSheet's mandatory date picker needs revisiting.\nSearched:\n$order",
+        )
+    }
+
+    /**
+     * `PlaceOrderRequest` deliberately omits `paymentMethod` and pins `paidAmount` at 0, because
+     * the refinement below only DEMANDS a method once a payment is actually attached. Prepayment
+     * at placement is a later slice; if that refinement ever becomes unconditional, an order this
+     * client places would start 422-ing — offline, hours later, with nobody watching.
+     */
+    @Test fun `paymentMethod is still required only when paidAmount is positive`() {
+        assertTrue(
+            Regex("""!\(v\.paidAmount\s*>\s*0\)\s*\|\|\s*!!v\.paymentMethod""").containsMatchIn(validation),
+            "PlaceOrderSchema's paymentMethod refinement changed — PlaceOrderRequest omits the " +
+                "field entirely and sends paidAmount = 0 on the strength of it.",
+        )
     }
 
     // ── the crudest parser that can still fail honestly — mirrors ServerContractTest's own ──

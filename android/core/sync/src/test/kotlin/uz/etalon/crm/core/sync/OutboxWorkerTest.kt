@@ -8,6 +8,8 @@ import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import okhttp3.MultipartBody
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -27,6 +29,7 @@ import uz.etalon.crm.core.network.TokenProvider
 import uz.etalon.crm.core.network.dto.*
 import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.io.File
+import java.io.IOException
 
 /** Every member of [FakeEtalonApi] throws, so a test overrides only the routes its row calls. */
 private open class StubApi : FakeEtalonApi()
@@ -38,6 +41,16 @@ private class RecordingOrders : OrdersGateway {
 
 /** The operator every test row belongs to unless it says otherwise. */
 private const val SIGNED_IN = "u1"
+
+/** A real `PlaceOrderRequest` body, as `CalculatorRepository.queuePlaceOrder` serialises one —
+ *  the worker decodes this back into the DTO, so a field rename would fail here rather than in
+ *  front of a customer. */
+private const val PLACE_ORDER_PAYLOAD = """
+    {"clientName":"Aziz","clientPhone":"998901234567","clientAddress":"Тошкент, Юнусобод, 12-уй",
+     "rooms":[{"innerWidth":4.0,"innerLength":6.0}],"discountPercent":0.0,"discountAmount":0,
+     "deliveryCost":0,"otherCost":0,"scheduledAt":"2026-09-20T00:00:00Z","paidAmount":0,
+     "receiptUrls":[]}
+"""
 
 /** The stored session token, mutable so a test can change it mid-drain. */
 private class FakeTokens(var value: String?) : TokenProvider {
@@ -66,6 +79,14 @@ class OutboxWorkerTest {
             attempts = 0, lastError = null, createdAt = created, updatedAt = created,
         )
     }
+
+    /** A queued placement: no file, no order id, its whole request in `payloadJson` — the shape
+     *  `CalculatorRepository.queuePlaceOrder` writes. */
+    private fun placeOrderRow(id: String, created: Long = 1) = OutboxEntity(
+        id = id, ownerId = SIGNED_IN, kind = "PLACE_ORDER", orderId = null, shipmentId = null,
+        paymentId = null, filePath = null, payloadJson = PLACE_ORDER_PAYLOAD,
+        state = OutboxState.QUEUED, attempts = 0, lastError = null, createdAt = created, updatedAt = created,
+    )
 
     private fun worker(
         dao: OutboxDao, api: EtalonApi, orders: OrdersGateway, signedIn: String? = SIGNED_IN,
@@ -251,6 +272,104 @@ class OutboxWorkerTest {
         assertEquals(OutboxState.FAILED, after.state)
         assertEquals("Сурат топилмади, қайта суратга олинг", after.lastError)
         assertEquals(emptyList<String>(), orders.refreshed)
+    }
+
+    // ── PLACE_ORDER: the one queued kind with no photo and no order ──
+
+    /** The whole point of the restructure: this row has no file to resolve and no order to name.
+     *  Before it, `send` resolved a JPEG for every kind BEFORE the `when`, so this row would have
+     *  died permanently with «Сурат топилмади» over a photo it was never supposed to have. */
+    @Test fun `a queued order with no file and no order id drains and sends the row id as the key`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(placeOrderRow("place-1"))
+        var sentKey: String? = null
+        var sentAuth: String? = null
+        var sentName: String? = null
+        val api = object : StubApi() {
+            override suspend fun placeOrder(body: PlaceOrderRequest, idempotencyKey: String, authorization: String?): OrderPlacedDto {
+                sentKey = idempotencyKey; sentAuth = authorization; sentName = body.clientName
+                return OrderPlacedDto("order-1", "2609-001")
+            }
+        }
+        val orders = RecordingOrders()
+
+        val result = worker(dao, api, orders, tokens = FakeTokens("tokX")).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals("place-1", sentKey)
+        assertEquals("Bearer tokX", sentAuth)
+        assertEquals("Aziz", sentName)
+        assertEquals(null, dao.byId("place-1"))
+        // Nothing to refresh: the order this row created is not in the cache under any id the row
+        // knows, and refreshDetail("") would be a real network call for an order that never was.
+        assertEquals(emptyList<String>(), orders.refreshed)
+    }
+
+    /**
+     * The guarantee the whole offline path rests on. The first attempt dies on the network, so the
+     * row is requeued; the next drain sends it again — and it must send the SAME `Idempotency-Key`,
+     * or a server that already committed the first attempt places a SECOND real order, with a
+     * second order number, a second production commitment and a second receivable.
+     */
+    @Test fun `a retried queued order sends the same idempotency key both times`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(placeOrderRow("place-2"))
+        val keys = mutableListOf<String>()
+        val api = object : StubApi() {
+            override suspend fun placeOrder(body: PlaceOrderRequest, idempotencyKey: String, authorization: String?): OrderPlacedDto {
+                keys += idempotencyKey
+                if (keys.size == 1) throw IOException("unexpected end of stream")
+                return OrderPlacedDto("order-2", "2609-002")
+            }
+        }
+
+        assertEquals(ListenableWorker.Result.retry(), worker(dao, api, RecordingOrders()).doWork())
+        assertEquals(OutboxState.QUEUED, dao.byId("place-2")?.state)
+        assertEquals(ListenableWorker.Result.success(), worker(dao, api, RecordingOrders()).doWork())
+
+        assertEquals(listOf("place-2", "place-2"), keys)
+        assertEquals(null, dao.byId("place-2"))
+    }
+
+    /** A retry that overtakes the first attempt gets 409 IDEMPOTENT_IN_PROGRESS. The order may be
+     *  committing right now — the row must wait, never fail, or a flaky connection turns a real
+     *  placed order into a permanent rejection the operator has to chase. */
+    @Test fun `a queued order answered IDEMPOTENT_IN_PROGRESS stays queued`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(placeOrderRow("place-3"))
+        val api = object : StubApi() {
+            override suspend fun placeOrder(body: PlaceOrderRequest, idempotencyKey: String, authorization: String?): OrderPlacedDto =
+                throw ApiException(
+                    409, "Сўров ҳали бажарилмоқда · Request still in progress",
+                    JsonObject(mapOf("code" to JsonPrimitive("IDEMPOTENT_IN_PROGRESS"))),
+                )
+        }
+
+        val result = worker(dao, api, RecordingOrders()).doWork()
+
+        assertEquals(ListenableWorker.Result.retry(), result)
+        val after = dao.byId("place-3")!!
+        assertEquals(OutboxState.QUEUED, after.state)
+        assertEquals(null, after.lastError)
+    }
+
+    /** The server refusing the body on the merits is the opposite case: retrying can never help,
+     *  so the row fails permanently carrying the server's own Uzbek half — which is what the
+     *  calculator later shows the operator, since the quote itself is long gone. */
+    @Test fun `a queued order the server rejects fails permanently with the server's message`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(placeOrderRow("place-4"))
+        val api = object : StubApi() {
+            override suspend fun placeOrder(body: PlaceOrderRequest, idempotencyKey: String, authorization: String?): OrderPlacedDto =
+                throw ApiException(422, "Мижоз манзили керак · client address is required")
+        }
+
+        val result = worker(dao, api, RecordingOrders()).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        val after = dao.byId("place-4")!!
+        assertEquals(OutboxState.FAILED, after.state)
+        assertEquals("Мижоз манзили керак", after.lastError)
     }
 
     /** A row of this kind should never lack a `paymentId` — `LogisticsRepository`/`PaymentRepository`

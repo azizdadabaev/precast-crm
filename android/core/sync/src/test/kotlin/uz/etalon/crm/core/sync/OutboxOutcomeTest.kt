@@ -2,6 +2,8 @@ package uz.etalon.crm.core.sync
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.network.ApiException
 import java.io.IOException
@@ -37,6 +39,23 @@ class OutboxOutcomeTest {
     @Test fun `a 401 retries so the upload survives a token refresh`() {
         // Signing back in must not lose the photo; the row stays queued.
         assertEquals(OutboxOutcome.Retry, outcomeFor(ApiException(401, "Авторизация талаб қилинади · Authentication required")))
+    }
+
+    /** The server's own idempotency layer is still running the FIRST attempt at this key. Nothing
+     *  was rejected — treating it as a permanent failure would turn a flaky connection into a lost
+     *  order the operator has to chase. */
+    @Test fun `IDEMPOTENT_IN_PROGRESS retries rather than failing the row`() {
+        val details = JsonObject(mapOf("code" to JsonPrimitive("IDEMPOTENT_IN_PROGRESS")))
+        val t = ApiException(409, "Сўров ҳали бажарилмоқда · Request still in progress", details)
+        assertEquals(OutboxOutcome.Retry, outcomeFor(t))
+    }
+
+    /** Every OTHER 409 is a real conflict the server will answer the same way forever — the order
+     *  already exists for that project, say — so it must still fail permanently. */
+    @Test fun `an ordinary 409 still fails permanently`() {
+        val out = outcomeFor(ApiException(409, "Бу лойиҳа учун буюртма аллақачон жойлаштирилган · Already placed"))
+        assertTrue(out is OutboxOutcome.Fail)
+        assertEquals("Бу лойиҳа учун буюртма аллақачон жойлаштирилган", (out as OutboxOutcome.Fail).message)
     }
 
     @Test fun `a missing file fails permanently instead of retrying forever`() {

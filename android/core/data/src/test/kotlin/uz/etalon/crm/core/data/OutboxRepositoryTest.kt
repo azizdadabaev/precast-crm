@@ -26,6 +26,11 @@ private class FakeOutboxDao : OutboxDao {
     val rows = MutableStateFlow<Map<String, OutboxEntity>>(emptyMap())
     override fun observeForOrder(orderId: String, ownerId: String) =
         rows.map { m -> m.values.filter { it.orderId == orderId && it.ownerId == ownerId }.sortedBy { it.createdAt } }
+    override fun observeFailedOfKind(ownerId: String, kind: String) =
+        rows.map { m ->
+            m.values.filter { it.ownerId == ownerId && it.kind == kind && it.state == OutboxState.FAILED }
+                .sortedBy { it.createdAt }
+        }
     override suspend fun byId(id: String) = rows.value[id]
     override suspend fun peekQueued(ownerId: String) =
         rows.value.values.filter { it.state == OutboxState.QUEUED && it.ownerId == ownerId }.minByOrNull { it.createdAt }

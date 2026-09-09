@@ -24,13 +24,26 @@ import javax.inject.Singleton
 /** Implemented in :core:sync so this module never depends on WorkManager. */
 interface OutboxScheduler { fun schedule(id: String) }
 
-/** The seam LogisticsRepository talks to, so its tests need no file system. */
+/** The seam LogisticsRepository and CalculatorRepository talk to, so their tests need no file system. */
 interface OutboxGateway {
     suspend fun enqueue(
-        kind: OutboxKind, orderId: String, shipmentId: String? = null, paymentId: String? = null,
+        kind: OutboxKind, orderId: String? = null, shipmentId: String? = null, paymentId: String? = null,
         photo: PreparedImage? = null, payload: JsonObject = JsonObject(emptyMap()),
+        rowId: String? = null,
     ): String
+
+    /** The signed-in operator's own rows of [kind] that the server permanently rejected — see
+     *  [OutboxDao.observeFailedOfKind] for why a rejected order needs its own door. */
+    fun observeFailed(kind: OutboxKind): Flow<List<FailedOutboxRow>>
+
+    /** Drops one row for good, file and all — what an operator taps to acknowledge a rejection. */
+    suspend fun discard(id: String)
 }
+
+/** A row the server rejected: enough to say WHAT was refused and WHY, without the caller having
+ *  to know the row's payload shape. [payload] is the request as it was queued, so a caller can
+ *  name the customer the rejected order was for. */
+data class FailedOutboxRow(val id: String, val error: String?, val payload: JsonObject)
 
 @Singleton
 class OutboxRepository @Inject constructor(
@@ -65,14 +78,21 @@ class OutboxRepository @Inject constructor(
      * fails: a row nobody owns is unsendable, and writing one would only leave the operator
      * believing their delivery proof was queued. The photo is left where the caller put it —
      * nothing is moved before the owner is known.
+     *
+     * [rowId] lets a caller decide the row's id, which IS the `Idempotency-Key` the worker sends.
+     * One caller needs that: an order the operator tried to place online, whose response was lost
+     * to the network, and which they then queue. Minting a fresh id there would send a DIFFERENT
+     * key for the same submission, and a server that had already committed the first attempt would
+     * place a second real order. Everyone else omits it and gets a fresh UUID. Re-enqueuing the
+     * same [rowId] replaces the existing row, which is the right answer: it is the same submission.
      */
     override suspend fun enqueue(
-        kind: OutboxKind, orderId: String, shipmentId: String?, paymentId: String?,
-        photo: PreparedImage?, payload: JsonObject,
+        kind: OutboxKind, orderId: String?, shipmentId: String?, paymentId: String?,
+        photo: PreparedImage?, payload: JsonObject, rowId: String?,
     ): String {
         val ownerId = currentUser.id()
             ?: error("Сеанс тугаган, қайтадан киринг · No signed-in user to own this upload")
-        val id = UUID.randomUUID().toString()
+        val id = rowId ?: UUID.randomUUID().toString()
         val stored = photo?.let { moveIntoOutbox(it.file, id) }
         val now = System.currentTimeMillis()
         dao.upsert(
@@ -87,6 +107,30 @@ class OutboxRepository @Inject constructor(
         scheduler.schedule(id)
         return id
     }
+
+    /** Owner-scoped like every other observer here: with nobody signed in there is nothing of
+     *  theirs to show. */
+    override fun observeFailed(kind: OutboxKind): Flow<List<FailedOutboxRow>> = flow {
+        val owner = currentUser.id()
+        if (owner == null) {
+            emit(emptyList())
+        } else {
+            emitAll(
+                dao.observeFailedOfKind(owner, kind.name).map { rows ->
+                    rows.map { r ->
+                        // Nothing here suspends, so runCatching cannot swallow a cancellation. An
+                        // unparsable payload must still show the row — the operator needs to know
+                        // the order was rejected even if this build cannot read what was in it.
+                        val body = runCatching { json.decodeFromString(JsonObject.serializer(), r.payloadJson) }
+                            .getOrDefault(JsonObject(emptyMap()))
+                        FailedOutboxRow(id = r.id, error = r.lastError, payload = body)
+                    }
+                },
+            )
+        }
+    }
+
+    override suspend fun discard(id: String) = cancel(id)
 
     suspend fun retry(id: String) {
         dao.markQueued(id, System.currentTimeMillis())

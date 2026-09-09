@@ -130,6 +130,55 @@ class EtalonDatabaseMigrationTest {
         }
     }
 
+    /**
+     * Schema 7 relaxes `outbox.orderId` to nullable, and SQLite cannot do that in place — the
+     * table is RECREATED and every row copied across. That is the one migration shape that can
+     * silently lose an operator's un-sent delivery proof, so this walks a real v6 database
+     * forward and checks both halves: the existing row survives with its owner, file, payload and
+     * state untouched, AND a PLACE_ORDER row with a NULL `orderId` can now be written at all.
+     *
+     * Deleting [MIGRATION_6_7] from `ALL_MIGRATIONS` fails this test: `runMigrationsAndValidate`
+     * finds no registered step for 6 → 7 and throws before it can read anything back.
+     */
+    @Test fun `schema 7 makes orderId nullable without disturbing a queued upload`() {
+        val payload = """{"cashAmount":"2500000.00"}"""
+        helper.createDatabase(6).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO outbox
+                    (id, ownerId, kind, orderId, shipmentId, paymentId, filePath, payloadJson,
+                     state, attempts, lastError, createdAt, updatedAt)
+                VALUES ('row-6','u1','DELIVERY_PROOF','o1',NULL,NULL,'/data/outbox/row-6.jpg',
+                        '$payload','QUEUED',0,NULL,10,10)
+                """.trimIndent()
+            )
+        }
+
+        helper.runMigrationsAndValidate(7, ALL_MIGRATIONS.toList()).use { db ->
+            db.prepare("SELECT ownerId, filePath, payloadJson, state FROM outbox WHERE id = 'row-6'").use { stmt ->
+                assertTrue("the queued delivery proof must survive the table rebuild", stmt.step())
+                assertEquals("u1", stmt.getText(0))
+                assertEquals("/data/outbox/row-6.jpg", stmt.getText(1))
+                assertEquals("the cash figure must come through unchanged", payload, stmt.getText(2))
+                assertEquals("QUEUED", stmt.getText(3))
+            }
+            // The point of the whole step: a queued order has no order to name yet.
+            db.execSQL(
+                """
+                INSERT INTO outbox
+                    (id, ownerId, kind, orderId, shipmentId, paymentId, filePath, payloadJson,
+                     state, attempts, lastError, createdAt, updatedAt)
+                VALUES ('row-7','u1','PLACE_ORDER',NULL,NULL,NULL,NULL,'{}','QUEUED',0,NULL,20,20)
+                """.trimIndent()
+            )
+            db.prepare("SELECT orderId IS NULL, filePath IS NULL FROM outbox WHERE id = 'row-7'").use { stmt ->
+                assertTrue(stmt.step())
+                assertEquals("orderId must be writable as NULL at schema 7", 1, stmt.getInt(0))
+                assertEquals("a body-only row carries no file either", 1, stmt.getInt(1))
+            }
+        }
+    }
+
     private inline fun <T> SQLiteConnection.use(block: (SQLiteConnection) -> T): T =
         try { block(this) } finally { close() }
 }

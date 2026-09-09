@@ -1,5 +1,7 @@
 package uz.etalon.crm.core.data
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Assertions.*
@@ -15,11 +17,16 @@ import uz.etalon.crm.core.testing.FakeEtalonApi
 /** Records what was enqueued and what hit the network, so the queued-versus-online
  *  boundary is asserted rather than assumed. */
 private class SpyOutbox : OutboxGateway {
-    data class Enqueued(val kind: OutboxKind, val orderId: String, val shipmentId: String?, val payload: String)
+    data class Enqueued(val kind: OutboxKind, val orderId: String?, val shipmentId: String?, val payload: String)
     val calls = mutableListOf<Enqueued>()
-    override suspend fun enqueue(kind: OutboxKind, orderId: String, shipmentId: String?, paymentId: String?, photo: PreparedImage?, payload: JsonObject): String {
+    override suspend fun enqueue(
+        kind: OutboxKind, orderId: String?, shipmentId: String?, paymentId: String?,
+        photo: PreparedImage?, payload: JsonObject, rowId: String?,
+    ): String {
         calls += Enqueued(kind, orderId, shipmentId, payload.toString()); return "outbox-${calls.size}"
     }
+    override fun observeFailed(kind: OutboxKind): Flow<List<FailedOutboxRow>> = flowOf(emptyList())
+    override suspend fun discard(id: String) = error("LogisticsRepository never discards an outbox row")
 }
 
 /** Every member of [FakeEtalonApi] throws, so FailingApi below needs no overrides at all and

@@ -222,4 +222,31 @@ interface EtalonApi {
         @Body body: SaveProjectDraftRequest,
         @Header("Idempotency-Key") idempotencyKey: String,
     ): ProjectSavedDto
+
+    /**
+     * `POST /api/orders` — placing the order, `withIdempotency`-wrapped server-side (Phase 2b
+     * Task 1). This is the ONE non-multipart route the outbox may queue: a calculator is used at
+     * a customer's site, where signal is worst, and a placement that cannot wait for a bar is a
+     * deal lost. The queued row's id IS the key, so a drain retrying after a dropped connection
+     * replays the first response rather than creating a second real order — with a second order
+     * number, a second production commitment and a second receivable.
+     *
+     * [authorization] is nullable, unlike the five multipart routes' — this route has two callers,
+     * not one. The outbox drain pins the token it started with and passes it, so a row claimed
+     * under one operator never goes out under the next one's (`AuthInterceptor` leaves a header the
+     * caller already set). The ONLINE path — the operator's own tap, right now — passes null:
+     * Retrofit omits a null `@Header` entirely, and the interceptor then supplies the live token as
+     * it does for every other route. Passing a placeholder instead would send a broken credential.
+     *
+     * A 409 `IDEMPOTENT_IN_PROGRESS` means a retry arrived while the first attempt was still
+     * running — "try again shortly", never a permanent failure (`outcomeFor` treats it that way).
+     * A key first used here must never be reused for a draft save or a payment: the server keys
+     * are scoped `${user.id}:${key}` and answer `IDEMPOTENT_ROUTE_MISMATCH` across routes.
+     */
+    @POST("/api/orders")
+    suspend fun placeOrder(
+        @Body body: PlaceOrderRequest,
+        @Header("Idempotency-Key") idempotencyKey: String,
+        @Header("Authorization") authorization: String?,
+    ): OrderPlacedDto
 }

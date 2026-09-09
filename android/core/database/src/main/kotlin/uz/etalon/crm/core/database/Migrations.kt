@@ -51,5 +51,37 @@ internal val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/**
+ * 6 → 7 makes `outbox.orderId` nullable, because a queued PLACE_ORDER row has no order yet — the
+ * order is what it is going to create. SQLite cannot relax NOT NULL in place, so the table is
+ * recreated and every existing row copied across UNCHANGED: those rows are the only durable record
+ * of a photographed delivery and the cash counted against it.
+ *
+ * The column list is spelled out on both sides rather than `INSERT … SELECT *`: a bare `*` depends
+ * on the old table's column ORDER matching the new one's, which is true today only by coincidence
+ * of this file also being the thing that wrote it.
+ */
+internal val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(connection: SQLiteConnection) {
+        val columns = "`id`, `ownerId`, `kind`, `orderId`, `shipmentId`, `paymentId`, `filePath`, " +
+            "`payloadJson`, `state`, `attempts`, `lastError`, `createdAt`, `updatedAt`"
+        connection.execSQL(
+            "CREATE TABLE IF NOT EXISTS `outbox_new` (`id` TEXT NOT NULL, `ownerId` TEXT NOT NULL, " +
+                "`kind` TEXT NOT NULL, `orderId` TEXT, `shipmentId` TEXT, `paymentId` TEXT, " +
+                "`filePath` TEXT, `payloadJson` TEXT NOT NULL, `state` TEXT NOT NULL, " +
+                "`attempts` INTEGER NOT NULL, `lastError` TEXT, `createdAt` INTEGER NOT NULL, " +
+                "`updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+        )
+        connection.execSQL("INSERT INTO `outbox_new` ($columns) SELECT $columns FROM `outbox`")
+        connection.execSQL("DROP TABLE `outbox`")
+        connection.execSQL("ALTER TABLE `outbox_new` RENAME TO `outbox`")
+        // Dropping the old table took its indices with it; Room's exported 7.json still expects
+        // all three, and `runMigrationsAndValidate` is what checks that these names match it.
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_orderId` ON `outbox` (`orderId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_ownerId` ON `outbox` (`ownerId`)")
+        connection.execSQL("CREATE INDEX IF NOT EXISTS `index_outbox_state_createdAt` ON `outbox` (`state`, `createdAt`)")
+    }
+}
+
 /** Every migration the builder installs. Add each new step here as the schema version rises. */
-val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)

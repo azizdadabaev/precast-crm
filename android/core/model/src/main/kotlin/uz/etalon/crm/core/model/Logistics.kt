@@ -43,7 +43,13 @@ data class LatLng(val lat: Double, val lng: Double)
  *  — the kind is stored as a string precisely so a future value needs no schema migration, and
  *  [from] is what makes that promise good instead of throwing out of a flow. */
 enum class OutboxKind {
-    LOAD_TRUCK, ADD_LOADED_PHOTO, DELIVERY_PROOF, LOAD_SHIPMENT, ADD_PAYMENT_RECEIPT, UNKNOWN;
+    LOAD_TRUCK, ADD_LOADED_PHOTO, DELIVERY_PROOF, LOAD_SHIPMENT, ADD_PAYMENT_RECEIPT,
+    /** The one queued kind that carries no photo and no order: it is what CREATES the order.
+     *  Its whole request body lives in the row's `payloadJson`, and the row's own id is the
+     *  `Idempotency-Key`, so a retry after a dropped connection replays the first response
+     *  instead of placing a second real order. */
+    PLACE_ORDER,
+    UNKNOWN;
     companion object { fun from(s: String) = entries.firstOrNull { it.name == s } ?: UNKNOWN }
 }
 
@@ -61,7 +67,9 @@ val SHIPMENT_CREATE_STATUSES: Set<OrderStatus> =
 data class PendingUpload(
     val id: String,
     val kind: OutboxKind,
-    val orderId: String,
+    /** Null for [OutboxKind.PLACE_ORDER]: the order does not exist yet — the row is what will
+     *  create it. Every other kind names the order its photo belongs to. */
+    val orderId: String?,
     val shipmentId: String?,
     val failed: Boolean,
     val attempts: Int,

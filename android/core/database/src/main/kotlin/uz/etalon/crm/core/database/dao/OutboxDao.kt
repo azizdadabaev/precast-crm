@@ -16,6 +16,15 @@ interface OutboxDao {
     @Query("SELECT * FROM outbox WHERE orderId = :orderId AND ownerId = :ownerId ORDER BY createdAt, id")
     fun observeForOrder(orderId: String, ownerId: String): Flow<List<OutboxEntity>>
 
+    /**
+     * The operator's own rows of one kind that the server permanently rejected. [observeForOrder]
+     * cannot show a rejected PLACE_ORDER row — it has no `orderId` to be listed under, and the
+     * quote it came from is long gone from the calculator — so this is the query that keeps such a
+     * rejection findable instead of silent.
+     */
+    @Query("SELECT * FROM outbox WHERE ownerId = :ownerId AND kind = :kind AND state = 'FAILED' ORDER BY createdAt, id")
+    fun observeFailedOfKind(ownerId: String, kind: String): Flow<List<OutboxEntity>>
+
     @Query("SELECT * FROM outbox WHERE id = :id")
     suspend fun byId(id: String): OutboxEntity?
 

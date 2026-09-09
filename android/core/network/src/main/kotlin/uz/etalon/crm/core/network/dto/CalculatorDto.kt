@@ -56,3 +56,51 @@ data class SaveProjectDraftRequest(
  * is what lets this decode just the one field this client needs.
  */
 @Serializable data class ProjectSavedDto(val id: String)
+
+/**
+ * Body of `POST /api/orders` (`PlaceOrderSchema`) — the deal itself, not a quote. A deliberate
+ * superset of [SaveProjectDraftRequest]: the same rooms and the same discount levers, plus the
+ * three client fields the server requires here (`min(1)` on name and address, `min(5)` on the
+ * phone — the draft route takes them as optional), the delivery date, the notes, and the delivery
+ * and other costs the draft route has no columns for.
+ *
+ * The server recomputes every room with its own engine and its own `loadPricingConfig()`, so this
+ * carries INPUTS only — never a subtotal, never a total, never a room's `SlabResult`.
+ *
+ * The money fields travel as [BigDecimal] for the reason `PaymentRecordRequest.amount` does:
+ * [discountAmount]/[deliveryCost]/[otherCost] are whole-UZS operator amounts off the totals sheet's
+ * keypad (`Boundary.kt`'s `operatorAmountMoney`), and [paidAmount] is a customer's cash. Only
+ * [discountPercent] stays a plain `Double` — it is a percentage, not an amount, matching
+ * `ProjectMoney.discountPercent`'s own reasoning.
+ *
+ * `paymentMethod` is deliberately absent, and [paidAmount]/[receiptUrls] are pinned at their empty
+ * values: prepayment at placement is the NEXT phase's slice, designed for offline. `PlaceOrderSchema`'s
+ * refinement only demands a `paymentMethod` once `paidAmount > 0`, so a field this class could
+ * only ever leave null would be dead weight — the same rule that keeps `SaveProjectDraftSchema.name`
+ * out of [SaveProjectDraftRequest].
+ */
+@Serializable
+data class PlaceOrderRequest(
+    val clientName: String,
+    val clientPhone: String,
+    val clientAddress: String,
+    val rooms: List<RoomCalcInputDto>,
+    val discountPercent: Double = 0.0,
+    @Serializable(with = BigDecimalSerializer::class) val discountAmount: BigDecimal = BigDecimal.ZERO,
+    @Serializable(with = BigDecimalSerializer::class) val deliveryCost: BigDecimal = BigDecimal.ZERO,
+    @Serializable(with = BigDecimalSerializer::class) val otherCost: BigDecimal = BigDecimal.ZERO,
+    /** ISO-8601 instant; `z.coerce.date()` on the server. Required — there is no server default,
+     *  and a silent "today" would be a real production commitment nobody chose. */
+    val scheduledAt: String,
+    val notes: String? = null,
+    @Serializable(with = BigDecimalSerializer::class) val paidAmount: BigDecimal = BigDecimal.ZERO,
+    val receiptUrls: List<String> = emptyList(),
+)
+
+/**
+ * Response of `POST /api/orders`. The route answers the FULL `Order` row (client, project and
+ * relations included), not a bare `{id, orderNumber}` — `EtalonJson.ignoreUnknownKeys` is what
+ * lets this decode just the two fields this client needs: the id to navigate to, and the number
+ * to name the order in a confirmation.
+ */
+@Serializable data class OrderPlacedDto(val id: String, val orderNumber: String)

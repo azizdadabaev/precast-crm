@@ -1,5 +1,7 @@
 package uz.etalon.crm.core.data
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Assertions.*
@@ -19,11 +21,16 @@ import java.io.File
 /** Records what was enqueued, so the queued-versus-online boundary is asserted rather than
  *  assumed. Mirrors LogisticsRepositoryTest's PaySpyOutbox. */
 private class PaySpyOutbox : OutboxGateway {
-    data class Enqueued(val kind: OutboxKind, val orderId: String, val paymentId: String?)
+    data class Enqueued(val kind: OutboxKind, val orderId: String?, val paymentId: String?)
     val calls = mutableListOf<Enqueued>()
-    override suspend fun enqueue(kind: OutboxKind, orderId: String, shipmentId: String?, paymentId: String?, photo: PreparedImage?, payload: JsonObject): String {
+    override suspend fun enqueue(
+        kind: OutboxKind, orderId: String?, shipmentId: String?, paymentId: String?,
+        photo: PreparedImage?, payload: JsonObject, rowId: String?,
+    ): String {
         calls += Enqueued(kind, orderId, paymentId); return "outbox-${calls.size}"
     }
+    override fun observeFailed(kind: OutboxKind): Flow<List<FailedOutboxRow>> = flowOf(emptyList())
+    override suspend fun discard(id: String) = error("PaymentsRepository never discards an outbox row")
 }
 
 /** Every member errors with IllegalStateException by default (Kotlin's `error(...)`), so

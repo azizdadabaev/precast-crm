@@ -35,7 +35,13 @@ data class OutboxEntity(
     val ownerId: String,
     /** OutboxKind name — decides which endpoint the worker calls. */
     val kind: String,
-    val orderId: String,
+    /**
+     * Nullable since schema 7. A PLACE_ORDER row has no order yet — the order is what it is going
+     * to create — and there is no honest value to store in the meantime: `""` would send
+     * `OrdersGateway.refreshDetail("")` down a real network call once the row drained. Every
+     * photo kind still names the order its file belongs to.
+     */
+    val orderId: String?,
     val shipmentId: String? = null,
     val paymentId: String? = null,
     /** Absolute path of the prepared JPEG, moved out of the cache into files/. */

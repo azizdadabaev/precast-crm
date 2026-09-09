@@ -12,7 +12,7 @@ import uz.etalon.crm.core.database.entity.OutboxEntity
 
 @Database(
     entities = [OrderSummaryEntity::class, OrderDetailEntity::class, OutboxEntity::class, CalculatorDraftEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class EtalonDatabase : RoomDatabase() {
