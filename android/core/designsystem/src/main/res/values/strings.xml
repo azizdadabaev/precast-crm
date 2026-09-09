@@ -35,6 +35,12 @@
     <string name="photo_n">Расм %1$d</string>
     <string name="photo_pending">Юборилмоқда</string>
     <string name="stepper_max">Кўпи билан %1$d</string>
+    <!-- RegionField / RegionPickerSheet — moved from :feature:clients in Task 7 so the
+         calculator's client bar can share the same picker. -->
+    <string name="ds_region_unset">Танланмаган</string>
+    <string name="ds_region_search">Қидириш</string>
+    <string name="ds_region_clear">Тозалаш</string>
+    <string name="ds_region_empty">Ҳеч нарса топилмади</string>
     <plurals name="outbox_pending">
         <item quantity="other">%1$d та расм юборилмоқда…</item>
     </plurals>

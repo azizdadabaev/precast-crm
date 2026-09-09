@@ -1,22 +1,13 @@
 package uz.etalon.crm.feature.clients.edit
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -36,8 +27,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
-import uz.etalon.crm.core.designsystem.components.SecondaryButton
-import uz.etalon.crm.core.designsystem.components.SectionLabel
+import uz.etalon.crm.core.designsystem.components.RegionField
+import uz.etalon.crm.core.designsystem.components.RegionPickerSheet
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.feature.clients.R
@@ -71,8 +62,6 @@ internal fun completeSave(
     consume()
     onSaved(id)
 }
-
-private val ROW_MIN = 48.dp
 
 /**
  * Adding a customer, or correcting one.
@@ -109,7 +98,7 @@ fun ClientEditSheet(
     val pick = picking
     if (pick != null) {
         RegionPickerSheet(
-            titleRes = if (pick == RegionPick.VILOYAT) R.string.client_field_viloyat else R.string.client_field_tuman,
+            title = stringResource(if (pick == RegionPick.VILOYAT) R.string.client_field_viloyat else R.string.client_field_tuman),
             options = when (pick) {
                 RegionPick.VILOYAT -> VILOYATS.map { it.nameUz to it.name }
                 RegionPick.TUMAN -> tumansOf(s.viloyat).map { it.nameUz to it.name }
@@ -164,8 +153,8 @@ fun ClientEditSheet(
                 singleLine = true, textStyle = EtalonType.monoBody,
                 modifier = Modifier.fillMaxWidth(),
             )
-            RegionField(R.string.client_field_viloyat, s.viloyat) { picking = RegionPick.VILOYAT }
-            RegionField(R.string.client_field_tuman, s.tuman) { picking = RegionPick.TUMAN }
+            RegionField(stringResource(R.string.client_field_viloyat), s.viloyat) { picking = RegionPick.VILOYAT }
+            RegionField(stringResource(R.string.client_field_tuman), s.tuman) { picking = RegionPick.TUMAN }
             OutlinedTextField(
                 value = s.street, onValueChange = vm::setStreet,
                 label = { Text(stringResource(R.string.client_field_street)) },
@@ -208,71 +197,5 @@ private fun keepNoticeRes(s: ClientEditState): Int? = when {
     else -> null
 }
 
-/**
- * One of the two linked catalogues, as a labelled button rather than a text field: the value is
- * never typed, 206 tumans need a search box rather than a dropdown, and a button is already the
- * design system's 48 dp thumb target.
- */
-@Composable
-private fun RegionField(labelRes: Int, value: String, onOpen: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        SectionLabel(stringResource(labelRes))
-        SecondaryButton(
-            text = value.ifEmpty { stringResource(R.string.client_region_unset) },
-            onClick = onOpen,
-            leading = Icons.Default.ArrowDropDown,
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RegionPickerSheet(
-    titleRes: Int,
-    /** Cyrillic name to Latin name — the Cyrillic is what gets stored, the Latin is searchable. */
-    options: List<Pair<String, String>>,
-    onDismiss: () -> Unit,
-    onPick: (String) -> Unit,
-) {
-    var query by remember { mutableStateOf("") }
-    val matches = remember(query, options) {
-        val q = query.trim()
-        if (q.isEmpty()) options
-        else options.filter { (uz, latin) -> uz.contains(q, ignoreCase = true) || latin.contains(q, ignoreCase = true) }
-    }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(stringResource(titleRes), style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(
-                value = query, onValueChange = { query = it },
-                placeholder = { Text(stringResource(R.string.client_region_search)) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true, modifier = Modifier.fillMaxWidth(),
-            )
-            // Clearing is a real choice here — it is the address's region that is being unset,
-            // not the whole address, so nothing the server would silently drop.
-            SecondaryButton(stringResource(R.string.client_region_clear), onClick = { onPick("") })
-            if (matches.isEmpty()) {
-                Text(
-                    stringResource(R.string.client_region_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                // Latin stays a search key only (matched above) — never shown. The web's
-                // AddressInput does the same: Cyrillic is the only spelling on screen.
-                items(matches, key = { it.first }) { (uz, _) ->
-                    ListItem(
-                        headlineContent = { Text(uz) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = ROW_MIN)
-                            .clickable { onPick(uz) },
-                    )
-                }
-            }
-        }
-    }
-}
+// RegionField/RegionPickerSheet moved to `:core:designsystem` (Task 7) so the calculator's
+// client bar can share the same picker — see `core/designsystem/components/RegionPicker.kt`.

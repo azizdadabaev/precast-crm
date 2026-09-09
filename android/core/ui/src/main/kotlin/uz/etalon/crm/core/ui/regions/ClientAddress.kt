@@ -1,4 +1,4 @@
-package uz.etalon.crm.feature.clients.edit
+package uz.etalon.crm.core.ui.regions
 
 /**
  * A client address split the way it is stored. The convention is written by the web's
@@ -11,18 +11,6 @@ package uz.etalon.crm.feature.clients.edit
  * street with no region at all.
  */
 data class ParsedAddress(val viloyat: String, val tuman: String, val street: String)
-
-internal fun findViloyatByName(name: String): Viloyat? =
-    VILOYATS.firstOrNull { it.name == name || it.nameUz == name }
-
-internal fun findTumanByName(name: String): Tuman? =
-    TUMANS.firstOrNull { it.name == name || it.nameUz == name }
-
-/** The tumans of one viloyat, or all of them when nothing is chosen yet. */
-internal fun tumansOf(viloyatName: String): List<Tuman> {
-    val v = findViloyatByName(viloyatName) ?: return TUMANS
-    return TUMANS.filter { it.viloyatId == v.id }
-}
 
 /** Mirrors `composeAddress` in src/lib/regions/index.ts, case for case: a blank part is an
  *  absent part, and what is left is joined with ", ". */
