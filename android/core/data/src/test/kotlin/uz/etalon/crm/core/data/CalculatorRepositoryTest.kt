@@ -177,6 +177,27 @@ class CalculatorRepositoryTest {
         assertNull(api.lastRequest)
     }
 
+    /** `SaveProjectDraftSchema.clientPhone` is `min(3)` and REQUIRED, unlike the name and the
+     *  address. `normalizePhone("")` is `""`, so without this the empty string goes on the wire and
+     *  comes back a 422 whose message names no field at all. */
+    @Test fun `a save with no phone never reaches the API`() = runTest {
+        val api = CalcRecordingApi()
+        val r = repo(api).saveDraft(draft(rows = listOf(room("A")), clientPhone = ""), "idem-1")
+
+        assertTrue(r.isFailure)
+        assertNull(api.lastRequest)
+    }
+
+    /** `rooms` DEFAULTS to `[]` on the draft route, so the server would happily create a project
+     *  holding nothing. */
+    @Test fun `a save with no rooms never reaches the API`() = runTest {
+        val api = CalcRecordingApi()
+        val r = repo(api).saveDraft(draft(rows = emptyList()), "idem-1")
+
+        assertTrue(r.isFailure)
+        assertNull(api.lastRequest)
+    }
+
     @Test fun `discountPercent and discountAmount reach the wire the way the engine boundary keeps them`() = runTest {
         val api = CalcRecordingApi()
         repo(api).saveDraft(draft(rows = listOf(room("A")), discountAmount = 50_000.0), "idem-1").getOrThrow()

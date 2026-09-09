@@ -105,6 +105,15 @@ class CalculatorViewModelTest {
         setClientViloyat("Тошкент"); setClientTuman("Юнусобод"); setClientStreet("12-уй")
     }
 
+    /** A quote «Лойиҳани сақлаш» will actually accept: one priced room plus the phone, the one
+     *  client field `SaveProjectDraftSchema` insists on (`min(3)`, required — name and address are
+     *  optional on that route). Returns the room's id. */
+    private fun CalculatorViewModel.readyToSave(): String {
+        val id = addPricedRoom()
+        setClientPhoneDigits("901234567")
+        return id
+    }
+
     /** Adds one priced room («Хона 1», 4×6) and returns its id — the shape every save/idempotency
      *  test below needs before `saveDraft` will let a request through (`SlabRow.canPersist`). */
     private fun CalculatorViewModel.addPricedRoom(): String {
@@ -240,6 +249,7 @@ class CalculatorViewModelTest {
         v.addRoom(); val id = v.state.value.rows[0].id
         v.openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
         v.openKeypad(KeypadTarget(id, LENGTH)); "6".forEach(v::keypadDigit); v.commitKeypad()
+        v.setClientPhoneDigits("901234567")
 
         v.saveDraft()
         advanceUntilIdle()
@@ -278,6 +288,57 @@ class CalculatorViewModelTest {
         assertNotNull(v.state.value.error)
     }
 
+    /**
+     * `SaveProjectDraftSchema.clientPhone` is `min(3)` and required. Without this refusal the empty
+     * phone goes on the wire, the server answers 422, and the operator reads the generic
+     * «Маълумот нотўғри» — which names no field at all.
+     */
+    @Test fun `saveDraft is refused before the network when there is no phone`() = runTest {
+        var called = false
+        val v = vm(saveDraft = SaveDraftUseCase { _, _ -> called = true; Result.success("x") })
+        advanceUntilIdle()
+        v.addPricedRoom()          // a perfectly good room, but nobody to save it for
+
+        v.saveDraft()
+        advanceUntilIdle()
+
+        assertFalse(called, "an empty phone must block the save before it ever reaches the use case")
+        assertEquals("Мижоз телефон рақамини киритинг", v.state.value.error)
+        assertNull(v.state.value.projectId)
+    }
+
+    /** Parity with placement's own five refusals: `rooms` DEFAULTS to `[]` on the draft route, so
+     *  an empty save is accepted server-side and creates a project holding nothing. */
+    @Test fun `saveDraft is refused before the network when there are no rooms`() = runTest {
+        var called = false
+        val v = vm(saveDraft = SaveDraftUseCase { _, _ -> called = true; Result.success("x") })
+        advanceUntilIdle()
+        v.setClientPhoneDigits("901234567")
+
+        v.saveDraft()
+        advanceUntilIdle()
+
+        assertFalse(called)
+        assertEquals("Камида битта хона керак", v.state.value.error)
+    }
+
+    /** `clientName` is `max(120)` and `clientAddress` `max(200)` on both routes. Over-long values
+     *  are impossible to enter rather than rejected later — an over-long value queued offline is a
+     *  permanent 422 whose message is the server's English "Validation failed". */
+    @Test fun `the client name and address are capped at the schema's own limits`() = runTest {
+        val v = vm(); advanceUntilIdle()
+
+        v.setClientName("а".repeat(200))
+        assertEquals(120, v.state.value.clientName.length)
+
+        v.setClientViloyat("Тошкент вилояти"); v.setClientTuman("Юнусобод тумани")
+        v.setClientStreet("к".repeat(400))
+        val composed = uz.etalon.crm.core.ui.regions.composeAddress(
+            v.state.value.clientAddress.viloyat, v.state.value.clientAddress.tuman, v.state.value.clientAddress.street,
+        )
+        assertEquals(200, composed.length, "the street takes exactly the room the address still had")
+    }
+
     @Test fun `clearAll empties the client bar and the discounts too, and clears the persisted draft`() = runTest {
         var cleared = false
         val v = vm(clearDraft = ClearDraftUseCase { cleared = true })
@@ -311,7 +372,7 @@ class CalculatorViewModelTest {
             clearDraft = ClearDraftUseCase { roomDeleted = true },
         )
         advanceUntilIdle()
-        v.addPricedRoom()
+        v.readyToSave()
 
         v.saveDraft()
         assertTrue(v.state.value.saving)
@@ -334,7 +395,7 @@ class CalculatorViewModelTest {
         val saveResult = CompletableDeferred<Result<String>>()
         val v = vm(saveDraft = SaveDraftUseCase { _, _ -> saveResult.await() })
         advanceUntilIdle()
-        v.addPricedRoom()
+        v.readyToSave()
         v.saveDraft()
         v.clearAll()
 
@@ -368,7 +429,7 @@ class CalculatorViewModelTest {
         val keys = mutableListOf<String>()
         val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.failure(java.io.IOException("dropped")) })
         advanceUntilIdle()
-        v.addPricedRoom()
+        v.readyToSave()
 
         v.saveDraft(); advanceUntilIdle()
         v.saveDraft(); advanceUntilIdle()
@@ -382,7 +443,7 @@ class CalculatorViewModelTest {
         val keys = mutableListOf<String>()
         val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.failure(IllegalStateException("сумма ортиқча")) })
         advanceUntilIdle()
-        v.addPricedRoom()
+        v.readyToSave()
 
         v.saveDraft(); advanceUntilIdle()
         v.setDiscountMode(DiscountMode.AMOUNT); v.setDiscountAmount(20_000.0)
@@ -399,13 +460,13 @@ class CalculatorViewModelTest {
         val first = mutableListOf<String>()
         val v = vm(saveDraft = SaveDraftUseCase { _, key -> first += key; Result.failure(java.io.IOException("dropped")) }, saved = saved)
         advanceUntilIdle()
-        v.addPricedRoom()
+        v.readyToSave()
         v.saveDraft(); advanceUntilIdle()
 
         val second = mutableListOf<String>()
         val restored = vm(saveDraft = SaveDraftUseCase { _, key -> second += key; Result.success("proj-1") }, saved = saved)
         advanceUntilIdle()
-        restored.addPricedRoom()
+        restored.readyToSave()
         restored.saveDraft(); advanceUntilIdle()
 
         assertEquals(first, second)
@@ -419,7 +480,7 @@ class CalculatorViewModelTest {
         val keys = mutableListOf<String>()
         val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.failure(IllegalStateException("boom")) })
         advanceUntilIdle()
-        v.addPricedRoom()
+        v.readyToSave()
 
         v.saveDraft(); advanceUntilIdle()
         v.setDeliveryCost(50_000.0)
@@ -433,7 +494,7 @@ class CalculatorViewModelTest {
         val keys = mutableListOf<String>()
         val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.failure(IllegalStateException("boom")) })
         advanceUntilIdle()
-        val id = v.addPricedRoom()
+        val id = v.readyToSave()
 
         v.saveDraft(); advanceUntilIdle()
         v.openKeypad(KeypadTarget(id, LENGTH)); "6,5".forEach(v::keypadDigit); v.commitKeypad()
@@ -447,7 +508,7 @@ class CalculatorViewModelTest {
         val keys = mutableListOf<String>()
         val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.success("proj-1") })
         advanceUntilIdle()
-        v.addPricedRoom()
+        v.readyToSave()
 
         v.saveDraft(); advanceUntilIdle()
         v.saveDraft(); advanceUntilIdle()

@@ -82,16 +82,25 @@ class CalculatorRepository @Inject constructor(
      * Online only — never queued through the outbox. [idempotencyKey] is the caller's, exactly
      * like `PaymentsRepository.record`: the same key across a retry of one submission, a new one
      * for a new save, decided by whoever holds the form.
+     *
+     * Refuses four ways before anything leaves the device — no `order.create`, an unpersistable
+     * room, no rooms, no phone. The last is not decoration: `SaveProjectDraftSchema.clientPhone`
+     * is `min(3)` and REQUIRED (name and address are optional there), and an empty one comes back
+     * a 422 rendered as the generic «Маълумот нотўғри», naming nothing. `CalculatorViewModel`
+     * blocks all four first; this is the repository's own defence-in-depth.
      */
     suspend fun saveDraft(draft: CalculatorDraft, idempotencyKey: String): Result<String> = runCatchingCancellable {
         if (!permissions.can(ORDER_CREATE)) error("Буюртма яратишга рухсат йўқ")
         val blocked = draft.rows.filterNot { it.canPersist }
         if (blocked.isNotEmpty()) error(blockedRoomsMessage(blocked.map { it.name }))
+        if (draft.rows.isEmpty()) error("Камида битта хона керак")
+        val phone = normalizePhone(draft.clientPhone)
+        if (phone.isBlank()) error("Мижоз телефон рақамини киритинг")
         val dto = api.saveProjectDraft(
             SaveProjectDraftRequest(
                 projectId = draft.projectId,
                 clientName = draft.clientName.trim().ifEmpty { null },
-                clientPhone = normalizePhone(draft.clientPhone),
+                clientPhone = phone,
                 clientAddress = draft.clientAddress.trim().ifEmpty { null },
                 rooms = draft.rows.map { it.toWire() },
                 discountPercent = draft.discountPercent,

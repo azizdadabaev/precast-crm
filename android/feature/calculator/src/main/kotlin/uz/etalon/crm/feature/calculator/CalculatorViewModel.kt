@@ -67,6 +67,19 @@ private const val NO_ROOMS_MESSAGE = "Камида битта хона кера�
 private const val CLIENT_INCOMPLETE_MESSAGE = "Мижоз маълумотлари тўлиқ эмас"
 private const val NO_DATE_MESSAGE = "Етказиб бериш санасини танланг"
 
+/** `SaveProjectDraftSchema.clientPhone` is `min(3)` and REQUIRED — the one client field the DRAFT
+ *  route insists on (name and address are optional there). `normalizePhone("")` returns `""`, which
+ *  would go on the wire and come back a 422 rendered as the generic «Маълумот нотўғри», naming
+ *  nothing. Mirrored word-for-word by `CalculatorRepository.saveDraft`. */
+private const val NO_PHONE_MESSAGE = "Мижоз телефон рақамини киритинг"
+
+/** `clientName` is `max(120)` and `clientAddress` `max(200)` on BOTH `SaveProjectDraftSchema` and
+ *  `PlaceOrderSchema`. Capped as the operator types rather than left to the server: an over-long
+ *  value queued offline becomes a permanent 422 whose message is the server's English
+ *  "Validation failed", hours later, with the operator nowhere near the customer. */
+private const val MAX_CLIENT_NAME = 120
+private const val MAX_CLIENT_ADDRESS = 200
+
 /** How long after any mutation the ViewModel waits before writing the draft to Room — long
  *  enough that a keystroke walk through a room's fields is one write, not one per keystroke. */
 private const val AUTOSAVE_DEBOUNCE_MS = 500L
@@ -439,9 +452,9 @@ open class CalculatorViewModel(
     fun dismissSaveMessage() = _state.update { it.copy(saveMessage = null) }
 
     /**
-     * Refuses without `order.create` and refuses when any row is not `SlabRow.canPersist` — both
-     * checks mirror `CalculatorRepository.saveDraft`'s own, so a save that would 422 never leaves
-     * the device. [SavedStateHandle]-pinned [idempotencyKeyFor] keeps the same Idempotency-Key
+     * Refuses the same four ways `CalculatorRepository.saveDraft` does — no `order.create`, an
+     * unpersistable room, no rooms, no phone — so a save that would 422 never leaves the device.
+     * [SavedStateHandle]-pinned [idempotencyKeyFor] keeps the same Idempotency-Key
      * across a retry of one submission (a dropped response, a 409 `IDEMPOTENT_IN_PROGRESS`) and
      * mints a new one only once the draft's own content changes — the same rule
      * `RecordPaymentViewModel.idempotencyKeyFor` follows for `POST /api/payments`.
@@ -449,13 +462,9 @@ open class CalculatorViewModel(
     fun saveDraft() {
         val s = _state.value
         if (s.saving) return
-        if (!s.canWrite) {
-            _state.update { it.copy(error = NO_PERMISSION_MESSAGE) }
-            return
-        }
-        val blocked = s.unpersistableRoomNames
-        if (blocked.isNotEmpty()) {
-            _state.update { it.copy(error = "Сақлаб бўлмайдиган хоналар: " + blocked.joinToString(", ")) }
+        val refusal = saveRefusal(s)
+        if (refusal != null) {
+            _state.update { it.copy(error = refusal) }
             return
         }
         val draft = s.toDraft()
@@ -487,6 +496,21 @@ open class CalculatorViewModel(
                 },
             )
         }
+    }
+
+    /** Why this quote may not be SAVED, in Uzbek — or null when it may. The draft route is looser
+     *  than placement (no address, no name, no date), but it does demand a phone, and it demands a
+     *  room the server will accept: `rooms` defaults to `[]` server-side, so an empty save would be
+     *  accepted and create a project holding nothing. Mirrors `CalculatorRepository.saveDraft`'s
+     *  refusals so the screen never offers an action the repository would only refuse a layer
+     *  later — the same shape [placementRefusal] has for `POST /api/orders`. */
+    private fun saveRefusal(s: CalculatorUiState): String? = when {
+        !s.canWrite -> NO_PERMISSION_MESSAGE
+        s.unpersistableRoomNames.isNotEmpty() ->
+            "Сақлаб бўлмайдиган хоналар: " + s.unpersistableRoomNames.joinToString(", ")
+        s.rows.none { it.canPersist } -> NO_ROOMS_MESSAGE
+        s.clientPhoneDigits.isBlank() -> NO_PHONE_MESSAGE
+        else -> null
     }
 
     /**
@@ -681,10 +705,21 @@ open class CalculatorViewModel(
         )
     }
 
-    fun setClientName(v: String) = updateClientState { it.copy(clientName = v) }
+    fun setClientName(v: String) = updateClientState { it.copy(clientName = v.take(MAX_CLIENT_NAME)) }
     fun setClientViloyat(v: String) = updateClientState { s -> s.copy(clientAddress = s.clientAddress.copy(viloyat = v)) }
     fun setClientTuman(v: String) = updateClientState { s -> s.copy(clientAddress = s.clientAddress.copy(tuman = v)) }
-    fun setClientStreet(v: String) = updateClientState { s -> s.copy(clientAddress = s.clientAddress.copy(street = v)) }
+    fun setClientStreet(v: String) = updateClientState { s ->
+        s.copy(clientAddress = s.clientAddress.copy(street = v.take(streetRoom(s.clientAddress))))
+    }
+
+    /** How many characters the street may still take before [composeAddress]'s result would pass
+     *  [MAX_CLIENT_ADDRESS]. The viloyat and the tuman come from a fixed catalogue and are short;
+     *  the street is the free-text half, so it is the one that gets capped. */
+    private fun streetRoom(address: ParsedAddress): Int {
+        val withoutStreet = composeAddress(address.viloyat, address.tuman, "")
+        val separator = if (withoutStreet.isEmpty()) 0 else 2   // the ", " composeAddress joins with
+        return (MAX_CLIENT_ADDRESS - withoutStreet.length - separator).coerceAtLeast(0)
+    }
 
     /** The pencil on the collapsed line. Reopens without blanking anything — [reopenClientBar]
      *  only ever clears the collapse flag, never the phone/name/address it is showing. */
