@@ -30,12 +30,13 @@ describe("OpenAPI document", () => {
       "/api/discrepancies/{id}",
       "/api/dashboard",
       "/api/clients/export",
+      "/api/projects",
     ]) {
       expect(paths, `missing ${p}`).toContain(p);
     }
   });
-  it("registers exactly 44 paths", () => {
-    expect(paths).toHaveLength(44);
+  it("registers exactly 45 paths", () => {
+    expect(paths).toHaveLength(45);
   });
   it("documents both methods on /api/drivers/{id}", () => {
     const p = doc.paths?.["/api/drivers/{id}"];

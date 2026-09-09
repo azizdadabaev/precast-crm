@@ -1150,6 +1150,17 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "required": false,
+            "name": "Idempotency-Key",
+            "in": "header"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1482,6 +1493,458 @@
           },
           "409": {
             "description": "Already placed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects": {
+      "post": {
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "required": false,
+            "name": "Idempotency-Key",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 120
+                  },
+                  "clientName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 120
+                  },
+                  "clientPhone": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 40
+                  },
+                  "clientAddress": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200
+                  },
+                  "shapeType": {
+                    "type": "string",
+                    "enum": [
+                      "RECTANGULAR",
+                      "TRAPEZOIDAL",
+                      "IRREGULAR"
+                    ],
+                    "default": "RECTANGULAR"
+                  },
+                  "dimensions": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "width": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "length": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "widths": {
+                        "type": "array",
+                        "items": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "notes": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "maxLength": 500
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "length"
+                    ]
+                  },
+                  "rooms": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 80
+                        },
+                        "innerWidth": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "innerLength": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        "bearing": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "minimum": 0,
+                          "default": 0.15
+                        },
+                        "correction": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": 0
+                        },
+                        "extraBeams": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 0,
+                          "default": 0
+                        },
+                        "forceStartBeam": {
+                          "type": [
+                            "boolean",
+                            "null"
+                          ],
+                          "default": false
+                        },
+                        "patternOverride": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "enum": [
+                            "GB",
+                            "BGB",
+                            "GBG"
+                          ]
+                        },
+                        "m2PriceOverride": {
+                          "type": [
+                            "boolean",
+                            "null"
+                          ],
+                          "default": false
+                        },
+                        "m2PriceOverrideValue": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "m2PriceReason": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "maxLength": 200
+                        },
+                        "box": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "imagePath": {
+                              "type": "string",
+                              "maxLength": 500
+                            },
+                            "x": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "w": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "h": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          },
+                          "required": [
+                            "imagePath",
+                            "x",
+                            "y",
+                            "w",
+                            "h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "innerWidth",
+                        "innerLength"
+                      ]
+                    },
+                    "default": []
+                  },
+                  "discountPercent": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 100,
+                    "default": 0
+                  },
+                  "discountAmount": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "default": 0
+                  },
+                  "conversationId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "drawing": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "rooms": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "points": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "x",
+                                  "y"
+                                ]
+                              }
+                            },
+                            "closed": {
+                              "type": "boolean"
+                            },
+                            "holes": {
+                              "type": "array",
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "x": {
+                                      "type": "number"
+                                    },
+                                    "y": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "x",
+                                    "y"
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "required": [
+                            "points",
+                            "closed"
+                          ]
+                        }
+                      },
+                      "globalDir": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "enum": [
+                          "H",
+                          "V"
+                        ]
+                      },
+                      "dirOverrides": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string",
+                          "enum": [
+                            "H",
+                            "V"
+                          ]
+                        },
+                        "default": {}
+                      },
+                      "wallThickCm": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      "guides": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "a": {
+                              "type": "object",
+                              "properties": {
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "x",
+                                "y"
+                              ]
+                            },
+                            "b": {
+                              "type": "object",
+                              "properties": {
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "x",
+                                "y"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "a",
+                            "b"
+                          ]
+                        }
+                      }
+                    },
+                    "required": [
+                      "rooms",
+                      "globalDir"
+                    ]
+                  }
+                },
+                "required": [
+                  "clientPhone"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {}
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Disabled or missing permission",
             "content": {
               "application/json": {
                 "schema": {

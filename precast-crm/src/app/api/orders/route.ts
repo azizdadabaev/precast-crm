@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { PlaceOrderSchema } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { can } from "@/lib/permissions";
 import { createOrder } from "@/lib/create-order";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
@@ -107,8 +108,13 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
  * The early phone check preserves the original failure ordering (phone 422 is
  * reported before the payment-permission 403); createOrder re-validates phone
  * for the session-free path.
+ *
+ * Wrapped in `withIdempotency` because placing an order is the one operation the Android outbox
+ * may queue offline: the queued row's id IS the Idempotency-Key, so a drain that retries after a
+ * dropped connection replays the first response instead of creating a second real order — with a
+ * second order number, a second production commitment and a second receivable.
  */
-export const POST = withPermission("order.create", async (req: NextRequest, { user }) => {
+export const POST = withPermission("order.create", withIdempotency(async (req: NextRequest, { user }) => {
   const body = PlaceOrderSchema.parse(await req.json());
 
   if (!normalizePhone(body.clientPhone)) return fail("phone is required", 422);
@@ -138,4 +144,4 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
     order.project.conversationId = null;
   }
   return created(order);
-});
+}));

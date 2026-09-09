@@ -92,6 +92,44 @@ describe("withIdempotency", () => {
     expect((await res.json()).details.code).toBe("IDEMPOTENT_ROUTE_MISMATCH");
   });
 
+  // Phase 2b: POST /api/projects and POST /api/orders were newly wrapped.
+  // A key is scoped `${userId}:${key}` with NO route in the id itself — the
+  // route is only checked on a hit. So a key reused across /api/payments,
+  // /api/projects and /api/orders must not silently collide; it must be
+  // rejected the same way any other cross-route reuse is.
+  it("does not let a save-draft/place-order key collide with a payments key", async () => {
+    const inner = vi.fn(async () => Response.json({ ok: true, data: {} }, { status: 201 }));
+    const wrapped = withIdempotency(inner);
+    await wrapped(req("k5", "http://localhost/api/payments"), ctx);
+    const res = await wrapped(req("k5", "http://localhost/api/projects"), ctx);
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(422);
+    expect((await res.json()).details.code).toBe("IDEMPOTENT_ROUTE_MISMATCH");
+  });
+
+  it("replays /api/orders and /api/projects like any other wrapped route: no key untouched, same key one row + replay", async () => {
+    for (const url of ["http://localhost/api/projects", "http://localhost/api/orders"]) {
+      table.clear(); // fresh key namespace per iteration — same key "k6" is reused below
+      let n = 0;
+      const inner = vi.fn(async () => Response.json({ ok: true, data: { n: ++n } }, { status: 201 }));
+      const wrapped = withIdempotency(inner);
+
+      // No header — untouched, runs every time, nothing stored.
+      await wrapped(req(undefined, url), ctx);
+      await wrapped(req(undefined, url), ctx);
+      expect(inner).toHaveBeenCalledTimes(2);
+
+      // Same key twice — one row created, second call replays the first body.
+      const a = await wrapped(req("k6", url), ctx);
+      const b = await wrapped(req("k6", url), ctx);
+      expect(inner).toHaveBeenCalledTimes(3);
+      expect(a.status).toBe(201);
+      expect(b.status).toBe(201);
+      expect((await b.json()).data.n).toBe(3);
+      expect(b.headers.get("Idempotency-Replayed")).toBe("true");
+    }
+  });
+
   it("does not strand the row when content-type says JSON but the body isn't", async () => {
     const inner = vi.fn(
       async () => new Response("not json", { status: 200, headers: { "content-type": "application/json" } }),

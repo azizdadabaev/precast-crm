@@ -11,6 +11,8 @@ const ROUTES = [
   "src/app/api/payments/upload-receipt/route.ts",
   "src/app/api/payments/[id]/receipts/route.ts",
   "src/app/api/orders/[id]/comments/route.ts",
+  "src/app/api/projects/route.ts",
+  "src/app/api/orders/route.ts",
 ];
 
 describe("mobile-retried routes are wrapped with withIdempotency", () => {

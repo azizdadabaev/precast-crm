@@ -18,7 +18,7 @@ import {
   PaymentRejectSchema, CommentCreateSchema, DriverCreateSchema, DriverUpdateSchema,
   DispatchCreateSchema, OrderStatusEnum, OrderPaymentStateEnum, PaymentStatusEnum,
   PaymentMethodEnum, RoleEnum, LanguageEnum, GalleryListSchema,
-  DiscrepancyUpdateSchema, DiscrepancyStatusEnum, ContactExportSchema,
+  DiscrepancyUpdateSchema, DiscrepancyStatusEnum, ContactExportSchema, SaveProjectDraftSchema,
 } from "@/lib/validation";
 import { CalculateBatchSchema } from "@/app/api/calculate/batch/schema";
 import { DeliveryLocationBody } from "@/app/api/orders/[id]/delivery-location/schema";
@@ -102,7 +102,8 @@ registry.registerPath({ method: "get", path: "/api/pricing", security: bearer, r
 registry.registerPath({ method: "get", path: "/api/orders", security: bearer,
   request: { query: z.object({ q: z.string().optional(), status: OrderStatusEnum.optional(), day: z.string().optional(), page: z.number().int().optional(), pageSize: z.number().int().max(100).optional() }) },
   responses: { 200: { description: "Page", ...json(envelope(z.object({ items: z.array(OrderListItem), total: z.number(), page: z.number(), pageSize: z.number(), totalPages: z.number() }))) }, ...errors } });
-registry.registerPath({ method: "post", path: "/api/orders", security: bearer, request: { body: json(PlaceOrderSchema) }, responses: { 201: { description: "Order", ...json(envelope(Any)) }, ...errors, 409: { description: "Already placed", ...json(ApiError) } } });
+registry.registerPath({ method: "post", path: "/api/orders", security: bearer, request: { headers: z.object({ "Idempotency-Key": idem }), body: json(PlaceOrderSchema) }, responses: { 201: { description: "Order", ...json(envelope(Any)) }, ...errors, 409: { description: "Already placed", ...json(ApiError) } } });
+registry.registerPath({ method: "post", path: "/api/projects", security: bearer, request: { headers: z.object({ "Idempotency-Key": idem }), body: json(SaveProjectDraftSchema) }, responses: { 201: { description: "Project", ...json(envelope(Any)) }, ...errors } });
 // CapacityRangeSchema (validation.ts) uses z.coerce.date() for from/to, which
 // zod-to-openapi renders as an optional nullable string instead of a required
 // date — worse than this hand-written object, so it's kept as-is.

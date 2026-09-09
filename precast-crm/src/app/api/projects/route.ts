@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { SaveProjectDraftSchema, ProjectStatusEnum } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
@@ -212,8 +213,13 @@ export const GET = withPermission("order.view", async (req: NextRequest, { user 
   });
 });
 
-/** POST /api/projects — order.create. Save Project (draft). Phone-only required. */
-export const POST = withPermission("order.create", async (req: NextRequest, { user }) => {
+/** POST /api/projects — order.create. Save Project (draft). Phone-only required.
+ *
+ *  Wrapped in `withIdempotency` for the same reason POST /api/payments is: the Android
+ *  calculator saves a draft over a field connection and retries, and a response lost after
+ *  the Project row committed would otherwise leave one quote saved twice under two ids —
+ *  the operator then edits one of them and places an order from the stale other. */
+export const POST = withPermission("order.create", withIdempotency(async (req: NextRequest, { user }) => {
   const body = SaveProjectDraftSchema.parse(await req.json());
 
   const phoneNorm = normalizePhone(body.clientPhone);
@@ -420,7 +426,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   });
 
   return created(project);
-});
+}));
 
 /**
  * DELETE /api/projects — owner-only bulk delete of saved drafts.
