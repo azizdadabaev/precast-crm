@@ -41,7 +41,9 @@
     <string name="ds_region_search">Қидириш</string>
     <string name="ds_region_clear">Тозалаш</string>
     <string name="ds_region_empty">Ҳеч нарса топилмади</string>
+    <!-- «маълумот», not «расм»: the outbox carries a queued PLACE_ORDER row as well as photos
+         since Phase 2b, and that row is an ORDER. The count was right; the noun was not. -->
     <plurals name="outbox_pending">
-        <item quantity="other">%1$d та расм юборилмоқда…</item>
+        <item quantity="other">%1$d та маълумот юборилмоқда…</item>
     </plurals>
 </resources>

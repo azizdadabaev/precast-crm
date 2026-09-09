@@ -33,9 +33,14 @@ private const val ORDER_CREATE = "order.create"
 
 /** Shown when [CalculatorRepository.saveDraft] is called with a row `SlabRow.canPersist` says no
  *  to. The ViewModel is expected to block the button first (`CalculatorUiState.unpersistableRoomNames`)
- *  — this is the repository's own defence-in-depth, not the primary UX. */
+ *  — this is the repository's own defence-in-depth, not the primary UX.
+ *
+ *  Word-for-word `:feature:calculator`'s `R.string.calc_cannot_save_rooms`, which `PlaceOrderSheet`
+ *  renders for the very same condition. A resource cannot cross the module boundary into
+ *  `:core:data`, so the words are duplicated — but they ARE the same words; one condition, one
+ *  sentence. `CalculatorViewModel.blockedRoomsMessage` is the third copy, for the same reason. */
 private fun blockedRoomsMessage(names: List<String>): String =
-    "Сақлаб бўлмайдиган хоналар: " + names.joinToString(", ")
+    "Бу хоналарни сақлаб бўлмайди: " + names.joinToString(", ")
 
 /** What a rejected queued order shows when the row carries no message of its own — the worker
  *  always writes one, so this is the "row hand-edited / written by another build" case. */

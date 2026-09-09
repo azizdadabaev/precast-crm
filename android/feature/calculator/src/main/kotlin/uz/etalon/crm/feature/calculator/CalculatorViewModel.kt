@@ -51,8 +51,15 @@ import javax.inject.Inject
 private const val ORDER_CREATE = "order.create"
 
 /** Mirrors `CalculatorRepository.saveDraft`'s own refusal, so the screen never offers an action
- *  the operator cannot perform and the repository never has to be the first to say no. */
+ *  the operator cannot perform and the repository never has to be the first to say no.
+ *  Word-for-word `R.string.calc_no_write_permission`, which a ViewModel cannot reach. */
 private const val NO_PERMISSION_MESSAGE = "Буюртма яратишга рухсат йўқ"
+
+/** Word-for-word `R.string.calc_cannot_save_rooms` — the sheet renders that resource for the very
+ *  same condition (`PlaceOrderSheet`'s notice), and one condition gets one sentence.
+ *  `CalculatorRepository.blockedRoomsMessage` carries the same words for the same reason. */
+private fun blockedRoomsMessage(names: List<String>): String =
+    "Бу хоналарни сақлаб бўлмайди: " + names.joinToString(", ")
 
 private const val SAVE_SUCCESS_MESSAGE = "Лойиҳа сақланди"
 
@@ -537,8 +544,7 @@ open class CalculatorViewModel(
      *  later — the same shape [placementRefusal] has for `POST /api/orders`. */
     private fun saveRefusal(s: CalculatorUiState): String? = when {
         !s.canWrite -> NO_PERMISSION_MESSAGE
-        s.unpersistableRoomNames.isNotEmpty() ->
-            "Сақлаб бўлмайдиган хоналар: " + s.unpersistableRoomNames.joinToString(", ")
+        s.unpersistableRoomNames.isNotEmpty() -> blockedRoomsMessage(s.unpersistableRoomNames)
         s.rows.none { it.canPersist } -> NO_ROOMS_MESSAGE
         s.clientPhoneDigits.isBlank() -> NO_PHONE_MESSAGE
         else -> null
@@ -640,8 +646,7 @@ open class CalculatorViewModel(
      *  repository would only refuse a layer later. */
     private fun placementRefusal(s: CalculatorUiState, scheduledAt: String): String? = when {
         !s.canWrite -> NO_PERMISSION_MESSAGE
-        s.unpersistableRoomNames.isNotEmpty() ->
-            "Сақлаб бўлмайдиган хоналар: " + s.unpersistableRoomNames.joinToString(", ")
+        s.unpersistableRoomNames.isNotEmpty() -> blockedRoomsMessage(s.unpersistableRoomNames)
         s.rows.none { it.canPersist } -> NO_ROOMS_MESSAGE
         !canPlaceClient(s) -> CLIENT_INCOMPLETE_MESSAGE
         scheduledAt.isBlank() -> NO_DATE_MESSAGE

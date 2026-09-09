@@ -1,5 +1,9 @@
 <resources>
-    <string name="calc_title">Калькулятор</string>
+    <!-- `calc_room_default_name`, `calc_no_write_permission` and `calc_place_queued` are NOT dead:
+         each mirrors a literal in `CalculatorViewModel`/`CalculatorRepository`, which cannot reach
+         a resource (no Context, and the repository is in another module). They are the canonical
+         wording; the literals must match them WORD FOR WORD, and this is where that wording is
+         edited. -->
     <string name="calc_room_default_name">Хона %1$d</string>
     <string name="calc_add_room">Хона қўшиш</string>
     <string name="calc_field_width">Эни</string>
@@ -37,6 +41,9 @@
     <string name="calc_out_blocks_per_row">Гишт/Қатор</string>
     <string name="calc_rate">м² нархи</string>
     <string name="calc_rate_auto">Авто: %1$s</string>
+    <!-- The badge on the tier the engine would have picked, in the override sheet. Bare, unlike
+         `calc_rate_auto`: that row already prints the very same price beside it. -->
+    <string name="calc_rate_auto_badge">Авто</string>
     <string name="calc_rate_override_title">м² нархини ўзгартириш</string>
     <string name="calc_rate_reason">Сабаби</string>
     <string name="calc_rate_reason_required">Сабабини ёзинг</string>
@@ -83,12 +90,14 @@
     <string name="calc_place_summary_total">Жами</string>
     <string name="calc_place_queue">Навбатга қўйиш</string>
     <string name="calc_place_queued">Интернет пайдо бўлганда юборилади</string>
+    <!-- Mirrored word-for-word by `CalculatorViewModel`'s two refusals and
+         `CalculatorRepository.blockedRoomsMessage` — one condition, one sentence. -->
     <string name="calc_cannot_save_rooms">Бу хоналарни сақлаб бўлмайди: %1$s</string>
-    <string name="calc_rejected_title">Юборилмаган буюртмалар</string>
     <string name="calc_rejected_row">%1$s · %2$s</string>
     <string name="calc_rejected_dismiss">Тушунарли</string>
     <!-- «Юбориш» — the quote as a shareable image, task 10 -->
     <string name="calc_action_share">Юбориш</string>
+    <string name="calc_share_failed">Расмни тайёрлаб бўлмади</string>
     <string name="calc_quote_share_subject">Ҳисоб-китоб</string>
     <!-- Company header on the shared quote card — a brand name/tagline, not translated content;
          values match precast-crm/src/lib/table-design-config.ts's DEFAULT_TABLE_DESIGN. -->
@@ -96,4 +105,8 @@
     <string name="calc_quote_company_tagline">Yig\'ma monolit</string>
     <string name="calc_quote_company_phone">998934813330</string>
     <string name="calc_quote_room_unnamed">Номсиз хона</string>
+    <!-- Shown on the shared card only while a discount is actually applied, so a customer never
+         reads a Жами lower than the rooms above it with nothing to explain the difference. -->
+    <string name="calc_quote_discount">Чегирма</string>
+    <string name="calc_quote_discount_percent">Чегирма %1$s</string>
 </resources>

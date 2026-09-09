@@ -794,7 +794,7 @@ class CalculatorViewModelTest {
         v.placeOrder(scheduledAt, ""); advanceUntilIdle()
 
         assertFalse(called)
-        assertEquals("Сақлаб бўлмайдиган хоналар: Хона 2", v.state.value.error)
+        assertEquals("Бу хоналарни сақлаб бўлмайди: Хона 2", v.state.value.error)
     }
 
     /**
