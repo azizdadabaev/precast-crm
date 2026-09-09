@@ -18,6 +18,7 @@ fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hil
     val s by vm.state.collectAsStateWithLifecycle()
     CalculatorScreen(
         s = s,
+        vm = vm,
         onAddRoom = vm::addRoom,
         onDuplicateRoom = vm::duplicateRoom,
         onDeleteRoom = vm::deleteRoom,

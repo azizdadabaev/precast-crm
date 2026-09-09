@@ -70,6 +70,7 @@ fun RoomCard(
     listState: LazyListState,
     keypadTarget: KeypadTarget?,
     expanded: Boolean,
+    vm: CalculatorViewModel,
     onNameChange: (String) -> Unit,
     onOpenField: (KeypadTarget.Field) -> Unit,
     onToggleExpanded: () -> Unit,
@@ -184,6 +185,10 @@ fun RoomCard(
                 if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+
+        if (expanded) {
+            RoomExtras(row = row, vm = vm)
         }
 
         if (!row.canPersist && row.result != null) {

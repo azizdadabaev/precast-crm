@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.calc.DEFAULT_PRICE_CONFIG
+import uz.etalon.crm.core.calc.M2_OVERRIDE_TIERS
+import uz.etalon.crm.core.calc.Pattern
 import uz.etalon.crm.core.calc.PriceConfig
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.beamSchedule
@@ -25,6 +27,10 @@ import javax.inject.Inject
 /** `POST /api/orders` (and the draft route behind it) is gated on this — the calculator itself
  *  stays usable without it; see `CalculatorUiState.canWrite`. */
 private const val ORDER_CREATE = "order.create"
+
+/** `RoomCalcInputBaseSchema.m2PriceReason`'s cap on the server (validation.ts) — `internal` so
+ *  `RateOverrideSheet` can enforce the same limit on the reason field it collects. */
+internal const val MAX_REASON = 200
 
 /**
  * Rooms, the docked keypad's walk, live pricing and totals for a quote — the state and behaviour
@@ -179,6 +185,30 @@ class CalculatorViewModel @Inject constructor(
      *  `SlabRow.canPersist`) still prices and still counts in [CalculatorUiState.totals]; only
      *  [CalculatorUiState.unpersistableRoomNames] marks it as unsavable. */
     fun setExtraBeams(id: String, n: Int) = applyToRow(id) { it.copy(extraBeams = n) }
+
+    /** «Қўшимча»'s remaining editable engine inputs — see [SlabRow] for what each one means
+     *  geometrically. Every one of these is a plain `updateRow`-then-recompute, same shape as
+     *  [setExtraBeams] above. */
+    fun setBearing(id: String, v: Double) = applyToRow(id) { it.copy(bearing = v) }
+    fun setCorrection(id: String, v: Double) = applyToRow(id) { it.copy(correction = v) }
+    fun setForceStartBeam(id: String, on: Boolean) = applyToRow(id) { it.copy(forceStartBeam = on) }
+    /** `null` == the web's "Авто": let the engine auto-pick the pattern. */
+    fun setPattern(id: String, p: Pattern?) = applyToRow(id) { it.copy(patternOverride = p) }
+
+    /**
+     * The reason is MANDATORY here, unlike the web's optional note. A rate that differs from the
+     * tier table is the one number on a quote nobody can reconstruct later, and the phone is where
+     * it gets changed standing in front of the customer. Blank means the override does not happen.
+     */
+    fun applyRateOverride(id: String, price: Double, reason: String) {
+        val note = reason.trim().take(MAX_REASON)          // 200 — RoomCalcInputBaseSchema
+        if (note.isEmpty()) return
+        if (M2_OVERRIDE_TIERS.none { it.price == price }) return
+        applyToRow(id) { it.copy(m2PriceOverride = true, m2PriceOverrideValue = price, m2PriceReason = note) }
+    }
+
+    fun clearRateOverride(id: String) =
+        applyToRow(id) { it.copy(m2PriceOverride = false, m2PriceOverrideValue = null, m2PriceReason = null) }
 
     fun setDiscountMode(m: DiscountMode) = _state.update { recomputeTotals(it.copy(discountMode = m)) }
     fun setDiscountPercent(v: Double) = _state.update { recomputeTotals(it.copy(discountPercent = v)) }

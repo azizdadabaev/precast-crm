@@ -35,6 +35,7 @@ import uz.etalon.crm.core.designsystem.components.NumericKeypad
 @Composable
 fun CalculatorScreen(
     s: CalculatorUiState,
+    vm: CalculatorViewModel,
     onAddRoom: () -> Unit,
     onDuplicateRoom: (String) -> Unit,
     onDeleteRoom: (String) -> Unit,
@@ -85,7 +86,7 @@ fun CalculatorScreen(
             itemsIndexed(s.rows, key = { _, row -> row.id }) { index, row ->
                 RoomCard(
                     row = row, index = index, listState = listState,
-                    keypadTarget = s.keypad, expanded = s.expandedRowId == row.id,
+                    keypadTarget = s.keypad, expanded = s.expandedRowId == row.id, vm = vm,
                     onNameChange = { onSetName(row.id, it) },
                     onOpenField = { field -> onOpenField(row.id, field) },
                     onToggleExpanded = { onToggleExpanded(row.id) },
