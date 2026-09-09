@@ -24,6 +24,7 @@ interface Order {
   status: "PLACED" | "IN_PRODUCTION" | "LOADED" | "DISPATCHED" | "DELIVERED" | "CANCELED";
   paymentState: "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
   confirmedPaid: string;
+  writeOffAmount: string;
   totalPrice: string;
   totalArea: string;
   scheduledAt: string;
@@ -401,7 +402,7 @@ function OrdersList() {
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono">
                         {(() => {
-                          const v = paidVariant(o.confirmedPaid, o.totalPrice);
+                          const v = paidVariant(o.confirmedPaid, o.totalPrice, o.writeOffAmount);
                           if (v === "zero") {
                             return <span className="text-text-tertiary">—</span>;
                           }
