@@ -87,4 +87,13 @@
     <string name="calc_rejected_title">Юборилмаган буюртмалар</string>
     <string name="calc_rejected_row">%1$s · %2$s</string>
     <string name="calc_rejected_dismiss">Тушунарли</string>
+    <!-- «Юбориш» — the quote as a shareable image, task 10 -->
+    <string name="calc_action_share">Юбориш</string>
+    <string name="calc_quote_share_subject">Ҳисоб-китоб</string>
+    <!-- Company header on the shared quote card — a brand name/tagline, not translated content;
+         values match precast-crm/src/lib/table-design-config.ts's DEFAULT_TABLE_DESIGN. -->
+    <string name="calc_quote_company">EtalonSlabs</string>
+    <string name="calc_quote_company_tagline">Yig\'ma monolit</string>
+    <string name="calc_quote_company_phone">998934813330</string>
+    <string name="calc_quote_room_unnamed">Номсиз хона</string>
 </resources>

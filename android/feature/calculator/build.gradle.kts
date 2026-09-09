@@ -9,6 +9,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons)
+    // FileProvider (writeQuotePng, QuoteImage.kt) — already in the version catalog and used by
+    // :app, but not previously wired into this module's own classpath.
+    implementation(libs.androidx.core.ktx)
     testImplementation(project(":core:network"))
     testImplementation(project(":core:testing"))
     testImplementation(libs.roborazzi)

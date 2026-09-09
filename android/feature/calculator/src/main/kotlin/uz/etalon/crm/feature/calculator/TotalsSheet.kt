@@ -1,7 +1,9 @@
 package uz.etalon.crm.feature.calculator
 
+import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,6 +11,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,13 +22,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import uz.etalon.crm.core.calc.money
 import uz.etalon.crm.core.calc.operatorAmountMoney
 import uz.etalon.crm.core.calc.totalPriceMoney
@@ -282,21 +291,28 @@ private fun EditableValueRow(label: String, valueText: String, onClick: () -> Un
 private const val SAVE_MESSAGE_AUTO_DISMISS_MS = 2500L
 
 /**
- * «Буюртма бериш», «Лойиҳани сақлаш» and «Тозалаш», filling [TotalsSheet]'s own `actions` slot —
- * see that composable's KDoc for why the slot exists. All hidden when `!state.canWrite`: the
- * calculator stays usable to quote without `order.create`, but there is nothing to save or place.
+ * «Юбориш», «Буюртма бериш», «Лойиҳани сақлаш» and «Тозалаш», filling [TotalsSheet]'s own
+ * `actions` slot — see that composable's KDoc for why the slot exists.
  *
- * «Буюртма бериш» is the primary and the other two are secondary: this is the action that commits
- * the deal, and the quote-side actions are what lead up to it. It opens [PlaceOrderSheet] rather
- * than submitting on the spot — a delivery date is required, and it is not on this screen.
+ * [ShareQuoteButton] renders first and is the ONE action here not behind `!state.canWrite` —
+ * showing a customer a price on a PNG is not writing an order, so it stays usable to a
+ * quote-only operator the same way the rest of the calculator does. Everything below it — the
+ * rejected-orders record, «Буюртма бериш», «Тозалаш», «Лойиҳани сақлаш» — commits or persists
+ * something server-side and stays gated.
  *
- * [state.rejectedOrders] renders ABOVE all of it and is not part of this quote: it is the record
- * of a DIFFERENT one the server refused after it was queued, by which time the calculator had
- * been cleared. There is nowhere else in the app such an order could surface — it never became an
- * order, so no order screen lists it — so this is where the operator finds out.
+ * «Буюртма бериш» is the primary of the gated group and the other two are secondary: this is the
+ * action that commits the deal, and the quote-side actions are what lead up to it. It opens
+ * [PlaceOrderSheet] rather than submitting on the spot — a delivery date is required, and it is
+ * not on this screen.
+ *
+ * [state.rejectedOrders] renders ABOVE the gated group and is not part of this quote: it is the
+ * record of a DIFFERENT one the server refused after it was queued, by which time the calculator
+ * had been cleared. There is nowhere else in the app such an order could surface — it never
+ * became an order, so no order screen lists it — so this is where the operator finds out.
  */
 @Composable
 fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
+    ShareQuoteButton(state)
     if (!state.canWrite) return
     var showPlaceSheet by remember { mutableStateOf(false) }
 
@@ -358,4 +374,44 @@ fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
             onQueue = vm::queuePlaceOrder,
         )
     }
+}
+
+/**
+ * «Юбориш» — captures [QuoteCard] to a PNG and opens the system share sheet. Enabled once at
+ * least one room has priced (an empty quote has nothing to hand over); NOT gated on
+ * `state.canWrite` — see [CalculatorActions]'s own KDoc for why.
+ *
+ * [QuoteCard] is composed unconditionally through [ZeroSizeCapture], every recomposition, not
+ * only while this sheet is dragged open — `BottomSheetScaffold` composes the WHOLE sheet content
+ * regardless of the collapsed/expanded anchor (see [TotalsSheet]'s own KDoc), so the layer already
+ * holds a fresh frame the moment the operator taps, whichever anchor the sheet is sitting at.
+ */
+@Composable
+private fun ShareQuoteButton(state: CalculatorUiState) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val layer = rememberGraphicsLayer()
+    var sharing by remember { mutableStateOf(false) }
+    val subject = stringResource(R.string.calc_quote_share_subject)
+
+    ZeroSizeCapture {
+        Box(Modifier.drawWithContent { layer.record { this@drawWithContent.drawContent() } }) {
+            QuoteCard(state)
+        }
+    }
+
+    SecondaryButton(
+        text = stringResource(R.string.calc_action_share),
+        onClick = {
+            sharing = true
+            scope.launch {
+                val uri = writeQuotePng(context, layer.toImageBitmap())
+                context.startActivity(Intent.createChooser(shareQuoteIntent(uri, subject), null))
+                sharing = false
+            }
+        },
+        enabled = state.rows.any { it.result != null } && !sharing,
+        loading = sharing,
+        leading = Icons.Filled.Share,
+    )
 }
