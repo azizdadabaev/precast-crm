@@ -21,12 +21,21 @@ import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Pricing
 
-/** No screenshot here ever expands a room's card (see [state]'s `expandedRowId`), so this vm is
- *  wired through to [CalculatorScreen] purely to satisfy its signature — `RoomCard` needs one to
- *  reach `RoomExtras`' setters, but nothing in these frames ever calls into it. */
+/** [CalculatorScreen] itself carries no `CalculatorViewModel` — `RoomCard`/`RoomExtras` take a
+ *  plain [RoomExtrasCallbacks] instead. This vm exists only because `totalsSheetContent` renders
+ *  `TotalsSheet`, which still takes one (`TotalsSheet.kt`'s own signature, untouched here); nothing
+ *  in these frames ever calls into any of its methods either way. */
 private class InertSessionPricing : SessionPricing {
     override val pricing: StateFlow<Pricing?> = MutableStateFlow(null)
 }
+
+/** Every room-level callback as a no-op — no screenshot here interacts with «Қўшимча», it only
+ *  renders it (see [expandedState]). */
+private val NOOP_ROOM_CALLBACKS = RoomExtrasCallbacks(
+    onExtraBeams = { _, _ -> }, onBearing = { _, _ -> }, onCorrection = { _, _ -> },
+    onForceStartBeam = { _, _ -> }, onPattern = { _, _ -> },
+    onApplyRateOverride = { _, _, _ -> }, onClearRateOverride = {},
+)
 
 /**
  * One baseline: two priced rooms (a Б-Г-Б and a Г-Б-Г case, so both a pattern chip and a real
@@ -89,14 +98,16 @@ class CalculatorScreenshotTest {
     }
 
     private fun content(s: CalculatorUiState, dark: Boolean) {
+        val vm = CalculatorViewModel(session = InertSessionPricing(), permissions = PermissionGate { false })
         rule.setContent {
             EtalonTheme(darkTheme = dark) {
                 CalculatorScreen(
                     s = s,
-                    vm = CalculatorViewModel(session = InertSessionPricing(), permissions = PermissionGate { false }),
+                    roomCallbacks = NOOP_ROOM_CALLBACKS,
                     onAddRoom = {}, onDuplicateRoom = {}, onDeleteRoom = {}, onMoveRoom = { _, _ -> },
                     onSetName = { _, _ -> }, onToggleExpanded = {}, onOpenField = { _, _ -> },
                     onKeypadValue = {}, onKeypadConfirm = {},
+                    totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
                 )
             }
         }

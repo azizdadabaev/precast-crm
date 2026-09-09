@@ -70,7 +70,7 @@ fun RoomCard(
     listState: LazyListState,
     keypadTarget: KeypadTarget?,
     expanded: Boolean,
-    vm: CalculatorViewModel,
+    callbacks: RoomExtrasCallbacks,
     onNameChange: (String) -> Unit,
     onOpenField: (KeypadTarget.Field) -> Unit,
     onToggleExpanded: () -> Unit,
@@ -188,7 +188,7 @@ fun RoomCard(
         }
 
         if (expanded) {
-            RoomExtras(row = row, vm = vm)
+            RoomExtras(row = row, callbacks = callbacks)
         }
 
         if (!row.canPersist && row.result != null) {

@@ -26,12 +26,12 @@ import uz.etalon.crm.core.calc.Pattern
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.autoPickedRate
 import uz.etalon.crm.core.calc.money
+import uz.etalon.crm.core.calc.tierPriceMoney
 import uz.etalon.crm.core.designsystem.components.CountStepper
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.theme.EtalonType
-import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.ui.format.formatCount
 import uz.etalon.crm.core.ui.format.formatMeters
 import uz.etalon.crm.core.ui.format.formatMoney
@@ -41,28 +41,33 @@ import uz.etalon.crm.core.ui.format.formatMoney
  *  docked ЭНИ/БЎЙИ walk [CalculatorViewModel.openKeypad] drives on the collapsed card. */
 private enum class ExtrasKeypadField { BEARING, CORRECTION }
 
-/**
- * [autoPickedRate] and every [uz.etalon.crm.core.calc.M2_OVERRIDE_TIERS] price are always a
- * whole-UZS figure straight out of the engine's tier tables — never a fraction of a tiyin — so
- * routing it through [Money.parse] (the same public conversion the rest of the app uses for a
- * server decimal string) is exact. `:core:calc`'s own `moneyOf` does the equivalent job but is
- * `internal` to that module on purpose (see its KDoc); this is the boundary-respecting way to
- * render one of its raw `Double`s as [Money] from a feature module.
- */
-internal fun Double.asTierMoney(): Money = Money.parse(toLong().toString())
-
 /** Parses the keypad's comma-decimal text the same way [CalculatorViewModel.commitKeypad] does:
  *  an empty or unparsable pad commits as `0.0` rather than leaving the field untouched. */
 private fun parseKeypadValue(text: String): Double = text.replace(',', '.').toDoubleOrNull() ?: 0.0
 
 /**
+ * The seven room-level engine-input setters «Қўшимча» needs — bundled into one holder so
+ * [RoomCard]/[RoomExtras] take a single parameter instead of seven, rather than a raw
+ * [CalculatorViewModel] reaching this deep: every other feature's `*Screen` is plain data in,
+ * plain callbacks out, with the ViewModel staying behind in its `*Route`. Built once in
+ * [CalculatorRoute] from `vm::…` references.
+ */
+data class RoomExtrasCallbacks(
+    val onExtraBeams: (id: String, n: Int) -> Unit,
+    val onBearing: (id: String, v: Double) -> Unit,
+    val onCorrection: (id: String, v: Double) -> Unit,
+    val onForceStartBeam: (id: String, on: Boolean) -> Unit,
+    val onPattern: (id: String, p: Pattern?) -> Unit,
+    val onApplyRateOverride: (id: String, price: Double, reason: String) -> Unit,
+    val onClearRateOverride: (id: String) -> Unit,
+)
+
+/**
  * «Қўшимча»: the seven remaining engine inputs, split from the engine's own read-only working-out
- * underneath them — never mixed, per the design. [vm] is called directly rather than threaded back
- * up through a wall of callbacks: this panel alone needs nine of them, and only one room's panel
- * is ever open at a time.
+ * underneath them — never mixed, per the design.
  */
 @Composable
-fun RoomExtras(row: SlabRow, vm: CalculatorViewModel) {
+fun RoomExtras(row: SlabRow, callbacks: RoomExtrasCallbacks) {
     val r = row.result
     var keypadField by remember(row.id) { mutableStateOf<ExtrasKeypadField?>(null) }
     var showRateSheet by remember(row.id) { mutableStateOf(false) }
@@ -84,7 +89,7 @@ fun RoomExtras(row: SlabRow, vm: CalculatorViewModel) {
             CountStepper(
                 label = stringResource(R.string.calc_field_extra_beams),
                 value = row.extraBeams,
-                onChange = { vm.setExtraBeams(row.id, it) },
+                onChange = { callbacks.onExtraBeams(row.id, it) },
             )
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp),
@@ -92,24 +97,25 @@ fun RoomExtras(row: SlabRow, vm: CalculatorViewModel) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(stringResource(R.string.calc_field_start_beam), style = MaterialTheme.typography.bodyMedium)
-                Switch(checked = row.forceStartBeam, onCheckedChange = { vm.setForceStartBeam(row.id, it) })
+                Switch(checked = row.forceStartBeam, onCheckedChange = { callbacks.onForceStartBeam(row.id, it) })
             }
+            SectionLabel(stringResource(R.string.calc_field_pattern))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PatternChip(
                     stringResource(R.string.calc_pattern_auto), row.patternOverride == null,
-                    { vm.setPattern(row.id, null) }, Modifier.weight(1f),
+                    { callbacks.onPattern(row.id, null) }, Modifier.weight(1f),
                 )
                 PatternChip(
                     stringResource(R.string.calc_pattern_gb), row.patternOverride == Pattern.GB,
-                    { vm.setPattern(row.id, Pattern.GB) }, Modifier.weight(1f),
+                    { callbacks.onPattern(row.id, Pattern.GB) }, Modifier.weight(1f),
                 )
                 PatternChip(
                     stringResource(R.string.calc_pattern_bgb), row.patternOverride == Pattern.BGB,
-                    { vm.setPattern(row.id, Pattern.BGB) }, Modifier.weight(1f),
+                    { callbacks.onPattern(row.id, Pattern.BGB) }, Modifier.weight(1f),
                 )
                 PatternChip(
                     stringResource(R.string.calc_pattern_gbg), row.patternOverride == Pattern.GBG,
-                    { vm.setPattern(row.id, Pattern.GBG) }, Modifier.weight(1f),
+                    { callbacks.onPattern(row.id, Pattern.GBG) }, Modifier.weight(1f),
                 )
             }
             if (r != null) {
@@ -130,7 +136,7 @@ fun RoomExtras(row: SlabRow, vm: CalculatorViewModel) {
                     }
                     if (row.m2PriceOverride) {
                         Text(
-                            stringResource(R.string.calc_rate_auto, formatMoney(autoPickedRate(row).asTierMoney())),
+                            stringResource(R.string.calc_rate_auto, formatMoney(tierPriceMoney(autoPickedRate(row)))),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -173,8 +179,8 @@ fun RoomExtras(row: SlabRow, vm: CalculatorViewModel) {
             onConfirm = { text ->
                 val value = parseKeypadValue(text)
                 when (field) {
-                    ExtrasKeypadField.BEARING -> vm.setBearing(row.id, value)
-                    ExtrasKeypadField.CORRECTION -> vm.setCorrection(row.id, value)
+                    ExtrasKeypadField.BEARING -> callbacks.onBearing(row.id, value)
+                    ExtrasKeypadField.CORRECTION -> callbacks.onCorrection(row.id, value)
                 }
                 keypadField = null
             },
@@ -186,8 +192,8 @@ fun RoomExtras(row: SlabRow, vm: CalculatorViewModel) {
         RateOverrideSheet(
             row = row,
             onDismiss = { showRateSheet = false },
-            onApply = { price, reason -> vm.applyRateOverride(row.id, price, reason); showRateSheet = false },
-            onClear = { vm.clearRateOverride(row.id); showRateSheet = false },
+            onApply = { price, reason -> callbacks.onApplyRateOverride(row.id, price, reason); showRateSheet = false },
+            onClear = { callbacks.onClearRateOverride(row.id); showRateSheet = false },
         )
     }
 }

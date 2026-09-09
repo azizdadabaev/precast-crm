@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,15 +36,17 @@ import uz.etalon.crm.core.designsystem.components.NumericKeypad
  * The room list, docked directly above the keypad rather than a `ModalBottomSheet` — see
  * `NumericKeypadSheet.kt`'s KDoc for why — with the totals sheet ([TotalsSheet]) as a second,
  * PERSISTENT bottom sheet beneath it (`BottomSheetScaffold`, never `Hidden` — see
- * `TotalsSheet.kt`'s KDoc). The screen renders [CalculatorUiState] and sends events back through
- * the callbacks; it computes nothing itself — every figure a room card or the totals sheet shows
- * came off [CalculatorViewModel] already.
+ * `TotalsSheet.kt`'s KDoc). [totalsSheetContent] is that sheet's content, handed in by the caller
+ * rather than built here: this screen carries no `CalculatorViewModel` of its own, matching every
+ * other feature's `*Route`/`*Screen` split — only [CalculatorRoute] knows about the ViewModel.
+ * The screen renders [CalculatorUiState] and sends events back through the callbacks; it computes
+ * nothing itself — every figure a room card shows came off the engine already.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalculatorScreen(
     s: CalculatorUiState,
-    vm: CalculatorViewModel,
+    roomCallbacks: RoomExtrasCallbacks,
     onAddRoom: () -> Unit,
     onDuplicateRoom: (String) -> Unit,
     onDeleteRoom: (String) -> Unit,
@@ -53,6 +56,7 @@ fun CalculatorScreen(
     onOpenField: (String, KeypadTarget.Field) -> Unit,
     onKeypadValue: (String) -> Unit,
     onKeypadConfirm: () -> Unit,
+    totalsSheetContent: @Composable ColumnScope.() -> Unit,
 ) {
     val listState = rememberLazyListState()
     // Keeps the room the keypad is walking through on screen: a Кейинги from the last visible
@@ -70,7 +74,7 @@ fun CalculatorScreen(
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
         sheetPeekHeight = 88.dp,
-        sheetContent = { TotalsSheet(state = s, vm = vm) {} },
+        sheetContent = totalsSheetContent,
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
             Column(Modifier.fillMaxSize()) {
@@ -86,7 +90,7 @@ fun CalculatorScreen(
                     itemsIndexed(s.rows, key = { _, row -> row.id }) { index, row ->
                         RoomCard(
                             row = row, index = index, listState = listState,
-                            keypadTarget = s.keypad, expanded = s.expandedRowId == row.id, vm = vm,
+                            keypadTarget = s.keypad, expanded = s.expandedRowId == row.id, callbacks = roomCallbacks,
                             onNameChange = { onSetName(row.id, it) },
                             onOpenField = { field -> onOpenField(row.id, field) },
                             onToggleExpanded = { onToggleExpanded(row.id) },

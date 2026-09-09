@@ -16,9 +16,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
+    val roomCallbacks = RoomExtrasCallbacks(
+        onExtraBeams = vm::setExtraBeams,
+        onBearing = vm::setBearing,
+        onCorrection = vm::setCorrection,
+        onForceStartBeam = vm::setForceStartBeam,
+        onPattern = vm::setPattern,
+        onApplyRateOverride = vm::applyRateOverride,
+        onClearRateOverride = vm::clearRateOverride,
+    )
     CalculatorScreen(
         s = s,
-        vm = vm,
+        roomCallbacks = roomCallbacks,
         onAddRoom = vm::addRoom,
         onDuplicateRoom = vm::duplicateRoom,
         onDeleteRoom = vm::deleteRoom,
@@ -28,5 +37,6 @@ fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hil
         onOpenField = { id, field -> vm.openKeypad(KeypadTarget(id, field)) },
         onKeypadValue = vm::setKeypadText,
         onKeypadConfirm = vm::nextField,
+        totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
     )
 }
