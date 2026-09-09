@@ -6,14 +6,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.calc.CalculatorDraft
 import uz.etalon.crm.core.calc.DEFAULT_PRICE_CONFIG
+import uz.etalon.crm.core.calc.PlaceOrderInput
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.database.dao.CalculatorDraftDao
 import uz.etalon.crm.core.database.entity.CalculatorDraftEntity
+import uz.etalon.crm.core.image.PreparedImage
+import uz.etalon.crm.core.model.OutboxKind
+import uz.etalon.crm.core.network.dto.OrderPlacedDto
+import uz.etalon.crm.core.network.dto.PlaceOrderRequest
 import uz.etalon.crm.core.network.dto.ProjectSavedDto
 import uz.etalon.crm.core.network.dto.SaveProjectDraftRequest
 import uz.etalon.crm.core.testing.FakeEtalonApi
@@ -39,6 +46,53 @@ private class CalcRecordingApi : CalcStubApi() {
         return response
     }
 }
+
+/** Records what the queued path wrote, so "the offline order is the SAME order" can be asserted
+ *  against the bytes rather than assumed. Mirrors `LogisticsRepositoryTest`'s `SpyOutbox`. */
+private class CalcSpyOutbox : OutboxGateway {
+    data class Enqueued(val kind: OutboxKind, val orderId: String?, val rowId: String?, val payload: JsonObject)
+    val calls = mutableListOf<Enqueued>()
+    val failed = MutableStateFlow<List<FailedOutboxRow>>(emptyList())
+    val discarded = mutableListOf<String>()
+    override suspend fun enqueue(
+        kind: OutboxKind, orderId: String?, shipmentId: String?, paymentId: String?,
+        photo: PreparedImage?, payload: JsonObject, rowId: String?,
+    ): String {
+        calls += Enqueued(kind, orderId, rowId, payload)
+        return rowId ?: "outbox-${calls.size}"
+    }
+    override fun observeFailed(kind: OutboxKind): Flow<List<FailedOutboxRow>> = failed
+    override suspend fun discard(id: String) { discarded += id }
+}
+
+private class CalcPlacingApi : CalcStubApi() {
+    var lastRequest: PlaceOrderRequest? = null
+    var lastIdempotencyKey: String? = null
+    var lastAuthorization: String? = "not-called"
+    var failure: Throwable? = null
+    override suspend fun placeOrder(body: PlaceOrderRequest, idempotencyKey: String, authorization: String?): OrderPlacedDto {
+        lastRequest = body; lastIdempotencyKey = idempotencyKey; lastAuthorization = authorization
+        failure?.let { throw it }
+        return OrderPlacedDto("order-1", "2609-001")
+    }
+}
+
+/** The ISO instant `PlaceOrderSheet.scheduledAtInstant` produces for a Tashkent calendar day. */
+private const val SCHEDULED_AT = "2026-09-20T00:00:00+05:00"
+
+private fun placeInput(
+    rows: List<SlabRow>, notes: String = "", scheduledAt: String = SCHEDULED_AT,
+    deliveryCost: Double = 0.0, otherCost: Double = 0.0, clientName: String = "Aziz",
+    clientAddress: String = "Тошкент, Юнусобод, 12-уй", clientPhone: String = "901234567",
+) = PlaceOrderInput(
+    draft = CalculatorDraft(
+        rows = rows, clientPhone = clientPhone, clientName = clientName, clientAddress = clientAddress,
+        discountPercent = 0.0, discountAmount = 0.0, deliveryCost = deliveryCost, otherCost = otherCost,
+        projectId = null,
+    ),
+    scheduledAt = scheduledAt,
+    notes = notes,
+)
 
 private val CALC_GRANTED = PermissionGate { true }
 private fun user(id: String?) = CurrentUser { id }
@@ -67,7 +121,8 @@ class CalculatorRepositoryTest {
     private fun repo(
         api: FakeEtalonApi, permissions: PermissionGate = CALC_GRANTED,
         currentUser: CurrentUser = user("u1"), dao: CalculatorDraftDao = FakeDraftDao(),
-    ) = CalculatorRepository(dao, api, permissions, currentUser, jsonInstance())
+        outbox: OutboxGateway = CalcSpyOutbox(),
+    ) = CalculatorRepository(dao, api, permissions, currentUser, jsonInstance(), outbox)
 
     // ── saveDraft: the wire request ─────────────────────────────────
 
@@ -172,5 +227,162 @@ class CalculatorRepositoryTest {
             assertNull(awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    // ── placeOrder: the wire request ────────────────────────────────
+
+    @Test fun `placeOrder sends the whole body, the caller's key, and no pinned credential`() = runTest {
+        val api = CalcPlacingApi()
+        val id = repo(api).placeOrder(
+            placeInput(rows = listOf(room("A"), room("B")), notes = " иккинчи қават ", deliveryCost = 150_000.0, otherCost = 25_000.0),
+            "idem-order-1",
+        ).getOrThrow()
+
+        assertEquals("order-1", id)
+        val sent = api.lastRequest!!
+        assertEquals("998901234567", sent.clientPhone)
+        assertEquals("Aziz", sent.clientName)
+        assertEquals(listOf("A", "B"), sent.rooms.map { it.name })
+        assertEquals(SCHEDULED_AT, sent.scheduledAt)
+        assertEquals("иккинчи қават", sent.notes)
+        assertEquals(0, BigDecimal("150000").compareTo(sent.deliveryCost))
+        assertEquals(0, BigDecimal("25000").compareTo(sent.otherCost))
+        assertEquals("idem-order-1", api.lastIdempotencyKey)
+        // Null, not a placeholder: the interceptor supplies the live token for an online tap.
+        // Only the outbox drain pins a credential.
+        assertNull(api.lastAuthorization)
+    }
+
+    /** Prepayment at placement is a later slice, designed for offline — see `PlaceOrderRequest`'s
+     *  own KDoc. Zero here is a decision, and `PlaceOrderSchema`'s refinement only demands a
+     *  `paymentMethod` once this is positive. */
+    @Test fun `placeOrder never attaches a payment`() = runTest {
+        val api = CalcPlacingApi()
+        repo(api).placeOrder(placeInput(rows = listOf(room("A"))), "idem-order-1").getOrThrow()
+
+        assertEquals(0, BigDecimal.ZERO.compareTo(api.lastRequest!!.paidAmount))
+        assertEquals(emptyList<String>(), api.lastRequest!!.receiptUrls)
+    }
+
+    @Test fun `placeOrder is refused without order_create, before the network`() = runTest {
+        val api = CalcPlacingApi()
+        val r = repo(api, permissions = PermissionGate { false }).placeOrder(placeInput(rows = listOf(room("A"))), "idem-order-1")
+
+        assertTrue(r.isFailure)
+        assertNull(api.lastRequest)
+    }
+
+    @Test fun `placing with an extras-only room never reaches the API`() = runTest {
+        val api = CalcPlacingApi()
+        val r = repo(api).placeOrder(placeInput(rows = listOf(room("A"), extrasOnlyRoom("B"))), "idem-order-1")
+
+        assertTrue(r.isFailure)
+        assertNull(api.lastRequest, "the unpersistable room must block the whole order, not just be dropped")
+    }
+
+    /** `PlaceOrderSchema.rooms` is `min(1)`. */
+    @Test fun `placing with no rooms never reaches the API`() = runTest {
+        val api = CalcPlacingApi()
+        assertTrue(repo(api).placeOrder(placeInput(rows = emptyList()), "idem-order-1").isFailure)
+        assertNull(api.lastRequest)
+    }
+
+    /** All three client fields are required here, unlike on the draft route — a quote that saves
+     *  perfectly well as a project can still be unplaceable. */
+    @Test fun `placing without a full client never reaches the API`() = runTest {
+        for (input in listOf(
+            placeInput(rows = listOf(room("A")), clientName = "  "),
+            placeInput(rows = listOf(room("A")), clientAddress = ""),
+            placeInput(rows = listOf(room("A")), clientPhone = ""),
+        )) {
+            val api = CalcPlacingApi()
+            assertTrue(repo(api).placeOrder(input, "idem-order-1").isFailure)
+            assertNull(api.lastRequest)
+        }
+    }
+
+    @Test fun `placing without a date never reaches the API`() = runTest {
+        val api = CalcPlacingApi()
+        assertTrue(repo(api).placeOrder(placeInput(rows = listOf(room("A")), scheduledAt = ""), "idem-order-1").isFailure)
+        assertNull(api.lastRequest)
+    }
+
+    // ── queuePlaceOrder: the SAME order, sent later ─────────────────
+
+    /**
+     * The equality this whole offline path rests on: what the queue stores must round-trip to
+     * exactly the `PlaceOrderRequest` the online path would have sent. Anything else and the
+     * order the customer signed off on is not the order that eventually reaches the server.
+     */
+    @Test fun `the queued JSON round-trips to the same request the online path would send`() = runTest {
+        val input = placeInput(
+            rows = listOf(room("A"), room("B").copy(m2PriceOverride = true, m2PriceOverrideValue = 160000.0, m2PriceReason = "чегирма")),
+            notes = "тезкор", deliveryCost = 150_000.0, otherCost = 25_000.0,
+        )
+        val online = CalcPlacingApi()
+        repo(online).placeOrder(input, "idem-order-1").getOrThrow()
+
+        val outbox = CalcSpyOutbox()
+        repo(CalcPlacingApi(), outbox = outbox).queuePlaceOrder(input, "idem-order-1").getOrThrow()
+
+        val queued = jsonInstance().decodeFromJsonElement(PlaceOrderRequest.serializer(), outbox.calls.single().payload)
+        assertEquals(online.lastRequest, queued)
+    }
+
+    /** The row's id IS the key the worker sends, so it must be the caller's — the same one the
+     *  online attempt used. A fresh one would place a second real order against a server that had
+     *  already committed the first attempt whose response was lost. */
+    @Test fun `the queued row carries no order id and takes the caller's key as its id`() = runTest {
+        val outbox = CalcSpyOutbox()
+        val rowId = repo(CalcPlacingApi(), outbox = outbox)
+            .queuePlaceOrder(placeInput(rows = listOf(room("A"))), "idem-order-1").getOrThrow()
+
+        val call = outbox.calls.single()
+        assertEquals(OutboxKind.PLACE_ORDER, call.kind)
+        assertNull(call.orderId, "the order is what this row is going to create")
+        assertEquals("idem-order-1", call.rowId)
+        assertEquals("idem-order-1", rowId)
+    }
+
+    /** Every refusal the online path makes, the queued path makes too — a row that could only ever
+     *  422 would fail hours later with the operator nowhere near the customer. */
+    @Test fun `a refused order is never queued either`() = runTest {
+        val outbox = CalcSpyOutbox()
+        val r = repo(CalcPlacingApi(), permissions = PermissionGate { false }, outbox = outbox)
+            .queuePlaceOrder(placeInput(rows = listOf(room("A"))), "idem-order-1")
+
+        assertTrue(r.isFailure)
+        assertTrue(outbox.calls.isEmpty())
+    }
+
+    // ── rejections: findable, not silent ────────────────────────────
+
+    @Test fun `a rejected queued order surfaces with its customer and the server's message`() = runTest {
+        val outbox = CalcSpyOutbox()
+        val repo = repo(CalcPlacingApi(), outbox = outbox)
+        outbox.failed.value = listOf(
+            FailedOutboxRow(
+                id = "row-1",
+                error = "Мижоз манзили керак",
+                payload = jsonInstance().encodeToJsonElement(
+                    PlaceOrderRequest.serializer(),
+                    PlaceOrderRequest(
+                        clientName = "Aziz", clientPhone = "998901234567", clientAddress = "Тошкент",
+                        rooms = emptyList(), scheduledAt = SCHEDULED_AT,
+                    ),
+                ).jsonObject,
+            ),
+        )
+
+        repo.observeRejectedOrders().test {
+            val rejected = awaitItem().single()
+            assertEquals("row-1", rejected.id)
+            assertEquals("Aziz", rejected.clientName)
+            assertEquals("Мижоз манзили керак", rejected.message)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        repo.discardRejectedOrder("row-1")
+        assertEquals(listOf("row-1"), outbox.discarded)
     }
 }

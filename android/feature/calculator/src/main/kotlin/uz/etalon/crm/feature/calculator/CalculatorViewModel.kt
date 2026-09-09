@@ -23,6 +23,7 @@ import uz.etalon.crm.core.calc.CalculatorDraft
 import uz.etalon.crm.core.calc.DEFAULT_PRICE_CONFIG
 import uz.etalon.crm.core.calc.M2_OVERRIDE_TIERS
 import uz.etalon.crm.core.calc.Pattern
+import uz.etalon.crm.core.calc.PlaceOrderInput
 import uz.etalon.crm.core.calc.PriceConfig
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.beamSchedule
@@ -35,9 +36,11 @@ import uz.etalon.crm.core.calc.toPriceConfig
 import uz.etalon.crm.core.data.CalculatorRepository
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
+import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.data.mapper.normalizePhone
 import uz.etalon.crm.core.data.toAppError
+import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.ui.regions.ParsedAddress
 import uz.etalon.crm.core.ui.regions.composeAddress
 import uz.etalon.crm.core.ui.regions.parseAddress
@@ -54,6 +57,16 @@ private const val NO_PERMISSION_MESSAGE = "Буюртма яратишга ру�
 
 private const val SAVE_SUCCESS_MESSAGE = "Лойиҳа сақланди"
 
+/** Shown after a placement is queued. The order is not placed yet — it will be, the moment there
+ *  is a signal — and the message says exactly that rather than implying it is done. */
+internal const val QUEUED_MESSAGE = "Интернет пайдо бўлганда юборилади"
+
+/** Mirrors `CalculatorRepository.toRequest`'s own refusals, so the sheet never offers an action
+ *  the server would reject. */
+private const val NO_ROOMS_MESSAGE = "Камида битта хона керак"
+private const val CLIENT_INCOMPLETE_MESSAGE = "Мижоз маълумотлари тўлиқ эмас"
+private const val NO_DATE_MESSAGE = "Етказиб бериш санасини танланг"
+
 /** How long after any mutation the ViewModel waits before writing the draft to Room — long
  *  enough that a keystroke walk through a room's fields is one write, not one per keystroke. */
 private const val AUTOSAVE_DEBOUNCE_MS = 500L
@@ -63,13 +76,24 @@ private const val AUTOSAVE_DEBOUNCE_MS = 500L
 private const val KEY_IDEMPOTENCY = "calc.idempotencyKey"
 private const val KEY_IDEMPOTENCY_FOR = "calc.idempotencyFor"
 
+/**
+ * The Place-Order key and its submission, kept in their OWN [SavedStateHandle] slots — never the
+ * two above. The server scopes an idempotency key as `${user.id}:${key}` and answers
+ * `IDEMPOTENT_ROUTE_MISMATCH` when a key first used on one route is replayed against another, so a
+ * key that saved a draft to `POST /api/projects` would be REJECTED by `POST /api/orders`. Two
+ * routes, two keys.
+ */
+private const val KEY_PLACE_IDEMPOTENCY = "calc.placeIdempotencyKey"
+private const val KEY_PLACE_IDEMPOTENCY_FOR = "calc.placeIdempotencyFor"
+
 /** `RoomCalcInputBaseSchema.m2PriceReason`'s cap on the server (validation.ts) — `internal` so
  *  `RateOverrideSheet` can enforce the same limit on the reason field it collects. */
 internal const val MAX_REASON = 200
 
 /** `normalizePhone` turns exactly nine digits into `998` + those nine — the same figure
- *  `ClientEditViewModel`'s own `LOCAL_PHONE_DIGITS` uses. */
-private const val CLIENT_PHONE_DIGITS = 9
+ *  `ClientEditViewModel`'s own `LOCAL_PHONE_DIGITS` uses. `internal` so `PlaceOrderSheet.kt`'s
+ *  `canPlaceClient` tests the SAME figure rather than a copy that could drift from it. */
+internal const val CLIENT_PHONE_DIGITS = 9
 
 /** How long the client bar waits after the ninth digit before asking `findByPhone` — long enough
  *  that a nine-digit phone is one request, not nine; short enough the operator does not notice.
@@ -95,6 +119,22 @@ fun interface ClearDraftUseCase {
 
 fun interface SaveDraftUseCase {
     suspend operator fun invoke(draft: CalculatorDraft, idempotencyKey: String): Result<String>
+}
+
+fun interface PlaceOrderUseCase {
+    suspend operator fun invoke(input: PlaceOrderInput, idempotencyKey: String): Result<String>
+}
+
+fun interface QueuePlaceOrderUseCase {
+    suspend operator fun invoke(input: PlaceOrderInput, idempotencyKey: String): Result<String>
+}
+
+fun interface ObserveRejectedOrdersUseCase {
+    operator fun invoke(): Flow<List<RejectedOrder>>
+}
+
+fun interface DiscardRejectedOrderUseCase {
+    suspend operator fun invoke(id: String)
 }
 
 /**
@@ -125,6 +165,10 @@ open class CalculatorViewModel(
     private val persistDraft: PersistDraftUseCase = PersistDraftUseCase { },
     private val clearDraftUseCase: ClearDraftUseCase = ClearDraftUseCase { },
     private val saveDraftUseCase: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.failure(IllegalStateException("no draft to save")) },
+    private val placeOrderUseCase: PlaceOrderUseCase = PlaceOrderUseCase { _, _ -> Result.failure(IllegalStateException("no order to place")) },
+    private val queuePlaceOrderUseCase: QueuePlaceOrderUseCase = QueuePlaceOrderUseCase { _, _ -> Result.failure(IllegalStateException("no order to queue")) },
+    private val observeRejectedOrders: ObserveRejectedOrdersUseCase = ObserveRejectedOrdersUseCase { flowOf(emptyList()) },
+    private val discardRejectedOrderUseCase: DiscardRejectedOrderUseCase = DiscardRejectedOrderUseCase { },
     private val saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
@@ -171,6 +215,12 @@ open class CalculatorViewModel(
             // Room row it just deleted the moment its own debounce next elapses — see clearAll's doc.
             _state.map { it.toDraft() }.distinctUntilChanged().filter { it != EMPTY_DRAFT }
                 .debounce(AUTOSAVE_DEBOUNCE_MS).collect { draft -> persistDraft(draft) }
+        }
+        // Rejections outlive the quote they came from: by the time the server refuses a queued
+        // order the calculator has long been cleared, so this is the only surface that can tell
+        // the operator it happened. Collected for the whole life of the screen, not once.
+        viewModelScope.launch {
+            observeRejectedOrders().collect { rejected -> _state.update { it.copy(rejectedOrders = rejected) } }
         }
         // Collected once, here: until it lands every row prices against DEFAULT_PRICE_CONFIG,
         // which is what an operator's real bootstrap Pricing reproduces anyway (see
@@ -374,6 +424,11 @@ open class CalculatorViewModel(
                 clientPhoneDigits = "", clientName = "", clientAddress = ParsedAddress("", "", ""),
                 matchedClientId = null, clientLookupError = null, clientBarCollapsed = false,
                 projectId = null, saveMessage = null, saving = false,
+                // Same reasoning as `saving`: a stale placement's completion discards itself, so
+                // nothing else would ever put the spinner down. [rejectedOrders] is deliberately
+                // NOT cleared — it is not part of this quote, it is the record of a DIFFERENT one
+                // the server refused, and «Тозалаш» must not be a way to lose that.
+                placing = false, queueOffered = false,
             )
         }
         viewModelScope.launch { clearDraftUseCase() }
@@ -446,6 +501,115 @@ open class CalculatorViewModel(
             saved[KEY_IDEMPOTENCY] = UUID.randomUUID().toString()
         }
         return requireNotNull(saved.get<String>(KEY_IDEMPOTENCY))
+    }
+
+    // ── «Буюртма бериш» ─────────────────────────────────────────────
+
+    /**
+     * Places the order now. [scheduledAt] is the ISO-8601 instant the sheet resolved from the
+     * operator's picked date; [notes] is whatever they wrote.
+     *
+     * Refuses the same five ways `CalculatorRepository.toRequest` does — no `order.create`, an
+     * unpersistable room, no rooms, an incomplete client, no date — so a placement that would 422
+     * never leaves the device and, more importantly, is never QUEUED to fail hours later with the
+     * operator nowhere near the customer.
+     *
+     * On success the quote is cleared, exactly as the web does after Place Order: the deal is
+     * committed and the calculator is free for the next customer. On a NETWORK failure the sheet
+     * is offered «Навбатга қўйиш» instead — see [queuePlaceOrder] for why that must reuse this
+     * submission's key, not mint a new one.
+     */
+    fun placeOrder(scheduledAt: String, notes: String) = submitPlacement(scheduledAt, notes, queue = false)
+
+    /**
+     * Queues the order for the outbox. Its key is the SAME one [placeOrder] pinned for this
+     * submission: the ordinary way here is an online attempt that died on the network, where the
+     * server may already have committed the order, and a fresh key would place a second real one.
+     */
+    fun queuePlaceOrder(scheduledAt: String, notes: String) = submitPlacement(scheduledAt, notes, queue = true)
+
+    private fun submitPlacement(scheduledAt: String, notes: String, queue: Boolean) {
+        val s = _state.value
+        if (s.placing || s.saving) return
+        val refusal = placementRefusal(s, scheduledAt)
+        if (refusal != null) {
+            _state.update { it.copy(error = refusal) }
+            return
+        }
+        val input = PlaceOrderInput(draft = s.toDraft(), scheduledAt = scheduledAt, notes = notes)
+        val key = placeIdempotencyKeyFor(input)
+        // Captured before the request goes out — see clearAll's own doc for why a result that
+        // comes back after the operator has cleared the quote must be discarded, not applied.
+        val generation = draftGeneration
+        _state.update { it.copy(placing = true, error = null, saveMessage = null, queueOffered = false) }
+        viewModelScope.launch {
+            val result = if (queue) queuePlaceOrderUseCase(input, key) else placeOrderUseCase(input, key)
+            if (draftGeneration != generation) return@launch
+            result.fold(
+                onSuccess = { id ->
+                    // clearAll bumps draftGeneration itself, so nothing captured earlier can
+                    // write onto the fresh quote afterwards; both writes below happen after it,
+                    // deliberately, because they are about the order that was just committed.
+                    clearAll()
+                    if (queue) {
+                        _state.update { it.copy(saveMessage = QUEUED_MESSAGE) }
+                    } else {
+                        _state.update { it.copy(placedOrderId = id) }
+                    }
+                },
+                onFailure = { t ->
+                    val err = t.toAppError()
+                    _state.update {
+                        it.copy(
+                            placing = false, error = err.message,
+                            // Only a lost signal is queueable. A 422 is the server refusing this
+                            // body on the merits; queueing it would fail again, later, invisibly.
+                            queueOffered = !queue && err is AppError.Network,
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    /** The route has navigated to the placed order — see [CalculatorUiState.placedOrderId]. */
+    fun consumePlacedOrder() = _state.update { it.copy(placedOrderId = null) }
+
+    /** The operator has read the rejection and is done with it. */
+    fun discardRejectedOrder(id: String) {
+        viewModelScope.launch { discardRejectedOrderUseCase(id) }
+    }
+
+    /** Why this quote may not be placed, in Uzbek — or null when it may. Mirrors
+     *  `CalculatorRepository.toRequest`'s refusals so the screen never offers an action the
+     *  repository would only refuse a layer later. */
+    private fun placementRefusal(s: CalculatorUiState, scheduledAt: String): String? = when {
+        !s.canWrite -> NO_PERMISSION_MESSAGE
+        s.unpersistableRoomNames.isNotEmpty() ->
+            "Сақлаб бўлмайдиган хоналар: " + s.unpersistableRoomNames.joinToString(", ")
+        s.rows.none { it.canPersist } -> NO_ROOMS_MESSAGE
+        !canPlaceClient(s) -> CLIENT_INCOMPLETE_MESSAGE
+        scheduledAt.isBlank() -> NO_DATE_MESSAGE
+        else -> null
+    }
+
+    /**
+     * The Idempotency-Key for ONE placement — the same rule [idempotencyKeyFor] follows for the
+     * draft route, over its own [SavedStateHandle] slots (see [KEY_PLACE_IDEMPOTENCY]). The
+     * fingerprint covers everything `PlaceOrderRequest` actually sends, which unlike the draft's
+     * INCLUDES `deliveryCost`/`otherCost`, the date and the notes: those are real fields here, so
+     * changing one is a different submission and must not replay the previous one's response.
+     */
+    private fun placeIdempotencyKeyFor(input: PlaceOrderInput): String {
+        val fingerprint = listOf(
+            input.draft.wireFingerprint(), input.draft.deliveryCost, input.draft.otherCost,
+            input.scheduledAt, input.notes,
+        ).joinToString(";")
+        if (saved.get<String>(KEY_PLACE_IDEMPOTENCY_FOR) != fingerprint) {
+            saved[KEY_PLACE_IDEMPOTENCY_FOR] = fingerprint
+            saved[KEY_PLACE_IDEMPOTENCY] = UUID.randomUUID().toString()
+        }
+        return requireNotNull(saved.get<String>(KEY_PLACE_IDEMPOTENCY))
     }
 
     /** Applies a restored draft to state, recomputing every row through the current
@@ -631,5 +795,9 @@ class HiltCalculatorViewModel @Inject constructor(
     persistDraft = PersistDraftUseCase { draft -> repository.persistDraft(draft) },
     clearDraftUseCase = ClearDraftUseCase { repository.clearDraft() },
     saveDraftUseCase = SaveDraftUseCase { draft, key -> repository.saveDraft(draft, key) },
+    placeOrderUseCase = PlaceOrderUseCase { input, key -> repository.placeOrder(input, key) },
+    queuePlaceOrderUseCase = QueuePlaceOrderUseCase { input, key -> repository.queuePlaceOrder(input, key) },
+    observeRejectedOrders = ObserveRejectedOrdersUseCase { repository.observeRejectedOrders() },
+    discardRejectedOrderUseCase = DiscardRejectedOrderUseCase { id -> repository.discardRejectedOrder(id) },
     saved = saved,
 )

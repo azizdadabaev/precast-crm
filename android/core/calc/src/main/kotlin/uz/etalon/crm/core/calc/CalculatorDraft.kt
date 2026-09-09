@@ -35,3 +35,24 @@ data class CalculatorDraft(
     val otherCost: Double,
     val projectId: String?,
 )
+
+/**
+ * Everything `POST /api/orders` needs that a quote alone does not carry: the delivery date the
+ * customer asked for, and whatever the operator wrote down about the job.
+ *
+ * A separate type rather than four more nullable fields on [CalculatorDraft], because the two are
+ * not the same thing. A draft is a quote that may never become anything; this is the commitment,
+ * and [scheduledAt] is REQUIRED here (`PlaceOrderSchema` has no default for it) while it has no
+ * meaning at all on a draft. Keeping it out of [CalculatorDraft] is also what keeps it out of the
+ * autosaved Room snapshot and out of the draft-save Idempotency-Key's fingerprint.
+ *
+ * [deliveryCost]/[otherCost] come off the draft — local-only for `saveDraft`, real fields here.
+ */
+data class PlaceOrderInput(
+    val draft: CalculatorDraft,
+    /** ISO-8601 instant, as `PlaceOrderRequest.scheduledAt` sends it. A `String` and not a
+     *  `java.time.Instant` so `:core:calc` stays free of a time zone it has no business choosing:
+     *  the screen resolves the operator's picked date in `Asia/Tashkent` and hands the result on. */
+    val scheduledAt: String,
+    val notes: String = "",
+)

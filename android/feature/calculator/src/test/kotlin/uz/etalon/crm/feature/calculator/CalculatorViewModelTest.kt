@@ -23,11 +23,14 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.calc.CalculatorDraft
+import uz.etalon.crm.core.calc.PlaceOrderInput
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
+import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.data.SessionPricing
+import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.model.Pricing
@@ -78,14 +81,29 @@ class CalculatorViewModelTest {
         persistDraft: PersistDraftUseCase = PersistDraftUseCase { },
         clearDraft: ClearDraftUseCase = ClearDraftUseCase { },
         saveDraft: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.success("proj-1") },
+        placeOrder: PlaceOrderUseCase = PlaceOrderUseCase { _, _ -> Result.success("order-1") },
+        queuePlaceOrder: QueuePlaceOrderUseCase = QueuePlaceOrderUseCase { _, key -> Result.success(key) },
+        rejected: ObserveRejectedOrdersUseCase = ObserveRejectedOrdersUseCase { flowOf(emptyList()) },
+        discardRejected: DiscardRejectedOrderUseCase = DiscardRejectedOrderUseCase { },
         saved: SavedStateHandle = SavedStateHandle(),
     ) = CalculatorViewModel(
         session = FakeSessionPricing(defaultAndroidPricing()),
         permissions = PermissionGate { it == "order.create" && canWrite },
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
         observeDraft = observeDraft, persistDraft = persistDraft, clearDraftUseCase = clearDraft, saveDraftUseCase = saveDraft,
+        placeOrderUseCase = placeOrder, queuePlaceOrderUseCase = queuePlaceOrder,
+        observeRejectedOrders = rejected, discardRejectedOrderUseCase = discardRejected,
         saved = saved,
     )
+
+    /** A quote a placement will actually accept: one priced room plus the three client fields
+     *  `PlaceOrderSchema` requires (the draft route takes them as optional). */
+    private fun CalculatorViewModel.readyToPlace() {
+        addPricedRoom()
+        setClientPhoneDigits("901234567")
+        setClientName("Aziz")
+        setClientViloyat("Тошкент"); setClientTuman("Юнусобод"); setClientStreet("12-уй")
+    }
 
     /** Adds one priced room («Хона 1», 4×6) and returns its id — the shape every save/idempotency
      *  test below needs before `saveDraft` will let a request through (`SlabRow.canPersist`). */
@@ -436,5 +454,219 @@ class CalculatorViewModelTest {
 
         assertEquals(2, keys.size)
         assertNotEquals(keys[0], keys[1], "the second save is an UPDATE — a stale key would replay the CREATE response")
+    }
+
+    // ── Task 9: «Буюртма бериш», online or queued ──────────────────
+
+    private val scheduledAt = "2026-09-19T19:00:00Z"
+
+    @Test fun `a placed order clears the quote and hands the route an id to navigate to`() = runTest {
+        var cleared = false
+        val v = vm(placeOrder = PlaceOrderUseCase { _, _ -> Result.success("order-1") }, clearDraft = ClearDraftUseCase { cleared = true })
+        advanceUntilIdle()
+        v.readyToPlace()
+
+        v.placeOrder(scheduledAt, "тезкор"); advanceUntilIdle()
+
+        assertEquals("order-1", v.state.value.placedOrderId)
+        assertTrue(v.state.value.rows.isEmpty(), "the deal is committed — the calculator is free for the next customer")
+        assertTrue(cleared, "the Room draft must go too, or reopening brings the placed quote back")
+        assertFalse(v.state.value.placing)
+
+        v.consumePlacedOrder()
+        assertNull(v.state.value.placedOrderId, "consumed once, so a recomposition cannot navigate twice")
+    }
+
+    @Test fun `what the sheet submits is what the repository is asked to place`() = runTest {
+        var sent: PlaceOrderInput? = null
+        val v = vm(placeOrder = PlaceOrderUseCase { input, _ -> sent = input; Result.success("order-1") })
+        advanceUntilIdle()
+        v.readyToPlace()
+        v.setDeliveryCost(150_000.0)
+
+        v.placeOrder(scheduledAt, "тезкор"); advanceUntilIdle()
+
+        assertEquals(scheduledAt, sent!!.scheduledAt)
+        assertEquals("тезкор", sent!!.notes)
+        assertEquals(150_000.0, sent!!.draft.deliveryCost)
+        assertEquals("998901234567", sent!!.draft.clientPhone)
+        assertEquals(listOf("Хона 1"), sent!!.draft.rows.map { it.name })
+    }
+
+    /** A lost signal is the case the queue exists for, so the sheet is offered it. A server
+     *  refusal is not: queueing that same body would only fail again, later, unwatched. */
+    @Test fun `only a network failure offers the queue`() = runTest {
+        val network = vm(placeOrder = PlaceOrderUseCase { _, _ -> Result.failure(java.io.IOException("dropped")) })
+        advanceUntilIdle()
+        network.readyToPlace()
+        network.placeOrder(scheduledAt, ""); advanceUntilIdle()
+        assertTrue(network.state.value.queueOffered)
+        assertFalse(network.state.value.placing)
+        assertEquals("Интернет йўқ", network.state.value.error)
+
+        val refused = vm(placeOrder = PlaceOrderUseCase { _, _ -> Result.failure(ApiException(422, "Мижоз манзили керак · required")) })
+        advanceUntilIdle()
+        refused.readyToPlace()
+        refused.placeOrder(scheduledAt, ""); advanceUntilIdle()
+        assertFalse(refused.state.value.queueOffered)
+        assertEquals("Мижоз манзили керак", refused.state.value.error)
+    }
+
+    /**
+     * The double-submit trap the whole idempotency story exists to close: the online attempt may
+     * ALREADY have committed the order when the connection dropped. Queueing it afterwards must
+     * reuse that submission's key — the queued row's id becomes that key — or the drain places a
+     * second real order with a second order number and a second receivable.
+     */
+    @Test fun `queueing after a failed online attempt reuses that submission's key`() = runTest {
+        val keys = mutableListOf<String>()
+        val v = vm(
+            placeOrder = PlaceOrderUseCase { _, key -> keys += key; Result.failure(java.io.IOException("dropped")) },
+            queuePlaceOrder = QueuePlaceOrderUseCase { _, key -> keys += key; Result.success(key) },
+        )
+        advanceUntilIdle()
+        v.readyToPlace()
+
+        v.placeOrder(scheduledAt, "тезкор"); advanceUntilIdle()
+        v.queuePlaceOrder(scheduledAt, "тезкор"); advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertEquals(keys[0], keys[1])
+    }
+
+    /** Two routes, two keys. A key first used on `POST /api/projects` is answered
+     *  `IDEMPOTENT_ROUTE_MISMATCH` by `POST /api/orders` — the server scopes them per user, not
+     *  per route, and refuses the crossover outright. */
+    @Test fun `the place key is never the draft key`() = runTest {
+        val draftKeys = mutableListOf<String>()
+        val placeKeys = mutableListOf<String>()
+        val v = vm(
+            saveDraft = SaveDraftUseCase { _, key -> draftKeys += key; Result.success("proj-1") },
+            placeOrder = PlaceOrderUseCase { _, key -> placeKeys += key; Result.failure(java.io.IOException("dropped")) },
+        )
+        advanceUntilIdle()
+        v.readyToPlace()
+
+        v.saveDraft(); advanceUntilIdle()
+        v.placeOrder(scheduledAt, ""); advanceUntilIdle()
+
+        assertNotEquals(draftKeys.single(), placeKeys.single())
+    }
+
+    /** Same rule the draft key follows, over its own SavedStateHandle slots. */
+    @Test fun `the place key survives process death`() = runTest {
+        val saved = SavedStateHandle()
+        val first = mutableListOf<String>()
+        val v = vm(placeOrder = PlaceOrderUseCase { _, key -> first += key; Result.failure(java.io.IOException("dropped")) }, saved = saved)
+        advanceUntilIdle()
+        v.readyToPlace()
+        v.placeOrder(scheduledAt, "тезкор"); advanceUntilIdle()
+
+        val second = mutableListOf<String>()
+        val restored = vm(placeOrder = PlaceOrderUseCase { _, key -> second += key; Result.success("order-1") }, saved = saved)
+        advanceUntilIdle()
+        restored.readyToPlace()
+        restored.placeOrder(scheduledAt, "тезкор"); advanceUntilIdle()
+
+        assertEquals(first, second)
+    }
+
+    @Test fun `a queued placement clears the quote and says it is not sent yet`() = runTest {
+        val v = vm(queuePlaceOrder = QueuePlaceOrderUseCase { _, key -> Result.success(key) })
+        advanceUntilIdle()
+        v.readyToPlace()
+
+        v.queuePlaceOrder(scheduledAt, ""); advanceUntilIdle()
+
+        assertTrue(v.state.value.rows.isEmpty())
+        assertEquals(QUEUED_MESSAGE, v.state.value.saveMessage)
+        assertNull(v.state.value.placedOrderId, "a queued order has no id — it does not exist yet")
+    }
+
+    /** The same `draftGeneration` guard `saveDraft` uses: a placement started for one customer
+     *  must not land on the quote the operator has since started for the next one. */
+    @Test fun `clearing mid-placement is not resurrected once the stale placement completes`() = runTest {
+        val result = CompletableDeferred<Result<String>>()
+        val v = vm(placeOrder = PlaceOrderUseCase { _, _ -> result.await() })
+        advanceUntilIdle()
+        v.readyToPlace()
+
+        v.placeOrder(scheduledAt, "")
+        assertTrue(v.state.value.placing)
+        v.clearAll()
+        advanceUntilIdle()
+        assertFalse(v.state.value.placing, "the abandoned placement's spinner must not linger over the fresh quote")
+
+        result.complete(Result.success("order-1"))
+        advanceUntilIdle()
+
+        assertNull(v.state.value.placedOrderId, "the stale placement must not navigate away from the quote started since")
+    }
+
+    @Test fun `placing is refused before the network when anything the server needs is missing`() = runTest {
+        var called = false
+        val place = PlaceOrderUseCase { _, _ -> called = true; Result.success("order-1") }
+
+        val noRooms = vm(placeOrder = place); advanceUntilIdle()
+        noRooms.setClientPhoneDigits("901234567"); noRooms.setClientName("Aziz")
+        noRooms.setClientStreet("12-уй")
+        noRooms.placeOrder(scheduledAt, ""); advanceUntilIdle()
+        assertFalse(called); assertEquals("Камида битта хона керак", noRooms.state.value.error)
+
+        val noClient = vm(placeOrder = place); advanceUntilIdle()
+        noClient.addPricedRoom()
+        noClient.placeOrder(scheduledAt, ""); advanceUntilIdle()
+        assertFalse(called); assertEquals("Мижоз маълумотлари тўлиқ эмас", noClient.state.value.error)
+
+        val noDate = vm(placeOrder = place); advanceUntilIdle()
+        noDate.readyToPlace()
+        noDate.placeOrder("", ""); advanceUntilIdle()
+        assertFalse(called); assertEquals("Етказиб бериш санасини танланг", noDate.state.value.error)
+
+        val noPermission = vm(canWrite = false, placeOrder = place); advanceUntilIdle()
+        noPermission.readyToPlace()
+        noPermission.placeOrder(scheduledAt, ""); advanceUntilIdle()
+        assertFalse(called); assertEquals("Буюртма яратишга рухсат йўқ", noPermission.state.value.error)
+    }
+
+    /** An extras-only room is named, never dropped — sending the rest would place an order for
+     *  less than the operator quoted. */
+    @Test fun `an extras-only room blocks the placement and names itself`() = runTest {
+        var called = false
+        val v = vm(placeOrder = PlaceOrderUseCase { _, _ -> called = true; Result.success("order-1") })
+        advanceUntilIdle()
+        v.readyToPlace()
+        v.addRoom()
+        val extras = v.state.value.rows[1].id
+        v.openKeypad(KeypadTarget(extras, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
+        v.setExtraBeams(extras, 2)
+
+        v.placeOrder(scheduledAt, ""); advanceUntilIdle()
+
+        assertFalse(called)
+        assertEquals("Сақлаб бўлмайдиган хоналар: Хона 2", v.state.value.error)
+    }
+
+    /**
+     * A queued order the server later refuses has nowhere else to surface — it never became an
+     * order, so no order screen lists it, and the quote it came from was cleared the moment it was
+     * queued. The calculator is where the operator finds out, and «Тозалаш» must not be a way to
+     * lose that: it belongs to a different quote entirely.
+     */
+    @Test fun `a rejected queued order stays visible, and survives Тозалаш`() = runTest {
+        val discarded = mutableListOf<String>()
+        val rejected = RejectedOrder(id = "row-1", clientName = "Aziz", message = "Мижоз манзили керак")
+        val v = vm(
+            rejected = ObserveRejectedOrdersUseCase { flowOf(listOf(rejected)) },
+            discardRejected = DiscardRejectedOrderUseCase { id -> discarded += id },
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf(rejected), v.state.value.rejectedOrders)
+        v.clearAll(); advanceUntilIdle()
+        assertEquals(listOf(rejected), v.state.value.rejectedOrders)
+
+        v.discardRejectedOrder("row-1"); advanceUntilIdle()
+        assertEquals(listOf("row-1"), discarded)
     }
 }

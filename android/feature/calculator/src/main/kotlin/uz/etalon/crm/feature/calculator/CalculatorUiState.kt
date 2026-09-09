@@ -6,6 +6,7 @@ import uz.etalon.crm.core.calc.ProjectTotals
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
+import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.ui.regions.ParsedAddress
 
 /** The width/length bump step, in metres — see `CalculatorViewModel.bumpWidth`. */
@@ -72,6 +73,20 @@ data class CalculatorUiState(
     /** A transient Uzbek confirmation shown after a successful save — cleared by
      *  `CalculatorViewModel.dismissSaveMessage` once the screen has shown it. */
     val saveMessage: String? = null,
+
+    // ── «Буюртма бериш» — see `PlaceOrderSheet.kt` ──────────────────
+    val placing: Boolean = false,
+    /** True once a placement failed for want of a signal — the sheet then offers «Навбатга қўйиш»
+     *  instead of a bare retry. Only a network failure sets it: a 422 is the server saying no, and
+     *  queueing that same body would only fail again hours later. */
+    val queueOffered: Boolean = false,
+    /** Set once, after a successful ONLINE placement, for the route to navigate with — cleared by
+     *  `CalculatorViewModel.consumePlacedOrder` so a recomposition cannot navigate twice. */
+    val placedOrderId: String? = null,
+    /** Orders the server permanently refused while they sat in the queue. By then the quote has
+     *  been cleared, so this list is the only place the operator can learn it happened — see
+     *  `CalculatorRepository.observeRejectedOrders`. */
+    val rejectedOrders: List<RejectedOrder> = emptyList(),
 ) {
     val totalWeightKg: Double get() = totals.monolithArea * KG_PER_M2
 

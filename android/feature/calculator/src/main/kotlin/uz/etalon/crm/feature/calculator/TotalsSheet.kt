@@ -282,13 +282,23 @@ private fun EditableValueRow(label: String, valueText: String, onClick: () -> Un
 private const val SAVE_MESSAGE_AUTO_DISMISS_MS = 2500L
 
 /**
- * «Лойиҳани сақлаш» and «Тозалаш», filling [TotalsSheet]'s own `actions` slot — see that
- * composable's KDoc for why the slot exists. Both hidden when `!state.canWrite`: the calculator
- * stays usable to quote without `order.create`, but there is nothing to save.
+ * «Буюртма бериш», «Лойиҳани сақлаш» and «Тозалаш», filling [TotalsSheet]'s own `actions` slot —
+ * see that composable's KDoc for why the slot exists. All hidden when `!state.canWrite`: the
+ * calculator stays usable to quote without `order.create`, but there is nothing to save or place.
+ *
+ * «Буюртма бериш» is the primary and the other two are secondary: this is the action that commits
+ * the deal, and the quote-side actions are what lead up to it. It opens [PlaceOrderSheet] rather
+ * than submitting on the spot — a delivery date is required, and it is not on this screen.
+ *
+ * [state.rejectedOrders] renders ABOVE all of it and is not part of this quote: it is the record
+ * of a DIFFERENT one the server refused after it was queued, by which time the calculator had
+ * been cleared. There is nowhere else in the app such an order could surface — it never became an
+ * order, so no order screen lists it — so this is where the operator finds out.
  */
 @Composable
 fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
     if (!state.canWrite) return
+    var showPlaceSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saveMessage) {
         if (state.saveMessage != null) {
@@ -296,19 +306,56 @@ fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
             vm.dismissSaveMessage()
         }
     }
+    // A placement that succeeded or was queued closes the sheet: `clearAll` has already emptied
+    // the quote behind it, so leaving it open would show the next customer's blank form as if it
+    // were still the order just committed.
+    LaunchedEffect(state.placedOrderId, state.saveMessage) {
+        if (state.placedOrderId != null || state.saveMessage == QUEUED_MESSAGE) showPlaceSheet = false
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        state.rejectedOrders.forEach { rejected ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ErrorBanner(
+                    stringResource(R.string.calc_rejected_row, rejected.clientName, rejected.message),
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = { vm.discardRejectedOrder(rejected.id) },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.calc_rejected_dismiss)) }
+            }
+        }
         state.error?.let { ErrorBanner(it) }
         state.saveMessage?.let { NoticeBanner(it) }
+        PrimaryButton(
+            text = stringResource(R.string.calc_action_place_order),
+            onClick = { showPlaceSheet = true },
+            enabled = !state.saving && !state.placing,
+            loading = state.placing,
+        )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SecondaryButton(
                 text = stringResource(R.string.calc_action_clear), onClick = vm::clearAll,
-                enabled = !state.saving, modifier = Modifier.weight(1f),
+                enabled = !state.saving && !state.placing, modifier = Modifier.weight(1f),
             )
-            PrimaryButton(
+            SecondaryButton(
                 text = stringResource(R.string.calc_action_save), onClick = vm::saveDraft,
-                loading = state.saving, modifier = Modifier.weight(1f),
+                enabled = !state.placing, loading = state.saving, modifier = Modifier.weight(1f),
             )
         }
+    }
+
+    if (showPlaceSheet) {
+        PlaceOrderSheet(
+            state = state,
+            onDismiss = { showPlaceSheet = false },
+            onPlace = vm::placeOrder,
+            onQueue = vm::queuePlaceOrder,
+        )
     }
 }

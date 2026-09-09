@@ -68,4 +68,23 @@
     <string name="calc_client_edit">Мижозни ўзгартириш</string>
     <!-- draft persistence and save — task 8 -->
     <string name="calc_action_save">Лойиҳани сақлаш</string>
+    <!-- «Буюртма бериш» — task 9 -->
+    <string name="calc_action_place_order">Буюртма бериш</string>
+    <string name="calc_place_title">Буюртмани расмийлаштириш</string>
+    <string name="calc_place_client">Мижоз</string>
+    <string name="calc_place_scheduled_at">Етказиб бериш санаси</string>
+    <string name="calc_place_pick_date">Сана танланг</string>
+    <string name="calc_place_date_done">Тайёр</string>
+    <string name="calc_place_cancel">Бекор қилиш</string>
+    <string name="calc_place_notes">Изоҳ</string>
+    <string name="calc_place_notes_counter">%1$d/%2$d</string>
+    <string name="calc_place_summary_rooms">Хоналар</string>
+    <string name="calc_place_summary_area">Майдон</string>
+    <string name="calc_place_summary_total">Жами</string>
+    <string name="calc_place_queue">Навбатга қўйиш</string>
+    <string name="calc_place_queued">Интернет пайдо бўлганда юборилади</string>
+    <string name="calc_cannot_save_rooms">Бу хоналарни сақлаб бўлмайди: %1$s</string>
+    <string name="calc_rejected_title">Юборилмаган буюртмалар</string>
+    <string name="calc_rejected_row">%1$s · %2$s</string>
+    <string name="calc_rejected_dismiss">Тушунарли</string>
 </resources>
