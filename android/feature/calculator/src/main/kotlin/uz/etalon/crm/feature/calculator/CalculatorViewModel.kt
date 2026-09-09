@@ -119,10 +119,18 @@ internal const val CLIENT_PHONE_DIGITS = 9
  *  `internal` so the test measures the real figure, mirroring `CLIENT_SEARCH_DEBOUNCE_MS`. */
 internal const val CLIENT_PHONE_LOOKUP_DEBOUNCE_MS = 400L
 
-/** A restored room's name follows «Хона N» — this recovers N so a freshly-added room after a
- *  restore never reuses a number already on screen, the same rule `addRoom` keeps for a deleted
- *  room within one session. */
-private val ROOM_SEQ_REGEX = Regex("""(\d+)""")
+/**
+ * A restored room's name follows «Хона N» ([CalculatorViewModel.addRoom]'s own literal, mirrored
+ * by `R.string.calc_room_default_name`) — this recovers N so a freshly-added room after a restore
+ * never reuses a number already on screen, the same rule `addRoom` keeps for a deleted room within
+ * one session.
+ *
+ * Anchored at the END, and on the word: a bare `(\d+)` took the FIRST digit group, so an operator
+ * who had renamed a room «2-қават Хона 5» handed back 2 — and the next room added was «Хона 5»
+ * again, a second room with that name, indistinguishable from the first in the photo of the screen
+ * the customer is sent.
+ */
+private val ROOM_SEQ_REGEX = Regex("""Хона (\d+)$""")
 
 fun interface ObserveDraftUseCase {
     operator fun invoke(): Flow<CalculatorDraft?>
@@ -316,7 +324,11 @@ open class CalculatorViewModel(
         }
     }
 
-    /** Reorders only — no row's inputs change, so nothing needs re-running through the engine. */
+    /** Reorders only — no row's inputs change, so no row's own result moves. The project totals
+     *  ARE re-summed in a different order, which binary floating-point addition does not promise
+     *  to be associative about, so they can differ in the last bit; every one of them is `round2`'d
+     *  before it becomes money, which is far coarser than that, so nothing observable changes and
+     *  re-running the aggregation here would buy nothing. */
     fun moveRoom(from: Int, to: Int) {
         _state.update { s ->
             if (from !in s.rows.indices || to !in s.rows.indices) return@update s
@@ -334,11 +346,20 @@ open class CalculatorViewModel(
      *  read off [CalculatorUiState.keypadText] alone. */
     fun openKeypad(target: KeypadTarget) = _state.update { it.copy(keypad = target, keypadText = "") }
 
+    /**
+     * One character at a time. The docked keypad does NOT call this — it applies `applyDigit`
+     * itself and hands back the whole string through [setKeypadText] — so nothing in production
+     * reaches it. Kept deliberately rather than deleted as dead: it is the API this ViewModel's own
+     * tests type through, and typing a room's dimensions keystroke by keystroke is exactly how the
+     * recompute-per-keystroke behaviour gets exercised. [setKeypadText] cannot stand in for that
+     * without every test re-implementing the pad's own `applyDigit` rules.
+     */
     fun keypadDigit(c: Char) {
         if (!(c.isDigit() || c == ',')) return
         _state.update { it.copy(keypadText = it.keypadText + c) }
     }
 
+    /** The counterpart to [keypadDigit], kept for the same reason — see its own doc. */
     fun keypadBackspace() = _state.update { it.copy(keypadText = it.keypadText.dropLast(1)) }
 
     /** Replaces the whole pad text — what the docked [uz.etalon.crm.core.designsystem.components.NumericKeypad]
@@ -479,12 +500,26 @@ open class CalculatorViewModel(
                 placing = false, queueOffered = false,
             )
         }
+        // Both pinned Idempotency-Keys go with the quote. The server's TTL on a key is 24 h, so
+        // an IDENTICAL submission afterwards — the same customer ordering the same rooms for the
+        // same day, which happens — would replay the first response and be silently never placed.
+        // Safe only here and after a successful placement: those are the two moments the quote a
+        // key belongs to stops existing, and a key must otherwise SURVIVE, which is its whole job.
+        saved.remove<String>(KEY_IDEMPOTENCY)
+        saved.remove<String>(KEY_IDEMPOTENCY_FOR)
+        saved.remove<String>(KEY_PLACE_IDEMPOTENCY)
+        saved.remove<String>(KEY_PLACE_IDEMPOTENCY_FOR)
         viewModelScope.launch { clearDraftUseCase() }
     }
 
     // ── draft persistence and «Лойиҳани сақлаш» ─────────────────────
 
     fun dismissSaveMessage() = _state.update { it.copy(saveMessage = null) }
+
+    /** Drops whatever refusal is on screen. `CalculatorActions` calls it when «Буюртма бериш»
+     *  opens the placement sheet: a save that failed minutes ago belongs to the quote, and the
+     *  sheet renders `state.error` too — a stale one there reads as the placement's own refusal. */
+    fun dismissError() = _state.update { it.copy(error = null) }
 
     /**
      * Refuses the same four ways `CalculatorRepository.saveDraft` does — no `order.create`, an
@@ -611,6 +646,8 @@ open class CalculatorViewModel(
                     // clearAll bumps draftGeneration itself, so nothing captured earlier can
                     // write onto the fresh quote afterwards; both writes below happen after it,
                     // deliberately, because they are about the order that was just committed.
+                    // It is also what forgets this submission's Idempotency-Keys — see its own doc
+                    // for why a repeat of an identical order would otherwise never be placed.
                     clearAll()
                     if (queue) {
                         _state.update { it.copy(saveMessage = QUEUED_MESSAGE) }
@@ -677,7 +714,7 @@ open class CalculatorViewModel(
      *  a `SlabResult`. Runs once, in `init`, before the operator's first keystroke can race it. */
     private fun restoreDraft(draft: CalculatorDraft) {
         val rows = draft.rows.map { recomputeRow(it, priceConfig) }
-        nextRoomSeq = (rows.mapNotNull { ROOM_SEQ_REGEX.find(it.name)?.value?.toIntOrNull() }.maxOrNull() ?: 0) + 1
+        nextRoomSeq = (rows.mapNotNull { ROOM_SEQ_REGEX.find(it.name)?.groupValues?.get(1)?.toIntOrNull() }.maxOrNull() ?: 0) + 1
         val address = parseAddress(draft.clientAddress)
         val digits = draft.clientPhone.takeLast(CLIENT_PHONE_DIGITS)
         _state.update { s ->

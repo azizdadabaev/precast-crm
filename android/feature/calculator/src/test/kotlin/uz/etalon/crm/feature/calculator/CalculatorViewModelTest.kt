@@ -114,6 +114,23 @@ class CalculatorViewModelTest {
         return id
     }
 
+    /**
+     * One priced room named «Хона 1» plus the full client — deliberately IDENTICAL every time it
+     * is built, unlike [readyToPlace], whose room takes the next «Хона N» and so fingerprints
+     * differently on a second call. Two submissions built by this one fingerprint the same, which
+     * is what makes a released Idempotency-Key the only thing that can tell them apart.
+     */
+    private fun CalculatorViewModel.identicalQuote() {
+        addRoom()
+        val id = state.value.rows.last().id
+        setName(id, "Хона 1")
+        openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(::keypadDigit); commitKeypad()
+        openKeypad(KeypadTarget(id, LENGTH)); "6".forEach(::keypadDigit); commitKeypad()
+        setClientPhoneDigits("901234567")
+        setClientName("Aziz")
+        setClientViloyat("Тошкент"); setClientTuman("Юнусобод"); setClientStreet("12-уй")
+    }
+
     /** Adds one priced room («Хона 1», 4×6) and returns its id — the shape every save/idempotency
      *  test below needs before `saveDraft` will let a request through (`SlabRow.canPersist`). */
     private fun CalculatorViewModel.addPricedRoom(): String {
@@ -584,6 +601,59 @@ class CalculatorViewModelTest {
         assertNotEquals(keys[0], keys[1], "the second save is an UPDATE — a stale key would replay the CREATE response")
     }
 
+    /**
+     * `ROOM_SEQ_REGEX` took the FIRST digit group, so a room the operator had renamed
+     * «2-қават Хона 5» handed back 2 — and the next room added was «Хона 5» all over again. Two
+     * rooms with one name are indistinguishable in the photo of the screen the customer is sent.
+     */
+    @Test fun `numbering after a restore reads the room's own number, not the first digits in its name`() = runTest {
+        val restored = CalculatorDraft(
+            rows = listOf(
+                recomputeRow(SlabRow(id = "r1", name = "2-қават Хона 5", innerWidth = 4.0, innerLength = 6.0)),
+                recomputeRow(SlabRow(id = "r2", name = "Болалар хонаси", innerWidth = 4.0, innerLength = 6.0)),
+            ),
+            clientPhone = "998901234567", clientName = "Aziz", clientAddress = "",
+            discountPercent = 0.0, discountAmount = 0.0, deliveryCost = 0.0, otherCost = 0.0, projectId = null,
+        )
+        val v = vm(observeDraft = ObserveDraftUseCase { flowOf(restored) })
+        advanceUntilIdle()
+
+        v.addRoom()
+
+        assertEquals("Хона 6", v.state.value.rows.last().name, "a number already on screen must never be reused")
+    }
+
+    /** Rows price against `DEFAULT_PRICE_CONFIG` until the bootstrap `Pricing` lands — a coroutine
+     *  race in `init`. If the owner has edited a tier, a cold-start operator would quote, and share
+     *  a PNG of, the WRONG price unless every row already on screen is re-priced when it arrives.
+     *  `BoundaryTest` only proves the exported default pricing agrees with the default config,
+     *  which is precisely the one case that cannot catch this. */
+    @Test fun `an owner-edited pricing re-prices every row already on screen`() = runTest {
+        val pricing = MutableStateFlow<Pricing?>(null)
+        val v = CalculatorViewModel(
+            session = object : SessionPricing { override val pricing: StateFlow<Pricing?> = pricing },
+            permissions = PermissionGate { true },
+            clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
+        )
+        advanceUntilIdle()
+        val id = v.addPricedRoom()   // 4.0 × 6.0 — a 4.30 beam, so the first m² tier
+
+        val atDefault = v.state.value.rows.single { it.id == id }.result!!
+        assertEquals(140_000.0, atDefault.m2Price, "until the catalogue lands, the engine's own default")
+
+        val edited = defaultAndroidPricing().let { p ->
+            p.copy(m2Tiers = p.m2Tiers.mapIndexed { i, t -> if (i == 0) t.copy(price = Money.parse("155000")) else t })
+        }
+        pricing.value = edited
+        advanceUntilIdle()
+
+        val repriced = v.state.value.rows.single { it.id == id }.result!!
+        assertEquals(155_000.0, repriced.m2Price, "the owner's tier, not the default")
+        assertTrue(repriced.subtotal > atDefault.subtotal, "the whole row re-runs, not just its rate")
+        assertEquals(repriced.subtotal, v.state.value.totals.projTotal.roomsSubtotal, "and the totals with it")
+        assertEquals(repriced.subtotal, v.state.value.orderTotals.totalPrice)
+    }
+
     // ── Task 9: «Буюртма бериш», online or queued ──────────────────
 
     private val scheduledAt = "2026-09-19T19:00:00Z"
@@ -795,6 +865,45 @@ class CalculatorViewModelTest {
 
         assertFalse(called)
         assertEquals("Бу хоналарни сақлаб бўлмайди: Хона 2", v.state.value.error)
+    }
+
+    /**
+     * The trap the server's 24 h idempotency TTL sets. The SAME customer ordering the SAME rooms
+     * for the SAME day again — which happens — replayed the first order's response and was
+     * silently never placed, because nothing ever released the key that submission had pinned.
+     */
+    @Test fun `an identical repeat order gets its own key instead of replaying the first`() = runTest {
+        val keys = mutableListOf<String>()
+        val v = vm(placeOrder = PlaceOrderUseCase { _, key -> keys += key; Result.success("order-1") })
+        advanceUntilIdle()
+
+        v.identicalQuote()
+        v.placeOrder(scheduledAt, ""); advanceUntilIdle()
+        v.consumePlacedOrder()
+
+        v.identicalQuote()
+        v.placeOrder(scheduledAt, ""); advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertNotEquals(keys[0], keys[1], "two real orders, not one answered twice")
+    }
+
+    /** «Тозалаш» ends the quote a key belongs to, the same way a placement does. */
+    @Test fun `Тозалаш releases the draft key, so the same quote typed again is a new submission`() = runTest {
+        val keys = mutableListOf<String>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.success("proj-1") })
+        advanceUntilIdle()
+
+        v.identicalQuote()
+        v.saveDraft(); advanceUntilIdle()
+
+        v.clearAll(); advanceUntilIdle()
+
+        v.identicalQuote()
+        v.saveDraft(); advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertNotEquals(keys[0], keys[1])
     }
 
     /**

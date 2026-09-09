@@ -36,6 +36,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatMoney
+import uz.etalon.crm.core.ui.format.formatPercent
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.core.ui.regions.composeAddress
 import java.io.File
@@ -116,6 +117,26 @@ fun QuoteCard(state: CalculatorUiState, modifier: Modifier = Modifier) {
             HorizontalDivider()
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // A discount nets silently into Жами otherwise, and the customer reads a total
+                // LOWER than the rooms above it with nothing to explain the difference — the same
+                // conditional line the web's own share card carries
+                // (`src/components/share/CalculationShareCard.tsx`). Off `totals.projTotal`, which
+                // is round2'd, not off `orderTotals.discountAmount`, which the engine deliberately
+                // leaves unrounded (see `OrderTotals`' class doc) and `moneyOf` would refuse.
+                val discount = state.totals.projTotal
+                if (discount.discountAmount > 0) {
+                    QuoteTotalRow(
+                        if (state.discountMode == DiscountMode.PERCENT) {
+                            stringResource(
+                                R.string.calc_quote_discount_percent,
+                                formatPercent(BigDecimal.valueOf(discount.discountPercent)),
+                            )
+                        } else {
+                            stringResource(R.string.calc_quote_discount)
+                        },
+                        formatMoney(discount.money().discountAmount),
+                    )
+                }
                 if (state.deliveryCost > 0) {
                     QuoteTotalRow(stringResource(R.string.calc_delivery_cost), formatMoney(operatorAmountMoney(state.deliveryCost)))
                 }

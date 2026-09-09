@@ -135,6 +135,10 @@ fun RoomExtras(row: SlabRow, callbacks: RoomExtrasCallbacks) {
                         MoneyText(r.money().m2Price, style = EtalonType.monoBody)
                     }
                     if (row.m2PriceOverride) {
+                        // `tierPriceMoney` is `moneyOf`, whose RoundingMode.UNNECESSARY throws on
+                        // anything carrying more than two decimals. Safe here only because this is
+                        // inside `if (row.m2PriceOverride)`: `autoPickedRate` then returns a
+                        // catalogue TIER price — a whole-UZS literal — not a computed rate.
                         Text(
                             stringResource(R.string.calc_rate_auto, formatMoney(tierPriceMoney(autoPickedRate(row)))),
                             style = MaterialTheme.typography.labelSmall,
@@ -204,7 +208,12 @@ private fun PatternChip(label: String, selected: Boolean, onClick: () -> Unit, m
 }
 
 /** A tappable Таяниш/Корр. row — the same shape as `RoomCard`'s `DimensionField`, just a single
- *  line rather than a two-line box, since these are rare edits, not the screen's main target. */
+ *  line rather than a two-line box, since these are rare edits, not the screen's main target.
+ *
+ *  No horizontal padding, for the same reason `TotalsSheet.kt`'s copy has none: this row sits
+ *  directly above `CountStepper` (+Б) and the Бош Б. switch row, neither of which insets itself,
+ *  so a 12dp indent here left Таяниш and Корр. hanging in from the two labels below them. Only
+ *  the touch target keeps its own vertical breathing room. */
 @Composable
 private fun EditableValueRow(label: String, valueText: String, onClick: () -> Unit) {
     Row(
@@ -212,7 +221,7 @@ private fun EditableValueRow(label: String, valueText: String, onClick: () -> Un
             .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
             .heightIn(min = 48.dp)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {

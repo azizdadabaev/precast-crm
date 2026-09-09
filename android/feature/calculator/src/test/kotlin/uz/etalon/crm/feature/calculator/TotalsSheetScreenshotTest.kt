@@ -8,7 +8,9 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +28,7 @@ import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
+import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Pricing
@@ -110,9 +113,44 @@ class TotalsSheetScreenshotTest {
         rule.onRoot().captureRoboImage("screenshots/totals_sheet_expanded_$name.png")
     }
 
+    /** The sheet's own `actions` slot, filled the way `CalculatorRoute` fills it. Every other
+     *  fixture in this file — and in `CalculatorScreenshotTest` — passes `{}` there, so
+     *  «Буюртма бериш»/«Тозалаш»/«Лойиҳани сақлаш», the save notice, the refusal banner and the
+     *  rejected-order row had no baseline at all; all four could have been laid out wrongly, or
+     *  been missing outright, with the whole suite green.
+     *
+     *  The two `assertIsDisplayed` calls are not decoration: the notice dismisses itself after
+     *  2.5 s (`SAVE_MESSAGE_AUTO_DISMISS_MS`), and a baseline recorded after that had elapsed
+     *  would silently pin a frame WITHOUT it. */
+    private fun shootActions(name: String, dark: Boolean) {
+        val s = state().copy(
+            error = "Бу хоналарни сақлаб бўлмайди: Хона 3",
+            saveMessage = "Лойиҳа сақланди",
+            rejectedOrders = listOf(
+                RejectedOrder(id = "row-1", clientName = "Азиз Дадамов", message = "Мижоз манзили керак"),
+            ),
+        )
+        val vm = vm()
+        rule.setContent {
+            EtalonTheme(darkTheme = dark) {
+                TotalsSheet(state = s, vm = vm) { CalculatorActions(state = s, vm = vm) }
+            }
+        }
+        rule.onNodeWithText("Лойиҳа сақланди").assertIsDisplayed()
+        rule.onNodeWithText("Бу хоналарни сақлаб бўлмайди: Хона 3").assertIsDisplayed()
+        rule.onRoot().captureRoboImage("screenshots/totals_sheet_actions_$name.png")
+    }
+
     @Test @Config(qualifiers = "w411dp-h891dp") fun collapsedLight() = shootCollapsed("light", false)
     @Test @Config(qualifiers = "w411dp-h891dp") fun collapsedDark() = shootCollapsed("dark", true)
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun expandedLight() = shootExpanded("light", false)
     @Test @Config(qualifiers = "w411dp-h891dp") fun expandedDark() = shootExpanded("dark", true)
+
+    // A taller-than-a-phone canvas on purpose: the whole action group — the refusal banner, the
+    // rejected-order row, the notice and all four buttons — is what this baseline exists for, and
+    // on a real 891dp screen the operator reaches «Тозалаш»/«Лойиҳани сақлаш» by scrolling the
+    // sheet, which one captured frame cannot do.
+    @Test @Config(qualifiers = "w411dp-h1200dp") fun actionsLight() = shootActions("light", false)
+    @Test @Config(qualifiers = "w411dp-h1200dp") fun actionsDark() = shootActions("dark", true)
 }

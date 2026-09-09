@@ -222,14 +222,20 @@ fun TotalsSheet(state: CalculatorUiState, vm: CalculatorViewModel, actions: @Com
                 formatDecimal(BigDecimal.valueOf(state.discountPercent), 2),
                 "%", allowDecimal = true,
             )
+            // `operatorAmountMoney`, not `toLong().toString()`: these three are money, and
+            // `Boundary.kt` is the one door an engine-side `Double` goes through to become it —
+            // the same door the rows above already use to RENDER these very fields.
             TotalsKeypadField.DISCOUNT_AMOUNT -> KeypadSpec(
-                stringResource(R.string.calc_discount_amount), state.discountAmount.toLong().toString(), "UZS", allowDecimal = false,
+                stringResource(R.string.calc_discount_amount),
+                operatorAmountMoney(state.discountAmount).amount.toPlainString(), "UZS", allowDecimal = false,
             )
             TotalsKeypadField.DELIVERY -> KeypadSpec(
-                stringResource(R.string.calc_delivery_cost), state.deliveryCost.toLong().toString(), "UZS", allowDecimal = false,
+                stringResource(R.string.calc_delivery_cost),
+                operatorAmountMoney(state.deliveryCost).amount.toPlainString(), "UZS", allowDecimal = false,
             )
             TotalsKeypadField.OTHER -> KeypadSpec(
-                stringResource(R.string.calc_other_cost), state.otherCost.toLong().toString(), "UZS", allowDecimal = false,
+                stringResource(R.string.calc_other_cost),
+                operatorAmountMoney(state.otherCost).amount.toPlainString(), "UZS", allowDecimal = false,
             )
         }
         NumericKeypadSheet(
@@ -310,12 +316,20 @@ private const val SAVE_MESSAGE_AUTO_DISMISS_MS = 2500L
  * record of a DIFFERENT one the server refused after it was queued, by which time the calculator
  * had been cleared. There is nowhere else in the app such an order could surface — it never
  * became an order, so no order screen lists it — so this is where the operator finds out.
+ *
+ * `state.error` renders ABOVE the `canWrite` gate: both `saveDraft` and `placeOrder` refuse a
+ * quote-only operator with an Uzbek message, and returning before that banner was what made every
+ * one of those messages unrenderable. It renders here only while [PlaceOrderSheet] is closed — the
+ * sheet renders the same field itself, over the top of this, and one sentence shown twice at once
+ * reads as two problems.
  */
 @Composable
 fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
-    ShareQuoteButton(state)
-    if (!state.canWrite) return
     var showPlaceSheet by remember { mutableStateOf(false) }
+
+    ShareQuoteButton(state)
+    if (!showPlaceSheet) state.error?.let { ErrorBanner(it) }
+    if (!state.canWrite) return
 
     LaunchedEffect(state.saveMessage) {
         if (state.saveMessage != null) {
@@ -347,11 +361,12 @@ fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
                 ) { Text(stringResource(R.string.calc_rejected_dismiss)) }
             }
         }
-        state.error?.let { ErrorBanner(it) }
         state.saveMessage?.let { NoticeBanner(it) }
         PrimaryButton(
             text = stringResource(R.string.calc_action_place_order),
-            onClick = { showPlaceSheet = true },
+            // The sheet renders `state.error` itself, and a save that failed minutes ago belongs
+            // to the quote, not to the placement the operator is only now starting.
+            onClick = { vm.dismissError(); showPlaceSheet = true },
             enabled = !state.saving && !state.placing,
             loading = state.placing,
         )

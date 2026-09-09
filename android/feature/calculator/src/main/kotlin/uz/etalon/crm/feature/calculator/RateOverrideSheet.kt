@@ -33,7 +33,6 @@ import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.theme.EtalonType
-import uz.etalon.crm.core.ui.format.formatMoney
 
 /**
  * The one control in the calculator that changes what a customer is charged: replaces the
@@ -122,8 +121,12 @@ private fun TierRow(price: Double, isAuto: Boolean, selected: Boolean, onClick: 
             MoneyText(tierPriceMoney(price), style = EtalonType.monoBody)
         }
         if (isAuto) {
+            // Bare, not `calc_rate_auto`'s «Авто: %s»: that format belongs to `RoomExtras.kt`,
+            // where the auto rate is a DIFFERENT number from the one on the line. Here the row is
+            // already printing that very price two centimetres to the left, so the format spelt it
+            // back at itself — «230 000 UZS … Авто: 230 000 UZS».
             Text(
-                stringResource(R.string.calc_rate_auto, formatMoney(tierPriceMoney(price))),
+                stringResource(R.string.calc_rate_auto_badge),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
