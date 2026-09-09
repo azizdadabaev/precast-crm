@@ -48,7 +48,7 @@ Copy these into your working notes before you touch anything. Each has cost this
 - **Numbers:** space-grouped thousands (U+00A0 non-breaking), decimal comma, `UZS`, `м²`, `та`, mono tabular figures (`EtalonType.mono*`). Route everything through `:core:ui`'s `Formatters.kt`; **never format inline.**
 - **Phone is the unique client identity; names may repeat** — never flag a duplicate name. Normalise through the existing Kotlin mirror `uz.etalon.crm.core.data.mapper.normalizePhone` (mirrors `src/lib/phone.ts`) before writing or matching.
 - **JUnit 5.** Never apply `org.jetbrains.kotlin.android` (the convention plugins wire Kotlin). **No new dependency without justification** — this plan needs none.
-- **Verification per task:** from `android/`, with `JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"`, run `.\gradlew.bat testDebugUnitTest assembleDebug --no-daemon`. For server tasks, from `precast-crm/`, run `npm test` and `npx tsc --noEmit`.
+- **Verification per task:** from `android/`, with `JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"`, run `.\gradlew.bat testDebugUnitTest verifyRoborazziDebug assembleDebug --no-daemon`. **`verifyRoborazziDebug` is not optional:** `testDebugUnitTest` alone records nothing and compares nothing — the Roborazzi baselines are only checked when that task sets the verify property. Six order-detail goldens sat stale from Phase 1c until this phase ran it by name (amended 2026-09-09; earlier tasks in this plan ran the shorter command). For server tasks, from `precast-crm/`, run `npm test` and `npx tsc --noEmit`.
 
 ### Wire contracts — verified, use these exact values
 
