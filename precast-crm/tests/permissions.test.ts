@@ -224,6 +224,19 @@ describe("homeForUser", () => {
   });
 });
 
+describe("SALES role template — dispatch.create gap", () => {
+  // Regression: the orders/[id] page rendered the "Split shipment"
+  // button for anyone holding order.edit, but the API route behind it
+  // (POST /api/orders/[id]/shipments) is gated on dispatch.create. SALES
+  // has order.edit but not dispatch.create, so the button was guaranteed
+  // to 403 for that role — pin the permission gap the page must gate on.
+  it("has order.edit but not dispatch.create", () => {
+    const perms = getDefaultPermissionsForRole("SALES");
+    expect(perms).toContain("order.edit");
+    expect(perms).not.toContain("dispatch.create");
+  });
+});
+
 describe("ROLE_TEMPLATES — order.view coverage", () => {
   it("every standard template includes order.view so login lands on /orders", () => {
     // CUSTOM is the only template that intentionally has no defaults

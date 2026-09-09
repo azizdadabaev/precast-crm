@@ -287,6 +287,7 @@ export default function OrderDetailPage() {
   const canEditOrder = me?.permissions?.includes("order.edit") ?? false;
   const canRecordPayment = me?.permissions?.includes("payment.record") ?? false;
   const canConfirmPayment = me?.permissions?.includes("payment.confirm") ?? false;
+  const canDispatch = me?.permissions?.includes("dispatch.create") ?? false;
 
   // Which payment row is currently uploading a receipt (paymentId), so the
   // per-row "+ чек" button can show a busy state without a shared flag.
@@ -1412,7 +1413,7 @@ export default function OrderDetailPage() {
               })}
 
             {/* Split Shipment button — shown when PLACED/IN_PRODUCTION and no shipments yet */}
-            {(order.status === "PLACED" || order.status === "IN_PRODUCTION") && order.shipments.length === 0 && (
+            {canDispatch && (order.status === "PLACED" || order.status === "IN_PRODUCTION") && order.shipments.length === 0 && (
               <>
                 <div className="w-px self-stretch bg-border/60 mx-1" />
                 <button
