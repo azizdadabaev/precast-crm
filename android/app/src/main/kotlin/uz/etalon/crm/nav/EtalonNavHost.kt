@@ -28,6 +28,7 @@ import androidx.navigation3.ui.NavDisplay
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.feature.auth.ChangePinRoute
 import uz.etalon.crm.feature.auth.LoginRoute
+import uz.etalon.crm.feature.calculator.CalculatorRoute
 import uz.etalon.crm.feature.clients.detail.ClientDetailRoute
 import uz.etalon.crm.feature.clients.list.ClientsRoute
 import uz.etalon.crm.feature.home.HomeRoute
@@ -146,6 +147,12 @@ fun SignedInShell(
                         orderId = k.orderId, extraPhoto = k.extra,
                         onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
                     )
+                }
+                // Registered only for an operator who may quote — the Drivers pattern: without
+                // calculator.use the route does not exist, so no restored back stack can open it
+                // either.
+                if (me.can(PERM_CALCULATOR_USE)) {
+                    entry<Calculator> { CalculatorRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
                 }
                 // Registered only for an operator who may read the client list, the Drivers
                 // pattern: without client.view the route does not exist, so no restored back

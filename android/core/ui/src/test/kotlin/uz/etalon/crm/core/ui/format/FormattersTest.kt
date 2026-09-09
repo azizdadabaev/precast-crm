@@ -23,6 +23,10 @@ class FormattersTest {
         assertEquals("24,75 м²", formatArea(BigDecimal("24.75")))
     }
     @Test fun `count uses та`() { assertEquals("12 та", formatCount(12)) }
+    @Test fun `meters use comma decimal and м`() { assertEquals("4,25 м", formatMeters(4.25)) }
+    @Test fun `weight uses non-breaking-space thousands, no decimals, and кг`() {
+        assertEquals("12 240 кг", formatWeightKg(12240.0))
+    }
     @Test fun `phone renders +998 90 111 22 33 from digits`() {
         assertEquals("+998 90 111 22 33", formatPhone("998901112233"))
         assertEquals("+998 90 111 22 33", formatPhone("901112233"))

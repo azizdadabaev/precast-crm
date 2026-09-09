@@ -33,6 +33,10 @@ import kotlinx.serialization.Serializable
 @Serializable data class DeliveryLocation(val orderId: String) : Key
 @Serializable data object Drivers : Key
 
+// ── Calculator ───────────────────────────────────────────────────────────────
+/** The bottom-bar tab (Destination.CALCULATOR). Carries no back arrow, like Orders and Payments. */
+@Serializable data object Calculator : Key
+
 // ── Payments ─────────────────────────────────────────────────────────────────
 /** The bottom-bar tab (Destination.PAYMENTS). It *is* the confirmation queue — that screen was
  *  built as a top-level destination, tabs and all — so there is no second key for the queue. */

@@ -14,4 +14,14 @@
     <string name="calc_beams">%1$s балка</string>
     <string name="calc_room_not_persistable">Бу хона фақат қўшимча балкадан иборат — сақлаб бўлмайди</string>
     <string name="calc_no_write_permission">Буюртма яратишга рухсат йўқ</string>
+    <!-- Pulled forward from Task 5's string list: the pattern chip on the collapsed RoomCard
+         (this task) already needs these four names, ahead of the rest of Task 5's «Қўшимча»
+         strings which are not needed until the extras panel itself is built. -->
+    <string name="calc_pattern_auto">Авто</string>
+    <string name="calc_pattern_gb">Г-Б</string>
+    <string name="calc_pattern_bgb">Б-Г-Б</string>
+    <string name="calc_pattern_gbg">Г-Б-Г</string>
+    <string name="calc_extras">Қўшимча</string>
+    <string name="calc_action_reorder">Тартибини ўзгартириш</string>
+    <string name="calc_action_more">Кўпроқ амаллар</string>
 </resources>

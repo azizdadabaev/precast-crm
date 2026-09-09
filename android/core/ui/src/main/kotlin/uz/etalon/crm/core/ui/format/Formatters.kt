@@ -41,6 +41,15 @@ fun formatDecimal(v: BigDecimal, maxDigits: Int = 1): String {
 fun formatArea(m2: BigDecimal): String = formatDecimal(m2, 2) + " м²"
 fun formatCount(n: Int): String = groupThousands(n.toString()) + " та"
 
+/** A length in metres for a room card or a beam schedule row. */
+fun formatMeters(v: Double, decimals: Int = 2): String =
+    formatDecimal(BigDecimal.valueOf(v), decimals) + " м"
+
+/** Total product weight. The factory's rule of thumb for finished beam-and-block flooring is
+ *  180 kg per m² of slab; the calculator shows it so an operator can size the truck at a glance.
+ *  Whole kilograms — a tenth of a kilo on a twelve-tonne load is noise. */
+fun formatWeightKg(kg: Double): String = formatDecimal(BigDecimal.valueOf(kg), 0) + " кг"
+
 /** Digits-only storage → `+998 90 111 22 33`. Mirrors src/lib/phone.ts formatPhone. */
 fun formatPhone(raw: String): String {
     val d = raw.filter { it.isDigit() }

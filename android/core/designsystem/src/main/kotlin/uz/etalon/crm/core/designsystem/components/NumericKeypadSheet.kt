@@ -28,7 +28,51 @@ fun applyBackspace(current: String): String = current.dropLast(1)
 /**
  * Amount and count entry without a soft keyboard: the operator is wearing gloves
  * on a truck bed, and the system keyboard's number row is a 6 mm target.
+ *
+ * Stateless — the caller owns [value] — so the calculator screen's ViewModel can dock this grid
+ * in its own scaffold and drive it across fields, instead of the modal sheet below owning the
+ * text itself.
  */
+@Composable
+fun NumericKeypad(
+    value: String,
+    suffix: String? = null,
+    allowDecimal: Boolean = true,
+    confirmLabel: String,
+    onValue: (String) -> Unit,
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(value.ifEmpty { "0" }, style = EtalonType.monoDisplay, modifier = Modifier.weight(1f))
+            if (suffix != null) Text(suffix, style = EtalonType.monoBody, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        val rows = listOf("123", "456", "789", if (allowDecimal) ",0⌫" else " 0⌫")
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { ch ->
+                    when (ch) {
+                        ' ' -> Spacer(Modifier.weight(1f).height(60.dp))
+                        '⌫' -> FilledTonalIconButton(
+                            onClick = { onValue(applyBackspace(value)) },
+                            modifier = Modifier.weight(1f).height(60.dp),
+                        ) { Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = stringResource(R.string.action_backspace)) }
+                        else -> FilledTonalButton(
+                            onClick = { onValue(applyDigit(value, ch, allowDecimal)) },
+                            modifier = Modifier.weight(1f).height(60.dp),
+                        ) { Text(ch.toString(), style = EtalonType.monoTitle) }
+                    }
+                }
+            }
+        }
+        PrimaryButton(confirmLabel, onClick = onConfirm)
+    }
+}
+
+/** Amount and count entry as a modal sheet — the sheet's scrim is right for a one-off edit like
+ *  a payment amount or a shipment count, where nothing behind it needs to stay visible. A thin
+ *  wrapper around [NumericKeypad]: every existing caller (payments, logistics) is untouched. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NumericKeypadSheet(
@@ -46,29 +90,11 @@ fun NumericKeypadSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             SectionLabel(title)
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(value.ifEmpty { "0" }, style = EtalonType.monoDisplay, modifier = Modifier.weight(1f))
-                if (suffix != null) Text(suffix, style = EtalonType.monoBody, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            val rows = listOf("123", "456", "789", if (allowDecimal) ",0⌫" else " 0⌫")
-            rows.forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    row.forEach { ch ->
-                        when (ch) {
-                            ' ' -> Spacer(Modifier.weight(1f).height(60.dp))
-                            '⌫' -> FilledTonalIconButton(
-                                onClick = { value = applyBackspace(value) },
-                                modifier = Modifier.weight(1f).height(60.dp),
-                            ) { Icon(Icons.AutoMirrored.Filled.Backspace, contentDescription = stringResource(R.string.action_backspace)) }
-                            else -> FilledTonalButton(
-                                onClick = { value = applyDigit(value, ch, allowDecimal) },
-                                modifier = Modifier.weight(1f).height(60.dp),
-                            ) { Text(ch.toString(), style = EtalonType.monoTitle) }
-                        }
-                    }
-                }
-            }
-            PrimaryButton(stringResource(R.string.action_confirm), onClick = { onConfirm(value.ifEmpty { "0" }) })
+            NumericKeypad(
+                value = value, suffix = suffix, allowDecimal = allowDecimal,
+                confirmLabel = stringResource(R.string.action_confirm),
+                onValue = { value = it }, onConfirm = { onConfirm(value.ifEmpty { "0" }) },
+            )
         }
     }
 }

@@ -35,4 +35,8 @@ class KeypadInputTest {
     @Test fun `a second separator is rejected even with digits typed after the first`() {
         assertEquals("1,5", applyDigit("1,5", ',', true))
     }
+    @Test fun `a comma on an empty pad starts from an implied zero, and a second comma is refused`() {
+        assertEquals("0,", applyDigit("", ',', allowDecimal = true))
+        assertEquals("0,", applyDigit("0,", ',', allowDecimal = true))
+    }
 }

@@ -131,6 +131,11 @@ class CalculatorViewModel @Inject constructor(
 
     fun keypadBackspace() = _state.update { it.copy(keypadText = it.keypadText.dropLast(1)) }
 
+    /** Replaces the whole pad text — what the docked [uz.etalon.crm.core.designsystem.components.NumericKeypad]
+     *  calls: it applies `applyDigit`/`applyBackspace` itself and hands back the next full string,
+     *  unlike [keypadDigit]'s one-character-at-a-time API above. */
+    fun setKeypadText(text: String) = _state.update { it.copy(keypadText = text) }
+
     /** Parses the raw comma string and writes it onto the targeted field. An empty or unparsable
      *  pad commits as `0.0` rather than leaving the field untouched — the same rule the web
      *  calculator's keypad uses. */

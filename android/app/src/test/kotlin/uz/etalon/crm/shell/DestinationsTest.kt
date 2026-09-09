@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import uz.etalon.crm.R
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Role
+import uz.etalon.crm.nav.Calculator
 import uz.etalon.crm.nav.ChangePin
 import uz.etalon.crm.nav.ClientDetail
 import uz.etalon.crm.nav.Clients
@@ -33,11 +34,12 @@ class DestinationsTest {
     private val owner = me("order.view", "calculator.use", "inbox.access", "payment.view", "inventory.view")
 
     /** HOME joined ORDERS and PAYMENTS as a real screen in this slice — it needs no permission,
-     *  so it is first on everyone's bar now rather than sitting in «Яна» forever. */
+     *  so it is first on everyone's bar now rather than sitting in «Яна» forever. CALCULATOR
+     *  joined too: the owner's bar now fills to the cap without INBOX ever holding a slot. */
     @Test
     fun `the bar holds only destinations that have a screen, in priority order`() {
         assertEquals(
-            listOf(Destination.HOME, Destination.ORDERS, Destination.PAYMENTS, Destination.MORE),
+            listOf(Destination.HOME, Destination.ORDERS, Destination.CALCULATOR, Destination.PAYMENTS, Destination.MORE),
             destinationsFor(owner),
         )
     }
@@ -53,7 +55,7 @@ class DestinationsTest {
     /** A placeholder is never a bar slot, and is never lost either: «Яна» still lists it. */
     @Test
     fun `a placeholder is kept off the bar but stays in More`() {
-        val placeholders = listOf(Destination.CALCULATOR, Destination.INBOX, Destination.PRODUCTION, Destination.GAZOBLOK)
+        val placeholders = listOf(Destination.INBOX, Destination.PRODUCTION, Destination.GAZOBLOK)
         val bar = destinationsFor(owner)
         val more = moreDestinationsFor(owner)
         placeholders.forEach { d ->
@@ -86,20 +88,20 @@ class DestinationsTest {
     }
 
     /**
-     * This slice is the first where the four-item cap can actually be reached: HOME, ORDERS,
-     * PAYMENTS and CLIENTS are now real screens — exactly four, so a fully-permitted operator's
-     * bar fills to the cap without anything being trimmed by it (there is no fifth real screen
-     * yet for the cap to push off). Phase 1c dropped the equivalent hard-equality assertion
-     * because back then the filtered list could never reach four; it is restored here, at the
-     * boundary it can now actually reach.
+     * HOME, ORDERS, CALCULATOR, PAYMENTS and CLIENTS are now real screens — five, one past the
+     * four-item cap — so a fully-permitted operator's bar fills to the cap and CLIENTS (last in
+     * §5.1 priority order among the five) is the one pushed into «Яна». This replaces the
+     * previous boundary case, where CLIENTS was the fourth screen and nothing needed trimming;
+     * CALCULATOR taking a slot ahead of it in priority order is exactly what should happen now.
      */
     @Test
     fun `a user permitted every destination with a screen fills the bar to exactly the cap`() {
         val everyone = Destination.entries.mapNotNull { it.requires }.toTypedArray()
         assertEquals(
-            listOf(Destination.HOME, Destination.ORDERS, Destination.PAYMENTS, Destination.CLIENTS, Destination.MORE),
+            listOf(Destination.HOME, Destination.ORDERS, Destination.CALCULATOR, Destination.PAYMENTS, Destination.MORE),
             destinationsFor(me(*everyone)),
         )
+        assertTrue(Destination.CLIENTS in moreDestinationsFor(me(*everyone)), "CLIENTS is the screen the cap pushed off")
     }
 
     /** Whatever the bar does not hold has to be reachable from "Яна" — otherwise a permitted
@@ -107,7 +109,7 @@ class DestinationsTest {
     @Test
     fun `More lists exactly what the bar does not`() {
         assertEquals(
-            listOf(Destination.CALCULATOR, Destination.INBOX, Destination.PRODUCTION, Destination.GAZOBLOK),
+            listOf(Destination.INBOX, Destination.PRODUCTION, Destination.GAZOBLOK),
             moreDestinationsFor(owner),
         )
     }
@@ -170,6 +172,28 @@ class DestinationsTest {
     fun `a user without order view never starts on Orders`() {
         assertEquals(Home, startKeyFor(me("inventory.view"), deepLinkOrderId = null))
         assertEquals(Home, startKeyFor(me("inventory.view"), deepLinkOrderId = "o-42"))
+    }
+
+    // ── The calculator slice: the tab is a real screen, gated on its own permission ──────────
+
+    @Test
+    fun `the calculator tab is a real screen, not a coming-soon notice`() {
+        assertEquals(Calculator, Destination.CALCULATOR.key())
+    }
+
+    /** An operator without `calculator.use` must not merely lose the tab — the route must not
+     *  exist for them at all, so no restored back stack can open it either. */
+    @Test
+    fun `a user without calculator use neither sees the tab nor can reach it`() {
+        val noCalculator = me("order.view")
+        assertFalse(Destination.CALCULATOR in destinationsFor(noCalculator) + moreDestinationsFor(noCalculator))
+        assertFalse(noCalculator.canOpen(Calculator))
+        assertEquals("calculator.use", gatingPermission(Calculator))
+    }
+
+    @Test
+    fun `a user with calculator use can reach it`() {
+        assertTrue(me("calculator.use").canOpen(Calculator))
     }
 
     // ── The payments slice: the tab is a real screen, and every route behind it is gated ──

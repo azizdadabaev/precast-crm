@@ -10,11 +10,13 @@ internal const val PERM_PAYMENT_VIEW = "payment.view"
 internal const val PERM_PAYMENT_RECORD = "payment.record"
 internal const val PERM_DISCREPANCY_VIEW = "discrepancy.view"
 internal const val PERM_CLIENT_VIEW = "client.view"
+internal const val PERM_CALCULATOR_USE = "calculator.use"
 
 /** The key a bottom-bar destination opens. The rest have no feature module yet. */
 internal fun Destination.key(): Key = when (this) {
     Destination.HOME -> Home
     Destination.ORDERS -> Orders
+    Destination.CALCULATOR -> Calculator
     Destination.CLIENTS -> Clients
     Destination.PAYMENTS -> Payments
     Destination.MORE -> More
@@ -38,6 +40,7 @@ internal fun gatingPermission(key: NavKey): String? = when (key) {
     is RecordPayment -> PERM_PAYMENT_RECORD
     is Discrepancies -> PERM_DISCREPANCY_VIEW
     is Clients, is ClientDetail -> PERM_CLIENT_VIEW
+    is Calculator -> PERM_CALCULATOR_USE
     else -> null
 }
 
