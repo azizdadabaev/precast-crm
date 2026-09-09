@@ -1,12 +1,15 @@
 package uz.etalon.crm.feature.calculator
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +39,19 @@ private class TotalsSheetInertSessionPricing : SessionPricing {
  * own KDoc), not a branch inside it. So the "collapsed" baseline below is the SAME composition as
  * "expanded", just clipped to the peek height the way `CalculatorScreen` clips it in the real app;
  * "expanded" captures the whole thing at its natural height.
+ *
+ * The "collapsed" fixture must reproduce the WHOLE sheet the way `BottomSheetScaffold` builds it,
+ * not just [TotalsSheet]'s own content: Material3 draws its default drag handle
+ * ([BottomSheetDefaults.DragHandle]) above `sheetContent`, and `sheetPeekHeight`
+ * ([CalculatorScreen]'s [CALC_SHEET_PEEK_HEIGHT]) measures both together. An earlier version of
+ * this fixture clipped a bare, handle-less [TotalsSheet] to `88.dp` — a peek the app never
+ * actually draws — so it stayed green while the real screen clipped the grand total the operator
+ * reads out loud (see task-6 report). Rendering the handle here and sharing
+ * [CALC_SHEET_PEEK_HEIGHT] with the real screen is what makes this fixture move if that ever
+ * regresses again, in either direction — a bigger handle, more of [TotalsSheet]'s own top padding,
+ * or a taller peek row.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36])
@@ -72,7 +87,12 @@ class TotalsSheetScreenshotTest {
     private fun shootCollapsed(name: String, dark: Boolean) {
         rule.setContent {
             EtalonTheme(darkTheme = dark) {
-                Box(Modifier.height(88.dp).clipToBounds()) { TotalsSheet(state = state(), vm = vm()) {} }
+                Box(Modifier.height(CALC_SHEET_PEEK_HEIGHT).clipToBounds()) {
+                    Column(Modifier.fillMaxWidth()) {
+                        BottomSheetDefaults.DragHandle()
+                        TotalsSheet(state = state(), vm = vm()) {}
+                    }
+                }
             }
         }
         rule.onRoot().captureRoboImage("screenshots/totals_sheet_collapsed_$name.png")

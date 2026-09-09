@@ -97,6 +97,24 @@ class CalculatorScreenshotTest {
         )
     }
 
+    /** A single mid-typing room with the docked keypad open and nothing else on screen — isolates
+     *  the FAB-vs-keypad overlap this fixture exists to pin (Critical 2's task-6 finding: the FAB
+     *  used to sit on the docked keypad's «Кейинги» confirm button, because both were anchored in
+     *  the same `Box` — see `CalculatorScreen.kt`'s own fix comment) from the rest of [state]'s
+     *  concerns (multiple rooms, patterns, totals). */
+    private fun keypadFabState(): CalculatorUiState {
+        val rows = listOf(SlabRow(id = "r1", name = "Хона 1"))
+        return CalculatorUiState(
+            rows = rows,
+            keypad = KeypadTarget("r1", KeypadTarget.Field.WIDTH),
+            keypadText = "4",
+            totals = projectTotals(rows, 0.0, 0.0),
+            orderTotals = computeOrderTotals(rows, 0.0, 0.0, 0.0, 0.0),
+            schedule = beamSchedule(rows),
+            canWrite = true,
+        )
+    }
+
     private fun content(s: CalculatorUiState, dark: Boolean) {
         val vm = CalculatorViewModel(session = InertSessionPricing(), permissions = PermissionGate { false })
         rule.setContent {
@@ -123,10 +141,18 @@ class CalculatorScreenshotTest {
         rule.onRoot().captureRoboImage("screenshots/calculator_extras_$name.png")
     }
 
+    private fun shootKeypadFab(name: String, dark: Boolean) {
+        content(keypadFabState(), dark)
+        rule.onRoot().captureRoboImage("screenshots/calculator_fab_keypad_$name.png")
+    }
+
     @Test @Config(qualifiers = "w411dp-h891dp") fun light() = shoot("light", false)
     @Test @Config(qualifiers = "w411dp-h891dp") fun dark() = shoot("dark", true)
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun largeFont() = shoot("font13", false)
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun extrasLight() = shootExpanded("light", false)
     @Test @Config(qualifiers = "w411dp-h891dp") fun extrasDark() = shootExpanded("dark", true)
+
+    @Test @Config(qualifiers = "w411dp-h891dp") fun fabKeypadLight() = shootKeypadFab("light", false)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun fabKeypadDark() = shootKeypadFab("dark", true)
 }
