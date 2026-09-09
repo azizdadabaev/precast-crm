@@ -103,6 +103,32 @@ class BoundaryTest {
         assertEquals(2, moneyOf(0.1).amount.scale())
     }
 
+    @TestFactory
+    fun `every order-totals golden vector's totalPrice converts to Money losslessly`() =
+        GoldenVectors.orderTotals.cases.map { c ->
+            DynamicTest.dynamicTest(c.name) {
+                val rows = c.rooms.mapIndexed { i, (width, length) ->
+                    recomputeRow(SlabRow(id = "r$i", name = "Хона ${i + 1}", innerWidth = width, innerLength = length))
+                }
+                val r = computeOrderTotals(rows, c.discountPercent, c.discountAmount, c.deliveryCost, c.otherCost)
+                val expectedWire = BigDecimal.valueOf(round2(c.result.getValue("total_price").double)).setScale(2).toPlainString()
+                assertMoneyEquals(expectedWire, r.totalPriceMoney(), c.name)
+            }
+        }
+
+    @Test
+    fun `a delivery fee out of a division carries float noise into totalPrice — round2 before Money avoids the throw`() {
+        // Same shape as the gazoblok `deliveryCost` case above, but here it is `totalPrice` itself
+        // that carries the noise (OrderTotals has no separate un-rounded deliveryCost field — see
+        // OrderTotals.kt's class doc). Bare moneyOf(totalPrice) would throw; totalPriceMoney()
+        // round2's first, mirroring what the Decimal(14,2) column does on write.
+        val row = recomputeRow(SlabRow(id = "r", name = "Хона 1", innerWidth = 4.0, innerLength = 6.0))
+        val onePartOfATruck = 250_000.0 / 3.0 // 83333.33333333333
+        val r = computeOrderTotals(listOf(row), discountPercent = 0.0, discountAmount = 0.0, deliveryCost = onePartOfATruck, otherCost = 0.0)
+        assertThrows(ArithmeticException::class.java) { moneyOf(r.totalPrice) }
+        assertMoneyEquals("3832933.33", r.totalPriceMoney(), "totalPrice with a divided delivery fee")
+    }
+
     @Test
     fun `moneyOf throws rather than silently round when a double still carries a third decimal`() {
         // Pins RoundingMode.UNNECESSARY as moneyOf's contract. Every engine money field is

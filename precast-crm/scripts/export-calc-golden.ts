@@ -51,6 +51,8 @@ import {
   type SlabResult,
   type PriceConfig,
 } from "../src/services/calculation-engine";
+import { computeOrderTotals, type DiscountMode } from "../src/lib/order-totals";
+import type { RoomInput } from "../src/lib/calc-persistence";
 import {
   blockVolumeM3,
   pricePerM3,
@@ -83,11 +85,36 @@ export interface ProjectGoldenCaseResult {
 export interface ProjectGoldenCase { name: string; input: ProjectGoldenCaseInput; result: ProjectGoldenCaseResult }
 export interface ProjectGoldenBlock { cases: ProjectGoldenCase[] }
 
+// `computeOrderTotals` (order-totals.ts) — the order-PLACEMENT roll-up, distinct from
+// `projectTotal` above (the calculator's own in-app running total). Unlike the `project` block,
+// which replays over bare room SUBTOTALS, `computeOrderTotals` takes real `RoomInput[]` and runs
+// the engine itself, so a vector here carries real room geometry rather than a pre-computed
+// number — the Kotlin port under test builds its rooms through `recomputeRow`/`calculateSlab`
+// the same way, then feeds only the `.result.subtotal`s into its own roll-up (see task-6 report's
+// Deviation note for why the Android signature takes already-computed rows instead of RoomInput).
+export interface OrderTotalsGoldenCaseInput {
+  rooms: RoomInput[];
+  discount_percent: number;
+  discount_amount: number;
+  delivery_cost: number;
+  other_cost: number;
+}
+export interface OrderTotalsGoldenCaseResult {
+  rooms_subtotal: number;
+  discount_amount: number;
+  resolved_discount_percent: number;
+  discount_mode: DiscountMode;
+  total_price: number;
+}
+export interface OrderTotalsGoldenCase { name: string; input: OrderTotalsGoldenCaseInput; result: OrderTotalsGoldenCaseResult }
+export interface OrderTotalsGoldenBlock { cases: OrderTotalsGoldenCase[] }
+
 export interface GoldenFile {
   version: 1;
   pricing: PriceConfig;
   cases: GoldenCase[];
   project: ProjectGoldenBlock;
+  orderTotals: OrderTotalsGoldenBlock;
 }
 
 const inputs: Array<{ name: string; input: SlabInput }> = [
@@ -318,6 +345,98 @@ function buildProjectGolden(): ProjectGoldenBlock {
   };
 }
 
+// ── Order-totals vectors (computeOrderTotals) ──────────────────────
+//
+// One case per bullet in the task-6 brief's Deviation: the ordinary percent
+// path with delivery+other both moving the total (the bug the task exists to
+// prevent), an amount override below the subtotal, one capped at the
+// subtotal, an empty room list (delivery/other alone form the total, no
+// divide-by-zero), the `discountAmount: 0` and negative-override falsy
+// cases falling through to the percent branch, and — unlike `projectTotal`
+// — `discountPercent` is proven NOT clamped here (the route/schema layer
+// clamps 0..100 before this function ever sees it; this function itself
+// does not). The last case is a delivery fee out of a division, the same
+// float-noise shape as BoundaryTest's gazoblok `deliveryCost` case, so the
+// Kotlin side has a real vector to prove its round2-before-Money boundary.
+const room46: RoomInput[] = [{ innerWidth: 4.0, innerLength: 6.0 }];
+const room46And43: RoomInput[] = [{ innerWidth: 4.0, innerLength: 6.0 }, { innerWidth: 4.0, innerLength: 4.3 }];
+const subtotal46 = computeOrderTotals(
+  room46,
+  { discountPercent: 0, discountAmount: 0, deliveryCost: 0, otherCost: 0 },
+  DEFAULT_PRICE_CONFIG,
+).roomsSubtotal;
+
+const orderTotalsCases: Array<{
+  name: string;
+  rooms: RoomInput[];
+  discountPercent: number;
+  discountAmount: number;
+  deliveryCost: number;
+  otherCost: number;
+}> = [
+  {
+    name: "two rooms, 10% discount — delivery and other both raise the total",
+    rooms: room46And43, discountPercent: 10, discountAmount: 0, deliveryCost: 150_000, otherCost: 25_000,
+  },
+  {
+    name: "amount override below the subtotal wins over the ignored percent",
+    rooms: room46, discountPercent: 25, discountAmount: 500_000, deliveryCost: 200_000, otherCost: 0,
+  },
+  {
+    name: "amount override above the subtotal is capped at the subtotal",
+    rooms: room46, discountPercent: 0, discountAmount: subtotal46 + 1_000_000, deliveryCost: 0, otherCost: 75_000,
+  },
+  {
+    name: "empty room list — delivery and other alone form the total, no divide-by-zero",
+    rooms: [], discountPercent: 0, discountAmount: 0, deliveryCost: 100_000, otherCost: 50_000,
+  },
+  {
+    name: "falsy-zero override falls through to the percent branch (0 is not > 0)",
+    rooms: room46, discountPercent: 10, discountAmount: 0, deliveryCost: 0, otherCost: 0,
+  },
+  {
+    name: "negative discountPercent is NOT clamped here (unlike projectTotal)",
+    rooms: room46, discountPercent: -5, discountAmount: 0, deliveryCost: 0, otherCost: 0,
+  },
+  {
+    name: "discountPercent above 100 is NOT clamped here (unlike projectTotal)",
+    rooms: room46, discountPercent: 150, discountAmount: 0, deliveryCost: 0, otherCost: 0,
+  },
+  {
+    name: "a delivery fee out of a division carries float noise into totalPrice",
+    rooms: room46, discountPercent: 0, discountAmount: 0, deliveryCost: 250_000 / 3, otherCost: 0,
+  },
+];
+
+function buildOrderTotalsGolden(): OrderTotalsGoldenBlock {
+  return {
+    cases: orderTotalsCases.map((c) => {
+      const r = computeOrderTotals(
+        c.rooms,
+        { discountPercent: c.discountPercent, discountAmount: c.discountAmount, deliveryCost: c.deliveryCost, otherCost: c.otherCost },
+        DEFAULT_PRICE_CONFIG,
+      );
+      return {
+        name: c.name,
+        input: {
+          rooms: c.rooms,
+          discount_percent: c.discountPercent,
+          discount_amount: c.discountAmount,
+          delivery_cost: c.deliveryCost,
+          other_cost: c.otherCost,
+        },
+        result: {
+          rooms_subtotal: r.roomsSubtotal,
+          discount_amount: r.discountAmount,
+          resolved_discount_percent: r.resolvedDiscountPercent,
+          discount_mode: r.discountMode,
+          total_price: r.totalPrice,
+        },
+      };
+    }),
+  };
+}
+
 export function buildGolden(): GoldenFile {
   return {
     version: 1,
@@ -336,6 +455,7 @@ export function buildGolden(): GoldenFile {
       })),
     ],
     project: buildProjectGolden(),
+    orderTotals: buildOrderTotalsGolden(),
   };
 }
 

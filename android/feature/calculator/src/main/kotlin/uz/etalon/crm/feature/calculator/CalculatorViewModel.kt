@@ -14,6 +14,7 @@ import uz.etalon.crm.core.calc.Pattern
 import uz.etalon.crm.core.calc.PriceConfig
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.beamSchedule
+import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.calc.roundDownToGrid
@@ -210,12 +211,34 @@ class CalculatorViewModel @Inject constructor(
     fun clearRateOverride(id: String) =
         applyToRow(id) { it.copy(m2PriceOverride = false, m2PriceOverrideValue = null, m2PriceReason = null) }
 
-    fun setDiscountMode(m: DiscountMode) = _state.update { recomputeTotals(it.copy(discountMode = m)) }
-    fun setDiscountPercent(v: Double) = _state.update { recomputeTotals(it.copy(discountPercent = v)) }
-    fun setDiscountAmount(v: Double) = _state.update { recomputeTotals(it.copy(discountAmount = v)) }
-    fun setDeliveryCost(v: Double) = _state.update { it.copy(deliveryCost = v) }
-    fun setOtherCost(v: Double) = _state.update { it.copy(otherCost = v) }
+    /** [DiscountMode.PERCENT]/[DiscountMode.AMOUNT] are mutually exclusive at the engine boundary
+     *  (see [withTotals]'s comment) — switching mode zeroes the field the OTHER mode owns, so a
+     *  stale value left in the field the operator just left cannot silently resurface if they
+     *  switch back. */
+    fun setDiscountMode(m: DiscountMode) = _state.update { s ->
+        recomputeTotals(
+            when (m) {
+                DiscountMode.PERCENT -> s.copy(discountMode = m, discountAmount = 0.0)
+                DiscountMode.AMOUNT -> s.copy(discountMode = m, discountPercent = 0.0)
+            },
+        )
+    }
+    fun setDiscountPercent(v: Double) = _state.update { recomputeTotals(it.copy(discountPercent = v.coerceIn(0.0, 100.0))) }
+    fun setDiscountAmount(v: Double) = _state.update { recomputeTotals(it.copy(discountAmount = v.coerceAtLeast(0.0))) }
+    fun setDeliveryCost(v: Double) = _state.update { recomputeTotals(it.copy(deliveryCost = v.coerceAtLeast(0.0))) }
+    fun setOtherCost(v: Double) = _state.update { recomputeTotals(it.copy(otherCost = v.coerceAtLeast(0.0))) }
     fun setGrid(g: Grid) = _state.update { it.copy(grid = g) }
+
+    /** The `calc_round_all_up` ghost button: bumps every room with a width up to the current
+     *  [Grid], leaving extras-only rows (no width yet) untouched — same rule [bumpWidth] uses for
+     *  one row, applied to all of them at once. */
+    fun roundAllWidthsUp() = _state.update { s ->
+        val step = s.grid.step
+        val newRows = s.rows.map { row ->
+            if (row.innerWidth > 0) recomputeRow(row.copy(innerWidth = roundUpToGrid(row.innerWidth, step)), priceConfig) else row
+        }
+        withTotals(s, newRows)
+    }
 
     fun toggleExpanded(id: String) = _state.update { it.copy(expandedRowId = if (it.expandedRowId == id) null else id) }
 
@@ -227,7 +250,9 @@ class CalculatorViewModel @Inject constructor(
             rows = emptyList(), expandedRowId = null, keypad = null, keypadText = "",
             discountMode = DiscountMode.PERCENT, discountPercent = 0.0, discountAmount = 0.0,
             deliveryCost = 0.0, otherCost = 0.0, grid = Grid.CM10,
-            totals = projectTotals(emptyList(), 0.0, 0.0), schedule = emptyList(), error = null,
+            totals = projectTotals(emptyList(), 0.0, 0.0),
+            orderTotals = computeOrderTotals(emptyList(), 0.0, 0.0, 0.0, 0.0),
+            schedule = emptyList(), error = null,
         )
     }
 
@@ -250,6 +275,13 @@ class CalculatorViewModel @Inject constructor(
             DiscountMode.PERCENT -> s.discountPercent to 0.0
             DiscountMode.AMOUNT -> 0.0 to s.discountAmount
         }
-        return s.copy(rows = rows, totals = projectTotals(rows, percent, amountOverride), schedule = beamSchedule(rows))
+        return s.copy(
+            rows = rows,
+            totals = projectTotals(rows, percent, amountOverride),
+            // computeOrderTotals takes the same PERCENT/AMOUNT split — it resolves discountAmount
+            // > 0 the same way projectTotal's discountAmountOverride does (see OrderTotals.kt).
+            orderTotals = computeOrderTotals(rows, percent, amountOverride, s.deliveryCost, s.otherCost),
+            schedule = beamSchedule(rows),
+        )
     }
 }

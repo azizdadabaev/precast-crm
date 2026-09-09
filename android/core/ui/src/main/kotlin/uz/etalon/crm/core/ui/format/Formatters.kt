@@ -41,6 +41,9 @@ fun formatDecimal(v: BigDecimal, maxDigits: Int = 1): String {
 fun formatArea(m2: BigDecimal): String = formatDecimal(m2, 2) + " м²"
 fun formatCount(n: Int): String = groupThousands(n.toString()) + " та"
 
+/** A discount percentage, e.g. "10%" or "13,33%" — the calculator's discount field. */
+fun formatPercent(v: BigDecimal, decimals: Int = 2): String = formatDecimal(v, decimals) + "%"
+
 /** A length in metres for a room card or a beam schedule row. */
 fun formatMeters(v: Double, decimals: Int = 2): String =
     formatDecimal(BigDecimal.valueOf(v), decimals) + " м"

@@ -43,4 +43,21 @@
     <string name="calc_rate_reason_counter">%1$d/%2$d</string>
     <string name="calc_rate_apply">Қўллаш</string>
     <string name="calc_rate_clear">Авто нархга қайтариш</string>
+    <string name="calc_totals_title">Сўнгги нархи</string>
+    <string name="calc_rooms_subtotal">Жами хоналар</string>
+    <string name="calc_discount_percent">Чегирма %</string>
+    <string name="calc_discount_amount">Чегирма (сўм)</string>
+    <string name="calc_delivery_cost">Етказиб бериш</string>
+    <string name="calc_other_cost">Бошқа харажат</string>
+    <string name="calc_total_weight">Жами маҳсулот оғирлиги</string>
+    <string name="calc_grid_label">Лабораторий ўлчам</string>
+    <string name="calc_grid_10">10 см</string>
+    <string name="calc_grid_5">5 см</string>
+    <string name="calc_round_all_up">Барча хоналарни юқорилаштириш</string>
+    <string name="calc_production_list">Балка + Ғишт</string>
+    <string name="calc_schedule_row">Балка · %1$s м</string>
+    <string name="calc_pieces">%1$s дона</string>
+    <string name="calc_schedule_empty">Ҳозирча балка йўқ.</string>
+    <string name="calc_total_blocks">Ғишт · жами</string>
+    <string name="calc_weight_formula">%1$s × 180 = %2$s</string>
 </resources>

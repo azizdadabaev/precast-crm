@@ -62,6 +62,27 @@ data class ProjectCase(
 data class ProjectGolden(val cases: List<ProjectCase>)
 
 /**
+ * One case from `calc-golden.json`'s `orderTotals` block: `computeOrderTotals` (order-totals.ts)
+ * replayed over real room geometry — unlike [ProjectCase] above, this function runs the engine
+ * itself, so the exporter records `RoomInput`-shaped rooms rather than pre-computed subtotals (see
+ * the header comment in `precast-crm/scripts/export-calc-golden.ts`). [rooms] carries only
+ * `innerWidth`/`innerLength` — every case in this block uses the engine's defaults for the rest —
+ * so the parity test builds each row with [SlabRow]'s own defaults via [recomputeRow], exactly as
+ * `CalculatorViewModel` does.
+ */
+data class OrderTotalsCase(
+    val name: String,
+    val rooms: List<Pair<Double, Double>>, // (innerWidth, innerLength)
+    val discountPercent: Double,
+    val discountAmount: Double,
+    val deliveryCost: Double,
+    val otherCost: Double,
+    val result: Map<String, JsonPrimitive>,
+)
+
+data class OrderTotalsGolden(val cases: List<OrderTotalsCase>)
+
+/**
  * One case from `docs/api/gazoblok-golden.json`. Unlike [SlabCase], `gazoblok-engine.ts` exports
  * several distinct functions (`fn`) with different input shapes and result shapes — some a bare
  * number, some a nested object, some an object with array fields — so `input`/`result` are kept
@@ -101,6 +122,7 @@ data class GazoblokGolden(
 object GoldenVectors {
     val slab: SlabGolden by lazy { parseSlab(calcGoldenRoot) }
     val project: ProjectGolden by lazy { parseProject(calcGoldenRoot) }
+    val orderTotals: OrderTotalsGolden by lazy { parseOrderTotals(calcGoldenRoot) }
     val gazoblok: GazoblokGolden by lazy { loadGazoblok() }
 
     /** `calc-golden.json` parsed once; [slab] and [project] both read off this same root instead
@@ -140,6 +162,27 @@ object GoldenVectors {
             )
         }
         return ProjectGolden(cases = cases)
+    }
+
+    private fun parseOrderTotals(root: JsonObject): OrderTotalsGolden {
+        val cases = root.getValue("orderTotals").jsonObject.getValue("cases").jsonArray.map { element ->
+            val case = element.jsonObject
+            val input = case.getValue("input").jsonObject
+            val rooms = input.getValue("rooms").jsonArray.map {
+                val room = it.jsonObject
+                room.getValue("innerWidth").jsonPrimitive.double to room.getValue("innerLength").jsonPrimitive.double
+            }
+            OrderTotalsCase(
+                name = case.getValue("name").jsonPrimitive.content,
+                rooms = rooms,
+                discountPercent = input.getValue("discount_percent").jsonPrimitive.double,
+                discountAmount = input.getValue("discount_amount").jsonPrimitive.double,
+                deliveryCost = input.getValue("delivery_cost").jsonPrimitive.double,
+                otherCost = input.getValue("other_cost").jsonPrimitive.double,
+                result = case.getValue("result").jsonObject.mapValues { it.value.jsonPrimitive },
+            )
+        }
+        return OrderTotalsGolden(cases = cases)
     }
 
     private fun loadGazoblok(): GazoblokGolden {

@@ -12,6 +12,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.calc.SlabRow
+import uz.etalon.crm.core.calc.beamSchedule
+import uz.etalon.crm.core.calc.computeOrderTotals
+import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
@@ -40,16 +43,25 @@ class CalculatorScreenshotTest {
     private fun room(id: String, name: String, width: Double, length: Double) =
         recomputeRow(SlabRow(id = id, name = name, innerWidth = width, innerLength = length))
 
-    private fun state() = CalculatorUiState(
-        rows = listOf(
+    // `totals`/`orderTotals`/`schedule` are computed the same way `CalculatorViewModel.withTotals`
+    // does — since Task 6 the totals sheet renders them too, and the peek row would show the
+    // empty-quote defaults (₸0, 0 м²) rather than these rooms' real numbers otherwise.
+    private fun state(): CalculatorUiState {
+        val rows = listOf(
             room("r1", "Хона 1", 4.0, 6.0),   // Б-Г-Б
             room("r2", "Хона 2", 4.0, 4.3),   // Г-Б-Г
             SlabRow(id = "r3", name = "Хона 3"), // not typed yet — result == null
-        ),
-        keypad = KeypadTarget("r3", KeypadTarget.Field.WIDTH),
-        keypadText = "4",
-        canWrite = true,
-    )
+        )
+        return CalculatorUiState(
+            rows = rows,
+            keypad = KeypadTarget("r3", KeypadTarget.Field.WIDTH),
+            keypadText = "4",
+            totals = projectTotals(rows, 0.0, 0.0),
+            orderTotals = computeOrderTotals(rows, 0.0, 0.0, 0.0, 0.0),
+            schedule = beamSchedule(rows),
+            canWrite = true,
+        )
+    }
 
     /** «Қўшимча» expanded on the Б-Г-Б room and overridden, so both new baselines catch the whole
      *  panel in one frame: the editable group (including the "Авто: …" comparison line, which
@@ -60,15 +72,19 @@ class CalculatorScreenshotTest {
      *  `calculator_rooms_*`. */
     private fun expandedState(): CalculatorUiState {
         val base = state()
+        val rows = base.rows.map {
+            if (it.id == "r1") {
+                recomputeRow(it.copy(m2PriceOverride = true, m2PriceOverrideValue = 230_000.0, m2PriceReason = "Йирик буюртма"))
+            } else it
+        }
         return base.copy(
-            rows = base.rows.map {
-                if (it.id == "r1") {
-                    recomputeRow(it.copy(m2PriceOverride = true, m2PriceOverrideValue = 230_000.0, m2PriceReason = "Йирик буюртма"))
-                } else it
-            },
+            rows = rows,
             expandedRowId = "r1",
             keypad = null,
             keypadText = "",
+            totals = projectTotals(rows, 0.0, 0.0),
+            orderTotals = computeOrderTotals(rows, 0.0, 0.0, 0.0, 0.0),
+            schedule = beamSchedule(rows),
         )
     }
 

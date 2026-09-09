@@ -1,8 +1,10 @@
 package uz.etalon.crm.feature.calculator
 
 import uz.etalon.crm.core.calc.BeamScheduleLine
+import uz.etalon.crm.core.calc.OrderTotals
 import uz.etalon.crm.core.calc.ProjectTotals
 import uz.etalon.crm.core.calc.SlabRow
+import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
 
 /** The width/length bump step, in metres — see `CalculatorViewModel.bumpWidth`. */
@@ -35,6 +37,10 @@ data class CalculatorUiState(
     val otherCost: Double = 0.0,
     val grid: Grid = Grid.CM10,
     val totals: ProjectTotals = projectTotals(emptyList(), 0.0, 0.0),
+    // The order-PLACEMENT roll-up — the sheet's headline number. Distinct from [totals]'s own
+    // `projTotal`: that one never includes delivery/other and rounds at three internal points
+    // (see `OrderTotals.kt`'s class doc for why the two must not be conflated).
+    val orderTotals: OrderTotals = computeOrderTotals(emptyList(), 0.0, 0.0, 0.0, 0.0),
     val schedule: List<BeamScheduleLine> = emptyList(),
     val canWrite: Boolean = false,          // order.create
     val error: String? = null,

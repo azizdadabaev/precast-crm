@@ -76,6 +76,17 @@ fun ProjectTotal.money(): ProjectMoney = ProjectMoney(
     total = moneyOf(total),
 )
 
+/**
+ * [OrderTotals.totalPrice], converted to [Money] — the order-placement headline the totals sheet
+ * shows (`Order.totalPrice`), not [ProjectTotal.money]'s `total` (a different, in-app running
+ * number that never includes delivery/other). [OrderTotals] leaves [OrderTotals.totalPrice]
+ * unrounded on purpose (see its class doc); it is [round2]'d here, immediately before [moneyOf],
+ * mirroring what the server's `Order.totalPrice` column (`Decimal(14,2)`) does on write — this is
+ * not new rounding, and every other [OrderTotals] field is left to the existing [ProjectTotal.money]
+ * display (roomsSubtotal/discountAmount/discountPercent), which this sheet also shows.
+ */
+fun OrderTotals.totalPriceMoney(): Money = moneyOf(round2(totalPrice))
+
 // ── Gazoblok ─────────────────────────────────────────────────────
 //
 // Same rule as the slab section above: every gazoblok money value is a `Double` in

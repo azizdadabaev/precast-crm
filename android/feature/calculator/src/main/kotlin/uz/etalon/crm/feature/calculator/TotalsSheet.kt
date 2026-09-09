@@ -1,0 +1,264 @@
+package uz.etalon.crm.feature.calculator
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import uz.etalon.crm.core.calc.money
+import uz.etalon.crm.core.calc.totalPriceMoney
+import uz.etalon.crm.core.designsystem.components.AreaText
+import uz.etalon.crm.core.designsystem.components.CountText
+import uz.etalon.crm.core.designsystem.components.EmptyState
+import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
+import uz.etalon.crm.core.designsystem.components.SectionLabel
+import uz.etalon.crm.core.designsystem.theme.EtalonType
+import uz.etalon.crm.core.ui.format.formatArea
+import uz.etalon.crm.core.ui.format.formatDecimal
+import uz.etalon.crm.core.ui.format.formatMoney
+import uz.etalon.crm.core.ui.format.formatPercent
+import uz.etalon.crm.core.ui.format.formatWeightKg
+import uz.etalon.crm.core.model.Money
+import java.math.BigDecimal
+
+/** Which of the totals sheet's four money fields the modal keypad is editing — the discount's two
+ *  entries are mutually exclusive (only the field for [CalculatorUiState.discountMode] is ever
+ *  shown), delivery and other are always both editable. */
+private enum class TotalsKeypadField { DISCOUNT_PERCENT, DISCOUNT_AMOUNT, DELIVERY, OTHER }
+
+/** Parses the modal keypad's comma-decimal text the same way `RoomExtras.kt`'s does: an empty or
+ *  unparsable pad commits as `0.0` rather than leaving the field untouched. */
+private fun parseKeypadValue(text: String): Double = text.replace(',', '.').toDoubleOrNull() ?: 0.0
+
+/** The sheet's four editable money fields (discount amount, delivery, other) are all whole-UZS —
+ *  their keypads use `allowDecimal = false`, same "cash has no kopeks" rule
+ *  `RecordPaymentScreen` uses — so truncating through [Long] is exact, never lossy. */
+private fun Double.asWholeMoney(): Money = Money.parse(toLong().toString())
+
+/**
+ * The persistent, draggable, never-dismissible totals sheet — hosted as `BottomSheetScaffold`'s
+ * `sheetContent` in [CalculatorScreen] with `sheetPeekHeight = 88.dp`. The collapsed peek (this
+ * composable's first row) and the rest of the content below it are laid out in one column; the
+ * scaffold's peek height is what visually clips the rest away until the operator drags the sheet
+ * up — this composable renders unconditionally, it never branches on the sheet's own state.
+ *
+ * The headline number is [CalculatorUiState.orderTotals]' `totalPrice` — the order-PLACEMENT
+ * total (`Order.totalPrice`, delivery and other included) — NOT `totals.projTotal.total`, which
+ * never includes delivery/other. See `OrderTotals.kt`'s class doc.
+ *
+ * [actions] is the slot the next tasks (Save Project / Place Order) fill; empty today.
+ */
+@Composable
+fun TotalsSheet(state: CalculatorUiState, vm: CalculatorViewModel, actions: @Composable () -> Unit) {
+    var keypadField by remember { mutableStateOf<TotalsKeypadField?>(null) }
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // ── Collapsed peek: grand total + total area ──
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MoneyText(state.orderTotals.totalPriceMoney(), style = EtalonType.monoTitle)
+            AreaText(
+                BigDecimal.valueOf(state.totals.monolithArea), style = EtalonType.monoTitle,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // ── Expanded: everything below the peek. Scrollable, but with no height cap of its own —
+        // BottomSheetScaffold's own Expanded anchor already bounds the sheet at the screen height,
+        // so this only kicks in if a very long beam schedule ever pushes past that. ──
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            LabelValueRow(stringResource(R.string.calc_rooms_subtotal)) {
+                MoneyText(state.totals.projTotal.money().roomsSubtotal, style = EtalonType.monoBody)
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = state.discountMode == DiscountMode.PERCENT,
+                        onClick = { vm.setDiscountMode(DiscountMode.PERCENT) },
+                        label = { Text(stringResource(R.string.calc_discount_percent)) },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    )
+                    FilterChip(
+                        selected = state.discountMode == DiscountMode.AMOUNT,
+                        onClick = { vm.setDiscountMode(DiscountMode.AMOUNT) },
+                        label = { Text(stringResource(R.string.calc_discount_amount)) },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    )
+                }
+                when (state.discountMode) {
+                    DiscountMode.PERCENT -> EditableValueRow(
+                        label = stringResource(R.string.calc_discount_percent),
+                        valueText = formatPercent(BigDecimal.valueOf(state.discountPercent)),
+                        onClick = { keypadField = TotalsKeypadField.DISCOUNT_PERCENT },
+                    )
+                    DiscountMode.AMOUNT -> EditableValueRow(
+                        label = stringResource(R.string.calc_discount_amount),
+                        valueText = formatMoney(state.discountAmount.asWholeMoney()),
+                        onClick = { keypadField = TotalsKeypadField.DISCOUNT_AMOUNT },
+                    )
+                }
+            }
+
+            EditableValueRow(
+                label = stringResource(R.string.calc_delivery_cost),
+                valueText = formatMoney(state.deliveryCost.asWholeMoney()),
+                onClick = { keypadField = TotalsKeypadField.DELIVERY },
+            )
+            EditableValueRow(
+                label = stringResource(R.string.calc_other_cost),
+                valueText = formatMoney(state.otherCost.asWholeMoney()),
+                onClick = { keypadField = TotalsKeypadField.OTHER },
+            )
+
+            LabelValueRow(stringResource(R.string.calc_total_weight)) {
+                Text(
+                    stringResource(
+                        R.string.calc_weight_formula,
+                        formatArea(BigDecimal.valueOf(state.totals.monolithArea)),
+                        formatWeightKg(state.totalWeightKg),
+                    ),
+                    style = EtalonType.monoBody,
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel(stringResource(R.string.calc_grid_label))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(
+                        selected = state.grid == Grid.CM10, onClick = { vm.setGrid(Grid.CM10) },
+                        label = { Text(stringResource(R.string.calc_grid_10)) }, modifier = Modifier.heightIn(min = 48.dp),
+                    )
+                    FilterChip(
+                        selected = state.grid == Grid.CM5, onClick = { vm.setGrid(Grid.CM5) },
+                        label = { Text(stringResource(R.string.calc_grid_5)) }, modifier = Modifier.heightIn(min = 48.dp),
+                    )
+                    TextButton(onClick = vm::roundAllWidthsUp, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(R.string.calc_round_all_up))
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SectionLabel(stringResource(R.string.calc_production_list))
+                if (state.schedule.isEmpty()) {
+                    EmptyState(stringResource(R.string.calc_schedule_empty))
+                } else {
+                    // beamLengthKey is already a two-decimal STRING from the engine layer (see its
+                    // KDoc in `Totals.kt`) — only the decimal separator changes for display, the
+                    // digits are never re-derived/re-formatted here.
+                    state.schedule.forEach { line ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(
+                                stringResource(R.string.calc_schedule_row, line.lengthKey.replace('.', ',')),
+                                style = EtalonType.monoBody,
+                            )
+                            Text(stringResource(R.string.calc_pieces, line.beams), style = EtalonType.monoBody)
+                        }
+                    }
+                    if (state.totals.blocks > 0) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(stringResource(R.string.calc_total_blocks), style = MaterialTheme.typography.labelLarge)
+                            CountText(state.totals.blocks, style = EtalonType.monoBody, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            }
+
+            actions()
+        }
+    }
+
+    keypadField?.let { field ->
+        val spec = when (field) {
+            TotalsKeypadField.DISCOUNT_PERCENT -> KeypadSpec(
+                stringResource(R.string.calc_discount_percent),
+                formatDecimal(BigDecimal.valueOf(state.discountPercent), 2),
+                "%", allowDecimal = true,
+            )
+            TotalsKeypadField.DISCOUNT_AMOUNT -> KeypadSpec(
+                stringResource(R.string.calc_discount_amount), state.discountAmount.toLong().toString(), "UZS", allowDecimal = false,
+            )
+            TotalsKeypadField.DELIVERY -> KeypadSpec(
+                stringResource(R.string.calc_delivery_cost), state.deliveryCost.toLong().toString(), "UZS", allowDecimal = false,
+            )
+            TotalsKeypadField.OTHER -> KeypadSpec(
+                stringResource(R.string.calc_other_cost), state.otherCost.toLong().toString(), "UZS", allowDecimal = false,
+            )
+        }
+        NumericKeypadSheet(
+            title = spec.title,
+            initial = spec.initial,
+            suffix = spec.suffix,
+            allowDecimal = spec.allowDecimal,
+            onConfirm = { text ->
+                val value = parseKeypadValue(text)
+                when (field) {
+                    TotalsKeypadField.DISCOUNT_PERCENT -> vm.setDiscountPercent(value)
+                    TotalsKeypadField.DISCOUNT_AMOUNT -> vm.setDiscountAmount(value)
+                    TotalsKeypadField.DELIVERY -> vm.setDeliveryCost(value)
+                    TotalsKeypadField.OTHER -> vm.setOtherCost(value)
+                }
+                keypadField = null
+            },
+            onDismiss = { keypadField = null },
+        )
+    }
+}
+
+/** What [NumericKeypadSheet] needs for one [TotalsKeypadField] — a plain holder so the `when`
+ *  above builds one value per branch instead of three separate `val`s each. */
+private data class KeypadSpec(val title: String, val initial: String, val suffix: String, val allowDecimal: Boolean)
+
+/** A read-only label/value row — the same shape as `RoomExtras.kt`'s `ReadOnlyRow`, duplicated
+ *  locally per this module's existing per-file convention for these small row helpers. */
+@Composable
+private fun LabelValueRow(label: String, value: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        value()
+    }
+}
+
+/** A tappable label/value row that opens the modal keypad — the same shape as `RoomExtras.kt`'s
+ *  `EditableValueRow`, duplicated locally per this module's existing per-file convention. */
+@Composable
+private fun EditableValueRow(label: String, valueText: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(valueText, style = EtalonType.monoBody, color = MaterialTheme.colorScheme.onSurface)
+    }
+}

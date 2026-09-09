@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { GOLDEN_CASES, buildGolden, buildGazoblokGolden } from "../scripts/export-calc-golden";
 import { calculateSlab, projectTotal, DEFAULT_PRICE_CONFIG, type SlabResult } from "@/services/calculation-engine";
+import { computeOrderTotals } from "@/lib/order-totals";
 
 describe("calc golden vectors", () => {
   it("covers every pattern, extras-only, overrides, and the BLENDER_CALC_SPEC cases", () => {
@@ -31,6 +32,28 @@ describe("calc golden vectors", () => {
         discount_percent: r.discount_percent,
         discount_amount: r.discount_amount,
         total: r.total,
+      }).toEqual(c.result);
+    }
+  });
+  it("order-totals vectors are reproducible from computeOrderTotals", () => {
+    const g = buildGolden();
+    for (const c of g.orderTotals.cases) {
+      const r = computeOrderTotals(
+        c.input.rooms,
+        {
+          discountPercent: c.input.discount_percent,
+          discountAmount: c.input.discount_amount,
+          deliveryCost: c.input.delivery_cost,
+          otherCost: c.input.other_cost,
+        },
+        DEFAULT_PRICE_CONFIG,
+      );
+      expect({
+        rooms_subtotal: r.roomsSubtotal,
+        discount_amount: r.discountAmount,
+        resolved_discount_percent: r.resolvedDiscountPercent,
+        discount_mode: r.discountMode,
+        total_price: r.totalPrice,
       }).toEqual(c.result);
     }
   });

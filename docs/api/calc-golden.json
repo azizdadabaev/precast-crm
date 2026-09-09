@@ -2719,5 +2719,184 @@
         }
       }
     ]
+  },
+  "orderTotals": {
+    "cases": [
+      {
+        "name": "two rooms, 10% discount — delivery and other both raise the total",
+        "input": {
+          "rooms": [
+            {
+              "innerWidth": 4,
+              "innerLength": 6
+            },
+            {
+              "innerWidth": 4,
+              "innerLength": 4.3
+            }
+          ],
+          "discount_percent": 10,
+          "discount_amount": 0,
+          "delivery_cost": 150000,
+          "other_cost": 25000
+        },
+        "result": {
+          "rooms_subtotal": 6464620,
+          "discount_amount": 646462,
+          "resolved_discount_percent": 10,
+          "discount_mode": "PERCENT",
+          "total_price": 5993158
+        }
+      },
+      {
+        "name": "amount override below the subtotal wins over the ignored percent",
+        "input": {
+          "rooms": [
+            {
+              "innerWidth": 4,
+              "innerLength": 6
+            }
+          ],
+          "discount_percent": 25,
+          "discount_amount": 500000,
+          "delivery_cost": 200000,
+          "other_cost": 0
+        },
+        "result": {
+          "rooms_subtotal": 3749600,
+          "discount_amount": 500000,
+          "resolved_discount_percent": 13.33,
+          "discount_mode": "AMOUNT",
+          "total_price": 3449600
+        }
+      },
+      {
+        "name": "amount override above the subtotal is capped at the subtotal",
+        "input": {
+          "rooms": [
+            {
+              "innerWidth": 4,
+              "innerLength": 6
+            }
+          ],
+          "discount_percent": 0,
+          "discount_amount": 4749600,
+          "delivery_cost": 0,
+          "other_cost": 75000
+        },
+        "result": {
+          "rooms_subtotal": 3749600,
+          "discount_amount": 3749600,
+          "resolved_discount_percent": 100,
+          "discount_mode": "AMOUNT",
+          "total_price": 75000
+        }
+      },
+      {
+        "name": "empty room list — delivery and other alone form the total, no divide-by-zero",
+        "input": {
+          "rooms": [],
+          "discount_percent": 0,
+          "discount_amount": 0,
+          "delivery_cost": 100000,
+          "other_cost": 50000
+        },
+        "result": {
+          "rooms_subtotal": 0,
+          "discount_amount": 0,
+          "resolved_discount_percent": 0,
+          "discount_mode": "PERCENT",
+          "total_price": 150000
+        }
+      },
+      {
+        "name": "falsy-zero override falls through to the percent branch (0 is not > 0)",
+        "input": {
+          "rooms": [
+            {
+              "innerWidth": 4,
+              "innerLength": 6
+            }
+          ],
+          "discount_percent": 10,
+          "discount_amount": 0,
+          "delivery_cost": 0,
+          "other_cost": 0
+        },
+        "result": {
+          "rooms_subtotal": 3749600,
+          "discount_amount": 374960,
+          "resolved_discount_percent": 10,
+          "discount_mode": "PERCENT",
+          "total_price": 3374640
+        }
+      },
+      {
+        "name": "negative discountPercent is NOT clamped here (unlike projectTotal)",
+        "input": {
+          "rooms": [
+            {
+              "innerWidth": 4,
+              "innerLength": 6
+            }
+          ],
+          "discount_percent": -5,
+          "discount_amount": 0,
+          "delivery_cost": 0,
+          "other_cost": 0
+        },
+        "result": {
+          "rooms_subtotal": 3749600,
+          "discount_amount": -187480,
+          "resolved_discount_percent": -5,
+          "discount_mode": "PERCENT",
+          "total_price": 3937080
+        }
+      },
+      {
+        "name": "discountPercent above 100 is NOT clamped here (unlike projectTotal)",
+        "input": {
+          "rooms": [
+            {
+              "innerWidth": 4,
+              "innerLength": 6
+            }
+          ],
+          "discount_percent": 150,
+          "discount_amount": 0,
+          "delivery_cost": 0,
+          "other_cost": 0
+        },
+        "result": {
+          "rooms_subtotal": 3749600,
+          "discount_amount": 5624400,
+          "resolved_discount_percent": 150,
+          "discount_mode": "PERCENT",
+          "total_price": -1874800
+        }
+      },
+      {
+        "name": "a delivery fee out of a division carries float noise into totalPrice",
+        "input": {
+          "rooms": [
+            {
+              "innerWidth": 4,
+              "innerLength": 6
+            }
+          ],
+          "discount_percent": 0,
+          "discount_amount": 0,
+          "delivery_cost": 83333.33333333333,
+          "other_cost": 0
+        },
+        "result": {
+          "rooms_subtotal": 3749600,
+          "discount_amount": 0,
+          "resolved_discount_percent": 0,
+          "discount_mode": "PERCENT",
+          "total_price": 3832933.3333333335
+        }
+      }
+    ]
   }
 }
