@@ -17,27 +17,31 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import java.io.IOException
 
 /**
- * `writeQuotePng` and `shareQuoteIntent` off-device — see `QuoteImage.kt`'s own KDoc for the
- * FileProvider wiring (`app/src/main/res/xml/file_paths.xml`, mirrored here in this module's own
- * `src/test/AndroidManifest.xml` + `src/test/res/xml/file_paths.xml` — a Robolectric unit test
- * inside `:feature:calculator` never sees `:app`'s manifest, since `:app` depends on this module
- * and not the other way round).
+ * `writeQuoteFile`, `writeQuotePng` and `shareQuoteIntent` off-device — see `QuoteImage.kt`'s own
+ * KDoc for the FileProvider wiring (`app/src/main/res/xml/file_paths.xml`, mirrored here in this
+ * module's own `src/test/AndroidManifest.xml` + `src/test/res/xml/file_paths.xml` — a Robolectric
+ * unit test inside `:feature:calculator` never sees `:app`'s manifest, since `:app` depends on this
+ * module and not the other way round).
  *
- * Every test that calls [writeQuotePng] is skipped (not failed) on a Windows host, via
- * `assumeTrue(File.separatorChar == '/')`: `androidx.core.content.FileProvider
+ * Only the ONE case that actually calls `FileProvider.getUriForFile` is skipped (not failed) on a
+ * Windows host, via `assumeTrue(File.separatorChar == '/')`: `androidx.core.content.FileProvider
  * .SimplePathStrategy.belongsToRoot` hardcodes `'/'` when checking a resolved file against its
  * configured root (`filePath.startsWith(rootPath + '/')` — FileProvider.java), but
  * `File.getCanonicalPath()` on Windows returns `\`-separated paths, so the check never matches and
  * `getUriForFile` throws `IllegalArgumentException("Failed to find configured root...")` for ANY
- * authority/root, no matter how correctly configured — before `writeQuotePng` can even return, so
- * every assertion afterward is moot too. This is a real, upstream limitation of running this
- * specific library call under Robolectric on Windows — verified by walking the exact
+ * authority/root, no matter how correctly configured. This is a real, upstream limitation of
+ * running that specific library call under Robolectric on Windows — verified by walking the exact
  * provider/meta-data/XML resolution by hand (all correct) down to this one hardcoded separator —
  * not a defect in `writeQuotePng` or in this module's manifest/resource wiring, and it does not
- * reproduce on a real device or emulator, or on a Linux/macOS host, where `File.separatorChar` is
- * already `/`.
+ * reproduce on a real device or emulator, or on a Linux/macOS host.
+ *
+ * Everything else — the write itself, the stale-file cleanup that keeps a previous customer's
+ * details out of the next share, and the IOException the share button has to catch — goes through
+ * `writeQuoteFile` against a real `cacheDir` and therefore runs on EVERY host. Before that split
+ * this file had zero executed coverage on Windows, and there is no CI to make up for it.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -46,17 +50,44 @@ class QuoteImageTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun `writeQuotePng writes a readable PNG under cacheDir slash quotes`() = runTest {
-        assumeTrue(File.separatorChar == '/')
+    fun `writeQuoteFile writes a readable PNG under cacheDir slash quotes`() = runTest {
+        val written = writeQuoteFile(context, ImageBitmap(4, 4))
 
-        writeQuotePng(context, ImageBitmap(4, 4))
-
+        assertEquals(File(context.cacheDir, "quotes"), written.parentFile)
         val files = File(context.cacheDir, "quotes").listFiles().orEmpty()
         assertEquals(1, files.size)
         val decoded = BitmapFactory.decodeFile(files.first().absolutePath)
         assertNotNull("the written file must decode back as an image", decoded)
         assertEquals(4, decoded!!.width)
         assertEquals(4, decoded.height)
+    }
+
+    /** A stale PNG carries a previous customer's name, phone and address baked into the image. */
+    @Test
+    fun `writeQuoteFile clears a stale file from an earlier share before writing the new one`() = runTest {
+        val first = writeQuoteFile(context, ImageBitmap(2, 2))
+        val second = writeQuoteFile(context, ImageBitmap(2, 2))
+
+        val dir = File(context.cacheDir, "quotes")
+        assertEquals(1, dir.listFiles()?.size)
+        assertTrue("each share gets its own unpredictable name", first.name != second.name)
+        assertTrue(second.exists())
+    }
+
+    /** The failure `ShareQuoteButton` catches. Reproduced by taking the directory's own name with a
+     *  plain file, which is what a full or read-only cache partition amounts to here. */
+    @Test
+    fun `writeQuoteFile fails with an IOException when the quotes directory cannot be used`() = runTest {
+        File(context.cacheDir, "quotes").apply { parentFile?.mkdirs() }.writeText("not a directory")
+
+        var thrown: Throwable? = null
+        try {
+            writeQuoteFile(context, ImageBitmap(2, 2))
+        } catch (e: Throwable) {
+            thrown = e
+        }
+
+        assertTrue("expected an IOException, got $thrown", thrown is IOException)
     }
 
     @Test
@@ -67,17 +98,6 @@ class QuoteImageTest {
 
         assertEquals("content", uri.scheme)
         assertEquals("${context.packageName}.fileprovider", uri.authority)
-    }
-
-    @Test
-    fun `writeQuotePng clears a stale file from an earlier share before writing the new one`() = runTest {
-        assumeTrue(File.separatorChar == '/')
-
-        writeQuotePng(context, ImageBitmap(2, 2))
-        writeQuotePng(context, ImageBitmap(2, 2))
-
-        val dir = File(context.cacheDir, "quotes")
-        assertEquals(1, dir.listFiles()?.size)
     }
 
     @Test

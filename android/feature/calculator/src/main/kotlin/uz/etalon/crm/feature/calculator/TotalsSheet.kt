@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.calc.money
@@ -387,12 +388,14 @@ fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
  * holds a fresh frame the moment the operator taps, whichever anchor the sheet is sitting at.
  */
 @Composable
-private fun ShareQuoteButton(state: CalculatorUiState) {
+internal fun ShareQuoteButton(state: CalculatorUiState) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val layer = rememberGraphicsLayer()
     var sharing by remember { mutableStateOf(false) }
+    var shareError by remember { mutableStateOf<String?>(null) }
     val subject = stringResource(R.string.calc_quote_share_subject)
+    val failure = stringResource(R.string.calc_share_failed)
 
     ZeroSizeCapture {
         Box(Modifier.drawWithContent { layer.record { this@drawWithContent.drawContent() } }) {
@@ -400,14 +403,27 @@ private fun ShareQuoteButton(state: CalculatorUiState) {
         }
     }
 
+    shareError?.let { ErrorBanner(it) }
     SecondaryButton(
         text = stringResource(R.string.calc_action_share),
         onClick = {
             sharing = true
+            shareError = null
             scope.launch {
-                val uri = writeQuotePng(context, layer.toImageBitmap())
-                context.startActivity(Intent.createChooser(shareQuoteIntent(uri, subject), null))
-                sharing = false
+                // A full cache partition is enough to make writeQuotePng throw, and this launch
+                // has no parent to catch it: uncaught, it takes the process down and leaves the
+                // button spinning forever on the way. `finally` is what puts the spinner down —
+                // both on that failure and on the ordinary cancellation of leaving the screen.
+                try {
+                    val uri = writeQuotePng(context, layer.toImageBitmap())
+                    context.startActivity(Intent.createChooser(shareQuoteIntent(uri, subject), null))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    shareError = failure
+                } finally {
+                    sharing = false
+                }
             }
         },
         enabled = state.rows.any { it.result != null } && !sharing,

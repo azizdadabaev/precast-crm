@@ -160,24 +160,35 @@ internal fun ZeroSizeCapture(content: @Composable () -> Unit) {
 }
 
 /**
- * Writes the captured quote under `cacheDir/quotes/` and returns the `content://` URI
- * [androidx.core.content.FileProvider] exposes for it — see `app/src/main/res/xml/file_paths.xml`
- * and the `<provider>` entry in the manifest, both scoped to exactly this subdirectory and nothing
- * wider. A random file name per share, and every older file in the directory removed first: a
- * stale PNG left behind carries a previous customer's name, phone and address baked into the
- * image, and a predictable name would let anything holding a `content://` grant on one share
- * guess the next one's URI.
+ * Writes the captured quote under `cacheDir/quotes/` and returns the file itself.
+ *
+ * A random file name per share, and every older file in the directory removed first: a stale PNG
+ * left behind carries a previous customer's name, phone and address baked into the image, and a
+ * predictable name would let anything holding a `content://` grant on one share guess the next
+ * one's URI.
+ *
+ * Split out of [writeQuotePng] so the write and the cleanup can be tested on any host:
+ * `FileProvider.getUriForFile` cannot run under Robolectric on Windows (see `QuoteImageTest`'s own
+ * KDoc), and everything this function does is the half that has nothing to do with FileProvider.
+ *
+ * Throws [java.io.IOException] if the directory cannot be used — a full disk, or the name taken by
+ * something that is not a directory. `ShareQuoteButton` is where that is caught and shown.
  */
-suspend fun writeQuotePng(context: Context, bitmap: ImageBitmap): Uri {
-    val file = withContext(Dispatchers.IO) {
-        val dir = File(context.cacheDir, "quotes").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        File(dir, "${UUID.randomUUID()}.png").also { f ->
-            f.outputStream().use { bitmap.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
-        }
+internal suspend fun writeQuoteFile(context: Context, bitmap: ImageBitmap): File = withContext(Dispatchers.IO) {
+    val dir = File(context.cacheDir, "quotes").apply { mkdirs() }
+    dir.listFiles()?.forEach { it.delete() }
+    File(dir, "${UUID.randomUUID()}.png").also { f ->
+        f.outputStream().use { bitmap.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
-    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
 }
+
+/**
+ * [writeQuoteFile]'s file as the `content://` URI [androidx.core.content.FileProvider] exposes for
+ * it — see `app/src/main/res/xml/file_paths.xml` and the `<provider>` entry in the manifest, both
+ * scoped to exactly that subdirectory and nothing wider.
+ */
+suspend fun writeQuotePng(context: Context, bitmap: ImageBitmap): Uri =
+    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", writeQuoteFile(context, bitmap))
 
 /** [uri] carries a customer's name, phone and address baked into its image, and this [Intent]
  *  hands it to whichever app the operator picks — nothing about either is logged on this path. */
