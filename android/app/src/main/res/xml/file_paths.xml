@@ -1,0 +1,4 @@
+<paths>
+    <!-- Only the generated quote PNGs are exposed, and only for the life of the share. -->
+    <cache-path name="quotes" path="quotes/" />
+</paths>
