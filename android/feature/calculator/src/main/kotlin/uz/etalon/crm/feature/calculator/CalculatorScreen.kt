@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -28,9 +26,26 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.NumericKeypad
+
+/**
+ * How much of the WHOLE sheet `BottomSheetScaffold`'s `sheetPeekHeight` must reserve for
+ * `TotalsSheet`'s collapsed peek to render uncut — `sheetPeekHeight` measures the sheet from ITS
+ * OWN top (Material3's drag handle) down, not just `sheetContent`. Three real parts, not a guess:
+ *  - [BottomSheetDefaults.DragHandle]: a 4dp bar in 22dp of vertical padding on each side
+ *    (`SheetDefaults.kt`/`SheetBottomTokens.kt`) — 48dp. `CalculatorScreen` passes no
+ *    `sheetDragHandle`, so this default renders.
+ *  - `TotalsSheet`'s own `Column`'s top `padding(vertical = 12.dp)`, before its peek `Row` starts.
+ *  - That peek `Row`'s own `heightIn(min = 48.dp)`.
+ * This screen intentionally has no compile-time reference to `TotalsSheet` (`totalsSheetContent`
+ * is a caller-supplied slot — see this file's own KDoc), so this stays a documented constant
+ * rather than a shared import: a future edit to either of `TotalsSheet`'s two numbers above must
+ * update this one too, or the peek clips again exactly as it did before this fix.
+ */
+internal val CALC_SHEET_PEEK_HEIGHT: Dp = 48.dp + 12.dp + 48.dp
 
 /**
  * The room list, docked directly above the keypad rather than a `ModalBottomSheet` — see
@@ -73,14 +88,17 @@ fun CalculatorScreen(
 
     BottomSheetScaffold(
         scaffoldState = scaffoldState,
-        sheetPeekHeight = 88.dp,
+        sheetPeekHeight = CALC_SHEET_PEEK_HEIGHT,
         sheetContent = totalsSheetContent,
     ) { pad ->
-        Box(Modifier.fillMaxSize().padding(pad)) {
-            Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().padding(pad)) {
+            // The FAB floats within THIS Box only, not the whole body — so its BottomEnd anchor
+            // sits above the docked keypad below (a sibling here, not a child), rather than on
+            // top of its «Кейинги» confirm button the way it did when both shared one Box.
+            Box(Modifier.weight(1f)) {
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    modifier = Modifier.fillMaxSize(),
                     // Extra bottom room so the FAB — which floats over the list, not the layout —
                     // never sits on top of the last card's «Қўшимча» row.
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
@@ -100,21 +118,28 @@ fun CalculatorScreen(
                         )
                     }
                 }
-                if (s.keypad != null) {
-                    Column(Modifier.background(MaterialTheme.colorScheme.surface).navigationBarsPadding().padding(16.dp)) {
-                        NumericKeypad(
-                            value = s.keypadText, suffix = "м", allowDecimal = true,
-                            confirmLabel = stringResource(R.string.calc_action_next),
-                            onValue = onKeypadValue, onConfirm = onKeypadConfirm,
-                        )
-                    }
+                FloatingActionButton(
+                    onClick = onAddRoom,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.calc_add_room))
                 }
             }
-            FloatingActionButton(
-                onClick = onAddRoom,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            ) {
-                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.calc_add_room))
+            if (s.keypad != null) {
+                // No `navigationBarsPadding()` here: `CalculatorRoute` is hosted inside
+                // `SignedInShell`'s `NavigationSuiteScaffold` (`EtalonNavHost.kt`), which already
+                // consumes `WindowInsets.navigationBars` for its content slot — the same way plain
+                // `Scaffold` consumes it for its own `bottomBar`. `BottomSheetScaffold` itself does
+                // NOT add that inset back (its content padding is bare `sheetPeekHeight`, no window
+                // insets — verified against `BottomSheetScaffold.kt`), so re-adding it here just
+                // padded the keypad up by the system nav bar's height for no reason.
+                Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp)) {
+                    NumericKeypad(
+                        value = s.keypadText, suffix = "м", allowDecimal = true,
+                        confirmLabel = stringResource(R.string.calc_action_next),
+                        onValue = onKeypadValue, onConfirm = onKeypadConfirm,
+                    )
+                }
             }
         }
     }
