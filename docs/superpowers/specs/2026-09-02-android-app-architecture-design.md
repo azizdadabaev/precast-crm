@@ -281,6 +281,9 @@ On ≥600 dp (tablets, unfolded foldables — Android 16 ignores orientation loc
 - Tapered/irregular rooms come only through the CAD canvas (Phase 3); no sandbox port.
 
 ### 5.5 CAD canvas (Phase 3; owner's priority — designed for touch, judged by feel)
+
+> **Owner decision, 2026-09-09: the CAD canvas is not built for the mobile app.** It stays a desk tool. The phone's roadmap after Phase 2b is the web app's most-used features in field-importance order (edit order, prepayment at placement with offline chaining, then production/inventory/Gazoblok and the owner home). This section is kept for the record and must not be planned from.
+
 Rebuild, not port, of `RoomCanvas.tsx` on Compose `Canvas` with `pointerInput` gestures; all geometry from `:core:geometry`.
 - **Gestures:** one-finger tap = place vertex (Draw) / select; long-press vertex = drag with a magnifier loupe offset above the finger; drag wall body = parallel slide with live offset readout; two-finger pinch/pan = zoom/pan (never conflicts with drawing); double-tap = fit.
 - **Direct entry is primary on touch**: tapping any dimension opens a numeric keypad sheet (length, optional bearing angle) — the DDE workflow becomes the default way to draw precisely; polar snap (15/45/90) and grid snap (5/10/25/50) as toggles in a bottom tool rail.
