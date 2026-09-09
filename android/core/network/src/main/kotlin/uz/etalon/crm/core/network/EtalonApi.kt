@@ -182,12 +182,15 @@ interface EtalonApi {
      * [ClientsPageDto.total] is the count MATCHING the query server-side, so a caller can tell
      * the operator when there is more than it fetched.
      *
-     * `?phone=` is deliberately absent: it exists for the web calculator's dedup autocomplete,
-     * and `q` already matches trailing phone digits (`phoneMatchForms`) as well as names.
+     * `?phone=` IS used, by the calculator's client bar and only there: it is an exact-or-prefix
+     * match on the normalised number (`src/app/api/clients/route.ts:88`), which is the dedup the
+     * web calculator's ClientInfoBar does. `q` stays the list screen's search — it matches names
+     * and trailing digits, which is the wrong shape for "is this exact number already a customer".
      */
     @GET("/api/clients")
     suspend fun clients(
         @Query("q") q: String? = null,
+        @Query("phone") phone: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = CLIENTS_PAGE_SIZE,
     ): ClientsPageDto

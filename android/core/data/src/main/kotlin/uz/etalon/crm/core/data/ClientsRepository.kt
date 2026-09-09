@@ -6,6 +6,7 @@ import uz.etalon.crm.core.model.ClientCreated
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientInput
 import uz.etalon.crm.core.model.ClientPage
+import uz.etalon.crm.core.model.ClientSummary
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.ClientWriteRequest
 import javax.inject.Inject
@@ -41,6 +42,18 @@ class ClientsRepository @Inject constructor(
 
     suspend fun detail(id: String): Result<ClientDetail> =
         runCatchingCancellable { api.client(id).toDomain() }
+
+    /**
+     * Phone is this product's unique customer identity, so this is an identity lookup, not a search.
+     * The route matches on `startsWith` as well as `contains` (route.ts:88-95) — good enough for the
+     * web's autocomplete, wrong for "fill this quote in with that customer", so the exact normalised
+     * number is compared here before anything is returned. A near miss is not a customer.
+     */
+    suspend fun findByPhone(phone: String): Result<ClientSummary?> = runCatchingCancellable {
+        val norm = normalizePhone(phone)
+        if (norm.length < 9) return@runCatchingCancellable null
+        api.clients(phone = norm).toDomain().items.firstOrNull { normalizePhone(it.phone) == norm }
+    }
 
     /**
      * Phone is this product's unique customer identity — client names may legitimately repeat

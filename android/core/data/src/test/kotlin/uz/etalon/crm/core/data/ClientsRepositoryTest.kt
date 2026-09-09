@@ -23,7 +23,7 @@ private class ClientRecordingApi : ClientStubApi() {
     var listResult = ClientsPageDto(rows = emptyList(), total = 0, page = 1, pageSize = 50, pageCount = 1)
     var detailResult = ClientDetailDto(id = "c1", name = "Navoi Build", phone = "998901112233")
 
-    override suspend fun clients(q: String?, page: Int, pageSize: Int): ClientsPageDto {
+    override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int): ClientsPageDto {
         calls += "clients:$q:$page:$pageSize"; return listResult
     }
     override suspend fun createClient(body: ClientWriteRequest): ClientRowDto {
@@ -195,6 +195,56 @@ class ClientsRepositoryTest {
         val res = ClientsRepository(ClientFailingApi(), CLIENT_GRANTED).create(input())
         assertTrue(res.isFailure)
     }
+
+    // ── findByPhone: an identity lookup, not a search ────────────────────────────
+
+    @Test fun `findByPhone normalises before asking and returns the exact match only`() = runTest {
+        var asked: String? = null
+        val api = object : FakeEtalonApi() {
+            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int): ClientsPageDto {
+                asked = phone
+                return ClientsPageDto(rows = listOf(row(phone = "998901112233")), total = 1, page = 1, pageSize = 50, pageCount = 1)
+            }
+        }
+        val hit = repo(api).findByPhone("90 111 22 33").getOrThrow()
+        assertEquals("998901112233", asked)
+        assertEquals("998901112233", hit?.phone)
+    }
+
+    @Test fun `a prefix match that is not the same number is not a match`() = runTest {
+        val api = object : FakeEtalonApi() {
+            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int) =
+                ClientsPageDto(rows = listOf(row(phone = "998901112234")), total = 1, page = 1, pageSize = 50, pageCount = 1)
+        }
+        assertNull(repo(api).findByPhone("998901112233").getOrThrow())
+    }
+
+    @Test fun `no rows at all is simply no match, not an error`() = runTest {
+        val api = object : FakeEtalonApi() {
+            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int) =
+                ClientsPageDto(rows = emptyList(), total = 0, page = 1, pageSize = 50, pageCount = 1)
+        }
+        assertNull(repo(api).findByPhone("998901112233").getOrThrow())
+    }
+
+    /** Fewer than nine digits cannot be a real number, so the lookup never reaches the network —
+     *  the same guard the server's own dedup only bothers to run against a full number. */
+    @Test fun `too few digits is refused before the network`() = runTest {
+        val api = ClientRecordingApi()
+        val hit = ClientsRepository(api, CLIENT_GRANTED).findByPhone("90 111").getOrThrow()
+        assertNull(hit)
+        assertEquals(0, api.calls.size)
+    }
+
+    @Test fun `a findByPhone failure comes back as a Result failure, not an exception`() = runTest {
+        val res = ClientsRepository(ClientFailingApi(), CLIENT_GRANTED).findByPhone("998901112233")
+        assertTrue(res.isFailure)
+    }
+
+    private fun repo(api: FakeEtalonApi) = ClientsRepository(api, CLIENT_GRANTED)
+
+    private fun row(phone: String, id: String = "c1", name: String = "Navoi Build") =
+        ClientRowDto(id = id, name = name, phone = phone)
 
     @Test fun `a list-row response with no _count still maps to zero orders`() = runTest {
         // POST /api/clients omits _count entirely; ClientRowDto defaults it to zero rather than
