@@ -20,7 +20,11 @@ dependencies {
 // edited without a regeneration — a tier price, PITCH, a gazoblok default — still fails instead
 // of the JSON and the Kotlin quietly agreeing with each other while both are wrong. Declaring
 // them as inputs the same way is what makes Gradle re-run on a source edit rather than reporting
-// "up to date".
+// "up to date". order-totals.ts (OrderTotals.kt's port source) and calc-persistence.ts
+// (calcResultToCreatePayload, which order-totals.ts calls to honour a per-row rate override) are
+// declared the same way for the same reason: OrderTotalsParityTest replays computeOrderTotals
+// against both, so a constant or op-sequence change in either file must fail this suite too, not
+// just sail through as "up to date" until the next unrelated JSON regeneration happens to catch it.
 tasks.withType<Test>().configureEach {
     inputs.files(rootProject.file("../docs/api/calc-golden.json"))
         .withPropertyName("goldenVectors").withPathSensitivity(PathSensitivity.RELATIVE)
@@ -30,4 +34,8 @@ tasks.withType<Test>().configureEach {
         .withPropertyName("calculationEngineSource").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.files(rootProject.file("../precast-crm/src/services/gazoblok-engine.ts"))
         .withPropertyName("gazoblokEngineSource").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(rootProject.file("../precast-crm/src/lib/order-totals.ts"))
+        .withPropertyName("orderTotalsSource").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.files(rootProject.file("../precast-crm/src/lib/calc-persistence.ts"))
+        .withPropertyName("calcPersistenceSource").withPathSensitivity(PathSensitivity.RELATIVE)
 }
