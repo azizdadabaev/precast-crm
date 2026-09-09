@@ -77,8 +77,11 @@ private class CalcPlacingApi : CalcStubApi() {
     }
 }
 
-/** The ISO instant `PlaceOrderSheet.scheduledAtInstant` produces for a Tashkent calendar day. */
-private const val SCHEDULED_AT = "2026-09-20T00:00:00+05:00"
+/** The ISO instant `PlaceOrderSheet.scheduledAtInstant` produces for the Tashkent calendar day
+ *  2026-09-20. It renders in UTC with a `Z`, not with the `+05:00` offset it was resolved in:
+ *  `scheduledAtInstant` ends in `.toInstant().toString()`, and `Instant` has no offset to print.
+ *  Tashkent is UTC+5, so start-of-day there is 19:00 the previous day in UTC. */
+private const val SCHEDULED_AT = "2026-09-19T19:00:00Z"
 
 private fun placeInput(
     rows: List<SlabRow>, notes: String = "", scheduledAt: String = SCHEDULED_AT,

@@ -14,7 +14,6 @@ internal typealias Viloyat = uz.etalon.crm.core.ui.regions.Viloyat
 internal typealias Tuman = uz.etalon.crm.core.ui.regions.Tuman
 internal val VILOYATS = uz.etalon.crm.core.ui.regions.VILOYATS
 internal val TUMANS = uz.etalon.crm.core.ui.regions.TUMANS
-internal typealias ParsedAddress = uz.etalon.crm.core.ui.regions.ParsedAddress
 internal fun composeAddress(v: String, t: String, s: String) = uz.etalon.crm.core.ui.regions.composeAddress(v, t, s)
 internal fun parseAddress(a: String?) = uz.etalon.crm.core.ui.regions.parseAddress(a)
 internal fun findViloyatByName(n: String) = uz.etalon.crm.core.ui.regions.findViloyatByName(n)

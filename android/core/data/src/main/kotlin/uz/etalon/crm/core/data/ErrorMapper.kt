@@ -30,10 +30,12 @@ fun Throwable.toAppError(): AppError = when (this) {
     //
     // That convention is not enforced by the type system — core/calc's CalculationError, for
     // one, carries an internal ENGLISH validation message and would leak it here unchanged were
-    // it ever thrown from a screen. It has no caller today (the calculator UI isn't wired up
-    // yet), so this is a known, currently-dormant gap rather than a live one; closing it needs a
-    // marker distinguishing "already Uzbek, safe to show" throwables from everything else, which
-    // is a wider change than this fallback line.
+    // it ever thrown from a screen. The calculator IS wired up now, but no CalculationError
+    // reaches this branch from it: `recomputeRow` catches every one of them itself and answers a
+    // null result (a row mid-typing is expected traffic, not an error), and nothing else in the
+    // calculator calls the engine directly. So this stays a dormant gap rather than a live one;
+    // closing it needs a marker distinguishing "already Uzbek, safe to show" throwables from
+    // everything else, which is a wider change than this fallback line.
     else -> AppError.Server(message ?: "Хатолик", 0)
 }
 

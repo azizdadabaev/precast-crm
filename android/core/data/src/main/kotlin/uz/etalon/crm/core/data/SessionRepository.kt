@@ -95,9 +95,13 @@ class SessionRepository @Inject constructor(
      *  epoch, and bumping it first guarantees that write is rejected instead of landing in the table
      *  db.clearOrderCache() just emptied.
      *  The outbox is deliberately left intact — a queued upload belongs to the operator who made it and
-     *  survives their session ending; `login()` destroys it only for a *different* operator. */
+     *  survives their session ending; `login()` destroys it only for a *different* operator.
+     *  _pricing goes the way _me does, and for the reason the caches do: it is the PREVIOUS
+     *  session's catalogue, and the calculator prices every row against whatever is in it
+     *  (`CalculatorViewModel.init`). The next operator to sign in on this device must not quote
+     *  from it in the window before their own bootstrap lands. */
     suspend fun signOut() {
-        tokens.clear(); _me.value = null; prefs.setLastMe(null); orders.clearCache()
+        tokens.clear(); _me.value = null; _pricing.value = null; prefs.setLastMe(null); orders.clearCache()
         db.clearOrderCache()
     }
 
