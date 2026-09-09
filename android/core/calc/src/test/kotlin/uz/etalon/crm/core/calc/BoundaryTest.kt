@@ -107,8 +107,14 @@ class BoundaryTest {
     fun `every order-totals golden vector's totalPrice converts to Money losslessly`() =
         GoldenVectors.orderTotals.cases.map { c ->
             DynamicTest.dynamicTest(c.name) {
-                val rows = c.rooms.mapIndexed { i, (width, length) ->
-                    recomputeRow(SlabRow(id = "r$i", name = "Хона ${i + 1}", innerWidth = width, innerLength = length))
+                val rows = c.rooms.mapIndexed { i, room ->
+                    recomputeRow(
+                        SlabRow(
+                            id = "r$i", name = "Хона ${i + 1}",
+                            innerWidth = room.innerWidth, innerLength = room.innerLength,
+                            m2PriceOverride = room.m2PriceOverride, m2PriceOverrideValue = room.m2PriceOverrideValue,
+                        ),
+                    )
                 }
                 val r = computeOrderTotals(rows, c.discountPercent, c.discountAmount, c.deliveryCost, c.otherCost)
                 val expectedWire = BigDecimal.valueOf(round2(c.result.getValue("total_price").double)).setScale(2).toPlainString()

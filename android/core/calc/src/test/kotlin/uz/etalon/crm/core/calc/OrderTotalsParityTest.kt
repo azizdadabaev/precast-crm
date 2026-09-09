@@ -12,15 +12,24 @@ import org.junit.jupiter.api.TestFactory
  * this is the ORDER-PLACEMENT roll-up (delivery/other included, no internal rounding except the
  * back-computed percent) — see `OrderTotals.kt`'s class doc for why it exists separately from
  * [projectTotal]. Each case's rooms are built through [recomputeRow] first, exactly the way
- * `CalculatorViewModel` builds [SlabRow.result] before calling [computeOrderTotals].
+ * `CalculatorViewModel` builds [SlabRow.result] before calling [computeOrderTotals] — including the
+ * one case whose room carries `m2PriceOverride`/`m2PriceOverrideValue`, so [recomputeRow]'s
+ * [applyRateOverride] call bakes the override into that room's `result.subtotal` the same way a
+ * real operator's rate override would, pinning that it survives into `roomsSubtotal`/`totalPrice`.
  */
 class OrderTotalsParityTest {
 
     @TestFactory
     fun `every order-totals golden vector replays bit for bit`() = GoldenVectors.orderTotals.cases.map { c ->
         DynamicTest.dynamicTest(c.name) {
-            val rows = c.rooms.mapIndexed { i, (width, length) ->
-                recomputeRow(SlabRow(id = "r$i", name = "Хона ${i + 1}", innerWidth = width, innerLength = length))
+            val rows = c.rooms.mapIndexed { i, room ->
+                recomputeRow(
+                    SlabRow(
+                        id = "r$i", name = "Хона ${i + 1}",
+                        innerWidth = room.innerWidth, innerLength = room.innerLength,
+                        m2PriceOverride = room.m2PriceOverride, m2PriceOverrideValue = room.m2PriceOverrideValue,
+                    ),
+                )
             }
             val r = computeOrderTotals(rows, c.discountPercent, c.discountAmount, c.deliveryCost, c.otherCost)
 
@@ -33,8 +42,8 @@ class OrderTotalsParityTest {
     }
 
     @Test
-    fun `the order-totals vector file carries exactly the 8 cases the exporter produced`() {
-        assertEquals(8, GoldenVectors.orderTotals.cases.size)
+    fun `the order-totals vector file carries exactly the 9 cases the exporter produced`() {
+        assertEquals(9, GoldenVectors.orderTotals.cases.size)
     }
 
     @Test

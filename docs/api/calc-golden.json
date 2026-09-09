@@ -2896,6 +2896,31 @@
           "discount_mode": "PERCENT",
           "total_price": 3832933.3333333335
         }
+      },
+      {
+        "name": "a per-row rate override survives into the order total",
+        "input": {
+          "rooms": [
+            {
+              "innerWidth": 4,
+              "innerLength": 6,
+              "m2PriceOverride": true,
+              "m2PriceOverrideValue": 230000,
+              "m2PriceReason": "Йирик буюртма"
+            }
+          ],
+          "discount_percent": 0,
+          "discount_amount": 0,
+          "delivery_cost": 0,
+          "other_cost": 0
+        },
+        "result": {
+          "rooms_subtotal": 5994200,
+          "discount_amount": 0,
+          "resolved_discount_percent": 0,
+          "discount_mode": "PERCENT",
+          "total_price": 5994200
+        }
       }
     ]
   }

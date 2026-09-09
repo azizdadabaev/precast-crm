@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -62,17 +63,29 @@ data class ProjectCase(
 data class ProjectGolden(val cases: List<ProjectCase>)
 
 /**
+ * One room of an [OrderTotalsCase]. Every case in this block leaves [bearing]/[correction]/etc. at
+ * the engine's defaults — only [innerWidth]/[innerLength] and, for the one case that exercises a
+ * per-row rate override, [m2PriceOverride]/[m2PriceOverrideValue] ever carry a non-default wire
+ * value — so the parity test builds each row with [SlabRow]'s own defaults via [recomputeRow]
+ * (which is also where [applyRateOverride] bakes an override into `result.subtotal`), exactly as
+ * `CalculatorViewModel` does.
+ */
+data class OrderTotalsRoomInput(
+    val innerWidth: Double,
+    val innerLength: Double,
+    val m2PriceOverride: Boolean,
+    val m2PriceOverrideValue: Double?,
+)
+
+/**
  * One case from `calc-golden.json`'s `orderTotals` block: `computeOrderTotals` (order-totals.ts)
  * replayed over real room geometry — unlike [ProjectCase] above, this function runs the engine
  * itself, so the exporter records `RoomInput`-shaped rooms rather than pre-computed subtotals (see
- * the header comment in `precast-crm/scripts/export-calc-golden.ts`). [rooms] carries only
- * `innerWidth`/`innerLength` — every case in this block uses the engine's defaults for the rest —
- * so the parity test builds each row with [SlabRow]'s own defaults via [recomputeRow], exactly as
- * `CalculatorViewModel` does.
+ * the header comment in `precast-crm/scripts/export-calc-golden.ts`).
  */
 data class OrderTotalsCase(
     val name: String,
-    val rooms: List<Pair<Double, Double>>, // (innerWidth, innerLength)
+    val rooms: List<OrderTotalsRoomInput>,
     val discountPercent: Double,
     val discountAmount: Double,
     val deliveryCost: Double,
@@ -170,7 +183,12 @@ object GoldenVectors {
             val input = case.getValue("input").jsonObject
             val rooms = input.getValue("rooms").jsonArray.map {
                 val room = it.jsonObject
-                room.getValue("innerWidth").jsonPrimitive.double to room.getValue("innerLength").jsonPrimitive.double
+                OrderTotalsRoomInput(
+                    innerWidth = room.getValue("innerWidth").jsonPrimitive.double,
+                    innerLength = room.getValue("innerLength").jsonPrimitive.double,
+                    m2PriceOverride = room["m2PriceOverride"]?.jsonPrimitive?.boolean ?: false,
+                    m2PriceOverrideValue = room["m2PriceOverrideValue"]?.jsonPrimitive?.double,
+                )
             }
             OrderTotalsCase(
                 name = case.getValue("name").jsonPrimitive.content,

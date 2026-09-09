@@ -355,9 +355,15 @@ function buildProjectGolden(): ProjectGoldenBlock {
 // cases falling through to the percent branch, and — unlike `projectTotal`
 // — `discountPercent` is proven NOT clamped here (the route/schema layer
 // clamps 0..100 before this function ever sees it; this function itself
-// does not). The last case is a delivery fee out of a division, the same
-// float-noise shape as BoundaryTest's gazoblok `deliveryCost` case, so the
-// Kotlin side has a real vector to prove its round2-before-Money boundary.
+// does not). The penultimate case is a delivery fee out of a division, the
+// same float-noise shape as BoundaryTest's gazoblok `deliveryCost` case, so
+// the Kotlin side has a real vector to prove its round2-before-Money
+// boundary. The last case (added for the task-6 fix report's Important 4)
+// gives one room a per-row rate override (`m2PriceOverride`/
+// `m2PriceOverrideValue`) — `roomsSubtotal` is summed from
+// `calcResultToCreatePayload(...).subtotal`, not the engine's bare
+// `result.subtotal`, so this is the one vector that would still pass a port
+// that silently ignored the override.
 const room46: RoomInput[] = [{ innerWidth: 4.0, innerLength: 6.0 }];
 const room46And43: RoomInput[] = [{ innerWidth: 4.0, innerLength: 6.0 }, { innerWidth: 4.0, innerLength: 4.3 }];
 const subtotal46 = computeOrderTotals(
@@ -405,6 +411,16 @@ const orderTotalsCases: Array<{
   {
     name: "a delivery fee out of a division carries float noise into totalPrice",
     rooms: room46, discountPercent: 0, discountAmount: 0, deliveryCost: 250_000 / 3, otherCost: 0,
+  },
+  {
+    // roomsSubtotal is summed from calcResultToCreatePayload(...).subtotal, not the engine's bare
+    // result.subtotal — this is the one vector that would still pass if a port read the latter and
+    // silently ignored the operator's per-row rate override. 230_000 is the top m2_price_tiers
+    // entry, which room46's auto-picked rate (a lower tier, beam_length 6.0 - default bearing 0.15
+    // puts it in a middle bracket) is not, so the override provably moves roomsSubtotal/totalPrice.
+    name: "a per-row rate override survives into the order total",
+    rooms: [{ innerWidth: 4.0, innerLength: 6.0, m2PriceOverride: true, m2PriceOverrideValue: 230_000, m2PriceReason: "Йирик буюртма" }],
+    discountPercent: 0, discountAmount: 0, deliveryCost: 0, otherCost: 0,
   },
 ];
 
