@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.calc.M2_OVERRIDE_TIERS
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.autoPickedRate
+import uz.etalon.crm.core.calc.tierPriceMoney
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
@@ -118,11 +119,11 @@ private fun TierRow(price: Double, isAuto: Boolean, selected: Boolean, onClick: 
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             RadioButton(selected = selected, onClick = null)
-            MoneyText(price.asTierMoney(), style = EtalonType.monoBody)
+            MoneyText(tierPriceMoney(price), style = EtalonType.monoBody)
         }
         if (isAuto) {
             Text(
-                stringResource(R.string.calc_rate_auto, formatMoney(price.asTierMoney())),
+                stringResource(R.string.calc_rate_auto, formatMoney(tierPriceMoney(price))),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

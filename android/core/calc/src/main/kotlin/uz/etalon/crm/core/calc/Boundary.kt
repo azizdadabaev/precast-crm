@@ -34,6 +34,19 @@ import uz.etalon.crm.core.model.Pricing
  */
 internal fun moneyOf(d: Double): Money = Money(BigDecimal.valueOf(d).setScale(2, RoundingMode.UNNECESSARY))
 
+/**
+ * A catalogue m² price-tier value — [PriceTier.price] / [M2_OVERRIDE_TIERS] / what [autoPickedRate]
+ * returns — converted to [Money]. These are always whole-UZS literals straight out of the engine's
+ * tier tables, never a fraction of a tiyin, so this is exactly as exact as [moneyOf] and shares its
+ * `RoundingMode.UNNECESSARY`: a tier price that ever carried a fraction throws here too, rather
+ * than silently truncating it the way a feature-module `Double.toLong()` shortcut would.
+ *
+ * [moneyOf] itself stays `internal` to this file on purpose (see its doc) — this is the
+ * boundary-respecting public door for the one other place in the app that legitimately turns a
+ * calc-engine `Double` into [Money]: a feature module rendering a catalogue tier price.
+ */
+fun tierPriceMoney(price: Double): Money = moneyOf(price)
+
 /** Android's `BigDecimal`/`Money` pricing (`core:model` `Session.kt`) → the engine's `Double` config. */
 fun Pricing.toPriceConfig(): PriceConfig = PriceConfig(
     m2PriceTiers = m2Tiers.map { PriceTier(it.maxBeamLength.toDouble(), it.price.amount.toDouble()) },

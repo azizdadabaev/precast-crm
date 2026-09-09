@@ -141,6 +141,13 @@ class BoundaryTest {
     }
 
     @Test
+    fun `tierPriceMoney converts every catalogue m2 override tier losslessly`() {
+        M2_OVERRIDE_TIERS.forEach { tier ->
+            assertMoneyEquals(tier.price.toLong().toString(), tierPriceMoney(tier.price), "tier ${tier.price}")
+        }
+    }
+
+    @Test
     fun `Android pricing converts to engine doubles that pick the same tiers as the exported pricing block`() {
         val fromAndroid = androidDefaultPricing().toPriceConfig()
         val fromGolden = GoldenVectors.slab.pricing.toPriceConfig()

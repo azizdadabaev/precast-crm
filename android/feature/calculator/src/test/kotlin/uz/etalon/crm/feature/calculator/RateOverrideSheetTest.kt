@@ -16,6 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.recomputeRow
+import uz.etalon.crm.core.calc.tierPriceMoney
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.ui.format.formatMoney
 
@@ -46,14 +47,14 @@ class RateOverrideSheetTest {
     @Test fun `lists all five catalogue tier prices`() {
         show()
         listOf(140_000.0, 160_000.0, 180_000.0, 200_000.0, 230_000.0).forEach { price ->
-            rule.onNodeWithText(formatMoney(price.asTierMoney())).assertExists()
+            rule.onNodeWithText(formatMoney(tierPriceMoney(price))).assertExists()
         }
     }
 
     @Test fun `apply stays disabled until a tier is picked and a reason is typed`() {
         show()
         rule.onNodeWithText("Қўллаш").assertIsNotEnabled()
-        rule.onNodeWithText(formatMoney(230_000.0.asTierMoney())).performClick()
+        rule.onNodeWithText(formatMoney(tierPriceMoney(230_000.0))).performClick()
         rule.onNodeWithText("Қўллаш").assertIsNotEnabled()
         rule.onNodeWithText("Сабаби").performTextInput("Йирик буюртма")
         rule.onNodeWithText("Қўллаш").assertIsEnabled()
@@ -62,7 +63,7 @@ class RateOverrideSheetTest {
     @Test fun `applying calls back with the picked price and the typed reason`() {
         var applied: Pair<Double, String>? = null
         show(onApply = { price, reason -> applied = price to reason })
-        rule.onNodeWithText(formatMoney(200_000.0.asTierMoney())).performClick()
+        rule.onNodeWithText(formatMoney(tierPriceMoney(200_000.0))).performClick()
         rule.onNodeWithText("Сабаби").performTextInput("Такрорий мижоз")
         rule.onNodeWithText("Қўллаш").performClick()
         assertEquals(200_000.0 to "Такрорий мижоз", applied)
