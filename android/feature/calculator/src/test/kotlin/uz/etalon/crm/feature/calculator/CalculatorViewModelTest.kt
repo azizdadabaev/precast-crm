@@ -344,4 +344,97 @@ class CalculatorViewModelTest {
         assertEquals(beforeClear, upserts, "the empty draft clearAll leaves behind must not be persisted back")
     }
 
+    // ── Task 8: the Idempotency-Key fingerprints the wire, not the local draft ─────
+
+    @Test fun `a retry of the same submission sends the same idempotency key`() = runTest {
+        val keys = mutableListOf<String>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.failure(java.io.IOException("dropped")) })
+        advanceUntilIdle()
+        v.addPricedRoom()
+
+        v.saveDraft(); advanceUntilIdle()
+        v.saveDraft(); advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertEquals(keys[0], keys[1])
+        assertTrue(keys[0].isNotBlank())
+    }
+
+    @Test fun `editing the submission mints a new idempotency key`() = runTest {
+        val keys = mutableListOf<String>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.failure(IllegalStateException("сумма ортиқча")) })
+        advanceUntilIdle()
+        v.addPricedRoom()
+
+        v.saveDraft(); advanceUntilIdle()
+        v.setDiscountMode(DiscountMode.AMOUNT); v.setDiscountAmount(20_000.0)
+        v.saveDraft(); advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertNotEquals(keys[0], keys[1])
+    }
+
+    /** Process death between the send and the response is the case the key exists for — see
+     *  `RecordPaymentViewModelTest`'s identical test for `POST /api/payments`. */
+    @Test fun `the idempotency key survives process death`() = runTest {
+        val saved = SavedStateHandle()
+        val first = mutableListOf<String>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, key -> first += key; Result.failure(java.io.IOException("dropped")) }, saved = saved)
+        advanceUntilIdle()
+        v.addPricedRoom()
+        v.saveDraft(); advanceUntilIdle()
+
+        val second = mutableListOf<String>()
+        val restored = vm(saveDraft = SaveDraftUseCase { _, key -> second += key; Result.success("proj-1") }, saved = saved)
+        advanceUntilIdle()
+        restored.addPricedRoom()
+        restored.saveDraft(); advanceUntilIdle()
+
+        assertEquals(first, second)
+    }
+
+    /** Important 2: `deliveryCost` never reaches `SaveProjectDraftSchema` (it exists only on
+     *  Place Order) — fingerprinting it would rotate the key for a reason the server never sees,
+     *  and a save whose response was lost, followed by the operator nudging this field and
+     *  retrying, would mint a fresh key and create a duplicate project. */
+    @Test fun `changing the delivery cost between saves does not rotate the idempotency key`() = runTest {
+        val keys = mutableListOf<String>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.failure(IllegalStateException("boom")) })
+        advanceUntilIdle()
+        v.addPricedRoom()
+
+        v.saveDraft(); advanceUntilIdle()
+        v.setDeliveryCost(50_000.0)
+        v.saveDraft(); advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertEquals(keys[0], keys[1])
+    }
+
+    @Test fun `changing a room dimension rotates the idempotency key`() = runTest {
+        val keys = mutableListOf<String>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.failure(IllegalStateException("boom")) })
+        advanceUntilIdle()
+        val id = v.addPricedRoom()
+
+        v.saveDraft(); advanceUntilIdle()
+        v.openKeypad(KeypadTarget(id, LENGTH)); "6,5".forEach(v::keypadDigit); v.commitKeypad()
+        v.saveDraft(); advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertNotEquals(keys[0], keys[1])
+    }
+
+    @Test fun `a successful save mints a new key for the next one, because projectId is now set`() = runTest {
+        val keys = mutableListOf<String>()
+        val v = vm(saveDraft = SaveDraftUseCase { _, key -> keys += key; Result.success("proj-1") })
+        advanceUntilIdle()
+        v.addPricedRoom()
+
+        v.saveDraft(); advanceUntilIdle()
+        v.saveDraft(); advanceUntilIdle()
+
+        assertEquals(2, keys.size)
+        assertNotEquals(keys[0], keys[1], "the second save is an UPDATE — a stale key would replay the CREATE response")
+    }
 }

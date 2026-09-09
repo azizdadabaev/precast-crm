@@ -434,9 +434,13 @@ open class CalculatorViewModel(
         }
     }
 
-    /** The Idempotency-Key for ONE submission — see [saveDraft]'s own doc. */
+    /**
+     * The Idempotency-Key for ONE submission — see [saveDraft]'s own doc. Fingerprints only what
+     * [CalculatorRepository.saveDraft] actually puts on the wire (mirrors [CalculatorDraft.wireFingerprint]'s
+     * own doc for why `deliveryCost`/`otherCost` and a row's `result` must stay out of it).
+     */
     private fun idempotencyKeyFor(draft: CalculatorDraft): String {
-        val fingerprint = draft.toString()
+        val fingerprint = draft.wireFingerprint()
         if (saved.get<String>(KEY_IDEMPOTENCY_FOR) != fingerprint) {
             saved[KEY_IDEMPOTENCY_FOR] = fingerprint
             saved[KEY_IDEMPOTENCY] = UUID.randomUUID().toString()
@@ -589,6 +593,28 @@ private fun CalculatorUiState.toDraft(): CalculatorDraft = CalculatorDraft(
 /** What `clearAll` leaves behind — the autosave collector filters this out so the empty draft it
  *  produces is never written back to Room, re-creating the row `clearAll` just deleted. */
 private val EMPTY_DRAFT: CalculatorDraft = CalculatorUiState().toDraft()
+
+/**
+ * The subset of [CalculatorDraft] that [CalculatorRepository.saveDraft] actually puts on the
+ * wire, joined into one string for [idempotencyKeyFor] to fingerprint. `deliveryCost`/`otherCost`
+ * are local-only (`SaveProjectDraftSchema` has no such fields — see [CalculatorDraft]'s own KDoc),
+ * and a row's `result` is derived, not input: after a restore every row is briefly re-priced
+ * against `DEFAULT_PRICE_CONFIG` until `session.pricing` lands (a coroutine race — see
+ * `CalculatorViewModel.init`), so it is momentarily a function of timing rather than what the
+ * operator typed. Fingerprinting either would rotate the Idempotency-Key for a reason the server
+ * can never see, breaking the one guarantee the key exists to give: the SAME wire content must
+ * keep the SAME key across a retry, and changing something the server never receives is not a
+ * new submission.
+ */
+private fun CalculatorDraft.wireFingerprint(): String {
+    val rooms = rows.joinToString("|") { r ->
+        listOf(
+            r.name, r.innerWidth, r.innerLength, r.bearing, r.correction, r.extraBeams,
+            r.forceStartBeam, r.patternOverride, r.m2PriceOverride, r.m2PriceOverrideValue, r.m2PriceReason,
+        ).joinToString(",")
+    }
+    return listOf(projectId, clientName, clientPhone, clientAddress, discountPercent, discountAmount, rooms).joinToString(";")
+}
 
 @HiltViewModel
 class HiltCalculatorViewModel @Inject constructor(
