@@ -14,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,14 +24,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import uz.etalon.crm.core.calc.money
 import uz.etalon.crm.core.calc.operatorAmountMoney
 import uz.etalon.crm.core.calc.totalPriceMoney
 import uz.etalon.crm.core.designsystem.components.AreaText
 import uz.etalon.crm.core.designsystem.components.CountText
 import uz.etalon.crm.core.designsystem.components.EmptyState
+import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
+import uz.etalon.crm.core.designsystem.components.PrimaryButton
+import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.ui.format.formatArea
@@ -268,5 +274,41 @@ private fun EditableValueRow(label: String, valueText: String, onClick: () -> Un
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
         Text(valueText, style = EtalonType.monoBody, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** How long a save confirmation stays on screen before it dismisses itself — long enough to read
+ *  in front of a customer, short enough not to sit there through the operator's next action. */
+private const val SAVE_MESSAGE_AUTO_DISMISS_MS = 2500L
+
+/**
+ * «Лойиҳани сақлаш» and «Тозалаш», filling [TotalsSheet]'s own `actions` slot — see that
+ * composable's KDoc for why the slot exists. Both hidden when `!state.canWrite`: the calculator
+ * stays usable to quote without `order.create`, but there is nothing to save.
+ */
+@Composable
+fun CalculatorActions(state: CalculatorUiState, vm: CalculatorViewModel) {
+    if (!state.canWrite) return
+
+    LaunchedEffect(state.saveMessage) {
+        if (state.saveMessage != null) {
+            delay(SAVE_MESSAGE_AUTO_DISMISS_MS)
+            vm.dismissSaveMessage()
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        state.error?.let { ErrorBanner(it) }
+        state.saveMessage?.let { NoticeBanner(it) }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SecondaryButton(
+                text = stringResource(R.string.calc_action_clear), onClick = vm::clearAll,
+                modifier = Modifier.weight(1f),
+            )
+            PrimaryButton(
+                text = stringResource(R.string.calc_action_save), onClick = vm::saveDraft,
+                loading = state.saving, modifier = Modifier.weight(1f),
+            )
+        }
     }
 }

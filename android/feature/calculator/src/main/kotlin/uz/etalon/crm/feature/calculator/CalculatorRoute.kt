@@ -14,7 +14,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
  * signature does not change again when that task lands.
  */
 @Composable
-fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hiltViewModel()) {
+fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hiltViewModel<HiltCalculatorViewModel>()) {
     val s by vm.state.collectAsStateWithLifecycle()
     val roomCallbacks = RoomExtrasCallbacks(
         onExtraBeams = vm::setExtraBeams,
@@ -39,6 +39,6 @@ fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hil
         onKeypadConfirm = vm::nextField,
         clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = vm::reopenClientBar) },
         clientBarExpanded = { ClientBarExpanded(state = s, vm = vm) },
-        totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
+        totalsSheetContent = { TotalsSheet(state = s, vm = vm) { CalculatorActions(state = s, vm = vm) } },
     )
 }

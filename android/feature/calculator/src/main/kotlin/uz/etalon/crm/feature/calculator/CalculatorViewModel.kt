@@ -1,15 +1,23 @@
 package uz.etalon.crm.feature.calculator
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uz.etalon.crm.core.calc.CalculatorDraft
 import uz.etalon.crm.core.calc.DEFAULT_PRICE_CONFIG
 import uz.etalon.crm.core.calc.M2_OVERRIDE_TIERS
 import uz.etalon.crm.core.calc.Pattern
@@ -22,10 +30,14 @@ import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.calc.roundDownToGrid
 import uz.etalon.crm.core.calc.roundUpToGrid
 import uz.etalon.crm.core.calc.toPriceConfig
+import uz.etalon.crm.core.data.CalculatorRepository
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
+import uz.etalon.crm.core.data.mapper.normalizePhone
 import uz.etalon.crm.core.data.toAppError
+import uz.etalon.crm.core.ui.regions.ParsedAddress
+import uz.etalon.crm.core.ui.regions.composeAddress
 import uz.etalon.crm.core.ui.regions.parseAddress
 import java.util.UUID
 import javax.inject.Inject
@@ -33,6 +45,21 @@ import javax.inject.Inject
 /** `POST /api/orders` (and the draft route behind it) is gated on this — the calculator itself
  *  stays usable without it; see `CalculatorUiState.canWrite`. */
 private const val ORDER_CREATE = "order.create"
+
+/** Mirrors `CalculatorRepository.saveDraft`'s own refusal, so the screen never offers an action
+ *  the operator cannot perform and the repository never has to be the first to say no. */
+private const val NO_PERMISSION_MESSAGE = "Буюртма яратишга рухсат йўқ"
+
+private const val SAVE_SUCCESS_MESSAGE = "Лойиҳа сақланди"
+
+/** How long after any mutation the ViewModel waits before writing the draft to Room — long
+ *  enough that a keystroke walk through a room's fields is one write, not one per keystroke. */
+private const val AUTOSAVE_DEBOUNCE_MS = 500L
+
+/** The Idempotency-Key in flight and the submission it belongs to — see `saveDraft`'s own doc,
+ *  and `RecordPaymentViewModel`'s identical pair for `POST /api/payments`. */
+private const val KEY_IDEMPOTENCY = "calc.idempotencyKey"
+private const val KEY_IDEMPOTENCY_FOR = "calc.idempotencyFor"
 
 /** `RoomCalcInputBaseSchema.m2PriceReason`'s cap on the server (validation.ts) — `internal` so
  *  `RateOverrideSheet` can enforce the same limit on the reason field it collects. */
@@ -47,6 +74,27 @@ private const val CLIENT_PHONE_DIGITS = 9
  *  `internal` so the test measures the real figure, mirroring `CLIENT_SEARCH_DEBOUNCE_MS`. */
 internal const val CLIENT_PHONE_LOOKUP_DEBOUNCE_MS = 400L
 
+/** A restored room's name follows «Хона N» — this recovers N so a freshly-added room after a
+ *  restore never reuses a number already on screen, the same rule `addRoom` keeps for a deleted
+ *  room within one session. */
+private val ROOM_SEQ_REGEX = Regex("""(\d+)""")
+
+fun interface ObserveDraftUseCase {
+    operator fun invoke(): Flow<CalculatorDraft?>
+}
+
+fun interface PersistDraftUseCase {
+    suspend operator fun invoke(draft: CalculatorDraft)
+}
+
+fun interface ClearDraftUseCase {
+    suspend operator fun invoke()
+}
+
+fun interface SaveDraftUseCase {
+    suspend operator fun invoke(draft: CalculatorDraft, idempotencyKey: String): Result<String>
+}
+
 /**
  * Rooms, the docked keypad's walk, live pricing and totals for a quote — the state and behaviour
  * behind the calculator screen, with no Compose in it: the screen (a later task) is built on top
@@ -55,17 +103,27 @@ internal const val CLIENT_PHONE_LOOKUP_DEBOUNCE_MS = 400L
  * [session] and [permissions] are taken directly rather than wrapped in a use-case fun interface
  * the way `ClientsViewModel`/`HomeViewModel` wrap their repositories: both are already narrow,
  * already-fakeable abstractions (see [SessionPricing], [PermissionGate]), so a second layer of
- * indirection here would buy nothing.
+ * indirection here would buy nothing. [CalculatorRepository] is the opposite case — it bundles a
+ * Room DAO the feature module cannot reach without pulling `:core:database` onto its own test
+ * classpath — so its four operations ARE wrapped, the same way `RecordPaymentViewModel` wraps
+ * `PaymentsRepository` and `DiscrepanciesViewModel` wraps `DiscrepanciesRepository`; the four
+ * fun-interface params below default to inert no-ops so every existing test that never touches a
+ * draft need not know they exist.
  *
  * `:core:calc` is a `Double` engine on purpose (bit-parity with the server's TS engine); this
  * class holds that `Double` state for live recompute, but never exposes a `Double` as money —
  * `SlabResult.money()` / `ProjectTotal.money()` do that conversion at the render site, not here.
  */
-@HiltViewModel
-class CalculatorViewModel @Inject constructor(
+@OptIn(FlowPreview::class)
+open class CalculatorViewModel(
     private val session: SessionPricing,
     private val permissions: PermissionGate,
     private val clients: ClientsRepository,
+    private val observeDraft: ObserveDraftUseCase = ObserveDraftUseCase { flowOf(null) },
+    private val persistDraft: PersistDraftUseCase = PersistDraftUseCase { },
+    private val clearDraftUseCase: ClearDraftUseCase = ClearDraftUseCase { },
+    private val saveDraftUseCase: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.failure(IllegalStateException("no draft to save")) },
+    private val saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
     private var priceConfig: PriceConfig = DEFAULT_PRICE_CONFIG
@@ -85,6 +143,14 @@ class CalculatorViewModel @Inject constructor(
         viewModelScope.launch {
             val canWrite = permissions.can(ORDER_CREATE)
             _state.update { it.copy(canWrite = canWrite) }
+        }
+        // Restores the operator's own draft, then keeps writing it back on a debounce — one
+        // coroutine, sequential: the debounced collector below only starts watching [_state]
+        // AFTER the restore has already applied, so the empty default state this ViewModel is
+        // seeded with is never the thing that gets persisted and clobbers a real draft.
+        viewModelScope.launch {
+            observeDraft().first()?.let { restoreDraft(it) }
+            _state.map { it.toDraft() }.debounce(AUTOSAVE_DEBOUNCE_MS).collect { draft -> persistDraft(draft) }
         }
         // Collected once, here: until it lands every row prices against DEFAULT_PRICE_CONFIG,
         // which is what an operator's real bootstrap Pricing reproduces anyway (see
@@ -262,18 +328,102 @@ class CalculatorViewModel @Inject constructor(
 
     fun toggleExpanded(id: String) = _state.update { it.copy(expandedRowId = if (it.expandedRowId == id) null else id) }
 
-    /** Back to a blank quote. `canWrite` is left alone — it is resolved from the session, not part
-     *  of the calculator's own data — and `nextRoomSeq` is left alone too, for the same reason
-     *  deleting a room never reuses its number. */
-    fun clearAll() = _state.update {
-        it.copy(
-            rows = emptyList(), expandedRowId = null, keypad = null, keypadText = "",
-            discountMode = DiscountMode.PERCENT, discountPercent = 0.0, discountAmount = 0.0,
-            deliveryCost = 0.0, otherCost = 0.0, grid = Grid.CM10,
-            totals = projectTotals(emptyList(), 0.0, 0.0),
-            orderTotals = computeOrderTotals(emptyList(), 0.0, 0.0, 0.0, 0.0),
-            schedule = emptyList(), error = null,
-        )
+    /** Back to a blank quote — rooms, the client bar and the discounts, per «Тозалаш»'s own
+     *  brief. `canWrite` is left alone — it is resolved from the session, not part of the
+     *  calculator's own data — and `nextRoomSeq` is left alone too, for the same reason deleting
+     *  a room never reuses its number. Clears the persisted Room draft too, so reopening the
+     *  screen does not bring the just-cleared quote back. */
+    fun clearAll() {
+        _state.update {
+            it.copy(
+                rows = emptyList(), expandedRowId = null, keypad = null, keypadText = "",
+                discountMode = DiscountMode.PERCENT, discountPercent = 0.0, discountAmount = 0.0,
+                deliveryCost = 0.0, otherCost = 0.0, grid = Grid.CM10,
+                totals = projectTotals(emptyList(), 0.0, 0.0),
+                orderTotals = computeOrderTotals(emptyList(), 0.0, 0.0, 0.0, 0.0),
+                schedule = emptyList(), error = null,
+                clientPhoneDigits = "", clientName = "", clientAddress = ParsedAddress("", "", ""),
+                matchedClientId = null, clientLookupError = null, clientBarCollapsed = false,
+                projectId = null, saveMessage = null,
+            )
+        }
+        viewModelScope.launch { clearDraftUseCase() }
+    }
+
+    // ── draft persistence and «Лойиҳани сақлаш» ─────────────────────
+
+    fun dismissSaveMessage() = _state.update { it.copy(saveMessage = null) }
+
+    /**
+     * Refuses without `order.create` and refuses when any row is not `SlabRow.canPersist` — both
+     * checks mirror `CalculatorRepository.saveDraft`'s own, so a save that would 422 never leaves
+     * the device. [SavedStateHandle]-pinned [idempotencyKeyFor] keeps the same Idempotency-Key
+     * across a retry of one submission (a dropped response, a 409 `IDEMPOTENT_IN_PROGRESS`) and
+     * mints a new one only once the draft's own content changes — the same rule
+     * `RecordPaymentViewModel.idempotencyKeyFor` follows for `POST /api/payments`.
+     */
+    fun saveDraft() {
+        val s = _state.value
+        if (s.saving) return
+        if (!s.canWrite) {
+            _state.update { it.copy(error = NO_PERMISSION_MESSAGE) }
+            return
+        }
+        val blocked = s.unpersistableRoomNames
+        if (blocked.isNotEmpty()) {
+            _state.update { it.copy(error = "Сақлаб бўлмайдиган хоналар: " + blocked.joinToString(", ")) }
+            return
+        }
+        val draft = s.toDraft()
+        _state.update { it.copy(saving = true, error = null, saveMessage = null) }
+        viewModelScope.launch {
+            saveDraftUseCase(draft, idempotencyKeyFor(draft)).fold(
+                onSuccess = { id ->
+                    // Persisted immediately, not left to the autosave debounce: from here a
+                    // second save must UPDATE this project, and that fact must survive a process
+                    // death in the gap before the debounce would otherwise have flushed it —
+                    // mirrors RecordPaymentViewModel persisting KEY_PAYMENT_ID the moment the row
+                    // is known to exist.
+                    val withId = draft.copy(projectId = id)
+                    persistDraft(withId)
+                    _state.update { it.copy(saving = false, projectId = id, saveMessage = SAVE_SUCCESS_MESSAGE) }
+                },
+                onFailure = { t -> _state.update { it.copy(saving = false, error = t.toAppError().message) } },
+            )
+        }
+    }
+
+    /** The Idempotency-Key for ONE submission — see [saveDraft]'s own doc. */
+    private fun idempotencyKeyFor(draft: CalculatorDraft): String {
+        val fingerprint = draft.toString()
+        if (saved.get<String>(KEY_IDEMPOTENCY_FOR) != fingerprint) {
+            saved[KEY_IDEMPOTENCY_FOR] = fingerprint
+            saved[KEY_IDEMPOTENCY] = UUID.randomUUID().toString()
+        }
+        return requireNotNull(saved.get<String>(KEY_IDEMPOTENCY))
+    }
+
+    /** Applies a restored draft to state, recomputing every row through the current
+     *  [priceConfig] the same way a freshly-typed room is — the persisted snapshot never carries
+     *  a `SlabResult`. Runs once, in `init`, before the operator's first keystroke can race it. */
+    private fun restoreDraft(draft: CalculatorDraft) {
+        val rows = draft.rows.map { recomputeRow(it, priceConfig) }
+        nextRoomSeq = (rows.mapNotNull { ROOM_SEQ_REGEX.find(it.name)?.value?.toIntOrNull() }.maxOrNull() ?: 0) + 1
+        val address = parseAddress(draft.clientAddress)
+        val digits = draft.clientPhone.takeLast(CLIENT_PHONE_DIGITS)
+        _state.update { s ->
+            withTotals(
+                s.copy(
+                    clientPhoneDigits = digits, clientName = draft.clientName, clientAddress = address,
+                    clientBarCollapsed = digits.length == CLIENT_PHONE_DIGITS && draft.clientName.isNotBlank(),
+                    discountMode = if (draft.discountAmount > 0.0) DiscountMode.AMOUNT else DiscountMode.PERCENT,
+                    discountPercent = draft.discountPercent, discountAmount = draft.discountAmount,
+                    deliveryCost = draft.deliveryCost, otherCost = draft.otherCost,
+                    projectId = draft.projectId,
+                ),
+                rows,
+            )
+        }
     }
 
     // ── The client bar: who the quote is for ───────────────────────
@@ -379,3 +529,36 @@ class CalculatorViewModel @Inject constructor(
         )
     }
 }
+
+/** The whole quote, as [CalculatorRepository] persists and sends it — see [restoreDraft] for the
+ *  inverse. `clientPhone` is normalised at the wire boundary (`CalculatorRepository.saveDraft`),
+ *  not here, so the LOCAL draft round-trips the digits exactly as the operator typed them. */
+private fun CalculatorUiState.toDraft(): CalculatorDraft = CalculatorDraft(
+    rows = rows,
+    clientPhone = if (clientPhoneDigits.isEmpty()) "" else normalizePhone(clientPhoneDigits),
+    clientName = clientName,
+    clientAddress = composeAddress(clientAddress.viloyat, clientAddress.tuman, clientAddress.street),
+    discountPercent = discountPercent,
+    discountAmount = discountAmount,
+    deliveryCost = deliveryCost,
+    otherCost = otherCost,
+    projectId = projectId,
+)
+
+@HiltViewModel
+class HiltCalculatorViewModel @Inject constructor(
+    session: SessionPricing,
+    permissions: PermissionGate,
+    clients: ClientsRepository,
+    repository: CalculatorRepository,
+    saved: SavedStateHandle,
+) : CalculatorViewModel(
+    session = session,
+    permissions = permissions,
+    clients = clients,
+    observeDraft = ObserveDraftUseCase { repository.observeDraft() },
+    persistDraft = PersistDraftUseCase { draft -> repository.persistDraft(draft) },
+    clearDraftUseCase = ClearDraftUseCase { repository.clearDraft() },
+    saveDraftUseCase = SaveDraftUseCase { draft, key -> repository.saveDraft(draft, key) },
+    saved = saved,
+)

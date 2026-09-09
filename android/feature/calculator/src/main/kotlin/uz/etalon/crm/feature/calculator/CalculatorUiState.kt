@@ -62,6 +62,16 @@ data class CalculatorUiState(
     /** Collapses the bar to one line once a phone and a name are both present — see
      *  `CalculatorViewModel.updateClientState`. The pencil on the collapsed line reopens it. */
     val clientBarCollapsed: Boolean = false,
+
+    // ── draft persistence and «Лойиҳани сақлаш» ─────────────────────
+    /** Null until the first successful save; from then on a second save updates this project
+     *  instead of creating a duplicate one. Restored from the Room draft, so it survives process
+     *  death the same way the rest of the quote does. */
+    val projectId: String? = null,
+    val saving: Boolean = false,
+    /** A transient Uzbek confirmation shown after a successful save — cleared by
+     *  `CalculatorViewModel.dismissSaveMessage` once the screen has shown it. */
+    val saveMessage: String? = null,
 ) {
     val totalWeightKg: Double get() = totals.monolithArea * KG_PER_M2
 

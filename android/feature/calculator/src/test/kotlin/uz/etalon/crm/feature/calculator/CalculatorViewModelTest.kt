@@ -4,7 +4,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -12,10 +15,14 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import uz.etalon.crm.core.calc.CalculatorDraft
+import uz.etalon.crm.core.calc.SlabRow
+import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
@@ -63,10 +70,17 @@ class CalculatorViewModelTest {
      *  so `toPriceConfig()` reproduces DEFAULT_PRICE_CONFIG — the equality Phase 2a's
      *  `BoundaryTest` already pins. None of these tests exercise the client bar, so [ClientsRepository]
      *  is wired to a [FakeEtalonApi] that throws by name if anything ever calls it. */
-    private fun vm(canWrite: Boolean = true) = CalculatorViewModel(
+    private fun vm(
+        canWrite: Boolean = true,
+        observeDraft: ObserveDraftUseCase = ObserveDraftUseCase { flowOf(null) },
+        persistDraft: PersistDraftUseCase = PersistDraftUseCase { },
+        clearDraft: ClearDraftUseCase = ClearDraftUseCase { },
+        saveDraft: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.success("proj-1") },
+    ) = CalculatorViewModel(
         session = FakeSessionPricing(defaultAndroidPricing()),
         permissions = PermissionGate { it == "order.create" && canWrite },
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
+        observeDraft = observeDraft, persistDraft = persistDraft, clearDraftUseCase = clearDraft, saveDraftUseCase = saveDraft,
     )
 
     @Test fun `rooms are auto-named Хона N and numbering does not reuse a deleted name`() = runTest {
@@ -147,5 +161,105 @@ class CalculatorViewModelTest {
         v.openKeypad(KeypadTarget(b, WIDTH))
         v.deleteRoom(a)
         assertEquals(KeypadTarget(b, WIDTH), v.state.value.keypad)
+    }
+
+    // ── Task 8: draft restore, autosave, save, clear ───────────────────────────────
+
+    @Test fun `a persisted draft is restored into state before the operator types anything`() = runTest {
+        val restored = CalculatorDraft(
+            rows = listOf(recomputeRow(SlabRow(id = "r1", name = "Хона 3", innerWidth = 4.0, innerLength = 6.0))),
+            clientPhone = "998901234567", clientName = "Aziz", clientAddress = "",
+            discountPercent = 0.0, discountAmount = 20_000.0, deliveryCost = 5_000.0, otherCost = 1_000.0,
+            projectId = "proj-9",
+        )
+        val v = vm(observeDraft = ObserveDraftUseCase { flowOf(restored) })
+        advanceUntilIdle()
+
+        assertEquals(listOf("Хона 3"), v.state.value.rows.map { it.name })
+        assertEquals("901234567", v.state.value.clientPhoneDigits)
+        assertEquals("Aziz", v.state.value.clientName)
+        assertEquals(DiscountMode.AMOUNT, v.state.value.discountMode, "discountAmount > 0 wins, as the engine boundary resolves it")
+        assertEquals(20_000.0, v.state.value.discountAmount)
+        assertEquals(5_000.0, v.state.value.deliveryCost)
+        assertEquals("proj-9", v.state.value.projectId)
+        assertTrue(v.state.value.totals.projTotal.total > 0.0, "the restored room is recomputed, not left blank")
+
+        v.addRoom()
+        assertEquals("Хона 4", v.state.value.rows.last().name, "numbering continues past the restored room, never reusing it")
+    }
+
+    @Test fun `mutations are persisted after the 500ms debounce, not before`() = runTest {
+        var saves = 0
+        val v = vm(persistDraft = PersistDraftUseCase { saves++ })
+        advanceUntilIdle() // let init's restore settle and the very first (empty) draft flush
+        val baseline = saves
+
+        v.addRoom()
+        advanceTimeBy(400)
+        assertEquals(baseline, saves, "not yet — the debounce has not elapsed")
+        advanceTimeBy(200); advanceUntilIdle()
+        assertEquals(baseline + 1, saves)
+    }
+
+    @Test fun `saveDraft succeeds, keeps the projectId, shows a confirmation, and persists it immediately`() = runTest {
+        var persisted: CalculatorDraft? = null
+        val v = vm(saveDraft = SaveDraftUseCase { _, _ -> Result.success("proj-1") }, persistDraft = PersistDraftUseCase { d -> persisted = d })
+        advanceUntilIdle()
+        v.addRoom(); val id = v.state.value.rows[0].id
+        v.openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
+        v.openKeypad(KeypadTarget(id, LENGTH)); "6".forEach(v::keypadDigit); v.commitKeypad()
+
+        v.saveDraft()
+        advanceUntilIdle()
+
+        assertEquals("proj-1", v.state.value.projectId)
+        assertEquals("Лойиҳа сақланди", v.state.value.saveMessage)
+        assertFalse(v.state.value.saving)
+        assertEquals("proj-1", persisted?.projectId, "the returned id is written to Room right away, not left to the autosave debounce")
+    }
+
+    @Test fun `saveDraft is blocked before the network when a room is unpersistable`() = runTest {
+        var called = false
+        val v = vm(saveDraft = SaveDraftUseCase { _, _ -> called = true; Result.success("x") })
+        advanceUntilIdle()
+        v.addRoom(); val id = v.state.value.rows[0].id
+        v.openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
+        v.setExtraBeams(id, 2) // extras-only: canPersist is false
+
+        v.saveDraft()
+        advanceUntilIdle()
+
+        assertFalse(called, "an unpersistable row must block the whole save before it ever reaches the use case")
+        assertNotNull(v.state.value.error)
+        assertNull(v.state.value.projectId)
+    }
+
+    @Test fun `saveDraft is refused without order_create, before the network`() = runTest {
+        var called = false
+        val v = vm(canWrite = false, saveDraft = SaveDraftUseCase { _, _ -> called = true; Result.success("x") })
+        advanceUntilIdle()
+
+        v.saveDraft()
+        advanceUntilIdle()
+
+        assertFalse(called)
+        assertNotNull(v.state.value.error)
+    }
+
+    @Test fun `clearAll empties the client bar and the discounts too, and clears the persisted draft`() = runTest {
+        var cleared = false
+        val v = vm(clearDraft = ClearDraftUseCase { cleared = true })
+        advanceUntilIdle()
+        v.addRoom(); v.setClientPhoneDigits("901234567"); v.setClientName("Aziz")
+        v.setDiscountMode(DiscountMode.AMOUNT); v.setDiscountAmount(10_000.0)
+
+        v.clearAll()
+        advanceUntilIdle()
+
+        assertTrue(v.state.value.rows.isEmpty())
+        assertEquals("", v.state.value.clientPhoneDigits)
+        assertEquals("", v.state.value.clientName)
+        assertEquals(0.0, v.state.value.discountAmount)
+        assertTrue(cleared, "the Room draft must go too, or reopening the screen brings the just-cleared quote back")
     }
 }

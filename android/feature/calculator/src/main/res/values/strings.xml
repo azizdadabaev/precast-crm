@@ -66,4 +66,6 @@
     <string name="calc_client_tuman">Туман</string>
     <string name="calc_client_street">Кўча, уй, хонадон</string>
     <string name="calc_client_edit">Мижозни ўзгартириш</string>
+    <!-- draft persistence and save — task 8 -->
+    <string name="calc_action_save">Лойиҳани сақлаш</string>
 </resources>
