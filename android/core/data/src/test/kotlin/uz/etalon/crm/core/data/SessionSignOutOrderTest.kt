@@ -24,6 +24,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import uz.etalon.crm.core.database.EtalonDatabase
+import uz.etalon.crm.core.database.dao.CalculatorDraftDao
 import uz.etalon.crm.core.database.dao.OrdersDao
 import uz.etalon.crm.core.database.dao.OutboxDao
 import uz.etalon.crm.core.database.entity.OutboxEntity
@@ -121,6 +122,7 @@ class SessionSignOutOrderTest {
         return object : EtalonDatabase() {
             override fun ordersDao(): OrdersDao = dao
             override fun outboxDao(): OutboxDao = real.outboxDao()
+            override fun calculatorDraftDao(): CalculatorDraftDao = real.calculatorDraftDao()
             override fun clearAllTables() { /* unused: wipe() never calls this */ }
             override fun createInvalidationTracker(): InvalidationTracker = InvalidationTracker(this)
         }
