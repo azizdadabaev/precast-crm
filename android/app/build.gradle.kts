@@ -60,6 +60,7 @@ dependencies {
     implementation(project(":feature:capture"))
     implementation(project(":feature:clients"))
     implementation(project(":feature:home"))
+    implementation(project(":feature:calculator"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)

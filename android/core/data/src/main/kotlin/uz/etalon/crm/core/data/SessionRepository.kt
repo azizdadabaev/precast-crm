@@ -11,6 +11,7 @@ import uz.etalon.crm.core.datastore.SessionPrefs
 import uz.etalon.crm.core.datastore.TokenStore
 import uz.etalon.crm.core.model.Bootstrap
 import uz.etalon.crm.core.model.Me
+import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.ChangePinRequest
 import uz.etalon.crm.core.network.dto.LoginRequest
@@ -18,14 +19,29 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * The operator's live catalogue pricing, narrowed out of [SessionRepository]'s full surface so a
+ * consumer like `:feature:calculator`'s ViewModel can depend on just this and stay fakeable in a
+ * unit test — the same reason [PermissionGate] sits apart from [SessionCurrentUser].
+ *
+ * Set once `bootstrap()` returns; null on a cold start before that lands, in which case the
+ * calculator falls back to its own `DEFAULT_PRICE_CONFIG` until this emits.
+ */
+interface SessionPricing {
+    val pricing: StateFlow<Pricing?>
+}
+
 @Singleton
 class SessionRepository @Inject constructor(
     private val api: EtalonApi, private val tokens: TokenStore, private val prefs: SessionPrefs, private val db: EtalonDatabase,
     private val orders: OrdersRepository, private val outboxScheduler: OutboxScheduler,
-) {
+) : SessionPricing {
     private val _me = MutableStateFlow<Me?>(null)
     val me: StateFlow<Me?> = _me.asStateFlow()
     val isLoggedIn: Flow<Boolean> = tokens.isLoggedIn
+
+    private val _pricing = MutableStateFlow<Pricing?>(null)
+    override val pricing: StateFlow<Pricing?> = _pricing.asStateFlow()
 
     /** The last authenticated user, surviving process death; see SessionPrefs.lastMe. */
     val lastMe: Flow<Me?> = prefs.lastMe
@@ -60,7 +76,9 @@ class SessionRepository @Inject constructor(
 
     /** Cold start. A 401 here clears the token (AuthInterceptor) and the caller shows the PIN screen. */
     suspend fun bootstrap(): Result<Bootstrap> =
-        runCatchingCancellable { api.bootstrap().toDomain().also { _me.value = it.me; prefs.setLastMe(it.me) } }
+        runCatchingCancellable {
+            api.bootstrap().toDomain().also { _me.value = it.me; _pricing.value = it.pricing; prefs.setLastMe(it.me) }
+        }
 
     suspend fun changePin(currentPin: String, newPin: String): Result<Unit> = runCatchingCancellable {
         api.changePin(ChangePinRequest(currentPin, newPin))

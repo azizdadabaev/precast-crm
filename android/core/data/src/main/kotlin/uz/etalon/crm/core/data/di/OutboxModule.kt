@@ -14,6 +14,8 @@ import uz.etalon.crm.core.data.OutboxGateway
 import uz.etalon.crm.core.data.OutboxRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionCurrentUser
+import uz.etalon.crm.core.data.SessionPricing
+import uz.etalon.crm.core.data.SessionRepository
 import java.io.File
 import javax.inject.Named
 import javax.inject.Singleton
@@ -30,6 +32,9 @@ abstract class OutboxModule {
 
     /** Same persisted identity, read for its permission set — see [PermissionGate]. */
     @Binds @Singleton abstract fun permissionGate(impl: SessionCurrentUser): PermissionGate
+
+    /** `:feature:calculator`'s narrow view of the session — see [SessionPricing]. */
+    @Binds @Singleton abstract fun sessionPricing(impl: SessionRepository): SessionPricing
 
     companion object {
         @Provides @Singleton @Named("outboxDir")
