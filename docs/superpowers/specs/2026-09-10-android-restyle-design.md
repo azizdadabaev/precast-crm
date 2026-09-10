@@ -90,7 +90,9 @@ Hit areas ≥ 48 dp on every interactive element (D7); visual heights as the spe
 
 ## 4. Navigation and shell
 
-Floating pill, navy, h60, 16 dp side margin, 12 dp above the gesture inset, five equal cells (D3): **Бош · Буюртма · Ҳисоб · Тўлов · Мижоз**. Active cell = white pill, navy icon, 6 dp indigo dot + label; inactive = icon only at 62 %. The bar is permission-filtered exactly as today, so a role lacking `calculator.use` or `client.view` sees fewer cells. Page content carries the 40 % white→page gradient scrim beneath the nav.
+Floating pill, navy, h60, 16 dp side margin, 12 dp above the gesture inset, five cells (D3): **Бош · Буюртма · Ҳисоб · Тўлов · Мижоз**. Active cell = white pill, navy icon, 6 dp indigo dot + label; inactive = icon only at 62 %.
+
+> **Cell widths (settled in phase 1, 2026-09-10).** The cells are *not* equal: the **active cell hugs its label** (10 dp side padding, measured off the prototype — `2b-home` draws an 81 px active pill and `2b-orders` an 88 px one on identical bars) and the **inactive cells share the remainder** with `weight(1f)`. Five equal cells cannot fit: at 360 dp an equal cell is 63.2 dp, its chrome (dot 6 + gap 6 + icon 20 + gap 6) is 38, and «Буюртма» at 12/600 needs 53 — even at 411 dp an equal cell leaves 35. With the hugging rule at 360 dp the label draws in full, the active cell is 111 dp and each inactive cell 51 dp, all above the 48 dp floor. The labels are therefore load-bearing: a longer label than «Буюртма» must be re-measured against the 360 dp gate before it ships. The bar is permission-filtered exactly as today, so a role lacking `calculator.use` or `client.view` sees fewer cells. Page content carries the 40 % white→page gradient scrim beneath the nav.
 
 **Logistics (D9).** No logistics cell. A driver's screens — Dispatch, LoadTruck, ShipmentLoad, Shipments, DeliveryProof, DeliveryLocation, Drivers — are reached from the order detail's sticky action bar («Юклаш», «Жўнатиш», «Етказилди», and their sub-flows) and from Home's «Бугунги етказиш» rows. Every route, ViewModel and permission stays as it is; only the entry point moves.
 
