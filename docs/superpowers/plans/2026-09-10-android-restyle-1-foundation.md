@@ -90,7 +90,7 @@ Elevation: flat with hairlines. Shadows only on the primary button `0 6 16 rgba(
 
 - `build.gradle.kts` — modify (roborazzi plugin + test deps, Task 2).
 - `src/main/res/font/plusjakartasans.ttf` — new (Task 3); `manrope_*.ttf`, `jetbrainsmono_*.ttf` — deleted (Task 12).
-- `src/main/assets/font/OFL.txt`, `src/main/res/drawable/LICENSE-lucide.txt` — new licence files.
+- `src/main/assets/font/OFL.txt`, `src/main/assets/icon/LICENSE-lucide.txt` — new licence files.
 - `src/main/res/drawable/ic_lu_*.xml` — 36 new vector drawables (Task 5).
 - `src/main/res/values/strings.xml` — modify (three `ds_status_*_short`, a few `ds_cd_*` content descriptions).
 - `src/main/kotlin/uz/etalon/crm/core/designsystem/theme/`
@@ -798,7 +798,7 @@ Fix the two mechanical slips as you type: the import list needs `androidx.compos
 
 ## Task 5: Lucide icons as vector drawables
 
-**Files:** add 36 `core/designsystem/src/main/res/drawable/ic_lu_*.xml`; add `core/designsystem/src/main/res/drawable/LICENSE-lucide.txt`; create `core/designsystem/src/main/kotlin/uz/etalon/crm/core/designsystem/icon/EtalonIcons.kt`; create `core/designsystem/src/test/kotlin/uz/etalon/crm/core/designsystem/IconRenderTest.kt`.
+**Files:** add 36 `core/designsystem/src/main/res/drawable/ic_lu_*.xml`; add `core/designsystem/src/main/assets/icon/LICENSE-lucide.txt`; create `core/designsystem/src/main/kotlin/uz/etalon/crm/core/designsystem/icon/EtalonIcons.kt`; create `core/designsystem/src/test/kotlin/uz/etalon/crm/core/designsystem/IconRenderTest.kt`.
 
 **Interfaces consumed:** `EtalonColors`.
 **Interfaces produced:**
@@ -852,7 +852,7 @@ Sizes, §1.6: **20 dp** in the nav, **18 dp** in header buttons, **16 dp** inlin
 
 36 drawables, covering all 30 usages plus the eight, with `chevron-down` and `navigation` each serving two.
 
-- [ ] **Step 1: Fetch the licence.** `curl -sSL -o android/core/designsystem/src/main/res/drawable/LICENSE-lucide.txt "https://raw.githubusercontent.com/lucide-icons/lucide/main/LICENSE"` — it must open with "ISC License" and "Copyright (c) 2026 Lucide Icons and Contributors". aapt ignores a `.txt` in `drawable/`; keeping it there means the licence cannot drift away from the files it covers.
+- [ ] **Step 1: Fetch the licence.** `curl -sSL -o android/core/designsystem/src/main/assets/icon/LICENSE-lucide.txt "https://raw.githubusercontent.com/lucide-icons/lucide/main/LICENSE"` — it must open with "ISC License" and "Copyright (c) 2026 Lucide Icons and Contributors". aapt ignores a `.txt` in `drawable/`; keeping it there means the licence cannot drift away from the files it covers.
 
 - [ ] **Step 2: Learn the conversion on one full example.** Fetch `https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/arrow-left.svg`; it holds two `<path>`s: `m12 19-7-7 7-7` and `M19 12H5`. The drawable, `ic_lu_arrow_left.xml`, is that verbatim inside the standard wrapper:
 
@@ -956,7 +956,7 @@ import uz.etalon.crm.core.designsystem.R
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 
 /**
- * Lucide (ISC — see res/drawable/LICENSE-lucide.txt), 2-unit stroke in a 24-unit viewport,
+ * Lucide (ISC — see assets/icon/LICENSE-lucide.txt), 2-unit stroke in a 24-unit viewport,
  * round caps. Ints rather than ImageVectors: a drawable reference costs nothing to hold and the
  * whole set can be listed in a test. §1.6 sizes: 20 nav · 18 header · 16 inline · 12 in a square.
  */
