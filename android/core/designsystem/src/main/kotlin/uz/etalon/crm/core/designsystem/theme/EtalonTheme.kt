@@ -4,6 +4,7 @@ import androidx.compose.foundation.Indication
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RippleConfiguration
@@ -66,6 +67,9 @@ fun EtalonTheme(darkTheme: Boolean = false, content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalEtalonColors provides LegacyExtended,
         LocalIndication provides etalonRipple(),
+        // D7: `minimumInteractiveComponentSize()` reads this local, so the 48 dp comes from the
+        // design token rather than from M3's own default happening to agree with it.
+        LocalMinimumInteractiveComponentSize provides EtalonSpace.minTouch,
         LocalRippleConfiguration provides RippleConfiguration(color = Color.Unspecified, rippleAlpha = EtalonRippleAlpha),
     ) {
         MaterialTheme(

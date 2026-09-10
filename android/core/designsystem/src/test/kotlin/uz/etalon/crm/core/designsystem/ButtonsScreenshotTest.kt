@@ -33,11 +33,13 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 
 /**
- * §2's buttons in one sheet, every state the spec names: the primary in its four forms, the
- * secondary and the danger button enabled and disabled, the icon button with and without its
- * badge dot, and the avatar on white and on an indigoPanel with its ring. The navy strip at the
- * bottom is the sticky pair of `2b-order-detail.png` — DarkButton and InverseButton only ever
- * appear there, so they are only legible against navy.
+ * §2's buttons in one sheet, every state the spec names: the primary enabled, disabled and
+ * loading — the last two must not look alike — the secondary and the danger button enabled and
+ * disabled, the icon button with and without its badge dot, and the avatar on white and on an
+ * indigoPanel with its ring. The navy strip at the bottom is §2's ConfirmSheet footer — the
+ * DarkButton / InverseButton pair only ever appears there, so it is only legible against navy.
+ * The badged bell inside that strip is what pins the badge's ring white rather than letting it
+ * sample the button underneath.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -30,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.icon.EtalonIcon
@@ -92,28 +94,37 @@ private fun RowScope.ButtonBody(text: String?, loading: Boolean, leading: ImageV
         // them to `leadingIcon` as they are redrawn.
         leading != null -> { Icon(leading, null, Modifier.size(18.dp), tint = color); if (text != null) Spacer(Modifier.width(10.dp)) }
     }
-    if (text != null) Text(text, style = EtalonType.rowTitle, color = color, maxLines = 1)
+    if (text != null) Text(text, style = EtalonType.rowTitle, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
-/** The one action a screen exists for. Indigo pill, the system's only coloured shadow. */
+/**
+ * The one action a screen exists for. Indigo pill, the system's only coloured shadow.
+ *
+ * `loading` and `enabled = false` are two different things and must not look alike: a button that
+ * is working still shows the indigo fill with the spinner and label in onDark — only the click is
+ * taken away. The lavender skin means "you cannot do this", and eleven live write actions (place
+ * order, record payment, dispatch, …) would otherwise read as unavailable the moment they were
+ * tapped.
+ *
+ * @param compact paints the 36 dp pill instead of 46 and drops `fillMaxWidth` — the header form.
+ * The interactive slot stays 48 dp either way (D7), so a compact button still reserves 48 dp of
+ * height; that reservation only disappears where a taller sibling in the same row already claims it.
+ */
 @Composable
 fun PrimaryButton(
     text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
     enabled: Boolean = true, loading: Boolean = false,
     leading: ImageVector? = null, leadingIcon: Int? = null, compact: Boolean = false,
-) {
-    val on = enabled && !loading
-    EtalonButtonBase(
-        onClick = onClick, enabled = on,
-        modifier = if (compact) modifier else modifier.fillMaxWidth(),
-        height = if (compact) H_COMPACT else H_REGULAR,
-        shape = EtalonShapes.pill,
-        fill = if (on) EtalonColors.indigo else EtalonColors.lavenderBg,
-        pressedFill = EtalonColors.indigoPressed,
-        border = null, onDark = true,
-        shadow = if (on) EtalonColors.indigo else null,
-    ) { ButtonBody(text, loading, leading, leadingIcon, if (on) EtalonColors.onDark else EtalonColors.indigo.copy(alpha = 0.5f)) }
-}
+) = EtalonButtonBase(
+    onClick = onClick, enabled = enabled && !loading,
+    modifier = if (compact) modifier else modifier.fillMaxWidth(),
+    height = if (compact) H_COMPACT else H_REGULAR,
+    shape = EtalonShapes.pill,
+    fill = if (enabled) EtalonColors.indigo else EtalonColors.lavenderBg,
+    pressedFill = EtalonColors.indigoPressed,
+    border = null, onDark = true,
+    shadow = if (enabled) EtalonColors.indigo else null,
+) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.onDark else EtalonColors.indigo.copy(alpha = 0.5f)) }
 
 @Composable
 fun SecondaryButton(
@@ -130,7 +141,9 @@ fun SecondaryButton(
 ) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.ink else EtalonColors.ink3) }
 
 /** Destructive: delete a shipment, remove a photo. Not in §2 — kept because five feature files
- *  call it and deleting a payment-adjacent action is exactly where a red button earns its keep. */
+ *  call it and deleting a payment-adjacent action is exactly where a red button earns its keep.
+ *  The pressed fill is `red` again — [EtalonColors] has no darker red, and §1.1 is closed to new
+ *  hexes, so the press reads through the ripple alone until the spec names a `redPressed`. */
 @Composable
 fun DangerButton(
     text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
@@ -163,11 +176,20 @@ fun InverseButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
         fill = EtalonColors.surface, pressedFill = EtalonColors.lavenderBg, border = null, onDark = false,
     ) { ButtonBody(text, false, null, null, if (enabled) EtalonColors.navy else EtalonColors.ink3) }
 
+/** How far in from the painted button's top-right corner the badge sits. Enough that the 10 dp
+ *  dot clears a pill's curve at both 36 and 40 dp, so it never floats outside the outline. */
+private val BADGE_INSET = 5.dp
+
 /**
  * 36–40 dp square or pill. On light: white with a hairline. On dark: navy2, no border.
- * [badge] is the unread dot from `2b-home.png` — 7 dp red with a 1.5 dp ring in the surface
- * colour, so it reads as a hole punched in the button rather than a sticker on top of it.
- * The outer box is the 48 dp hit area (D7); [size] is what is painted inside it.
+ * [badge] is the unread dot from `2b-home.png` — 7 dp red with the spec's 1.5 dp **white** ring,
+ * up and to the right of the icon but inside the button's corner. The ring is white on light and
+ * on dark alike (§2): on white it disappears into the button, on navy2 it is the gap that keeps
+ * the red off the dark fill.
+ *
+ * The outer box is the 48 dp hit area (D7); [size] is the painted button, and the badge is
+ * anchored to that — anchoring it to the hit area would push it into the clear air around a
+ * button smaller than 48 dp.
  */
 @Composable
 fun EtalonIconButton(
@@ -175,18 +197,22 @@ fun EtalonIconButton(
     onDark: Boolean = false, badge: Boolean = false, size: Dp = 40.dp,
     shape: Shape = EtalonShapes.pill, tint: Color? = null,
 ) = Box(modifier.size(EtalonSpace.minTouch), contentAlignment = Alignment.Center) {
-    Box(
-        Modifier
-            .size(size).clip(shape)
-            .background(if (onDark) EtalonColors.navy2 else EtalonColors.surface)
-            .then(if (onDark) Modifier else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, shape))
-            .clickable(indication = etalonRipple(onDark), interactionSource = remember { MutableInteractionSource() }, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { EtalonIcon(icon, contentDescription, size = 18.dp, tint = tint ?: if (onDark) EtalonColors.onDark else EtalonColors.ink) }
-    if (badge) Box(
-        Modifier.align(Alignment.TopEnd).offset(x = (-2).dp, y = 2.dp)
-            .size(10.dp).clip(EtalonShapes.pill)
-            .background(if (onDark) EtalonColors.navy2 else EtalonColors.surface)
-            .padding(1.5.dp).clip(EtalonShapes.pill).background(EtalonColors.red),
-    )
+    Box(Modifier.size(size)) {
+        Box(
+            Modifier
+                .fillMaxSize().clip(shape)
+                .background(if (onDark) EtalonColors.navy2 else EtalonColors.surface)
+                .then(if (onDark) Modifier else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, shape))
+                .clickable(
+                    role = Role.Button, indication = etalonRipple(onDark),
+                    interactionSource = remember { MutableInteractionSource() }, onClick = onClick,
+                ),
+            contentAlignment = Alignment.Center,
+        ) { EtalonIcon(icon, contentDescription, size = 18.dp, tint = tint ?: if (onDark) EtalonColors.onDark else EtalonColors.ink) }
+        if (badge) Box(
+            Modifier.align(Alignment.TopEnd).offset(x = -BADGE_INSET, y = BADGE_INSET)
+                .size(10.dp).clip(EtalonShapes.pill).background(EtalonColors.onDark)
+                .padding(1.5.dp).clip(EtalonShapes.pill).background(EtalonColors.red),
+        )
+    }
 }
