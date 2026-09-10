@@ -90,7 +90,7 @@ Elevation: flat with hairlines. Shadows only on the primary button `0 6 16 rgba(
 
 - `build.gradle.kts` — modify (roborazzi plugin + test deps, Task 2).
 - `src/main/res/font/plusjakartasans.ttf` — new (Task 3); `manrope_*.ttf`, `jetbrainsmono_*.ttf` — deleted (Task 12).
-- `src/main/res/font/OFL.txt`, `src/main/res/drawable/LICENSE-lucide.txt` — new licence files.
+- `src/main/assets/font/OFL.txt`, `src/main/res/drawable/LICENSE-lucide.txt` — new licence files.
 - `src/main/res/drawable/ic_lu_*.xml` — 36 new vector drawables (Task 5).
 - `src/main/res/values/strings.xml` — modify (three `ds_status_*_short`, a few `ds_cd_*` content descriptions).
 - `src/main/kotlin/uz/etalon/crm/core/designsystem/theme/`
@@ -483,7 +483,7 @@ dependencies {
 
 ## Task 3: Plus Jakarta Sans and the §1.2 type scale
 
-**Files:** add `core/designsystem/src/main/res/font/plusjakartasans.ttf` and `core/designsystem/src/main/res/font/OFL.txt`; rewrite `core/designsystem/src/main/kotlin/uz/etalon/crm/core/designsystem/theme/EtalonTypography.kt`; re-record 45 baselines.
+**Files:** add `core/designsystem/src/main/res/font/plusjakartasans.ttf` and `core/designsystem/src/main/assets/font/OFL.txt`; rewrite `core/designsystem/src/main/kotlin/uz/etalon/crm/core/designsystem/theme/EtalonTypography.kt`; re-record 45 baselines.
 
 **Interfaces consumed:** `EtalonColors` (Task 1).
 **Interfaces produced:**
@@ -530,7 +530,7 @@ private fun pj(weight: Int) = Font(
     variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
 )
 
-/** §1.2 — 400/500/600/700/800 cut from the one variable file (OFL, see res/font/OFL.txt). */
+/** §1.2 — 400/500/600/700/800 cut from the one variable file (OFL, see assets/font/OFL.txt). */
 val PlusJakarta = FontFamily(pj(400), pj(500), pj(600), pj(700), pj(800))
 
 /**
@@ -2323,7 +2323,7 @@ Before calling phase 1 done, check each of these and fix what fails — do not d
 - [ ] D3: `BottomNav` renders five cells without ellipsizing «Буюртма» at 360 dp — or the failure was reported to the owner rather than papered over.
 
 **Fonts and icons.**
-- [ ] `FontWeightTest` passes and the seven old `.ttf` files are gone; `res/font/` holds Plus Jakarta and `OFL.txt` only.
+- [ ] `FontWeightTest` passes and the seven old `.ttf` files are gone; `res/font/` holds the five Plus Jakarta static weights only (the resource merger rejects non-font files there), and `src/main/assets/font/OFL.txt` ships the licence.
 - [ ] All 36 glyphs render at 20/18/16/12 dp on `ds_icons_light.png` — no blank cell, no filled blob where a stroke belongs. `LICENSE-lucide.txt` is committed.
 - [ ] Every one of the 30 Material icons in use has a row in the mapping table, and `EtalonIcons` exposes the glyph it names.
 
