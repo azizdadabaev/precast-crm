@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -40,7 +41,11 @@ class MainActivity : ComponentActivity() {
     private var deepLinkOrderId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        // The page is light only (D6); force dark status/nav-bar icons regardless of the
+        // system's dark-mode setting, or SystemBarStyle.auto picks light icons there and they
+        // vanish against our light page.
+        val transparentBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+        enableEdgeToEdge(statusBarStyle = transparentBarStyle, navigationBarStyle = transparentBarStyle)
         super.onCreate(savedInstanceState)
         deepLinkOrderId = intent?.data?.takeIf { it.scheme == "etalon" && it.host == "order" }?.lastPathSegment
         setContent {
