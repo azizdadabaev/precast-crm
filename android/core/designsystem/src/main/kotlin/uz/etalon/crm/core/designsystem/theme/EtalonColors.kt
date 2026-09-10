@@ -4,7 +4,8 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Etalon Mobile §1.1, light only (design decision D6). **This is the only file in the repo that
- * may contain a colour literal** — `NoRawHexTest` fails the build otherwise. Every component reads
+ * may contain a colour literal** — `core/designsystem/src/test/.../NoRawHexTest.kt` scans every
+ * module's `src/main` and fails the build otherwise. Every component reads
  * these directly; `MaterialTheme.colorScheme` is mapped onto them in [EtalonTheme] only so that a
  * stray M3 component inherits something sensible.
  */
