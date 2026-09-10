@@ -48,4 +48,4 @@ internal val LegacyExtended = EtalonExtendedColors(
 
 @Suppress("DEPRECATION")
 @Deprecated("Read EtalonColors directly; this composition local is deleted at the end of phase 5.")
-val LocalEtalonColors = staticCompositionLocalOf { LegacyExtended }
+val LocalEtalonColors = staticCompositionLocalOf<EtalonExtendedColors> { error("EtalonTheme not applied") }
