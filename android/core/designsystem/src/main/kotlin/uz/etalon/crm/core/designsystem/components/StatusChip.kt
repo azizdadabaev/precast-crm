@@ -1,26 +1,28 @@
 package uz.etalon.crm.core.designsystem.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import uz.etalon.crm.core.designsystem.R
-import uz.etalon.crm.core.designsystem.theme.EtalonShapes
-import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.DiscrepancyStatus
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.core.model.ShipmentStatus
+
+/**
+ * **Temporary.** The six `*Chip` composables, [Chip], [ChipTone] and [toneColor] survive only so
+ * that the twelve feature files naming them keep compiling until their screens are redrawn in
+ * phases 2–5. Every one of them is now a thin shim over [StatusTag] and friends, so a screen that
+ * has not been redrawn yet is already wearing the new §2 palette.
+ *
+ * **Do not add a new use of anything below the tone/label tables.** The last task of phase 5
+ * deletes the shims, and that deletion must be a pure removal — if it turns into a refactor, this
+ * rule was broken. The `*Tone` and `*Label` functions themselves are not shims: `StatusChip`'s
+ * callers read the labels, `StatusStripeCard`'s callers read the tones, and both outlive phase 5.
+ */
 
 enum class ChipTone { PRIMARY, SUCCESS, WARNING, DANGER, GOLD, NEUTRAL }
 
@@ -49,6 +51,16 @@ fun orderStatusLabel(s: OrderStatus): Int = when (s) {
     OrderStatus.CANCELED -> R.string.status_canceled
     OrderStatus.DRAFT, OrderStatus.UNKNOWN -> R.string.status_unknown
 }
+
+/** Row-sized wording from the prototype (`2b-orders.png`); falls back to the full label where the
+ *  prototype has no short form. The full words stay in use on panels and detail screens. */
+fun orderStatusShortLabel(s: OrderStatus): Int = when (s) {
+    OrderStatus.PLACED -> R.string.ds_status_placed_short
+    OrderStatus.IN_PRODUCTION -> R.string.ds_status_in_production_short
+    OrderStatus.DISPATCHED -> R.string.ds_status_dispatched_short
+    else -> orderStatusLabel(s)
+}
+
 fun paymentStateLabel(p: PaymentState): Int = when (p) {
     PaymentState.FULLY_PAID -> R.string.payment_paid
     PaymentState.PARTIALLY_PAID -> R.string.payment_partial
@@ -130,29 +142,33 @@ fun toneColor(t: ChipTone): Color {
     }
 }
 
-/** Text colour on a 14 % tint, 30 % border — never a solid fill (spec §6.1). */
-@Composable
-fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) {
-    val c = toneColor(tone)
-    Text(
-        text = text.uppercase(),
-        style = EtalonType.mono.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.08.sp, color = c),
-        modifier = modifier
-            .background(c.copy(alpha = 0.14f), EtalonShapes.pill)
-            .border(1.dp, c.copy(alpha = 0.30f), EtalonShapes.pill)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    )
+/** The old tone vocabulary on the new families. WARNING and GOLD used to collapse onto the same
+ *  indigo through `LegacyExtended`; here they keep [Chip]'s only remaining caller (the
+ *  calculator's pattern chip) on the accent family, and the six typed chips below no longer route
+ *  through a tone at all — which is what separates ЮКЛАНГАН from ЖЎНАТИЛГАН again. */
+internal fun ChipTone.family() = when (this) {
+    ChipTone.PRIMARY, ChipTone.WARNING, ChipTone.GOLD -> TagFamily.LAVENDER
+    ChipTone.SUCCESS -> TagFamily.GREEN
+    ChipTone.DANGER -> TagFamily.RED
+    ChipTone.NEUTRAL -> TagFamily.NEUTRAL
 }
 
+/** The old free-form chip, on the new palette: no more uppercase, no more 14 %-tint-and-border. */
+@Composable
+fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) =
+    Tag(tone.family(), text, TagSurface.ROW_ON_LIGHT, modifier)
+
+// ── The six typed chips. Call [StatusTag] and friends instead; these survive so that twelve
+// feature files compile until their screens are redrawn in phases 2–5. ──────────────────────────
 @Composable fun StatusChip(status: OrderStatus, modifier: Modifier = Modifier) =
-    Chip(orderStatusTone(status), stringResource(orderStatusLabel(status)), modifier)
+    StatusTag(status, TagSurface.ROW_ON_LIGHT, modifier = modifier)
 @Composable fun PaymentChip(state: PaymentState, modifier: Modifier = Modifier) =
-    Chip(paymentStateTone(state), stringResource(paymentStateLabel(state)), modifier)
+    PaymentStateTag(state, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun ShipmentStatusChip(status: ShipmentStatus, modifier: Modifier = Modifier) =
-    Chip(shipmentStatusTone(status), stringResource(shipmentStatusLabel(status)), modifier)
+    ShipmentStatusTag(status, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun DriverStatusChip(active: Boolean, modifier: Modifier = Modifier) =
-    Chip(driverActiveTone(active), stringResource(driverActiveLabel(active)), modifier)
+    DriverStatusTag(active, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun PaymentStatusChip(status: PaymentStatus, modifier: Modifier = Modifier) =
-    Chip(paymentStatusTone(status), stringResource(paymentStatusLabel(status)), modifier)
+    PaymentStatusTag(status, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun DiscrepancyStatusChip(status: DiscrepancyStatus, modifier: Modifier = Modifier) =
-    Chip(discrepancyStatusTone(status), stringResource(discrepancyStatusLabel(status)), modifier)
+    DiscrepancyStatusTag(status, TagSurface.ROW_ON_LIGHT, modifier)

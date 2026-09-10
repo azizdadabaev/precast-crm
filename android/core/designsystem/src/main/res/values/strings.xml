@@ -6,6 +6,11 @@
     <string name="status_delivered">Етказилган</string>
     <string name="status_canceled">Бекор қилинган</string>
     <string name="status_unknown">Номаълум</string>
+    <!-- Row-sized forms from the prototype (2b-orders.png); the full words above are unchanged
+         and stay in use on panels and detail screens. -->
+    <string name="ds_status_placed_short">Қабул</string>
+    <string name="ds_status_in_production_short">Ишлаб чиқ.</string>
+    <string name="ds_status_dispatched_short">Йўлда</string>
     <string name="payment_paid">Тўланган</string>
     <string name="payment_partial">Қисман</string>
     <string name="payment_pending">Кутилмоқда</string>
