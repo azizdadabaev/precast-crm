@@ -167,7 +167,7 @@ fun OrderDetailScreen(
                 item {
                     StatusStripeCard(stripe = if (o.remaining.isZero) LocalEtalonColors.current.success else MaterialTheme.colorScheme.primary) {
                         SectionLabel(stringResource(R.string.remaining))
-                        MoneyText(o.remaining, style = EtalonType.monoDisplay)
+                        MoneyHeroText(o.remaining, style = EtalonType.monoDisplay)
                         Text(stringResource(R.string.paid_of_total, formatMoney(o.summary.confirmedPaid), formatMoney(o.summary.totalPrice)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (!o.pendingAmount.isZero) Text(stringResource(R.string.pending_amount, formatMoney(o.pendingAmount)), style = MaterialTheme.typography.bodySmall, color = LocalEtalonColors.current.warning)
                         o.payments.forEach { p ->

@@ -13,20 +13,39 @@ import java.time.ZoneId
 val TASHKENT: ZoneId = ZoneId.of("Asia/Tashkent")
 val UZ_MONTHS_SHORT = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
-// U+00A0 non-breaking space, written as an escape rather than a literal invisible character.
-// Matches the web's Intl.NumberFormat("ru-RU", …) grouping separator, so a long figure like
-// "542 200 000 UZS" can't wrap across lines mid-number.
-private const val NBSP = '\u00A0'
+// U+2009 THIN SPACE, written as an escape rather than as a literal invisible character — a literal
+// cannot be told apart from a plain space in a diff. Design decision D8 replaced the old U+00A0:
+// at 10–13 sp a full space between groups reads as two separate numbers on a phone row, and the
+// prototype the owner signed off uses the thin one. It is still unbreakable in practice — Compose
+// does not break inside a run of digits and thin spaces of this width — so a nine-digit total
+// cannot wrap mid-number.
+private const val THIN = '\u2009'
 
 private fun groupThousands(whole: String): String {
     val neg = whole.startsWith("-")
     val digits = whole.trimStart('-')
     val sb = StringBuilder()
-    digits.reversed().forEachIndexed { i, c -> if (i > 0 && i % 3 == 0) sb.append(NBSP); sb.append(c) }
+    digits.reversed().forEachIndexed { i, c -> if (i > 0 && i % 3 == 0) sb.append(THIN); sb.append(c) }
     return (if (neg) "-" else "") + sb.reverse()
 }
 
-fun formatMoney(m: Money): String = groupThousands(m.roundedWhole().toPlainString()) + " UZS"
+/** The currency, for the one place it is written: a hero figure. */
+const val MONEY_UNIT = "UZS"
+
+/**
+ * Money as it appears in a list, a row or a total: grouped digits and **nothing else** (D8).
+ * The unit is dropped because every figure on those screens is UZS and repeating it eleven times
+ * down a column is what made the old rows unreadable at 13 sp.
+ */
+fun formatMoney(m: Money): String = groupThousands(m.roundedWhole().toPlainString())
+
+/**
+ * The KPI / confirm-sheet form: «UZS 53 268 760». Callers that can style two runs separately
+ * should use `MoneyHeroText` instead — it renders the prefix at 14/500 and 50 % opacity, which a
+ * plain string cannot. This exists for the places that need one string: a content description,
+ * the share image's canvas, a toast.
+ */
+fun formatMoneyHero(m: Money): String = "$MONEY_UNIT$THIN${formatMoney(m)}"
 
 fun formatDecimal(v: BigDecimal, maxDigits: Int = 1): String {
     val scaled = v.setScale(maxDigits, RoundingMode.HALF_UP).stripTrailingZeros()

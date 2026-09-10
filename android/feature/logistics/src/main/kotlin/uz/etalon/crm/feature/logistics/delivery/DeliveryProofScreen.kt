@@ -16,7 +16,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
-import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
@@ -86,7 +86,7 @@ fun DeliveryProofRoute(
                     stringResource(R.string.delivery_cash_label), style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                MoneyText(s.amount, style = EtalonType.monoDisplay)
+                MoneyHeroText(s.amount, style = EtalonType.monoDisplay)
                 Text(
                     stringResource(R.string.delivery_expected, formatMoney(s.expected)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -47,7 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.DriverPicker
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.Lightbox
-import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
 import uz.etalon.crm.core.designsystem.components.PhotoRef
@@ -243,7 +243,7 @@ fun RecordPaymentScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 SectionLabel(stringResource(R.string.record_amount_label))
-                MoneyText(s.amount, style = EtalonType.monoDisplay)
+                MoneyHeroText(s.amount, style = EtalonType.monoDisplay)
                 if (!s.overCap.isZero) {
                     Text(
                         stringResource(R.string.record_over_cap, formatMoney(s.overCap)),

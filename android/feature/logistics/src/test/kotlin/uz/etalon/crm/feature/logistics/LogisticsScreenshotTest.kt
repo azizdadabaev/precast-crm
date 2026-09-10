@@ -32,7 +32,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.components.CountStepper
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
-import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
@@ -112,7 +112,7 @@ class LogisticsScreenshotTest {
                 )
                 Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.delivery_cash_label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    MoneyText(s.amount, style = EtalonType.monoDisplay)
+                    MoneyHeroText(s.amount, style = EtalonType.monoDisplay)
                     Text(stringResource(R.string.delivery_expected, formatMoney(s.expected)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (!s.noCashCollected && !s.shortfall.isZero) {
                         Text(stringResource(R.string.delivery_shortfall, formatMoney(s.shortfall)), style = MaterialTheme.typography.bodyMedium, color = LocalEtalonColors.current.danger)

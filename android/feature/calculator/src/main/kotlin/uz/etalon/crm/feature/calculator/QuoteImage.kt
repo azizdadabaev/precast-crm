@@ -31,6 +31,7 @@ import uz.etalon.crm.core.calc.money
 import uz.etalon.crm.core.calc.operatorAmountMoney
 import uz.etalon.crm.core.calc.totalPriceMoney
 import uz.etalon.crm.core.designsystem.components.AreaText
+import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.designsystem.theme.EtalonType
@@ -145,7 +146,7 @@ fun QuoteCard(state: CalculatorUiState, modifier: Modifier = Modifier) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
                     Text(stringResource(R.string.calc_place_summary_total), style = MaterialTheme.typography.titleMedium)
-                    MoneyText(state.orderTotals.totalPriceMoney(), style = EtalonType.monoTitle)
+                    MoneyHeroText(state.orderTotals.totalPriceMoney(), style = EtalonType.monoTitle)
                 }
             }
         }

@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.components.DangerButton
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.Lightbox
-import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
 import uz.etalon.crm.core.designsystem.components.PhotoRef
 import uz.etalon.crm.core.designsystem.components.PhotoStrip
@@ -141,7 +141,7 @@ fun ConfirmSheet(
 
             if (rejecting) {
                 // The recorded figure is shown, never edited: a rejection does not adjust anything.
-                MoneyText(sheet.item.amount, style = EtalonType.monoTitle)
+                MoneyHeroText(sheet.item.amount, style = EtalonType.monoTitle)
                 OutlinedTextField(
                     value = sheet.rejectReason, onValueChange = onSetRejectReason,
                     label = { Text(stringResource(R.string.reject_reason_label)) },
@@ -154,7 +154,7 @@ fun ConfirmSheet(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     SectionLabel(stringResource(R.string.record_amount_label))
-                    MoneyText(sheet.amount, style = EtalonType.monoDisplay)
+                    MoneyHeroText(sheet.amount, style = EtalonType.monoDisplay)
                 }
                 Text(
                     stringResource(R.string.queue_recorded, formatMoney(sheet.item.amount)),

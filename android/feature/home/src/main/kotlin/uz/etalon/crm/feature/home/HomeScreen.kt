@@ -27,7 +27,7 @@ import uz.etalon.crm.core.designsystem.components.ChipTone
 import uz.etalon.crm.core.designsystem.components.CountText
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
-import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.toneColor
@@ -111,11 +111,11 @@ private fun HomeTilesSection(tiles: HomeTiles) {
             CountText(tiles.todayCount)
         }
         HomeTile(label = stringResource(R.string.home_tile_discrepancies)) {
-            MoneyText(tiles.openDiscrepancyTotal, style = EtalonType.monoTitle)
+            MoneyHeroText(tiles.openDiscrepancyTotal, style = EtalonType.monoTitle)
             CountText(tiles.openDiscrepancies)
         }
         HomeTile(label = stringResource(R.string.home_tile_receivables)) {
-            MoneyText(tiles.receivables, style = EtalonType.monoTitle, color = LocalEtalonColors.current.danger)
+            MoneyHeroText(tiles.receivables, style = EtalonType.monoTitle, color = LocalEtalonColors.current.danger)
             CountText(tiles.receivableOrders)
         }
     }

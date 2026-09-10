@@ -42,6 +42,7 @@ import uz.etalon.crm.core.designsystem.components.AreaText
 import uz.etalon.crm.core.designsystem.components.CountText
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.NumericKeypadSheet
@@ -93,7 +94,7 @@ fun TotalsSheet(state: CalculatorUiState, vm: CalculatorViewModel, actions: @Com
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MoneyText(state.orderTotals.totalPriceMoney(), style = EtalonType.monoTitle)
+            MoneyHeroText(state.orderTotals.totalPriceMoney(), style = EtalonType.monoTitle)
             AreaText(
                 BigDecimal.valueOf(state.totals.monolithArea), style = EtalonType.monoTitle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

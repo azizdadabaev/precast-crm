@@ -31,7 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.calc.totalPriceMoney
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
-import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
@@ -176,7 +176,7 @@ fun PlaceOrderSheet(
                     Text(formatArea(BigDecimal.valueOf(state.totals.monolithArea)), style = EtalonType.monoBody)
                 }
                 SummaryRow(stringResource(R.string.calc_place_summary_total)) {
-                    MoneyText(state.orderTotals.totalPriceMoney(), style = EtalonType.monoTitle)
+                    MoneyHeroText(state.orderTotals.totalPriceMoney(), style = EtalonType.monoTitle)
                 }
             }
 
