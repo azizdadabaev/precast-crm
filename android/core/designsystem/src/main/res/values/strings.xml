@@ -49,6 +49,10 @@
     <!-- SearchField's trailing ×. Same word as ds_region_clear, a different affordance: that one
          is a button that unsets the region, this one only empties the query box. -->
     <string name="ds_search_clear">Тозалаш</string>
+    <!-- DetailPanel's two header IconButtons (§2). Content descriptions only — neither button
+         carries a visible label. -->
+    <string name="ds_cd_back">Орқага</string>
+    <string name="ds_cd_call">Қўнғироқ қилиш</string>
     <!-- «маълумот», not «расм»: the outbox carries a queued PLACE_ORDER row as well as photos
          since Phase 2b, and that row is an ORDER. The count was right; the noun was not. -->
     <plurals name="outbox_pending">
