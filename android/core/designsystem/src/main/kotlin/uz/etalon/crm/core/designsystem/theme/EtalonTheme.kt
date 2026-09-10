@@ -1,24 +1,57 @@
 package uz.etalon.crm.core.designsystem.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Indication
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.unit.dp
 
-/** Radii from globals.css: 10 / 6 / 4 px. Brand is fixed; dynamic colour is off on purpose. */
-val EtalonShapes = Shapes(small = RoundedCornerShape(4.dp), medium = RoundedCornerShape(6.dp), large = RoundedCornerShape(10.dp), extraLarge = RoundedCornerShape(14.dp))
+/**
+ * §1.1 mapped onto M3 so that any Material component we have not replaced yet inherits something
+ * sensible. Etalon components do **not** read this — they read [EtalonColors] directly.
+ * Dynamic colour is deliberately absent: the brand is fixed and the owner signed off these exact
+ * hexes. Elevation overlays never appear because every surface here is the same white.
+ */
+private val EtalonColorScheme: ColorScheme = lightColorScheme(
+    primary = EtalonColors.indigo, onPrimary = EtalonColors.onDark,
+    primaryContainer = EtalonColors.lavenderBg, onPrimaryContainer = EtalonColors.indigo,
+    secondary = EtalonColors.indigoPanel, onSecondary = EtalonColors.onDark,
+    background = EtalonColors.page, onBackground = EtalonColors.ink,
+    surface = EtalonColors.surface, onSurface = EtalonColors.ink,
+    surfaceVariant = EtalonColors.lavenderBg, onSurfaceVariant = EtalonColors.ink2,
+    surfaceContainer = EtalonColors.surface, surfaceContainerHigh = EtalonColors.surface,
+    surfaceContainerHighest = EtalonColors.surface, surfaceContainerLow = EtalonColors.page,
+    outline = EtalonColors.surfaceBorder, outlineVariant = EtalonColors.surfaceBorder,
+    error = EtalonColors.red, onError = EtalonColors.onDark,
+    errorContainer = EtalonColors.redBg, onErrorContainer = EtalonColors.red,
+    scrim = EtalonColors.navy,
+)
 
+/** §5: indigo 12 % on light, white 12 % on dark. 12 % is M3's own pressed alpha, so passing the
+ *  colour is the whole configuration. Components sitting on navy or indigoPanel pass `onDark = true`. */
 @Composable
-fun EtalonTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    val extended = if (darkTheme) DarkExtended else LightExtended
-    CompositionLocalProvider(LocalEtalonColors provides extended) {
+fun etalonRipple(onDark: Boolean = false): Indication =
+    ripple(color = if (onDark) EtalonColors.onDark else EtalonColors.indigo)
+
+/**
+ * @param darkTheme accepted and **ignored** — the restyle is light only (design decision D6).
+ * The parameter survives because fifteen screenshot tests still pass it; phases 2–5 drop those
+ * call sites as they redraw each screen.
+ */
+@Composable
+@Suppress("UNUSED_PARAMETER", "DEPRECATION")
+fun EtalonTheme(darkTheme: Boolean = false, content: @Composable () -> Unit) {
+    CompositionLocalProvider(
+        LocalEtalonColors provides LegacyExtended,
+        LocalIndication provides etalonRipple(),
+    ) {
         MaterialTheme(
-            colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
+            colorScheme = EtalonColorScheme,
             typography = EtalonTypography,
-            shapes = EtalonShapes,
+            shapes = EtalonShapes.material,
             content = content,
         )
     }

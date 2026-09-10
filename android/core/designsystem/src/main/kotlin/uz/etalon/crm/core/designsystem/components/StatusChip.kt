@@ -3,7 +3,6 @@ package uz.etalon.crm.core.designsystem.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uz.etalon.crm.core.designsystem.R
+import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.DiscrepancyStatus
@@ -138,8 +138,8 @@ fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) {
         text = text.uppercase(),
         style = EtalonType.mono.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.08.sp, color = c),
         modifier = modifier
-            .background(c.copy(alpha = 0.14f), RoundedCornerShape(999.dp))
-            .border(1.dp, c.copy(alpha = 0.30f), RoundedCornerShape(999.dp))
+            .background(c.copy(alpha = 0.14f), EtalonShapes.pill)
+            .border(1.dp, c.copy(alpha = 0.30f), EtalonShapes.pill)
             .padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }

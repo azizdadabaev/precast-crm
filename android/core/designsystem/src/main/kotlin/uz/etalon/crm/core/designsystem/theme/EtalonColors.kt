@@ -1,63 +1,58 @@
 package uz.etalon.crm.core.designsystem.theme
 
-import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-@Immutable
-data class EtalonExtendedColors(
-    val success: Color, val warning: Color, val gold: Color, val danger: Color,
-    val border: Color, val borderStrong: Color, val textTertiary: Color, val surfaceHover: Color,
-    // Editorial (owner home) palette
-    val paper: Color, val ink: Color, val paperSurface: Color, val paperLine: Color, val paperMuted: Color,
-    val accentGreen: Color, val terracotta: Color,
-)
+/**
+ * Etalon Mobile §1.1, light only (design decision D6). **This is the only file in the repo that
+ * may contain a colour literal** — `NoRawHexTest` fails the build otherwise. Every component reads
+ * these directly; `MaterialTheme.colorScheme` is mapped onto them in [EtalonTheme] only so that a
+ * stray M3 component inherits something sensible.
+ */
+object EtalonColors {
+    val page = Color(0xFFF8F8FA)
+    val surface = Color(0xFFFFFFFF)
+    /** 1 dp hairline on every white surface — the system has no card shadows. */
+    val surfaceBorder = Color(0xFFECEBF3)
 
-val LocalEtalonColors = staticCompositionLocalOf<EtalonExtendedColors> { error("EtalonTheme not applied") }
+    val navy = Color(0xFF1B2033)
+    val navy2 = Color(0xFF262B40)
 
-// App shell — light
-private val LightBackground = Color(0xFFF3F5FB); private val LightSurface = Color(0xFFFFFFFF)
-private val LightForeground = Color(0xFF0C0F1A); private val LightMuted = Color(0xFFEAECF5)
-private val LightMutedFg = Color(0xFF5A6488); private val LightBorder = Color(0xFFDDE1F0)
-private val LightPrimary = Color(0xFF4E80FF)
-// App shell — dark
-private val DarkBackground = Color(0xFF1A1C21); private val DarkSurface = Color(0xFF262830)
-private val DarkForeground = Color(0xFFE0E1E6); private val DarkMuted = Color(0xFF353842)
-private val DarkMutedFg = Color(0xFF989BA4); private val DarkBorder = Color(0xFF41444F)
-private val DarkPrimary = Color(0xFF5D85ED)
+    val indigo = Color(0xFF5646EE)
+    val indigoPressed = Color(0xFF4A3AD9)
+    val indigoPanel = Color(0xFF625BB8)
+    val indigoTile = Color(0xFF7770CC)
+    val indigoTint = Color(0xFF8A82F1)
 
-val LightColorScheme: ColorScheme = lightColorScheme(
-    primary = LightPrimary, onPrimary = Color.White,
-    primaryContainer = LightPrimary.copy(alpha = 0.14f), onPrimaryContainer = LightPrimary,
-    background = LightBackground, onBackground = LightForeground,
-    surface = LightSurface, onSurface = LightForeground,
-    surfaceVariant = LightMuted, onSurfaceVariant = LightMutedFg,
-    outline = LightBorder, outlineVariant = LightBorder,
-    error = Color(0xFFDC2626), onError = Color.White,
-    errorContainer = Color(0xFFDC2626).copy(alpha = 0.10f), onErrorContainer = Color(0xFFDC2626),
-)
-val DarkColorScheme: ColorScheme = darkColorScheme(
-    primary = DarkPrimary, onPrimary = Color.White,
-    primaryContainer = DarkPrimary.copy(alpha = 0.14f), onPrimaryContainer = DarkPrimary,
-    background = DarkBackground, onBackground = DarkForeground,
-    surface = DarkSurface, onSurface = DarkForeground,
-    surfaceVariant = DarkMuted, onSurfaceVariant = DarkMutedFg,
-    outline = DarkBorder, outlineVariant = DarkBorder,
-    error = Color(0xFFD65D63), onError = Color.White,
-    errorContainer = Color(0xFFD65D63).copy(alpha = 0.10f), onErrorContainer = Color(0xFFD65D63),
-)
-val LightExtended = EtalonExtendedColors(
-    success = Color(0xFF059669), warning = Color(0xFFD97706), gold = Color(0xFFB45309), danger = Color(0xFFDC2626),
-    border = LightBorder, borderStrong = Color(0xFFC4CADF), textTertiary = Color(0xFF9AA3BF), surfaceHover = Color(0xFFF8F9FD),
-    paper = Color(0xFFF4F3EE), ink = Color(0xFF15181D), paperSurface = Color(0xFFFFFFFF), paperLine = Color(0xFFE6E4DC), paperMuted = Color(0xFF6E7682),
-    accentGreen = Color(0xFF0E7C5A), terracotta = Color(0xFFC0492F),
-)
-val DarkExtended = EtalonExtendedColors(
-    success = Color(0xFF45C2A0), warning = Color(0xFFE29A4D), gold = Color(0xFFD4A258), danger = Color(0xFFD65D63),
-    border = DarkBorder, borderStrong = Color(0xFF565A66), textTertiary = Color(0xFF757983), surfaceHover = Color(0xFF2C2E36),
-    paper = Color(0xFF0E1311), ink = Color(0xFFECEFEA), paperSurface = Color(0xFF161D1A), paperLine = Color(0xFF27302C), paperMuted = Color(0xFF8A958D),
-    accentGreen = Color(0xFF34D39A), terracotta = Color(0xFFF08A6E),
-)
+    val lavender = Color(0xFFC2BCFF)
+    val lavenderBg = Color(0xFFEDEBFF)
+
+    val ink = Color(0xFF0F0F17)
+    val ink2 = Color(0xFF5D5F70)
+    val ink3 = Color(0xFFA7A6AE)
+
+    val green = Color(0xFF22B07D)
+    val greenBg = Color(0xFFE6F7F0)
+    val red = Color(0xFFE5484D)
+    val redBg = Color(0xFFFDECEC)
+
+    val onDark = Color(0xFFFFFFFF)
+    val onDarkMuted = Color(0xFFFFFFFF).copy(alpha = 0.72f)
+    val onDarkDivider = Color(0xFFFFFFFF).copy(alpha = 0.18f)
+    /** Debt and "paid" on a navy row read at a different weight than on white. */
+    val debtOnDark = Color(0xFFFF8A8E)
+    val paidOnDark = Color(0xFF5CD6A6)
+
+    /** Seven avatar fills, §1.1. Index is deterministic per client name — see [avatarColor]. */
+    val avatarPalette = listOf(
+        Color(0xFF5646EE), Color(0xFF8A82F1), Color(0xFF625BB8), Color(0xFFE5BBAD),
+        Color(0xFF22B07D), Color(0xFF7770CC), Color(0xFFF0A868),
+    )
+
+    /**
+     * The prototype's rule, verbatim: sum of char codes mod 7. It must stay exactly this — the
+     * same client has to keep the same colour on the phone, in the share image and in whatever
+     * renders next, and any "better" hash silently repaints every avatar in the app.
+     * Char codes are non-negative, so the remainder is too.
+     */
+    fun avatarColor(name: String): Color = avatarPalette[name.sumOf { it.code } % avatarPalette.size]
+}
