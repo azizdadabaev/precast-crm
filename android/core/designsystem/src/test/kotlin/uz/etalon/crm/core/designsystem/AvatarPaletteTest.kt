@@ -3,6 +3,7 @@ package uz.etalon.crm.core.designsystem
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import uz.etalon.crm.core.designsystem.components.avatarInitials
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 
 class AvatarPaletteTest {
@@ -28,5 +29,13 @@ class AvatarPaletteTest {
         listOf("Раҳимов Аброр", "Каримов", "Тошкент Tower LLC", "", "  ").forEach {
             assertTrue(EtalonColors.avatarPalette.contains(EtalonColors.avatarColor(it)))
         }
+    }
+
+    @Test fun `initials are the first letters of the first two words, ampersand ignored`() {
+        assertEquals("YS", avatarInitials("Yusupov & Sons"))
+        assertEquals("РА", avatarInitials("Раҳимов Аброр Тоҳирович"))
+        assertEquals("К", avatarInitials("Каримов"))
+        assertEquals("TT", avatarInitials("Tashkent Tower LLC"))
+        assertEquals("", avatarInitials("   "))
     }
 }
