@@ -1,9 +1,12 @@
 package uz.etalon.crm.core.designsystem.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -12,33 +15,39 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.R
-import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
+import uz.etalon.crm.core.designsystem.theme.EtalonColors
+import uz.etalon.crm.core.designsystem.theme.EtalonShapes
+import uz.etalon.crm.core.designsystem.theme.EtalonType
 
 /**
- * Shows the operator that a photo is still on its way, or that the server
- * rejected it. Silence here would look like the upload succeeded.
+ * Shows the operator that a photo is still on its way, or that the server rejected it. Silence
+ * here would look like the upload succeeded.
+ *
+ * [NoticeBanner]'s shape in both states: still-sending is the standing, expected condition and
+ * wears `lavenderBg`/`indigo`; a rejection is a failure the operator can act on and wears
+ * [ErrorBanner]'s `redBg`/`red` with the two compact buttons.
  */
 @Composable
 fun OutboxBanner(pending: Int, failedMessage: String?, onRetry: () -> Unit, onCancel: () -> Unit) {
     if (pending == 0 && failedMessage == null) return
-    val ext = LocalEtalonColors.current
-    val tone = if (failedMessage != null) MaterialTheme.colorScheme.error else ext.warning
-    val shape = MaterialTheme.shapes.medium
+    val failed = failedMessage != null
     Row(
-        Modifier.fillMaxWidth().clip(shape).background(tone.copy(alpha = 0.10f))
-            .border(1.dp, tone.copy(alpha = 0.30f), shape)
+        Modifier.fillMaxWidth().clip(EtalonShapes.md)
+            .background(if (failed) EtalonColors.redBg else EtalonColors.lavenderBg)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                failedMessage ?: pluralStringResource(R.plurals.outbox_pending, pending, pending),
-                style = MaterialTheme.typography.bodyMedium, color = tone,
-            )
-        }
-        if (failedMessage != null) {
-            TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.ds_action_cancel)) }
+        Text(
+            failedMessage ?: pluralStringResource(R.plurals.outbox_pending, pending, pending),
+            style = EtalonType.body,
+            color = if (failed) EtalonColors.red else EtalonColors.indigo,
+            modifier = Modifier.weight(1f),
+        )
+        if (failed) {
+            Spacer(Modifier.width(8.dp))
+            SecondaryButton(stringResource(R.string.action_retry), onRetry, compact = true)
+            Spacer(Modifier.width(6.dp))
+            SecondaryButton(stringResource(R.string.ds_action_cancel), onCancel, compact = true)
         }
     }
 }

@@ -1,11 +1,10 @@
 package uz.etalon.crm.core.designsystem.components
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import uz.etalon.crm.core.designsystem.R
-import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
+import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.model.DiscrepancyStatus
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
@@ -129,17 +128,17 @@ fun discrepancyStatusLabel(s: DiscrepancyStatus): Int = when (s) {
     DiscrepancyStatus.UNKNOWN -> R.string.status_unknown
 }
 
+/**
+ * The stripe colour for [StatusStripeCard]. Read straight off [EtalonColors] — these are the exact
+ * values `LegacyExtended` and the M3 scheme were already mapping onto, so nothing repaints, but the
+ * design system no longer routes a live colour through the shim.
+ */
 @Composable
-fun toneColor(t: ChipTone): Color {
-    val ext = LocalEtalonColors.current
-    return when (t) {
-        ChipTone.PRIMARY -> MaterialTheme.colorScheme.primary
-        ChipTone.SUCCESS -> ext.success
-        ChipTone.WARNING -> ext.warning
-        ChipTone.DANGER -> ext.danger
-        ChipTone.GOLD -> ext.gold
-        ChipTone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+fun toneColor(t: ChipTone): Color = when (t) {
+    ChipTone.PRIMARY, ChipTone.WARNING, ChipTone.GOLD -> EtalonColors.indigo
+    ChipTone.SUCCESS -> EtalonColors.green
+    ChipTone.DANGER -> EtalonColors.red
+    ChipTone.NEUTRAL -> EtalonColors.ink2
 }
 
 /** The old tone vocabulary on the new families. WARNING and GOLD used to collapse onto the same
