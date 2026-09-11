@@ -58,7 +58,6 @@ import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentFilter
-import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatDate
 import uz.etalon.crm.core.ui.format.formatMonthYear
@@ -71,11 +70,12 @@ import java.time.ZoneOffset
 
 /**
  * The chip row, left to right as `2b-orders.png` draws it — «Барчаси» then the app's real
- * statuses. CANCELED closes the row (the capture's five are all that fit on screen), and DRAFT is
- * left out: the mobile never lists a draft.
+ * statuses in the order an order moves through them, CANCELED last. Every status the list can
+ * return is here (LOADED included, off the capture's right edge) so «Барчаси» is always the sum of
+ * the chips beside it; DRAFT is the one omission — the mobile never lists a draft.
  */
 private val STATUS_CHIPS = listOf(
-    null, OrderStatus.PLACED, OrderStatus.IN_PRODUCTION, OrderStatus.DISPATCHED,
+    null, OrderStatus.PLACED, OrderStatus.IN_PRODUCTION, OrderStatus.LOADED, OrderStatus.DISPATCHED,
     OrderStatus.DELIVERED, OrderStatus.CANCELED,
 )
 
@@ -180,7 +180,13 @@ fun OrdersListScreen(
         ) {
             items(STATUS_CHIPS) { st ->
                 EtalonFilterChip(
-                    label = if (st == null) stringResource(R.string.orders_seg_all) else stringResource(orderStatusShortLabel(st)),
+                    // §3.2 spells this chip out — «Ишлаб чиқариш», not the row tag's «Ишлаб чиқ.»,
+                    // which exists only because a tag inside a row has no width to spare.
+                    label = when (st) {
+                        null -> stringResource(R.string.orders_seg_all)
+                        OrderStatus.IN_PRODUCTION -> stringResource(R.string.orders_chip_in_production)
+                        else -> stringResource(orderStatusShortLabel(st))
+                    },
                     selected = s.status == st,
                     onClick = { onStatus(st) },
                     // Ruling R5: the counts describe the whole filtered set, not the loaded rows.
@@ -231,7 +237,9 @@ private fun NavyList(
             (l.visibleItemsInfo.lastOrNull()?.index ?: 0) >= l.totalItemsCount - PREFETCH_ROWS
         }
     }
-    LaunchedEffect(nearEnd, s.hasMore) { if (nearEnd && s.hasMore && !s.loadingMore) onLoadMore() }
+    // `loadingMore` is a key, not just a condition: when a page lands while the list is still
+    // parked at the end, nothing else changes, and without it the next page is never asked for.
+    LaunchedEffect(nearEnd, s.hasMore, s.loadingMore) { if (nearEnd && s.hasMore && !s.loadingMore) onLoadMore() }
     PullToRefreshBox(isRefreshing = s.isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
@@ -286,13 +294,16 @@ private fun NavyList(
             s.groups.forEach { g ->
                 item(key = "m-${g.month}") { MonthHeader(formatMonthYear(g.month), g.total) }
                 items(g.rows, key = { it.id }) { o ->
+                    // A canceled order owes nothing and has paid nothing: neither «қолди …» nor
+                    // «тўланган» is true of it, so the row carries no second line at all.
+                    val canceled = o.status == OrderStatus.CANCELED
                     OrderRow(
                         clientName = o.client.name,
                         status = o.status,
                         metaLine = "${formatOrderNo(o.orderNumber)} · ${formatArea(o.totalArea)}",
                         total = o.totalPrice,
-                        debt = o.remaining,
-                        paidLabel = stringResource(R.string.orders_paid),
+                        debt = if (canceled) null else o.remaining,
+                        paidLabel = if (canceled) null else stringResource(R.string.orders_paid),
                         debtLabel = { ctx.getString(R.string.orders_debt, formatMoney(it)) },
                         onDark = true,
                         onClick = { onOpen(o.id) },
@@ -314,21 +325,22 @@ private fun NavyList(
 }
 
 /**
- * Ruling R6's day filter. The picker reports the selection as UTC midnight, so it is read back in
- * [ZoneOffset.UTC] — reading it in Tashkent time would hand back the previous day.
+ * Ruling R6's day filter. The picker works in UTC midnights, so the seed and the read-back both use
+ * [ZoneOffset.UTC]; seeding from Tashkent midnight (19:00 UTC the day before) would reopen the
+ * picker on the previous day and let «Танлаш» move the filter without the operator touching a date.
  *
- * Material3's own «Select date» / «Selected date» headings are English on a device whose locale
- * has no translation for them, which this CRM does not ship, so both slots are filled with the
- * app's own Uzbek wording and the keyboard-entry toggle (whose hint and error text cannot be
- * replaced at all) is turned off. The calendar grid's month and weekday names still come from the
- * platform locale — they are not app strings and there is no Uzbek Cyrillic calendar data to point
- * them at.
+ * Material3's own «Select date» / «Selected date» headings are drawn from the platform's own
+ * resources, so both slots are filled with the app's Uzbek wording instead and the keyboard-entry
+ * toggle (whose hint and error text cannot be replaced at all) is turned off. The calendar grid's
+ * month and weekday names still read English: CLDR does carry `uz-Cyrl` calendar data, but
+ * `DatePicker` takes its `CalendarLocale` from the device, and this app ships no locale
+ * configuration of its own — forcing one is an app-wide change, not this screen's.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DayPickerDialog(day: LocalDate?, onPick: (LocalDate) -> Unit, onClear: () -> Unit, onDismiss: () -> Unit) {
     val state = rememberDatePickerState(
-        initialSelectedDateMillis = day?.atStartOfDay(TASHKENT)?.toInstant()?.toEpochMilli(),
+        initialSelectedDateMillis = day?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
     )
     DatePickerDialog(
         onDismissRequest = onDismiss,

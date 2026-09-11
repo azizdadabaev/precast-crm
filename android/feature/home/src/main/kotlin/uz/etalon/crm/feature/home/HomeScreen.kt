@@ -56,6 +56,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
@@ -287,6 +288,9 @@ private fun TodaySheet(s: HomeUiState, onOpenOrder: (String) -> Unit) = NavyShee
         s.showNoAccessState -> SheetNote(stringResource(R.string.home_today_no_access))
         s.showEmptyState -> SheetNote(stringResource(R.string.home_today_empty))
         else -> s.today.forEach { d ->
+            // A canceled order owes nothing and has paid nothing, so it carries neither «қолди …»
+            // nor «тўланган» — see OrderRow's `paidLabel`.
+            val canceled = d.status == OrderStatus.CANCELED
             OrderRow(
                 clientName = d.clientName,
                 // No tag on these rows: everything on this sheet is scheduled for today, so the
@@ -294,8 +298,8 @@ private fun TodaySheet(s: HomeUiState, onOpenOrder: (String) -> Unit) = NavyShee
                 status = null,
                 metaLine = listOfNotNull(formatAddressLine(d.clientAddress), formatArea(d.area)).joinToString(" · "),
                 total = d.totalPrice,
-                debt = d.remaining,
-                paidLabel = paidLabel,
+                debt = if (canceled) null else d.remaining,
+                paidLabel = if (canceled) null else paidLabel,
                 debtLabel = { debtTemplate.format(formatMoney(it)) },
                 onDark = true,
                 onClick = { onOpenOrder(d.orderId) },
@@ -364,13 +368,14 @@ private fun RecentSection(
                 )
             } else {
                 recent.take(4).forEach { r ->
+                    val canceled = r.status == OrderStatus.CANCELED
                     OrderRow(
                         clientName = r.clientName,
                         status = r.status,
                         metaLine = formatScheduleDate(r.scheduledAt, now),
                         total = r.totalPrice,
-                        debt = r.remaining,
-                        paidLabel = paidLabel,
+                        debt = if (canceled) null else r.remaining,
+                        paidLabel = if (canceled) null else paidLabel,
                         debtLabel = { debtTemplate.format(formatMoney(it)) },
                         onDark = false,
                         onClick = { onOpenOrder(r.orderId) },

@@ -24,7 +24,7 @@ import java.time.Instant
 
 /**
  * `2b-orders.png` reproduced row for row, so the reviewer can lay the two images side by side:
- * «Буюртмалар» over «9 буюртма · 563,2 м²» with the «+ Янги» pill, the search field and its filter
+ * «Буюртмалар» over its count-and-area line with the «+ Янги» pill, the search field and its filter
  * square, the chips with their facet counts, and the navy sheet — «Рўйхат», the
  * Барчаси/Қарз/Тўланган switch, «Сентябрь 2026 … 49 483 340» and the rows beneath it.
  *
@@ -74,8 +74,12 @@ class OrdersListScreenshotTest {
         client = ClientRef("c-$id", client, "998901112233", null),
     )
 
-    /** Newest first (ruling R5), which is the order the server's `sort=desc` returns. */
+    /** Newest first (ruling R5), which is the order the server's `sort=desc` returns. The canceled
+     *  row is not in `2b-orders.png` — live data has them, and it is the row that proves two rules
+     *  at once: it carries no «қолди …»/«тўланган» line, and «Сентябрь 2026» still sums to the
+     *  capture's 49 483 340 with it on screen. */
     private val rows = listOf(
+        row("o6", "2026-09-0006", "Navoi Build", OrderStatus.CANCELED, "24.03", "4773400.00", "0.00", "2026-09-21T06:00:00Z"),
         row("o5", "2026-09-0005", "Fergana Dom", OrderStatus.PLACED, "36.50", "6210000.00", "0.00", "2026-09-18T06:00:00Z"),
         row("o4", "2026-09-0004", "Tashkent Tower LLC", OrderStatus.IN_PRODUCTION, "108.20", "18420000.00", "0.00", "2026-09-15T06:00:00Z"),
         row("o3", "2026-09-0003", "Yusupov & Sons", OrderStatus.DISPATCHED, "78.70", "13350000.00", "6000000.00", "2026-09-11T06:00:00Z"),
@@ -85,19 +89,22 @@ class OrdersListScreenshotTest {
         row("n1", "2026-06-0002", "Andijon Stroy", OrderStatus.DELIVERED, "31.40", "4947920.00", "4947920.00", "2026-06-19T06:00:00Z"),
     )
 
-    /** The facets describe all nine orders the filter matches, not the seven loaded — which is
-     *  why «Барчаси 9» sits over a list of seven and `hasMore` is true. */
+    /** The facets describe all ten orders the filter matches, not the eight loaded — which is why
+     *  «Барчаси 10» sits over a list of eight and `hasMore` is true. Every chip's count is here,
+     *  LOADED's zero included, so the chips add up to «Барчаси» and so do the two segments. */
     private val facets = OrderFacets(
         byStatus = mapOf(
             OrderStatus.PLACED to 1,
             OrderStatus.IN_PRODUCTION to 1,
+            OrderStatus.LOADED to 0,
             OrderStatus.DISPATCHED to 2,
             OrderStatus.DELIVERED to 5,
+            OrderStatus.CANCELED to 1,
         ),
-        debt = 6,
+        debt = 7,
         paid = 3,
-        total = 9,
-        totalArea = BigDecimal("563.20"),
+        total = 10,
+        totalArea = BigDecimal("587.23"),
     )
 
     private fun loaded() = OrdersListUiState(

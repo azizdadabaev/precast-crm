@@ -6,6 +6,8 @@
     <string name="orders_filter_day">Кун бўйича</string>
     <string name="orders_list_title">Рўйхат</string>
     <string name="orders_seg_all">Барчаси</string>
+    <!-- Chip-only: the row tag abbreviates this to «Ишлаб чиқ.» for want of width, the chip does not. -->
+    <string name="orders_chip_in_production">Ишлаб чиқариш</string>
     <string name="orders_seg_debt">Қарз</string>
     <string name="orders_seg_paid">Тўланган</string>
     <string name="orders_not_found">Буюртма топилмади.</string>

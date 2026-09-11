@@ -36,8 +36,8 @@ import java.time.LocalDate
 
 /**
  * Three baselines: the record sheet, a confirm-queue card with a shortfall, and the discrepancies
- * list. Every clock and every figure below is fixed, the same trap [uz.etalon.crm.feature.orders.OrderCardScreenshotTest]
- * hit with `OrderCard` — a baseline must not change meaning with the day it happens to be recorded.
+ * list. Every clock and every figure below is fixed — a baseline must not change meaning with the
+ * day it happens to be recorded.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
