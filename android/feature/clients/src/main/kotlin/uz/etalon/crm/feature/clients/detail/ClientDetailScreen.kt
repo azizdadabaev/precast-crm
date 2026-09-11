@@ -44,6 +44,7 @@ import uz.etalon.crm.core.designsystem.components.StatusChip
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.orderStatusTone
 import uz.etalon.crm.core.designsystem.components.toneColor
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.ClientOrderLine
 import uz.etalon.crm.core.ui.format.formatAddressLine
@@ -111,7 +112,12 @@ fun ClientDetailScreen(
         PullToRefreshBox(isRefreshing = s.loading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                // The floating nav pill is drawn over this screen (R8: it shows on every signed-in
+                // route), so the last card needs `EtalonSpace.underNav` to scroll clear of it.
+                // Clearance only — this screen is restyled in phase 3.
+                contentPadding = PaddingValues(
+                    start = 16.dp, end = 16.dp, top = 16.dp, bottom = EtalonSpace.underNav,
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val error = s.error

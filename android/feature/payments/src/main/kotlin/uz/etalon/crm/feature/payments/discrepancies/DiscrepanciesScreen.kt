@@ -52,6 +52,7 @@ import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.discrepancyStatusLabel
 import uz.etalon.crm.core.designsystem.components.discrepancyStatusTone
 import uz.etalon.crm.core.designsystem.components.toneColor
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.Discrepancy
@@ -130,7 +131,12 @@ fun DiscrepanciesScreen(
         PullToRefreshBox(isRefreshing = s.loading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                // The floating nav pill is drawn over this screen (R8), and without this band the
+                // last card's «Ҳал қилиш» sits behind it — unreachable. Clearance only; this screen
+                // is restyled in phase 3.
+                contentPadding = PaddingValues(
+                    start = 16.dp, end = 16.dp, top = 16.dp, bottom = EtalonSpace.underNav,
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 // Resolving is online-only — the route is not withIdempotency-wrapped, so it may
