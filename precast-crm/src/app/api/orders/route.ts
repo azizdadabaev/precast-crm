@@ -10,7 +10,7 @@ import { can } from "@/lib/permissions";
 import { createOrder } from "@/lib/create-order";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms } from "@/lib/regions";
-import { facetsFrom } from "@/lib/order-facets";
+import { facetsFrom, NON_LIVE_ORDER_STATUSES } from "@/lib/order-facets";
 
 /** GET /api/orders — order.view. Paginated. Search/status/day/payment filters
  * run server-side so `q` matches the full DB even when only one page
@@ -77,8 +77,17 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
   // how many orders each status holds while one status is selected.
   const facetWhere: Record<string, unknown> = { ...where };
   if (status) where.status = status;
-  if (payment === "paid") where.paymentState = "FULLY_PAID";
-  else if (payment === "debt") where.paymentState = { not: "FULLY_PAID" };
+  // The payment segments are about live money, so they exclude canceled and draft orders exactly
+  // as `byPayment` does (NON_LIVE_ORDER_STATUSES, the CRM's LIVE_ORDERS rule). Without this the
+  // «Қарз» segment listed canceled orders whose count it had stopped including — rows the header
+  // said were not there. A status chip narrows further rather than overriding: «Бекор қилинган» +
+  // «Қарз» is genuinely empty, because no canceled order is in debt.
+  if (payment === "paid" || payment === "debt") {
+    where.paymentState = payment === "paid" ? "FULLY_PAID" : { not: "FULLY_PAID" };
+    where.status = status
+      ? { equals: status, notIn: NON_LIVE_ORDER_STATUSES }
+      : { notIn: NON_LIVE_ORDER_STATUSES };
+  }
 
   const [total, items, statusGroups, paymentGroups] = await Promise.all([
     prisma.order.count({ where }),
@@ -98,8 +107,10 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       _count: { _all: true },
       _sum: { totalArea: true },
     }),
+    // By status as well as paymentState: `facetsFrom` drops the non-live statuses from
+    // «Қарз»/«Тўланган», and it can only do that if it can see which status each group is.
     prisma.order.groupBy({
-      by: ["paymentState"],
+      by: ["paymentState", "status"],
       where: facetWhere,
       _count: { _all: true },
     }),
