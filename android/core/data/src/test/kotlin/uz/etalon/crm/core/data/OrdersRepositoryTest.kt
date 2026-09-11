@@ -46,7 +46,7 @@ private open class FakeApi : FakeEtalonApi() {
 
     /** When set, `orders()` suspends until it completes, so a test can act mid-flight. */
     var gate: CompletableDeferred<Unit>? = null
-    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto { gate?.await(); fail?.let { throw it }; return this.page }
+    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int, payment: String?, sort: String): OrdersPageDto { gate?.await(); fail?.let { throw it }; return this.page }
     override suspend fun order(id: String): OrderDetailDto { fail?.let { throw it }; throw ApiException(404, "Топилмади · Not found") }
 }
 
@@ -100,7 +100,7 @@ class OrdersRepositoryTest {
     }
     @Test fun `listKey distinguishes filters`() {
         assertNotEquals(OrdersFilter().listKey, OrdersFilter(status = OrderStatus.PLACED).listKey)
-        assertEquals("q=|status=|day=|page=1", OrdersFilter().listKey)
+        assertEquals("q=|status=|day=|payment=|sort=asc|size=20|page=1", OrdersFilter().listKey)
     }
 
     @Test fun `clearCache resets outcomes so a stale account's data cannot leak`() = runTest {

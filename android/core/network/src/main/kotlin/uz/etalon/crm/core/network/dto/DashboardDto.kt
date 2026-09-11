@@ -23,7 +23,23 @@ data class TodayDeliveryOrderDto(
     val orderNumber: String,
     val clientName: String,
     @Serializable(with = BigDecimalSerializer::class) val totalArea: BigDecimal,
+    // Defaults exist only so an older server still decodes; Task 1 ships these fields.
+    val status: String = "PLACED",
+    val clientAddress: String? = null,
+    @Serializable(with = BigDecimalSerializer::class) val totalPrice: BigDecimal = BigDecimal.ZERO,
+    @Serializable(with = BigDecimalSerializer::class) val remaining: BigDecimal = BigDecimal.ZERO,
 )
+
+/** One row of the dashboard's `recentOrders` — the six most recent orders for the owner's Home. */
+@Serializable data class RecentOrderDto(
+    val id: String, val orderNumber: String, val clientName: String,
+    val status: String = "PLACED", val scheduledAt: String? = null,
+    @Serializable(with = BigDecimalSerializer::class) val totalPrice: BigDecimal,
+    @Serializable(with = BigDecimalSerializer::class) val remaining: BigDecimal = BigDecimal.ZERO,
+)
+@Serializable data class TrendDto(@Serializable(with = BigDecimalSerializer::class) val deltaPct: BigDecimal, val direction: String)
+@Serializable data class CollectedThisMonthDto(@Serializable(with = BigDecimalSerializer::class) val total: BigDecimal, val trend: TrendDto? = null)
+@Serializable data class MonthCollectedDto(val month: String, @Serializable(with = BigDecimalSerializer::class) val collected: BigDecimal)
 
 /**
  * The payload also carries `count` and `date`. Neither is modelled: `HomeViewModel` counts the
@@ -58,4 +74,7 @@ data class DashboardDto(
     val openDiscrepancies: OpenDiscrepanciesDto,
     val outstandingReceivables: OutstandingReceivablesDto,
     val ordersByPaymentState: OrdersByPaymentStateDto,
+    val recentOrders: List<RecentOrderDto> = emptyList(),
+    val collectedThisMonth: CollectedThisMonthDto? = null,
+    val collectedByMonth: List<MonthCollectedDto> = emptyList(),
 )

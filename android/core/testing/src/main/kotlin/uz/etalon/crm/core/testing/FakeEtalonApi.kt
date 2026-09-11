@@ -34,7 +34,7 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun changePin(body: ChangePinRequest): ChangedDto = unused("changePin")
     override suspend fun registerDevice(body: DeviceRegisterRequest): DeviceDto = unused("registerDevice")
     override suspend fun unregisterDevice(token: String): DeletedDto = unused("unregisterDevice")
-    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto = unused("orders")
+    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int, payment: String?, sort: String): OrdersPageDto = unused("orders")
     override suspend fun order(id: String): OrderDetailDto = unused("order")
 
     override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = unused("loadTruck")

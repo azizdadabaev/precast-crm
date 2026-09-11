@@ -57,7 +57,7 @@ private class UnusedApi(
     private val page: OrdersPageDto = OrdersPageDto(emptyList(), 0, 1, 20, 0),
     private val loginResponse: LoginResponse? = null,
 ) : FakeEtalonApi() {
-    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int): OrdersPageDto {
+    override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int, payment: String?, sort: String): OrdersPageDto {
         gate?.await()
         return this.page
     }

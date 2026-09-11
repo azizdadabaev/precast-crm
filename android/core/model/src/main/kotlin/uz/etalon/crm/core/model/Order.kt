@@ -31,6 +31,13 @@ data class OrderSummary(
     val remaining: Money get() = (totalPrice - confirmedPaid - writeOffAmount).coerceAtLeastZero()
 }
 
+enum class PaymentFilter { DEBT, PAID }
+
+/** GET /api/orders' `facets` — status/payment counts and total area for the current `q`/`day`
+ *  filter, independent of `status`/`payment`/`page` so the list's chips can show every option's
+ *  count while one is selected. */
+data class OrderFacets(val byStatus: Map<OrderStatus, Int>, val debt: Int, val paid: Int, val total: Int, val totalArea: BigDecimal)
+
 data class RoomLine(
     val name: String?, val innerWidth: BigDecimal, val innerLength: BigDecimal, val pattern: String,
     val beamLength: BigDecimal, val beamCount: Int, val totalBlocks: Int, val billedArea: BigDecimal, val subtotal: Money,

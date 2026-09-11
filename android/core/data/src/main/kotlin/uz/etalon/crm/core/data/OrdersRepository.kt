@@ -24,8 +24,13 @@ import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
 
-data class OrdersFilter(val q: String? = null, val status: OrderStatus? = null, val day: LocalDate? = null, val page: Int = 1) {
-    val listKey: String get() = "q=${q.orEmpty()}|status=${status?.name.orEmpty()}|day=${day?.toString().orEmpty()}|page=$page"
+data class OrdersFilter(
+    val q: String? = null, val status: OrderStatus? = null, val day: LocalDate? = null, val page: Int = 1,
+    val payment: PaymentFilter? = null, val sort: String = "asc", val pageSize: Int = 20,
+) {
+    val listKey: String get() = "q=${q.orEmpty()}|status=${status?.name.orEmpty()}|day=${day?.toString().orEmpty()}|payment=${payment?.name.orEmpty()}|sort=$sort|size=$pageSize|page=$page"
+    /** Facets ignore status, payment and page — this is the key they are stored under. */
+    val facetKey: String get() = "q=${q.orEmpty()}|day=${day?.toString().orEmpty()}"
 }
 
 /** The result of the last refresh attempt for a key, with the fetched rows embedded directly
@@ -46,6 +51,7 @@ class OrdersRepository @Inject constructor(
 ) : OrdersGateway {
     private val listOutcomes = MutableStateFlow<Map<String, ListOutcome>>(emptyMap())
     private val detailOutcomes = MutableStateFlow<Map<String, DetailOutcome>>(emptyMap())
+    private val facetsByKey = MutableStateFlow<Map<String, OrderFacets>>(emptyMap())
 
     /** Bumped by [clearCache]. A refresh captures the epoch before its network call and drops its
      *  write if the epoch moved meanwhile — otherwise an in-flight request started by user A can
@@ -59,6 +65,7 @@ class OrdersRepository @Inject constructor(
         epoch.incrementAndGet()
         listOutcomes.value = emptyMap()
         detailOutcomes.value = emptyMap()
+        facetsByKey.value = emptyMap()
     }
 
     fun list(filter: OrdersFilter): Flow<Resource<List<OrderSummary>>> {
@@ -77,16 +84,25 @@ class OrdersRepository @Inject constructor(
         }.distinctUntilChanged()
     }
 
+    /** Keyed by [OrdersFilter.facetKey] (`q`/`day` only) and written by [refreshList] whenever the
+     *  server includes `facets` on the page — absent on an older server, so callers see `null`
+     *  until the first refresh from a Task-1-or-later server for that key. */
+    fun facets(filter: OrdersFilter): Flow<OrderFacets?> = facetsByKey.map { it[filter.facetKey] }.distinctUntilChanged()
+
     suspend fun refreshList(filter: OrdersFilter) {
         val key = filter.listKey
         val started = epoch.get()
         try {
-            val page = api.orders(q = filter.q, status = filter.status?.name, day = filter.day?.toString(), page = filter.page)
+            val page = api.orders(
+                q = filter.q, status = filter.status?.name, day = filter.day?.toString(), page = filter.page,
+                pageSize = filter.pageSize, payment = filter.payment?.name?.lowercase(), sort = filter.sort,
+            )
             val rows = page.items.map { it.toDomain() }
             if (epoch.get() != started) return // signed out mid-flight; these rows belong to the old session
             // Embed the fetched rows in the same write as the outcome so every combine() tick
             // this triggers is already self-consistent; the DAO write below is for persistence only.
             listOutcomes.update { m -> if (epoch.get() != started) m else m + (key to ListOutcome(rows, null)) }
+            page.facets?.let { f -> facetsByKey.update { m -> if (epoch.get() != started) m else m + (filter.facetKey to f.toDomain()) } }
             val now = System.currentTimeMillis()
             dao.replaceList(key, rows.mapIndexed { i, o -> o.toEntity(key, i, now) })
         } catch (t: Throwable) {

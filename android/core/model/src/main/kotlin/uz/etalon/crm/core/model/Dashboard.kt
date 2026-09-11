@@ -1,6 +1,7 @@
 package uz.etalon.crm.core.model
 
 import java.math.BigDecimal
+import java.time.Instant
 
 /** One row of GET /api/dashboard's `todayDeliveries.orders` — a delivery scheduled for today,
  *  as the Home screen's «Бугун» column shows it. `area` is м², not money. */
@@ -8,8 +9,29 @@ data class TodayDelivery(
     val orderId: String,
     val orderNumber: String,
     val clientName: String,
+    val clientAddress: String?,
     val area: BigDecimal,
+    val status: OrderStatus,
+    val totalPrice: Money,
+    val remaining: Money,
 )
+
+/** One row of GET /api/dashboard's `recentOrders` — the six most recently scheduled orders, for
+ *  the owner's editorial Home. */
+data class RecentOrder(
+    val orderId: String,
+    val orderNumber: String,
+    val clientName: String,
+    val status: OrderStatus,
+    val scheduledAt: Instant,
+    val totalPrice: Money,
+    val remaining: Money,
+)
+
+data class MonthCollected(val month: String, val collected: Money)
+
+/** `up` is true unless the server's `direction` is `'down'` — `'flat'` renders as up-with-0. */
+data class Trend(val deltaPct: BigDecimal, val up: Boolean)
 
 /**
  * The subset of `GET /api/dashboard`'s `DashboardPayload` this slice renders: the «Бугун»
@@ -34,4 +56,8 @@ data class HomeSummary(
     val paidOrders: Int,
     val partialOrders: Int,
     val awaitingOrders: Int,
+    val recent: List<RecentOrder>,
+    val collectedThisMonth: Money,
+    val collectedTrend: Trend?,
+    val collectedByMonth: List<MonthCollected>,
 )

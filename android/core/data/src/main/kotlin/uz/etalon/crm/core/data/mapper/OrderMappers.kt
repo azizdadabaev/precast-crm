@@ -4,11 +4,17 @@ import uz.etalon.crm.core.database.entity.OrderSummaryEntity
 import uz.etalon.crm.core.model.*
 import uz.etalon.crm.core.network.MediaUrl
 import uz.etalon.crm.core.network.dto.OrderDetailDto
+import uz.etalon.crm.core.network.dto.OrderFacetsDto
 import uz.etalon.crm.core.network.dto.OrderSummaryDto
 import java.math.BigDecimal
 import java.time.Instant
 
 private fun String.toInstant(): Instant = Instant.parse(this)
+
+fun OrderFacetsDto.toDomain() = OrderFacets(
+    byStatus = byStatus.mapNotNull { (k, v) -> OrderStatus.entries.firstOrNull { it.name == k }?.let { it to v } }.toMap(),
+    debt = byPayment.debt, paid = byPayment.paid, total = total, totalArea = totalArea,
+)
 
 fun OrderSummaryDto.toDomain() = OrderSummary(
     id = id, orderNumber = orderNumber, status = OrderStatus.from(status), paymentState = PaymentState.from(paymentState),

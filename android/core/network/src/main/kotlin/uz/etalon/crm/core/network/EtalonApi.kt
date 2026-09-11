@@ -23,6 +23,7 @@ interface EtalonApi {
     @GET("/api/orders") suspend fun orders(
         @Query("q") q: String? = null, @Query("status") status: String? = null, @Query("day") day: String? = null,
         @Query("page") page: Int = 1, @Query("pageSize") pageSize: Int = 20,
+        @Query("payment") payment: String? = null, @Query("sort") sort: String = "asc",
     ): OrdersPageDto
     @GET("/api/orders/{id}") suspend fun order(@Path("id") id: String): OrderDetailDto
 

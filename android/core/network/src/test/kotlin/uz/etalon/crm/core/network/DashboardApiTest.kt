@@ -7,6 +7,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import retrofit2.Retrofit
@@ -91,5 +92,69 @@ class DashboardApiTest {
         ))
         val dto = api.dashboard()
         assertEquals(BigDecimal.ZERO, dto.todayDeliveries.totalArea)
+    }
+
+    // Task 1's own additions: recentOrders, collectedThisMonth's trend, collectedByMonth, and the
+    // richer today-row fields. All arrive as bare JSON numbers on the money-shaped ones, same trap
+    // as the rest of this endpoint.
+    @Test fun `recentOrders, collectedThisMonth's trend and collectedByMonth decode as BigDecimal, and a today row carries the richer fields`() = runTest {
+        server.enqueue(ok(
+            """{"ok":true,"data":{
+              |"todayDeliveries":{"count":1,"totalArea":18.4,"date":"2026-09-07","orders":[
+              |  {"id":"o1","orderNumber":"A-1","clientName":"Client","totalArea":18.4,"status":"DISPATCHED","clientAddress":"Навоий 1","totalPrice":18420000,"remaining":18420000}
+              |]},
+              |"openDiscrepancies":{"count":0,"totalAmount":0},
+              |"outstandingReceivables":{"total":0,"orderCount":0},
+              |"ordersByPaymentState":{"paid":0,"partial":0,"awaiting":0},
+              |"recentOrders":[
+              |  {"id":"r1","orderNumber":"B-1","clientName":"C1","status":"PLACED","scheduledAt":"2026-09-08T00:00:00Z","totalPrice":500000,"remaining":100000}
+              |],
+              |"collectedThisMonth":{"total":13500000,"paymentCount":4,"periodStart":"2026-09-01","periodEnd":"2026-09-30","trend":{"deltaPct":8.2,"direction":"up","polarity":"positive"}},
+              |"collectedByMonth":[
+              |  {"month":"2026-08","collected":9000000,"paymentCount":3},
+              |  {"month":"2026-09","collected":13500000,"paymentCount":4}
+              |]
+              |}}"""
+                .trimMargin().replace("\n", ""),
+        ))
+        val dto = api.dashboard()
+        val today = dto.todayDeliveries.orders.single()
+        assertEquals("DISPATCHED", today.status)
+        assertEquals("Навоий 1", today.clientAddress)
+        assertEquals(BigDecimal("18420000"), today.totalPrice)
+        assertEquals(BigDecimal("18420000"), today.remaining)
+        assertEquals(1, dto.recentOrders.size)
+        assertEquals(BigDecimal("500000"), dto.recentOrders.single().totalPrice)
+        assertEquals(BigDecimal("13500000"), dto.collectedThisMonth?.total)
+        assertEquals(BigDecimal("8.2"), dto.collectedThisMonth?.trend?.deltaPct)
+        assertEquals("up", dto.collectedThisMonth?.trend?.direction)
+        assertEquals(2, dto.collectedByMonth.size)
+        assertEquals(BigDecimal("9000000"), dto.collectedByMonth[0].collected)
+    }
+
+    // The pre-Task-1 shape: no recentOrders/collectedThisMonth/collectedByMonth keys, and a today
+    // row with none of its new fields. Every one of them must fall back to its default rather than
+    // failing the decode.
+    @Test fun `a pre-Task-1 payload with none of the new keys still decodes, with defaults`() = runTest {
+        server.enqueue(ok(
+            """{"ok":true,"data":{
+              |"todayDeliveries":{"count":1,"totalArea":10,"date":"2026-09-07","orders":[
+              |  {"id":"o1","orderNumber":"A-1","clientName":"Client","totalArea":10}
+              |]},
+              |"openDiscrepancies":{"count":0,"totalAmount":0},
+              |"outstandingReceivables":{"total":0,"orderCount":0},
+              |"ordersByPaymentState":{"paid":0,"partial":0,"awaiting":0}
+              |}}"""
+                .trimMargin().replace("\n", ""),
+        ))
+        val dto = api.dashboard()
+        val today = dto.todayDeliveries.orders.single()
+        assertEquals("PLACED", today.status)
+        assertNull(today.clientAddress)
+        assertEquals(BigDecimal.ZERO, today.totalPrice)
+        assertEquals(BigDecimal.ZERO, today.remaining)
+        assertEquals(emptyList<Any>(), dto.recentOrders)
+        assertNull(dto.collectedThisMonth)
+        assertEquals(emptyList<Any>(), dto.collectedByMonth)
     }
 }

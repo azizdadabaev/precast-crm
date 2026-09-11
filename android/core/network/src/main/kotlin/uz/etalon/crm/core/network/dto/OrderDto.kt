@@ -1,6 +1,8 @@
 package uz.etalon.crm.core.network.dto
 
 import kotlinx.serialization.Serializable
+import uz.etalon.crm.core.network.BigDecimalSerializer
+import java.math.BigDecimal
 
 @Serializable data class ClientDto(val id: String, val name: String, val phone: String, val address: String? = null)
 @Serializable data class OrderSummaryDto(
@@ -12,7 +14,18 @@ import kotlinx.serialization.Serializable
     // compile unchanged.
     val writeOffAmount: String = "0",
 )
-@Serializable data class OrdersPageDto(val items: List<OrderSummaryDto>, val total: Int, val page: Int, val pageSize: Int, val totalPages: Int)
+@Serializable data class OrderFacetsPaymentDto(val debt: Int = 0, val paid: Int = 0)
+@Serializable data class OrderFacetsDto(
+    val byStatus: Map<String, Int> = emptyMap(),
+    val byPayment: OrderFacetsPaymentDto = OrderFacetsPaymentDto(),
+    val total: Int = 0,
+    @Serializable(with = BigDecimalSerializer::class) val totalArea: BigDecimal = BigDecimal.ZERO,
+)
+@Serializable data class OrdersPageDto(
+    val items: List<OrderSummaryDto>, val total: Int, val page: Int, val pageSize: Int, val totalPages: Int,
+    /** Absent from a server older than Task 1; the list then shows no counts rather than failing to decode. */
+    val facets: OrderFacetsDto? = null,
+)
 
 @Serializable data class NameDto(val id: String, val name: String)
 @Serializable data class CalculationDto(val name: String? = null, val innerWidth: String, val innerLength: String, val pattern: String, val beamLength: String, val beamCount: Int, val totalBlocks: Int, val billedArea: String, val subtotal: String)
