@@ -32,9 +32,11 @@ import java.time.Instant
  * built by the production [groupByMonth], so a baseline recorded in March is the one recorded in
  * September.
  *
- * **The nav pill is not in these frames.** `OrdersListScreen` is stateless and knows nothing about
- * the shell that draws the pill over it; what the baseline shows instead is the
- * [uz.etalon.crm.core.designsystem.theme.EtalonSpace.underNav] of list padding kept for it.
+ * **The nav pill is not in these frames, and neither is its band.** `OrdersListScreen` is stateless
+ * and knows nothing about the shell that draws the pill over it; the clearance it keeps for the
+ * pill is bottom `contentPadding` on a list whose rows already run past the viewport, so it is
+ * below the frame's edge and photographs as nothing at all. The clearance arithmetic is
+ * `NavPillTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

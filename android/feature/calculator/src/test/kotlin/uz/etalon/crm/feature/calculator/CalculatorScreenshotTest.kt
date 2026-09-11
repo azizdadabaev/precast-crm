@@ -1,7 +1,9 @@
 package uz.etalon.crm.feature.calculator
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,9 +21,14 @@ import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
+import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.testing.FakeEtalonApi
+
+/** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
+ *  inset: the pill's 84 dp band alone, so these frames carry the clearance a real phone shows. */
+private val SHELL_NAV_PILL_INSET = 84.dp
 
 /** [CalculatorScreen] itself carries no `CalculatorViewModel` — `RoomCard`/`RoomExtras` take a
  *  plain [RoomExtrasCallbacks] instead. This vm exists only because `totalsSheetContent` renders
@@ -126,16 +133,18 @@ class CalculatorScreenshotTest {
         )
         rule.setContent {
             EtalonTheme(darkTheme = dark) {
-                CalculatorScreen(
-                    s = s,
-                    roomCallbacks = NOOP_ROOM_CALLBACKS,
-                    onAddRoom = {}, onDuplicateRoom = {}, onDeleteRoom = {}, onMoveRoom = { _, _ -> },
-                    onSetName = { _, _ -> }, onToggleExpanded = {}, onOpenField = { _, _ -> },
-                    onKeypadValue = {}, onKeypadConfirm = {},
-                    clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = {}) },
-                    clientBarExpanded = { ClientBarExpanded(state = s, vm = vm) },
-                    totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
-                )
+                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
+                    CalculatorScreen(
+                        s = s,
+                        roomCallbacks = NOOP_ROOM_CALLBACKS,
+                        onAddRoom = {}, onDuplicateRoom = {}, onDeleteRoom = {}, onMoveRoom = { _, _ -> },
+                        onSetName = { _, _ -> }, onToggleExpanded = {}, onOpenField = { _, _ -> },
+                        onKeypadValue = {}, onKeypadConfirm = {},
+                        clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = {}) },
+                        clientBarExpanded = { ClientBarExpanded(state = s, vm = vm) },
+                        totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
+                    )
+                }
             }
         }
     }

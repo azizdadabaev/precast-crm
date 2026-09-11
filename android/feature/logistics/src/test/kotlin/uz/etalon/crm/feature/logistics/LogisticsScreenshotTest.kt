@@ -1,7 +1,6 @@
 package uz.etalon.crm.feature.logistics
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +15,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -33,11 +33,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.components.CountStepper
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
@@ -62,6 +62,15 @@ import uz.etalon.crm.feature.logistics.shipments.ShipmentsUiState
 import java.io.File
 import java.math.BigDecimal
 import java.time.Instant
+
+/** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
+ *  inset: the pill's 84 dp band alone, so these frames carry the clearance a real phone shows. */
+private val SHELL_NAV_PILL_INSET = 84.dp
+
+/** The band the shell reserves for the floating nav pill, around a screen the shell would host. */
+@Composable
+private fun ShellFrame(content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET, content = content)
 
 /**
  * Neither [uz.etalon.crm.feature.logistics.delivery.DeliveryProofRoute] nor
@@ -140,7 +149,7 @@ class LogisticsScreenshotTest {
 
     private fun shootDeliveryProof(name: String, dark: Boolean) {
         val s = deliveryProofState()
-        rule.setContent { EtalonTheme(darkTheme = dark) { DeliveryProofPreview(s) } }
+        rule.setContent { EtalonTheme(darkTheme = dark) { ShellFrame { DeliveryProofPreview(s) } } }
         rule.onRoot().captureRoboImage("screenshots/delivery_proof_$name.png")
     }
 
@@ -197,7 +206,7 @@ class LogisticsScreenshotTest {
 
     private fun shootShipmentLoad(name: String, dark: Boolean) {
         val s = shipmentLoadState()
-        rule.setContent { EtalonTheme(darkTheme = dark) { ShipmentLoadPreview(s) } }
+        rule.setContent { EtalonTheme(darkTheme = dark) { ShellFrame { ShipmentLoadPreview(s) } } }
         rule.onRoot().captureRoboImage("screenshots/shipment_load_$name.png")
     }
 
@@ -240,7 +249,7 @@ class LogisticsScreenshotTest {
 
     private fun shootShipmentsList(name: String, dark: Boolean) {
         val s = ShipmentsUiState(resource = Resource.Success(shipmentsOrder()))
-        rule.setContent { EtalonTheme(darkTheme = dark) { ShipmentsScreen(s, {}, {}, {}, {}, {}, {}, {}) } }
+        rule.setContent { EtalonTheme(darkTheme = dark) { ShellFrame { ShipmentsScreen(s, {}, {}, {}, {}, {}, {}, {}) } } }
         rule.onRoot().captureRoboImage("screenshots/shipments_list_$name.png")
     }
 

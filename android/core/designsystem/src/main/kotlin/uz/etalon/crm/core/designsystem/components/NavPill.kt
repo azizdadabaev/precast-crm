@@ -20,8 +20,12 @@ import androidx.compose.ui.unit.dp
  *
  * The bar itself is drawn on `navigationBarsPadding()`, which is why this figure is the band alone
  * and the system inset is added separately by [navPillInsetOf].
+ *
+ * `internal`, not `private`: [BottomNavScrim] is the band too — it fades exactly this much and
+ * then stops, rather than washing on down through the system-bar strip — and it must not restate
+ * the figure.
  */
-private val NAV_PILL_BAND = 84.dp
+internal val NAV_PILL_BAND = 84.dp
 
 /**
  * How much room the current screen must leave at its bottom edge for the shell's floating nav

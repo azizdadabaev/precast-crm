@@ -1,7 +1,9 @@
 package uz.etalon.crm.feature.payments
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
@@ -9,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.ClientRef
 import uz.etalon.crm.core.model.CustodyChain
@@ -33,6 +36,12 @@ import uz.etalon.crm.feature.payments.record.RecordPaymentUiState
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+
+/** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
+ *  inset: the pill's 84 dp band alone, so the record frame carries the clearance a real phone
+ *  shows. Only the record sheet takes it — the queue and discrepancies frames are lists whose
+ *  clearance is bottom `contentPadding` below the viewport, which photographs as nothing. */
+private val SHELL_NAV_PILL_INSET = 84.dp
 
 /**
  * Three baselines: the record sheet, a confirm-queue card with a shortfall, and the discrepancies
@@ -94,12 +103,14 @@ class PaymentScreenshotTest {
     private fun shootRecord(name: String, dark: Boolean, fontScale: Float? = null) {
         rule.setContent {
             EtalonTheme(darkTheme = dark) {
-                RecordPaymentScreen(
-                    s = recordState(), onLeave = {}, onSetAmountDigits = {}, onSetMethod = {}, onSetSource = {},
-                    onSetHandOverNow = {}, onSetDriverId = {}, onSetNotes = {}, onSetPaidOn = {},
-                    onCaptureReceipt = {}, onRemoveReceipt = {}, onSubmit = {}, onFinishWithoutReceipts = {},
-                    onRetryLoad = {},
-                )
+                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
+                    RecordPaymentScreen(
+                        s = recordState(), onLeave = {}, onSetAmountDigits = {}, onSetMethod = {}, onSetSource = {},
+                        onSetHandOverNow = {}, onSetDriverId = {}, onSetNotes = {}, onSetPaidOn = {},
+                        onCaptureReceipt = {}, onRemoveReceipt = {}, onSubmit = {}, onFinishWithoutReceipts = {},
+                        onRetryLoad = {},
+                    )
+                }
             }
         }
         rule.onRoot().captureRoboImage("screenshots/record_sheet_$name.png")

@@ -109,4 +109,59 @@ class NavPillTest {
             windowBottom - buttonBottom >= 132.dp,
         )
     }
+
+    /**
+     * The system navigation inset is counted **once**, not twice — the regression this whole task
+     * exists for. The flat-constant lift this replaced sat in a `Box` *outside* a bar that applied
+     * `navigationBarsPadding()` of its own, so the inset was paid for twice.
+     *
+     * The frame is exactly the app's: a real 48 dp inset dispatched through the same
+     * `OnApplyWindowInsetsListener` path as the arithmetic tests above, **and** the 132 dp
+     * (48 + 84) the shell would provide for it. Two exact assertions, both of which a double count
+     * breaks by 48 dp:
+     *
+     *  - the gap does not change when the inset arrives — the bar reads the provided figure and
+     *    nothing else;
+     *  - the gap is **145 dp**: the bar's own 12 dp of air below the buttons, the 132 dp provided,
+     *    and 1 dp of the 48 dp touch slot `minimumInteractiveComponentSize` reserves around the
+     *    46 dp pill (that modifier is outermost in `EtalonButtonBase`, so the tagged node is the
+     *    slot, not the paint). A double count would read 193.
+     *
+     * `assertEquals` on `Dp`, not `>=`: over-clearing is a bug too — it is empty page an operator
+     * sees below the last button on a screen that has run out of content.
+     */
+    @Test fun `the sticky bar counts the system inset once`() {
+        lateinit var view: View
+        var px = 0
+        rule.setContent {
+            view = LocalView.current
+            px = with(LocalDensity.current) { 48.dp.roundToPx() }
+            EtalonTheme {
+                CompositionLocalProvider(LocalNavPillInset provides 132.dp) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+                        StickyActionBar {
+                            PrimaryButton("Сақлаш", onClick = {}, modifier = Modifier.testTag("action"))
+                        }
+                    }
+                }
+            }
+        }
+        rule.waitForIdle()
+        val before = buttonGapToWindowBottom()
+        rule.runOnIdle {
+            view.dispatchApplyWindowInsets(
+                WindowInsets.Builder()
+                    .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, px))
+                    .build(),
+            )
+        }
+        rule.waitForIdle()
+        val after = buttonGapToWindowBottom()
+        assertEquals("the bar moved when a 48 dp inset arrived, so it counts that inset twice", before, after)
+        assertEquals(145.dp, after)
+    }
+
+    private fun buttonGapToWindowBottom(): Dp =
+        rule.onRoot().getUnclippedBoundsInRoot().height -
+            rule.onNodeWithTag("action").getUnclippedBoundsInRoot().bottom
 }

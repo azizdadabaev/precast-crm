@@ -27,10 +27,11 @@ import java.time.Instant
  * row with the third card peeking, the navy «Бугунги етказиш» sheet with its count pill, and the
  * white «Сўнгги буюртмалар» card.
  *
- * **The nav pill is not in these frames.** `HomeScreen` is stateless and knows nothing about the
- * shell that draws the pill over it; what the baseline shows instead is the
- * [uz.etalon.crm.core.designsystem.theme.EtalonSpace.underNav] of bottom padding the screen keeps
- * for it. The pill's own picture is `ds_bottom_nav_light.png`.
+ * **The nav pill is not in these frames, and neither is its band.** `HomeScreen` is stateless and
+ * knows nothing about the shell that draws the pill over it; the clearance it keeps for the pill
+ * is bottom `contentPadding` on a list whose content already runs past the viewport, so it is
+ * below the frame's edge and photographs as nothing at all. The pill's own picture is
+ * `ds_bottom_nav_light.png`; the clearance arithmetic is `NavPillTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

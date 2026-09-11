@@ -28,7 +28,6 @@ import uz.etalon.crm.core.designsystem.icon.EtalonIcon
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonElevation
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.etalonRipple
 import uz.etalon.crm.core.designsystem.theme.etalonShadow
@@ -136,13 +135,18 @@ fun BottomNav(
 /**
  * The white→page gradient §4 puts beneath the floating bar, so a row scrolling under the pill
  * fades out instead of being sliced by it. The shell places it above its own content, aligned to
- * the bottom; its height is [navPillInsetOf], the same figure the screens below it are given as
- * bottom clearance — so the fade covers exactly the band they keep clear and no more.
+ * the bottom.
+ *
+ * It is the pill's own [NAV_PILL_BAND] tall and it sits on [navigationBarsPadding], exactly as the
+ * bar does — not the full `navPillInsetOf()`, which would stretch the page wash down through the
+ * system-bar strip and, under three-button navigation, wash 48 dp of a navy list out to page grey
+ * below the pill.
  */
 @Composable
 fun BottomNavScrim(modifier: Modifier = Modifier) = Box(
     modifier
         .fillMaxWidth()
-        .height(navPillInsetOf())
+        .navigationBarsPadding()
+        .height(NAV_PILL_BAND)
         .background(Brush.verticalGradient(listOf(EtalonColors.page.copy(alpha = 0f), EtalonColors.page))),
 )

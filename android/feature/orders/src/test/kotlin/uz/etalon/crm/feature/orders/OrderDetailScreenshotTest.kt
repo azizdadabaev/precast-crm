@@ -1,11 +1,13 @@
 package uz.etalon.crm.feature.orders
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
@@ -13,6 +15,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.ClientRef
 import uz.etalon.crm.core.model.DispatchInfo
@@ -37,6 +40,10 @@ import uz.etalon.crm.feature.orders.detail.OrderDetailScreen
 import java.math.BigDecimal
 import java.time.Instant
 
+/** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
+ *  inset: the pill's 84 dp band alone, so these frames carry the clearance a real phone shows. */
+private val SHELL_NAV_PILL_INSET = 84.dp
+
 /**
  * `2b-order-detail.png` reproduced element for element, so the reviewer can lay the two images
  * side by side: the navy panel with the back circle, «30 авг 2026» and the phone circle; the
@@ -47,9 +54,10 @@ import java.time.Instant
  * Nothing here reads the clock: every instant is fixed, so a baseline recorded in March is the one
  * recorded in September.
  *
- * **The nav pill is not in these frames.** `OrderDetailScreen` is stateless and knows nothing about
- * the shell that draws the pill over it; what the baselines show instead is the
- * [uz.etalon.crm.core.designsystem.theme.EtalonSpace.underNav] band the sticky bar is lifted by.
+ * **The nav pill is not drawn in these frames, but its band is.** `OrderDetailScreen` is stateless
+ * and knows nothing about the shell; the frame provides [SHELL_NAV_PILL_INSET] so the empty strip
+ * the sticky bar keeps below itself is the one the shell reserves on a real phone. The pill's own
+ * picture is `ds_bottom_nav_light.png`.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -152,12 +160,14 @@ class OrderDetailScreenshotTest {
     private fun show(o: OrderDetail, pending: List<PendingUpload> = emptyList(), who: Me = me) {
         rule.setContent {
             EtalonTheme {
-                OrderDetailScreen(
-                    r = Resource.Success(o), me = who, pending = pending, actionError = null,
-                    onBack = {}, onRefresh = {}, onLoadTruck = {}, onAddPhoto = {}, onDeliveryProof = {},
-                    onOpenShipments = {}, onOpenLocation = {}, onRecordPayment = {},
-                    onDeletePhoto = {}, onRetryUpload = {}, onCancelUpload = {},
-                )
+                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
+                    OrderDetailScreen(
+                        r = Resource.Success(o), me = who, pending = pending, actionError = null,
+                        onBack = {}, onRefresh = {}, onLoadTruck = {}, onAddPhoto = {}, onDeliveryProof = {},
+                        onOpenShipments = {}, onOpenLocation = {}, onRecordPayment = {},
+                        onDeletePhoto = {}, onRetryUpload = {}, onCancelUpload = {},
+                    )
+                }
             }
         }
     }

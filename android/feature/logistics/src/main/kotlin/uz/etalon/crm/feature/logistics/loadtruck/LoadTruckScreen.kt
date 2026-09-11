@@ -14,7 +14,6 @@ import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.feature.capture.PhotoCapture
 import uz.etalon.crm.feature.logistics.R
 

@@ -26,7 +26,6 @@ import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
 import uz.etalon.crm.core.designsystem.components.shipmentStatusTone
 import uz.etalon.crm.core.designsystem.components.toneColor
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.feature.logistics.R
