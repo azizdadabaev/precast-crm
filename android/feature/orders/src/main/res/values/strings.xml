@@ -32,9 +32,8 @@
     <string name="detail_paid_amount">Тўланган %1$s</string>
     <string name="detail_remaining_amount">Қолди %1$s</string>
     <string name="detail_delivery">Етказиш</string>
-    <string name="step_placed">Қабул</string>
-    <string name="step_production">Ишлаб чиқ.</string>
-    <string name="step_dispatched">Йўлда</string>
+    <string name="step_placed">Буюртма</string>
+    <string name="step_loaded">Юкланди</string>
     <string name="step_delivered">Етказилди</string>
     <string name="detail_date">Сана</string>
     <string name="detail_driver">Ҳайдовчи</string>
