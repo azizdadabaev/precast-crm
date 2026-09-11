@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -31,7 +32,9 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
  * Every string arrives composed. «Тўланган 6 000 000» and «Қолди 7 350 000» are the *screen's*
  * words about its own order, so the component invents no user-facing text and formats no money.
  *
- * @param fraction paid ÷ total, 0..1; clamped, so a rounding overshoot cannot draw past the track.
+ * @param fraction paid ÷ total, 0..1. Clamped, so a rounding overshoot cannot draw past the
+ *   track, and checked for NaN first: paid ÷ 0 is a real arrival here (an order still being
+ *   priced), `coerceIn` passes NaN through untouched, and `fillMaxWidth(NaN)` throws.
  * @param settled there is no debt left — the percentage and the remaining figure turn green.
  */
 @Composable
@@ -50,13 +53,19 @@ fun ProgressCard(
 ) {
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
         Text(label, style = EtalonType.label, color = EtalonColors.ink2, maxLines = 1)
-        Text(percentText, style = EtalonType.label, color = if (settled) EtalonColors.green else EtalonColors.red)
+        Text(
+            percentText,
+            style = EtalonType.label,
+            color = if (settled) EtalonColors.green else EtalonColors.red,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
     Spacer(Modifier.height(10.dp))
     // §1.7: the bar animates its width over 400 ms. It starts *at* the incoming fraction, so the
     // card does not sweep from zero when the screen opens — only a payment landing moves it.
     val width by animateFloatAsState(
-        targetValue = fraction.coerceIn(0f, 1f),
+        targetValue = if (fraction.isFinite()) fraction.coerceIn(0f, 1f) else 0f,
         animationSpec = tween(durationMillis = 400),
         label = "paidFraction",
     )
@@ -67,12 +76,23 @@ fun ProgressCard(
     }
     Spacer(Modifier.height(10.dp))
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-        Text(paidLabel, style = EtalonType.meta, color = EtalonColors.ink2, maxLines = 1)
+        // The weight makes the *paid* line the one that gives way when the two do not both fit:
+        // «Қолди …» is the figure the owner is reading the card for, and it is measured first.
+        // `fill = false` keeps it at its own width when there is room, so nothing moves.
+        Text(
+            paidLabel,
+            style = EtalonType.meta,
+            color = EtalonColors.ink2,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
         Text(
             remainingLabel,
             style = EtalonType.meta,
             color = if (settled) EtalonColors.green else EtalonColors.red,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

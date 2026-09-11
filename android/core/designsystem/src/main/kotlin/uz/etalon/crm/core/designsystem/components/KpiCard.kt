@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,7 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.icon.EtalonIcon
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
@@ -52,8 +54,10 @@ private val BarShape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottom
 /**
  * §2 KpiCard — w210 × auto, white, `xl`, pad 14×16, as the Home hero row on `2b-home.png`.
  *
- * The width is fixed because the row scrolls horizontally: three cards of the same width are what
- * makes the second one peek at the right edge and read as "there is more here".
+ * The width is a **minimum**, not a fixed size: the row scrolls horizontally, and three cards of
+ * the same 210 dp are what make the second one peek at the right edge and read as "there is more
+ * here". A card only exceeds it when its own figure would not otherwise fit (§5, font scale 130 %
+ * with a nine-digit amount) — losing the shared edge is the lesser harm against a cut number.
  *
  * @param value the figure, already formatted by `Formatters.kt` — this component never formats.
  * @param unit an optional quiet **prefix** ahead of the figure, 14/500 at 50 %. It is the «UZS» of
@@ -88,6 +92,9 @@ fun KpiCard(
             style = EtalonType.kpi,
             color = EtalonColors.ink,
             maxLines = 1,
+            // Same rule as `MoneyText`: a figure that does not fit must be *visibly* cut. Clipped,
+            // «78,70 м²» becomes «78,7» and reads as a smaller number rather than a truncated one.
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -122,12 +129,24 @@ private fun KpiCardFrame(
     modifier: Modifier,
     value: @Composable ColumnScope.() -> Unit,
 ) = Column(
-    modifier.width(210.dp).clip(EtalonShapes.xl).background(EtalonColors.surface)
+    // 210 dp is a floor, not a fixed width: §5 asks that a nine-digit amount survive font scale
+    // 130 %, where the figure needs about 185 dp of the 178 dp a 210 dp card has left inside its
+    // padding. Fixed, the number would ellipsize; this way the card grows and the row scrolls.
+    //
+    // `width(IntrinsicSize.Max)` is what makes "grows" mean *to its content* rather than to the
+    // whole screen: the header and sparkline rows inside carry `fillMaxWidth`, so without the
+    // intrinsic pass a card with no upper bound simply took every pixel its parent offered and the
+    // two cards beside it fell off the edge. Max, not Min: every text in this card is `maxLines =
+    // 1`, so the width that renders it correctly is its whole one-line width — `Min` is a word's
+    // worth narrower, and that last few pixels is a whole glyph off the «UZS». `widthIn` sits
+    // outside it, so the result is never under 210.
+    modifier.widthIn(min = 210.dp).width(IntrinsicSize.Max)
+        .clip(EtalonShapes.xl).background(EtalonColors.surface)
         .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
         .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
 ) {
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        Text(label, style = EtalonType.label, color = EtalonColors.ink2, maxLines = 1)
+        Text(label, style = EtalonType.label, color = EtalonColors.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Box(Modifier.size(22.dp).clip(EtalonShapes.sm).background(accent.bg()), Alignment.Center) {
             EtalonIcon(icon, null, size = 12.dp, tint = accent.fg())
         }
@@ -138,8 +157,9 @@ private fun KpiCardFrame(
         Spacer(Modifier.height(4.dp))
         Text(
             footnote,
-            style = EtalonType.meta.copy(fontWeight = FontWeight.W600),
+            style = EtalonType.labelSm,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             color = when (footnotePositive) {
                 true -> EtalonColors.green
                 false -> EtalonColors.red
@@ -156,8 +176,10 @@ private fun KpiCardFrame(
                 Box(
                     Modifier.weight(1f)
                         // A zero-height bar is invisible and reads as missing data rather than a
-                        // quiet month, so every bar keeps a 4 dp floor.
-                        .fillMaxHeight(h.coerceIn(0f, 1f).coerceAtLeast(0.09f))
+                        // quiet month, so every bar keeps a 4 dp floor. NaN is checked first:
+                        // `coerceIn` passes it straight through, and `fillMaxHeight(NaN)` throws
+                        // inside `roundToInt` — a month with no denominator would crash the screen.
+                        .fillMaxHeight(if (h.isFinite()) h.coerceIn(0f, 1f).coerceAtLeast(0.09f) else 0.09f)
                         .clip(BarShape)
                         .background(if (i == currentBar) EtalonColors.indigo else EtalonColors.lavender),
                 )
