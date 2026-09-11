@@ -50,9 +50,9 @@ private val NOOP_ROOM_CALLBACKS = RoomExtrasCallbacks(
 
 /**
  * One baseline: two priced rooms (a Б-Г-Б and a Г-Б-Г case, so both a pattern chip and a real
- * subtotal render) plus a third room still mid-typing with the docked keypad open on its ЭНИ —
- * the state that only this screen has, since every other screenshot suite in the app shoots a
- * `ModalBottomSheet` instead of a bottom-slot keypad.
+ * subtotal render) plus a third, empty room. The docked keypad these frames used to carry is
+ * retired — Task 3 rebuilds the card with the cells on the system keyboard, which a screenshot
+ * cannot photograph.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -74,8 +74,6 @@ class CalculatorScreenshotTest {
         )
         return CalculatorUiState(
             rows = rows,
-            keypad = KeypadTarget("r3", KeypadTarget.Field.WIDTH),
-            keypadText = "4",
             totals = projectTotals(rows, 0.0, 0.0),
             orderTotals = computeOrderTotals(rows, 0.0, 0.0, 0.0, 0.0),
             schedule = beamSchedule(rows),
@@ -85,11 +83,7 @@ class CalculatorScreenshotTest {
 
     /** «Қўшимча» expanded on the Б-Г-Б room and overridden, so both new baselines catch the whole
      *  panel in one frame: the editable group (including the "Авто: …" comparison line, which
-     *  only shows while overridden), and the engine's read-only working-out beneath it. No keypad
-     *  is open here — [state]'s own docked keypad on «Хона 3» would auto-scroll the list straight
-     *  past the expanded card (`CalculatorScreen`'s own `LaunchedEffect(s.keypad?.rowId)`), which
-     *  is exactly the trap that made the first recording of this baseline byte-identical to
-     *  `calculator_rooms_*`. */
+     *  only shows while overridden), and the engine's read-only working-out beneath it. */
     private fun expandedState(): CalculatorUiState {
         val base = state()
         val rows = base.rows.map {
@@ -100,29 +94,9 @@ class CalculatorScreenshotTest {
         return base.copy(
             rows = rows,
             expandedRowId = "r1",
-            keypad = null,
-            keypadText = "",
             totals = projectTotals(rows, 0.0, 0.0),
             orderTotals = computeOrderTotals(rows, 0.0, 0.0, 0.0, 0.0),
             schedule = beamSchedule(rows),
-        )
-    }
-
-    /** A single mid-typing room with the docked keypad open and nothing else on screen — isolates
-     *  the FAB-vs-keypad overlap this fixture exists to pin (Critical 2's task-6 finding: the FAB
-     *  used to sit on the docked keypad's «Кейинги» confirm button, because both were anchored in
-     *  the same `Box` — see `CalculatorScreen.kt`'s own fix comment) from the rest of [state]'s
-     *  concerns (multiple rooms, patterns, totals). */
-    private fun keypadFabState(): CalculatorUiState {
-        val rows = listOf(SlabRow(id = "r1", name = "Хона 1"))
-        return CalculatorUiState(
-            rows = rows,
-            keypad = KeypadTarget("r1", KeypadTarget.Field.WIDTH),
-            keypadText = "4",
-            totals = projectTotals(rows, 0.0, 0.0),
-            orderTotals = computeOrderTotals(rows, 0.0, 0.0, 0.0, 0.0),
-            schedule = beamSchedule(rows),
-            canWrite = true,
         )
     }
 
@@ -138,8 +112,7 @@ class CalculatorScreenshotTest {
                         s = s,
                         roomCallbacks = NOOP_ROOM_CALLBACKS,
                         onAddRoom = {}, onDuplicateRoom = {}, onDeleteRoom = {}, onMoveRoom = { _, _ -> },
-                        onSetName = { _, _ -> }, onToggleExpanded = {}, onOpenField = { _, _ -> },
-                        onKeypadValue = {}, onKeypadConfirm = {},
+                        onSetName = { _, _ -> }, onToggleExpanded = {},
                         clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = {}) },
                         clientBarExpanded = { ClientBarExpanded(state = s, vm = vm) },
                         totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
@@ -159,18 +132,10 @@ class CalculatorScreenshotTest {
         rule.onRoot().captureRoboImage("screenshots/calculator_extras_$name.png")
     }
 
-    private fun shootKeypadFab(name: String, dark: Boolean) {
-        content(keypadFabState(), dark)
-        rule.onRoot().captureRoboImage("screenshots/calculator_fab_keypad_$name.png")
-    }
-
     @Test @Config(qualifiers = "w411dp-h891dp") fun light() = shoot("light", false)
     @Test @Config(qualifiers = "w411dp-h891dp") fun dark() = shoot("dark", true)
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun largeFont() = shoot("font13", false)
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun extrasLight() = shootExpanded("light", false)
     @Test @Config(qualifiers = "w411dp-h891dp") fun extrasDark() = shootExpanded("dark", true)
-
-    @Test @Config(qualifiers = "w411dp-h891dp") fun fabKeypadLight() = shootKeypadFab("light", false)
-    @Test @Config(qualifiers = "w411dp-h891dp") fun fabKeypadDark() = shootKeypadFab("dark", true)
 }

@@ -51,14 +51,16 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatMeters
-import uz.etalon.crm.feature.calculator.KeypadTarget.Field.LENGTH
-import uz.etalon.crm.feature.calculator.KeypadTarget.Field.WIDTH
 import java.math.BigDecimal
 
 /**
- * The collapsed room card: name, the two large ЭНИ/БЎЙИ entry fields, a live result strip, the
+ * The collapsed room card: name, the two large ЭНИ/БЎЙИ values, a live result strip, the
  * pattern chip and the room's subtotal — plus the «Қўшимча» expander row Task 5 fills in, and an
  * overflow menu to duplicate or delete the room.
+ *
+ * The dimension fields are READ-ONLY here: the docked keypad they used to open is retired (the
+ * cells become editable text fields on the system decimal keyboard when Task 3 rebuilds this card
+ * to design 3a), so the card shows what the engine has and nothing taps through to anything.
  *
  * [index] and [listState] are only for the drag handle's own gesture math (see [DragHandle]); the
  * card renders no differently for its position in the list otherwise.
@@ -68,11 +70,9 @@ fun RoomCard(
     row: SlabRow,
     index: Int,
     listState: LazyListState,
-    keypadTarget: KeypadTarget?,
     expanded: Boolean,
     callbacks: RoomExtrasCallbacks,
     onNameChange: (String) -> Unit,
-    onOpenField: (KeypadTarget.Field) -> Unit,
     onToggleExpanded: () -> Unit,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
@@ -119,15 +119,11 @@ fun RoomCard(
             DimensionField(
                 label = stringResource(R.string.calc_field_width),
                 valueText = formatMeters(row.innerWidth),
-                highlighted = keypadTarget == KeypadTarget(row.id, WIDTH),
-                onClick = { onOpenField(WIDTH) },
                 modifier = Modifier.weight(1f),
             )
             DimensionField(
                 label = stringResource(R.string.calc_field_length),
                 valueText = formatMeters(row.innerLength),
-                highlighted = keypadTarget == KeypadTarget(row.id, LENGTH),
-                onClick = { onOpenField(LENGTH) },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -203,21 +199,17 @@ private fun patternLabel(p: Pattern): Int = when (p) {
     Pattern.GBG -> R.string.calc_pattern_gbg
 }
 
-/** ЭНИ or БЎЙИ: a large, tappable value that opens the docked keypad on this field, highlighted
- *  while the keypad is pointed at it — the design's single biggest touch target, since it's what
- *  an operator taps most while quoting live. */
+/** ЭНИ or БЎЙИ, as the engine currently holds it. Read-only until Task 3 turns it into the
+ *  design's editable cell on the system decimal keyboard. */
 @Composable
-private fun DimensionField(
-    label: String, valueText: String, highlighted: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier,
-) {
+private fun DimensionField(label: String, valueText: String, modifier: Modifier = Modifier) {
     val ext = LocalEtalonColors.current
     val shape = MaterialTheme.shapes.medium
     Column(
         modifier
             .clip(shape)
-            .background(if (highlighted) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)
-            .border(1.dp, if (highlighted) MaterialTheme.colorScheme.primary else ext.border, shape)
-            .clickable(onClick = onClick)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, ext.border, shape)
             .heightIn(min = 48.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),

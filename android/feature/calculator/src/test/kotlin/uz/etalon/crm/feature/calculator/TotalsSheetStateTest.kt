@@ -19,8 +19,6 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.testing.FakeEtalonApi
-import uz.etalon.crm.feature.calculator.KeypadTarget.Field.LENGTH
-import uz.etalon.crm.feature.calculator.KeypadTarget.Field.WIDTH
 import java.math.BigDecimal
 
 /** A [SessionPricing] that already holds a value — no bootstrap round trip to fake. */
@@ -63,17 +61,13 @@ class TotalsSheetStateTest {
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
     )
 
-    /** Adds a new room and drives its ЭНИ/БЎЙИ through the docked keypad — comma-decimal text, so
-     *  a fractional width like `4.03` round-trips the same way a real keystroke sequence would. */
+    /** Adds a new room and types its ЭНИ/БЎЙИ into the cells — comma-decimal text, so a fractional
+     *  width like `4.03` round-trips the same way what an operator types would. */
     private fun addRoom(v: CalculatorViewModel, width: Double, length: Double) {
         v.addRoom()
         val id = v.state.value.rows.last().id
-        v.openKeypad(KeypadTarget(id, WIDTH))
-        width.toString().replace('.', ',').forEach(v::keypadDigit)
-        v.commitKeypad()
-        v.openKeypad(KeypadTarget(id, LENGTH))
-        length.toString().replace('.', ',').forEach(v::keypadDigit)
-        v.commitKeypad()
+        v.setWidthText(id, width.toString().replace('.', ','))
+        v.setLengthText(id, length.toString().replace('.', ','))
     }
 
     @Test fun `the two discount modes are mutually exclusive, as the engine resolves them`() = runTest {

@@ -152,44 +152,68 @@ class ClientBarStateTest {
         assertEquals("c1", v.state.value.matchedClientId)
     }
 
-    // ── collapse: an edge, not a level ───────────────────────────────────────────
+    // ── the client form opening and closing: an edge, not a level ───────────────
 
-    @Test fun `the bar collapses once a phone and a name are both present — phone first`() = runTest {
+    @Test fun `a blank quote opens on the form, and a complete client closes it`() = runTest {
+        val v = vm { emptyPage() }
+        assertTrue(v.state.value.clientFormOpen, "there is nothing to show on one line yet")
+
+        v.setClientName("Навоий Build")
+        v.setClientPhoneDigits("901112233")
+        advanceUntilIdle()
+
+        assertFalse(v.state.value.clientFormOpen, "a phone and a name fit on the one-line row")
+    }
+
+    /** The other half of the same rule: a quote whose phone or name has been emptied has nothing
+     *  to show on one line, so the form comes back. */
+    @Test fun `blanking the name reopens the form`() = runTest {
+        val v = vm { hitPage() }
+        v.setClientPhoneDigits("901112233")
+        advanceUntilIdle()
+        assertFalse(v.state.value.clientFormOpen)
+
+        v.setClientName("")
+
+        assertTrue(v.state.value.clientFormOpen)
+    }
+
+    @Test fun `the form closes once a phone and a name are both present — phone first`() = runTest {
         val v = vm { hitPage() }
         v.setClientPhoneDigits("901112233")
         advanceUntilIdle()
         // hitPage() supplies the name too, so both are present the moment the lookup lands.
-        assertTrue(v.state.value.clientBarCollapsed)
+        assertFalse(v.state.value.clientFormOpen)
     }
 
-    @Test fun `the bar collapses once a phone and a name are both present — name first`() = runTest {
+    @Test fun `the form closes once a phone and a name are both present — name first`() = runTest {
         val v = vm { emptyPage() }
         v.setClientName("Навоий Build")
-        assertFalse(v.state.value.clientBarCollapsed, "no phone yet")
+        assertTrue(v.state.value.clientFormOpen, "no phone yet")
         v.setClientPhoneDigits("901112233")
         advanceUntilIdle()
-        assertTrue(v.state.value.clientBarCollapsed, "a miss still leaves the typed name in place")
+        assertFalse(v.state.value.clientFormOpen, "a miss still leaves the typed name in place")
     }
 
-    @Test fun `neither a phone alone nor a name alone collapses the bar`() = runTest {
+    @Test fun `neither a phone alone nor a name alone closes the form`() = runTest {
         val phoneOnly = vm { emptyPage() }
         phoneOnly.setClientPhoneDigits("901112233")
         advanceUntilIdle()
-        assertFalse(phoneOnly.state.value.clientBarCollapsed)
+        assertTrue(phoneOnly.state.value.clientFormOpen)
 
         val nameOnly = vm { emptyPage() }
         nameOnly.setClientName("Навоий Build")
-        assertFalse(nameOnly.state.value.clientBarCollapsed)
+        assertTrue(nameOnly.state.value.clientFormOpen)
     }
 
-    @Test fun `the pencil reopens without clearing anything`() = runTest {
+    @Test fun `the chevron reopens without clearing anything`() = runTest {
         val v = vm { hitPage() }
         v.setClientPhoneDigits("901112233")
         advanceUntilIdle()
-        assertTrue(v.state.value.clientBarCollapsed)
+        assertFalse(v.state.value.clientFormOpen)
 
-        v.reopenClientBar()
-        assertFalse(v.state.value.clientBarCollapsed)
+        v.toggleClientForm()
+        assertTrue(v.state.value.clientFormOpen)
         assertEquals("Навоий Build", v.state.value.clientName, "reopening must not blank the form")
         assertEquals("901112233", v.state.value.clientPhoneDigits)
         assertEquals("c1", v.state.value.matchedClientId)
@@ -198,28 +222,28 @@ class ClientBarStateTest {
     /** The edge only re-fires on a fresh phone+name completion — editing a field while both stay
      *  present (the whole point of the pencil) must not snap the bar shut under the operator's
      *  fingers while they are still correcting it. */
-    @Test fun `editing a field after reopening does not immediately re-collapse the bar`() = runTest {
+    @Test fun `editing a field after reopening does not immediately re-close the form`() = runTest {
         val v = vm { hitPage() }
         v.setClientPhoneDigits("901112233")
         advanceUntilIdle()
-        v.reopenClientBar()
+        v.toggleClientForm()
 
         v.setClientStreet("Юнусобод 12-8")
-        assertFalse(v.state.value.clientBarCollapsed)
+        assertTrue(v.state.value.clientFormOpen)
         v.setClientName("Навоий Build MCHJ")
-        assertFalse(v.state.value.clientBarCollapsed)
+        assertTrue(v.state.value.clientFormOpen)
     }
 
-    @Test fun `clearing the phone below nine digits and completing it again re-collapses`() = runTest {
+    @Test fun `clearing the phone below nine digits and completing it again re-closes the form`() = runTest {
         val v = vm { hitPage() }
         v.setClientPhoneDigits("901112233")
         advanceUntilIdle()
-        v.reopenClientBar()
+        v.toggleClientForm()
 
         v.setClientPhoneDigits("90111223") // 8 digits — no longer ready
-        assertFalse(v.state.value.clientBarCollapsed)
+        assertTrue(v.state.value.clientFormOpen)
         v.setClientPhoneDigits("901112233") // ready again — a fresh edge
         advanceUntilIdle()
-        assertTrue(v.state.value.clientBarCollapsed)
+        assertFalse(v.state.value.clientFormOpen)
     }
 }

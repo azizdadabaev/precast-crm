@@ -25,8 +25,6 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.testing.FakeEtalonApi
-import uz.etalon.crm.feature.calculator.KeypadTarget.Field.LENGTH
-import uz.etalon.crm.feature.calculator.KeypadTarget.Field.WIDTH
 import java.math.BigDecimal
 
 /** A [SessionPricing] that already holds a value — no bootstrap round trip to fake. */
@@ -72,12 +70,8 @@ class RoomExtrasStateTest {
 
     /** Whole metres only, so plain digits are enough — no comma parsing to get right here. */
     private fun setDims(v: CalculatorViewModel, id: String, width: Double, length: Double) {
-        v.openKeypad(KeypadTarget(id, WIDTH))
-        width.toInt().toString().forEach(v::keypadDigit)
-        v.commitKeypad()
-        v.openKeypad(KeypadTarget(id, LENGTH))
-        length.toInt().toString().forEach(v::keypadDigit)
-        v.commitKeypad()
+        v.setWidthText(id, width.toInt().toString())
+        v.setLengthText(id, length.toInt().toString())
     }
 
     @Test fun `changing bearing or correction recomputes the row immediately`() = runTest {

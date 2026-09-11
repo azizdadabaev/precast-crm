@@ -23,8 +23,11 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.calc.CalculatorDraft
+import uz.etalon.crm.core.calc.Pattern
 import uz.etalon.crm.core.calc.PlaceOrderInput
 import uz.etalon.crm.core.calc.SlabRow
+import uz.etalon.crm.core.calc.autoPickedRate
+import uz.etalon.crm.core.calc.money
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
@@ -35,8 +38,6 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.testing.FakeEtalonApi
-import uz.etalon.crm.feature.calculator.KeypadTarget.Field.LENGTH
-import uz.etalon.crm.feature.calculator.KeypadTarget.Field.WIDTH
 import java.math.BigDecimal
 
 /** A [SessionPricing] that already holds a value — no bootstrap round trip to fake. */
@@ -124,8 +125,8 @@ class CalculatorViewModelTest {
         addRoom()
         val id = state.value.rows.last().id
         setName(id, "Хона 1")
-        openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(::keypadDigit); commitKeypad()
-        openKeypad(KeypadTarget(id, LENGTH)); "6".forEach(::keypadDigit); commitKeypad()
+        setWidthText(id, "4")
+        setLengthText(id, "6")
         setClientPhoneDigits("901234567")
         setClientName("Aziz")
         setClientViloyat("Тошкент"); setClientTuman("Юнусобод"); setClientStreet("12-уй")
@@ -136,8 +137,8 @@ class CalculatorViewModelTest {
     private fun CalculatorViewModel.addPricedRoom(): String {
         addRoom()
         val id = state.value.rows[0].id
-        openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(::keypadDigit); commitKeypad()
-        openKeypad(KeypadTarget(id, LENGTH)); "6".forEach(::keypadDigit); commitKeypad()
+        setWidthText(id, "4")
+        setLengthText(id, "6")
         return id
     }
 
@@ -150,24 +151,92 @@ class CalculatorViewModelTest {
     @Test fun `every keystroke recomputes the row and the totals`() = runTest {
         val v = vm(); v.addRoom()
         val id = v.state.value.rows[0].id
-        v.openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
+        v.setWidthText(id, "4")
         assertEquals(0.0, v.state.value.totals.projTotal.total, "width alone is not a room yet")
-        v.openKeypad(KeypadTarget(id, LENGTH)); "6".forEach(v::keypadDigit); v.commitKeypad()
+        v.setLengthText(id, "6")
         assertTrue(v.state.value.totals.projTotal.total > 0.0)
         assertEquals(v.state.value.rows[0].result!!.subtotal, v.state.value.totals.projTotal.roomsSubtotal)
     }
-    @Test fun `the keypad reads a decimal comma`() = runTest {
+    @Test fun `a cell reads a decimal comma`() = runTest {
         val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
-        v.openKeypad(KeypadTarget(id, WIDTH)); "4,25".forEach(v::keypadDigit); v.commitKeypad()
+        v.setWidthText(id, "4,25")
         assertEquals(4.25, v.state.value.rows[0].innerWidth)
     }
-    @Test fun `Кейинги walks width to length to the next room's width and stops at the end`() = runTest {
-        val v = vm(); v.addRoom(); v.addRoom()
-        val (a, b) = v.state.value.rows.map { it.id }
-        v.openKeypad(KeypadTarget(a, WIDTH)); v.nextField()
-        assertEquals(KeypadTarget(a, LENGTH), v.state.value.keypad)
-        v.nextField(); assertEquals(KeypadTarget(b, WIDTH), v.state.value.keypad)
-        v.nextField(); v.nextField(); assertNull(v.state.value.keypad, "past the last field the keypad closes")
+
+    /** §7 fixture 1, typed the way an operator types it: the cells are text, the engine is
+     *  doubles, and the two must meet at exactly this number. */
+    @Test fun `typing 5,2 by 7,1 into the cells prices fixture 1`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "5,2")
+        v.setLengthText(id, "7,1")
+        assertEquals(Money.parse("7330400.00"), v.state.value.rows[0].result!!.money().subtotal)
+    }
+
+    /** There is no «commit» any more: the row is repriced on the keystroke, including the one
+     *  that is only a comma — «5,» must price off the 5 it already has rather than dropping the
+     *  room to zero for as long as the operator's finger is between digits. */
+    @Test fun `the row reprices on every keystroke, the bare separator included`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setLengthText(id, "7")
+
+        v.setWidthText(id, "5")
+        assertEquals(5.0, v.state.value.rows[0].innerWidth)
+        val atFive = v.state.value.rows[0].result!!.subtotal
+        assertTrue(atFive > 0.0)
+
+        v.setWidthText(id, "5,")
+        assertEquals("5,", v.state.value.draft(id).width, "the separator stays in the cell")
+        assertEquals(5.0, v.state.value.rows[0].innerWidth)
+        assertEquals(atFive, v.state.value.rows[0].result!!.subtotal, "a half-typed decimal is still the 5")
+
+        v.setWidthText(id, "5,2")
+        assertEquals(5.2, v.state.value.rows[0].innerWidth)
+        assertNotEquals(atFive, v.state.value.rows[0].result!!.subtotal)
+    }
+
+    /** The system decimal keyboard emits whichever separator the device's locale gives it. */
+    @Test fun `a cell reads a decimal point the same as a comma, and shows the comma`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4.25")
+        assertEquals(4.25, v.state.value.rows[0].innerWidth)
+        assertEquals("4,25", v.state.value.draft(id).width, "D8's decimal mark, whatever was typed")
+    }
+
+    @Test fun `a cell filters out everything that is not a digit or the first separator`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "-4,2,5x")
+        assertEquals("4,25", v.state.value.draft(id).width)
+        assertEquals(4.25, v.state.value.rows[0].innerWidth)
+    }
+
+    /** Clearing a cell is not «leave the old number there»: the room stops being one the server
+     *  would take, and the totals say so immediately. */
+    @Test fun `an emptied cell prices as zero and the room stops being persistable`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4"); v.setLengthText(id, "6")
+        assertTrue(v.state.value.rows[0].canPersist)
+
+        v.setLengthText(id, "")
+
+        assertEquals("", v.state.value.draft(id).length)
+        assertEquals(0.0, v.state.value.rows[0].innerLength)
+        assertFalse(v.state.value.rows[0].canPersist)
+    }
+
+    @Test fun `the bearing and correction cells are text too`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        assertEquals("0,15", v.state.value.draft(id).bearing, "a new room starts at the engine's default")
+        v.setBearingText(id, "0,20"); v.setCorrectionText(id, "0,05")
+        assertEquals(0.20, v.state.value.rows[0].bearing)
+        assertEquals(0.05, v.state.value.rows[0].correction)
+    }
+
+    @Test fun `the width bump rewrites the cell it moved`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4"); v.setLengthText(id, "6")
+        v.bumpWidth(id, up = true)
+        assertEquals(4.1, v.state.value.rows[0].innerWidth)
+        assertEquals("4,10", v.state.value.draft(id).width)
     }
     @Test fun `duplicate copies every input and gives the copy its own id and name`() = runTest {
         val v = vm(); v.addRoom(); val src = v.state.value.rows[0]
@@ -184,13 +253,13 @@ class CalculatorViewModelTest {
     }
     @Test fun `the width bump uses the chosen grid`() = runTest {
         val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
-        v.openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
+        v.setWidthText(id, "4")
         v.bumpWidth(id, up = true); assertEquals(4.1, v.state.value.rows[0].innerWidth)
         v.setGrid(Grid.CM5); v.bumpWidth(id, up = false); assertEquals(4.05, v.state.value.rows[0].innerWidth)
     }
     @Test fun `an extras-only room is named as unpersistable rather than dropped`() = runTest {
         val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
-        v.openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
+        v.setWidthText(id, "4")
         v.setExtraBeams(id, 2)
         assertEquals(listOf("Хона 1"), v.state.value.unpersistableRoomNames)
         assertTrue(v.state.value.totals.projTotal.total > 0.0, "it still counts in the quote")
@@ -200,25 +269,121 @@ class CalculatorViewModelTest {
         assertFalse(v.state.value.canWrite); assertEquals(1, v.state.value.rows.size)
     }
 
-    // ── Trap: the focused room can be deleted out from under the keypad ────────────────
+    // ── Trap: the room a card or a sheet is pointed at can be deleted ─────────────────
 
-    @Test fun `deleting the room the keypad is focused on closes the keypad and collapses its card`() = runTest {
+    @Test fun `deleting a room takes its cells, its expanded card and its rate confirmation with it`() = runTest {
         val v = vm(); v.addRoom(); v.addRoom()
         val (a, b) = v.state.value.rows.map { it.id }
-        v.openKeypad(KeypadTarget(a, WIDTH))
+        v.setWidthText(a, "4"); v.setLengthText(a, "6")
         v.toggleExpanded(a)
+        v.pickRate(a, 230_000.0)
+        assertNotNull(v.state.value.rateConfirm, "the confirmation is open on the room about to go")
+
         v.deleteRoom(a)
-        assertNull(v.state.value.keypad, "the keypad followed the deleted room")
-        assertNull(v.state.value.expandedRowId, "the expanded card followed the deleted room too")
+
+        assertNull(v.state.value.expandedRowId, "the expanded card followed the deleted room")
+        assertNull(v.state.value.rateConfirm, "so did the rate confirmation")
+        assertFalse(v.state.value.drafts.containsKey(a), "and its cell texts")
         assertEquals(listOf(b), v.state.value.rows.map { it.id })
     }
 
-    @Test fun `deleting a room the keypad is NOT focused on leaves the keypad open`() = runTest {
+    @Test fun `deleting a room leaves another room's cells and confirmation alone`() = runTest {
         val v = vm(); v.addRoom(); v.addRoom()
         val (a, b) = v.state.value.rows.map { it.id }
-        v.openKeypad(KeypadTarget(b, WIDTH))
+        v.setWidthText(b, "4,25"); v.setLengthText(b, "6")
+        v.pickRate(b, 230_000.0)
+
         v.deleteRoom(a)
-        assertEquals(KeypadTarget(b, WIDTH), v.state.value.keypad)
+
+        assertEquals("4,25", v.state.value.draft(b).width)
+        assertEquals(RateConfirmState(b, 230_000.0), v.state.value.rateConfirm)
+    }
+
+    // ── The pattern chip and the rate sheet ───────────────────────────────────────
+
+    @Test fun `the pattern chip cycles авто to Г-Б to Б-Г-Б to Г-Б-Г and back to авто`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4"); v.setLengthText(id, "6")
+        assertNull(v.state.value.rows[0].patternOverride, "a room starts on авто")
+        v.cyclePattern(id); assertEquals(Pattern.GB, v.state.value.rows[0].patternOverride)
+        v.cyclePattern(id); assertEquals(Pattern.BGB, v.state.value.rows[0].patternOverride)
+        v.cyclePattern(id); assertEquals(Pattern.GBG, v.state.value.rows[0].patternOverride)
+        v.cyclePattern(id); assertNull(v.state.value.rows[0].patternOverride, "and round to авто again")
+    }
+
+    /** R2: picking the tier the engine would pick anyway changes nothing on the quote, so there is
+     *  nothing to justify — it clears the override outright rather than asking for a reason. */
+    @Test fun `picking the auto tier clears an override without asking for a reason`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4"); v.setLengthText(id, "6")
+        val auto = autoPickedRate(v.state.value.rows[0])
+        v.applyRateOverride(id, 230_000.0, "Йирик буюртма")
+        assertTrue(v.state.value.rows[0].m2PriceOverride)
+
+        v.pickRate(id, auto)
+
+        assertFalse(v.state.value.rows[0].m2PriceOverride)
+        assertNull(v.state.value.rateConfirm, "no confirmation is opened for a no-op")
+    }
+
+    @Test fun `picking Авто clears an override too`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4"); v.setLengthText(id, "6")
+        v.applyRateOverride(id, 230_000.0, "Йирик буюртма")
+
+        v.pickRate(id, null)
+
+        assertFalse(v.state.value.rows[0].m2PriceOverride)
+        assertNull(v.state.value.rateConfirm)
+    }
+
+    /** D5: the reason is mandatory. A blank one is not an error to report — the button is disabled
+     *  until there is one — so «Тасдиқлаш» simply does nothing and the sheet stays open. */
+    @Test fun `any other tier waits on a reason, and a blank reason applies nothing`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4"); v.setLengthText(id, "6")
+
+        v.pickRate(id, 230_000.0)
+        assertEquals(RateConfirmState(id, 230_000.0), v.state.value.rateConfirm)
+        assertFalse(v.state.value.rows[0].m2PriceOverride, "nothing is applied until it is justified")
+
+        v.confirmRate("   ")
+        assertFalse(v.state.value.rows[0].m2PriceOverride)
+        assertEquals(RateConfirmState(id, 230_000.0), v.state.value.rateConfirm, "the confirmation stays open")
+
+        v.confirmRate("Мижоз билан келишилди")
+        assertTrue(v.state.value.rows[0].m2PriceOverride)
+        assertEquals(230_000.0, v.state.value.rows[0].m2PriceOverrideValue)
+        assertEquals("Мижоз билан келишилди", v.state.value.rows[0].m2PriceReason)
+        assertNull(v.state.value.rateConfirm)
+    }
+
+    @Test fun `dismissing the rate confirmation applies nothing`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4"); v.setLengthText(id, "6")
+        v.pickRate(id, 230_000.0)
+
+        v.dismissRateConfirm()
+
+        assertNull(v.state.value.rateConfirm)
+        assertFalse(v.state.value.rows[0].m2PriceOverride)
+    }
+
+    // ── Reordering with the ↑ / ↓ buttons (R3) ───────────────────────────────────
+
+    @Test fun `moveRoomUp and moveRoomDown walk one place and do nothing at the ends`() = runTest {
+        val v = vm(); v.addRoom(); v.addRoom(); v.addRoom()
+        val (a, b, c) = v.state.value.rows.map { it.id }
+
+        v.moveRoomUp(a)
+        assertEquals(listOf(a, b, c), v.state.value.rows.map { it.id }, "the first room cannot go up")
+        v.moveRoomDown(c)
+        assertEquals(listOf(a, b, c), v.state.value.rows.map { it.id }, "nor the last one down")
+
+        v.moveRoomDown(a)
+        assertEquals(listOf(b, a, c), v.state.value.rows.map { it.id })
+        v.moveRoomUp(a)
+        assertEquals(listOf(a, b, c), v.state.value.rows.map { it.id })
     }
 
     // ── Task 8: draft restore, autosave, save, clear ───────────────────────────────
@@ -246,6 +411,22 @@ class CalculatorViewModelTest {
         assertEquals("Хона 4", v.state.value.rows.last().name, "numbering continues past the restored room, never reusing it")
     }
 
+    /** The persisted draft carries the engine's doubles and nothing else (this phase's ruling —
+     *  no migration), so the cells are derived back from them: two decimals and a comma. */
+    @Test fun `a restored room's cells are derived from its doubles`() = runTest {
+        val restored = CalculatorDraft(
+            rows = listOf(recomputeRow(SlabRow(id = "r1", name = "Хона 1", innerWidth = 5.2, innerLength = 7.1))),
+            clientPhone = "998901234567", clientName = "Aziz", clientAddress = "",
+            discountPercent = 0.0, discountAmount = 0.0, deliveryCost = 0.0, otherCost = 0.0,
+            projectId = null,
+        )
+        val v = vm(observeDraft = ObserveDraftUseCase { flowOf(restored) })
+        advanceUntilIdle()
+
+        assertEquals(RoomDraft(width = "5,20", length = "7,10", bearing = "0,15", correction = "0"), v.state.value.draft("r1"))
+        assertEquals(5.2, parseDecimal(v.state.value.draft("r1").width), "and they parse back to what they came from")
+    }
+
     @Test fun `mutations are persisted after the 500ms debounce, not before`() = runTest {
         var saves = 0
         val v = vm(persistDraft = PersistDraftUseCase { saves++ })
@@ -264,8 +445,8 @@ class CalculatorViewModelTest {
         val v = vm(saveDraft = SaveDraftUseCase { _, _ -> Result.success("proj-1") }, persistDraft = PersistDraftUseCase { d -> persisted = d })
         advanceUntilIdle()
         v.addRoom(); val id = v.state.value.rows[0].id
-        v.openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
-        v.openKeypad(KeypadTarget(id, LENGTH)); "6".forEach(v::keypadDigit); v.commitKeypad()
+        v.setWidthText(id, "4")
+        v.setLengthText(id, "6")
         v.setClientPhoneDigits("901234567")
 
         v.saveDraft()
@@ -273,6 +454,8 @@ class CalculatorViewModelTest {
 
         assertEquals("proj-1", v.state.value.projectId)
         assertEquals("Лойиҳа сақланди", v.state.value.saveMessage)
+        assertEquals("Лойиҳа сақланди", v.state.value.toast, "the restyled screen shows it as a Toast")
+        v.dismissToast(); assertNull(v.state.value.toast)
         assertFalse(v.state.value.saving)
         assertEquals("proj-1", persisted?.projectId, "the returned id is written to Room right away, not left to the autosave debounce")
     }
@@ -282,7 +465,7 @@ class CalculatorViewModelTest {
         val v = vm(saveDraft = SaveDraftUseCase { _, _ -> called = true; Result.success("x") })
         advanceUntilIdle()
         v.addRoom(); val id = v.state.value.rows[0].id
-        v.openKeypad(KeypadTarget(id, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
+        v.setWidthText(id, "4")
         v.setExtraBeams(id, 2) // extras-only: canPersist is false
 
         v.saveDraft()
@@ -581,7 +764,7 @@ class CalculatorViewModelTest {
         val id = v.readyToSave()
 
         v.saveDraft(); advanceUntilIdle()
-        v.openKeypad(KeypadTarget(id, LENGTH)); "6,5".forEach(v::keypadDigit); v.commitKeypad()
+        v.setLengthText(id, "6,5")
         v.saveDraft(); advanceUntilIdle()
 
         assertEquals(2, keys.size)
@@ -858,7 +1041,7 @@ class CalculatorViewModelTest {
         v.readyToPlace()
         v.addRoom()
         val extras = v.state.value.rows[1].id
-        v.openKeypad(KeypadTarget(extras, WIDTH)); "4".forEach(v::keypadDigit); v.commitKeypad()
+        v.setWidthText(extras, "4")
         v.setExtraBeams(extras, 2)
 
         v.placeOrder(scheduledAt, ""); advanceUntilIdle()

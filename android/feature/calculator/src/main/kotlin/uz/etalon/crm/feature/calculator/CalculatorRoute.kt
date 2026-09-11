@@ -43,10 +43,7 @@ fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hil
         onMoveRoom = vm::moveRoom,
         onSetName = vm::setName,
         onToggleExpanded = vm::toggleExpanded,
-        onOpenField = { id, field -> vm.openKeypad(KeypadTarget(id, field)) },
-        onKeypadValue = vm::setKeypadText,
-        onKeypadConfirm = vm::nextField,
-        clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = vm::reopenClientBar) },
+        clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = vm::toggleClientForm) },
         clientBarExpanded = { ClientBarExpanded(state = s, vm = vm) },
         totalsSheetContent = { TotalsSheet(state = s, vm = vm) { CalculatorActions(state = s, vm = vm) } },
     )

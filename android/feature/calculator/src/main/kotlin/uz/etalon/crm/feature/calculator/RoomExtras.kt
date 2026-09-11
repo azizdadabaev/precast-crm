@@ -37,13 +37,13 @@ import uz.etalon.crm.core.ui.format.formatMeters
 import uz.etalon.crm.core.ui.format.formatMoney
 
 /** Which of the two comma-decimal fields the modal keypad is editing. Таяниш/Корр. are rare,
- *  one-off edits standing in front of a customer — a modal sheet is right here, unlike the
- *  docked ЭНИ/БЎЙИ walk [CalculatorViewModel.openKeypad] drives on the collapsed card. */
+ *  one-off edits standing in front of a customer. Task 3 replaces this pad with the design's own
+ *  cells on the system keyboard ([CalculatorViewModel.setBearingText]). */
 private enum class ExtrasKeypadField { BEARING, CORRECTION }
 
-/** Parses the keypad's comma-decimal text the same way [CalculatorViewModel.commitKeypad] does:
+/** Parses the keypad's comma-decimal text the same way [parseDecimal] does for the card's cells:
  *  an empty or unparsable pad commits as `0.0` rather than leaving the field untouched. */
-private fun parseKeypadValue(text: String): Double = text.replace(',', '.').toDoubleOrNull() ?: 0.0
+private fun parseKeypadValue(text: String): Double = parseDecimal(text) ?: 0.0
 
 /**
  * The seven room-level engine-input setters «Қўшимча» needs — bundled into one holder so

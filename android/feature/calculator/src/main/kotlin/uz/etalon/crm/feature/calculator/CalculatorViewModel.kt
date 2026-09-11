@@ -25,6 +25,7 @@ import uz.etalon.crm.core.calc.Pattern
 import uz.etalon.crm.core.calc.PlaceOrderInput
 import uz.etalon.crm.core.calc.PriceConfig
 import uz.etalon.crm.core.calc.SlabRow
+import uz.etalon.crm.core.calc.autoPickedRate
 import uz.etalon.crm.core.calc.beamSchedule
 import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
@@ -165,7 +166,7 @@ fun interface DiscardRejectedOrderUseCase {
 }
 
 /**
- * Rooms, the docked keypad's walk, live pricing and totals for a quote — the state and behaviour
+ * Rooms, the text typed into their cells, live pricing and totals for a quote — the state and behaviour
  * behind the calculator screen, with no Compose in it: the screen (a later task) is built on top
  * of this and must be able to drive it from plain JUnit.
  *
@@ -252,9 +253,9 @@ open class CalculatorViewModel(
             // Nothing restored means there is no row of this operator's to keep in sync — see
             // [draftRowCleared], which the collector below reads before it clears anything.
             draftRowCleared = restored == null
-            // distinctUntilChanged: a keypad keystroke that does not change the committed value,
-            // expandedRowId, saving and saveMessage all touch [_state] without changing what
-            // toDraft() would write — none of that belongs in Room.
+            // distinctUntilChanged: a keystroke that does not change the parsed value (the comma
+            // of «5,»), expandedRowId, saving and saveMessage all touch [_state] without changing
+            // what toDraft() would write — none of that belongs in Room.
             _state.map { it.toDraft() }.distinctUntilChanged()
                 .debounce(AUTOSAVE_DEBOUNCE_MS)
                 .collect { draft ->
@@ -296,30 +297,32 @@ open class CalculatorViewModel(
      *  photo of the screen would be indistinguishable to the customer. */
     fun addRoom() {
         val row = recomputeRow(SlabRow(id = UUID.randomUUID().toString(), name = "Хона ${nextRoomSeq++}"), priceConfig)
-        _state.update { withTotals(it, it.rows + row) }
+        _state.update { withTotals(it.copy(drafts = it.drafts + (row.id to RoomDraft())), it.rows + row) }
     }
 
     /** Copies every input of [id] into a new row with its own id and the next room name, placed
-     *  right after the source. */
+     *  right after the source — its cell texts included, or the copy would show blank cells over
+     *  dimensions it really has. */
     fun duplicateRoom(id: String) {
         val src = _state.value.rows.firstOrNull { it.id == id } ?: return
         val copy = recomputeRow(src.copy(id = UUID.randomUUID().toString(), name = "Хона ${nextRoomSeq++}"), priceConfig)
         _state.update { s ->
             val idx = s.rows.indexOfFirst { it.id == id }
             val newRows = s.rows.toMutableList().apply { add(idx + 1, copy) }
-            withTotals(s, newRows)
+            withTotals(s.copy(drafts = s.drafts + (copy.id to s.draft(id))), newRows)
         }
     }
 
-    /** Removes the room, and — trap the docked keypad and the expanded card would otherwise fall
-     *  into — closes the keypad and collapses the card if either was pointed at it. */
+    /** Removes the room — and everything else on screen that points at it: its cell texts, the
+     *  expanded card, and a rate confirmation still collecting a reason for a row that is about to
+     *  stop existing. */
     fun deleteRoom(id: String) {
         _state.update { s ->
             val next = withTotals(s, s.rows.filterNot { it.id == id })
             next.copy(
                 expandedRowId = next.expandedRowId.takeIf { it != id },
-                keypad = next.keypad.takeIf { it?.rowId != id },
-                keypadText = if (next.keypad?.rowId == id) "" else next.keypadText,
+                drafts = next.drafts - id,
+                rateConfirm = next.rateConfirm.takeIf { it?.rowId != id },
             )
         }
     }
@@ -338,65 +341,68 @@ open class CalculatorViewModel(
         }
     }
 
+    /** The ↑ / ↓ buttons on the ⋯ row (R3), over [moveRoom]. A room already at the end of the list
+     *  does nothing — the buttons are disabled there, and this is the same rule behind them. */
+    fun moveRoomUp(id: String) {
+        val i = _state.value.rows.indexOfFirst { it.id == id }
+        if (i > 0) moveRoom(i, i - 1)
+    }
+
+    fun moveRoomDown(id: String) {
+        val rows = _state.value.rows
+        val i = rows.indexOfFirst { it.id == id }
+        if (i >= 0 && i < rows.lastIndex) moveRoom(i, i + 1)
+    }
+
     fun setName(id: String, name: String) = _state.update { s ->
         s.copy(rows = s.rows.map { if (it.id == id) it.copy(name = name) else it })
     }
 
-    /** Opens the keypad on [target] with an empty pad — never prefilled, so every keystroke is
-     *  read off [CalculatorUiState.keypadText] alone. */
-    fun openKeypad(target: KeypadTarget) = _state.update { it.copy(keypad = target, keypadText = "") }
+    // ── The four numeric cells: text in, engine doubles out ─────────
+    //
+    // Each one keeps what the operator typed (filtered to digits and one separator — see
+    // [filterDecimalText]) and prices the row off [parseDecimal] of that same text on EVERY
+    // keystroke. A cell that does not parse yet — blank, or the «5,» of a half-typed decimal —
+    // is 0.0 to the engine and unchanged on screen; nothing is ever "committed" separately,
+    // because there is no pad to commit from any more.
 
-    /**
-     * One character at a time. The docked keypad does NOT call this — it applies `applyDigit`
-     * itself and hands back the whole string through [setKeypadText] — so nothing in production
-     * reaches it. Kept deliberately rather than deleted as dead: it is the API this ViewModel's own
-     * tests type through, and typing a room's dimensions keystroke by keystroke is exactly how the
-     * recompute-per-keystroke behaviour gets exercised. [setKeypadText] cannot stand in for that
-     * without every test re-implementing the pad's own `applyDigit` rules.
-     */
-    fun keypadDigit(c: Char) {
-        if (!(c.isDigit() || c == ',')) return
-        _state.update { it.copy(keypadText = it.keypadText + c) }
-    }
+    fun setWidthText(id: String, text: String) =
+        setCellText(id, text, { d, t -> d.copy(width = t) }, { row, v -> row.copy(innerWidth = v) })
 
-    /** The counterpart to [keypadDigit], kept for the same reason — see its own doc. */
-    fun keypadBackspace() = _state.update { it.copy(keypadText = it.keypadText.dropLast(1)) }
+    fun setLengthText(id: String, text: String) =
+        setCellText(id, text, { d, t -> d.copy(length = t) }, { row, v -> row.copy(innerLength = v) })
 
-    /** Replaces the whole pad text — what the docked [uz.etalon.crm.core.designsystem.components.NumericKeypad]
-     *  calls: it applies `applyDigit`/`applyBackspace` itself and hands back the next full string,
-     *  unlike [keypadDigit]'s one-character-at-a-time API above. */
-    fun setKeypadText(text: String) = _state.update { it.copy(keypadText = text) }
+    fun setBearingText(id: String, text: String) =
+        setCellText(id, text, { d, t -> d.copy(bearing = t) }, { row, v -> row.copy(bearing = v) })
 
-    /** Parses the raw comma string and writes it onto the targeted field. An empty or unparsable
-     *  pad commits as `0.0` rather than leaving the field untouched — the same rule the web
-     *  calculator's keypad uses. */
-    fun commitKeypad() {
-        val s = _state.value
-        val target = s.keypad ?: return
-        val value = s.keypadText.replace(',', '.').toDoubleOrNull() ?: 0.0
-        applyToRow(target.rowId) { row ->
-            when (target.field) {
-                KeypadTarget.Field.WIDTH -> row.copy(innerWidth = value)
-                KeypadTarget.Field.LENGTH -> row.copy(innerLength = value)
-            }
+    fun setCorrectionText(id: String, text: String) =
+        setCellText(id, text, { d, t -> d.copy(correction = t) }, { row, v -> row.copy(correction = v) })
+
+    /** One state emission per keystroke: the cell's text and the row it prices move together, so
+     *  the screen can never draw a figure computed from a different string than the one in the
+     *  cell above it. */
+    private fun setCellText(
+        id: String,
+        text: String,
+        onDraft: (RoomDraft, String) -> RoomDraft,
+        onRow: (SlabRow, Double) -> SlabRow,
+    ) {
+        val filtered = filterDecimalText(text)
+        val value = parseDecimal(filtered) ?: 0.0
+        _state.update { s ->
+            if (s.rows.none { it.id == id }) return@update s
+            val newRows = s.rows.map { row -> if (row.id == id) recomputeRow(onRow(row, value), priceConfig) else row }
+            withTotals(s.copy(drafts = s.drafts + (id to onDraft(s.draft(id), filtered))), newRows)
         }
     }
 
-    /** Commits the field in progress, then walks ЭНИ → БЎЙИ → the next room's ЭНИ, closing the
-     *  keypad once the last room's БЎЙИ is passed. */
-    fun nextField() {
-        commitKeypad()
-        val cur = _state.value.keypad ?: return
-        val rows = _state.value.rows
-        val idx = rows.indexOfFirst { it.id == cur.rowId }
-        val target = when (cur.field) {
-            KeypadTarget.Field.WIDTH -> KeypadTarget(cur.rowId, KeypadTarget.Field.LENGTH)
-            KeypadTarget.Field.LENGTH -> rows.getOrNull(idx + 1)?.let { KeypadTarget(it.id, KeypadTarget.Field.WIDTH) }
-        }
-        if (target != null) openKeypad(target) else closeKeypad()
+    /** Re-derives ONE cell's text from the engine double after an intent that changed it without
+     *  the operator typing it — the ± bump, «юқорилаштириш», «Қўшимча»'s numeric fields. The text
+     *  intents above deliberately do NOT go through this: «5,» must stay «5,» while it is typed. */
+    private fun syncCellText(id: String, field: (RoomDraft, SlabRow) -> RoomDraft) = _state.update { s ->
+        val row = s.rows.firstOrNull { it.id == id } ?: return@update s
+        s.copy(drafts = s.drafts + (id to field(s.draft(id), row)))
     }
-
-    fun closeKeypad() = _state.update { it.copy(keypad = null, keypadText = "") }
 
     /** Nudges [id]'s width by one step of the currently chosen [Grid], up or down. */
     fun bumpWidth(id: String, up: Boolean) {
@@ -404,6 +410,7 @@ open class CalculatorViewModel(
         applyToRow(id) { row ->
             row.copy(innerWidth = if (up) roundUpToGrid(row.innerWidth, step) else roundDownToGrid(row.innerWidth, step))
         }
+        syncCellText(id) { d, row -> d.copy(width = dimensionText(row.innerWidth)) }
     }
 
     /** Manual extra beams beyond the slab's own pitches — an extras-only room (see
@@ -414,11 +421,33 @@ open class CalculatorViewModel(
     /** «Қўшимча»'s remaining editable engine inputs — see [SlabRow] for what each one means
      *  geometrically. Every one of these is a plain `updateRow`-then-recompute, same shape as
      *  [setExtraBeams] above. */
-    fun setBearing(id: String, v: Double) = applyToRow(id) { it.copy(bearing = v) }
-    fun setCorrection(id: String, v: Double) = applyToRow(id) { it.copy(correction = v) }
+    fun setBearing(id: String, v: Double) {
+        applyToRow(id) { it.copy(bearing = v) }
+        syncCellText(id) { d, row -> d.copy(bearing = dimensionText(row.bearing)) }
+    }
+    fun setCorrection(id: String, v: Double) {
+        applyToRow(id) { it.copy(correction = v) }
+        syncCellText(id) { d, row -> d.copy(correction = dimensionText(row.correction)) }
+    }
     fun setForceStartBeam(id: String, on: Boolean) = applyToRow(id) { it.copy(forceStartBeam = on) }
     /** `null` == the web's "Авто": let the engine auto-pick the pattern. */
     fun setPattern(id: String, p: Pattern?) = applyToRow(id) { it.copy(patternOverride = p) }
+
+    /** The pattern chip on the card, one tap at a time: авто → Г-Б → Б-Г-Б → Г-Б-Г → авто.
+     *  The chip is the only way to reach a pattern on the restyled card, so the cycle has to come
+     *  back round to «авто» rather than dead-ending on Г-Б-Г. */
+    fun cyclePattern(id: String) {
+        val row = _state.value.rows.firstOrNull { it.id == id } ?: return
+        setPattern(
+            id,
+            when (row.patternOverride) {
+                null -> Pattern.GB
+                Pattern.GB -> Pattern.BGB
+                Pattern.BGB -> Pattern.GBG
+                Pattern.GBG -> null
+            },
+        )
+    }
 
     /**
      * The reason is MANDATORY here, unlike the web's optional note. A rate that differs from the
@@ -434,6 +463,32 @@ open class CalculatorViewModel(
 
     fun clearRateOverride(id: String) =
         applyToRow(id) { it.copy(m2PriceOverride = false, m2PriceOverrideValue = null, m2PriceReason = null) }
+
+    /**
+     * A tier tapped in the rate sheet. «Авто» ([price] `null`) and the tier the engine would pick
+     * anyway are NOT overrides — nothing on the quote changes, so there is nothing to justify and
+     * they clear whatever override is in place immediately. Every other tier parks in
+     * [CalculatorUiState.rateConfirm] until [confirmRate] gets a reason (D5).
+     */
+    fun pickRate(id: String, price: Double?) {
+        val row = _state.value.rows.firstOrNull { it.id == id } ?: return
+        if (price == null || price == autoPickedRate(row)) {
+            clearRateOverride(id)
+            return
+        }
+        _state.update { it.copy(rateConfirm = RateConfirmState(id, price)) }
+    }
+
+    /** «Тасдиқлаш». A blank reason is not a refusal to be reported — the button is disabled until
+     *  there is one — so this simply does nothing and leaves the confirmation open. */
+    fun confirmRate(reason: String) {
+        val pending = _state.value.rateConfirm ?: return
+        if (reason.isBlank()) return
+        applyRateOverride(pending.rowId, pending.price, reason)
+        _state.update { it.copy(rateConfirm = null) }
+    }
+
+    fun dismissRateConfirm() = _state.update { it.copy(rateConfirm = null) }
 
     /** [DiscountMode.PERCENT]/[DiscountMode.AMOUNT] are mutually exclusive at the engine boundary
      *  (see [withTotals]'s comment) — switching mode zeroes the field the OTHER mode owns, so a
@@ -461,7 +516,12 @@ open class CalculatorViewModel(
         val newRows = s.rows.map { row ->
             if (row.innerWidth > 0) recomputeRow(row.copy(innerWidth = roundUpToGrid(row.innerWidth, step)), priceConfig) else row
         }
-        withTotals(s, newRows)
+        // The widths moved without anyone typing them, so their cells have to follow — see
+        // [syncCellText] for why the text intents do not.
+        val drafts = newRows.fold(s.drafts) { acc, row ->
+            if (row.innerWidth > 0) acc + (row.id to s.draft(row.id).copy(width = dimensionText(row.innerWidth))) else acc
+        }
+        withTotals(s.copy(drafts = drafts), newRows)
     }
 
     fun toggleExpanded(id: String) = _state.update { it.copy(expandedRowId = if (it.expandedRowId == id) null else id) }
@@ -484,15 +544,15 @@ open class CalculatorViewModel(
         draftRowCleared = true
         _state.update {
             it.copy(
-                rows = emptyList(), expandedRowId = null, keypad = null, keypadText = "",
+                rows = emptyList(), expandedRowId = null, drafts = emptyMap(), rateConfirm = null,
                 discountMode = DiscountMode.PERCENT, discountPercent = 0.0, discountAmount = 0.0,
                 deliveryCost = 0.0, otherCost = 0.0, grid = Grid.CM10,
                 totals = projectTotals(emptyList(), 0.0, 0.0),
                 orderTotals = computeOrderTotals(emptyList(), 0.0, 0.0, 0.0, 0.0),
                 schedule = emptyList(), error = null,
                 clientPhoneDigits = "", clientName = "", clientAddress = ParsedAddress("", "", ""),
-                matchedClientId = null, clientLookupError = null, clientBarCollapsed = false,
-                projectId = null, saveMessage = null, saving = false,
+                matchedClientId = null, clientLookupError = null, clientFormOpen = true,
+                projectId = null, saveMessage = null, toast = null, saving = false,
                 // Same reasoning as `saving`: a stale placement's completion discards itself, so
                 // nothing else would ever put the spinner down. [rejectedOrders] is deliberately
                 // NOT cleared — it is not part of this quote, it is the record of a DIFFERENT one
@@ -515,6 +575,9 @@ open class CalculatorViewModel(
     // ── draft persistence and «Лойиҳани сақлаш» ─────────────────────
 
     fun dismissSaveMessage() = _state.update { it.copy(saveMessage = null) }
+
+    /** The restyled screen shows the save confirmation as a Toast — see [CalculatorUiState.toast]. */
+    fun dismissToast() = _state.update { it.copy(toast = null) }
 
     /** Drops whatever refusal is on screen. `CalculatorActions` calls it when «Буюртма бериш»
      *  opens the placement sheet: a save that failed minutes ago belongs to the quote, and the
@@ -551,7 +614,9 @@ open class CalculatorViewModel(
                         // process death in the gap before the debounce would otherwise have
                         // flushed it — mirrors RecordPaymentViewModel persisting KEY_PAYMENT_ID
                         // the moment the row is known to exist.
-                        _state.update { it.copy(saving = false, projectId = id, saveMessage = SAVE_SUCCESS_MESSAGE) }
+                        _state.update {
+                            it.copy(saving = false, projectId = id, saveMessage = SAVE_SUCCESS_MESSAGE, toast = SAVE_SUCCESS_MESSAGE)
+                        }
                         // The CURRENT quote, not the one captured when the request went out: the
                         // operator keeps typing while the save is in flight, and writing the stale
                         // snapshot back would undo up to a debounce window of their edits.
@@ -720,8 +785,12 @@ open class CalculatorViewModel(
         _state.update { s ->
             withTotals(
                 s.copy(
+                    // The persisted draft carries doubles and nothing else — the ruling for this
+                    // phase — so a restored room's cells are derived back from them: «5,20», not
+                    // the «5,2» that was typed before the process died.
+                    drafts = rows.associate { it.id to draftOf(it) },
                     clientPhoneDigits = digits, clientName = draft.clientName, clientAddress = address,
-                    clientBarCollapsed = digits.length == CLIENT_PHONE_DIGITS && draft.clientName.isNotBlank(),
+                    clientFormOpen = !(digits.length == CLIENT_PHONE_DIGITS && draft.clientName.isNotBlank()),
                     discountMode = if (draft.discountAmount > 0.0) DiscountMode.AMOUNT else DiscountMode.PERCENT,
                     discountPercent = draft.discountPercent, discountAmount = draft.discountAmount,
                     deliveryCost = draft.deliveryCost, otherCost = draft.otherCost,
@@ -794,23 +863,29 @@ open class CalculatorViewModel(
         return (MAX_CLIENT_ADDRESS - withoutStreet.length - separator).coerceAtLeast(0)
     }
 
-    /** The pencil on the collapsed line. Reopens without blanking anything — [reopenClientBar]
-     *  only ever clears the collapse flag, never the phone/name/address it is showing. */
-    fun reopenClientBar() = _state.update { it.copy(clientBarCollapsed = false) }
+    /** The chevron on the one-line client row. Opens and closes the form without blanking
+     *  anything — it only ever moves the flag, never the phone/name/address it is showing. */
+    fun toggleClientForm() = _state.update { it.copy(clientFormOpen = !it.clientFormOpen) }
 
     /**
-     * A phone and a name both present is a rising EDGE, not a level: it fires [transform] and
-     * then collapses the bar only the moment that condition newly becomes true, never on every
-     * update while it stays true. That is what lets the pencil's reopen stick — editing a field
-     * (the name, the address) while the phone stays complete never re-crosses the edge, so it
-     * cannot snap shut again under the operator's fingers. It re-fires only if the phone is edited
-     * back below nine digits and then completed again.
+     * A phone and a name both present is an EDGE, not a level: it fires [transform] and then
+     * closes the form only the moment that condition newly becomes true, never on every update
+     * while it stays true. That is what lets the chevron's reopen stick — editing a field (the
+     * name, the address) while the phone stays complete never re-crosses the edge, so the form
+     * cannot snap shut again under the operator's fingers.
+     *
+     * The falling edge is the same rule read the other way: a quote whose phone or name has been
+     * blanked has nothing to show on one line, so the form comes back open.
      */
     private fun updateClientState(transform: (CalculatorUiState) -> CalculatorUiState) {
         _state.update { s ->
             val wasReady = clientReady(s)
             val next = transform(s)
-            if (!wasReady && clientReady(next)) next.copy(clientBarCollapsed = true) else next
+            when {
+                !wasReady && clientReady(next) -> next.copy(clientFormOpen = false)
+                wasReady && !clientReady(next) -> next.copy(clientFormOpen = true)
+                else -> next
+            }
         }
     }
 
