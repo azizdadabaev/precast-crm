@@ -29,7 +29,7 @@ import uz.etalon.crm.core.model.PaymentRecordInput
 import uz.etalon.crm.core.model.PaymentSource
 import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.ui.format.TASHKENT
-import uz.etalon.crm.core.ui.format.formatMoney
+import uz.etalon.crm.core.ui.format.formatMoneyHero
 import java.time.LocalDate
 import java.util.UUID
 
@@ -164,7 +164,10 @@ fun validateRecord(s: RecordPaymentUiState): String? {
     return when {
         order.summary.status == OrderStatus.CANCELED -> "Бекор қилинган буюртмага тўлов қайд этилмайди"
         s.amount.isZero || s.amount.isNegative -> "Суммани киритинг"
-        s.amount > s.cap -> "Сумма қолдиқдан ошиб кетди · кўпи билан ${formatMoney(s.cap)}"
+        // `formatMoneyHero`, not `formatMoney`: this is a standalone sentence, not a column of
+        // figures, so the figure carries its «UZS» (D8) — «кўпи билан 7 350 000» on its own would
+        // not say what the number is.
+        s.amount > s.cap -> "Сумма қолдиқдан ошиб кетди · кўпи билан ${formatMoneyHero(s.cap)}"
         s.driverApplies && s.driverId == null -> "Ҳайдовчини танланг"
         !s.driverApplies && s.driverId != null -> "Ҳайдовчи фақат ҳайдовчидан олинган нақдда кўрсатилади"
         !s.handOverApplies && s.handOverNow -> "Банк/онлайн тўловда офисга топшириш бўлмайди"

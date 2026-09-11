@@ -124,7 +124,7 @@ private fun TierRow(price: Double, isAuto: Boolean, selected: Boolean, onClick: 
             // Bare, not `calc_rate_auto`'s «Авто: %s»: that format belongs to `RoomExtras.kt`,
             // where the auto rate is a DIFFERENT number from the one on the line. Here the row is
             // already printing that very price two centimetres to the left, so the format spelt it
-            // back at itself — «230 000 UZS … Авто: 230 000 UZS».
+            // back at itself — «230 000 … Авто: 230 000».
             Text(
                 stringResource(R.string.calc_rate_auto_badge),
                 style = MaterialTheme.typography.labelSmall,

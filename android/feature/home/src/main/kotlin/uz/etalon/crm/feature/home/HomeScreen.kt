@@ -98,7 +98,8 @@ fun HomeScreen(
 /**
  * Full-width, one per row — not a three-across grid. Three tiles side by side on a 411dp phone
  * leave roughly 90dp of text each, which fits neither a real receivables figure
- * (`formatMoney` on a nine-digit UZS total is fifteen characters) nor an area past four digits.
+ * (`formatMoney` on a nine-digit total is eleven characters — nine digits and two group
+ * separators; D8 dropped the «UZS» from a listed figure) nor an area past four digits.
  * Full width comfortably fits both at [EtalonType.monoTitle], and every card gets the same
  * single-line label + single-line value shape, so the three no longer disagree on height the way
  * a wrapped "БУГУНГИ ЕТКАЗИШЛАР" against an unwrapped "ҚАРЗДОРЛИК" did in three narrow columns.
