@@ -190,12 +190,16 @@ private val BADGE_INSET = 5.dp
  * The outer box is the 48 dp hit area (D7); [size] is the painted button, and the badge is
  * anchored to that — anchoring it to the hit area would push it into the clear air around a
  * button smaller than 48 dp.
+ *
+ * @param enabled false greys the glyph **and** takes the click away. Both halves matter: a
+ *   [CountStepper] at its bound used to paint an ink3 minus that TalkBack still announced as a
+ *   live button, so the one user who could not see the tint was the one told it worked.
  */
 @Composable
 fun EtalonIconButton(
     icon: Int, contentDescription: String?, onClick: () -> Unit, modifier: Modifier = Modifier,
     onDark: Boolean = false, badge: Boolean = false, size: Dp = 40.dp,
-    shape: Shape = EtalonShapes.pill, tint: Color? = null,
+    shape: Shape = EtalonShapes.pill, tint: Color? = null, enabled: Boolean = true,
 ) = Box(modifier.size(EtalonSpace.minTouch), contentAlignment = Alignment.Center) {
     Box(Modifier.size(size)) {
         Box(
@@ -204,11 +208,19 @@ fun EtalonIconButton(
                 .background(if (onDark) EtalonColors.navy2 else EtalonColors.surface)
                 .then(if (onDark) Modifier else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, shape))
                 .clickable(
-                    role = Role.Button, indication = etalonRipple(onDark),
+                    enabled = enabled, role = Role.Button, indication = etalonRipple(onDark),
                     interactionSource = remember { MutableInteractionSource() }, onClick = onClick,
                 ),
             contentAlignment = Alignment.Center,
-        ) { EtalonIcon(icon, contentDescription, size = 18.dp, tint = tint ?: if (onDark) EtalonColors.onDark else EtalonColors.ink) }
+        ) {
+            val fg = when {
+                !enabled -> if (onDark) EtalonColors.onDark.copy(alpha = 0.38f) else EtalonColors.ink3
+                tint != null -> tint
+                onDark -> EtalonColors.onDark
+                else -> EtalonColors.ink
+            }
+            EtalonIcon(icon, contentDescription, size = 18.dp, tint = fg)
+        }
         if (badge) Box(
             Modifier.align(Alignment.TopEnd).offset(x = -BADGE_INSET, y = BADGE_INSET)
                 .size(10.dp).clip(EtalonShapes.pill).background(EtalonColors.onDark)

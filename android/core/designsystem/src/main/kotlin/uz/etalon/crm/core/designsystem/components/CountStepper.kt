@@ -31,9 +31,8 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
  *  the two [EtalonIconButton]s outside it, so each keeps its own 48 dp slot (D7) while the cell
  *  keeps its 40 dp height.
  *
- *  The buttons have no disabled skin: [EtalonIconButton] has no `enabled`, and the clamping is
- *  what actually holds the bounds — a tap at 0, or at [max], changes nothing. The ink3 tint is
- *  what says so. */
+ *  At a bound the button is genuinely disabled, not merely tinted: the ink3 glyph says so to
+ *  anyone looking, and `enabled = false` says the same thing to TalkBack. */
 @Composable
 fun CountStepper(label: String, value: Int, onChange: (Int) -> Unit, max: Int? = null) {
     val canDecrease = value > 0
@@ -48,10 +47,10 @@ fun CountStepper(label: String, value: Int, onChange: (Int) -> Unit, max: Int? =
         EtalonIconButton(
             EtalonIcons.Minus,
             stringResource(R.string.action_decrease),
-            onClick = { if (canDecrease) onChange(value - 1) },
+            onClick = { onChange(value - 1) },
             size = 36.dp,
             shape = EtalonShapes.md,
-            tint = if (canDecrease) EtalonColors.ink else EtalonColors.ink3,
+            enabled = canDecrease,
         )
         Box(
             Modifier.widthIn(min = 56.dp).height(40.dp).clip(EtalonShapes.md).background(EtalonColors.page)
@@ -64,10 +63,10 @@ fun CountStepper(label: String, value: Int, onChange: (Int) -> Unit, max: Int? =
         EtalonIconButton(
             EtalonIcons.Plus,
             stringResource(R.string.action_increase),
-            onClick = { if (canIncrease) onChange(value + 1) },
+            onClick = { onChange(value + 1) },
             size = 36.dp,
             shape = EtalonShapes.md,
-            tint = if (canIncrease) EtalonColors.ink else EtalonColors.ink3,
+            enabled = canIncrease,
         )
     }
 }
