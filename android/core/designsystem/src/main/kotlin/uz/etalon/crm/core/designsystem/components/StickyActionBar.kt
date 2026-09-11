@@ -20,6 +20,28 @@ import uz.etalon.crm.core.designsystem.theme.EtalonColors
 /** How much of the scrolling content the scrim fades out above the bar. */
 private val SCRIM_HEIGHT = 16.dp
 
+/** Air above and below the button row. */
+private val BAR_PAD_V = 12.dp
+
+/** The button slot the bar is sized around — `PrimaryButton`/`SecondaryButton` height, and D7's
+ *  minimum touch target. */
+private val BUTTON_HEIGHT = 48.dp
+
+object StickyActionBarDefaults {
+    /**
+     * What the bar covers of the window **excluding** the nav-pill clearance it adds beneath
+     * itself: [SCRIM_HEIGHT] 16 + [BAR_PAD_V] 12 + a [BUTTON_HEIGHT] 48 dp button slot +
+     * [BAR_PAD_V] 12 = 88 dp.
+     *
+     * A screen that sits in a `Scaffold` never needs this — the Scaffold measures the bottom bar
+     * and hands its height back in the content padding. It is for the screens that have no
+     * Scaffold and align the bar in a `Box` themselves (order detail), where the list's own
+     * `contentPadding` has to spell the clearance out:
+     * `navPillContentPadding(extraBottom = StickyActionBarDefaults.height)`.
+     */
+    val height: Dp = SCRIM_HEIGHT + BAR_PAD_V + BUTTON_HEIGHT + BAR_PAD_V
+}
+
 /**
  * The bar that carries a screen's next step. Lives in Scaffold's bottomBar slot so it stays in
  * the thumb zone while the content scrolls, and it sits above the navigation-bar inset rather
@@ -29,14 +51,20 @@ private val SCRIM_HEIGHT = 16.dp
  * row scrolling underneath dissolves instead of being cut by a line. The bar itself is the page,
  * not a white card — the button is the only object here.
  *
- * @param bottomInset extra air below the buttons, for a screen whose shell draws the floating nav
- *   pill over the bar's own band. It is *added* to the bar's 12 dp, inside
- *   [navigationBarsPadding], so the system inset is still counted exactly once — lifting the whole
- *   bar with an outer `Modifier.padding(bottom = …)` instead counts it twice. The 0 dp default
- *   leaves every screen that sits in a `Scaffold.bottomBar` byte-identical.
+ * @param clearNavPill whether the bar lifts itself clear of the shell's floating nav pill, which
+ *   is drawn *over* every signed-in screen. It does so with [LocalNavPillInset] — the system
+ *   navigation inset **plus** the pill's band — which is why it drops its own
+ *   `navigationBarsPadding()` in that mode: the inset is already inside the figure, and applying
+ *   both would count it twice. The padding stays *inside* the bar's `page` background, so the
+ *   strip the pill floats on is page-coloured rather than a shelf of whatever the caller drew
+ *   behind the bar.
+ *
+ *   Pass `false` for a bar outside the shell — one on a screen the pill is not drawn over, or one
+ *   whose caller has already lifted it — and the bar keeps the plain `navigationBarsPadding()` +
+ *   12 dp it had before the clearance existed.
  */
 @Composable
-fun StickyActionBar(bottomInset: Dp = 0.dp, content: @Composable RowScope.() -> Unit) {
+fun StickyActionBar(clearNavPill: Boolean = true, content: @Composable RowScope.() -> Unit) {
     Column {
         Box(
             Modifier.fillMaxWidth().height(SCRIM_HEIGHT).background(
@@ -46,8 +74,11 @@ fun StickyActionBar(bottomInset: Dp = 0.dp, content: @Composable RowScope.() -> 
         Row(
             Modifier.fillMaxWidth()
                 .background(EtalonColors.page)
-                .navigationBarsPadding()
-                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp + bottomInset),
+                .then(if (clearNavPill) Modifier else Modifier.navigationBarsPadding())
+                .padding(
+                    start = 16.dp, end = 16.dp, top = BAR_PAD_V,
+                    bottom = BAR_PAD_V + if (clearNavPill) LocalNavPillInset.current else 0.dp,
+                ),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             content = content,
         )

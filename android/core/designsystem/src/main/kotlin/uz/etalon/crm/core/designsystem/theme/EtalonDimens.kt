@@ -46,10 +46,6 @@ object EtalonSpace {
     val rowGap = 10.dp
     val hairline = 1.dp
 
-    /** Content padding under the floating nav, and under a sticky action bar as well. */
-    val underNav = 100.dp
-    val underStickyBar = 160.dp
-
     /** D7: visual size may be smaller, the hit area may not. */
     val minTouch = 48.dp
 }

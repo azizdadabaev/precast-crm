@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -12,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -25,6 +27,8 @@ import androidx.navigation3.ui.NavDisplay
 import uz.etalon.crm.core.designsystem.components.BottomNav
 import uz.etalon.crm.core.designsystem.components.BottomNavItem
 import uz.etalon.crm.core.designsystem.components.BottomNavScrim
+import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
+import uz.etalon.crm.core.designsystem.components.navPillInsetOf
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.model.Me
@@ -93,9 +97,8 @@ private fun rememberEntryDecorators(): List<NavEntryDecorator<NavKey>> {
 /**
  * Signed-in shell: the floating navy nav pill (§4, D3) over the Nav3 display. The pill draws
  * *above* the content rather than beside it — every screen pads its own last row clear of it with
- * [uz.etalon.crm.core.designsystem.theme.EtalonSpace.underNav] and the [BottomNavScrim] fades
- * whatever scrolls under it. The ≥ 600 dp rail is gone with `NavigationSuiteScaffold` (R8: phones
- * only).
+ * [LocalNavPillInset], which this shell provides, and the [BottomNavScrim] fades whatever scrolls
+ * under it. The ≥ 600 dp rail is gone with `NavigationSuiteScaffold` (R8: phones only).
  *
  * The lit cell is the *tab the current route belongs to* ([tabFor]), not the route itself, so an
  * order detail keeps «Буюртма» lit and the account sheet's three screens keep «Бош» lit. A route
@@ -128,157 +131,162 @@ fun SignedInShell(
     }
 
     Box(Modifier.fillMaxSize().background(EtalonColors.page)) {
-        NavDisplay(
-            backStack = backStack,
-            onBack = { backStack.removeLastOrNull() },
-            entryDecorators = rememberEntryDecorators(),
-            // Some keys legitimately have no entry: they are registered per permission (below), so
-            // a back stack restored for an operator who has since lost driver.view, dispatch.create
-            // or payment.view would land on nothing, and crashing them out of the app is worse than
-            // an Uzbek notice. `gatingPermission` is the one list of those keys — shared with the
-            // guards below so the two cannot drift. Every OTHER unregistered key, and any gated key
-            // whose permission this operator DOES hold, is a wiring mistake and must still fail
-            // loudly here rather than be swallowed as a silent "no access".
-            entryProvider = entryProvider(
-                fallback = { key ->
-                    if (me.canOpen(key)) error("No NavEntry registered for $key")
-                    NavEntry(key) { NoAccessScreen() }
+        // One place decides how much room the pill needs, for every screen under it and for every
+        // navigation mode: the system inset plus the pill's own band. `locked` provides 0 instead,
+        // because a forced PIN change gets no pill and must not keep a band of empty page for one.
+        CompositionLocalProvider(LocalNavPillInset provides if (locked) 0.dp else navPillInsetOf()) {
+            NavDisplay(
+                backStack = backStack,
+                onBack = { backStack.removeLastOrNull() },
+                entryDecorators = rememberEntryDecorators(),
+                // Some keys legitimately have no entry: they are registered per permission (below), so
+                // a back stack restored for an operator who has since lost driver.view, dispatch.create
+                // or payment.view would land on nothing, and crashing them out of the app is worse than
+                // an Uzbek notice. `gatingPermission` is the one list of those keys — shared with the
+                // guards below so the two cannot drift. Every OTHER unregistered key, and any gated key
+                // whose permission this operator DOES hold, is a wiring mistake and must still fail
+                // loudly here rather than be swallowed as a silent "no access".
+                entryProvider = entryProvider(
+                    fallback = { key ->
+                        if (me.canOpen(key)) error("No NavEntry registered for $key")
+                        NavEntry(key) { NoAccessScreen() }
+                    },
+                ) {
+                    // Home needs no permission at all — the «Бугун» column is for everyone; only its
+                    // tiles are gated, and HomeViewModel handles that itself (dashboard.viewBasic
+                    // or dashboard.view gates the one endpoint that carries both the tiles and
+                    // today's deliveries — see HomeViewModel's KDoc).
+                    entry<Home> {
+                        HomeRoute(
+                            me = me,
+                            onOpenOrder = { backStack.add(OrderDetail(it)) },
+                            onOpenOrders = { switchTab(backStack, Orders) },
+                            onOpenAccount = { showAccount = true },
+                        )
+                    }
+                    entry<Orders> {
+                        OrdersListRoute(
+                            onOpenOrder = { backStack.add(OrderDetail(it)) },
+                            // «+ Янги» hands over to the calculator, which is where a new order is
+                            // quoted and placed. Without calculator.use that tab does not exist, so
+                            // the button is not drawn at all rather than drawn and dead.
+                            onNewOrder = if (me.can(PERM_CALCULATOR_USE)) ({ switchTab(backStack, Calculator) }) else null,
+                        )
+                    }
+                    entry<OrderDetail> { k ->
+                        OrderDetailRoute(
+                            orderId = k.id,
+                            me = me,
+                            onBack = { backStack.removeLastOrNull() },
+                            onLoadTruck = { backStack.add(LoadTruck(k.id, extra = false)) },
+                            onAddPhoto = { backStack.add(LoadTruck(k.id, extra = true)) },
+                            onDeliveryProof = { backStack.add(DeliveryProof(k.id)) },
+                            onOpenShipments = { backStack.add(Shipments(k.id)) },
+                            onOpenLocation = { backStack.add(DeliveryLocation(k.id)) },
+                            onRecordPayment = { backStack.add(RecordPayment(k.id)) },
+                        )
+                    }
+                    entry<LoadTruck> { k ->
+                        LoadTruckRoute(
+                            orderId = k.orderId, extraPhoto = k.extra,
+                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                        )
+                    }
+                    // Registered only for an operator who may quote — the Drivers pattern: without
+                    // calculator.use the route does not exist, so no restored back stack can open it
+                    // either.
+                    if (me.can(PERM_CALCULATOR_USE)) {
+                        entry<Calculator> { CalculatorRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                    }
+                    // Registered only for an operator who may read the client list, the Drivers
+                    // pattern: without client.view the route does not exist, so no restored back
+                    // stack or deep link can open it either.
+                    if (me.can(PERM_CLIENT_VIEW)) {
+                        entry<Clients> { ClientsRoute(onOpenClient = { backStack.add(ClientDetail(it)) }) }
+                        entry<ClientDetail> { k ->
+                            ClientDetailRoute(
+                                clientId = k.id,
+                                onBack = { backStack.removeLastOrNull() },
+                                onOpenOrder = { backStack.add(OrderDetail(it)) },
+                            )
+                        }
+                    }
+                    // Every shipment and dispatch route is wrapped in withPermission("dispatch.create")
+                    // server-side, and ROLE_TEMPLATES.SALES — the largest operator role — holds
+                    // order.edit without it. Registered per permission for the same reason Drivers is:
+                    // without it these screens do not exist, so no restored back stack can open them
+                    // and walk the operator into a 403 that becomes a permanently failed upload.
+                    if (me.can(PERM_DISPATCH_CREATE)) {
+                        entry<Shipments> { k ->
+                            ShipmentsRoute(
+                                orderId = k.orderId,
+                                onLoadShipment = { backStack.add(ShipmentLoad(k.orderId, it)) },
+                                onDispatch = { backStack.add(Dispatch(k.orderId, it)) },
+                                onBack = { backStack.removeLastOrNull() },
+                            )
+                        }
+                        entry<ShipmentLoad> { k ->
+                            ShipmentLoadRoute(
+                                orderId = k.orderId, shipmentId = k.shipmentId,
+                                onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                            )
+                        }
+                        entry<Dispatch> { k ->
+                            DispatchRoute(
+                                orderId = k.orderId, shipmentId = k.shipmentId,
+                                onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                            )
+                        }
+                    }
+                    entry<DeliveryProof> { k ->
+                        DeliveryProofRoute(
+                            orderId = k.orderId,
+                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                        )
+                    }
+                    entry<DeliveryLocation> { k ->
+                        DeliveryLocationRoute(
+                            orderId = k.orderId,
+                            onDone = { backStack.removeLastOrNull() }, onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
+                    // Registered only for an operator who may read the roster: without the permission
+                    // the route does not exist, so no deep link or restored stack can open it.
+                    if (me.can(PERM_DRIVER_VIEW)) {
+                        entry<Drivers> { DriversRoute(onBack = { backStack.removeLastOrNull() }) }
+                    }
+                    // The payments tab IS the confirmation queue. Approve and reject inside it need
+                    // payment.confirm on top of this, which ConfirmQueueViewModel checks for itself —
+                    // an ACCOUNTANT holds payment.view alone and reads the queue without acting on it.
+                    if (me.can(PERM_PAYMENT_VIEW)) {
+                        entry<Payments> { ConfirmQueueRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                    }
+                    if (me.can(PERM_DISCREPANCY_VIEW)) {
+                        entry<Discrepancies> {
+                            DiscrepanciesRoute(
+                                onOpenOrder = { backStack.add(OrderDetail(it)) },
+                                onBack = { backStack.removeLastOrNull() },
+                            )
+                        }
+                    }
+                    // A DRIVER holds payment.record and neither payment.view nor order.edit: collecting
+                    // cash on site is their job, so this route is gated on its own permission rather
+                    // than riding along with the queue's.
+                    if (me.can(PERM_PAYMENT_RECORD)) {
+                        entry<RecordPayment> { k ->
+                            RecordPaymentRoute(
+                                orderId = k.orderId,
+                                onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                            )
+                        }
+                    }
+                    // The server bumps tokenVersion on a PIN change, so the current token is dead the
+                    // moment this succeeds. Sign out deliberately instead of walking back into the app
+                    // and hitting a silent 401.
+                    entry<ChangePin> { k -> ChangePinRoute(forced = k.forced, onDone = onPinChanged) }
                 },
-            ) {
-                // Home needs no permission at all — the «Бугун» column is for everyone; only its
-                // tiles are gated, and HomeViewModel handles that itself (dashboard.viewBasic
-                // or dashboard.view gates the one endpoint that carries both the tiles and
-                // today's deliveries — see HomeViewModel's KDoc).
-                entry<Home> {
-                    HomeRoute(
-                        me = me,
-                        onOpenOrder = { backStack.add(OrderDetail(it)) },
-                        onOpenOrders = { switchTab(backStack, Orders) },
-                        onOpenAccount = { showAccount = true },
-                    )
-                }
-                entry<Orders> {
-                    OrdersListRoute(
-                        onOpenOrder = { backStack.add(OrderDetail(it)) },
-                        // «+ Янги» hands over to the calculator, which is where a new order is
-                        // quoted and placed. Without calculator.use that tab does not exist, so
-                        // the button is not drawn at all rather than drawn and dead.
-                        onNewOrder = if (me.can(PERM_CALCULATOR_USE)) ({ switchTab(backStack, Calculator) }) else null,
-                    )
-                }
-                entry<OrderDetail> { k ->
-                    OrderDetailRoute(
-                        orderId = k.id,
-                        me = me,
-                        onBack = { backStack.removeLastOrNull() },
-                        onLoadTruck = { backStack.add(LoadTruck(k.id, extra = false)) },
-                        onAddPhoto = { backStack.add(LoadTruck(k.id, extra = true)) },
-                        onDeliveryProof = { backStack.add(DeliveryProof(k.id)) },
-                        onOpenShipments = { backStack.add(Shipments(k.id)) },
-                        onOpenLocation = { backStack.add(DeliveryLocation(k.id)) },
-                        onRecordPayment = { backStack.add(RecordPayment(k.id)) },
-                    )
-                }
-                entry<LoadTruck> { k ->
-                    LoadTruckRoute(
-                        orderId = k.orderId, extraPhoto = k.extra,
-                        onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
-                    )
-                }
-                // Registered only for an operator who may quote — the Drivers pattern: without
-                // calculator.use the route does not exist, so no restored back stack can open it
-                // either.
-                if (me.can(PERM_CALCULATOR_USE)) {
-                    entry<Calculator> { CalculatorRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
-                }
-                // Registered only for an operator who may read the client list, the Drivers
-                // pattern: without client.view the route does not exist, so no restored back
-                // stack or deep link can open it either.
-                if (me.can(PERM_CLIENT_VIEW)) {
-                    entry<Clients> { ClientsRoute(onOpenClient = { backStack.add(ClientDetail(it)) }) }
-                    entry<ClientDetail> { k ->
-                        ClientDetailRoute(
-                            clientId = k.id,
-                            onBack = { backStack.removeLastOrNull() },
-                            onOpenOrder = { backStack.add(OrderDetail(it)) },
-                        )
-                    }
-                }
-                // Every shipment and dispatch route is wrapped in withPermission("dispatch.create")
-                // server-side, and ROLE_TEMPLATES.SALES — the largest operator role — holds
-                // order.edit without it. Registered per permission for the same reason Drivers is:
-                // without it these screens do not exist, so no restored back stack can open them
-                // and walk the operator into a 403 that becomes a permanently failed upload.
-                if (me.can(PERM_DISPATCH_CREATE)) {
-                    entry<Shipments> { k ->
-                        ShipmentsRoute(
-                            orderId = k.orderId,
-                            onLoadShipment = { backStack.add(ShipmentLoad(k.orderId, it)) },
-                            onDispatch = { backStack.add(Dispatch(k.orderId, it)) },
-                            onBack = { backStack.removeLastOrNull() },
-                        )
-                    }
-                    entry<ShipmentLoad> { k ->
-                        ShipmentLoadRoute(
-                            orderId = k.orderId, shipmentId = k.shipmentId,
-                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
-                        )
-                    }
-                    entry<Dispatch> { k ->
-                        DispatchRoute(
-                            orderId = k.orderId, shipmentId = k.shipmentId,
-                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
-                        )
-                    }
-                }
-                entry<DeliveryProof> { k ->
-                    DeliveryProofRoute(
-                        orderId = k.orderId,
-                        onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
-                    )
-                }
-                entry<DeliveryLocation> { k ->
-                    DeliveryLocationRoute(
-                        orderId = k.orderId,
-                        onDone = { backStack.removeLastOrNull() }, onBack = { backStack.removeLastOrNull() },
-                    )
-                }
-                // Registered only for an operator who may read the roster: without the permission
-                // the route does not exist, so no deep link or restored stack can open it.
-                if (me.can(PERM_DRIVER_VIEW)) {
-                    entry<Drivers> { DriversRoute(onBack = { backStack.removeLastOrNull() }) }
-                }
-                // The payments tab IS the confirmation queue. Approve and reject inside it need
-                // payment.confirm on top of this, which ConfirmQueueViewModel checks for itself —
-                // an ACCOUNTANT holds payment.view alone and reads the queue without acting on it.
-                if (me.can(PERM_PAYMENT_VIEW)) {
-                    entry<Payments> { ConfirmQueueRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
-                }
-                if (me.can(PERM_DISCREPANCY_VIEW)) {
-                    entry<Discrepancies> {
-                        DiscrepanciesRoute(
-                            onOpenOrder = { backStack.add(OrderDetail(it)) },
-                            onBack = { backStack.removeLastOrNull() },
-                        )
-                    }
-                }
-                // A DRIVER holds payment.record and neither payment.view nor order.edit: collecting
-                // cash on site is their job, so this route is gated on its own permission rather
-                // than riding along with the queue's.
-                if (me.can(PERM_PAYMENT_RECORD)) {
-                    entry<RecordPayment> { k ->
-                        RecordPaymentRoute(
-                            orderId = k.orderId,
-                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
-                        )
-                    }
-                }
-                // The server bumps tokenVersion on a PIN change, so the current token is dead the
-                // moment this succeeds. Sign out deliberately instead of walking back into the app
-                // and hitting a silent 401.
-                entry<ChangePin> { k -> ChangePinRoute(forced = k.forced, onDone = onPinChanged) }
-            },
-        )
+            )
+        }
         if (!locked) {
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
                 BottomNavScrim()

@@ -3,7 +3,6 @@ package uz.etalon.crm.feature.payments.discrepancies
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,8 +50,8 @@ import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.discrepancyStatusLabel
 import uz.etalon.crm.core.designsystem.components.discrepancyStatusTone
+import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.components.toneColor
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.Discrepancy
@@ -134,9 +133,7 @@ fun DiscrepanciesScreen(
                 // The floating nav pill is drawn over this screen (R8), and without this band the
                 // last card's «Ҳал қилиш» sits behind it — unreachable. Clearance only; this screen
                 // is restyled in phase 3.
-                contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 16.dp, bottom = EtalonSpace.underNav,
-                ),
+                contentPadding = navPillContentPadding(start = 16.dp, end = 16.dp, top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 // Resolving is online-only — the route is not withIdempotency-wrapped, so it may

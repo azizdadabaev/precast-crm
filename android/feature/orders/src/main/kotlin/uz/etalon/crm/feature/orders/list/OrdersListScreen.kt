@@ -50,6 +50,7 @@ import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SearchField
 import uz.etalon.crm.core.designsystem.components.SegmentItem
 import uz.etalon.crm.core.designsystem.components.SegmentedControl
+import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.components.orderStatusShortLabel
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
@@ -115,7 +116,7 @@ fun OrdersListRoute(
  *
  * The shell no longer wraps the tabs in a `Scaffold`, so the screen applies
  * [statusBarsPadding] itself — without it the header draws under the clock. The bottom is the
- * list's own [EtalonSpace.underNav], which is what the floating nav pill needs to scroll clear.
+ * list's own [navPillContentPadding], which is what the floating nav pill needs to scroll clear.
  *
  * @param onNewOrder null for an operator without `calculator.use` — they get no «+ Янги» at all,
  * rather than a button that opens a tab they do not have.
@@ -245,9 +246,8 @@ private fun NavyList(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().clip(EtalonShapes.sheetTop).background(EtalonColors.navy),
-            contentPadding = PaddingValues(
-                start = EtalonSpace.rowGap, end = EtalonSpace.rowGap,
-                top = EtalonSpace.cardPadV, bottom = EtalonSpace.underNav,
+            contentPadding = navPillContentPadding(
+                start = EtalonSpace.rowGap, end = EtalonSpace.rowGap, top = EtalonSpace.cardPadV,
             ),
         ) {
             item {

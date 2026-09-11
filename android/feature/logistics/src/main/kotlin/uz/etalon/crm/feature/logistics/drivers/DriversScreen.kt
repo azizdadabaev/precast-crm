@@ -79,11 +79,9 @@ fun DriversScreen(
         },
         bottomBar = {
             if (canManage) {
-                // Lifted clear of the shell's floating nav pill, which is drawn over this screen.
-                Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
-                    StickyActionBar {
-                        PrimaryButton(stringResource(R.string.action_add_driver), onClick = { showAdd = true }, enabled = !s.loading && !s.isOffline)
-                    }
+                // The bar clears the shell's floating nav pill itself, in every navigation mode.
+                StickyActionBar {
+                    PrimaryButton(stringResource(R.string.action_add_driver), onClick = { showAdd = true }, enabled = !s.loading && !s.isOffline)
                 }
             }
         },

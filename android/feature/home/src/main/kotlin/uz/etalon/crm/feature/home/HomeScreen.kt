@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -49,6 +48,7 @@ import uz.etalon.crm.core.designsystem.components.KpiCard
 import uz.etalon.crm.core.designsystem.components.KpiMoneyCard
 import uz.etalon.crm.core.designsystem.components.NavySheet
 import uz.etalon.crm.core.designsystem.components.OrderRow
+import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -119,7 +119,7 @@ fun HomeRoute(
  * schedule dates are deterministic under test.
  *
  * The nav pill is not drawn here — the shell draws it over this screen — so the list keeps
- * [EtalonSpace.underNav] of bottom padding for the last card to clear it.
+ * [navPillContentPadding] at the bottom for the last card to clear it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,7 +144,7 @@ fun HomeScreen(
     ) {
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = EtalonSpace.sm, bottom = EtalonSpace.underNav),
+            contentPadding = navPillContentPadding(top = EtalonSpace.sm),
             verticalArrangement = Arrangement.spacedBy(SECTION_GAP),
         ) {
             item { AppBarRow(me, s.pendingUploads > 0, onOpenOutbox, onOpenAccount) }

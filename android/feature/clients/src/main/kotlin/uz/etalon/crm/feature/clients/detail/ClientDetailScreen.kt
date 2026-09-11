@@ -1,7 +1,6 @@
 package uz.etalon.crm.feature.clients.detail
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,9 +41,9 @@ import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.components.StatusChip
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
+import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.components.orderStatusTone
 import uz.etalon.crm.core.designsystem.components.toneColor
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.ClientOrderLine
 import uz.etalon.crm.core.ui.format.formatAddressLine
@@ -113,11 +112,9 @@ fun ClientDetailScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 // The floating nav pill is drawn over this screen (R8: it shows on every signed-in
-                // route), so the last card needs `EtalonSpace.underNav` to scroll clear of it.
+                // route), so the last card needs the pill's band to scroll clear of it.
                 // Clearance only — this screen is restyled in phase 3.
-                contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 16.dp, bottom = EtalonSpace.underNav,
-                ),
+                contentPadding = navPillContentPadding(start = 16.dp, end = 16.dp, top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val error = s.error

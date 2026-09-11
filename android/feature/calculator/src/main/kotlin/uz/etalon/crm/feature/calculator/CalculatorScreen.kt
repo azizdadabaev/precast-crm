@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.NumericKeypad
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
+import uz.etalon.crm.core.designsystem.components.navPillPadding
 
 /**
  * How much of the WHOLE sheet `BottomSheetScaffold`'s `sheetPeekHeight` must reserve for
@@ -121,7 +121,7 @@ fun CalculatorScreen(
         // half: the sheet is a full-height child translated down, so without it the part of it
         // below the peek goes on drawing into the strip the pill occupies. The calculator is
         // restyled in its own phase; this is clearance, not the restyle.
-        modifier = Modifier.padding(bottom = EtalonSpace.underNav).clipToBounds(),
+        modifier = Modifier.navPillPadding().clipToBounds(),
         scaffoldState = scaffoldState,
         sheetPeekHeight = CALC_SHEET_PEEK_HEIGHT,
         sheetContent = totalsSheetContent,
@@ -173,17 +173,14 @@ fun CalculatorScreen(
                 }
             }
             if (s.keypad != null) {
-                // No `navigationBarsPadding()` here: the scaffold above already reserves
-                // `EtalonSpace.underNav` at the bottom. (Until the restyle this said
-                // `NavigationSuiteScaffold` consumed the navigation-bar insets for the content
-                // slot; that scaffold is gone, and `SignedInShell` consumes nothing.)
+                // No `navigationBarsPadding()` here: the scaffold above already reserves the nav
+                // pill's band at the bottom, and that band contains the navigation inset. (Until
+                // the restyle this said `NavigationSuiteScaffold` consumed the navigation-bar
+                // insets for the content slot; that scaffold is gone, and `SignedInShell`
+                // consumes nothing.)
                 //
-                // That 100 dp clears the pill under GESTURE navigation, where the inset is a few
-                // dp of handle. Under THREE-BUTTON navigation the pill sits at inset + 72 dp —
-                // about 120 dp on this device — so `underNav` is roughly 20 dp short and the
-                // pill overlaps the bottom of the sheet. Fixing it properly means an inset-aware
-                // clearance in the design system rather than a constant, so it is carried to the
-                // phase-3 plan instead of being patched screen by screen here.
+                // The band is now inset-aware, so the ~20 dp the old flat 100 dp fell short by
+                // under THREE-BUTTON navigation — where the inset alone is 48 — is gone.
                 Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp)) {
                     NumericKeypad(
                         value = s.keypadText, suffix = "м", allowDecimal = true,

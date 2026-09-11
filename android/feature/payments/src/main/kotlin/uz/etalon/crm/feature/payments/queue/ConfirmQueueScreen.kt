@@ -1,7 +1,6 @@
 package uz.etalon.crm.feature.payments.queue
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,9 +34,9 @@ import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PaymentStatusChip
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
+import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.components.paymentStatusTone
 import uz.etalon.crm.core.designsystem.components.toneColor
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.PaymentQueueItem
@@ -120,9 +119,9 @@ fun ConfirmQueueScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 // The floating nav pill is drawn over this screen, so the last card — and its
-                // confirm/reject buttons — needs `EtalonSpace.underNav` to scroll clear of it.
+                // confirm/reject buttons — needs the pill's band to scroll clear of it.
                 // Clearance only; the queue is restyled in its own task.
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = EtalonSpace.underNav),
+                contentPadding = navPillContentPadding(start = 16.dp, end = 16.dp, top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 // Confirm and reject are both online-only — neither route is withIdempotency

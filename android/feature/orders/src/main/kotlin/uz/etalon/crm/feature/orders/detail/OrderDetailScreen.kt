@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.DetailPanel
@@ -60,8 +60,10 @@ import uz.etalon.crm.core.designsystem.components.ShipmentStatusTag
 import uz.etalon.crm.core.designsystem.components.StatusTag
 import uz.etalon.crm.core.designsystem.components.StepTimeline
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
+import uz.etalon.crm.core.designsystem.components.StickyActionBarDefaults
 import uz.etalon.crm.core.designsystem.components.TagSurface
 import uz.etalon.crm.core.designsystem.components.TimelineStep
+import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.icon.EtalonIcon
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
@@ -131,9 +133,9 @@ private fun dial(ctx: Context, phone: String) {
  * photos, events — under a sticky action bar.
  *
  * The shell draws the floating nav pill *over* this screen and has no `Scaffold`, so the root is a
- * plain `Box`: it pads the status bar itself, the list reserves
- * [EtalonSpace.underStickyBar] / [EtalonSpace.underNav] at the bottom, and the action bar is
- * bottom-aligned inside the box with the pill's band beneath it.
+ * plain `Box`: it pads the status bar itself, the list reserves the pill's band plus
+ * [StickyActionBarDefaults.height] at the bottom, and the action bar is bottom-aligned inside the
+ * box with the pill's band beneath it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -181,21 +183,14 @@ fun OrderDetailScreen(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
+                // The other sticky-bar screens sit in a Scaffold, which adds the bar's own height
+                // to their content padding; this one has no Scaffold, so the clearance is spelled
+                // out: the pill's inset-aware band, plus the bar's own 88 dp when it is drawn.
+                contentPadding = navPillContentPadding(
                     start = EtalonSpace.cardMargin,
                     end = EtalonSpace.cardMargin,
                     top = EtalonSpace.sm,
-                    // The other sticky-bar screens sit in a Scaffold, which adds the bar's own
-                    // height to their content padding; this one has no Scaffold, so the clearance
-                    // is spelled out. Measured: the bar stands 172 dp tall above the navigation
-                    // inset — 16 scrim + 12 + a 48 dp button slot + 12 + this screen's 84 dp
-                    // `bottomInset` — so it covers 196 dp of the window on the emulator's
-                    // gesture nav (24 dp inset) and 220 on a three-button one (48).
-                    // 160 (`underStickyBar`)
-                    // alone left the last card behind the buttons on the emulator, and 208
-                    // (`+ minTouch`) would still fail the three-button case, so the sum below —
-                    // 260, the smallest two-token figure that clears every nav mode — stands.
-                    bottom = if (hasBar) EtalonSpace.underNav + EtalonSpace.underStickyBar else EtalonSpace.underNav,
+                    extraBottom = if (hasBar) StickyActionBarDefaults.height else 0.dp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(EtalonSpace.md),
             ) {
@@ -592,12 +587,9 @@ private fun ShipmentsCard(o: OrderDetail, pending: List<PendingUpload>, onOpen: 
  * fills the width; with neither, no bar at all — an empty bar would eat thumb space and read as a
  * disabled action.
  *
- * The shell's floating pill is drawn over this screen at the window's bottom edge, so the bar is
- * given the pill's band as its own `bottomInset` — inside the bar, where the system's navigation
- * inset is applied, so that inset is counted once. (The nine screens lifted in this phase's task 4
- * wrap the bar in a padded `Box` instead, which counts it twice; phase 3 unifies them on this.)
- * Less the bar's own 16 dp of horizontal margin, so the buttons keep the capture's ~24 dp of air
- * over the pill rather than the full 100.
+ * The shell's floating pill is drawn over this screen at the window's bottom edge; the bar clears
+ * it by itself (`clearNavPill`, the default), which counts the system navigation inset exactly
+ * once and leaves the buttons the capture's ~24 dp of air over the pill in every navigation mode.
  */
 @Composable
 private fun BoxScope.ActionBar(
@@ -617,7 +609,7 @@ private fun BoxScope.ActionBar(
     }
     if (secondary == null && !canPay) return
     Box(Modifier.align(Alignment.BottomCenter)) {
-        StickyActionBar(bottomInset = EtalonSpace.underNav - EtalonSpace.cardMargin) {
+        StickyActionBar {
             secondary?.invoke(this)
             if (canPay) PrimaryButton(stringResource(R.string.action_record_payment), onRecordPayment, Modifier.weight(1f))
         }

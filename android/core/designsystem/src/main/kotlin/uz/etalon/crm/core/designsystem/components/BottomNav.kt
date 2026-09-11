@@ -135,14 +135,14 @@ fun BottomNav(
 
 /**
  * The white→page gradient §4 puts beneath the floating bar, so a row scrolling under the pill
- * fades out instead of being sliced by it. The screen places it above its own content, aligned to
- * the bottom; its height is [EtalonSpace.underNav], the same figure the screen uses as bottom
- * content padding.
+ * fades out instead of being sliced by it. The shell places it above its own content, aligned to
+ * the bottom; its height is [navPillInsetOf], the same figure the screens below it are given as
+ * bottom clearance — so the fade covers exactly the band they keep clear and no more.
  */
 @Composable
 fun BottomNavScrim(modifier: Modifier = Modifier) = Box(
     modifier
         .fillMaxWidth()
-        .height(EtalonSpace.underNav)
+        .height(navPillInsetOf())
         .background(Brush.verticalGradient(listOf(EtalonColors.page.copy(alpha = 0f), EtalonColors.page))),
 )

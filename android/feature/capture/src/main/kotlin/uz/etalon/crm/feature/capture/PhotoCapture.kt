@@ -39,7 +39,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
+import uz.etalon.crm.core.designsystem.components.navPillPadding
 import uz.etalon.crm.core.image.ImagePrep
 import uz.etalon.crm.core.image.PreparedImage
 import java.io.File
@@ -171,11 +171,11 @@ fun PhotoCapture(
 
     Scaffold(
         bottomBar = {
-            // `underNav` instead of the bare navigation-bar inset: the shell's floating nav pill is
-            // drawn over this screen too, and it covered the lower half of the shutter — the one
-            // control every load, delivery proof and receipt starts with.
+            // The nav pill's band instead of the bare navigation-bar inset: the shell's floating
+            // pill is drawn over this screen too, and it covered the lower half of the shutter —
+            // the one control every load, delivery proof and receipt starts with.
             Column(
-                Modifier.padding(bottom = EtalonSpace.underNav).padding(16.dp),
+                Modifier.navPillPadding().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 error?.let { ErrorBanner(message = it) }

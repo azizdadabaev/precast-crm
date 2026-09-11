@@ -58,15 +58,13 @@ fun DeliveryProofRoute(
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.delivery_proof_title)) }) },
         bottomBar = {
-            // Lifted clear of the shell's floating nav pill, which is drawn over this screen.
-            Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
-                StickyActionBar {
-                    SecondaryButton(stringResource(R.string.action_retake), onClick = vm::retake, modifier = Modifier.weight(1f))
-                    PrimaryButton(
-                        text = stringResource(R.string.action_mark_delivered), onClick = vm::submit,
-                        loading = s.submitting, modifier = Modifier.weight(1f),
-                    )
-                }
+            // The bar clears the shell's floating nav pill itself, in every navigation mode.
+            StickyActionBar {
+                SecondaryButton(stringResource(R.string.action_retake), onClick = vm::retake, modifier = Modifier.weight(1f))
+                PrimaryButton(
+                    text = stringResource(R.string.action_mark_delivered), onClick = vm::submit,
+                    loading = s.submitting, modifier = Modifier.weight(1f),
+                )
             }
         },
     ) { pad ->

@@ -99,11 +99,9 @@ class LogisticsScreenshotTest {
             bottomBar = {
                 // Verbatim with the Route, the nav-pill clearance included — a preview that
                 // stopped mirroring it would keep a baseline of a bar the app no longer draws there.
-                Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
-                    StickyActionBar {
-                        SecondaryButton(stringResource(R.string.action_retake), onClick = {}, modifier = Modifier.weight(1f))
-                        PrimaryButton(stringResource(R.string.action_mark_delivered), onClick = {}, loading = s.submitting, modifier = Modifier.weight(1f))
-                    }
+                StickyActionBar {
+                    SecondaryButton(stringResource(R.string.action_retake), onClick = {}, modifier = Modifier.weight(1f))
+                    PrimaryButton(stringResource(R.string.action_mark_delivered), onClick = {}, loading = s.submitting, modifier = Modifier.weight(1f))
                 }
             },
         ) { pad ->
@@ -170,11 +168,9 @@ class LogisticsScreenshotTest {
             topBar = { TopAppBar(title = { Text(stringResource(R.string.shipment_load_title)) }) },
             bottomBar = {
                 // Verbatim with the Route, the nav-pill clearance included.
-                Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
-                    StickyActionBar {
-                        SecondaryButton(stringResource(R.string.action_retake), onClick = {}, modifier = Modifier.weight(1f))
-                        PrimaryButton(stringResource(R.string.action_mark_loaded), onClick = {}, loading = s.submitting, modifier = Modifier.weight(1f))
-                    }
+                StickyActionBar {
+                    SecondaryButton(stringResource(R.string.action_retake), onClick = {}, modifier = Modifier.weight(1f))
+                    PrimaryButton(stringResource(R.string.action_mark_loaded), onClick = {}, loading = s.submitting, modifier = Modifier.weight(1f))
                 }
             },
         ) { pad ->

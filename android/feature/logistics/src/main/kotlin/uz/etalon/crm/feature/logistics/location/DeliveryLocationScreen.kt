@@ -165,14 +165,12 @@ fun DeliveryLocationScreen(
             )
         },
         bottomBar = {
-            // Lifted clear of the shell's floating nav pill, which is drawn over this screen.
-            Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
-                StickyActionBar {
-                    PrimaryButton(
-                        text = stringResource(R.string.logistics_action_save), onClick = onSave,
-                        enabled = s.canSave, loading = s.busy,
-                    )
-                }
+            // The bar clears the shell's floating nav pill itself, in every navigation mode.
+            StickyActionBar {
+                PrimaryButton(
+                    text = stringResource(R.string.logistics_action_save), onClick = onSave,
+                    enabled = s.canSave, loading = s.busy,
+                )
             }
         },
     ) { pad ->

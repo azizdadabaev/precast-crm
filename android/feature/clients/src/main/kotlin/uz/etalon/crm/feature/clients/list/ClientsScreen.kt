@@ -1,7 +1,6 @@
 package uz.etalon.crm.feature.clients.list
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,8 +43,8 @@ import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
+import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.components.toneColor
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.ClientSummary
 import uz.etalon.crm.core.ui.format.formatAddressLine
@@ -100,16 +99,15 @@ fun ClientsScreen(
             // because POST /api/clients is not `withIdempotency`-wrapped and may not be queued.
             if (s.showAddAction) {
                 // The floating nav pill is drawn over this screen and the sticky bar sits at the
-                // window's bottom edge, so without this «Мижоз қўшиш» is entirely behind the pill
-                // — measured on the emulator, where the button was invisible and untappable.
-                Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
-                    StickyActionBar {
-                        PrimaryButton(
-                            text = stringResource(R.string.clients_action_add),
-                            onClick = { adding = true },
-                            enabled = !s.isOffline,
-                        )
-                    }
+                // window's bottom edge, so without the bar's own nav-pill clearance «Мижоз қўшиш»
+                // is entirely behind the pill — measured on the emulator, where the button was
+                // invisible and untappable.
+                StickyActionBar {
+                    PrimaryButton(
+                        text = stringResource(R.string.clients_action_add),
+                        onClick = { adding = true },
+                        enabled = !s.isOffline,
+                    )
                 }
             }
         },
@@ -117,15 +115,16 @@ fun ClientsScreen(
         PullToRefreshBox(isRefreshing = s.loading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                // The floating nav pill is drawn over this screen, so the last row needs
-                // `EtalonSpace.underNav` to scroll clear of it — but only when there is no sticky
-                // bar, which already reserves that band for itself (and whose own height the
-                // Scaffold adds to `pad`). Both at once left ~120 dp of empty page above «Мижоз
-                // қўшиш». Clearance only — the list itself is restyled in its own task.
-                contentPadding = PaddingValues(
-                    start = 16.dp, end = 16.dp, top = 16.dp,
-                    bottom = if (s.showAddAction) 16.dp else EtalonSpace.underNav,
-                ),
+                // The floating nav pill is drawn over this screen, so the last row needs the pill's
+                // band to scroll clear of it — but only when there is no sticky bar, which already
+                // clears the pill for itself (and whose own height the Scaffold adds to `pad`).
+                // Both at once left ~120 dp of empty page above «Мижоз қўшиш». Clearance only —
+                // the list itself is restyled in its own task.
+                contentPadding = if (s.showAddAction) {
+                    PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp)
+                } else {
+                    navPillContentPadding(start = 16.dp, end = 16.dp, top = 16.dp)
+                },
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val error = s.error

@@ -56,7 +56,6 @@ import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.PaymentMethod
@@ -170,9 +169,12 @@ fun RecordPaymentScreen(
             // Which of the two outcomes this will be is decided by the recorder's own
             // permissions server-side. It sits here, not at the foot of the scrolling column,
             // because that is where it is off-screen at the one moment it matters: the tap.
-            // The padding sits OUTSIDE the background so the strip the shell's floating nav pill
-            // occupies stays page-coloured rather than a white shelf under the bar.
-            Column(Modifier.padding(bottom = EtalonSpace.underNav).background(MaterialTheme.colorScheme.surface)) {
+            // The pill's band is left by the bar itself rather than by an outer lift on this
+            // Column: `StickyActionBar` paints its `page` background behind its own bottom
+            // padding, so the strip the shell's floating nav pill occupies stays page-coloured —
+            // the same result the outer lift gave — and the system navigation inset is counted
+            // exactly once instead of by both.
+            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                 Text(
                     stringResource(if (s.canAutoConfirm) R.string.record_will_auto_confirm else R.string.record_will_be_pending),
                     style = MaterialTheme.typography.bodySmall,

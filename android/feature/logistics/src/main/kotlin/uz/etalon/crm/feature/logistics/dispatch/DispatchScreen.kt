@@ -98,14 +98,12 @@ fun DispatchScreen(
             )
         },
         bottomBar = {
-            // Lifted clear of the shell's floating nav pill, which is drawn over this screen.
-            Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
-                StickyActionBar {
-                    PrimaryButton(
-                        text = stringResource(R.string.action_dispatch), onClick = onSubmit,
-                        enabled = canSubmit, loading = s.submitting,
-                    )
-                }
+            // The bar clears the shell's floating nav pill itself, in every navigation mode.
+            StickyActionBar {
+                PrimaryButton(
+                    text = stringResource(R.string.action_dispatch), onClick = onSubmit,
+                    enabled = canSubmit, loading = s.submitting,
+                )
             }
         },
     ) { pad ->
