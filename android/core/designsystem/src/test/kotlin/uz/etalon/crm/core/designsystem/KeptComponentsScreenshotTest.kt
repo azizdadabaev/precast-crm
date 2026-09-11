@@ -53,8 +53,9 @@ private val CHAIN = CustodyChainModel(
  * a weight here without opening a screen.
  *
  * `Lightbox`, `DriverPicker` and `RegionPickerSheet` are absent because each owns a `Dialog` or a
- * `ModalBottomSheet` and cannot be composed into a sheet like this; their rows and their scrim are
- * the shapes shown here — [RegionField], the light row, and §2's navy-at-55 % veil.
+ * `ModalBottomSheet` and cannot be composed into a sheet like this — two full-screen scrims over
+ * one page would photograph as one scrim. The two pickers have a capture each in
+ * `PickerSheetsScreenshotTest`; what stands here is the field that opens them, [RegionField].
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
