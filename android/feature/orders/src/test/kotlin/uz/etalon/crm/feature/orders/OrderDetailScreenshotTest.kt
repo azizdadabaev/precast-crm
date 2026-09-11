@@ -220,8 +220,40 @@ class OrderDetailScreenshotTest {
         ),
     )
 
+    /**
+     * Defect C2. A canceled order owes nothing (`OrderStatus.owesNothing`), so the panel's «Қолди»
+     * is a muted «—» rather than its untouched 13 350 000, and neither the «Тўлов ҳолати» progress
+     * card nor the cost breakdown is drawn — the Orders and Home rows already draw nothing for a
+     * canceled order, and the screen they open must agree with them.
+     *
+     * Nothing paid, and a cost breakdown that *would* render on any live status, so the frame
+     * records both absences at once; the red «Бекор қилинган» tag sits on the panel.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun canceledLight() = shoot(
+        "order_detail_canceled_light",
+        order(
+            status = OrderStatus.CANCELED, paid = "0.00", payments = emptyList(),
+            roomsSubtotal = "13550000.00", discount = "500000.00", delivery = "300000.00",
+        ),
+    )
+
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
     fun largeFont() = shoot("order_detail_font13", order())
+
+    /**
+     * The other half of C2's rule, which [canceledLight] cannot photograph because its order was
+     * never paid: cash already taken against an order that was later canceled is **history** and
+     * stays on the screen. Dropping the progress card must not drop the payments card with it —
+     * the money really did change hands; what is wrong is calling the rest of it *owed*.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun aCanceledOrderStillListsThePaymentsItTook() {
+        show(order(status = OrderStatus.CANCELED, paid = "6000000.00"))
+        val card = hasText("Тўловлар")
+        rule.onNode(hasScrollAction()).performScrollToNode(card)
+        rule.onNode(card).assertIsDisplayed()
+    }
 
     /**
      * The shipments door sits below [placedLight]'s viewport — a `LazyColumn` does not compose

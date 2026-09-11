@@ -31,6 +31,22 @@ data class OrderSummary(
     val remaining: Money get() = (totalPrice - confirmedPaid - writeOffAmount).coerceAtLeastZero()
 }
 
+/**
+ * Whether an order in this status still owes its balance. A CANCELED one does not.
+ *
+ * A canceled order is a sale that never happened: the CRM's own `LIVE_ORDERS` rule
+ * (`precast-crm/src/lib/dashboard-data.ts`) keeps it out of every receivable, and the server's
+ * payment facets exclude it for the same reason. So nothing that draws a balance may draw one for
+ * it — the Orders rows and Home's two row lists pass `debt = null` and `paidLabel = null`, and the
+ * order detail's «Қолди» reads «—» with no progress bar and no cost breakdown.
+ *
+ * Money already recorded against a canceled order stays visible as history (the payments card):
+ * that cash really was taken. What would be wrong is calling it *owed*.
+ *
+ * This is the one place the rule is decided; every screen that draws a balance reads it here.
+ */
+val OrderStatus.owesNothing: Boolean get() = this == OrderStatus.CANCELED
+
 enum class PaymentFilter { DEBT, PAID }
 
 /** GET /api/orders' `facets` — status/payment counts and total area for the current `q`/`day`

@@ -72,6 +72,7 @@ import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.PendingUpload
 import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.model.owesNothing
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatDate
@@ -213,8 +214,14 @@ fun OrderDetailScreen(
                 if (actionError != null) item { ErrorBanner(actionError) }
                 if (o == null) return@LazyColumn
                 item { Panel(o, onBack = onBack, onCall = { dial(ctx, o.summary.client.phone) }) }
-                item { PaymentProgress(o) }
-                if (hasCostBreakdown(o)) item { CostsCard(o) }
+                // A canceled order has no balance to make progress against and no live price to
+                // break down (`OrderStatus.owesNothing`): a «45 % тўланган» bar or a «Жами» on a
+                // sale that never happened is a claim about money that is not owed. The payments
+                // card below still draws — cash that was taken is history and stays visible.
+                if (!o.summary.status.owesNothing) {
+                    item { PaymentProgress(o) }
+                    if (hasCostBreakdown(o)) item { CostsCard(o) }
+                }
                 if (o.payments.isNotEmpty() || !o.pendingAmount.isZero) item { PaymentsCard(o) }
                 item {
                     DeliveryCard(
@@ -257,8 +264,13 @@ fun OrderDetailScreen(
                     item {
                         WhiteCard(stringResource(R.string.events)) {
                             o.events.take(20).forEach { e ->
+                                // The server's own `message` first — it carries the specifics a
+                                // type name cannot. Without one, the type's Uzbek wording; the raw
+                                // English enum is never printed at an operator (`orderEventLabel`).
+                                val what = e.message
+                                    ?: stringResource(orderEventLabel(e.type) ?: R.string.event_generic)
                                 Text(
-                                    "${formatDateTime(e.createdAt)} · ${e.message ?: e.type}${e.actorName?.let { " · $it" } ?: ""}",
+                                    "${formatDateTime(e.createdAt)} · $what${e.actorName?.let { " · $it" } ?: ""}",
                                     style = EtalonType.meta,
                                     color = EtalonColors.ink2,
                                     modifier = Modifier.padding(top = EtalonSpace.xs),
@@ -320,10 +332,19 @@ private fun Panel(o: OrderDetail, onBack: () -> Unit, onCall: () -> Unit) = Deta
     totals = {
         PanelTotal(stringResource(R.string.detail_area), formatArea(o.summary.totalArea), modifier = Modifier.weight(1f))
         PanelTotal(stringResource(R.string.detail_total), formatMoney(o.summary.totalPrice), modifier = Modifier.weight(1f))
+        // A canceled order owes nothing (`OrderStatus.owesNothing`), so «Қолди» is a dash rather
+        // than its untouched total — the rows on Home and Orders already draw nothing for one, and
+        // the screen they open must not contradict them. Muted, because «—» is an absence, not a
+        // figure, and green would read as settled.
+        val owesNothing = o.summary.status.owesNothing
         PanelTotal(
             stringResource(R.string.detail_remaining),
-            formatMoney(o.remaining),
-            valueColor = if (o.remaining.isZero) EtalonColors.paidOnDark else EtalonColors.onDark,
+            if (owesNothing) stringResource(R.string.detail_no_balance) else formatMoney(o.remaining),
+            valueColor = when {
+                owesNothing -> EtalonColors.onDarkMuted
+                o.remaining.isZero -> EtalonColors.paidOnDark
+                else -> EtalonColors.onDark
+            },
             modifier = Modifier.weight(1f),
         )
     },

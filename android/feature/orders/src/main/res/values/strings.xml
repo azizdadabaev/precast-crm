@@ -23,6 +23,9 @@
     <string name="detail_area">Майдон</string>
     <string name="detail_total">Жами</string>
     <string name="detail_remaining">Қолди</string>
+    <!-- The «Қолди» figure of a canceled order: an EM DASH (U+2014), not a number. A canceled
+         order owes nothing, so a sum here would be a false claim — see OrderStatus.owesNothing. -->
+    <string name="detail_no_balance">—</string>
     <string name="detail_room_dims">%1$s · %2$s × %3$s</string>
     <string name="detail_payment_state">Тўлов ҳолати</string>
     <string name="detail_percent_paid">%1$d%% тўланган</string>
@@ -53,6 +56,32 @@
     <string name="room_n">Хона %1$d</string>
     <string name="photos">Расмлар</string>
     <string name="events">Тарих</string>
+    <!-- «Тарих» event wording, one per Prisma `OrderEventType` (see EventLabels.kt). Used when the
+         server sends no `message` of its own; a type this client does not know reads as
+         «Ҳодиса» rather than its raw English enum name. -->
+    <string name="event_generic">Ҳодиса</string>
+    <string name="event_order_placed">Буюртма қабул қилинди</string>
+    <string name="event_status_changed">Ҳолат ўзгарди</string>
+    <string name="event_scheduled_date_changed">Етказиш санаси ўзгарди</string>
+    <string name="event_discount_applied">Чегирма қўлланди</string>
+    <string name="event_order_canceled">Буюртма бекор қилинди</string>
+    <string name="event_order_edited">Буюртма таҳрирланди</string>
+    <string name="event_note_added">Изоҳ қўшилди</string>
+    <string name="event_stock_warning">Қолдиқ огоҳлантириши</string>
+    <string name="event_order_dispatched">Буюртма жўнатилди</string>
+    <string name="event_dispatch_returned">Ҳайдовчи қайтди</string>
+    <string name="event_payment_recorded">Тўлов қайд қилинди</string>
+    <string name="event_payment_handed_over">Нақд пул топширилди</string>
+    <string name="event_payment_confirmed">Тўлов тасдиқланди</string>
+    <string name="event_payment_rejected">Тўлов рад этилди</string>
+    <string name="event_payment_adjusted">Тўлов миқдори тузатилди</string>
+    <string name="event_discrepancy_opened">Тафовут очилди</string>
+    <string name="event_discrepancy_resolved">Тафовут ҳал қилинди</string>
+    <string name="event_order_loaded">Юк ортилди</string>
+    <string name="event_shipment_created">Жўнатма яратилди</string>
+    <string name="event_shipment_loaded">Жўнатмага юк ортилди</string>
+    <string name="event_shipment_dispatched">Жўнатма йўлга чиқди</string>
+    <string name="event_shipment_delivered">Жўнатма етказилди</string>
     <string name="shipments">Жўнатмалар</string>
     <string name="split_into_shipments">Жўнатмаларга бўлиш</string>
     <string name="orders_shipment_n">Жўнатма %1$d</string>

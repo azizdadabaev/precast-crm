@@ -58,6 +58,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentFilter
+import uz.etalon.crm.core.model.owesNothing
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatDate
 import uz.etalon.crm.core.ui.format.formatMonthYear
@@ -296,7 +297,9 @@ private fun NavyList(
                 items(g.rows, key = { it.id }) { o ->
                     // A canceled order owes nothing and has paid nothing: neither «қолди …» nor
                     // «тўланган» is true of it, so the row carries no second line at all.
-                    val canceled = o.status == OrderStatus.CANCELED
+                    // The rule lives at `OrderStatus.owesNothing` (core:model) — the order detail
+                    // reads the same one, so a row and the screen it opens cannot disagree.
+                    val canceled = o.status.owesNothing
                     OrderRow(
                         clientName = o.client.name,
                         status = o.status,
