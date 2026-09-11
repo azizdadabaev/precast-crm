@@ -39,6 +39,14 @@ internal fun tabFor(key: NavKey): Destination? = when (key) {
 }
 
 /**
+ * Whether [key] is a gate the nav pill must not be drawn over at all — see `SignedInShell`'s
+ * KDoc. Only the forced PIN change is one: the server has expired this operator's password, the
+ * screen has no back arrow, and finishing it signs them out, so no cell on the bar leads anywhere
+ * they may go. The voluntary ChangePin reached from the account sheet keeps its pill.
+ */
+internal fun hidesNav(key: NavKey): Boolean = key is ChangePin && key.forced
+
+/**
  * The permission a key's NavEntry is registered behind, or null when the entry always exists.
  *
  * One source for two things that must never drift apart: the `if (me.can(…))` guards around the

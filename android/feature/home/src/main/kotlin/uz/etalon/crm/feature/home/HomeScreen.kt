@@ -176,9 +176,11 @@ private fun AppBarRow(me: Me, hasPending: Boolean, onOpenOutbox: () -> Unit, onO
         Text(stringResource(R.string.home_tagline), style = EtalonType.meta, color = EtalonColors.ink2)
     }
     Spacer(Modifier.weight(1f))
+    // A rounded square, not a circle: `2b-home.png` draws the bell in a 36 dp `md` box and keeps
+    // the pill shape for the avatar beside it, so the two do not read as a pair of buttons.
     EtalonIconButton(
         EtalonIcons.Bell, stringResource(R.string.home_bell), onOpenOutbox,
-        badge = hasPending, size = 36.dp,
+        badge = hasPending, size = 36.dp, shape = EtalonShapes.md,
     )
     Spacer(Modifier.width(EtalonSpace.sm))
     Avatar(
@@ -267,7 +269,9 @@ private fun sparkline(series: List<Money>): List<Float> {
 private fun TodaySheet(s: HomeUiState, onOpenOrder: (String) -> Unit) = NavySheet(
     title = stringResource(R.string.home_kpi_today),
     modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
-    trailing = { CountPill(s.today.size) },
+    // No pill at all without the permission: «0» is a count, and a count is a claim about how
+    // many deliveries there are — exactly what this operator has just been told they cannot see.
+    trailing = if (s.showNoAccessState) null else ({ CountPill(s.today.size) }),
     fillsToBottom = false,
 ) {
     // `debtLabel` is a plain lambda the row calls while it composes, so its wording is read out

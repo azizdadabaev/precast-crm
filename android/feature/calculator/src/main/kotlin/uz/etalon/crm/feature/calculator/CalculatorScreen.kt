@@ -26,11 +26,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.NumericKeypad
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 
 /**
  * How much of the WHOLE sheet `BottomSheetScaffold`'s `sheetPeekHeight` must reserve for
@@ -112,6 +114,14 @@ fun CalculatorScreen(
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
 
     BottomSheetScaffold(
+        // The floating nav pill (`SignedInShell`) is drawn OVER this screen, and the collapsed
+        // totals sheet is pinned to the window's bottom edge — so without this the pill sat on
+        // the summary and a tap meant to expand it switched tabs instead. Padding the scaffold,
+        // rather than the sheet, lifts the docked keypad with it. `clipToBounds` is the other
+        // half: the sheet is a full-height child translated down, so without it the part of it
+        // below the peek goes on drawing into the strip the pill occupies. The calculator is
+        // restyled in its own phase; this is clearance, not the restyle.
+        modifier = Modifier.padding(bottom = EtalonSpace.underNav).clipToBounds(),
         scaffoldState = scaffoldState,
         sheetPeekHeight = CALC_SHEET_PEEK_HEIGHT,
         sheetContent = totalsSheetContent,
@@ -163,13 +173,12 @@ fun CalculatorScreen(
                 }
             }
             if (s.keypad != null) {
-                // No `navigationBarsPadding()` here: `CalculatorRoute` is hosted inside
-                // `SignedInShell`'s `NavigationSuiteScaffold` (`EtalonNavHost.kt`), which already
-                // consumes `WindowInsets.navigationBars` for its content slot — the same way plain
-                // `Scaffold` consumes it for its own `bottomBar`. `BottomSheetScaffold` itself does
-                // NOT add that inset back (its content padding is bare `sheetPeekHeight`, no window
-                // insets — verified against `BottomSheetScaffold.kt`), so re-adding it here just
-                // padded the keypad up by the system nav bar's height for no reason.
+                // No `navigationBarsPadding()` here: the scaffold above already reserves
+                // `EtalonSpace.underNav` at the bottom, which clears both the floating nav pill
+                // and — since the pill carries its own `navigationBarsPadding()` — the system
+                // gesture bar under it. (Until the restyle this said `NavigationSuiteScaffold`
+                // consumed the navigation-bar insets for the content slot; that scaffold is gone,
+                // and `SignedInShell` consumes nothing.)
                 Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp)) {
                     NumericKeypad(
                         value = s.keypadText, suffix = "м", allowDecimal = true,

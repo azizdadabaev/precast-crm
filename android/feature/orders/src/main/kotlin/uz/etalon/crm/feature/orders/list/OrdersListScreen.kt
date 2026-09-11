@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.orderStatusLabel
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.feature.orders.R
 
@@ -43,7 +44,14 @@ fun OrdersListScreen(s: OrdersListUiState, onQuery: (String) -> Unit, onStatus: 
         }
     }) { pad ->
         PullToRefreshBox(isRefreshing = s.isRefreshing, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
-            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxSize()) {
+            // The floating nav pill is drawn over this screen, so the last row needs
+            // `EtalonSpace.underNav` to scroll clear of it. Clearance only — the list itself is
+            // restyled in its own task.
+            LazyColumn(
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = EtalonSpace.underNav),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
                 if (s.error != null) item { ErrorBanner(s.error, onRetry = onRefresh) }
                 if (s.items.isEmpty() && !s.isRefreshing) item { EmptyState(stringResource(R.string.orders_empty)) }
                 items(s.items, key = { it.id }) { o -> OrderCard(o) { onOpen(o.id) } }

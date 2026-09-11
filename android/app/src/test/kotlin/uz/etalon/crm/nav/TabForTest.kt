@@ -1,7 +1,9 @@
 package uz.etalon.crm.nav
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.shell.Destination
 
@@ -40,5 +42,18 @@ class TabForTest {
     @Test
     fun `a key outside the bar lights nothing`() {
         assertNull(tabFor(Login))
+    }
+
+    /**
+     * A forced PIN change is a gate: the server has expired the password, the screen has no back
+     * arrow and finishing it signs the operator out, so the shell draws no pill over it. The
+     * voluntary one — the account sheet's «PIN ни ўзгартириш» — keeps its bar.
+     */
+    @Test
+    fun `only the forced PIN change hides the pill`() {
+        assertTrue(hidesNav(ChangePin(forced = true)))
+        assertFalse(hidesNav(ChangePin(forced = false)))
+        listOf(Home, Orders, OrderDetail("o"), Calculator, Payments, Clients, Drivers, Discrepancies)
+            .forEach { assertFalse(hidesNav(it), it.toString()) }
     }
 }

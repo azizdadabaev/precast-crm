@@ -90,6 +90,14 @@ private fun rememberEntryDecorators(): List<NavEntryDecorator<NavKey>> {
  * The lit cell is the *tab the current route belongs to* ([tabFor]), not the route itself, so an
  * order detail keeps «Буюртма» lit and the account sheet's three screens keep «Бош» lit. A route
  * belonging to no cell leaves `selected` at -1, which lights nothing.
+ *
+ * The one screen that gets **no pill at all** is a forced PIN change. `MainActivity` makes
+ * `ChangePin(forced = true)` the start key for an operator whose password the server has expired,
+ * and that screen is a gate: it has no back arrow and `onDone` signs them out. A bar there would
+ * light «Бош» — [tabFor] maps every ChangePin to Home, which is right for the voluntary one
+ * reached from the account sheet — and, worse, every cell would still be tappable, walking the
+ * operator around an app whose token dies the moment they finish. The voluntary ChangePin keeps
+ * its pill.
  */
 @Composable
 fun SignedInShell(
@@ -101,6 +109,7 @@ fun SignedInShell(
     val destinations = destinationsFor(me)
     val current = backStack.lastOrNull()
     val selected = destinations.indexOf(current?.let(::tabFor))
+    val locked = current != null && hidesNav(current)
     var showAccount by remember { mutableStateOf(false) }
     val labels = destinations.map { stringResource(it.shortLabelRes) }
     val descriptions = destinations.map { stringResource(it.labelRes) }
@@ -252,9 +261,11 @@ fun SignedInShell(
                 entry<ChangePin> { k -> ChangePinRoute(forced = k.forced, onDone = onPinChanged) }
             },
         )
-        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-            BottomNavScrim()
-            BottomNav(items = items, selectedIndex = selected, onSelect = { i -> switchTab(backStack, destinations[i].key()) })
+        if (!locked) {
+            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+                BottomNavScrim()
+                BottomNav(items = items, selectedIndex = selected, onSelect = { i -> switchTab(backStack, destinations[i].key()) })
+            }
         }
     }
     if (showAccount) {

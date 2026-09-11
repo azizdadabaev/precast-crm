@@ -40,7 +40,7 @@ fun OutboxSheet(pending: Int, onDismiss: () -> Unit) = ModalBottomSheet(
             if (pending > 0) {
                 pluralStringResource(DesignSystemR.plurals.outbox_pending, pending, pending)
             } else {
-                stringResource(R.string.home_outbox_clear)
+                stringResource(R.string.home_outbox_clear_data)
             },
             style = EtalonType.body,
             color = EtalonColors.ink2,

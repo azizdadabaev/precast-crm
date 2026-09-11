@@ -21,5 +21,7 @@
     <string name="home_close">Ёпиш</string>
     <string name="home_today_empty">Бугунга буюртма йўқ</string>
     <string name="home_today_no_access">Бугунги етказишларни кўриш ҳуқуқингиз йўқ</string>
-    <string name="home_outbox_clear">Юборилмаган расм йўқ</string>
+    <!-- «маълумот», not «расм»: a queued PLACE_ORDER row counts here too, and the sheet's own
+         title and its `outbox_pending` plural both already say маълумот. -->
+    <string name="home_outbox_clear_data">Юборилмаган маълумот йўқ</string>
 </resources>

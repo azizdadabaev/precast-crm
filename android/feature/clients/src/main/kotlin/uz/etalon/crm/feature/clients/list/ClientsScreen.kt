@@ -1,6 +1,7 @@
 package uz.etalon.crm.feature.clients.list
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,6 +45,7 @@ import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
 import uz.etalon.crm.core.designsystem.components.toneColor
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.ClientSummary
 import uz.etalon.crm.core.ui.format.formatAddressLine
@@ -97,12 +99,17 @@ fun ClientsScreen(
             // then vanishes is worse than one that arrives a frame late. Disabled while offline
             // because POST /api/clients is not `withIdempotency`-wrapped and may not be queued.
             if (s.showAddAction) {
-                StickyActionBar {
-                    PrimaryButton(
-                        text = stringResource(R.string.clients_action_add),
-                        onClick = { adding = true },
-                        enabled = !s.isOffline,
-                    )
+                // The floating nav pill is drawn over this screen and the sticky bar sits at the
+                // window's bottom edge, so without this «Мижоз қўшиш» is entirely behind the pill
+                // — measured on the emulator, where the button was invisible and untappable.
+                Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
+                    StickyActionBar {
+                        PrimaryButton(
+                            text = stringResource(R.string.clients_action_add),
+                            onClick = { adding = true },
+                            enabled = !s.isOffline,
+                        )
+                    }
                 }
             }
         },
@@ -110,7 +117,10 @@ fun ClientsScreen(
         PullToRefreshBox(isRefreshing = s.loading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                // The floating nav pill is drawn over this screen, so the last row needs
+                // `EtalonSpace.underNav` to scroll clear of it. Clearance only — the list itself
+                // is restyled in its own task.
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = EtalonSpace.underNav),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val error = s.error
