@@ -23,6 +23,24 @@ class OrderDetailDerivedTest {
         )
     }
 
+    /**
+     * The web keys its load list with `Number(beamLength).toFixed(2)`, which rounds the binary
+     * double: 3.505 is stored as the nearest `Double`, 3.504999…, and reads «3.50». A decimal
+     * HALF_UP would read «3.51» and the loader's two lists would disagree on a length that the
+     * server's `Decimal(10,3)` really can hold.
+     */
+    @Test fun `the two-decimal key rounds the binary value, exactly as toFixed does`() {
+        val keys = detailWith(
+            listOf(
+                room(beamLength = "3.505", beamCount = 1, totalBlocks = 0),
+                room(beamLength = "4.005", beamCount = 1, totalBlocks = 0),
+                room(beamLength = "3.8", beamCount = 1, totalBlocks = 0),
+                room(beamLength = "5.05", beamCount = 1, totalBlocks = 0),
+            ),
+        ).loadList.map { it.lengthKey }
+        assertEquals(listOf("3.50", "4.00", "3.80", "5.05"), keys)
+    }
+
     @Test fun `total blocks sums every room`() {
         val rooms = listOf(room(beamLength = "3.8", beamCount = 8, totalBlocks = 20), room(beamLength = "5.05", beamCount = 3, totalBlocks = 5))
         assertEquals(25, detailWith(rooms).totalBlocks)

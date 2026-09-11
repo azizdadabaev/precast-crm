@@ -120,14 +120,26 @@ data class OrderDetail(
  *  rooms' beam counts summed. Mirrors the web's `beamGroups` (orders/[id]/page.tsx). */
 data class LoadLine(val lengthKey: String, val beamLength: BigDecimal, val beams: Int)
 
-/** The order's beams grouped by length, in first-appearance order — matches the web's
- *  `beamGroups`: `Map` keyed by `Number(c.beamLength).toFixed(2)`, summing `c.beamCount`. */
+/**
+ * The order's beams grouped by length, in first-appearance order — matches the web's
+ * `beamGroups`: `Map` keyed by `Number(c.beamLength).toFixed(2)`, summing `c.beamCount`.
+ *
+ * The key rounds the **binary** value, not the decimal one, because `toFixed(2)` does and a
+ * loader reads the two lists side by side. `beamLength` is `Decimal(10,3)` on the server
+ * (`round3(innerWidth + 2 × bearing)`), so an exact half — 3.505 — is a value that really occurs,
+ * and the two roundings disagree on it: decimal HALF_UP says «3.51», `toFixed(2)` says «3.50»,
+ * because the nearest `Double` to 3.505 is 3.504999…. `BigDecimal(Double)` is that expansion
+ * exactly, so a decimal tie never arises and the result equals `toFixed(2)` for every input.
+ *
+ * This is the one `Double` on the model and it stays here: beam length is geometry a truck is
+ * loaded from, not money, and the figure being matched is the web's own rounding.
+ */
 val OrderDetail.loadList: List<LoadLine>
     get() {
         val counts = LinkedHashMap<String, Int>()
         val lengths = LinkedHashMap<String, BigDecimal>()
         for (room in rooms) {
-            val scaled = room.beamLength.setScale(2, RoundingMode.HALF_UP)
+            val scaled = BigDecimal(room.beamLength.toDouble()).setScale(2, RoundingMode.HALF_UP)
             val key = scaled.toPlainString()
             counts[key] = (counts[key] ?: 0) + room.beamCount
             lengths.putIfAbsent(key, scaled)
