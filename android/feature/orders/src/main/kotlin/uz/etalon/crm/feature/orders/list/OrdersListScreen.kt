@@ -26,12 +26,13 @@ private val STATUS_CHIPS = listOf(null, OrderStatus.PLACED, OrderStatus.IN_PRODU
 @Composable
 fun OrdersListRoute(onOpenOrder: (String) -> Unit, vm: HiltOrdersListViewModel = hiltViewModel()) {
     val s by vm.state.collectAsStateWithLifecycle()
-    OrdersListScreen(s, vm::setQuery, vm::setStatus, vm::refresh, vm::nextPage, vm::previousPage, onOpenOrder)
+    OrdersListScreen(s, vm::setQuery, vm::setStatus, vm::refresh, vm::loadMore, onOpenOrder)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrdersListScreen(s: OrdersListUiState, onQuery: (String) -> Unit, onStatus: (OrderStatus?) -> Unit, onRefresh: () -> Unit, onNext: () -> Unit, onPrev: () -> Unit, onOpen: (String) -> Unit) {
+fun OrdersListScreen(s: OrdersListUiState, onQuery: (String) -> Unit, onStatus: (OrderStatus?) -> Unit, onRefresh: () -> Unit, onLoadMore: () -> Unit, onOpen: (String) -> Unit) {
+    val rows = s.groups.flatMap { it.rows }
     Scaffold(topBar = {
         Column {
             OutlinedTextField(s.query, onQuery, placeholder = { Text(stringResource(R.string.orders_search_hint)) }, leadingIcon = { Icon(Icons.Default.Search, null) },
@@ -53,13 +54,11 @@ fun OrdersListScreen(s: OrdersListUiState, onQuery: (String) -> Unit, onStatus: 
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (s.error != null) item { ErrorBanner(s.error, onRetry = onRefresh) }
-                if (s.items.isEmpty() && !s.isRefreshing) item { EmptyState(stringResource(R.string.orders_empty)) }
-                items(s.items, key = { it.id }) { o -> OrderCard(o) { onOpen(o.id) } }
-                item {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(onClick = onPrev, enabled = s.page > 1) { Text(stringResource(R.string.paging_prev)) }
-                        Text(s.page.toString(), style = MaterialTheme.typography.labelMedium)
-                        TextButton(onClick = onNext, enabled = s.items.size >= 20) { Text(stringResource(R.string.paging_next)) }
+                if (rows.isEmpty() && !s.isRefreshing) item { EmptyState(stringResource(R.string.orders_empty)) }
+                items(rows, key = { it.id }) { o -> OrderCard(o) { onOpen(o.id) } }
+                if (s.hasMore) item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                        TextButton(onClick = onLoadMore, enabled = !s.loadingMore) { Text(stringResource(R.string.paging_next)) }
                     }
                 }
             }
