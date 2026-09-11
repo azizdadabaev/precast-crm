@@ -45,10 +45,20 @@ object EtalonType {
     val rowAmount = Base.copy(fontSize = 13.sp, fontWeight = FontWeight.W700)
     val label = Base.copy(fontSize = 12.sp, fontWeight = FontWeight.W600)
     val meta = Base.copy(fontSize = 11.sp, fontWeight = FontWeight.W400)
+    /** The 11 sp step at 600 — a form field's label, a KPI footnote, a segment. [meta] is the same
+     *  size at 400, and eight call sites used to write out the `copy` by hand. */
+    val labelSm = Base.copy(fontSize = 11.sp, fontWeight = FontWeight.W600)
     val tag = Base.copy(fontSize = 10.sp, fontWeight = FontWeight.W600)
-    /** §2: a tag sitting on an indigo panel is set half a point larger. */
+    /**
+     * The 10.5/600 step. §2 gives it to a tag on an indigo panel, and the same half-point lift is
+     * what `OrderRow`'s debt line and `MonthHeader` are set in — the name says where it came from,
+     * not who is allowed to use it.
+     */
     val tagPanel = Base.copy(fontSize = 10.5.sp, fontWeight = FontWeight.W600)
     val caption = Base.copy(fontSize = 10.sp, fontWeight = FontWeight.W600)
+    /** The 10 sp step at 400 — a tile's caption under its figure, where [caption]'s 600 would
+     *  compete with the number above it. */
+    val captionLight = Base.copy(fontSize = 10.sp, fontWeight = FontWeight.W400)
 
     // ── Shim. Thirty files still name these; phases 2–5 move them onto the scale above and the
     // last task of phase 5 deletes the five lines. Re-pointing them here is what makes Manrope

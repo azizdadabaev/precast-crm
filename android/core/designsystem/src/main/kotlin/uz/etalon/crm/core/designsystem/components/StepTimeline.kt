@@ -12,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -55,7 +54,7 @@ fun StepTimeline(steps: List<TimelineStep>, modifier: Modifier = Modifier) =
                 if (s.caption != null) {
                     Text(
                         s.caption,
-                        style = EtalonType.caption.copy(fontWeight = FontWeight.W400),
+                        style = EtalonType.captionLight,
                         color = EtalonColors.ink3,
                         maxLines = 1,
                     )

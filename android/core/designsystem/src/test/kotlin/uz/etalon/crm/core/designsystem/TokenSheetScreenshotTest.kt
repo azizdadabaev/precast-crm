@@ -44,7 +44,9 @@ import java.util.Locale
  * style named with its size and weight beside the same figure; the eight radii in a row.
  *
  * Every colour here is read from [EtalonColors] and every hex is printed from that colour rather
- * than typed, so the sheet cannot drift from the tokens and passes `NoRawHexTest` itself.
+ * than typed, so the sheet cannot drift from the tokens. (Saying it "passes `NoRawHexTest`" would
+ * be vacuous — that lint scans `src/main` and this file is a test — the point is that the hexes
+ * printed here are computed from [EtalonColors], not transcribed.)
  *
  * Light only — design decision D6 gives the system one theme.
  */
@@ -99,9 +101,11 @@ private val STYLES = listOf(
     "rowAmount" to EtalonType.rowAmount,
     "label" to EtalonType.label,
     "meta" to EtalonType.meta,
+    "labelSm" to EtalonType.labelSm,
     "tag" to EtalonType.tag,
     "tagPanel" to EtalonType.tagPanel,
     "caption" to EtalonType.caption,
+    "captionLight" to EtalonType.captionLight,
 )
 
 private val RADII = listOf(
@@ -121,6 +125,8 @@ private val RADII = listOf(
  */
 private val SAMPLE = formatMoney(Money.parse("53268760.00"))
 
+// The mask drops the alpha byte. That is right for the 21 opaque tokens printed here; a
+// translucent one (onDarkMuted, onDarkDivider) would print as its RGB alone and is not on the sheet.
 private fun hex(c: Color): String = String.format(Locale.ROOT, "#%06X", c.toArgb() and 0xFFFFFF)
 
 private fun sizeLabel(sp: Float): String =

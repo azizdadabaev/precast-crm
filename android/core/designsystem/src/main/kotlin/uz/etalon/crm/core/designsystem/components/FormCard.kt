@@ -64,7 +64,7 @@ fun FormField(
     Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         Text(
             label,
-            style = EtalonType.meta.copy(fontWeight = FontWeight.W600),
+            style = EtalonType.labelSm,
             color = EtalonColors.ink2,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

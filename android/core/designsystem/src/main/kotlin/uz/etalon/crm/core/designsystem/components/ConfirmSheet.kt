@@ -19,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
@@ -42,7 +41,7 @@ fun ConfirmTile(caption: String, value: String, modifier: Modifier = Modifier) =
 ) {
     Text(
         caption,
-        style = EtalonType.caption.copy(fontWeight = FontWeight.W400),
+        style = EtalonType.captionLight,
         color = EtalonColors.onDarkMuted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -99,7 +98,7 @@ fun ConfirmSheet(
         ) {
             Text(
                 caption,
-                style = EtalonType.caption.copy(fontWeight = FontWeight.W400),
+                style = EtalonType.captionLight,
                 color = EtalonColors.onDarkMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
