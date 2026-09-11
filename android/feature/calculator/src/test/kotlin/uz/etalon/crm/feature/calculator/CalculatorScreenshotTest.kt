@@ -8,17 +8,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -56,6 +70,12 @@ private val NARROW_PHONE = 360.dp
 private val CARD_MARGIN = 16.dp
 /** §3.4: «gap 10 between cards». */
 private val CARD_GAP = 10.dp
+
+// The ⋯ row's own strings, as `strings.xml` writes them — these three tests drive the panel
+// rather than photographing it, so they find their nodes the way TalkBack does.
+private const val DECREASE = "Қўшимча балкани камайтириш"
+private const val INCREASE = "Қўшимча балка қўшиш"
+private const val START_BEAM = "Бош балка"
 
 /** [CalculatorScreen] carries no `CalculatorViewModel`; this one exists only because
  *  `totalsSheetContent` renders `TotalsSheet` and the client bar renders `ClientBar`
@@ -244,6 +264,73 @@ class CalculatorScreenshotTest {
     fun roomsFont13() {
         screen(state())
         rule.onRoot().captureRoboImage("screenshots/calculator_rooms_font13.png")
+    }
+
+    /**
+     * The ⋯ row's two stepper slots are 48 dp around 36 dp buttons, so they have to be tiled at
+     * the painted boundary rather than centred: centred they overlapped by 12 dp, and Compose
+     * hit-tests children in reverse order — so the right sixth of the painted «−» ADDED a beam to
+     * the quote. Both halves are asserted: the bounds do not overlap, and a tap just inside the
+     * «−»'s right edge decrements.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun stepperSlotsDoNotOverlap() {
+        val changes = mutableListOf<Int>()
+        rule.setContent {
+            EtalonTheme {
+                Column(Modifier.width(PHONE_WIDTH).background(EtalonColors.page).padding(CARD_MARGIN)) {
+                    RoomCard(
+                        row = recomputeRow(zal().copy(extraBeams = 2)), draft = zalDraft(), expanded = true,
+                        canMoveUp = false, canMoveDown = true,
+                        focusRequester = remember { FocusRequester() }, onNext = null,
+                        onNameChange = {}, onWidthChange = {}, onLengthChange = {},
+                        onBearingChange = {}, onCorrectionChange = {},
+                        onCyclePattern = {}, onToggleExpanded = {},
+                        onExtraBeams = { changes += it }, onForceStartBeam = {},
+                        onDuplicate = {}, onDelete = {}, onMoveUp = {}, onMoveDown = {},
+                        onApplyRateOverride = { _, _ -> }, onClearRateOverride = {},
+                    )
+                }
+            }
+        }
+        val minus = rule.onNodeWithContentDescription(DECREASE).getUnclippedBoundsInRoot()
+        val plus = rule.onNodeWithContentDescription(INCREASE).getUnclippedBoundsInRoot()
+        // Measured at 411 dp: «−» [85, 133], «+» [133, 181] — 48 dp each, meeting exactly at the
+        // boundary between the two painted 36 dp buttons.
+        assertTrue("«−» ends at ${minus.right}, «+» starts at ${plus.left}", minus.right <= plus.left)
+
+        val edge = with(rule.density) {
+            Offset((minus.right - 1.dp).toPx(), (minus.top + minus.height / 2).toPx())
+        }
+        rule.onRoot().performTouchInput { click(edge) }
+        assertEquals(listOf(1), changes)
+    }
+
+    /** «Бош балка» is a checkbox to a screen reader, not an unlabelled row: the navy fill is the
+     *  only thing that says the start beam is forced, and nothing else publishes it. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun startBeamToggleIsACheckbox() {
+        rule.setContent {
+            EtalonTheme {
+                var row by remember { mutableStateOf(recomputeRow(zal())) }
+                Column(Modifier.width(PHONE_WIDTH).background(EtalonColors.page).padding(CARD_MARGIN)) {
+                    RoomCard(
+                        row = row, draft = zalDraft(), expanded = true,
+                        canMoveUp = false, canMoveDown = true,
+                        focusRequester = remember { FocusRequester() }, onNext = null,
+                        onNameChange = {}, onWidthChange = {}, onLengthChange = {},
+                        onBearingChange = {}, onCorrectionChange = {},
+                        onCyclePattern = {}, onToggleExpanded = {},
+                        onExtraBeams = {}, onForceStartBeam = { row = recomputeRow(row.copy(forceStartBeam = it)) },
+                        onDuplicate = {}, onDelete = {}, onMoveUp = {}, onMoveDown = {},
+                        onApplyRateOverride = { _, _ -> }, onClearRateOverride = {},
+                    )
+                }
+            }
+        }
+        rule.onNodeWithText(START_BEAM).assertIsOff()
+        rule.onNodeWithText(START_BEAM).performClick()
+        rule.onNodeWithText(START_BEAM).assertIsOn()
     }
 
     /**

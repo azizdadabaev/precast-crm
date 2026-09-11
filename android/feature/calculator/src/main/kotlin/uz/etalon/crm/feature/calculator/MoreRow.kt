@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uz.etalon.crm.core.calc.SlabRow
@@ -52,6 +55,12 @@ private val CHECK_GLYPH = 12.dp
 /** The stepper's − and +: painted 36 dp, the size every square icon button in §2 paints. */
 private val STEPPER_BUTTON = 36.dp
 private val STEPPER_GLYPH = 16.dp
+/** Half of what a 48 dp slot adds around a 36 dp button — how far each of the pair's slots moves
+ *  outward so the two tile at the painted boundary instead of overlapping across it. */
+private val STEPPER_SLOT_SHIFT = (EtalonSpace.minTouch - STEPPER_BUTTON) / 2
+/** The same slack around a 40 dp [EtalonIconButton], used to bring the LAST button of a row flush
+ *  with the card's content edge — the ⋯ button's own trade in `RoomCard.kt`. */
+private val ICON_SLOT_SLACK = (EtalonSpace.minTouch - DELETE_BUTTON) / 2
 /** The cells' own side padding — §3.4 gives them none; 6 dp is what keeps the label off an `md`
  *  corner without eating the width the stepper needs at 360 dp. */
 private val CELL_PAD_H = 6.dp
@@ -76,10 +85,13 @@ private val WorkingValueStyle = EtalonType.labelSm
  * operator checks against the desk.
  *
  * D7 vs the drawn geometry, the [uz.etalon.crm.core.designsystem.components.SegmentedControl]
- * pattern: every control here paints §3.4's size and reserves 48 dp of touch around it, which
- * overhangs the 40 dp row — so the row's cells are painted with `background(colour, shape)`
- * rather than `clip(shape).background(colour)`. A clip is a graphics layer, and a layer clips
- * touch as well as paint, which would hand back the hit area D7 just bought.
+ * pattern: every control here paints §3.4's size and reserves 48 dp of touch around it — the
+ * toggle cell and the delete button through `minimumInteractiveComponentSize`, the stepper's two
+ * buttons through `requiredSize` — and that slot overhangs the 40 dp row, so the row's cells are
+ * painted with `background(colour, shape)` rather than `clip(shape).background(colour)`. A clip is
+ * a graphics layer, and a layer clips touch as well as paint, which would hand back the hit area
+ * D7 just bought. Where two slots would overlap they are tiled instead (see [StepperCell]): an
+ * overlap silently gives the shared band to whichever control is drawn last.
  */
 @Composable
 fun MoreRow(
@@ -118,6 +130,9 @@ fun MoreRow(
             size = DELETE_BUTTON,
             shape = EtalonShapes.md,
             tint = EtalonColors.red,
+            // Last in the row: its slot overhangs the card's end padding so the 40 dp button is
+            // painted flush with the content edge the ⋯ above it sits on.
+            modifier = Modifier.offset(x = ICON_SLOT_SLACK),
         )
     }
     // R3: this app reorders and duplicates rooms; the capture's card does neither, and the drag
@@ -141,6 +156,7 @@ fun MoreRow(
         EtalonIconButton(
             EtalonIcons.ArrowDown, stringResource(R.string.calc_action_move_down),
             onClick = onMoveDown, size = DELETE_BUTTON, shape = EtalonShapes.md, enabled = canMoveDown,
+            modifier = Modifier.offset(x = ICON_SLOT_SLACK),   // flush, as the delete button above
         )
     }
     row.result?.let { r ->
@@ -160,15 +176,16 @@ fun MoreRow(
  * is not [uz.etalon.crm.core.designsystem.components.CountStepper]: that one's label, two 48 dp
  * slots and 56 dp minimum figure cell need 152 dp before its label starts.
  *
- * The two buttons paint 36 dp and lay out 36 dp wide, with their 48 dp touch slot overhanging on
- * every side ([requiredSize] inside the painted box, the SegmentedControl pattern). The label
- * carries the `weight`, so when the column runs out of room the LABEL gives way — ellipsis first,
- * then nothing — and the figure and the two buttons are never the thing that goes.
+ * The two buttons paint 36 dp and lay out 36 dp wide, with their 48 dp touch slot overhanging
+ * ([requiredSize] inside the painted box, the SegmentedControl pattern). The label carries the
+ * `weight`, so when the column runs out of room the LABEL gives way — ellipsis first, then
+ * nothing — and the figure and the two buttons are never the thing that goes.
  *
- * The two touch slots are 36 dp apart and 48 dp wide, so they overlap by 12 dp down the middle;
- * Compose hit-tests children in reverse order, so that band belongs to «+». A tap that lands in
- * it was aimed at one of the two buttons either way — the alternative, a 12 dp gap between them,
- * costs exactly the width the «+Б» label needs at 360 dp.
+ * The two slots are TILED at the painted boundary rather than centred ([STEPPER_SLOT_SHIFT]):
+ * centred, they overlapped by 12 dp, and Compose hit-tests children in reverse order, so that
+ * band — the right sixth of the painted «−» — added a beam to the quote when it was tapped.
+ * Shifted, each slot borrows only inert neighbours: the figure on «−»'s left, the cell padding
+ * and the row's 6 dp gap on «+»'s right, where the toggle cell's own slot begins exactly.
  */
 @Composable
 private fun RowScope.StepperCell(label: String, value: Int, onChange: (Int) -> Unit) = Row(
@@ -189,22 +206,32 @@ private fun RowScope.StepperCell(label: String, value: Int, onChange: (Int) -> U
     )
     StepperButton(
         EtalonIcons.Minus, stringResource(R.string.calc_extra_beams_decrease),
-        enabled = value > 0, onClick = { onChange(value - 1) },
+        enabled = value > 0, slotShift = -STEPPER_SLOT_SHIFT, onClick = { onChange(value - 1) },
     )
     StepperButton(
         EtalonIcons.Plus, stringResource(R.string.calc_extra_beams_increase),
-        enabled = true, onClick = { onChange(value + 1) },
+        enabled = true, slotShift = STEPPER_SLOT_SHIFT, onClick = { onChange(value + 1) },
     )
 }
 
 /** §3.4 row 3's stepper buttons: 36 dp painted and laid out, 48 dp of touch overhanging it —
- *  [requiredSize] ignores the 36 dp box's constraints, so the hit slot spills 6 dp on each side
- *  instead of taking 48 dp of a 120 dp column. Nothing between it and the card clips. */
+ *  [requiredSize] ignores the 36 dp box's constraints, so the hit slot spills 12 dp to one side
+ *  instead of taking 48 dp of a 120 dp column. Nothing between it and the card clips.
+ *
+ *  [slotShift] moves the slot off centre so the pair tiles at the boundary between the two painted
+ *  buttons instead of overlapping across it — see [StepperCell]. */
 @Composable
-private fun StepperButton(icon: Int, contentDescription: String, enabled: Boolean, onClick: () -> Unit) =
+private fun StepperButton(
+    icon: Int,
+    contentDescription: String,
+    enabled: Boolean,
+    slotShift: Dp,
+    onClick: () -> Unit,
+) =
     Box(Modifier.size(STEPPER_BUTTON), contentAlignment = Alignment.Center) {
         Box(
             Modifier.requiredSize(EtalonSpace.minTouch)
+                .offset(x = slotShift)
                 .clickable(
                     enabled = enabled, role = Role.Button, indication = etalonRipple(),
                     interactionSource = remember { MutableInteractionSource() }, onClick = onClick,
@@ -236,6 +263,7 @@ private fun RowScope.ToggleCell(label: String, on: Boolean, onToggle: () -> Unit
     val fg = if (on) EtalonColors.onDark else EtalonColors.ink
     Row(
         Modifier.weight(1f)
+            .minimumInteractiveComponentSize()
             .height(MORE_CELL_HEIGHT)
             .background(if (on) EtalonColors.navy else EtalonColors.page, EtalonShapes.md)
             .then(

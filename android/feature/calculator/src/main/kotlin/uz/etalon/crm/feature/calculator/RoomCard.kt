@@ -557,11 +557,16 @@ private fun RateCell(row: SlabRow, enabled: Boolean, onClick: () -> Unit, modifi
         // oscillating. At a 1.3 font scale on a narrow column the rate stands alone.
         // (`BoxWithConstraints` would read this in one pass, but it is a `SubcomposeLayout` and
         // the InputRow measures its cells' intrinsic heights to make them share an edge.)
+        // 0 is "not measured yet", not "no room": the suffix is shown until a width says it does
+        // not fit, so the common case never pops it in a frame late.
         var cellWidth by remember(row.id) { mutableIntStateOf(0) }
-        val fits = enabled && cellWidth > 0 && with(LocalDensity.current) {
-            measurer.measure(valueText, RateValueStyle).size.width +
-                CELL_GAP.roundToPx() +
-                measurer.measure(suffix, suffixStyle).size.width <= cellWidth
+        val density = LocalDensity.current
+        val fits = enabled && remember(valueText, suffix, cellWidth, density) {
+            cellWidth == 0 || with(density) {
+                measurer.measure(valueText, RateValueStyle).size.width +
+                    CELL_GAP.roundToPx() +
+                    measurer.measure(suffix, suffixStyle).size.width <= cellWidth
+            }
         }
         Row(
             Modifier.fillMaxWidth().onSizeChanged { cellWidth = it.width },
