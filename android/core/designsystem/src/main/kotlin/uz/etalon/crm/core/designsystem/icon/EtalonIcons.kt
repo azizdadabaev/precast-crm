@@ -47,6 +47,9 @@ object EtalonIcons {
     val Save = R.drawable.ic_lu_save
     val Search = R.drawable.ic_lu_search
     val Send = R.drawable.ic_lu_send
+    /** Lucide has no plain "share": `share-2` is the three-node graph, and it is what replaces
+     *  `Icons.Filled.Share` on the calculator's send-the-quote action when phase 4 redraws it. */
+    val Share = R.drawable.ic_lu_share_2
     val SlidersHorizontal = R.drawable.ic_lu_sliders_horizontal
     val Trash = R.drawable.ic_lu_trash
     val TrendingUp = R.drawable.ic_lu_trending_up
@@ -64,7 +67,7 @@ object EtalonIcons {
         "ellipsis-vertical" to EllipsisVertical, "factory" to Factory, "grip-horizontal" to GripHorizontal,
         "house" to House, "images" to Images, "message-circle" to MessageCircle, "minus" to Minus,
         "navigation" to Navigation, "package" to Package, "pencil" to Pencil, "phone" to Phone,
-        "plus" to Plus, "save" to Save, "search" to Search, "send" to Send,
+        "plus" to Plus, "save" to Save, "search" to Search, "send" to Send, "share-2" to Share,
         "sliders-horizontal" to SlidersHorizontal, "trash" to Trash, "trending-up" to TrendingUp,
         "user" to User, "users" to Users, "wallet" to Wallet, "x" to X,
     )
