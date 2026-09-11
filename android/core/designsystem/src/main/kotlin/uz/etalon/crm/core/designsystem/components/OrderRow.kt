@@ -45,6 +45,10 @@ import uz.etalon.crm.core.model.OrderStatus
  * @param metaLine already composed by the caller, e.g. "№ 09−0003 · 78,7 м²".
  * @param debt the server's `remaining` — it counts write-offs, so it is never re-derived here.
  *   `null` or zero renders [paidLabel].
+ * @param paidLabel the settled wording, e.g. «тўланган». **Null draws no second line at all**, which
+ *   is a state of its own and not the same as "settled": a CANCELED order is owed nothing and has
+ *   paid nothing, so both «қолди …» and «тўланган» would be a claim about money that no longer
+ *   applies. Callers pass `debt = null, paidLabel = null` for that row.
  * @param debtLabel the caller's wording, e.g. `{ "қолди ${formatMoney(it)}" }`.
  * @param onDark the row sits inside a [NavySheet]; false is the white-card variant of `2b-home.png`.
  *
@@ -59,7 +63,7 @@ fun OrderRow(
     metaLine: String,
     total: Money,
     debt: Money?,
-    paidLabel: String,
+    paidLabel: String?,
     debtLabel: (Money) -> String,
     onDark: Boolean = true,
     onClick: () -> Unit,
@@ -120,20 +124,23 @@ fun OrderRow(
         Spacer(Modifier.width(EtalonSpace.rowGap))
         Column(horizontalAlignment = Alignment.End) {
             MoneyText(total, style = EtalonType.rowAmount, color = if (onDark) EtalonColors.onDark else EtalonColors.ink)
-            Spacer(Modifier.height(2.dp))
-            Text(
-                if (due != null) debtLabel(due) else paidLabel,
-                style = EtalonType.tagPanel,
-                maxLines = 1,
-                // A cut figure must not read as a smaller debt than it is: ellipsize, never clip.
-                overflow = TextOverflow.Ellipsis,
-                color = when {
-                    due != null && onDark -> EtalonColors.debtOnDark
-                    due != null -> EtalonColors.red
-                    onDark -> EtalonColors.paidOnDark
-                    else -> EtalonColors.green
-                },
-            )
+            val second = if (due != null) debtLabel(due) else paidLabel
+            if (second != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    second,
+                    style = EtalonType.tagPanel,
+                    maxLines = 1,
+                    // A cut figure must not read as a smaller debt than it is: ellipsize, never clip.
+                    overflow = TextOverflow.Ellipsis,
+                    color = when {
+                        due != null && onDark -> EtalonColors.debtOnDark
+                        due != null -> EtalonColors.red
+                        onDark -> EtalonColors.paidOnDark
+                        else -> EtalonColors.green
+                    },
+                )
+            }
         }
     }
 }

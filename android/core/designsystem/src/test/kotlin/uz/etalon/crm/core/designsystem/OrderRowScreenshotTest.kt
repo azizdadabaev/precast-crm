@@ -48,6 +48,7 @@ private val SEGMENTS = listOf(
 /**
  * @param debt null = settled, which is the only difference between the red line and the green one.
  * @param status null = the untagged variant Home's «Бугунги етказиш» sheet uses.
+ * @param paid null = no second line at all, the CANCELED row's state.
  */
 private data class Sample(
     val client: String,
@@ -55,22 +56,27 @@ private data class Sample(
     val meta: String,
     val total: String,
     val debt: String?,
+    val paid: String? = PAID,
 )
 
 /**
- * `2b-orders.png`'s own rows, with three additions the prototype's orders list does not show and a
- * reviewer needs: a CANCELED row (the fifth tag family), a client name long enough that the title
- * has to ellipsize while the amount column keeps its full width, and the untagged row Home's
- * «Бугунги етказиш» sheet draws, whose meta line stands alone where the tag row was.
+ * `2b-orders.png`'s own rows, with four additions the prototype's orders list does not show and a
+ * reviewer needs: a CANCELED row (the fifth tag family, and the one row with **no second line** —
+ * neither «қолди …» nor «тўланган» is true of an order that was called off), a second CANCELED row
+ * whose client name is long enough that the title has to ellipsize while the amount column keeps
+ * its full width, a LOADED row (the sixth family), and the untagged row Home's «Бугунги етказиш»
+ * sheet draws, whose meta line stands alone where the tag row was.
  */
 private val SAMPLES = listOf(
     Sample("Fergana Dom", OrderStatus.PLACED, "№ 09−0005 · 36,5 м²", "6210000.00", "6210000.00"),
     Sample("Tashkent Tower LLC", OrderStatus.IN_PRODUCTION, "№ 09−0004 · 108,2 м²", "18420000.00", "18420000.00"),
+    Sample("Navoi Build", OrderStatus.LOADED, "№ 09−0011 · 61,5 м²", "10746480.00", null),
     Sample("Yusupov & Sons", OrderStatus.DISPATCHED, "№ 09−0003 · 78,7 м²", "13350000.00", "7350000.00"),
     Sample("Karimov LLC", OrderStatus.DELIVERED, "№ 09−0001 · 26,9 м²", "4162500.00", null),
+    Sample("Stroy-Master", OrderStatus.CANCELED, "№ 09−0019 · 24,0 м²", "4773400.00", null, paid = null),
     Sample(
         "Andijon Qurilish Materiallari Savdo Markazi MChJ", OrderStatus.CANCELED,
-        "№ 08−0002 · 42,6 м²", "4947920.00", "4947920.00",
+        "№ 08−0002 · 42,6 м²", "4947920.00", null, paid = null,
     ),
     Sample("BuildPro Group", null, "Тошкент · Мирзо-Улуғбек · 42,6 м²", "7340840.00", "4340840.00"),
 )
@@ -83,7 +89,9 @@ private val SAMPLES = listOf(
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36], qualifiers = "w411dp-h1100dp")
+// Tall enough for both grounds to show every sample: the frame grows with SAMPLES, and a row that
+// falls off the bottom is a row no reviewer checks.
+@Config(sdk = [36], qualifiers = "w411dp-h1250dp")
 class OrderRowScreenshotTest {
     @get:Rule val rule = createComposeRule()
 
@@ -117,7 +125,7 @@ private fun Rows(onDark: Boolean) = SAMPLES.forEach { s ->
         metaLine = s.meta,
         total = Money.parse(s.total),
         debt = s.debt?.let(Money::parse),
-        paidLabel = PAID,
+        paidLabel = s.paid,
         debtLabel = debtLabel,
         onDark = onDark,
         onClick = {},
