@@ -82,7 +82,10 @@ fun ClientEditSheet(
     isOffline: Boolean,
     onDismiss: () -> Unit,
     onSaved: (String) -> Unit,
-    vm: HiltClientEditViewModel = hiltViewModel(),
+    // Declared as the base class so a screenshot test can hand it a plain [ClientEditViewModel]
+    // built from lambdas, exactly as `ClientEditViewModelTest` does; the default is still the
+    // Hilt one, so nothing about the running app changes.
+    vm: ClientEditViewModel = hiltViewModel<HiltClientEditViewModel>(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
     var picking by remember { mutableStateOf<RegionPick?>(null) }

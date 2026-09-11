@@ -1,10 +1,13 @@
 package uz.etalon.crm.core.designsystem.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,8 +42,11 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
  * dropdown, and D7's 48 dp thumb target comes from [minimumInteractiveComponentSize].
  *
  * The field draws no divider — it is used on its own today, not yet inside a [FormCard], and a
- * hairline under a lone field is a rule to nowhere. A card that adopts it later wraps it in its
- * own stack.
+ * hairline under a lone field is a rule to nowhere. Instead the value row wears §2's numeric-input
+ * skin: h40, page ground, hairline, radius `md`. Standing alone it needs a frame of its own —
+ * without one it is an 11 dp label over plain text with a small chevron, which on the calculator's
+ * client bar and on `ClientEditScreen` sits between two bordered inputs and reads as static text
+ * rather than as the control it is.
  *
  * [label] is a plain `String` rather than a `@StringRes Int` — a shared component must not name
  * another module's string resources. Moved out of `:feature:clients`' `ClientEditScreen.kt` in
@@ -48,8 +55,14 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
 @Composable
 fun RegionField(label: String, value: String, onOpen: () -> Unit) = FormField(label, divider = false) {
     Row(
-        Modifier.fillMaxWidth().minimumInteractiveComponentSize()
-            .clickable(role = Role.Button, onClick = onOpen),
+        Modifier.fillMaxWidth()
+            .minimumInteractiveComponentSize()
+            .height(40.dp)
+            .clip(EtalonShapes.md)
+            .background(EtalonColors.page)
+            .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.md)
+            .clickable(role = Role.Button, onClick = onOpen)
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
