@@ -361,7 +361,7 @@ Keep the existing default `sort = "asc"` on the filter so every existing caller 
 - [ ] **Step 1: Failing tests**
 ```kotlin
 @Test fun longDateIsWeekdayDayMonthInUzbekCyrillic() {
-    assertEquals("Сешанба, 9 сентябрь", formatLongDate(Instant.parse("2026-09-08T19:30:00Z"))) // 00:30 on the 9th in Tashkent
+    assertEquals("Чоршанба, 9 сентябрь", formatLongDate(Instant.parse("2026-09-08T19:30:00Z"))) // 00:30 on Wed 9 Sep 2026 in Tashkent — the capture's «Сешанба» is the designer's fiction; the real calendar wins
 }
 @Test fun monthYearHeader() { assertEquals("Сентябрь 2026", formatMonthYear(YearMonth.of(2026, 9))) }
 @Test fun orderNoDropsTheYearAndUsesANonBreakingHyphen() {
@@ -615,7 +615,7 @@ Delete `home_tile_today`, `home_tile_discrepancies`, `home_tile_receivables` (th
 
 - [ ] **Step 2: ViewModel** — `HomeTiles` and `HomeUiState` per Interfaces; `load()` fills them from `HomeSummary` (`collectedByMonth = s.collectedByMonth.map { it.collected }`, `recent = s.recent`). Extend `HomeViewModelTest` with one case: a summary carrying two recent orders and a 12-entry series yields `state.recent.size == 2` and `tiles.collectedByMonth.size == 12`; the Forbidden case still clears `recent`.
 
-- [ ] **Step 3: Failing screenshot test** — `HomeScreenshotTest.kt`, same harness as `OrderDetailScreenshotTest` (Robolectric NATIVE, sdk 36, `w411dp-h891dp`), fixtures that reproduce the capture: receivables `53 268 760` over 6 orders; collected `13 500 000`, trend `8.2` up, series of 12 with the last the highest; today = 3 rows (Tashkent Tower LLC «Тошкент, Юнусобод», 108,2 м², 18 420 000 / 18 420 000 IN_PRODUCTION; Yusupov & Sons «Бухоро, Эски шаҳар» 78,7 м² 13 350 000 / 7 350 000 DISPATCHED; BuildPro Group «Тошкент, Мирзо-Улуғбек» 42,6 м² 7 340 840 / 4 340 840 DISPATCHED); recent = 4 (Fergana Dom PLACED 4 сен 6 210 000 / 6 210 000; Tashkent Tower IN_PRODUCTION 2 сен; Yusupov DISPATCHED; Karimov LLC DELIVERED remaining 0). `now = Instant.parse("2026-09-08T19:30:00Z")` (Tuesday 9 Sep in Tashkent). Tests: `home_light`, `home_empty_light` (today empty, recent empty), `home_no_access_light` (`hasDashboardAccess=false`), `home_font13` (1.3). Baselines under `feature/home/screenshots/`.
+- [ ] **Step 3: Failing screenshot test** — `HomeScreenshotTest.kt`, same harness as `OrderDetailScreenshotTest` (Robolectric NATIVE, sdk 36, `w411dp-h891dp`), fixtures that reproduce the capture: receivables `53 268 760` over 6 orders; collected `13 500 000`, trend `8.2` up, series of 12 with the last the highest; today = 3 rows (Tashkent Tower LLC «Тошкент, Юнусобод», 108,2 м², 18 420 000 / 18 420 000 IN_PRODUCTION; Yusupov & Sons «Бухоро, Эски шаҳар» 78,7 м² 13 350 000 / 7 350 000 DISPATCHED; BuildPro Group «Тошкент, Мирзо-Улуғбек» 42,6 м² 7 340 840 / 4 340 840 DISPATCHED); recent = 4 (Fergana Dom PLACED 4 сен 6 210 000 / 6 210 000; Tashkent Tower IN_PRODUCTION 2 сен; Yusupov DISPATCHED; Karimov LLC DELIVERED remaining 0). `now = Instant.parse("2026-09-08T19:30:00Z")` (Wednesday 9 Sep 2026 in Tashkent; the subtitle reads «Чоршанба, 9 сентябрь»). Tests: `home_light`, `home_empty_light` (today empty, recent empty), `home_no_access_light` (`hasDashboardAccess=false`), `home_font13` (1.3). Baselines under `feature/home/screenshots/`.
 
 - [ ] **Step 4: The screen**
 
