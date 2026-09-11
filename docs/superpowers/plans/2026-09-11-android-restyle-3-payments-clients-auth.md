@@ -134,7 +134,9 @@ Add `"totalBooked"` to `CLIENT_SORT_FIELDS`. In the paginated branch: when `sort
 
 ---
 
-### Task 2: Design system — nav-pill clearance, carried components, phase-2 migration
+### Task 2: Design system — carried components (clearance and text field moved to phase 4)
+
+> **Amendment (2026-09-11):** the owner pulled the calculator (phase 4) forward, ahead of this phase. Phase 4's Task 1 now lands the inset-aware nav-pill clearance (`LocalNavPillInset`, `navPillPadding`, `navPillContentPadding`, `StickyActionBar(clearNavPill)`, `StickyActionBarDefaults.height`, deletion of `underNav`/`underStickyBar`, the phase-2 migration) and `EtalonTextField`/`EtalonTextFieldDefaults`. When this phase runs, treat those as ALREADY PRESENT: this task keeps only `OrderRow.trailing`, `SegmentedControl(fill)`, `TonalButton`, the compact-button geometry, `BrandMark`, «Лойиҳа», the grouped keypad echo, and the tests for them. Ruling R2 and the Global Constraint on clearance describe the state phase 4 leaves behind.
 
 **Files:**
 - Create: `core/designsystem/.../components/NavPill.kt`, `BrandMark.kt`, `EtalonTextField.kt`
@@ -312,6 +314,7 @@ fun EtalonTextField(value, onValueChange, modifier, placeholder: String? = null,
 - Grouped keypad echo (Task 2).
 - `TonalButton` for «Кўриб чиқиш» / «Ҳал қилиш» (Tasks 2, 4, 6).
 - `BrandMark` shared by Home and Login (Tasks 2, 9).
+- From the phase-2 whole-branch review: ChangePin's pill clearance and IME behaviour (Task 9 — `imePadding()` on its column); Roborazzi baselines for `AccountSheet` and `OutboxSheet` (Task 2 records them as `ds_account_sheet_light` / `ds_outbox_sheet_light` via `captureScreenRoboImage` if phase 3 touches those files, else Task 10 adds them in `:app`); the owner-visible items to confirm or restore before this phase closes — the receivables card's missing sparkline (R2), the order detail's per-room subtotal line and the client phone as text (Task 8 M5), and the month names' Russian-Cyrillic forms («сентябрь», as the captures draw) — asked of the owner, not changed here.
 - Phase-5 items stay out: `«Юкланди деб белгилаш»` ellipsis, the driver screens, `Lightbox` scrim judgement.
 
 ## Self-review
