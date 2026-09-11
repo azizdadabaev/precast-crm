@@ -30,14 +30,18 @@
     <string name="calc_cell_placeholder">0,00</string>
     <!-- An unnamed room, §3.4 row 1 — the name field is borderless, so this is what stands in it. -->
     <string name="calc_room_placeholder">Хона</string>
-    <!-- The ⋯ panel (§3.4 row 3) -->
-    <string name="calc_more_extra_beams">+Б қўшимча</string>
+    <!-- The ⋯ panel (§3.4 row 3). The stepper's label is the short «+Б»: its cell is one `1fr`
+         column of a three-column row — 120 dp on a 360 dp phone — and the figure and the two
+         buttons come first. The two content descriptions carry the full wording. -->
+    <string name="calc_more_extra_beams">+Б</string>
+    <string name="calc_extra_beams_decrease">Қўшимча балкани камайтириш</string>
+    <string name="calc_extra_beams_increase">Қўшимча балка қўшиш</string>
     <string name="calc_more_start_beam">Бош балка</string>
     <string name="calc_out_monolith_length">Монолит узунлиги</string>
     <string name="calc_out_beam_length">Балка узунлиги</string>
     <string name="calc_out_pitches">Қадам</string>
     <string name="calc_out_block_rows">Қатор</string>
-    <string name="calc_out_blocks_per_row">Гишт/Қатор</string>
+    <string name="calc_out_blocks_per_row">Ғишт/қатор</string>
     <!-- The four-column result strip and the formula footer, §3.4 rows 4–5. `calc_footer_extras`
          keeps its leading space: it is appended to the м² leg of the same sentence. -->
     <string name="calc_out_monolith">Монолит Б</string>
@@ -51,6 +55,8 @@
     <!-- Quoted so aapt keeps the leading space: this is appended to the м² leg above, and without
          it the footer reads «38,28 м²+ 440 000 балка». -->
     <string name="calc_footer_extras">" + %1$s балка"</string>
+    <!-- An extras-only room has no м² leg for the beams to be added to (§4.1 rule 9). -->
+    <string name="calc_footer_beams_only">%1$s балка</string>
     <!-- The rate cell, §3.4 row 2: «Нарх/м²» over «140k · авто» / «140k · қўлда». -->
     <string name="calc_rate_cell">Нарх/м²</string>
     <string name="calc_rate_manual_suffix">қўлда</string>

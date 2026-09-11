@@ -7,11 +7,14 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +26,7 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,11 +37,14 @@ import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -82,6 +89,9 @@ private val CHIP_HEIGHT = 26.dp
 private val CHIP_PAD_H = 10.dp
 /** §3.4 row 1: «more button 28dp pill (⋯)». */
 private val MORE_BUTTON = 28.dp
+/** How far the ⋯ pill's 48 dp touch slot overhangs the card's end padding so the 28 dp pill lands
+ *  flush with the content edge: half of what the slot adds around it. */
+private val MORE_SLOT_SLACK = (EtalonSpace.minTouch - MORE_BUTTON) / 2
 /** §3.4 row 1: name, chip and ⋯ sit in one row; the gap is not given, so it is the grid's `xs`. */
 private val TITLE_GAP = EtalonSpace.xs
 
@@ -231,8 +241,13 @@ fun RoomCard(
         }
 
         // ── 2. InputRow ───────────────────────────────────────────
+        //
+        // `IntrinsicSize.Min` + `fillMaxHeight()` on every cell is what makes the five share one
+        // edge, as the capture draws them: each cell's own content is a different height (the
+        // 15/700 lavender pair is taller than the 13/600 hairline three), and without this they
+        // paint 45 and 36 floating inside their 48 dp slots.
         Row(
-            Modifier.fillMaxWidth().padding(top = INPUT_TOP),
+            Modifier.fillMaxWidth().padding(top = INPUT_TOP).height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(INPUT_GAP),
         ) {
             DimCell(
@@ -274,7 +289,9 @@ fun RoomCard(
             )
             RateCell(
                 row = row,
-                enabled = r != null,
+                // An extras-only room is not priced by the m² at all (§4.1 rule 9), so it has no
+                // rate to show and nothing for the rate sheet to override.
+                enabled = r != null && !r.isExtrasOnly,
                 onClick = { showRateSheet = true },
                 modifier = Modifier.weight(W_RATE),
             )
@@ -367,7 +384,14 @@ private fun patternLabel(p: Pattern): Int = when (p) {
  */
 @Composable
 private fun MoreButton(expanded: Boolean, onClick: () -> Unit) {
-    Box(Modifier.minimumInteractiveComponentSize(), contentAlignment = Alignment.Center) {
+    // The 48 dp slot is 10 dp wider than the pill on each side, which would leave the pill sitting
+    // 10 dp inside the card's content edge; the capture draws it flush. The slot is nudged out to
+    // overhang the card's 14 dp end padding instead — the SegmentedControl trade, in the other
+    // axis: the touch area keeps its 48 dp and the paint lands where the design puts it.
+    Box(
+        Modifier.offset(x = MORE_SLOT_SLACK).minimumInteractiveComponentSize(),
+        contentAlignment = Alignment.Center,
+    ) {
         Box(
             Modifier.size(MORE_BUTTON)
                 .clip(EtalonShapes.pill)
@@ -398,7 +422,7 @@ private fun DimCell(
     actions: KeyboardActions,
     modifier: Modifier = Modifier,
 ) = Column(
-    modifier.minimumInteractiveComponentSize()
+    modifier.minimumInteractiveComponentSize().fillMaxHeight()
         .clip(EtalonShapes.md)
         .background(EtalonColors.lavenderBg)
         .padding(horizontal = DIM_PAD_H, vertical = DIM_PAD_V),
@@ -421,7 +445,7 @@ private fun HairCell(
     focusManager: FocusManager,
     modifier: Modifier = Modifier,
 ) = Column(
-    modifier.minimumInteractiveComponentSize()
+    modifier.minimumInteractiveComponentSize().fillMaxHeight()
         .clip(EtalonShapes.md)
         .background(EtalonColors.page)
         .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.md)
@@ -497,7 +521,7 @@ private fun RateCell(row: SlabRow, enabled: Boolean, onClick: () -> Unit, modifi
     val fg = if (overridden) EtalonColors.onDark else EtalonColors.ink
     val captionColor = if (overridden) EtalonColors.onDark.copy(alpha = SUFFIX_ALPHA) else EtalonColors.ink2
     Column(
-        modifier.minimumInteractiveComponentSize()
+        modifier.minimumInteractiveComponentSize().fillMaxHeight()
             .clip(EtalonShapes.md)
             .background(if (overridden) EtalonColors.indigo else EtalonColors.page)
             .then(
@@ -518,21 +542,35 @@ private fun RateCell(row: SlabRow, enabled: Boolean, onClick: () -> Unit, modifi
             )
             EtalonIcon(EtalonIcons.ChevronDown, null, size = RATE_CHEVRON, tint = captionColor)
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val rate = appliedRate(row)
-            Text(if (enabled) formatRateK(rate) else DASH, style = RateValueStyle, color = fg, maxLines = 1)
-            if (enabled) {
+        val rate = appliedRate(row)
+        val suffix = stringResource(
+            R.string.calc_rate_suffix,
+            stringResource(if (overridden) R.string.calc_rate_manual_suffix else R.string.calc_pattern_auto_suffix),
+        )
+        val suffixStyle = EtalonType.caption
+        val valueText = if (enabled) formatRateK(rate) else DASH
+        val measurer = rememberTextMeasurer()
+        // «· авто» is a whole word or nothing: ellipsized to «· а…» it reads as a truncated value,
+        // and the figure beside it is the number the quote turns on. So the two runs are measured
+        // against the width this row actually got — the row is `fillMaxWidth`, so that width is
+        // the cell's and does not depend on what is inside it, which is what keeps this from
+        // oscillating. At a 1.3 font scale on a narrow column the rate stands alone.
+        // (`BoxWithConstraints` would read this in one pass, but it is a `SubcomposeLayout` and
+        // the InputRow measures its cells' intrinsic heights to make them share an edge.)
+        var cellWidth by remember(row.id) { mutableIntStateOf(0) }
+        val fits = enabled && cellWidth > 0 && with(LocalDensity.current) {
+            measurer.measure(valueText, RateValueStyle).size.width +
+                CELL_GAP.roundToPx() +
+                measurer.measure(suffix, suffixStyle).size.width <= cellWidth
+        }
+        Row(
+            Modifier.fillMaxWidth().onSizeChanged { cellWidth = it.width },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(valueText, style = RateValueStyle, color = fg, maxLines = 1)
+            if (fits) {
                 Spacer(Modifier.width(CELL_GAP))
-                Text(
-                    stringResource(
-                        R.string.calc_rate_suffix,
-                        stringResource(
-                            if (overridden) R.string.calc_rate_manual_suffix else R.string.calc_pattern_auto_suffix,
-                        ),
-                    ),
-                    style = EtalonType.caption, color = fg.copy(alpha = SUFFIX_ALPHA),
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
+                Text(suffix, style = suffixStyle, color = fg.copy(alpha = SUFFIX_ALPHA), maxLines = 1)
             }
         }
     }
@@ -627,7 +665,8 @@ private fun FooterRow(row: SlabRow, r: SlabResult?) = Row(
     val extrasLine = if (extras.isZero) "" else stringResource(R.string.calc_footer_extras, formatMoney(extras))
     val formula = when {
         r == null -> ""
-        r.isExtrasOnly -> extrasLine.trimStart()
+        // No m² leg to add to, so the beams are the whole line rather than an addition to it.
+        r.isExtrasOnly -> stringResource(R.string.calc_footer_beams_only, formatMoney(extras))
         else -> stringResource(
             R.string.calc_footer_formula,
             formatMoney(tierPriceMoney(appliedRate(row))),

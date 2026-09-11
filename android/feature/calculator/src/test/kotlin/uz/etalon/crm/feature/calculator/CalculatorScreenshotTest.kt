@@ -1,15 +1,19 @@
 package uz.etalon.crm.feature.calculator
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,7 +51,11 @@ private val SHELL_NAV_PILL_INSET = 84.dp
  *  `CalculatorScreen`'s own 16 dp margin on each side, on the page ground the screen draws them
  *  on — so a reviewer can hold `3a-calculator.png` beside them at the same scale. */
 private val PHONE_WIDTH = 411.dp
+/** The narrowest phone the app targets — where the ⋯ row's three columns are tightest. */
+private val NARROW_PHONE = 360.dp
 private val CARD_MARGIN = 16.dp
+/** §3.4: «gap 10 between cards». */
+private val CARD_GAP = 10.dp
 
 /** [CalculatorScreen] carries no `CalculatorViewModel`; this one exists only because
  *  `totalsSheetContent` renders `TotalsSheet` and the client bar renders `ClientBar`
@@ -126,27 +134,37 @@ class CalculatorScreenshotTest {
         }
     }
 
-    /** One card alone, on the page ground at the width the screen gives it. */
-    private fun card(row: SlabRow, draft: RoomDraft, expanded: Boolean) {
+    /** One card alone, on the page ground at the width the screen gives it. [width] is the phone,
+     *  not the card: the helper insets it by the screen's own 16 dp margin either side. */
+    private fun card(row: SlabRow, draft: RoomDraft, expanded: Boolean, width: Dp = PHONE_WIDTH) =
+        cards(width) { OneCard(row, draft, expanded) }
+
+    /** The same frame with more than one card in it, `spacedBy(10)` as §3.4 stacks them. */
+    private fun cards(width: Dp = PHONE_WIDTH, content: @Composable ColumnScope.() -> Unit) {
         rule.setContent {
             EtalonTheme {
-                Box(
-                    Modifier.width(PHONE_WIDTH).background(EtalonColors.page).padding(CARD_MARGIN),
-                ) {
-                    RoomCard(
-                        row = row, draft = draft, expanded = expanded,
-                        canMoveUp = false, canMoveDown = true,
-                        focusRequester = remember { FocusRequester() }, onNext = null,
-                        onNameChange = {}, onWidthChange = {}, onLengthChange = {},
-                        onBearingChange = {}, onCorrectionChange = {},
-                        onCyclePattern = {}, onToggleExpanded = {},
-                        onExtraBeams = {}, onForceStartBeam = {},
-                        onDuplicate = {}, onDelete = {}, onMoveUp = {}, onMoveDown = {},
-                        onApplyRateOverride = { _, _ -> }, onClearRateOverride = {},
-                    )
-                }
+                Column(
+                    Modifier.width(width).background(EtalonColors.page).padding(CARD_MARGIN),
+                    verticalArrangement = Arrangement.spacedBy(CARD_GAP),
+                    content = content,
+                )
             }
         }
+    }
+
+    @Composable
+    private fun OneCard(row: SlabRow, draft: RoomDraft, expanded: Boolean) {
+        RoomCard(
+            row = row, draft = draft, expanded = expanded,
+            canMoveUp = false, canMoveDown = true,
+            focusRequester = remember { FocusRequester() }, onNext = null,
+            onNameChange = {}, onWidthChange = {}, onLengthChange = {},
+            onBearingChange = {}, onCorrectionChange = {},
+            onCyclePattern = {}, onToggleExpanded = {},
+            onExtraBeams = {}, onForceStartBeam = {},
+            onDuplicate = {}, onDelete = {}, onMoveUp = {}, onMoveDown = {},
+            onApplyRateOverride = { _, _ -> }, onClearRateOverride = {},
+        )
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp")
@@ -175,6 +193,39 @@ class CalculatorScreenshotTest {
         )
         card(row, zalDraft(), expanded = false)
         rule.onRoot().captureRoboImage("screenshots/calculator_room_override_light.png")
+    }
+
+    /** The ⋯ row on the narrowest phone the app supports: the «+Б» cell is one `1fr` column of
+     *  `1fr 1fr auto`, 120 dp here against 145 at 411 — the label, the figure and both buttons
+     *  have to survive it. */
+    @Test @Config(qualifiers = "w360dp-h800dp")
+    fun roomMoreW360Light() {
+        card(recomputeRow(zal().copy(extraBeams = 2)), zalDraft(), expanded = true, width = NARROW_PHONE)
+        rule.onRoot().captureRoboImage("screenshots/calculator_room_more_w360_light.png")
+    }
+
+    /** The ⋯ row at 130 %: the «+Б» label may ellipsize away entirely, the figure and the two
+     *  buttons may not. */
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
+    fun roomMoreFont13() {
+        card(recomputeRow(zal().copy(extraBeams = 2)), zalDraft(), expanded = true)
+        rule.onRoot().captureRoboImage("screenshots/calculator_room_more_font13.png")
+    }
+
+    /**
+     * The two states the «Зал» frames cannot show: an extras-only room (§4.1 rule 9 — no chip, no
+     * м² figures, the beam line alone, and the «cannot be saved» notice) over a room nobody has
+     * typed into yet (rule 10 — every figure and the subtotal a dash, no chip).
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun roomStatesLight() {
+        val extrasOnly = recomputeRow(SlabRow(id = "x", name = "Қўшимча балка", innerWidth = 4.0, extraBeams = 3))
+        val empty = SlabRow(id = "e", name = "Хона 2")
+        cards {
+            OneCard(extrasOnly, RoomDraft(width = "4"), expanded = false)
+            OneCard(empty, RoomDraft(), expanded = false)
+        }
+        rule.onRoot().captureRoboImage("screenshots/calculator_room_states_light.png")
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)

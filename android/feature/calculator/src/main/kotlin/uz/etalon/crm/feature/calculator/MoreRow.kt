@@ -8,24 +8,26 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
 import uz.etalon.crm.core.calc.SlabRow
-import uz.etalon.crm.core.designsystem.components.CountStepper
 import uz.etalon.crm.core.designsystem.components.EtalonIconButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.icon.EtalonIcon
@@ -47,28 +49,37 @@ private val DELETE_BUTTON = 40.dp
 private val CHECKBOX = 16.dp
 private val CHECKBOX_RADIUS = 5.dp
 private val CHECK_GLYPH = 12.dp
-/** The toggle cell's own side padding — §3.4 gives the cell no padding of its own; this is
- *  `Таяниш`'s 7 dp rounded up to the grid so the label clears the pill's corner. */
-private val TOGGLE_PAD_H = EtalonSpace.sm
+/** The stepper's − and +: painted 36 dp, the size every square icon button in §2 paints. */
+private val STEPPER_BUTTON = 36.dp
+private val STEPPER_GLYPH = 16.dp
+/** The cells' own side padding — §3.4 gives them none; 6 dp is what keeps the label off an `md`
+ *  corner without eating the width the stepper needs at 360 dp. */
+private val CELL_PAD_H = 6.dp
 /** The gap between the ⋯ panel and the InputRow above it — §3.4's own inter-row 10. */
 private val MORE_TOP = 10.dp
 
 /** §3.4 row 3: the toggle's label, 13/600 — the same step `Таяниш`'s value is set in. */
 private val ToggleLabelStyle = EtalonType.body.copy(fontWeight = FontWeight.W600)
+/** §3.4 row 3: the stepper's «+Б» label, 11/600 — the scale's `labelSm`, exactly. */
+private val StepperLabelStyle = EtalonType.labelSm
+/** §3.4 row 3: the stepper's figure, «15/700» — the same step the card's cells are set in
+ *  (`RoomCard.kt`'s `CellValueStyle`; each file names its own, both off `sectionTitle`). */
+private val StepperValueStyle = EtalonType.sectionTitle.copy(fontSize = 15.sp)
 /** R4: the working-out pairs are `meta` — 11/400 for the name, 11/600 for the figure, so the
  *  numbers still read as numbers in a block of eleven-point grey. */
 private val WorkingValueStyle = EtalonType.labelSm
 
 /**
- * What ⋯ opens on a room card: the engine inputs §3.4 puts here (+Б қўшимча, Бош балка, delete),
- * this app's own duplicate and reorder (plan ruling R3), and the engine's read-only working-out
- * (ruling R4) — the five numbers an operator checks against the desk.
+ * What ⋯ opens on a room card: §3.4's own `1fr 1fr auto` row — the «+Б» stepper cell, the
+ * «Бош балка» toggle and delete, all h40 with a 6 dp gap — then this app's duplicate and reorder
+ * (plan ruling R3) and the engine's read-only working-out (ruling R4), the five numbers an
+ * operator checks against the desk.
  *
- * §3.4 draws the first three as one `1fr 1fr auto` row. That grid cannot survive D7: two
- * [EtalonIconButton]s reserve 48 dp each whatever they paint, so a 1fr column at this card's
- * 351 dp of inner width leaves the stepper 145 dp for a label, a value and two buttons that need
- * 214 dp between them. The controls therefore stack as three h40 rows of the same 6 dp gap, in
- * §3.4's own order, rather than being squeezed into one — recorded in the task report.
+ * D7 vs the drawn geometry, the [uz.etalon.crm.core.designsystem.components.SegmentedControl]
+ * pattern: every control here paints §3.4's size and reserves 48 dp of touch around it, which
+ * overhangs the 40 dp row — so the row's cells are painted with `background(colour, shape)`
+ * rather than `clip(shape).background(colour)`. A clip is a graphics layer, and a layer clips
+ * touch as well as paint, which would hand back the hit area D7 just bought.
  */
 @Composable
 fun MoreRow(
@@ -85,17 +96,20 @@ fun MoreRow(
     Modifier.fillMaxWidth().padding(top = MORE_TOP),
     verticalArrangement = Arrangement.spacedBy(MORE_GAP),
 ) {
-    CountStepper(
-        label = stringResource(R.string.calc_more_extra_beams),
-        value = row.extraBeams,
-        onChange = { onExtraBeams(it) },
-    )
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MORE_GAP)) {
+    Row(
+        Modifier.fillMaxWidth().height(MORE_CELL_HEIGHT),
+        horizontalArrangement = Arrangement.spacedBy(MORE_GAP),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StepperCell(
+            label = stringResource(R.string.calc_more_extra_beams),
+            value = row.extraBeams,
+            onChange = onExtraBeams,
+        )
         ToggleCell(
             label = stringResource(R.string.calc_more_start_beam),
             on = row.forceStartBeam,
             onToggle = { onForceStartBeam(!row.forceStartBeam) },
-            modifier = Modifier.weight(1f),
         )
         EtalonIconButton(
             EtalonIcons.Trash,
@@ -141,37 +155,119 @@ fun MoreRow(
 }
 
 /**
- * §3.4 row 3: «`Бош балка` toggle (page bg/hairline; on = navy bg, white, checkbox 16dp radius 5
- * with check)». The whole cell is the target — a 16 dp box is not one — and it keeps its 48 dp
- * slot (D7) around the 40 dp it paints.
+ * §3.4 row 3: «`+Б қўшимча` numeric stepper cell (label left, value right 15/700)» — one `1fr`
+ * column of the row, so it has 145 dp at 411 dp of screen and 120 dp at 360 dp. That is why this
+ * is not [uz.etalon.crm.core.designsystem.components.CountStepper]: that one's label, two 48 dp
+ * slots and 56 dp minimum figure cell need 152 dp before its label starts.
+ *
+ * The two buttons paint 36 dp and lay out 36 dp wide, with their 48 dp touch slot overhanging on
+ * every side ([requiredSize] inside the painted box, the SegmentedControl pattern). The label
+ * carries the `weight`, so when the column runs out of room the LABEL gives way — ellipsis first,
+ * then nothing — and the figure and the two buttons are never the thing that goes.
+ *
+ * The two touch slots are 36 dp apart and 48 dp wide, so they overlap by 12 dp down the middle;
+ * Compose hit-tests children in reverse order, so that band belongs to «+». A tap that lands in
+ * it was aimed at one of the two buttons either way — the alternative, a 12 dp gap between them,
+ * costs exactly the width the «+Б» label needs at 360 dp.
  */
 @Composable
-private fun ToggleCell(label: String, on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+private fun RowScope.StepperCell(label: String, value: Int, onChange: (Int) -> Unit) = Row(
+    Modifier.weight(1f)
+        .height(MORE_CELL_HEIGHT)
+        .background(EtalonColors.page, EtalonShapes.md)
+        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.md)
+        .padding(horizontal = CELL_PAD_H),
+    verticalAlignment = Alignment.CenterVertically,
+) {
+    Text(
+        label, style = StepperLabelStyle, color = EtalonColors.ink2,
+        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+    )
+    Text(
+        value.toString(), style = StepperValueStyle, color = EtalonColors.ink, maxLines = 1,
+        modifier = Modifier.padding(horizontal = EtalonSpace.xs),
+    )
+    StepperButton(
+        EtalonIcons.Minus, stringResource(R.string.calc_extra_beams_decrease),
+        enabled = value > 0, onClick = { onChange(value - 1) },
+    )
+    StepperButton(
+        EtalonIcons.Plus, stringResource(R.string.calc_extra_beams_increase),
+        enabled = true, onClick = { onChange(value + 1) },
+    )
+}
+
+/** §3.4 row 3's stepper buttons: 36 dp painted and laid out, 48 dp of touch overhanging it —
+ *  [requiredSize] ignores the 36 dp box's constraints, so the hit slot spills 6 dp on each side
+ *  instead of taking 48 dp of a 120 dp column. Nothing between it and the card clips. */
+@Composable
+private fun StepperButton(icon: Int, contentDescription: String, enabled: Boolean, onClick: () -> Unit) =
+    Box(Modifier.size(STEPPER_BUTTON), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.requiredSize(EtalonSpace.minTouch)
+                .clickable(
+                    enabled = enabled, role = Role.Button, indication = etalonRipple(),
+                    interactionSource = remember { MutableInteractionSource() }, onClick = onClick,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier.size(STEPPER_BUTTON)
+                    .background(EtalonColors.surface, EtalonShapes.sm)
+                    .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.sm),
+                contentAlignment = Alignment.Center,
+            ) {
+                EtalonIcon(
+                    icon, contentDescription, size = STEPPER_GLYPH,
+                    tint = if (enabled) EtalonColors.ink else EtalonColors.ink3,
+                )
+            }
+        }
+    }
+
+/**
+ * §3.4 row 3: «`Бош балка` toggle (page bg/hairline; on = navy bg, white, checkbox 16dp radius 5
+ * with check)». The whole cell is the target — a 16 dp box is not one — and `toggleable` is what
+ * publishes its state: the box is the only thing that says the start beam is forced, and a screen
+ * reader cannot see it (the same reason `SegmentedControl` uses `selectable`).
+ */
+@Composable
+private fun RowScope.ToggleCell(label: String, on: Boolean, onToggle: () -> Unit) {
     val fg = if (on) EtalonColors.onDark else EtalonColors.ink
     Row(
-        modifier.minimumInteractiveComponentSize()
+        Modifier.weight(1f)
             .height(MORE_CELL_HEIGHT)
-            .clip(EtalonShapes.md)
-            .background(if (on) EtalonColors.navy else EtalonColors.page)
+            .background(if (on) EtalonColors.navy else EtalonColors.page, EtalonShapes.md)
             .then(
-                if (on) Modifier else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.md),
+                if (on) Modifier
+                else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.md),
             )
-            .clickable(
-                role = Role.Switch, indication = etalonRipple(onDark = on),
-                interactionSource = remember { MutableInteractionSource() }, onClick = onToggle,
+            .toggleable(
+                value = on,
+                onValueChange = { onToggle() },
+                role = Role.Checkbox,
+                indication = etalonRipple(onDark = on),
+                interactionSource = remember { MutableInteractionSource() },
             )
-            .padding(horizontal = TOGGLE_PAD_H),
+            .padding(horizontal = CELL_PAD_H),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(EtalonSpace.sm),
+        horizontalArrangement = Arrangement.spacedBy(EtalonSpace.xs),
     ) {
-        Text(label, style = ToggleLabelStyle, color = fg, maxLines = 1, modifier = Modifier.weight(1f))
+        Text(
+            label, style = ToggleLabelStyle, color = fg, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
         Box(
             Modifier.size(CHECKBOX)
-                .clip(RoundedCornerShape(CHECKBOX_RADIUS))
-                .background(if (on) EtalonColors.onDark else EtalonColors.surface)
+                .background(
+                    if (on) EtalonColors.onDark else EtalonColors.surface,
+                    RoundedCornerShape(CHECKBOX_RADIUS),
+                )
                 .then(
                     if (on) Modifier
-                    else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, RoundedCornerShape(CHECKBOX_RADIUS)),
+                    else Modifier.border(
+                        EtalonSpace.hairline, EtalonColors.surfaceBorder, RoundedCornerShape(CHECKBOX_RADIUS),
+                    ),
                 ),
             contentAlignment = Alignment.Center,
         ) {
