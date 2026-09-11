@@ -1,6 +1,7 @@
 package uz.etalon.crm.core.designsystem.components
 
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -64,12 +65,22 @@ object EtalonTextFieldDefaults {
  * [EtalonShapes.md], so no screen has to remember the token list — and so the global constraint
  * "no `OutlinedTextField` with default colours" has somewhere to point.
  *
- * [SearchField] stays its own thing: it is a 40 dp pill with a leading glyph, not a form field.
+ * **This is the form field, not the table cell.** [FIELD_MIN_HEIGHT] is a floor, not the drawn
+ * height: with [EtalonType.body] and M3's own content padding the field measures ~56 dp, and the
+ * overload wrapped here takes no `contentPadding` to shrink it. §3.4's 40 dp numeric cells — the
+ * room card's ЭНИ/БЎЙИ and the rate sheet's figures — are [androidx.compose.foundation.text.BasicTextField]s
+ * drawn to their own geometry, the way [SearchField]'s 40 dp pill already is.
  *
  * @param prefix a fixed run before the value that is not part of it — «+998 » on a phone number.
  *   It is drawn, never typed, so [onValueChange] never sees it.
  * @param supportingText the line under the field. With [isError] it is the reason, in `red`;
  *   without, a hint in `ink3`.
+ * @param enabled false greys the text to `ink3` and keeps the same `page` fill — this app disables
+ *   a field to say "not yet", never "never", and a greyed-out container reads as broken.
+ * @param readOnly the value is shown and selectable but not editable: a field waiting on a picker,
+ *   not a disabled one.
+ * @param keyboardActions what the IME action key does; pair it with [keyboardOptions]'s
+ *   `imeAction` when a field hands focus on to the next one.
  */
 @Composable
 fun EtalonTextField(
@@ -78,7 +89,10 @@ fun EtalonTextField(
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     singleLine: Boolean = true,
+    enabled: Boolean = true,
+    readOnly: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     textStyle: TextStyle = EtalonType.body,
     prefix: String? = null,
@@ -88,6 +102,8 @@ fun EtalonTextField(
     value = value,
     onValueChange = onValueChange,
     modifier = modifier.heightIn(min = FIELD_MIN_HEIGHT),
+    enabled = enabled,
+    readOnly = readOnly,
     textStyle = textStyle,
     placeholder = placeholder?.let { { Text(it, style = textStyle, maxLines = 1) } },
     prefix = prefix?.let { { Text(it, style = textStyle) } },
@@ -95,6 +111,7 @@ fun EtalonTextField(
     isError = isError,
     singleLine = singleLine,
     keyboardOptions = keyboardOptions,
+    keyboardActions = keyboardActions,
     visualTransformation = visualTransformation,
     shape = EtalonShapes.md,
     colors = EtalonTextFieldDefaults.colors(),

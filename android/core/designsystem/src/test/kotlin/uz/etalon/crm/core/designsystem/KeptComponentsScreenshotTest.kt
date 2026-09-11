@@ -92,8 +92,9 @@ private fun KeptSheet() = Column(
     CustodyChain(CHAIN)
     PhotoStrip(photos = emptyList(), onOpen = {}, onAdd = {})
     RegionField("Вилоят", "Тошкент", onOpen = {})
-    // EtalonTextField: empty with its placeholder, filled, with the «+998 » prefix, and in error
-    // with its reason. The focused state is not here — a blinking cursor is not a stable baseline,
+    // EtalonTextField: empty with its placeholder, filled, with the «+998 » prefix, in error with
+    // its reason, and disabled — which is the same `page` fill at `ink3`, on purpose.
+    // The focused state is not here — a blinking cursor is not a stable baseline,
     // and faking the focused border with a second colours object would photograph the fake rather
     // than the component. The indigo focus border is checked on the emulator instead.
     EtalonTextField(value = "", onValueChange = {}, placeholder = "Исм", modifier = Modifier.fillMaxWidth())
@@ -105,6 +106,10 @@ private fun KeptSheet() = Column(
     EtalonTextField(
         value = "12", onValueChange = {}, modifier = Modifier.fillMaxWidth(), isError = true,
         supportingText = "Телефон рақами тўлиқ эмас",
+    )
+    EtalonTextField(
+        value = "Тошкент вилояти", onValueChange = {}, modifier = Modifier.fillMaxWidth(),
+        enabled = false,
     )
     NumericKeypad(
         value = "4000000",
