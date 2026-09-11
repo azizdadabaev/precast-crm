@@ -8,16 +8,17 @@ import java.time.Instant
 
 class FormattersTest {
     @Test fun `money is grouped with a thin space and carries no unit`() {
-        // U+2009 THIN SPACE, written as an escape rather than an invisible literal. D8: the unit
-        // belongs on hero figures only, so a list row shows the digits alone.
-        assertEquals("542\u2009200\u2009000", formatMoney(Money.parse("542200000.00")))
+        // U+202F NARROW NO-BREAK SPACE, written as an escape rather than an invisible literal — and
+        // unbreakable, so a long figure can never lose its tail to a line break at a group boundary.
+        // D8: the unit belongs on hero figures only, so a list row shows the digits alone.
+        assertEquals("542\u202F200\u202F000", formatMoney(Money.parse("542200000.00")))
         assertEquals("0", formatMoney(Money.ZERO))
-        assertEquals("1\u2009250\u2009001", formatMoney(Money.parse("1250000.50")))   // half-away-from-zero, like round2 then display
-        assertEquals("-4\u2009340\u2009840", formatMoney(Money.parse("-4340840.00")))
+        assertEquals("1\u202F250\u202F001", formatMoney(Money.parse("1250000.50")))   // half-away-from-zero, like round2 then display
+        assertEquals("-4\u202F340\u202F840", formatMoney(Money.parse("-4340840.00")))
     }
     @Test fun `a hero figure carries the unit as a prefix`() {
-        assertEquals("UZS\u200953\u2009268\u2009760", formatMoneyHero(Money.parse("53268760.00")))
-        assertEquals("UZS\u20090", formatMoneyHero(Money.ZERO))
+        assertEquals("UZS\u202F53\u202F268\u202F760", formatMoneyHero(Money.parse("53268760.00")))
+        assertEquals("UZS\u202F0", formatMoneyHero(Money.ZERO))
     }
     @Test fun `area uses comma decimal, 2 places, and м²`() {
         assertEquals("12,5 м²", formatArea(BigDecimal("12.500")))
@@ -30,8 +31,8 @@ class FormattersTest {
     @Test fun `count uses та`() { assertEquals("12 та", formatCount(12)) }
     @Test fun `meters use comma decimal and м`() { assertEquals("4,25 м", formatMeters(4.25)) }
     @Test fun `weight is grouped with a thin space and кг`() {
-        // U+2009 THIN SPACE (D8), written as an escape so the expectation stays readable.
-        assertEquals("12\u2009240 кг", formatWeightKg(12240.0))
+        // U+202F NARROW NO-BREAK SPACE (D8), written as an escape so the expectation stays readable.
+        assertEquals("12\u202F240 кг", formatWeightKg(12240.0))
     }
     @Test fun `phone renders +998 90 111 22 33 from digits`() {
         assertEquals("+998 90 111 22 33", formatPhone("998901112233"))

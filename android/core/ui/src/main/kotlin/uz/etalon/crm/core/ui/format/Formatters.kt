@@ -13,13 +13,15 @@ import java.time.ZoneId
 val TASHKENT: ZoneId = ZoneId.of("Asia/Tashkent")
 val UZ_MONTHS_SHORT = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
-// U+2009 THIN SPACE, written as an escape rather than as a literal invisible character — a literal
-// cannot be told apart from a plain space in a diff. Design decision D8 replaced the old U+00A0:
-// at 10–13 sp a full space between groups reads as two separate numbers on a phone row, and the
-// prototype the owner signed off uses the thin one. It is still unbreakable in practice — Compose
-// does not break inside a run of digits and thin spaces of this width — so a nine-digit total
-// cannot wrap mid-number.
-private const val THIN = '\u2009'
+// U+202F NARROW NO-BREAK SPACE, written as an escape rather than as a literal invisible character
+// — a literal cannot be told apart from a plain space in a diff. Design decision D8 asks for a
+// thin group separator: at 10–13 sp a full space between groups reads as two separate numbers on
+// a phone row. The obvious character, U+2009 THIN SPACE, is the wrong one for money — its line
+// break class is BA, so a nine-digit figure in a narrow column breaks *at a digit-group boundary*
+// and, with `maxLines = 1`, everything after the break is discarded: «532 687 601» renders as
+// «532». U+202F is the same width and unbreakable by definition (class GL), so a figure that does
+// not fit ellipsizes instead of quietly reading as a sum a thousand times smaller.
+private const val THIN = '\u202F'
 
 private fun groupThousands(whole: String): String {
     val neg = whole.startsWith("-")
