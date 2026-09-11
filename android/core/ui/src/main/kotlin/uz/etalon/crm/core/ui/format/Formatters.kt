@@ -6,12 +6,16 @@ import uz.etalon.crm.core.ui.regions.findViloyatByName
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
+import java.time.YearMonth
 import java.time.ZoneId
 
 /** House number format (spec §6.5): space thousands, comma decimal, unit suffix.
  *  Device ICU is deliberately not used — the server does the same. */
 val TASHKENT: ZoneId = ZoneId.of("Asia/Tashkent")
 val UZ_MONTHS_SHORT = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+val UZ_MONTHS_FULL = listOf("январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
+/** Monday first, matching java.time's DayOfWeek ordinal. */
+val UZ_WEEKDAYS = listOf("Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба", "Якшанба")
 
 // U+202F NARROW NO-BREAK SPACE, written as an escape rather than as a literal invisible character
 // — a literal cannot be told apart from a plain space in a diff. Design decision D8 asks for a
@@ -105,6 +109,25 @@ fun formatScheduleDate(t: Instant, now: Instant = Instant.now()): String {
     val today = now.atZone(TASHKENT).toLocalDate()
     val dayMonth = "${day.dayOfMonth} ${UZ_MONTHS_SHORT[day.monthValue - 1]}"
     return if (day.year == today.year) dayMonth else "$dayMonth ${day.year}"
+}
+
+/** Home's subtitle: «Сешанба, 9 сентябрь». */
+fun formatLongDate(t: Instant): String {
+    val z = t.atZone(TASHKENT)
+    return "${UZ_WEEKDAYS[z.dayOfWeek.value - 1]}, ${z.dayOfMonth} ${UZ_MONTHS_FULL[z.monthValue - 1]}"
+}
+
+/** A month group header on the orders list: «Сентябрь 2026». */
+fun formatMonthYear(ym: YearMonth): String =
+    UZ_MONTHS_FULL[ym.monthValue - 1].replaceFirstChar { it.uppercase() } + " " + ym.year
+
+private const val NB_HYPHEN = '‑'
+
+/** «№ 09‑0003» for `2026-09-0003`: the year is dropped (it is on every row of a list), the
+ *  remaining hyphen is U+2011 so a number never breaks across lines. */
+fun formatOrderNo(orderNumber: String): String {
+    val rest = orderNumber.substringAfter('-', orderNumber)
+    return "№ " + rest.replace('-', NB_HYPHEN)
 }
 
 /** A viloyat/tuman head converted to Cyrillic for display, or [part] unchanged if it isn't a

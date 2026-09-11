@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.Money
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.YearMonth
 
 class FormattersTest {
     @Test fun `money is grouped with a thin space and carries no unit`() {
@@ -86,5 +87,14 @@ class FormattersTest {
         assertEquals(null, formatAddressLine("   "))
         assertEquals(null, formatAddressLine(" , , "))
         assertEquals("Тошкент шаҳри", formatAddressLine("Тошкент шаҳри, , "))  // trailing blanks dropped
+    }
+
+    @Test fun longDateIsWeekdayDayMonthInUzbekCyrillic() {
+        assertEquals("Чоршанба, 9 сентябрь", formatLongDate(Instant.parse("2026-09-08T19:30:00Z"))) // 00:30 on Wed 9 Sep 2026 in Tashkent — the capture's «Сешанба» is the designer's fiction; the real calendar wins
+    }
+    @Test fun monthYearHeader() { assertEquals("Сентябрь 2026", formatMonthYear(YearMonth.of(2026, 9))) }
+    @Test fun orderNoDropsTheYearAndUsesANonBreakingHyphen() {
+        assertEquals("№ 09‑0003", formatOrderNo("2026-09-0003"))
+        assertEquals("№ X17", formatOrderNo("X17"))
     }
 }
