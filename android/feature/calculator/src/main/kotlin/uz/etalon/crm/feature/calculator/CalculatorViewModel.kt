@@ -476,16 +476,27 @@ open class CalculatorViewModel(
             clearRateOverride(id)
             return
         }
+        // The tier is checked HERE, on the way in, rather than left to [applyRateOverride] to
+        // refuse silently after the reason has been typed: a price the server's Zod would reject
+        // must never open a confirmation the operator can fill in and watch do nothing.
+        if (M2_OVERRIDE_TIERS.none { it.price == price }) return
         _state.update { it.copy(rateConfirm = RateConfirmState(id, price)) }
     }
 
-    /** «Тасдиқлаш». A blank reason is not a refusal to be reported — the button is disabled until
-     *  there is one — so this simply does nothing and leaves the confirmation open. */
-    fun confirmRate(reason: String) {
-        val pending = _state.value.rateConfirm ?: return
-        if (reason.isBlank()) return
+    /**
+     * «Тасдиқлаш» — returns whether the override actually landed, and only then closes the
+     * confirmation. A blank reason is not a refusal to be reported (the button is disabled until
+     * there is one), so it simply leaves the sheet open; and if [applyRateOverride] refuses for
+     * any other reason, the sheet stays open too rather than closing over an unchanged quote.
+     */
+    fun confirmRate(reason: String): Boolean {
+        val pending = _state.value.rateConfirm ?: return false
+        if (reason.isBlank()) return false
         applyRateOverride(pending.rowId, pending.price, reason)
-        _state.update { it.copy(rateConfirm = null) }
+        val applied = _state.value.rows.firstOrNull { it.id == pending.rowId }
+            ?.let { it.m2PriceOverride && it.m2PriceOverrideValue == pending.price } == true
+        if (applied) _state.update { it.copy(rateConfirm = null) }
+        return applied
     }
 
     fun dismissRateConfirm() = _state.update { it.copy(rateConfirm = null) }

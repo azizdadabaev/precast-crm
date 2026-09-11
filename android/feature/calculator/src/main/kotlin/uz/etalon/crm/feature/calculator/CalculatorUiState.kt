@@ -96,6 +96,12 @@ internal fun draftOf(row: SlabRow): RoomDraft = RoomDraft(
  * figure the UI shows as money is read off a row's `SlabRow.result` or off [totals] through
  * `SlabResult.money()` / `ProjectTotal.money()` at the render site — see `CalculatorViewModel`'s
  * class doc for why a `Double` money field on this class would be a defect.
+ *
+ * The one carve-out is [RateConfirmState.price] in [rateConfirm]: it is not an amount this class
+ * computed but a catalogue TIER, echoed back verbatim from `M2_OVERRIDE_TIERS` (whose own prices
+ * are `Double` because the engine's `PriceConfig` is) on its way to `SlabRow.m2PriceOverrideValue`
+ * — the same `Double` the wire carries. It becomes `Money` for display at `tierPriceMoney`, the
+ * sanctioned boundary, and is never added to anything here.
  */
 data class CalculatorUiState(
     val rows: List<SlabRow> = emptyList(),

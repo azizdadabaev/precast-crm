@@ -231,6 +231,32 @@ class CalculatorViewModelTest {
         assertEquals(0.05, v.state.value.rows[0].correction)
     }
 
+    /** The `Double` setters «Қўшимча» used to own are still on the ViewModel (a restored draft and
+     *  the ± bump reach the same rows), and they must leave the CELL agreeing with the row they
+     *  just moved — otherwise the card shows one bearing and prices another. */
+    @Test fun `setting the bearing or the correction as a number rewrites its cell`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setBearing(id, 0.20)
+        v.setCorrection(id, 0.05)
+        assertEquals("0,20", v.state.value.draft(id).bearing)
+        assertEquals("0,05", v.state.value.draft(id).correction)
+    }
+
+    @Test fun `rounding every width up rewrites every width cell`() = runTest {
+        val v = vm()
+        v.addRoom(); val a = v.state.value.rows[0].id
+        v.addRoom(); val b = v.state.value.rows[1].id
+        v.setWidthText(a, "4,02"); v.setLengthText(a, "6")
+        v.setWidthText(b, "3,31"); v.setLengthText(b, "6")
+
+        v.roundAllWidthsUp()
+
+        assertEquals(4.1, v.state.value.rows[0].innerWidth)
+        assertEquals(3.4, v.state.value.rows[1].innerWidth)
+        assertEquals("4,10", v.state.value.draft(a).width)
+        assertEquals("3,40", v.state.value.draft(b).width)
+    }
+
     @Test fun `the width bump rewrites the cell it moved`() = runTest {
         val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
         v.setWidthText(id, "4"); v.setLengthText(id, "6")
@@ -244,6 +270,18 @@ class CalculatorViewModelTest {
         val copy = v.state.value.rows[1]
         assertNotEquals(src.id, copy.id); assertEquals("Хона 2", copy.name)
         assertEquals(src.innerWidth, copy.innerWidth); assertEquals(src.bearing, copy.bearing)
+    }
+    /** The copy's CELLS have to come across with its doubles: a duplicate showing blank cells over
+     *  dimensions it really has is a room the operator cannot correct without retyping it. */
+    @Test fun `duplicate copies the cell texts too`() = runTest {
+        val v = vm(); v.addRoom(); val src = v.state.value.rows[0].id
+        v.setWidthText(src, "5,2"); v.setLengthText(src, "7,1"); v.setCorrectionText(src, "0,05")
+        v.duplicateRoom(src)
+        val copy = v.state.value.rows[1].id
+        assertEquals(v.state.value.draft(src), v.state.value.draft(copy))
+        assertEquals("5,2", v.state.value.draft(copy).width)
+        assertEquals("7,1", v.state.value.draft(copy).length)
+        assertEquals("0,05", v.state.value.draft(copy).correction)
     }
     @Test fun `moveRoom reorders without recomputing anything`() = runTest {
         val v = vm(); v.addRoom(); v.addRoom(); v.addRoom()
@@ -347,15 +385,28 @@ class CalculatorViewModelTest {
         assertEquals(RateConfirmState(id, 230_000.0), v.state.value.rateConfirm)
         assertFalse(v.state.value.rows[0].m2PriceOverride, "nothing is applied until it is justified")
 
-        v.confirmRate("   ")
+        assertFalse(v.confirmRate("   "), "a blank reason applies nothing")
         assertFalse(v.state.value.rows[0].m2PriceOverride)
         assertEquals(RateConfirmState(id, 230_000.0), v.state.value.rateConfirm, "the confirmation stays open")
 
-        v.confirmRate("Мижоз билан келишилди")
+        assertTrue(v.confirmRate("Мижоз билан келишилди"), "«Тасдиқлаш» reports what it applied")
         assertTrue(v.state.value.rows[0].m2PriceOverride)
         assertEquals(230_000.0, v.state.value.rows[0].m2PriceOverrideValue)
         assertEquals("Мижоз билан келишилди", v.state.value.rows[0].m2PriceReason)
         assertNull(v.state.value.rateConfirm)
+    }
+
+    /** The five catalogue tiers are what the server's Zod accepts; anything else would be refused
+     *  by `applyRateOverride` AFTER the operator had typed a reason, so it never opens the
+     *  confirmation in the first place. */
+    @Test fun `a price that is not a catalogue tier opens no confirmation`() = runTest {
+        val v = vm(); v.addRoom(); val id = v.state.value.rows[0].id
+        v.setWidthText(id, "4"); v.setLengthText(id, "6")
+
+        v.pickRate(id, 175_000.0)
+
+        assertNull(v.state.value.rateConfirm)
+        assertFalse(v.state.value.rows[0].m2PriceOverride)
     }
 
     @Test fun `dismissing the rate confirmation applies nothing`() = runTest {
