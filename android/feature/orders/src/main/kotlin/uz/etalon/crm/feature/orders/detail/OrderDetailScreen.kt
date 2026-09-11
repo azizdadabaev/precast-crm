@@ -21,9 +21,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -184,9 +186,14 @@ fun OrderDetailScreen(
                     top = EtalonSpace.sm,
                     // The other sticky-bar screens sit in a Scaffold, which adds the bar's own
                     // height to their content padding; this one has no Scaffold, so the clearance
-                    // is spelled out: the pill's band the bar is lifted by, plus the bar itself.
-                    // Measured on the emulator — with `underStickyBar` alone the last card stayed
-                    // behind the buttons at the end of the scroll.
+                    // is spelled out. Measured: the bar stands 172 dp tall above the navigation
+                    // inset — 16 scrim + 12 + a 48 dp button slot + 12 + this screen's 84 dp
+                    // `bottomInset` — so it covers 196 dp of the window on the emulator's
+                    // gesture nav (24 dp inset) and 220 on a three-button one (48).
+                    // 160 (`underStickyBar`)
+                    // alone left the last card behind the buttons on the emulator, and 208
+                    // (`+ minTouch`) would still fail the three-button case, so the sum below —
+                    // 260, the smallest two-token figure that clears every nav mode — stands.
                     bottom = if (hasBar) EtalonSpace.underNav + EtalonSpace.underStickyBar else EtalonSpace.underNav,
                 ),
                 verticalArrangement = Arrangement.spacedBy(EtalonSpace.md),
@@ -207,6 +214,7 @@ fun OrderDetailScreen(
                 if (o == null) return@LazyColumn
                 item { Panel(o, onBack = onBack, onCall = { dial(ctx, o.summary.client.phone) }) }
                 item { PaymentProgress(o) }
+                if (hasCostBreakdown(o)) item { CostsCard(o) }
                 if (o.payments.isNotEmpty() || !o.pendingAmount.isZero) item { PaymentsCard(o) }
                 item {
                     DeliveryCard(
@@ -325,29 +333,47 @@ private fun Panel(o: OrderDetail, onBack: () -> Unit, onCall: () -> Unit) = Deta
 )
 
 /** The one permitted BigDecimal→Float crossing on this screen: bar geometry, never a figure. */
-private fun paidFraction(o: OrderDetail): Float {
+internal fun paidFraction(o: OrderDetail): Float {
     val total = o.summary.totalPrice.amount
     if (total.signum() <= 0) return 0f
     return o.summary.confirmedPaid.amount.divide(total, 4, RoundingMode.HALF_UP).toFloat().coerceIn(0f, 1f)
 }
 
+/**
+ * The percentage the card *says*, which is not the bar's geometry rounded.
+ *
+ * «100 % тўланган» is a claim about the debt, so only a settled order may make it: 13 349 999 of
+ * 13 350 000 rounds to 100 and would read as paid off next to a red «Қолди 1». «0 %» is the same
+ * claim backwards — a customer who has paid something must not be shown as having paid nothing.
+ * Everything between is clamped into 1..99.
+ */
+internal fun paidPercent(o: OrderDetail): Int = when {
+    o.remaining.isZero -> 100
+    o.summary.confirmedPaid.isZero -> 0
+    else -> (paidFraction(o) * 100).roundToInt().coerceIn(1, 99)
+}
+
 @Composable
 private fun PaymentProgress(o: OrderDetail) {
-    val fraction = paidFraction(o)
     ProgressCard(
         label = stringResource(R.string.detail_payment_state),
-        fraction = fraction,
-        percentText = stringResource(R.string.detail_percent_paid, (fraction * 100).roundToInt()),
+        fraction = paidFraction(o),
+        percentText = stringResource(R.string.detail_percent_paid, paidPercent(o)),
         paidLabel = stringResource(R.string.detail_paid_amount, formatMoney(o.summary.confirmedPaid)),
         remainingLabel = stringResource(R.string.detail_remaining_amount, formatMoney(o.remaining)),
         settled = o.remaining.isZero,
     )
 }
 
-/** §2's white card: `xl`, hairline border, 16/14 padding, a 14/700 title over its content. */
+/**
+ * §2's white card: `xl`, hairline border, 16/14 padding, a 14/700 title over its content.
+ *
+ * @param title null for a card whose rows title themselves — the cost breakdown, which is a list
+ *   of named lines closed by «Жами» and would only repeat itself in a header.
+ */
 @Composable
 private fun WhiteCard(
-    title: String,
+    title: String?,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
@@ -358,19 +384,72 @@ private fun WhiteCard(
         .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
         .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
 ) {
-    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        Text(
-            title,
-            style = EtalonType.sectionTitle,
-            color = EtalonColors.ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (trailing != null) trailing()
+    if (title != null || trailing != null) {
+        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+            Text(
+                title.orEmpty(),
+                style = EtalonType.sectionTitle,
+                color = EtalonColors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (trailing != null) trailing()
+        }
+        Spacer(Modifier.height(EtalonSpace.rowGap))
     }
-    Spacer(Modifier.height(EtalonSpace.rowGap))
     content()
+}
+
+/** A card with nothing to say: only the rooms priced the order, and the panel's «Жами» already
+ *  carries that figure. */
+private fun hasCostBreakdown(o: OrderDetail): Boolean =
+    !o.discountAmount.isZero || !o.deliveryCost.isZero || !o.otherCost.isZero
+
+/** U+2212 MINUS SIGN, written as an escape so a diff can tell it from a hyphen. */
+private const val MINUS = '−'
+
+/**
+ * What the order is priced from: the rooms' own subtotal, then whatever moved it, closed by the
+ * figure the panel shows. Restored from the rooms card the restyle replaced — without it the
+ * discount, the delivery cost and the other cost are visible nowhere on the phone.
+ */
+@Composable
+private fun CostsCard(o: OrderDetail) = WhiteCard(title = null) {
+    CostRow(stringResource(R.string.rooms_subtotal), formatMoney(o.roomsSubtotal))
+    if (!o.discountAmount.isZero) CostRow(stringResource(R.string.discount), "$MINUS${formatMoney(o.discountAmount)}")
+    if (!o.deliveryCost.isZero) CostRow(stringResource(R.string.delivery), formatMoney(o.deliveryCost))
+    if (!o.otherCost.isZero) CostRow(stringResource(R.string.other_cost), formatMoney(o.otherCost))
+    HorizontalDivider(
+        Modifier.padding(vertical = EtalonSpace.sm),
+        thickness = EtalonSpace.hairline,
+        color = EtalonColors.surfaceBorder,
+    )
+    CostRow(stringResource(R.string.total), formatMoney(o.summary.totalPrice), total = true)
+}
+
+@Composable
+private fun CostRow(caption: String, value: String, total: Boolean = false) = Row(
+    Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs),
+    Arrangement.SpaceBetween,
+    Alignment.CenterVertically,
+) {
+    Text(
+        caption,
+        style = if (total) EtalonType.label else EtalonType.meta,
+        color = if (total) EtalonColors.ink else EtalonColors.ink2,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+    )
+    Spacer(Modifier.width(EtalonSpace.sm))
+    Text(
+        value,
+        style = if (total) EtalonType.label else EtalonType.rowAmount,
+        color = EtalonColors.ink,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
@@ -493,8 +572,11 @@ private fun ShipmentsCard(o: OrderDetail, pending: List<PendingUpload>, onOpen: 
  * disabled action.
  *
  * The shell's floating pill is drawn over this screen at the window's bottom edge, so the bar is
- * lifted by [EtalonSpace.underNav]; without it the buttons sit behind the pill (measured on the
- * emulator, exactly as on the nine screens lifted in this phase's task 4).
+ * given the pill's band as its own `bottomInset` — inside the bar, where the system's navigation
+ * inset is applied, so that inset is counted once. (The nine screens lifted in this phase's task 4
+ * wrap the bar in a padded `Box` instead, which counts it twice; phase 3 unifies them on this.)
+ * Less the bar's own 16 dp of horizontal margin, so the buttons keep the capture's ~24 dp of air
+ * over the pill rather than the full 100.
  */
 @Composable
 private fun BoxScope.ActionBar(
@@ -513,8 +595,8 @@ private fun BoxScope.ActionBar(
         NextStep.None -> null
     }
     if (secondary == null && !canPay) return
-    Box(Modifier.align(Alignment.BottomCenter).padding(bottom = EtalonSpace.underNav)) {
-        StickyActionBar {
+    Box(Modifier.align(Alignment.BottomCenter)) {
+        StickyActionBar(bottomInset = EtalonSpace.underNav - EtalonSpace.cardMargin) {
             secondary?.invoke(this)
             if (canPay) PrimaryButton(stringResource(R.string.action_record_payment), onRecordPayment, Modifier.weight(1f))
         }

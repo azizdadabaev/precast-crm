@@ -1,6 +1,10 @@
 package uz.etalon.crm.feature.orders
 
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -60,6 +64,11 @@ class OrderDetailScreenshotTest {
         setOf("order.view", "order.edit", "payment.record"), false,
     )
 
+    /** The same operator with the permission every shipment route is wrapped in, so one frame
+     *  records the shipments *door* — the chevron and «Жўнатмаларга бўлиш» — rather than the
+     *  read-only card. */
+    private val dispatcher = Me("u2", "Диспетчер", Role.SALES, me.permissions + "dispatch.create", false)
+
     private fun room(name: String, w: String, l: String, area: String, subtotal: String) = RoomLine(
         name = name, innerWidth = BigDecimal(w), innerLength = BigDecimal(l), pattern = "Г-Б",
         beamLength = BigDecimal("6.00"), beamCount = 12, totalBlocks = 96,
@@ -104,6 +113,10 @@ class OrderDetailScreenshotTest {
         paid: String = "6000000.00",
         payments: List<PaymentLine> = listOf(payment),
         shipments: List<ShipmentLine> = emptyList(),
+        // The breakdown balances: roomsSubtotal − discount + delivery = totalPrice.
+        roomsSubtotal: String = "13350000.00",
+        discount: String = "0.00",
+        delivery: String = "0.00",
     ) = OrderDetail(
         summary = OrderSummary(
             id = "o3", orderNumber = "2026-09-0003", status = status,
@@ -120,8 +133,8 @@ class OrderDetailScreenshotTest {
         ),
         notes = null,
         deliveryLat = null, deliveryLng = null, deliveryLocationUrl = null, deliveryLocationLabel = null,
-        discountAmount = Money.ZERO, deliveryCost = Money.ZERO, otherCost = Money.ZERO,
-        roomsSubtotal = Money.parse("13350000.00"), writeOffAmount = Money.ZERO,
+        discountAmount = Money.parse(discount), deliveryCost = Money.parse(delivery), otherCost = Money.ZERO,
+        roomsSubtotal = Money.parse(roomsSubtotal), writeOffAmount = Money.ZERO,
         rooms = rooms, payments = payments, shipments = shipments,
         loadedPhotos = emptyList(), deliveryProofUrl = null, events = events,
         dispatch = if (status == OrderStatus.DISPATCHED || status == OrderStatus.DELIVERED) {
@@ -136,17 +149,26 @@ class OrderDetailScreenshotTest {
         fetchedAt = Instant.parse("2026-09-04T00:00:00Z"),
     )
 
-    private fun shoot(name: String, o: OrderDetail, pending: List<PendingUpload> = emptyList()) {
+    private fun show(o: OrderDetail, pending: List<PendingUpload> = emptyList(), who: Me = me) {
         rule.setContent {
             EtalonTheme {
                 OrderDetailScreen(
-                    r = Resource.Success(o), me = me, pending = pending, actionError = null,
+                    r = Resource.Success(o), me = who, pending = pending, actionError = null,
                     onBack = {}, onRefresh = {}, onLoadTruck = {}, onAddPhoto = {}, onDeliveryProof = {},
                     onOpenShipments = {}, onOpenLocation = {}, onRecordPayment = {},
                     onDeletePhoto = {}, onRetryUpload = {}, onCancelUpload = {},
                 )
             }
         }
+    }
+
+    private fun shoot(
+        name: String,
+        o: OrderDetail,
+        pending: List<PendingUpload> = emptyList(),
+        who: Me = me,
+    ) {
+        show(o, pending, who)
         rule.onRoot().captureRoboImage("screenshots/$name.png")
     }
 
@@ -154,12 +176,22 @@ class OrderDetailScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp")
     fun dispatchedLight() = shoot("order_detail_dispatched_light", order())
 
-    /** Nothing paid yet and nothing loaded: the bar's next step is «Юклаш», the progress card
-     *  reads 0 % and the timeline is on its first column. */
+    /**
+     * Nothing paid yet and nothing loaded: the bar's next step is «Юклаш», the progress card reads
+     * 0 % and the timeline is on its first column.
+     *
+     * This is also the frame that records the two things the capture's order has no occasion to
+     * show: the cost breakdown (13 550 000 − 500 000 + 300 000 = 13 350 000) and, through
+     * [dispatcher], the shipments door with its chevron and «Жўнатмаларга бўлиш».
+     */
     @Test @Config(qualifiers = "w411dp-h891dp")
     fun placedLight() = shoot(
         "order_detail_placed_light",
-        order(status = OrderStatus.PLACED, paid = "0.00", payments = emptyList()),
+        order(
+            status = OrderStatus.PLACED, paid = "0.00", payments = emptyList(),
+            roomsSubtotal = "13550000.00", discount = "500000.00", delivery = "300000.00",
+        ),
+        who = dispatcher,
     )
 
     /** Finished and settled: no bar at all (no next step, no debt to record against), the progress
@@ -190,4 +222,18 @@ class OrderDetailScreenshotTest {
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
     fun largeFont() = shoot("order_detail_font13", order())
+
+    /**
+     * The shipments door sits below [placedLight]'s viewport — a `LazyColumn` does not compose
+     * what it does not draw, so it is scrolled to and asserted rather than photographed. It is the
+     * only way into the split-truck flow on Android, so a regression that hid it would otherwise
+     * cost nothing on any baseline.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun shipmentsDoorIsOfferedOnAPlacedOrder() {
+        show(order(status = OrderStatus.PLACED, paid = "0.00", payments = emptyList()), who = dispatcher)
+        val door = hasText("Жўнатмаларга бўлиш")
+        rule.onNode(hasScrollAction()).performScrollToNode(door)
+        rule.onNode(door).assertIsDisplayed()
+    }
 }

@@ -41,6 +41,14 @@
     <string name="action_delivered">Етказилди</string>
     <string name="action_record_payment">Тўлов қайд қилиш</string>
 
+    <!-- The cost breakdown card: what the order is priced from, when anything moved the rooms'
+         own subtotal. «Етказиш» here is the delivery *cost* line, not the delivery card. -->
+    <string name="rooms_subtotal">Хоналар жами</string>
+    <string name="discount">Чегирма</string>
+    <string name="delivery">Етказиш</string>
+    <string name="other_cost">Бошқа</string>
+    <string name="total">Жами</string>
+
     <string name="pending_amount">Тасдиқ кутилмоқда: %1$s</string>
     <string name="room_n">Хона %1$d</string>
     <string name="photos">Расмлар</string>
