@@ -51,6 +51,9 @@ private val HERO_GAP = 6.dp
  * silently stretched a 210 dp `KpiCard` across the whole screen. So: the figure is measured first
  * with everything there is, the prefix takes what is left (nothing, at worst), and the layout is
  * exactly as wide as the two together — it still hugs.
+ *
+ * Placement is absolute (prefix at x = 0, figure after it), so unlike the `Row` it replaced this
+ * does not mirror under an RTL `LayoutDirection`. The app is Uzbek Cyrillic, LTR only.
  */
 @Composable
 fun MoneyHeroText(

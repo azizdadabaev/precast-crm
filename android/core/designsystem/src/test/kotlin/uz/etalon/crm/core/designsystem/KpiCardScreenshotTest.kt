@@ -49,8 +49,8 @@ private val REVENUE_BARS = listOf(0.34f, 0.49f, 0.42f, 0.71f, 0.40f, 0.95f)
 private val DELIVERY_STEPS = listOf("Қабул", "Ишлаб чиқ.", "Йўлда", "Етказилди")
 
 /**
- * A 411 dp phone less §3's 16 dp margins. The sheet itself is 720 dp wide so that three fixed
- * 210 dp KpiCards fit side by side, but a full-width card reviewed at 720 is reviewed at 1,9× the
+ * A 411 dp phone less §3's 16 dp margins. The sheet itself is 720 dp wide so that three KpiCards
+ * at their 210 dp floor fit side by side, but a full-width card reviewed at 720 is reviewed at 1,9× the
  * width it will ever have — which is exactly where a cramped footer stops looking cramped.
  */
 private val PHONE_CONTENT = 379.dp
@@ -83,7 +83,7 @@ private fun stepsAt(current: Int) = DELIVERY_STEPS.mapIndexed { i, label ->
  * four positions an order can be at. This image is the reviewer's whole check on the hero row of
  * `2b-home.png` and the two lower cards of `2b-order-detail.png`.
  *
- * The sheet is drawn 720 dp wide, not on a phone: a KpiCard is a fixed 210 dp and §3.1 puts three
+ * The sheet is drawn 720 dp wide, not on a phone: a KpiCard is 210 dp unless its figure needs more, and §3.1 puts three
  * of them in one horizontally scrolling row, so at 411 dp the third tint would sit off the edge
  * and never be reviewed. The cards themselves are unaffected — their width is their own. The two
  * components that *would* fill 720 dp, `ProgressCard` and `StepTimeline`, are held to

@@ -7,14 +7,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.width
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,6 +40,8 @@ import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.ui.format.MONEY_UNIT
+import uz.etalon.crm.core.ui.format.formatMoney
 import java.math.BigDecimal
 
 /** The nine-digit total from Task 9's finding: 532 687 601 UZS. */
@@ -50,12 +60,38 @@ class MoneyOverflowTest {
 
     /** True when the text did not fit the box it was given — which, with `maxLines = 1` and
      *  `TextOverflow.Ellipsis`, is exactly when the ellipsis is painted. */
-    private fun visuallyOverflows(tag: String): Boolean {
+    private fun visuallyOverflows(tag: String): Boolean =
+        visuallyOverflows(rule.onNodeWithTag(tag, useUnmergedTree = true), tag)
+
+    private fun visuallyOverflows(node: SemanticsNodeInteraction, what: String): Boolean {
         val results = mutableListOf<TextLayoutResult>()
-        val node = rule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
-        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
-        assertTrue("no text layout for '$tag'", results.isNotEmpty())
+        node.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        assertTrue("no text layout for '$what'", results.isNotEmpty())
         return results.first().hasVisualOverflow
+    }
+
+    /** The hero's hand-written layout measures the figure first: squeezed to exactly the figure's
+     *  own width, it is the «UZS» prefix that vanishes and the number that stays whole. A `Row`
+     *  would do the opposite, and that regression would otherwise only show as moved pixels in
+     *  `ds_money_overflow_light.png`. */
+    @Test
+    @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
+    fun heroPrefixGivesWayBeforeTheFigure() {
+        var width by mutableStateOf<Dp?>(null)
+        rule.setContent {
+            EtalonTheme {
+                Column { MoneyHeroText(NINE_DIGITS, width?.let { Modifier.width(it) } ?: Modifier) }
+            }
+        }
+        val figure = rule.onNodeWithText(formatMoney(NINE_DIGITS), useUnmergedTree = true)
+        val prefix = rule.onNodeWithText(MONEY_UNIT, useUnmergedTree = true)
+        val figureWidth = figure.getUnclippedBoundsInRoot().width
+        assertTrue("unconstrained, the prefix is drawn", prefix.getUnclippedBoundsInRoot().width > 0.dp)
+
+        rule.runOnIdle { width = figureWidth }
+        rule.waitForIdle()
+        assertTrue("at the figure's own width the prefix must collapse to nothing", prefix.getUnclippedBoundsInRoot().width == 0.dp)
+        assertFalse("and the figure must still be whole", visuallyOverflows(figure, "figure"))
     }
 
     @Test
