@@ -45,7 +45,7 @@ private val NINE_DIGITS = Money.parse("532687601.00")
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
-class FormattersTest {
+class MoneyOverflowTest {
     @get:Rule val rule = createComposeRule()
 
     /** True when the text did not fit the box it was given — which, with `maxLines = 1` and
