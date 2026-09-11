@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 
@@ -27,9 +28,15 @@ private val SCRIM_HEIGHT = 16.dp
  * §2 replaces the old hairline rule with a scrim: the page colour fading up from the bar, so a
  * row scrolling underneath dissolves instead of being cut by a line. The bar itself is the page,
  * not a white card — the button is the only object here.
+ *
+ * @param bottomInset extra air below the buttons, for a screen whose shell draws the floating nav
+ *   pill over the bar's own band. It is *added* to the bar's 12 dp, inside
+ *   [navigationBarsPadding], so the system inset is still counted exactly once — lifting the whole
+ *   bar with an outer `Modifier.padding(bottom = …)` instead counts it twice. The 0 dp default
+ *   leaves every screen that sits in a `Scaffold.bottomBar` byte-identical.
  */
 @Composable
-fun StickyActionBar(content: @Composable RowScope.() -> Unit) {
+fun StickyActionBar(bottomInset: Dp = 0.dp, content: @Composable RowScope.() -> Unit) {
     Column {
         Box(
             Modifier.fillMaxWidth().height(SCRIM_HEIGHT).background(
@@ -40,7 +47,7 @@ fun StickyActionBar(content: @Composable RowScope.() -> Unit) {
             Modifier.fillMaxWidth()
                 .background(EtalonColors.page)
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp + bottomInset),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             content = content,
         )
