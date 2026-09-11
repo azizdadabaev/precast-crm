@@ -1,11 +1,11 @@
 package uz.etalon.crm.core.designsystem.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -14,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -65,7 +64,10 @@ fun SegmentedControl(
                 .height(ITEM_HEIGHT)
                 .clip(EtalonShapes.pill)
                 .then(if (active) Modifier.background(EtalonColors.surface) else Modifier)
-                .clickable(
+                // `selectable`, not `clickable`: the inverted white pill is the only thing that
+                // says which segment is on, and a screen reader cannot see it.
+                .selectable(
+                    selected = active,
                     role = Role.Tab,
                     indication = etalonRipple(!active),
                     interactionSource = remember { MutableInteractionSource() },
@@ -73,11 +75,11 @@ fun SegmentedControl(
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(item.label, style = SegmentText, color = fg, maxLines = 1)
+            Text(item.label, style = EtalonType.labelSm, color = fg, maxLines = 1)
             if (item.count != null) {
                 Text(
                     "${item.count}",
-                    style = SegmentText,
+                    style = EtalonType.labelSm,
                     color = fg.copy(alpha = 0.55f),
                     maxLines = 1,
                     modifier = Modifier.padding(start = 5.dp),
@@ -86,6 +88,3 @@ fun SegmentedControl(
         }
     }
 }
-
-/** §2 sets the switch at 11/600; [EtalonType.meta] is the 11 sp step but at 400. */
-private val SegmentText = EtalonType.meta.copy(fontWeight = FontWeight.W600)

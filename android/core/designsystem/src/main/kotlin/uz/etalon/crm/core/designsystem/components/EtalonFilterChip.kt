@@ -2,11 +2,11 @@ package uz.etalon.crm.core.designsystem.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -55,7 +55,10 @@ fun EtalonFilterChip(
                 if (selected) Modifier
                 else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.pill),
             )
-            .clickable(
+            // `selectable`, not `clickable`: the navy fill is the whole of the selected state, so
+            // without it TalkBack reads every chip in the row the same way.
+            .selectable(
+                selected = selected,
                 role = Role.Tab,
                 indication = etalonRipple(selected),
                 interactionSource = remember { MutableInteractionSource() },
