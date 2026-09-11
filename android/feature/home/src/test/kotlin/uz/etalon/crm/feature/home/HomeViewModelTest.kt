@@ -24,6 +24,7 @@ import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.Trend
+import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.network.ApiException
 import java.io.IOException
 import java.math.BigDecimal
@@ -181,7 +182,7 @@ class HomeViewModelTest {
         val s = summary(
             recent = listOf(recentOrder("r1"), recentOrder("r2")),
             collectedThisMonth = Money.parse("13500000"),
-            collectedTrend = Trend(BigDecimal("8.2"), up = true),
+            collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UP),
             collectedByMonth = (1..12).map { MonthCollected("2026-%02d".format(it), Money.parse("${it}000000")) },
         )
         val vm = viewModel(home = { Result.success(s) })
@@ -193,7 +194,7 @@ class HomeViewModelTest {
         assertEquals(Money.parse("12000000"), tiles.collectedByMonth.last())
         assertEquals(Money.parse("13500000"), tiles.collectedThisMonth)
         assertEquals(BigDecimal("8.2"), tiles.collectedTrend?.deltaPct)
-        assertTrue(tiles.collectedTrend?.up == true)
+        assertEquals(TrendDirection.UP, tiles.collectedTrend?.direction)
     }
 
     /** «Ҳали буюртма йўқ» is a claim about the server, not about the screen: it may only be made

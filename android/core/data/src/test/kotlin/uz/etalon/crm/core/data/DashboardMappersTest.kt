@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.data.mapper.toDomain
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.network.dto.CollectedThisMonthDto
 import uz.etalon.crm.core.network.dto.DashboardDto
 import uz.etalon.crm.core.network.dto.OpenDiscrepanciesDto
@@ -63,13 +64,34 @@ class DashboardMappersTest {
         assertEquals(emptyList<Any>(), withMissingSchedule.toDomain().recent)
     }
 
-    @Test fun `collected trend direction down is not up, flat still renders up with its own deltaPct`() {
-        val down = dto.copy(collectedThisMonth = CollectedThisMonthDto(total = BigDecimal("100"), trend = TrendDto(BigDecimal("5.0"), "down")))
-        assertEquals(false, down.toDomain().collectedTrend!!.up)
+    /**
+     * Defect M2. The server's `direction` has three values (`src/lib/dashboard-metrics.ts`), and
+     * folding FLAT into "up" drew an unchanged month as a green «↑ 0,0 %» — a rise that did not
+     * happen. Each of the three maps to its own [TrendDirection], and `deltaPct` is carried through
+     * untouched in every case.
+     */
+    @Test fun `each of the server's three trend directions maps to its own`() {
+        fun trend(delta: String, direction: String) =
+            dto.copy(collectedThisMonth = CollectedThisMonthDto(total = BigDecimal("100"), trend = TrendDto(BigDecimal(delta), direction)))
+                .toDomain().collectedTrend!!
 
-        val flat = dto.copy(collectedThisMonth = CollectedThisMonthDto(total = BigDecimal("100"), trend = TrendDto(BigDecimal("0"), "flat")))
-        val flatTrend = flat.toDomain().collectedTrend!!
-        assertEquals(true, flatTrend.up)
-        assertEquals(BigDecimal("0"), flatTrend.deltaPct)
+        val up = trend("8.2", "up")
+        assertEquals(TrendDirection.UP, up.direction)
+        assertEquals(BigDecimal("8.2"), up.deltaPct)
+
+        val down = trend("5.0", "down")
+        assertEquals(TrendDirection.DOWN, down.direction)
+        assertEquals(BigDecimal("5.0"), down.deltaPct)
+
+        val flat = trend("0", "flat")
+        assertEquals(TrendDirection.FLAT, flat.direction)
+        assertEquals(BigDecimal("0"), flat.deltaPct)
+    }
+
+    /** A direction added on the server that this build has never heard of makes no claim at all —
+     *  it reads as FLAT does rather than being guessed into a rise or a fall. */
+    @Test fun `an unrecognised direction is UNKNOWN, not up`() {
+        val odd = dto.copy(collectedThisMonth = CollectedThisMonthDto(total = BigDecimal("100"), trend = TrendDto(BigDecimal("3.0"), "sideways")))
+        assertEquals(TrendDirection.UNKNOWN, odd.toDomain().collectedTrend!!.direction)
     }
 }

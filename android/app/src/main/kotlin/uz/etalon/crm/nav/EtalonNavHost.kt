@@ -60,9 +60,19 @@ private fun Destination.icon(): Int = when (this) {
     Destination.CLIENTS -> EtalonIcons.Users
 }
 
-/** Add first, then trim: clear-then-add would leave the stack momentarily empty, which
- *  NavDisplay cannot render. */
-private fun switchTab(backStack: NavBackStack<NavKey>, target: NavKey) {
+/**
+ * Add first, then trim: clear-then-add would leave the stack momentarily empty, which
+ * NavDisplay cannot render.
+ *
+ * Re-tapping the cell that is already lit is a no-op. Adding the same key again replaces the
+ * entry — and with it the `ViewModelStore` the entry decorator holds — so Orders would lose the
+ * query, the chip and the scroll position the operator had just set, on a tap that asked for
+ * nothing. This is a whole-screen test: `backStack.lastOrNull()`, not `tabFor`, because a stack
+ * route *under* the same tab (an order detail with «Буюртма» lit) is a different screen and
+ * tapping the cell must still take the operator back to the list.
+ */
+internal fun switchTab(backStack: NavBackStack<NavKey>, target: NavKey) {
+    if (backStack.lastOrNull() == target) return
     backStack.add(target)
     while (backStack.size > 1) backStack.removeAt(0)
 }

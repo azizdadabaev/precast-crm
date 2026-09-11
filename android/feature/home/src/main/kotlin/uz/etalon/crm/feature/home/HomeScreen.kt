@@ -56,8 +56,9 @@ import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Money
-import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.RecentOrder
+import uz.etalon.crm.core.model.TrendDirection
+import uz.etalon.crm.core.model.owesNothing
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatLongDate
@@ -78,6 +79,14 @@ private val BRAND_GAP = 10.dp
 
 /** The sparkline draws half a year — six bars is what fits a 210 dp card without crowding. */
 private const val SPARKLINE_MONTHS = 6
+
+/** The count pill hugs its digits: half of `EtalonSpace.xs`, so the pill stays a pill rather than
+ *  growing into a chip. Below the 4-pt grid, hence named here rather than tokenised. */
+private val PILL_PAD_V = 2.dp
+
+/** The recent card insets its rows a touch less than `EtalonSpace.sm`: `OrderRow` carries padding
+ *  of its own, and the full token pushed the avatars off the capture's left edge. */
+private val RECENT_ROW_INSET = 6.dp
 
 /**
  * A top-level nav-pill destination (Destination.HOME), so — like `OrdersListRoute` and
@@ -233,13 +242,21 @@ private fun KpiRow(t: HomeTiles) {
         KpiMoneyCard(
             stringResource(R.string.home_kpi_collected), t.collectedThisMonth,
             accent = KpiAccent.GREEN, icon = EtalonIcons.TrendingUp,
-            footnote = t.collectedTrend?.let {
-                stringResource(
-                    if (it.up) R.string.home_kpi_collected_up else R.string.home_kpi_collected_down,
-                    formatPercent(it.deltaPct, 1),
-                )
+            // FLAT (and a direction this client does not know) makes no claim: no arrow, no
+            // percentage, and `footnotePositive = null` so the line is neutral ink rather than
+            // green. An unchanged month drawn as «↑ 0,0 %» in green is a rise that did not happen.
+            footnote = t.collectedTrend?.let { trend ->
+                when (trend.direction) {
+                    TrendDirection.UP -> stringResource(R.string.home_kpi_collected_up, formatPercent(trend.deltaPct, 1))
+                    TrendDirection.DOWN -> stringResource(R.string.home_kpi_collected_down, formatPercent(trend.deltaPct, 1))
+                    TrendDirection.FLAT, TrendDirection.UNKNOWN -> stringResource(R.string.home_kpi_collected_flat)
+                }
             },
-            footnotePositive = t.collectedTrend?.up,
+            footnotePositive = when (t.collectedTrend?.direction) {
+                TrendDirection.UP -> true
+                TrendDirection.DOWN -> false
+                else -> null
+            },
             bars = bars,
             currentBar = bars.lastIndex,
             modifier = Modifier.fillMaxHeight(),
@@ -288,9 +305,10 @@ private fun TodaySheet(s: HomeUiState, onOpenOrder: (String) -> Unit) = NavyShee
         s.showNoAccessState -> SheetNote(stringResource(R.string.home_today_no_access))
         s.showEmptyState -> SheetNote(stringResource(R.string.home_today_empty))
         else -> s.today.forEach { d ->
-            // A canceled order owes nothing and has paid nothing, so it carries neither «қолди …»
-            // nor «тўланган» — see OrderRow's `paidLabel`.
-            val canceled = d.status == OrderStatus.CANCELED
+            // A canceled order owes nothing, so it carries neither «қолди …» nor «тўланган».
+            // The rule itself lives at `OrderStatus.owesNothing` (core:model), which the order
+            // detail reads too — all three screens must agree about the same order.
+            val canceled = d.status.owesNothing
             OrderRow(
                 clientName = d.clientName,
                 // No tag on these rows: everything on this sheet is scheduled for today, so the
@@ -322,7 +340,7 @@ private fun CountPill(n: Int) = Text(
     style = EtalonType.tag,
     color = EtalonColors.onDark,
     modifier = Modifier.clip(EtalonShapes.pill).background(EtalonColors.navy2)
-        .padding(horizontal = EtalonSpace.sm, vertical = 2.dp),
+        .padding(horizontal = EtalonSpace.sm, vertical = PILL_PAD_V),
 )
 
 @Composable
@@ -357,7 +375,7 @@ private fun RecentSection(
             Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.cardMargin)
                 .clip(EtalonShapes.xl).background(EtalonColors.surface)
                 .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
-                .padding(horizontal = 6.dp, vertical = EtalonSpace.xs),
+                .padding(horizontal = RECENT_ROW_INSET, vertical = EtalonSpace.xs),
         ) {
             if (recent.isEmpty()) {
                 Text(
@@ -368,7 +386,8 @@ private fun RecentSection(
                 )
             } else {
                 recent.take(4).forEach { r ->
-                    val canceled = r.status == OrderStatus.CANCELED
+                    // Same rule as the today sheet above: `OrderStatus.owesNothing` (core:model).
+                    val canceled = r.status.owesNothing
                     OrderRow(
                         clientName = r.clientName,
                         status = r.status,

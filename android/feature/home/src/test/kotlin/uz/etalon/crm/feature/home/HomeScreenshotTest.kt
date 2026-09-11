@@ -17,6 +17,7 @@ import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.Trend
+import uz.etalon.crm.core.model.TrendDirection
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -61,6 +62,15 @@ class HomeScreenshotTest {
             status = OrderStatus.DISPATCHED,
             totalPrice = Money.parse("7340840.00"), remaining = Money.parse("4340840.00"),
         ),
+        // Canceled, with its whole total still unpaid: the row must draw neither «қолди 18 000 000»
+        // nor «тўланган» (`OrderStatus.owesNothing`). Without one in the fixture that branch was
+        // written but never photographed.
+        TodayDelivery(
+            orderId = "o4", orderNumber = "2026-09-0001", clientName = "Navoi Build",
+            clientAddress = "Навоий, Шимолий", area = BigDecimal("18.00"),
+            status = OrderStatus.CANCELED,
+            totalPrice = Money.parse("3003520.00"), remaining = Money.parse("3003520.00"),
+        ),
     )
 
     private val recent = listOf(
@@ -74,10 +84,13 @@ class HomeScreenshotTest {
             status = OrderStatus.IN_PRODUCTION, scheduledAt = Instant.parse("2026-09-02T06:00:00Z"),
             totalPrice = Money.parse("18420000.00"), remaining = Money.parse("18420000.00"),
         ),
+        // The recent card's own CANCELED branch — the card draws only its first four rows, so the
+        // canceled one has to be inside them to reach the baseline. It takes the slot Yusupov &
+        // Sons held, which the today sheet above still shows.
         RecentOrder(
-            orderId = "o2", orderNumber = "2026-09-0003", clientName = "Yusupov & Sons",
-            status = OrderStatus.DISPATCHED, scheduledAt = Instant.parse("2026-09-01T06:00:00Z"),
-            totalPrice = Money.parse("13350000.00"), remaining = Money.parse("7350000.00"),
+            orderId = "o4", orderNumber = "2026-09-0001", clientName = "Navoi Build",
+            status = OrderStatus.CANCELED, scheduledAt = Instant.parse("2026-09-01T06:00:00Z"),
+            totalPrice = Money.parse("3003520.00"), remaining = Money.parse("3003520.00"),
         ),
         RecentOrder(
             orderId = "o6", orderNumber = "2026-08-0001", clientName = "Karimov LLC",
@@ -94,13 +107,13 @@ class HomeScreenshotTest {
 
     private fun tiles() = HomeTiles(
         todayCount = today.size,
-        todayArea = BigDecimal("229.50"),
+        todayArea = BigDecimal("247.50"), // 108,2 + 78,7 + 42,6 + 18,0 — the sum of `today`
         openDiscrepancies = 1,
         openDiscrepancyTotal = Money.parse("120000.00"),
         receivables = Money.parse("53268760.00"),
         receivableOrders = 6,
         collectedThisMonth = Money.parse("13500000.00"),
-        collectedTrend = Trend(BigDecimal("8.2"), up = true),
+        collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UP),
         collectedByMonth = collectedByMonth,
     )
 

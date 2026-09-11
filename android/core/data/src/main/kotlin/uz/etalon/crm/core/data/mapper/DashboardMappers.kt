@@ -7,6 +7,7 @@ import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.Trend
+import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.network.dto.DashboardDto
 import uz.etalon.crm.core.network.dto.RecentOrderDto
 import uz.etalon.crm.core.network.dto.TodayDeliveryOrderDto
@@ -46,6 +47,6 @@ fun DashboardDto.toDomain() = HomeSummary(
     awaitingOrders = ordersByPaymentState.awaiting,
     recent = recentOrders.mapNotNull { it.toDomain() },
     collectedThisMonth = Money(collectedThisMonth?.total ?: BigDecimal.ZERO),
-    collectedTrend = collectedThisMonth?.trend?.let { Trend(it.deltaPct, it.direction != "down") },
+    collectedTrend = collectedThisMonth?.trend?.let { Trend(it.deltaPct, TrendDirection.from(it.direction)) },
     collectedByMonth = collectedByMonth.map { MonthCollected(it.month, Money(it.collected)) },
 )

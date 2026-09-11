@@ -30,8 +30,24 @@ data class RecentOrder(
 
 data class MonthCollected(val month: String, val collected: Money)
 
-/** `up` is true unless the server's `direction` is `'down'` — `'flat'` renders as up-with-0. */
-data class Trend(val deltaPct: BigDecimal, val up: Boolean)
+/**
+ * The server's three directions (`src/lib/dashboard-metrics.ts`: `'up' | 'down' | 'flat'`), kept
+ * three-valued here. Folding FLAT into "up" drew an unchanged month as a green «↑ 0,0 %» — a rise
+ * that did not happen — so a month that stood still says so, in neutral ink and with no arrow.
+ * [UNKNOWN] is a direction this client does not recognise; it reads as FLAT does, making no claim.
+ */
+enum class TrendDirection { UP, DOWN, FLAT, UNKNOWN;
+    companion object {
+        fun from(s: String) = when (s) {
+            "up" -> UP
+            "down" -> DOWN
+            "flat" -> FLAT
+            else -> UNKNOWN
+        }
+    }
+}
+
+data class Trend(val deltaPct: BigDecimal, val direction: TrendDirection)
 
 /**
  * The subset of `GET /api/dashboard`'s `DashboardPayload` this slice renders: the «Бугун»
