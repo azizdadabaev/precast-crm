@@ -52,11 +52,21 @@ class ButtonsScreenshotTest {
         rule.onRoot().captureRoboImage("screenshots/ds_buttons_light.png")
     }
 
-    /** The pressed fills — indigoPressed under the primary, lavenderBg under the secondary — are
-     *  only reachable by holding the finger down, so the press is never released. */
+    /**
+     * Every pressed fill the system has, all held at once: indigoPressed under the primary,
+     * lavenderBg under the secondary and the inverse, navy under the dark one, and red again
+     * under the danger button — which is the point of pressing all five rather than one. A press
+     * is only reachable while the finger is down, so none of these is ever released.
+     *
+     * Each `down` takes its own pointer id: the touch dispatcher is shared across the tree, and a
+     * second pointer 0 while the first is still down is an error, not a second press.
+     */
     @Test fun buttonsPressedLight() {
         rule.setContent { EtalonTheme { ButtonSheet() } }
-        rule.onAllNodesWithText("Тасдиқлаш")[0].performTouchInput { down(center) }
+        listOf("Тасдиқлаш", "Бекор қилиш", "Ўчириш", "Рад этиш", "Сақлаш")
+            .forEachIndexed { pointer, label ->
+                rule.onAllNodesWithText(label)[0].performTouchInput { down(pointer, center) }
+            }
         rule.onRoot().captureRoboImage("screenshots/ds_buttons_pressed_light.png")
     }
 }
