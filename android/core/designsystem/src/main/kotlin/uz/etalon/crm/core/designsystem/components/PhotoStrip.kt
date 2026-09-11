@@ -15,12 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -45,12 +39,6 @@ import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 data class PhotoRef(val id: String?, val url: String, val pending: Boolean = false)
 
 private val THUMB = 104.dp
-
-/** The add tile's dash, matching [AddTile]'s — 1 dp, 6 on / 5 off, drawn on the `lg` corner. */
-private val DashStroke = 1.dp
-private val DashOn = 6.dp
-private val DashOff = 5.dp
-private val DashRadius = 12.dp
 
 /** [onLongPress] is the strip's secondary gesture — the order cockpit hangs "delete this photo"
  *  off it. It stays null wherever a photo may only be looked at. */
@@ -99,19 +87,7 @@ fun PhotoStrip(
                 // white-40 %, which is invisible on the page and only reads on an indigo panel.
                 Box(
                     Modifier.size(THUMB).clip(EtalonShapes.lg)
-                        .drawBehind {
-                            val w = DashStroke.toPx()
-                            drawRoundRect(
-                                color = EtalonColors.ink3,
-                                topLeft = Offset(w / 2f, w / 2f),
-                                size = Size(size.width - w, size.height - w),
-                                cornerRadius = CornerRadius(DashRadius.toPx() - w / 2f),
-                                style = Stroke(
-                                    width = w,
-                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(DashOn.toPx(), DashOff.toPx())),
-                                ),
-                            )
-                        }
+                        .dashedTileBorder(EtalonColors.ink3)
                         .clickable(onClick = onAdd),
                     contentAlignment = Alignment.Center,
                 ) {

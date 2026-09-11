@@ -24,13 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -49,17 +43,14 @@ import uz.etalon.crm.core.designsystem.theme.etalonRipple
 /** §2 sets a room tile's area figure at 15/700; the scale's nearest step, `titleSm`, is 16/800. */
 private val TileArea = EtalonType.titleSm.copy(fontSize = 15.sp, fontWeight = FontWeight.W700)
 
-/** The tiles' 1 dp dash, and the corner it is drawn on. */
-private val DashStroke = 1.dp
-private val DashOn = 6.dp
-private val DashOff = 5.dp
-private val TileRadius = 12.dp
-
 /**
  * One room of an order, `2b-order-detail.png`: the area, an arrow-out affordance when the room can
  * be opened, and the caller's caption («Зал · 5,8 × 6,4»).
  *
  * Give it `Modifier.weight(1f)` from inside the panel's `FlowRow` to make two equal columns.
+ *
+ * The 58 dp floor is [AddTile]'s: with three rooms the two sit side by side on the last row, and a
+ * tile an inch shorter than the slot beside it leaves the panel a ragged bottom edge.
  */
 @Composable
 fun RoomTile(
@@ -69,6 +60,7 @@ fun RoomTile(
     modifier: Modifier = Modifier,
 ) = Column(
     modifier
+        .heightIn(min = 58.dp)
         .clip(EtalonShapes.lg)
         .background(EtalonColors.indigoTile)
         .then(
@@ -92,38 +84,21 @@ fun RoomTile(
     Spacer(Modifier.height(2.dp))
     Text(
         caption,
-        style = EtalonType.caption.copy(fontWeight = FontWeight.W400),
+        style = EtalonType.captionLight,
         color = EtalonColors.onDarkMuted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
 }
 
-/**
- * The empty slot beside the rooms: 1 dp dashed white-40 % border, min height 58 (§2). Compose has
- * no dashed-border modifier, so the dash is a `drawBehind` stroke with a `PathEffect`. The stroke
- * is inset by half its width — drawn on the boundary it would be half-eaten by the `clip`.
- */
+/** The empty slot beside the rooms: [dashedTileBorder] in white-40 %, min height 58 (§2). */
 @Composable
 fun AddTile(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val stroke = EtalonColors.onDark.copy(alpha = 0.40f)
     Box(
         modifier
             .heightIn(min = 58.dp)
             .clip(EtalonShapes.lg)
-            .drawBehind {
-                val w = DashStroke.toPx()
-                drawRoundRect(
-                    color = stroke,
-                    topLeft = Offset(w / 2f, w / 2f),
-                    size = Size(size.width - w, size.height - w),
-                    cornerRadius = CornerRadius(TileRadius.toPx() - w / 2f),
-                    style = Stroke(
-                        width = w,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(DashOn.toPx(), DashOff.toPx())),
-                    ),
-                )
-            }
+            .dashedTileBorder(EtalonColors.onDark.copy(alpha = 0.40f))
             .clickable(
                 role = Role.Button,
                 indication = etalonRipple(true),
@@ -155,7 +130,7 @@ fun PanelTotal(
 ) = Column(modifier) {
     Text(
         caption,
-        style = EtalonType.caption.copy(fontWeight = FontWeight.W400),
+        style = EtalonType.captionLight,
         color = EtalonColors.onDarkMuted,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -169,16 +144,20 @@ fun PanelTotal(
  * navy(22, pad 10) → indigoPanel(18, pad 14/16).
  *
  * @param statusTag a [StatusTag] on [TagSurface.PANEL_ON_INDIGO]; a slot rather than a status so
- *   the panel serves shipments and payments as well as orders.
+ *   the panel serves shipments and payments as well as orders. Null where the screen has no status
+ *   to show — the 10 dp of air in front of it goes with it, rather than leaving the headline
+ *   trailing an empty gap.
  * @param tiles [RoomTile]s and one [AddTile], each carrying `Modifier.weight(1f)`; the caller
  *   supplies them so the panel does not need to know what a room is.
+ * @param totals two or three [PanelTotal]s, **each carrying `Modifier.weight(1f)`** — without it
+ *   a long figure pushes its neighbours out of the row instead of ellipsizing inside its own third.
  * @param onCall null hides the call button and leaves its 48 dp in place, so the date stays centred.
  */
 @Composable
 fun DetailPanel(
     caption: String,
     headline: String,
-    statusTag: @Composable () -> Unit,
+    statusTag: (@Composable () -> Unit)? = null,
     clientName: String,
     addressLine: String?,
     tiles: @Composable FlowRowScope.() -> Unit,
@@ -201,12 +180,14 @@ fun DetailPanel(
         Modifier.fillMaxWidth().clip(EtalonShapes.xxl).background(EtalonColors.indigoPanel)
             .padding(horizontal = 14.dp, vertical = 16.dp),
     ) {
-        Text(caption, style = EtalonType.caption.copy(fontWeight = FontWeight.W400), color = EtalonColors.onDarkMuted)
+        Text(caption, style = EtalonType.captionLight, color = EtalonColors.onDarkMuted)
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(headline, style = EtalonType.headline, color = EtalonColors.onDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.width(10.dp))
-            statusTag()
+            if (statusTag != null) {
+                Spacer(Modifier.width(10.dp))
+                statusTag()
+            }
         }
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
