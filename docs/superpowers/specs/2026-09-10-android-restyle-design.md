@@ -129,8 +129,9 @@ Spec §3.3 is three sentences and the phase-2 build followed it; the screen read
 | Canceled notice «Бекор қилинди · Сабаб: …» | Check | Conditional: `status == CANCELED` | `cancelReason`, `canceledAt` (new on the wire — the GET already returns them) |
 | **«Юклаш рўйхати»** — beam length × count per length, «Ғишт · жами N», footer «Оғирлик ~N кг» | **Load** | **Always** (the disqualifying gap) | derived on device exactly as the web (`page.tsx` `beamGroups`): group `rooms[]` by `beamLength` formatted to two decimals, sum `beamCount`, keep first-appearance order; blocks = Σ `rooms[].totalBlocks`; weight = `summary.totalArea × 180` kg (`ORDER_KG_PER_M2`, the calculator's own constant) |
 | Тўлов ҳолати (progress, Тўланган / Қолди) | Check | Always unless CANCELED | `summary.confirmedPaid`, `remaining`, `pendingAmount` |
-| Cost breakdown | Check | Conditional: any of discount / delivery / other ≠ 0 | `roomsSubtotal`, `discountAmount`, `deliveryCost`, `otherCost` |
-| Тўловлар (rows with status tags) | Check / Deliver | Conditional: any payment or pending amount | `payments[]` |
+| Cost breakdown | Check | Conditional: any of discount / delivery / other ≠ 0 | `roomsSubtotal`, `discountAmount`, **`discountPercent`** (the web labels the line «Чегирма 2,1 %»), `deliveryCost`, `otherCost` |
+| Тўловлар (rows with status tags) | Check / Deliver | Conditional: any payment or pending amount | `payments[]`; **when `status` is CANCELED** the card also carries «Тасдиқланган: `confirmedPaid` / `totalPrice`», because the progress and cost cards are hidden there and the rows would have no denominator |
+| **Шарҳлар** (comments with @mentions — the last three, «Барчаси (N)», a one-line composer) | Check / Deliver | Always with `order.view` | **Not in the order GET**: `GET`/`POST /api/orders/{id}/comments` (the deal's thread; `POST` is idempotent; mentions notify, and the push already deep-links to this screen). Read and post on the phone; no edit/delete, mention picker later |
 | Етказиш (timeline, Сана · Ҳайдовчи, location button) | Deliver | Always | `summary.placedAt`, `dispatch`, `shipments[].dispatchedAt/deliveredAt`, `deliveryLat/Lng/Url` |
 | Жўнатмалар (per-truck rows with `loadedBeams`, statuses) | Load | Conditional: split order or `dispatch.create` | `shipments[]` |
 | Расмлар (truck + proof photos, camera) | Load / Deliver | Conditional: photos or `canAddPhoto` | `loadedPhotos`, `deliveryProofUrl` |
@@ -138,6 +139,8 @@ Spec §3.3 is three sentences and the phase-2 build followed it; the screen read
 | Sticky bar (next step + «Тўлов қайд қилиш») | Load / Deliver | Conditional per the rules below | `nextStepFor`, `canRecordPayment` |
 
 **Actions — hide vs disable.** Hide an action that cannot apply to this order's lifecycle (a delivered or canceled order has no «Юклаш»). **Disable with a reason** an action that is merely blocked right now: a queued photo («Юборилмоқда…»), a failed upload («Юборилмади»), a payment door whose cap is zero while money is still owed («Тасдиқ кутилмоқда: N»). A missing button reads as a bug; a greyed button with a sentence teaches. The web's «Тўлов тўлиқ эмас — қолди: N» gate on the DELIVERED status button is **not** carried to the mobile delivery step: the phone's delivery-proof flow is where the driver takes the cash, so blocking it on the balance would block the job it exists for.
+
+**Later, decided:** the client's phone number as text under the name (a driver reads it aloud); a share-sheet «Юбориш» of an order image; «Чатга юбориш» — on the web it posts the quote image to the client's Telegram thread from the business account through `/api/inbox/{id}/reply-photo` and records it in the inbox, which the system share sheet cannot replace, so it waits for the inbox plumbing; per-payment receipt thumbnails (phase 3). **Not shown:** the stock-reserve warning — it fires after delivery and is resolved at the desk; its `STOCK_WARNING` event keeps its Uzbek label in «Тарих» rather than the server's English message.
 
 **Phone-first, not ported:** the camera for truck and proof photos, and the `tel:` / maps hand-off — the reasons to open the app rather than the site.
 
