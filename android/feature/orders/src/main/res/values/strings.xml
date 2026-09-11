@@ -76,6 +76,17 @@
     <string name="other_cost">Бошқа</string>
     <string name="total">Жами</string>
 
+    <!-- «Шарҳлар»: the deal's thread. A mention is typed as «@исм» and resolved on the server —
+         the hint says so, because there is no mention picker on the phone. -->
+    <string name="detail_comments">Шарҳлар</string>
+    <string name="detail_comment_hint">Шарҳ ёзинг… @ билан одам белгилаш</string>
+    <string name="detail_comments_empty">Ҳозирча шарҳлар йўқ</string>
+    <string name="detail_comments_all">Барчаси (%1$d)</string>
+    <string name="detail_comments_less">Камроқ</string>
+    <string name="detail_comment_send">Юбориш</string>
+    <!-- Shown when the send failed and the server named no reason of its own; the draft is kept. -->
+    <string name="detail_comment_failed">Шарҳ юборилмади</string>
+
     <string name="pending_amount">Тасдиқ кутилмоқда: %1$s</string>
     <string name="room_n">Хона %1$d</string>
     <string name="photos">Расмлар</string>

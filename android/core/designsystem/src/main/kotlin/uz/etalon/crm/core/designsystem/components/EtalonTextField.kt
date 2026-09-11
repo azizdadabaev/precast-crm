@@ -81,6 +81,8 @@ object EtalonTextFieldDefaults {
  *   not a disabled one.
  * @param keyboardActions what the IME action key does; pair it with [keyboardOptions]'s
  *   `imeAction` when a field hands focus on to the next one.
+ * @param maxLines how far a multi-line field may grow before it scrolls inside itself — M3's own
+ *   default, so a single-line field is still exactly one line. The comment composer caps at three.
  */
 @Composable
 fun EtalonTextField(
@@ -89,6 +91,7 @@ fun EtalonTextField(
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     singleLine: Boolean = true,
+    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     enabled: Boolean = true,
     readOnly: Boolean = false,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
@@ -110,6 +113,7 @@ fun EtalonTextField(
     supportingText = supportingText?.let { { Text(it, style = EtalonType.meta) } },
     isError = isError,
     singleLine = singleLine,
+    maxLines = maxLines,
     keyboardOptions = keyboardOptions,
     keyboardActions = keyboardActions,
     visualTransformation = visualTransformation,

@@ -24,6 +24,7 @@ import uz.etalon.crm.core.model.ClientRef
 import uz.etalon.crm.core.model.DispatchInfo
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.OrderComment
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderEventLine
 import uz.etalon.crm.core.model.OrderStatus
@@ -185,7 +186,22 @@ class OrderDetailScreenshotTest {
         discountPercent = BigDecimal(discountPercent),
     )
 
-    private fun show(o: OrderDetail, pending: List<PendingUpload> = emptyList(), who: Me = me) {
+    /** Three notes on the deal, oldest first as the route hands them back. The middle one carries
+     *  an «@Азиз» — the server resolved it into a `COMMENT_MENTION` push at write time, and the
+     *  phone draws exactly what was typed. */
+    private val comments = listOf(
+        OrderComment("k1", "Мижоз эртага тўлайман деди", Instant.parse("2026-09-02T10:05:00Z"), "u1", "Оператор", Role.SALES),
+        OrderComment("k2", "@Азиз юкни соат 8 да олиб кетинг", Instant.parse("2026-09-03T04:30:00Z"), "u2", "Диспетчер", Role.SALES),
+        OrderComment("k3", "Юкланди, ҳайдовчи йўлда", Instant.parse("2026-09-03T05:10:00Z"), "u3", "Азиз", Role.DRIVER),
+    )
+
+    private fun show(
+        o: OrderDetail,
+        pending: List<PendingUpload> = emptyList(),
+        who: Me = me,
+        comments: Resource<List<OrderComment>> = Resource.Success(emptyList()),
+        commentDraft: String = "",
+    ) {
         rule.setContent {
             EtalonTheme {
                 CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
@@ -194,6 +210,7 @@ class OrderDetailScreenshotTest {
                         onBack = {}, onRefresh = {}, onLoadTruck = {}, onAddPhoto = {}, onDeliveryProof = {},
                         onOpenShipments = {}, onOpenLocation = {}, onRecordPayment = {},
                         onDeletePhoto = {}, onRetryUpload = {}, onCancelUpload = {},
+                        comments = comments, commentDraft = commentDraft,
                     )
                 }
             }
@@ -364,6 +381,42 @@ class OrderDetailScreenshotTest {
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
     fun largeFont() = shoot("order_detail_font13", order())
+
+    /**
+     * «Шарҳлар» with a thread on it: three rows — avatar, name and time, then the note — over the
+     * composer with a draft in it and «Юбориш» live. The middle comment's «@Азиз» is drawn as the
+     * plain text it is; there is no mention picker on the phone, because the server is what
+     * resolves a mention (and what turns it into the push that opens this screen).
+     *
+     * The card is below the fold, so the frame scrolls to it: a `LazyColumn` composes only what it
+     * draws.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun commentsLight() {
+        show(order(), comments = Resource.Success(comments), commentDraft = "Тўлов бугун келади")
+        list().performScrollToNode(hasText("Шарҳлар"))
+        rule.onRoot().captureRoboImage("screenshots/order_detail_comments_light.png")
+    }
+
+    /** The same card at font scale 1,3 — the row that has to survive it is the name beside the
+     *  timestamp, which is why the name yields its width rather than pushing the date off. */
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
+    fun commentsLargeFont() {
+        show(order(), comments = Resource.Success(comments), commentDraft = "Тўлов бугун келади")
+        list().performScrollToNode(hasText("Шарҳлар"))
+        rule.onRoot().captureRoboImage("screenshots/order_detail_comments_font13.png")
+    }
+
+    /** An order nobody has written on yet still offers the card — the first person to open it
+     *  after a mention push must have somewhere to answer. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theEmptyThreadStillOffersTheComposer() {
+        show(order())
+        val empty = hasText("Ҳозирча шарҳлар йўқ")
+        list().performScrollToNode(empty)
+        rule.onNode(empty).assertIsDisplayed()
+        rule.onNode(hasText("Юбориш")).assertIsDisplayed()
+    }
 
     /**
      * The other half of C2's rule, which [canceledLight] cannot photograph because its order was

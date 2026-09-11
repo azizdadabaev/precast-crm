@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -34,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,12 +44,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.etalon.crm.core.designsystem.components.Avatar
 import uz.etalon.crm.core.designsystem.components.DetailPanel
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.EtalonTextField
 import uz.etalon.crm.core.designsystem.components.Lightbox
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.OutboxBanner
@@ -73,6 +79,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.Me
+import uz.etalon.crm.core.model.OrderComment
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderEventLine
 import uz.etalon.crm.core.model.PendingUpload
@@ -116,12 +123,18 @@ fun OrderDetailRoute(
     val r by vm.state.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle()
     val actionError by vm.actionError.collectAsStateWithLifecycle()
+    val comments by vm.comments.collectAsStateWithLifecycle()
+    val commentDraft by vm.commentDraft.collectAsStateWithLifecycle()
+    val postingComment by vm.postingComment.collectAsStateWithLifecycle()
+    val commentError by vm.commentError.collectAsStateWithLifecycle()
     OrderDetailScreen(
         r = r, me = me, pending = pending, actionError = actionError,
         onBack = onBack, onRefresh = vm::refresh,
         onLoadTruck = onLoadTruck, onAddPhoto = onAddPhoto, onDeliveryProof = onDeliveryProof,
         onOpenShipments = onOpenShipments, onOpenLocation = onOpenLocation, onRecordPayment = onRecordPayment,
         onDeletePhoto = vm::deletePhoto, onRetryUpload = vm::retryUpload, onCancelUpload = vm::cancelUpload,
+        comments = comments, commentDraft = commentDraft, postingComment = postingComment, commentError = commentError,
+        onCommentDraftChange = vm::setCommentDraft, onPostComment = vm::postComment,
     )
 }
 
@@ -164,6 +177,14 @@ fun OrderDetailScreen(
     onDeletePhoto: (String) -> Unit,
     onRetryUpload: (String) -> Unit,
     onCancelUpload: (String) -> Unit,
+    // «Шарҳлар». Defaulted so every frame that has nothing to say about the thread still draws the
+    // card in its empty state rather than having to spell six arguments out.
+    comments: Resource<List<OrderComment>> = Resource.Loading(null),
+    commentDraft: String = "",
+    postingComment: Boolean = false,
+    commentError: String? = null,
+    onCommentDraftChange: (String) -> Unit = {},
+    onPostComment: () -> Unit = {},
 ) {
     val o = r.dataOrNull
     val ctx = LocalContext.current
@@ -276,6 +297,15 @@ fun OrderDetailScreen(
                             )
                         }
                     }
+                }
+                // §5.1a's order: the thread sits between the photos and «Тарих». Always drawn —
+                // a `COMMENT_MENTION` push lands on this screen, and a card that is absent until
+                // somebody has already written something is a dead end for the first person to.
+                item {
+                    CommentsCard(
+                        comments = comments, draft = commentDraft, posting = postingComment,
+                        error = commentError, onDraftChange = onCommentDraftChange, onPost = onPostComment,
+                    )
                 }
                 if (o.events.isNotEmpty()) item { EventsCard(o.events) }
             }
@@ -525,6 +555,115 @@ private fun LoadRow(label: String, amount: String) = Row(
 /** How many «Тарих» rows are drawn before «Барчаси (N)». Spec §5.1a: the section is a *collapsed*
  *  one — three lines of context, and the rest a tap away. */
 private const val COLLAPSED_EVENTS = 3
+
+/** The same rule for «Шарҳлар» — but the LAST three, not the first: the route hands the thread
+ *  back oldest-first and what anyone opening an order wants is the end of the conversation. */
+private const val COLLAPSED_COMMENTS = 3
+
+/**
+ * «Шарҳлар»: the deal's thread and a composer under a hairline.
+ *
+ * An `@исм` is drawn as the plain text it is. The server resolves mentions at write time — it is
+ * what turns them into the `COMMENT_MENTION` push that opens this very screen — so the phone has
+ * nothing to look up and no mention picker to offer; typing the name is the whole interaction.
+ *
+ * Online only, with no cache behind it: a failed load leaves the card empty with the screen's own
+ * error banner above, and a failed send keeps the draft in the field so nobody retypes a note.
+ * The expansion is `rememberSaveable` because a rotation in the middle of reading a long thread
+ * must not fold it back to three lines.
+ */
+@Composable
+private fun CommentsCard(
+    comments: Resource<List<OrderComment>>,
+    draft: String,
+    posting: Boolean,
+    error: String?,
+    onDraftChange: (String) -> Unit,
+    onPost: () -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val thread = comments.dataOrNull.orEmpty()
+    WhiteCard(stringResource(R.string.detail_comments)) {
+        if (thread.isEmpty()) {
+            Text(stringResource(R.string.detail_comments_empty), style = EtalonType.body, color = EtalonColors.ink3)
+        }
+        (if (expanded) thread else thread.takeLast(COLLAPSED_COMMENTS)).forEach { CommentRow(it) }
+        if (thread.size > COLLAPSED_COMMENTS) {
+            Text(
+                if (expanded) {
+                    stringResource(R.string.detail_comments_less)
+                } else {
+                    stringResource(R.string.detail_comments_all, thread.size)
+                },
+                style = EtalonType.label,
+                color = EtalonColors.indigo,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.Button) { expanded = !expanded }
+                    .heightIn(min = EtalonSpace.minTouch)
+                    .wrapContentHeight(Alignment.CenterVertically),
+            )
+        }
+        HorizontalDivider(
+            Modifier.padding(vertical = EtalonSpace.sm),
+            thickness = EtalonSpace.hairline,
+            color = EtalonColors.surfaceBorder,
+        )
+        if (error != null) {
+            // The server's own Uzbek sentence when it named a reason; the flat «Шарҳ юборилмади»
+            // when it did not — the same shape the outbox banner uses for a failed upload.
+            ErrorBanner(error.ifBlank { stringResource(R.string.detail_comment_failed) }, onRetry = onPost)
+            Spacer(Modifier.height(EtalonSpace.sm))
+        }
+        EtalonTextField(
+            value = draft,
+            onValueChange = onDraftChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = stringResource(R.string.detail_comment_hint),
+            singleLine = false,
+            maxLines = 3,
+            enabled = !posting,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onPost() }),
+        )
+        Spacer(Modifier.height(EtalonSpace.sm))
+        Row(Modifier.fillMaxWidth(), Arrangement.End) {
+            PrimaryButton(
+                text = stringResource(R.string.detail_comment_send),
+                onClick = onPost,
+                enabled = draft.isNotBlank(),
+                loading = posting,
+                compact = true,
+            )
+        }
+    }
+}
+
+/** One line of the thread: the author's circle, their name with when they wrote it, then the note. */
+@Composable
+private fun CommentRow(c: OrderComment) = Row(
+    Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs),
+) {
+    Avatar(c.authorName, size = 28.dp)
+    Spacer(Modifier.width(EtalonSpace.sm))
+    Column(Modifier.weight(1f)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                c.authorName,
+                style = EtalonType.label,
+                color = EtalonColors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // fill = false: a short name leaves the date beside it rather than shoving it to
+                // the far edge, and a long one still yields the space the date needs.
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(EtalonSpace.xs))
+            Text(formatDateTime(c.createdAt), style = EtalonType.meta, color = EtalonColors.ink2, maxLines = 1)
+        }
+        Text(c.body, style = EtalonType.body, color = EtalonColors.ink)
+    }
+}
 
 /**
  * «Тарих», collapsed. The expansion happens in place: there is no history screen to navigate to,
