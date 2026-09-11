@@ -1,12 +1,14 @@
 package uz.etalon.crm.feature.orders
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -23,6 +25,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.ClientRef
 import uz.etalon.crm.core.model.DispatchInfo
 import uz.etalon.crm.core.model.Me
+import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderComment
 import uz.etalon.crm.core.model.OrderDetail
@@ -41,6 +44,8 @@ import uz.etalon.crm.core.model.RoomLine
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.feature.orders.detail.OrderDetailScreen
+import uz.etalon.crm.feature.orders.detail.TAG_COMMENTS_ALL
+import uz.etalon.crm.feature.orders.detail.TAG_EVENTS_ALL
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -190,10 +195,17 @@ class OrderDetailScreenshotTest {
      *  an «@Азиз» — the server resolved it into a `COMMENT_MENTION` push at write time, and the
      *  phone draws exactly what was typed. */
     private val comments = listOf(
-        OrderComment("k1", "Мижоз эртага тўлайман деди", Instant.parse("2026-09-02T10:05:00Z"), "u1", "Оператор", Role.SALES),
-        OrderComment("k2", "@Азиз юкни соат 8 да олиб кетинг", Instant.parse("2026-09-03T04:30:00Z"), "u2", "Диспетчер", Role.SALES),
-        OrderComment("k3", "Юкланди, ҳайдовчи йўлда", Instant.parse("2026-09-03T05:10:00Z"), "u3", "Азиз", Role.DRIVER),
+        OrderComment("k1", "Мижоз эртага тўлайман деди", Instant.parse("2026-09-02T10:05:00Z"), "u1", "Оператор"),
+        OrderComment("k2", "@Азиз юкни соат 8 да олиб кетинг", Instant.parse("2026-09-03T04:30:00Z"), "u2", "Диспетчер"),
+        OrderComment("k3", "Юкланди, ҳайдовчи йўлда", Instant.parse("2026-09-03T05:10:00Z"), "u3", "Азиз"),
     )
+
+    /** Five, so «Шарҳлар» has something to collapse: the card draws the LAST three and offers
+     *  «Барчаси (5)». */
+    private val fiveComments = listOf(
+        OrderComment("k0", "Ўлчов олинди, ҳисоб тайёр", Instant.parse("2026-09-01T06:00:00Z"), "u1", "Оператор"),
+        OrderComment("k01", "Мижоз чизмани тасдиқлади", Instant.parse("2026-09-01T11:20:00Z"), "u2", "Диспетчер"),
+    ) + comments
 
     private fun show(
         o: OrderDetail,
@@ -343,8 +355,23 @@ class OrderDetailScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp")
     fun historyLight() {
         show(order(events = sixEvents))
-        list().performScrollToNode(hasText("Барчаси (6)"))
+        list().performScrollToNode(hasTestTag(TAG_EVENTS_ALL))
         rule.onRoot().captureRoboImage("screenshots/order_detail_history_light.png")
+    }
+
+    /** The expansion goes both ways. An order can carry up to a hundred events (the route's own
+     *  `take: 100`), and «Барчаси» with no way back leaves the composer and the sticky bar a
+     *  hundred rows away from the operator who only wanted to check the last delivery. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theHistoryFoldsBackUp() {
+        show(order(events = sixEvents))
+        val row = hasTestTag(TAG_EVENTS_ALL)
+        list().performScrollToNode(row)
+        rule.onNode(row).assertTextEquals("Барчаси (6)")
+        rule.onNode(row).performClick()
+        rule.onNode(row).assertTextEquals("Камроқ")
+        rule.onNode(row).performClick()
+        rule.onNode(row).assertTextEquals("Барчаси (6)")
     }
 
     /**
@@ -364,6 +391,44 @@ class OrderDetailScreenshotTest {
         val line = hasText("Чегирма 3,7%")
         list().performScrollToNode(line)
         rule.onNode(line).assertIsDisplayed()
+        // Then down to the delivery card's footer for the picture. `performScrollToNode` moves the
+        // minimum needed, and the breakdown is ALREADY in the viewport — behind the sticky bar,
+        // which `assertIsDisplayed` does not know about and a baseline would show as nothing. The
+        // footer of the card after it is the first unambiguous node far enough down to pull the
+        // whole breakdown clear («Етказиш» itself matches the breakdown's own delivery row too).
+        list().performScrollToNode(hasText("Ҳайдовчи"))
+        rule.onRoot().captureRoboImage("screenshots/order_detail_discount_light.png")
+    }
+
+    /**
+     * A cancellation the server recorded no date for: the notice keeps its sentence and simply
+     * drops the «· 3 сен 2026». `canceledAt` is nullable on the wire, and an order canceled
+     * before that column existed reads exactly this way — the reason is the part nobody can
+     * reconstruct from the rest of the screen, so it must not be lost with the date.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun aCancellationWithNoDateStillSaysItWasCanceled() {
+        show(order(status = OrderStatus.CANCELED, cancelReason = "Мижоз бекор қилишни сўради", canceledAt = null))
+        val notice = hasText("Бекор қилинди")
+        list().performScrollToNode(notice)
+        rule.onNode(notice).assertIsDisplayed()
+        rule.onNode(hasText("Сабаб: Мижоз бекор қилишни сўради")).assertIsDisplayed()
+    }
+
+    /** …and one with a date but no grounds: «Сабаб кўрсатилмаган», said plainly, rather than a
+     *  blank line that reads as a rendering bug. A blank string is the same case as a null one —
+     *  the server stores both. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun aCancellationWithNoReasonSaysSoRatherThanNothing() {
+        show(
+            order(
+                status = OrderStatus.CANCELED, cancelReason = "   ",
+                canceledAt = Instant.parse("2026-09-03T09:00:00Z"),
+            ),
+        )
+        val reason = hasText("Сабаб: Сабаб кўрсатилмаган")
+        list().performScrollToNode(reason)
+        rule.onNode(reason).assertIsDisplayed()
     }
 
     /** §5.1a: the stock-reserve warning is resolved at the desk and its server message is written
@@ -372,7 +437,7 @@ class OrderDetailScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp")
     fun theStockWarningShowsItsUzbekLabelNotTheServersEnglish() {
         show(order(events = sixEvents))
-        val all = hasText("Барчаси (6)")
+        val all = hasTestTag(TAG_EVENTS_ALL)
         list().performScrollToNode(all)
         rule.onNode(all).performClick()
         list().performScrollToNode(hasText("Қолдиқ огоҳлантириши", substring = true))
@@ -381,6 +446,45 @@ class OrderDetailScreenshotTest {
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
     fun largeFont() = shoot("order_detail_font13", order())
+
+    /**
+     * [blockedLight]'s order at font scale 1,3 — the frame that checks the sticky bar's clearance
+     * rather than its wording. The outbox banner disables the secondary, and the bar keeps the
+     * whole-order «Тўлов қайд қилиш» beside it, so at 1,3 both labels are at their widest while
+     * the list below still has to end clear of the bar.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
+    fun blockedLargeFont() = shoot(
+        "order_detail_blocked_font13",
+        order(shipments = listOf(shipment)),
+        listOf(
+            PendingUpload(
+                id = "q1", kind = OutboxKind.ADD_LOADED_PHOTO, orderId = "o3", shipmentId = "s1",
+                failed = false, attempts = 0, error = null,
+            ),
+        ),
+    )
+
+    /**
+     * The payment door blocked at font scale 1,3 — the case the list's bottom clearance is
+     * measured for. «Тўлов қайд қилиш» is greyed with «Тасдиқ кутилмоқда: 13 350 000» wrapped onto
+     * the two `meta` lines the reason is allowed, and the list reserves exactly that box's measured
+     * height on top of the bar's own, so the last card ends above the bar rather than under it.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
+    fun pendingCapLargeFont() = shoot(
+        "order_detail_pending_cap_font13",
+        order(
+            status = OrderStatus.PLACED, paid = "0.00",
+            payments = listOf(
+                payment.copy(
+                    id = "p9", amount = Money.parse("13350000.00"),
+                    status = PaymentStatus.PENDING_CONFIRMATION,
+                    recordedAt = Instant.parse("2026-09-03T12:40:00Z"),
+                ),
+            ),
+        ),
+    )
 
     /**
      * «Шарҳлар» with a thread on it: three rows — avatar, name and time, then the note — over the
@@ -405,6 +509,54 @@ class OrderDetailScreenshotTest {
         show(order(), comments = Resource.Success(comments), commentDraft = "Тўлов бугун келади")
         list().performScrollToNode(hasText("Шарҳлар"))
         rule.onRoot().captureRoboImage("screenshots/order_detail_comments_font13.png")
+    }
+
+    /**
+     * The thread expanded: five notes behind «Барчаси (5)», opened, then folded back with
+     * «Камроқ». The card draws the LAST three collapsed — the route hands the thread back
+     * oldest-first and what anyone opening an order wants is the end of the conversation — so the
+     * two oldest are what appears on the tap.
+     *
+     * The row is found by its tag, not its wording: «Барчаси (5)» changes with the count and
+     * «Камроқ» is the same word the history card uses.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun commentsExpandedLight() {
+        show(order(), comments = Resource.Success(fiveComments))
+        val all = hasTestTag(TAG_COMMENTS_ALL)
+        list().performScrollToNode(all)
+        rule.onNode(all).assertTextEquals("Барчаси (5)")
+        rule.onNode(all).performClick()
+        rule.onNode(all).assertTextEquals("Камроқ")
+        list().performScrollToNode(hasText("Ўлчов олинди, ҳисоб тайёр"))
+        rule.onRoot().captureRoboImage("screenshots/order_detail_comments_expanded_light.png")
+        rule.onNode(all).performClick()
+        rule.onNode(all).assertTextEquals("Барчаси (5)")
+        rule.onNode(hasText("Ўлчов олинди, ҳисоб тайёр")).assertDoesNotExist()
+    }
+
+    /**
+     * A thread that failed to LOAD must not read as a deal nobody has written on. The card shows
+     * the server's reason with a retry above whatever rows the last answer left behind — here
+     * none, which is exactly the case «Ҳозирча шарҳлар йўқ» would have lied about.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun aFailedThreadSaysSoInsteadOfReadingAsEmpty() {
+        show(order(), comments = Resource.Error(null, AppError.Network("Интернет алоқаси йўқ")))
+        val card = hasText("Шарҳлар")
+        list().performScrollToNode(card)
+        rule.onNode(hasText("Интернет алоқаси йўқ")).assertIsDisplayed()
+        rule.onNode(hasText("Ҳозирча шарҳлар йўқ")).assertDoesNotExist()
+    }
+
+    /** …and the rows the last successful load left behind stay under the banner: a dropped refresh
+     *  must not empty a thread the operator was reading. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun aFailedRefreshKeepsTheThreadItAlreadyHad() {
+        show(order(), comments = Resource.Error(comments, AppError.Network("Интернет алоқаси йўқ")))
+        list().performScrollToNode(hasText("Шарҳлар"))
+        rule.onNode(hasText("Интернет алоқаси йўқ")).assertIsDisplayed()
+        rule.onNode(hasText("Юкланди, ҳайдовчи йўлда")).assertIsDisplayed()
     }
 
     /** An order nobody has written on yet still offers the card — the first person to open it

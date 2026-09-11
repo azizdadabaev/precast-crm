@@ -1,7 +1,6 @@
 package uz.etalon.crm.core.data.mapper
 
 import uz.etalon.crm.core.model.OrderComment
-import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.network.dto.CommentDto
 import java.time.Instant
 
@@ -11,8 +10,6 @@ fun CommentDto.toDomain() = OrderComment(
     createdAt = Instant.parse(createdAt),
     authorId = author.id,
     authorName = author.name,
-    // A role this client does not know reads as UNKNOWN rather than failing the whole thread.
-    authorRole = Role.from(author.role),
 )
 
 /** The thread as the screen draws it: oldest first, exactly as the route orders it, with any

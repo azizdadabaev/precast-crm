@@ -7,12 +7,13 @@ import kotlinx.serialization.Serializable
  * joined (`src/app/api/orders/[id]/comments/route.ts`). Only the fields this client draws are
  * declared; `EtalonJson` ignores the rest (`updatedAt`, `editHistory`, `mentionedUserIds`,
  * `projectId`, `deletedBy`…) — the mentions are resolved server-side and the phone has no edit,
- * delete or mention-picker surface to spend them on.
+ * delete or mention-picker surface to spend them on. The author's `role` is ignored for the same
+ * reason: a comment row on the phone is a name, a time and a note, with no role badge to draw.
  *
  * [deletedAt] is the exception: the list route already filters `deletedAt: null`, and it is kept
  * so the client states the rule itself rather than trusting a query it cannot see.
  */
-@Serializable data class CommentAuthorDto(val id: String, val name: String, val role: String)
+@Serializable data class CommentAuthorDto(val id: String, val name: String)
 
 @Serializable data class CommentDto(
     val id: String,

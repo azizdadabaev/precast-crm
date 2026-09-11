@@ -21,7 +21,6 @@ import uz.etalon.crm.core.network.dto.CommentCreateRequest
 import uz.etalon.crm.core.network.dto.OrderDetailDto
 import java.time.Instant
 import java.time.LocalDate
-import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Named
@@ -221,15 +220,16 @@ class OrdersRepository @Inject constructor(
      * comment appears without a second round trip. Mentions are extracted server-side from the
      * `@name` text — this sends the body exactly as typed.
      *
-     * The `Idempotency-Key` is minted per **attempt**, not per submission: a retry of the same
-     * draft therefore posts a second comment rather than replaying the first. That is the cheap
-     * trade a comment can afford and a payment cannot — a duplicated note is noise someone can
-     * read past, and the alternative (pinning a key to a draft) buys nothing against the only
-     * failure it would cover, a response lost after the row committed.
+     * [idempotencyKey] is the caller's, not this method's — the same division as
+     * `PaymentsRepository.record`. The route is `withIdempotency`-wrapped, so a retry carrying the
+     * key the first attempt used replays that attempt's response instead of writing a second copy
+     * of the note; minting one here, per attempt, would defeat exactly that. Only a caller that
+     * holds the draft can decide when the key retires, so `OrderDetailViewModel` keeps it in its
+     * `SavedStateHandle` — one key per draft, rotated once the server has the comment.
      */
-    suspend fun postComment(orderId: String, body: String): Result<OrderComment> = runCatchingCancellable {
+    suspend fun postComment(orderId: String, body: String, idempotencyKey: String): Result<OrderComment> = runCatchingCancellable {
         val started = epoch.get()
-        val comment = api.postComment(orderId, CommentCreateRequest(body), UUID.randomUUID().toString()).toDomain()
+        val comment = api.postComment(orderId, CommentCreateRequest(body), idempotencyKey).toDomain()
         commentOutcomes.update { m ->
             if (epoch.get() != started) {
                 m // signed out mid-flight; this comment belongs to the old session

@@ -11,7 +11,9 @@ import java.time.Instant
  * draws an `@name` as plain text rather than inventing a link it has no screen for.
  *
  * There is no `deletedAt` here: the list route filters soft-deleted rows out, and this client
- * neither edits nor deletes, so a comment that reaches the model is one that exists.
+ * neither edits nor deletes, so a comment that reaches the model is one that exists. Nor is there
+ * an author role: a row draws the name, the time and the note, and §5.1a puts no role badge on the
+ * phone — a field nothing reads is one more thing to keep in step with the server for nothing.
  */
 data class OrderComment(
     val id: String,
@@ -19,5 +21,4 @@ data class OrderComment(
     val createdAt: Instant,
     val authorId: String,
     val authorName: String,
-    val authorRole: Role,
 )

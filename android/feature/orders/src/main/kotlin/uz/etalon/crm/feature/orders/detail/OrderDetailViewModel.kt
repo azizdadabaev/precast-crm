@@ -1,5 +1,6 @@
 package uz.etalon.crm.feature.orders.detail
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.Binds
@@ -26,6 +27,7 @@ import uz.etalon.crm.core.model.OrderComment
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.PendingUpload
 import uz.etalon.crm.core.model.Resource
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -39,7 +41,7 @@ interface OrderDetailSource {
     suspend fun refreshDetail(id: String)
     fun comments(orderId: String): Flow<Resource<List<OrderComment>>>
     suspend fun refreshComments(orderId: String)
-    suspend fun postComment(orderId: String, body: String): Result<OrderComment>
+    suspend fun postComment(orderId: String, body: String, idempotencyKey: String): Result<OrderComment>
     fun pendingUploads(orderId: String): Flow<List<PendingUpload>>
     suspend fun retryUpload(id: String)
     suspend fun cancelUpload(id: String)
@@ -55,7 +57,8 @@ class RepositoryOrderDetailSource @Inject constructor(
     override suspend fun refreshDetail(id: String) = repo.refreshDetail(id)
     override fun comments(orderId: String) = repo.comments(orderId)
     override suspend fun refreshComments(orderId: String) = repo.refreshComments(orderId)
-    override suspend fun postComment(orderId: String, body: String) = repo.postComment(orderId, body)
+    override suspend fun postComment(orderId: String, body: String, idempotencyKey: String) =
+        repo.postComment(orderId, body, idempotencyKey)
     override fun pendingUploads(orderId: String) = outbox.observeForOrder(orderId)
     override suspend fun retryUpload(id: String) = outbox.retry(id)
     override suspend fun cancelUpload(id: String) = outbox.cancel(id)
@@ -70,10 +73,19 @@ abstract class OrderDetailSourceModule {
     @Binds abstract fun orderDetailSource(impl: RepositoryOrderDetailSource): OrderDetailSource
 }
 
+/** The draft the `Idempotency-Key` in flight belongs to, and the key itself — see
+ *  [commentIdempotencyKeyFor]. Both ride in `SavedStateHandle` so process death in the middle of
+ *  a send cannot mint a fresh key for a note the server may already have taken. */
+private const val KEY_COMMENT_IDEMPOTENCY = "detail.commentIdempotencyKey"
+private const val KEY_COMMENT_IDEMPOTENCY_FOR = "detail.commentIdempotencyFor"
+
 @HiltViewModel(assistedFactory = OrderDetailViewModel.Factory::class)
 class OrderDetailViewModel @AssistedInject constructor(
     private val source: OrderDetailSource,
     @Assisted val orderId: String,
+    // Defaulted so a unit test can build the ViewModel with nothing but a fake source; Hilt always
+    // passes the real one from the ViewModel component.
+    private val saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
     @AssistedFactory
     interface Factory {
@@ -109,10 +121,21 @@ class OrderDetailViewModel @AssistedInject constructor(
 
     fun refresh() {
         viewModelScope.launch { source.refreshDetail(orderId) }
+        refreshComments()
+    }
+
+    /** The thread alone — what the comments card's own error banner retries. Pulling the whole
+     *  screen would work too, but a failed thread is not a reason to re-fetch the order. */
+    fun refreshComments() {
         viewModelScope.launch { source.refreshComments(orderId) }
     }
 
-    fun setCommentDraft(text: String) { _commentDraft.value = text }
+    /** Typing is the operator answering the failure, so the message goes with the next keystroke
+     *  rather than sitting over a draft that has already been corrected. */
+    fun setCommentDraft(text: String) {
+        _commentDraft.value = text
+        _commentError.value = null
+    }
 
     /**
      * Sends the draft as typed — `@name` and all, since the server is what resolves a mention.
@@ -127,8 +150,13 @@ class OrderDetailViewModel @AssistedInject constructor(
         if (body.isEmpty() || _postingComment.value) return
         viewModelScope.launch {
             _postingComment.value = true
-            source.postComment(orderId, body).fold(
+            source.postComment(orderId, body, commentIdempotencyKeyFor(body)).fold(
                 onSuccess = {
+                    // The key retires WITH the draft it belonged to. Leaving it would make an
+                    // identical second note — «Тўланди», twice in a day — replay the first
+                    // comment's response instead of writing a new row.
+                    saved.remove<String>(KEY_COMMENT_IDEMPOTENCY_FOR)
+                    saved.remove<String>(KEY_COMMENT_IDEMPOTENCY)
                     _commentDraft.value = ""
                     _commentError.value = null
                 },
@@ -136,6 +164,26 @@ class OrderDetailViewModel @AssistedInject constructor(
             )
             _postingComment.value = false
         }
+    }
+
+    /**
+     * The `Idempotency-Key` for ONE draft. `POST /api/orders/{id}/comments` is
+     * `withIdempotency`-wrapped, so a retry carrying the key the first attempt used replays that
+     * attempt's response instead of appending a second copy of the note — which is the whole
+     * defence against a response lost after the row had already committed. Tapping «Юбориш» again
+     * after a timeout is exactly that case, and it is the tap an operator makes every time.
+     *
+     * The key therefore may not change between retries of the same text, and must change once the
+     * text does: the wrapper caches every non-5xx outcome, refusals included, so reusing a key
+     * after correcting a body the server rejected would replay the 422 for ever. The body is the
+     * discriminator and it never leaves the device — only the opaque UUID is sent.
+     */
+    private fun commentIdempotencyKeyFor(body: String): String {
+        if (saved.get<String>(KEY_COMMENT_IDEMPOTENCY_FOR) != body) {
+            saved[KEY_COMMENT_IDEMPOTENCY_FOR] = body
+            saved[KEY_COMMENT_IDEMPOTENCY] = UUID.randomUUID().toString()
+        }
+        return requireNotNull(saved.get<String>(KEY_COMMENT_IDEMPOTENCY))
     }
 
     fun retryUpload(id: String) = runAction { runCatchingCancellable { source.retryUpload(id) } }

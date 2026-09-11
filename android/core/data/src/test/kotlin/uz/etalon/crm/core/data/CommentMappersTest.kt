@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.data.mapper.toCommentThread
 import uz.etalon.crm.core.data.mapper.toDomain
-import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.network.dto.CommentDto
 import java.time.Instant
 
@@ -16,7 +15,8 @@ class CommentMappersTest {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false; coerceInputValues = true }
 
     /** A row exactly as the route returns it — `updatedAt`, `editHistory`, `mentionedUserIds`,
-     *  `projectId`, `gazoblokOrderId` and `deletedBy` included, none of them declared on the DTO. */
+     *  `projectId`, `gazoblokOrderId`, `deletedBy` and the author's `role` included, none of them
+     *  declared on the DTO. */
     private val wire = """
         {
           "id": "cmt_01",
@@ -42,7 +42,6 @@ class CommentMappersTest {
         assertEquals(Instant.parse("2026-09-10T07:15:00Z"), c.createdAt)
         assertEquals("u7", c.authorId)
         assertEquals("Оператор", c.authorName)
-        assertEquals(Role.SALES, c.authorRole)
     }
 
     /** `deletedAt` is the one optional field the client reads, and the POST response omits it
@@ -57,9 +56,12 @@ class CommentMappersTest {
         assertEquals("Тайёр", c.toDomain().body)
     }
 
-    @Test fun `an unknown role reads as UNKNOWN rather than failing the thread`() {
+    /** The author's role rides on the wire and is deliberately not declared — nothing on the
+     *  phone draws a role badge — so a role this client has never heard of must decode like any
+     *  other unknown field rather than failing the whole thread. */
+    @Test fun `an author role the client has never heard of still decodes`() {
         val c = json.decodeFromString(CommentDto.serializer(), wire.replace("\"SALES\"", "\"FOREMAN\"")).toDomain()
-        assertEquals(Role.UNKNOWN, c.authorRole)
+        assertEquals("Оператор", c.authorName)
     }
 
     /** The route filters soft-deleted rows already; the client restates the rule so one that slips

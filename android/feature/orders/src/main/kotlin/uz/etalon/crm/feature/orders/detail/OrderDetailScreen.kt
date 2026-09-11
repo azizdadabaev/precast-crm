@@ -138,6 +138,7 @@ fun OrderDetailRoute(
         onDeletePhoto = vm::deletePhoto, onRetryUpload = vm::retryUpload, onCancelUpload = vm::cancelUpload,
         comments = comments, commentDraft = commentDraft, postingComment = postingComment, commentError = commentError,
         onCommentDraftChange = vm::setCommentDraft, onPostComment = vm::postComment,
+        onRetryComments = vm::refreshComments,
     )
 }
 
@@ -188,6 +189,7 @@ fun OrderDetailScreen(
     commentError: String? = null,
     onCommentDraftChange: (String) -> Unit = {},
     onPostComment: () -> Unit = {},
+    onRetryComments: () -> Unit = {},
 ) {
     val o = r.dataOrNull
     val ctx = LocalContext.current
@@ -318,6 +320,7 @@ fun OrderDetailScreen(
                     CommentsCard(
                         comments = comments, draft = commentDraft, posting = postingComment,
                         error = commentError, onDraftChange = onCommentDraftChange, onPost = onPostComment,
+                        onRetryLoad = onRetryComments,
                     )
                 }
                 if (o.events.isNotEmpty()) item { EventsCard(o.events) }
@@ -582,8 +585,10 @@ private const val COLLAPSED_COMMENTS = 3
  * what turns them into the `COMMENT_MENTION` push that opens this very screen — so the phone has
  * nothing to look up and no mention picker to offer; typing the name is the whole interaction.
  *
- * Online only, with no cache behind it: a failed load leaves the card empty with the screen's own
- * error banner above, and a failed send keeps the draft in the field so nobody retypes a note.
+ * Online only, with no cache behind it. A failed LOAD is said inside the card, above whatever
+ * rows the last answer left there: «Ҳозирча шарҳлар йўқ» under a thread that merely failed to
+ * arrive is a lie, and the operator has to be able to tell an empty deal from a dropped
+ * connection. A failed SEND keeps the draft in the field so nobody retypes a note.
  * The expansion is `rememberSaveable` because a rotation in the middle of reading a long thread
  * must not fold it back to three lines.
  */
@@ -595,11 +600,15 @@ private fun CommentsCard(
     error: String?,
     onDraftChange: (String) -> Unit,
     onPost: () -> Unit,
+    onRetryLoad: () -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val thread = comments.dataOrNull.orEmpty()
     WhiteCard(stringResource(R.string.detail_comments)) {
-        if (thread.isEmpty()) {
+        if (comments is Resource.Error) {
+            ErrorBanner(comments.error.message, onRetry = onRetryLoad)
+            Spacer(Modifier.height(EtalonSpace.sm))
+        } else if (thread.isEmpty()) {
             Text(stringResource(R.string.detail_comments_empty), style = EtalonType.body, color = EtalonColors.ink3)
         }
         (if (expanded) thread else thread.takeLast(COLLAPSED_COMMENTS)).forEach { CommentRow(it) }
@@ -614,6 +623,7 @@ private fun CommentsCard(
                 color = EtalonColors.indigo,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag(TAG_COMMENTS_ALL)
                     .clickable(role = Role.Button) { expanded = !expanded }
                     .heightIn(min = EtalonSpace.minTouch)
                     .wrapContentHeight(Alignment.CenterVertically),
@@ -637,12 +647,17 @@ private fun CommentsCard(
             placeholder = stringResource(R.string.detail_comment_hint),
             singleLine = false,
             maxLines = 3,
-            enabled = !posting,
+            // readOnly, not disabled: a send in flight must not grey out the note the operator
+            // just typed — if it fails, that text is what they keep.
+            readOnly = posting,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onPost() }),
         )
         Spacer(Modifier.height(EtalonSpace.sm))
         Row(Modifier.fillMaxWidth(), Arrangement.End) {
+            // Live whenever there is something to send, offline included: this app observes no
+            // connectivity, so a disabled-when-offline button would be guessing. The send fails
+            // loudly instead and keeps the draft, which is the honest half of the same promise.
             PrimaryButton(
                 text = stringResource(R.string.detail_comment_send),
                 onClick = onPost,
