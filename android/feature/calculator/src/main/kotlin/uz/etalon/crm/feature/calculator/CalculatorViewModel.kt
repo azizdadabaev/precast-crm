@@ -250,6 +250,8 @@ open class CalculatorViewModel(
         viewModelScope.launch {
             val restored = observeDraft().first()
             if (restored != null) restoreDraft(restored)
+            // Only now may the screen act on an empty quote — see [CalculatorUiState.restored].
+            _state.update { it.copy(restored = true) }
             // Nothing restored means there is no row of this operator's to keep in sync — see
             // [draftRowCleared], which the collector below reads before it clears anything.
             draftRowCleared = restored == null

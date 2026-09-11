@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,16 +16,30 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.filterToOne
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
@@ -41,10 +56,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.calc.Pattern
 import uz.etalon.crm.core.calc.SlabRow
-import uz.etalon.crm.core.calc.beamSchedule
-import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.money
-import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
@@ -54,7 +66,9 @@ import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.network.dto.ClientsPageDto
 import uz.etalon.crm.core.testing.FakeEtalonApi
+import uz.etalon.crm.core.ui.format.MONEY_UNIT
 import uz.etalon.crm.core.ui.format.formatMoney
 
 /** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
@@ -77,20 +91,49 @@ private const val DECREASE = "Қўшимча балкани камайтириш
 private const val INCREASE = "Қўшимча балка қўшиш"
 private const val START_BEAM = "Бош балка"
 
-/** [CalculatorScreen] carries no `CalculatorViewModel`; this one exists only because
- *  `totalsSheetContent` renders `TotalsSheet` and the client bar renders `ClientBar`
- *  (`TotalsSheet.kt`/`ClientBar.kt`'s own signatures, untouched here). Nothing in these frames
- *  ever calls into it — the client-bar fixtures never reach nine digits, so [ClientsRepository]
- *  is wired to a [FakeEtalonApi] that throws by name if anything ever did. */
+/** §3.4 «AddRoomButton», as the screen draws it — the last item of the list, so scrolling to it
+ *  is scrolling to the end. */
+private const val ADD_ROOM = "+ Янги хона"
+private const val BACK = "Орқага"
+
+/** Enough half-viewport swipes to reach the end of a three-room list at any font scale — past the
+ *  end they do nothing, so the count only has to be generous. */
+private const val SWIPES_TO_THE_END = 6
+
+/**
+ * The three §7 fixtures the whole calculator is accepted against, as the operator types them —
+ * «Эни», «Бўйи», and the subtotal the footer must then show. The separators in the sums are
+ * U+202F NARROW NO-BREAK SPACE, D8's group separator (see `Formatters.kt`) — not the plain spaces
+ * they look like.
+ */
+private val FIXTURES = listOf(
+    Triple("Зал", "5,2" to "7,1", "7 330 400"),
+    Triple("Хона 1", "4,0" to "6,0", "3 749 600"),
+    Triple("Ошхона", "3,6" to "4,5", "2 462 460"),
+)
+
+/** Σ of the three above — the figure the fixed summary sheet reads out (§8). */
+private const val FIXTURE_TOTAL = "13 542 460"
+
+/** The capture's own customer: «Karimov LLC · +998 93 555 44 66 · Самарқанд, Регистон». */
+private const val CLIENT_NAME = "Karimov LLC"
+private const val CLIENT_PHONE = "935554466"
+private const val CLIENT_VILOYAT = "Самарқанд"
+private const val CLIENT_TUMAN = "Регистон"
+
+/** No pricing is fetched in these frames: every room prices against `DEFAULT_PRICE_CONFIG`, which
+ *  is what a real bootstrap `Pricing` reproduces anyway (`BoundaryTest`). */
 private class InertSessionPricing : SessionPricing {
     override val pricing: StateFlow<Pricing?> = MutableStateFlow(null)
 }
 
 /**
- * The design-3a room card (`docs/android/restyle-prototype/3a-calculator.png`, spec §3.4 rows
- * 1–5), photographed on its own at the width the screen gives it, plus the room list it sits in.
+ * The design-3a calculator (`docs/android/restyle-prototype/3a-calculator.png`, spec §3.4): the
+ * room card on its own at the width the screen gives it, and the whole screen — header, client
+ * row, cards, «+ Янги хона» and the fixed navy summary sheet — with the §7 fixtures typed into it
+ * through the UI.
  *
- * Light only (D6) — the calculator's dark frames are deleted with this task.
+ * Light only (D6).
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -109,49 +152,106 @@ class CalculatorScreenshotTest {
      *  «5,20» a double formatted back would give (see [RoomDraft]). */
     private fun zalDraft() = RoomDraft(width = "5,2", length = "7,1")
 
-    // `totals`/`orderTotals`/`schedule` are computed the same way `CalculatorViewModel.withTotals`
-    // does — the totals sheet renders them too, and the peek row would show the empty-quote
-    // defaults rather than these rooms' real numbers otherwise.
-    private fun state(): CalculatorUiState {
-        val rows = listOf(
-            room("r1", "Хона 1", 4.0, 6.0),   // Б-Г-Б
-            room("r2", "Хона 2", 4.0, 4.3),   // Г-Б-Г
-            SlabRow(id = "r3", name = "Хона 3"), // not typed yet — result == null
-        )
-        return CalculatorUiState(
-            rows = rows,
-            drafts = rows.associate { it.id to draftOf(it) },
-            totals = projectTotals(rows, 0.0, 0.0),
-            orderTotals = computeOrderTotals(rows, 0.0, 0.0, 0.0, 0.0),
-            schedule = beamSchedule(rows),
-            canWrite = true,
-        )
-    }
+    /** A ViewModel with nothing behind it but the engine: no draft to restore (so the screen's own
+     *  R8 rule opens with one blank card), and a clients API that answers every phone lookup with
+     *  a clean miss — these fixtures are a new customer, and a THROWING api would surface as a
+     *  lookup banner in the middle of the frame. */
+    private fun viewModel(canWrite: Boolean = true) = CalculatorViewModel(
+        session = InertSessionPricing(),
+        permissions = PermissionGate { canWrite },
+        clients = ClientsRepository(
+            api = object : FakeEtalonApi() {
+                override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int) =
+                    ClientsPageDto(rows = emptyList(), total = 0, page = 1, pageSize = 50, pageCount = 1)
+            },
+            permissions = PermissionGate { canWrite },
+        ),
+    )
 
-    private fun screen(s: CalculatorUiState) {
-        val vm = CalculatorViewModel(
-            session = InertSessionPricing(), permissions = PermissionGate { false },
-            clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { false }),
-        )
+    /** The whole screen, driven by a real [CalculatorViewModel] — the only way the §8 rule («the
+     *  fixtures are typed through the UI and read back off it») can be an acceptance test rather
+     *  than a picture of a hand-built state. */
+    private fun screen(vm: CalculatorViewModel, onBack: (() -> Unit)? = {}) {
         rule.setContent {
+            val s by vm.state.collectAsState()
             EtalonTheme {
                 CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
                     CalculatorScreen(
                         s = s,
-                        onAddRoom = {}, onDuplicateRoom = {}, onDeleteRoom = {},
-                        onMoveRoomUp = {}, onMoveRoomDown = {},
-                        onSetName = { _, _ -> }, onToggleExpanded = {},
-                        onWidthText = { _, _ -> }, onLengthText = { _, _ -> },
-                        onBearingText = { _, _ -> }, onCorrectionText = { _, _ -> },
-                        onCyclePattern = {}, onExtraBeams = { _, _ -> }, onForceStartBeam = { _, _ -> },
-                        onApplyRateOverride = { _, _, _ -> }, onClearRateOverride = {},
-                        clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = {}) },
-                        clientBarExpanded = { ClientBarExpanded(state = s, vm = vm) },
-                        totalsSheetContent = { TotalsSheet(state = s, vm = vm) {} },
+                        onBack = onBack,
+                        onAddRoom = vm::addRoom,
+                        onDuplicateRoom = vm::duplicateRoom,
+                        onDeleteRoom = vm::deleteRoom,
+                        onMoveRoomUp = vm::moveRoomUp,
+                        onMoveRoomDown = vm::moveRoomDown,
+                        onSetName = vm::setName,
+                        onToggleExpanded = vm::toggleExpanded,
+                        onWidthText = vm::setWidthText,
+                        onLengthText = vm::setLengthText,
+                        onBearingText = vm::setBearingText,
+                        onCorrectionText = vm::setCorrectionText,
+                        onCyclePattern = vm::cyclePattern,
+                        onExtraBeams = vm::setExtraBeams,
+                        onForceStartBeam = vm::setForceStartBeam,
+                        onApplyRateOverride = vm::applyRateOverride,
+                        onClearRateOverride = vm::clearRateOverride,
+                        onToggleClientForm = vm::toggleClientForm,
+                        onDismissToast = vm::dismissToast,
+                        clientForm = { ClientForm(state = s, vm = vm) },
+                        summarySheet = { SummarySheet(state = s, vm = vm) },
                     )
                 }
             }
         }
+        rule.waitForIdle()
+    }
+
+    /** Every editable field on screen, in composition order. Within one card that is
+     *  `name, Эни, Бўйи, Таяниш, Корр.` — the five [FIELDS_PER_ROOM] the helpers below index by. */
+    private fun fields() = rule.onAllNodes(hasSetTextAction())
+
+    /** Types one fixture into the LAST room on screen — the one «+ Янги хона» just created. */
+    private fun fillLastRoom(name: String, width: String, length: String) {
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText(ADD_ROOM))
+        val last = fields().fetchSemanticsNodes().size - FIELDS_PER_ROOM
+        fields()[last].performTextReplacement(name)
+        fields()[last + 1].performTextInput(width)
+        fields()[last + 2].performTextInput(length)
+        rule.waitForIdle()
+    }
+
+    private fun addRoom() {
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText(ADD_ROOM))
+        rule.onNodeWithText(ADD_ROOM).performClick()
+        rule.waitForIdle()
+    }
+
+    /**
+     * The capture's quote, typed the way an operator types it: the card R8 opened with, then two
+     * more off «+ Янги хона». Each room's own §7 subtotal is asserted while that card is still on
+     * screen — scrolled past, its footer is no longer composed and there would be nothing to read.
+     */
+    private fun typeTheFixtures(vm: CalculatorViewModel) {
+        vm.setClientPhoneDigits(CLIENT_PHONE)
+        vm.setClientName(CLIENT_NAME)
+        vm.setClientViloyat(CLIENT_VILOYAT)
+        vm.setClientTuman(CLIENT_TUMAN)
+        rule.waitForIdle()
+        FIXTURES.forEachIndexed { index, (name, dims, subtotal) ->
+            if (index > 0) addRoom()
+            fillLastRoom(name, dims.first, dims.second)
+            assertRoomFooterShows(subtotal)
+        }
+    }
+
+    /**
+     * That [sum] is on a room card's own footer — «inside the scrolling list» is what separates it
+     * from the two other places the very same figure legitimately appears: the summary sheet (a
+     * single-room quote's total IS that room's subtotal) and the off-screen `QuoteCard` the share
+     * action keeps composed. `filterToOne` also proves it appears there exactly once.
+     */
+    private fun assertRoomFooterShows(sum: String) {
+        rule.onAllNodesWithText(sum).filterToOne(hasAnyAncestor(hasScrollAction())).assertExists()
     }
 
     /** One card alone, on the page ground at the width the screen gives it. [width] is the phone,
@@ -254,16 +354,98 @@ class CalculatorScreenshotTest {
         rule.onRoot().captureRoboImage("screenshots/calculator_room_font13.png")
     }
 
+    /**
+     * **The acceptance frame.** `3a-calculator.png` element for element: the header over the
+     * collapsed client row, the three fixture rooms, and the fixed navy summary reading
+     * [FIXTURE_TOTAL]. Every number on it came out of the engine on the way through the UI —
+     * [typeTheFixtures] asserts each room's §7 subtotal as it is typed, and the summary is
+     * asserted here.
+     */
     @Test @Config(qualifiers = "w411dp-h891dp")
-    fun roomsLight() {
-        screen(state())
-        rule.onRoot().captureRoboImage("screenshots/calculator_rooms_light.png")
+    fun calculatorLight() {
+        val vm = viewModel()
+        screen(vm)
+        typeTheFixtures(vm)
+        // The sheet's own figure, by the description only IT publishes: R7 puts the unit AFTER the
+        // number here, where `MoneyHeroText` (the share card's) puts it before.
+        rule.onNodeWithContentDescription("$FIXTURE_TOTAL $MONEY_UNIT").assertExists()
+        // Back to the top, which is where the capture stands.
+        rule.onNode(hasScrollAction()).performScrollToIndex(0)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage("screenshots/calculator_light.png")
     }
 
+    /** The same screen as it opens for a new quote: no client yet, so the form is expanded under
+     *  the row (R9), and one blank card is already there to type into (R8). */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun calculatorClientFormLight() {
+        screen(viewModel())
+        rule.onNodeWithText("Мижоз танланмаган").assertExists()
+        rule.onRoot().captureRoboImage("screenshots/calculator_client_form_light.png")
+    }
+
+    /**
+     * 130 %, scrolled to the end — the acceptance checklist's own line: «Fixed SummarySheet never
+     * covers the last room card (190dp content padding)». Asserted, not only photographed: the
+     * list's last item («+ Янги хона», below the last card) must end above the sheet's top edge.
+     */
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
-    fun roomsFont13() {
-        screen(state())
-        rule.onRoot().captureRoboImage("screenshots/calculator_rooms_font13.png")
+    fun calculatorFont13() {
+        val vm = viewModel()
+        screen(vm)
+        typeTheFixtures(vm)
+        // To the END of the list, not merely far enough for the add button to be somewhere in the
+        // viewport: the viewport runs on UNDER the sheet (which is drawn over the list, not laid
+        // out beside it), so `performScrollToNode` stops with the button still behind it. Only the
+        // list's own 190 dp bottom padding lifts it clear, and only once it can go no further.
+        repeat(SWIPES_TO_THE_END) {
+            rule.onNode(hasScrollAction()).performTouchInput { swipeUp() }
+            rule.waitForIdle()
+        }
+
+        val addButton = rule.onNodeWithText(ADD_ROOM).getUnclippedBoundsInRoot()
+        val sheet = rule.onNodeWithTag(SUMMARY_SHEET_TAG).getUnclippedBoundsInRoot()
+        assertTrue(
+            "«$ADD_ROOM» ends at ${addButton.bottom}, the summary sheet starts at ${sheet.top}",
+            addButton.bottom <= sheet.top,
+        )
+        rule.onRoot().captureRoboImage("screenshots/calculator_font13.png")
+    }
+
+    /**
+     * The keyboard's «next» walk, which no single card can do on its own: Эни hands over to Бўйи
+     * inside the card, and Бўйи hands over to the NEXT card's Эни — through the screen, which owns
+     * the requesters and scrolls the target into view before asking for the focus.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun nextWalksFromWidthToLengthToTheNextRoom() {
+        val vm = viewModel()
+        screen(vm)
+        // The client form's own three fields would sit before the rooms' in composition order.
+        vm.toggleClientForm()
+        rule.waitForIdle()
+        fillLastRoom("Зал", "5,2", "7,1")
+        addRoom()
+        fillLastRoom("Хона 2", "4,0", "6,0")
+        rule.onNode(hasScrollAction()).performScrollToIndex(0)
+        rule.waitForIdle()
+
+        fields()[1].performTextInput("")   // park the focus on room 1's Эни
+        fields()[1].performImeAction()
+        fields()[2].assertIsFocused()
+
+        fields()[2].performImeAction()
+        rule.waitForIdle()
+        fields()[FIELDS_PER_ROOM + 1].assertIsFocused()
+    }
+
+    /** On the bottom-bar tab there is nothing to pop, so the header draws no back circle at all —
+     *  `CalculatorRoute` passes `onBack = null`. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theBackCircleIsNotDrawnWithNowhereToGoBackTo() {
+        screen(viewModel(), onBack = null)
+        rule.onAllNodes(hasText(BACK)).fetchSemanticsNodes().let { assertEquals(0, it.size) }
+        rule.onNodeWithContentDescription(BACK).assertDoesNotExist()
     }
 
     /**
@@ -347,8 +529,13 @@ class CalculatorScreenshotTest {
         assertEquals(38.28, r.billedArea, 0.0001)
         assertEquals(180_000.0, r.m2Price, 0.0001)
         assertEquals(Money.parse("440000.00"), r.money().patternExtraCost)
-        // The separators in this expected string are U+202F NARROW NO-BREAK SPACE, D8's group
-        // separator (see `Formatters.kt`) — not the plain spaces they look like.
+        // The separators are U+202F NARROW NO-BREAK SPACE, D8's group separator (see
+        // `Formatters.kt`) — spelt as escapes so a diff can tell them from plain spaces.
         assertEquals("7 330 400", formatMoney(r.money().subtotal))
     }
 }
+
+/** One room card publishes five editable fields, in this order: the name, Эни, Бўйи, Таяниш and
+ *  Корр. — what the helpers above index by. */
+private const val FIELDS_PER_ROOM = 5
+

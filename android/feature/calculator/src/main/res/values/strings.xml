@@ -1,14 +1,24 @@
 <resources>
+    <!-- The screen itself, §3.4 «Header» / «AddRoomButton» / «SummarySheet». -->
+    <string name="calc_title">Калькулятор</string>
+    <string name="calc_subtitle">%1$d хона · нарх балка узунлигига қараб</string>
+    <string name="calc_draw">Чизиш</string>
+    <string name="calc_back">Орқага</string>
+    <string name="calc_add_room_new">+ Янги хона</string>
+    <string name="calc_summary_total">Жами</string>
+    <string name="calc_summary_line">%1$s · %2$s балка · %3$s ғишт</string>
+    <!-- `formatWeightKg` already carries the «кг», so this adds only the «~». -->
+    <string name="calc_summary_weight">~%1$s</string>
+    <string name="calc_settings_title">Созламалар</string>
+    <string name="calc_action_settings">Созламалар</string>
     <!-- `calc_room_default_name`, `calc_no_write_permission` and `calc_place_queued` are NOT dead:
          each mirrors a literal in `CalculatorViewModel`/`CalculatorRepository`, which cannot reach
          a resource (no Context, and the repository is in another module). They are the canonical
          wording; the literals must match them WORD FOR WORD, and this is where that wording is
          edited. -->
     <string name="calc_room_default_name">Хона %1$d</string>
-    <string name="calc_add_room">Хона қўшиш</string>
     <string name="calc_field_width">Эни</string>
     <string name="calc_field_length">Бўйи</string>
-    <string name="calc_empty">Ҳали хона қўшилмаган.</string>
     <string name="calc_action_duplicate">Нусха олиш</string>
     <string name="calc_action_delete">Ўчириш</string>
     <string name="calc_action_clear">Тозалаш</string>
@@ -72,7 +82,8 @@
     <string name="calc_rate_reason_counter">%1$d/%2$d</string>
     <string name="calc_rate_apply">Қўллаш</string>
     <string name="calc_rate_clear">Авто нархга қайтариш</string>
-    <string name="calc_rooms_subtotal">Жами хоналар</string>
+    <!-- D10: the discount, delivery and other costs move onto the place-order sheet (task 5), which
+         is where they are agreed. Only the share card renders the last two today. -->
     <string name="calc_discount_percent">Чегирма %</string>
     <string name="calc_discount_amount">Чегирма (сўм)</string>
     <string name="calc_delivery_cost">Етказиб бериш</string>
@@ -82,19 +93,27 @@
     <string name="calc_grid_10">10 см</string>
     <string name="calc_grid_5">5 см</string>
     <string name="calc_round_all_up">Барча хоналарни юқорилаштириш</string>
+    <!-- The button under that label in the ⋯ settings sheet — the label already says what it does
+         to what, so the button says only the verb. -->
+    <string name="calc_round_all_up_action">Юқорилаштириш</string>
     <string name="calc_production_list">Балка + Ғишт</string>
     <string name="calc_schedule_row">Балка · %1$s м</string>
     <string name="calc_pieces">%1$s дона</string>
     <string name="calc_schedule_empty">Ҳозирча балка йўқ.</string>
     <string name="calc_total_blocks">Ғишт · жами</string>
     <string name="calc_weight_formula">%1$s × 180 = %2$s</string>
-    <!-- the client bar — who the quote is for -->
-    <string name="calc_client_phone">Телефон рақами</string>
-    <string name="calc_client_name">Мижоз номи</string>
+    <!-- the client row and its form — who the quote is for (§3.4 «ClientRow»/«ClientForm») -->
+    <string name="calc_client_none">Мижоз танланмаган</string>
+    <string name="calc_client_hint">Исм, телефон ва манзилни киритинг</string>
+    <string name="calc_client_name_req">Исм*</string>
+    <string name="calc_client_phone_req">Тел рақам*</string>
+    <!-- The mask §3.4 spells as `+998 90 ___ __ __`; the «+998 » is the field's own prefix, so
+         this is only what stands in the empty field behind it. -->
+    <string name="calc_client_phone_mask">90 ___ __ __</string>
     <string name="calc_client_viloyat">Вилоят</string>
     <string name="calc_client_tuman">Туман</string>
-    <string name="calc_client_street">Кўча, уй, хонадон</string>
-    <string name="calc_client_edit">Мижозни ўзгартириш</string>
+    <string name="calc_client_address">Манзил</string>
+    <string name="calc_client_address_hint">Кўча, маҳалла, бино, хонадон</string>
     <!-- draft persistence and save — task 8 -->
     <string name="calc_action_save">Лойиҳани сақлаш</string>
     <!-- «Буюртма бериш» — task 9 -->
@@ -115,8 +134,6 @@
     <!-- Mirrored word-for-word by `CalculatorViewModel`'s two refusals and
          `CalculatorRepository.blockedRoomsMessage` — one condition, one sentence. -->
     <string name="calc_cannot_save_rooms">Бу хоналарни сақлаб бўлмайди: %1$s</string>
-    <string name="calc_rejected_row">%1$s · %2$s</string>
-    <string name="calc_rejected_dismiss">Тушунарли</string>
     <!-- «Юбориш» — the quote as a shareable image, task 10 -->
     <string name="calc_action_share">Юбориш</string>
     <string name="calc_share_failed">Расмни тайёрлаб бўлмади</string>

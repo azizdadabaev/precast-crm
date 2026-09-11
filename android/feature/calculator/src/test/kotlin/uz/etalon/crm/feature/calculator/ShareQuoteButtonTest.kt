@@ -3,9 +3,12 @@ package uz.etalon.crm.feature.calculator
 import android.content.Context
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,8 +20,22 @@ import uz.etalon.crm.core.calc.beamSchedule
 import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
+import uz.etalon.crm.core.data.ClientsRepository
+import uz.etalon.crm.core.data.PermissionGate
+import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.io.File
+
+/** «Юбориш» as the navy sheet publishes it — an icon pill whose label is its content
+ *  description — and the Uzbek sentence a failed capture shows. */
+private const val SHARE = "Юбориш"
+private const val SHARE_FAILED = "Расмни тайёрлаб бўлмади"
+
+private class ShareInertSessionPricing : SessionPricing {
+    override val pricing: StateFlow<Pricing?> = MutableStateFlow(null)
+}
 
 /**
  * «Юбориш» when the PNG cannot be written. The capture runs inside a bare
@@ -29,6 +46,10 @@ import java.io.File
  * The failure is reproduced the way `QuoteImageTest` reproduces it — the `quotes` directory's name
  * taken by a plain file, which is what a full or read-only cache partition amounts to here — so
  * this runs on every host, unlike anything that has to go through `FileProvider`.
+ *
+ * Driven through [SummarySheet] rather than through `rememberShareQuote` directly: the sheet is
+ * what owns the pill, its `enabled` and the banner, and the regression this guards is that all
+ * three come back after a failure.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -49,19 +70,26 @@ class ShareQuoteButtonTest {
         )
     }
 
+    private fun vm() = CalculatorViewModel(
+        session = ShareInertSessionPricing(),
+        permissions = PermissionGate { false },
+        clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { false }),
+    )
+
     @Test
     @Config(qualifiers = "w411dp-h891dp")
     fun aFailedCaptureSaysSoInUzbekAndLetsTheOperatorTryAgain() {
         File(context.cacheDir, "quotes").apply { parentFile?.mkdirs() }.writeText("not a directory")
 
-        rule.setContent { EtalonTheme(darkTheme = false) { ShareQuoteButton(state()) } }
+        val s = state()
+        rule.setContent { EtalonTheme(darkTheme = false) { SummarySheet(state = s, vm = vm()) } }
 
-        rule.onNodeWithText("Юбориш").performClick()
+        rule.onNodeWithContentDescription(SHARE).performClick()
         rule.waitForIdle()
 
-        rule.onNodeWithText("Расмни тайёрлаб бўлмади").assertExists()
+        rule.onNodeWithText(SHARE_FAILED).assertExists()
         // `finally` put the spinner down — otherwise the button stays disabled for good and the
         // operator has no way to retry short of leaving the screen.
-        rule.onNodeWithText("Юбориш").assertIsEnabled()
+        rule.onNodeWithContentDescription(SHARE).assertIsEnabled()
     }
 }

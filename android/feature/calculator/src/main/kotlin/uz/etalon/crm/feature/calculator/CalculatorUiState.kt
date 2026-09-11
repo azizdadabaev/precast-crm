@@ -149,6 +149,11 @@ data class CalculatorUiState(
      *  instead of creating a duplicate one. Restored from the Room draft, so it survives process
      *  death the same way the rest of the quote does. */
     val projectId: String? = null,
+    /** True once the persisted draft has been looked for — whether or not there was one. The
+     *  screen's «start with one blank room» rule (R8) waits on it: asked on the first composition
+     *  instead, it would add a room that the draft then lands beside, and the operator would find
+     *  their restored quote with a stray empty card in it. */
+    val restored: Boolean = false,
     val saving: Boolean = false,
     /** A transient Uzbek confirmation shown after a successful save — cleared by
      *  `CalculatorViewModel.dismissSaveMessage` once the screen has shown it. */
