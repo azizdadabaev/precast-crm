@@ -269,9 +269,11 @@ private fun sparkline(series: List<Money>): List<Float> {
 private fun TodaySheet(s: HomeUiState, onOpenOrder: (String) -> Unit) = NavySheet(
     title = stringResource(R.string.home_kpi_today),
     modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
-    // No pill at all without the permission: «0» is a count, and a count is a claim about how
-    // many deliveries there are — exactly what this operator has just been told they cannot see.
-    trailing = if (s.showNoAccessState) null else ({ CountPill(s.today.size) }),
+    // No pill until a permitted fetch is actually possible: «0» is a count, and a count is a
+    // claim about how many deliveries there are — false while the permissions are still being
+    // resolved, and exactly what an operator without the permission has just been told they
+    // cannot see.
+    trailing = if (s.permissionsResolved && s.hasDashboardAccess) ({ CountPill(s.today.size) }) else null,
     fillsToBottom = false,
 ) {
     // `debtLabel` is a plain lambda the row calls while it composes, so its wording is read out

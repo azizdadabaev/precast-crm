@@ -17,6 +17,7 @@ import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.feature.capture.PhotoCapture
 import uz.etalon.crm.feature.logistics.R
 
@@ -49,12 +50,15 @@ fun ShipmentLoadRoute(
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.shipment_load_title)) }) },
         bottomBar = {
-            StickyActionBar {
-                SecondaryButton(stringResource(R.string.action_retake), onClick = vm::retake, modifier = Modifier.weight(1f))
-                PrimaryButton(
-                    text = stringResource(R.string.action_mark_loaded), onClick = vm::submit,
-                    loading = s.submitting, modifier = Modifier.weight(1f),
-                )
+            // Lifted clear of the shell's floating nav pill, which is drawn over this screen.
+            Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
+                StickyActionBar {
+                    SecondaryButton(stringResource(R.string.action_retake), onClick = vm::retake, modifier = Modifier.weight(1f))
+                    PrimaryButton(
+                        text = stringResource(R.string.action_mark_loaded), onClick = vm::submit,
+                        loading = s.submitting, modifier = Modifier.weight(1f),
+                    )
+                }
             }
         },
     ) { pad ->

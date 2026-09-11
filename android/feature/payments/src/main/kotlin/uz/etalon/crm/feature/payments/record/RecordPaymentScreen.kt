@@ -56,6 +56,7 @@ import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.SectionLabel
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.PaymentMethod
@@ -169,7 +170,9 @@ fun RecordPaymentScreen(
             // Which of the two outcomes this will be is decided by the recorder's own
             // permissions server-side. It sits here, not at the foot of the scrolling column,
             // because that is where it is off-screen at the one moment it matters: the tap.
-            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+            // The padding sits OUTSIDE the background so the strip the shell's floating nav pill
+            // occupies stays page-coloured rather than a white shelf under the bar.
+            Column(Modifier.padding(bottom = EtalonSpace.underNav).background(MaterialTheme.colorScheme.surface)) {
                 Text(
                     stringResource(if (s.canAutoConfirm) R.string.record_will_auto_confirm else R.string.record_will_be_pending),
                     style = MaterialTheme.typography.bodySmall,

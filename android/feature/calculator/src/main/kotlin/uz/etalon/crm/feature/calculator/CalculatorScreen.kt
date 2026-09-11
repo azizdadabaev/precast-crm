@@ -174,11 +174,16 @@ fun CalculatorScreen(
             }
             if (s.keypad != null) {
                 // No `navigationBarsPadding()` here: the scaffold above already reserves
-                // `EtalonSpace.underNav` at the bottom, which clears both the floating nav pill
-                // and — since the pill carries its own `navigationBarsPadding()` — the system
-                // gesture bar under it. (Until the restyle this said `NavigationSuiteScaffold`
-                // consumed the navigation-bar insets for the content slot; that scaffold is gone,
-                // and `SignedInShell` consumes nothing.)
+                // `EtalonSpace.underNav` at the bottom. (Until the restyle this said
+                // `NavigationSuiteScaffold` consumed the navigation-bar insets for the content
+                // slot; that scaffold is gone, and `SignedInShell` consumes nothing.)
+                //
+                // That 100 dp clears the pill under GESTURE navigation, where the inset is a few
+                // dp of handle. Under THREE-BUTTON navigation the pill sits at inset + 72 dp —
+                // about 120 dp on this device — so `underNav` is roughly 20 dp short and the
+                // pill overlaps the bottom of the sheet. Fixing it properly means an inset-aware
+                // clearance in the design system rather than a constant, so it is carried to the
+                // phase-3 plan instead of being patched screen by screen here.
                 Column(Modifier.background(MaterialTheme.colorScheme.surface).padding(16.dp)) {
                     NumericKeypad(
                         value = s.keypadText, suffix = "м", allowDecimal = true,

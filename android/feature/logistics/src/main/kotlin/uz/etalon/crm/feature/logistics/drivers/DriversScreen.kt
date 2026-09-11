@@ -3,6 +3,7 @@ package uz.etalon.crm.feature.logistics.drivers
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -41,6 +42,7 @@ import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
 import uz.etalon.crm.core.designsystem.components.driverActiveTone
 import uz.etalon.crm.core.designsystem.components.toneColor
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.Driver
 import uz.etalon.crm.core.ui.format.formatPhone
@@ -77,8 +79,11 @@ fun DriversScreen(
         },
         bottomBar = {
             if (canManage) {
-                StickyActionBar {
-                    PrimaryButton(stringResource(R.string.action_add_driver), onClick = { showAdd = true }, enabled = !s.loading && !s.isOffline)
+                // Lifted clear of the shell's floating nav pill, which is drawn over this screen.
+                Box(Modifier.padding(bottom = EtalonSpace.underNav)) {
+                    StickyActionBar {
+                        PrimaryButton(stringResource(R.string.action_add_driver), onClick = { showAdd = true }, enabled = !s.loading && !s.isOffline)
+                    }
                 }
             }
         },

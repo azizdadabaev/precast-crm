@@ -118,9 +118,14 @@ fun ClientsScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 // The floating nav pill is drawn over this screen, so the last row needs
-                // `EtalonSpace.underNav` to scroll clear of it. Clearance only — the list itself
-                // is restyled in its own task.
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = EtalonSpace.underNav),
+                // `EtalonSpace.underNav` to scroll clear of it — but only when there is no sticky
+                // bar, which already reserves that band for itself (and whose own height the
+                // Scaffold adds to `pad`). Both at once left ~120 dp of empty page above «Мижоз
+                // қўшиш». Clearance only — the list itself is restyled in its own task.
+                contentPadding = PaddingValues(
+                    start = 16.dp, end = 16.dp, top = 16.dp,
+                    bottom = if (s.showAddAction) 16.dp else EtalonSpace.underNav,
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val error = s.error
