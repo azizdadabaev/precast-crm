@@ -20,6 +20,14 @@ import java.io.File
  *
  * Vector drawables are exempt by construction: their `#FF000000` stroke is a placeholder that
  * `EtalonIcon`'s tint replaces, and this test reads `.kt` files only.
+ *
+ * The scan is textual, so a hex literal inside a **comment** (`// Color(0xFF5646EE)`) is flagged
+ * like any other — write the token's name in prose instead. A bare `#AABBCC` in prose is not: the
+ * pattern only matches a quoted `"#AABBCC"`, the shape that would be handed to a parser.
+ *
+ * The files it walks are declared as inputs of this module's `Test` tasks in
+ * `core/designsystem/build.gradle.kts`; without that, a literal planted in another module only
+ * failed a cold build.
  */
 class NoRawHexTest {
     private val allowed = setOf("EtalonColors.kt")

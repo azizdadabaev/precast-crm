@@ -55,7 +55,7 @@ Avatar palette (deterministic by hash of client name, sum of char codes mod 7): 
 | tag | 10sp / 600 | 0 | status tags in rows; 10.5sp on panels |
 | caption | 10sp / 600 | 0 | tile captions on dark |
 
-All numbers: `FontFeature "tnum"`. Thousands separator: thin space (U+2009). Decimal comma for m² (`36,5 м²`). Currency: amounts shown without unit inside lists; `UZS` as small prefix only on KPI/hero numbers.
+All numbers: `FontFeature "tnum"`. Thousands separator: thin space — **U+202F NARROW NO-BREAK SPACE** on Android (restyle ruling R5; U+2009 is breakable and costs a long figure its tail). Decimal comma for m² (`36,5 м²`). Currency: amounts shown without unit inside lists; `UZS` as small prefix only on KPI/hero numbers.
 
 ### 1.3 Shape (`EtalonShapes`)
 | Token | dp | Use |

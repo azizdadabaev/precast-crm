@@ -22,7 +22,7 @@ The backend contract is unchanged: the same `precast-crm` API, entities, enums, 
 | D5 | The rate-override **reason stays mandatory**. | Spec §3.4 «Сабаб (ихтиёрий)». |
 | D6 | **Light only.** Dark mode is out of scope for this restyle. | Architecture spec §6.1 light+dark. |
 | D7 | Touch targets stay **48 dp**; visual sizes follow the spec. | Spec §5 44 dp. |
-| D8 | Numbers use the spec's format: **thin-space (U+2009) thousands**, «UZS» only as the small prefix on KPI/hero figures, none inside lists. | Architecture spec §6.5 and the project rule (NBSP + «UZS» everywhere). |
+| D8 | Numbers use the spec's format: **thin-space thousands**, «UZS» only as the small prefix on KPI/hero figures, none inside lists. The character is **U+202F NARROW NO-BREAK SPACE**, not U+2009 (ruling R5, 2026-09-11): U+2009 is line-break class BA, so a nine-digit figure breaks at a digit-group boundary and, with `maxLines = 1`, is silently shown as a smaller number. | Architecture spec §6.5 and the project rule (NBSP + «UZS» everywhere). |
 | D9 | **No logistics cell** in the nav for any role. Dispatch, load truck, shipments, delivery proof are reached from the order detail's sticky action bar. | Phase 1b's logistics tab. |
 | D10 | Discount (%/amount), delivery and other cost move **into the place-order sheet** (spec §4.11: the discount is applied at placement). The rounding grid, «round all up» and the beam schedule open from a **⋯ on the summary sheet**. Rejected offline orders surface on **Home's outbox banner**. | Phase 2b's expandable totals sheet. |
 
@@ -146,12 +146,12 @@ Composition per spec §3.4: header with «Чизиш» kept as a disabled placeh
 ---
 
 ## 7. Numbers and formatting (D8)
-`Formatters.kt`: thousands grouped with U+2009; money in lists without a unit; KPI/hero figures with a small «UZS» prefix (14/500 at 50 %); `м²` with decimal comma; counts `та`; dates as today. Tabular figures everywhere. The architecture spec §6.5 and CLAUDE.md §3's "currency labelled UZS" are amended by this decision for the Android client only.
+`Formatters.kt`: thousands grouped with U+202F (see D8 — the thin space that cannot break); money in lists without a unit; KPI/hero figures with a small «UZS» prefix (14/500 at 50 %); `м²` with decimal comma; counts `та`; dates as today. Tabular figures everywhere. The architecture spec §6.5 and CLAUDE.md §3's "currency labelled UZS" are amended by this decision for the Android client only.
 
 ---
 
 ## 8. Testing and acceptance
-- Roborazzi, light only; every baseline re-recorded as its screen lands; `verifyRoborazziDebug` in the standard command.
+- Roborazzi, light only; every baseline re-recorded as its screen lands. The standard command is `.\gradlew.bat testDebugUnitTest verifyRoborazziDebug assembleDebug --no-daemon --rerun-tasks` — **both** `verifyRoborazziDebug` and `--rerun-tasks` are load-bearing: a warm `verifyRoborazziDebug` is UP-TO-DATE and compares no images at all (it printed green with a baseline deleted), and the hex lint only re-runs when its declared inputs move.
 - Spec §7 fixtures (`5,2×7,1 → 7 330 400`, `4,0×6,0 → 3 749 600`, `3,6×4,5 → 2 462 460`) are already pinned by the engine's golden tests; the calculator screen test asserts the same three through the UI.
 - No raw hex outside `EtalonColors.kt` — a lint-style unit test greps the source tree.
 - Rate override requires RateConfirm; reverting to Авто does not.
