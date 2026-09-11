@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -23,6 +25,7 @@ import uz.etalon.crm.core.designsystem.components.CountStepper
 import uz.etalon.crm.core.designsystem.components.CustodyChain
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.EtalonTextField
 import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.NumericKeypad
 import uz.etalon.crm.core.designsystem.components.OutboxBanner
@@ -48,9 +51,9 @@ private val CHAIN = CustodyChainModel(
 )
 
 /**
- * The fourteen components the restyle kept, on one sheet: none of them is new, and every one of
- * them now reads [EtalonColors] and [EtalonType] alone. A reviewer can reject a tint, a radius or
- * a weight here without opening a screen.
+ * The components the restyle kept, on one sheet, plus the one the calculator adds
+ * ([EtalonTextField]): every one of them reads [EtalonColors] and [EtalonType] alone. A reviewer
+ * can reject a tint, a radius or a weight here without opening a screen.
  *
  * `Lightbox`, `DriverPicker` and `RegionPickerSheet` are absent because each owns a `Dialog` or a
  * `ModalBottomSheet` and cannot be composed into a sheet like this — two full-screen scrims over
@@ -59,7 +62,7 @@ private val CHAIN = CustodyChainModel(
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [36], qualifiers = "w411dp-h1600dp")
+@Config(sdk = [36], qualifiers = "w411dp-h1900dp")
 class KeptComponentsScreenshotTest {
     @get:Rule val rule = createComposeRule()
 
@@ -89,6 +92,20 @@ private fun KeptSheet() = Column(
     CustodyChain(CHAIN)
     PhotoStrip(photos = emptyList(), onOpen = {}, onAdd = {})
     RegionField("Вилоят", "Тошкент", onOpen = {})
+    // EtalonTextField: empty with its placeholder, filled, with the «+998 » prefix, and in error
+    // with its reason. The focused state is not here — a blinking cursor is not a stable baseline,
+    // and faking the focused border with a second colours object would photograph the fake rather
+    // than the component. The indigo focus border is checked on the emulator instead.
+    EtalonTextField(value = "", onValueChange = {}, placeholder = "Исм", modifier = Modifier.fillMaxWidth())
+    EtalonTextField(value = "Азиз Раҳимов", onValueChange = {}, modifier = Modifier.fillMaxWidth())
+    EtalonTextField(
+        value = "90 481 33 30", onValueChange = {}, modifier = Modifier.fillMaxWidth(), prefix = "+998 ",
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+    )
+    EtalonTextField(
+        value = "12", onValueChange = {}, modifier = Modifier.fillMaxWidth(), isError = true,
+        supportingText = "Телефон рақами тўлиқ эмас",
+    )
     NumericKeypad(
         value = "4000000",
         suffix = "UZS",

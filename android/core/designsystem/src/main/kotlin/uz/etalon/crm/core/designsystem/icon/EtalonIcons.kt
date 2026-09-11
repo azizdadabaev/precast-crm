@@ -18,7 +18,9 @@ import uz.etalon.crm.core.designsystem.theme.EtalonColors
  * whole set can be listed in a test. §1.6 sizes: 20 nav · 18 header · 16 inline · 12 in a square.
  */
 object EtalonIcons {
+    val ArrowDown = R.drawable.ic_lu_arrow_down
     val ArrowLeft = R.drawable.ic_lu_arrow_left
+    val ArrowUp = R.drawable.ic_lu_arrow_up
     val ArrowUpRight = R.drawable.ic_lu_arrow_up_right
     val Bell = R.drawable.ic_lu_bell
     val Box = R.drawable.ic_lu_box
@@ -30,6 +32,7 @@ object EtalonIcons {
     val ChevronUp = R.drawable.ic_lu_chevron_up
     val CircleAlert = R.drawable.ic_lu_circle_alert
     val CloudUpload = R.drawable.ic_lu_cloud_upload
+    val Copy = R.drawable.ic_lu_copy
     val Delete = R.drawable.ic_lu_delete
     val Ellipsis = R.drawable.ic_lu_ellipsis
     val EllipsisVertical = R.drawable.ic_lu_ellipsis_vertical
@@ -61,10 +64,11 @@ object EtalonIcons {
 
     /** Every glyph, for the render test and the token sheet. */
     val all: List<Pair<String, Int>> = listOf(
-        "arrow-left" to ArrowLeft, "arrow-up-right" to ArrowUpRight, "bell" to Bell, "box" to Box,
+        "arrow-down" to ArrowDown, "arrow-left" to ArrowLeft, "arrow-up" to ArrowUp,
+        "arrow-up-right" to ArrowUpRight, "bell" to Bell, "box" to Box,
         "calculator" to Calculator, "camera" to Camera, "check" to Check, "chevron-down" to ChevronDown,
         "chevron-right" to ChevronRight, "chevron-up" to ChevronUp, "circle-alert" to CircleAlert,
-        "cloud-upload" to CloudUpload, "delete" to Delete, "ellipsis" to Ellipsis,
+        "cloud-upload" to CloudUpload, "copy" to Copy, "delete" to Delete, "ellipsis" to Ellipsis,
         "ellipsis-vertical" to EllipsisVertical, "factory" to Factory, "file-text" to FileText,
         "grip-horizontal" to GripHorizontal,
         "house" to House, "images" to Images, "message-circle" to MessageCircle, "minus" to Minus,
