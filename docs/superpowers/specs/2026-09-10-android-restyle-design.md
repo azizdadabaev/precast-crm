@@ -111,6 +111,40 @@ Stack routes and modals otherwise as today.
 ### 5.1 The six the spec draws — build as spec §3
 Home §3.1 · Orders §3.2 · Order detail §3.3 · Calculator §3.4 (see §6 here) · Payments §3.5 · Clients §3.6. Where the spec's data model is simpler than the app's (four order statuses, four payment methods, `debt = total − paid`), **the app's real model stands**: all seven order statuses get a StatusTag palette entry (DRAFT/PLACED neutral, IN_PRODUCTION/LOADED lavender-indigo, DISPATCHED indigo, DELIVERED green, CANCELED red), all five payment methods appear, and debt is the server's `remaining`, which counts write-offs.
 
+### 5.1a Order detail — what the phone must carry (owner, 2026-09-11)
+
+Spec §3.3 is three sentences and the phase-2 build followed it; the screen read as empty next to the web order page. The rule for deciding what belongs on the phone is **the job**, not the web inventory:
+
+| Job | Where | About to do |
+|---|---|---|
+| **Load** | at the truck, in the yard | read what goes on, mark loaded, photograph it |
+| **Deliver** | at the client's site | navigate, call, take payment, mark delivered |
+| **Check** | anywhere, ten seconds | see what is owed, call the client |
+
+**Sections, top to bottom, with their density rule and data contract.**
+
+| Section | Job | Density | Contract |
+|---|---|---|---|
+| DetailPanel (number, tag, client, address, room tiles, Майдон / Жами / Қолди) | Check | Always | `summary.orderNumber`, `summary.status`, `summary.client.*`, `rooms[].name/innerWidth/innerLength/billedArea`, `summary.totalArea`, `summary.totalPrice`, `remaining` |
+| Canceled notice «Бекор қилинди · Сабаб: …» | Check | Conditional: `status == CANCELED` | `cancelReason`, `canceledAt` (new on the wire — the GET already returns them) |
+| **«Юклаш рўйхати»** — beam length × count per length, «Ғишт · жами N», footer «Оғирлик ~N кг» | **Load** | **Always** (the disqualifying gap) | derived on device exactly as the web (`page.tsx` `beamGroups`): group `rooms[]` by `beamLength` formatted to two decimals, sum `beamCount`, keep first-appearance order; blocks = Σ `rooms[].totalBlocks`; weight = `summary.totalArea × 180` kg (`ORDER_KG_PER_M2`, the calculator's own constant) |
+| Тўлов ҳолати (progress, Тўланган / Қолди) | Check | Always unless CANCELED | `summary.confirmedPaid`, `remaining`, `pendingAmount` |
+| Cost breakdown | Check | Conditional: any of discount / delivery / other ≠ 0 | `roomsSubtotal`, `discountAmount`, `deliveryCost`, `otherCost` |
+| Тўловлар (rows with status tags) | Check / Deliver | Conditional: any payment or pending amount | `payments[]` |
+| Етказиш (timeline, Сана · Ҳайдовчи, location button) | Deliver | Always | `summary.placedAt`, `dispatch`, `shipments[].dispatchedAt/deliveredAt`, `deliveryLat/Lng/Url` |
+| Жўнатмалар (per-truck rows with `loadedBeams`, statuses) | Load | Conditional: split order or `dispatch.create` | `shipments[]` |
+| Расмлар (truck + proof photos, camera) | Load / Deliver | Conditional: photos or `canAddPhoto` | `loadedPhotos`, `deliveryProofUrl` |
+| Тарих | Check | Collapsed (first three, «Барчаси») | `events[]` |
+| Sticky bar (next step + «Тўлов қайд қилиш») | Load / Deliver | Conditional per the rules below | `nextStepFor`, `canRecordPayment` |
+
+**Actions — hide vs disable.** Hide an action that cannot apply to this order's lifecycle (a delivered or canceled order has no «Юклаш»). **Disable with a reason** an action that is merely blocked right now: a queued photo («Юборилмоқда…»), a failed upload («Юборилмади»), a payment door whose cap is zero while money is still owed («Тасдиқ кутилмоқда: N»). A missing button reads as a bug; a greyed button with a sentence teaches. The web's «Тўлов тўлиқ эмас — қолди: N» gate on the DELIVERED status button is **not** carried to the mobile delivery step: the phone's delivery-proof flow is where the driver takes the cash, so blocking it on the balance would block the job it exists for.
+
+**Phone-first, not ported:** the camera for truck and proof photos, and the `tel:` / maps hand-off — the reasons to open the app rather than the site.
+
+**Deliberately not on mobile:** Blender, print, editing rooms or pricing, drawings, cancelling an order. Named so nobody asks or quietly adds them.
+
+**Acceptance, as tasks:** a loader at the truck can read every beam length and its count, the block total and the weight, and mark the truck loaded, without the web app; a driver at the site can navigate, call, take a payment and mark delivered; anyone can see in ten seconds what is owed and why an order was cancelled.
+
 ### 5.2 The twelve extrapolated — mapping rules (D2)
 | Screen | Composition |
 |---|---|
