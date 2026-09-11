@@ -3,27 +3,20 @@
     <string name="nav_home">Бош саҳифа</string>
     <string name="nav_orders">Буюртмалар</string>
     <string name="nav_calculator">Калькулятор</string>
-    <string name="nav_inbox">Хабарлар</string>
     <string name="nav_payments">Тўловлар</string>
     <string name="nav_clients">Мижозлар</string>
-    <string name="nav_production">Ишлаб чиқариш</string>
-    <string name="nav_gazoblok">Газоблок</string>
-    <string name="nav_more">Яна</string>
-    <!-- Bottom-bar labels. The full names above wrap on a 411 dp phone with five
-         items, so the bar uses these. Change them here if the wording should differ. -->
+    <!-- Nav-pill labels. The full names above wrap on a 411 dp phone with five
+         cells, so the bar uses these. Change them here if the wording should differ. -->
     <string name="nav_home_short">Бош</string>
     <string name="nav_orders_short">Буюртма</string>
     <string name="nav_calculator_short">Ҳисоб</string>
-    <string name="nav_inbox_short">Хабар</string>
     <string name="nav_payments_short">Тўлов</string>
     <string name="nav_clients_short">Мижоз</string>
-    <string name="nav_production_short">И.Ч.</string>
-    <string name="nav_gazoblok_short">Газоблок</string>
-    <string name="nav_more_short">Яна</string>
-    <string name="more_change_pin">PIN ни ўзгартириш</string>
-    <string name="more_drivers">Ҳайдовчилар</string>
-    <string name="more_discrepancies">Нақд пул тафовутлари</string>
-    <string name="more_sign_out">Чиқиш</string>
+    <!-- The account sheet behind the Home app bar's avatar (ruling R3). -->
+    <string name="account_change_pin">PIN ни ўзгартириш</string>
+    <string name="account_drivers">Ҳайдовчилар</string>
+    <string name="account_discrepancies">Нақд пул тафовутлари</string>
+    <string name="account_sign_out">Чиқиш</string>
     <string name="app_action_cancel">Бекор қилиш</string>
     <!-- «маълумот», not «расм»: since Phase 2b a queued PLACE_ORDER row counts here too, and that
          row is an ORDER, not a photo. The count and the warning were already right; only the noun
@@ -31,7 +24,6 @@
     <string name="sign_out_pending_title">Юборилмаган маълумотлар</string>
     <string name="sign_out_pending_message">%1$d та маълумот ҳали юборилмаган. Улар сақланиб қолади ва сиз қайта кирганингизда юборилади. Аммо шу телефонга бошқа ходим кирса, улар ўчирилади.</string>
     <string name="no_access">Бу бўлимга рухсат йўқ</string>
-    <string name="coming_soon">Бу бўлим кейинги релизда</string>
     <string name="login_after_pin_change">Янги PIN билан киринг</string>
     <string name="role_owner">Эгаси</string>
     <string name="role_admin">Администратор</string>

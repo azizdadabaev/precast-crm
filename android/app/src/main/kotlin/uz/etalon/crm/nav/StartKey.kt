@@ -12,15 +12,30 @@ internal const val PERM_DISCREPANCY_VIEW = "discrepancy.view"
 internal const val PERM_CLIENT_VIEW = "client.view"
 internal const val PERM_CALCULATOR_USE = "calculator.use"
 
-/** The key a bottom-bar destination opens. The rest have no feature module yet. */
+/** The key a nav-pill cell opens. Every cell has a screen (§4). */
 internal fun Destination.key(): Key = when (this) {
     Destination.HOME -> Home
     Destination.ORDERS -> Orders
     Destination.CALCULATOR -> Calculator
     Destination.CLIENTS -> Clients
     Destination.PAYMENTS -> Payments
-    Destination.MORE -> More
-    else -> ComingSoon(labelRes)
+}
+
+/**
+ * Which cell is lit while [key] is on top of the stack (ruling R8). A stack route belongs to the
+ * tab it was opened from: every order-scoped screen lights «Буюртма», and the three the Home app
+ * bar's account sheet opens light «Бош». A key that belongs to no cell — the login flow — lights
+ * nothing, and `BottomNav` draws no active pill for an index it does not hold.
+ */
+internal fun tabFor(key: NavKey): Destination? = when (key) {
+    is Home, is Drivers, is Discrepancies, is ChangePin -> Destination.HOME
+    is Orders, is OrderDetail, is LoadTruck, is Shipments, is ShipmentLoad, is Dispatch,
+    is DeliveryProof, is DeliveryLocation, is RecordPayment,
+    -> Destination.ORDERS
+    is Calculator -> Destination.CALCULATOR
+    is Payments -> Destination.PAYMENTS
+    is Clients, is ClientDetail -> Destination.CLIENTS
+    else -> null
 }
 
 /**

@@ -1,22 +1,19 @@
 package uz.etalon.crm.nav
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Calculate
-import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.Factory
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.ViewInAr
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavEntry
@@ -25,6 +22,11 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import uz.etalon.crm.core.designsystem.components.BottomNav
+import uz.etalon.crm.core.designsystem.components.BottomNavItem
+import uz.etalon.crm.core.designsystem.components.BottomNavScrim
+import uz.etalon.crm.core.designsystem.icon.EtalonIcons
+import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.feature.auth.ChangePinRoute
 import uz.etalon.crm.feature.auth.LoginRoute
@@ -44,22 +46,25 @@ import uz.etalon.crm.feature.orders.list.OrdersListRoute
 import uz.etalon.crm.feature.payments.discrepancies.DiscrepanciesRoute
 import uz.etalon.crm.feature.payments.queue.ConfirmQueueRoute
 import uz.etalon.crm.feature.payments.record.RecordPaymentRoute
-import uz.etalon.crm.shell.ComingSoonScreen
+import uz.etalon.crm.shell.AccountSheet
+import uz.etalon.crm.shell.AccountViewModel
 import uz.etalon.crm.shell.Destination
-import uz.etalon.crm.shell.MoreRoute
 import uz.etalon.crm.shell.NoAccessScreen
 import uz.etalon.crm.shell.destinationsFor
 
-private fun Destination.icon(): ImageVector = when (this) {
-    Destination.HOME -> Icons.Default.Home
-    Destination.ORDERS -> Icons.Default.Inventory2
-    Destination.CALCULATOR -> Icons.Default.Calculate
-    Destination.INBOX -> Icons.Default.ChatBubble
-    Destination.PAYMENTS -> Icons.Default.AccountBalanceWallet
-    Destination.CLIENTS -> Icons.Default.People
-    Destination.PRODUCTION -> Icons.Default.Factory
-    Destination.GAZOBLOK -> Icons.Default.ViewInAr
-    Destination.MORE -> Icons.Default.MoreHoriz
+private fun Destination.icon(): Int = when (this) {
+    Destination.HOME -> EtalonIcons.House
+    Destination.ORDERS -> EtalonIcons.FileText
+    Destination.CALCULATOR -> EtalonIcons.Calculator
+    Destination.PAYMENTS -> EtalonIcons.Wallet
+    Destination.CLIENTS -> EtalonIcons.Users
+}
+
+/** Add first, then trim: clear-then-add would leave the stack momentarily empty, which
+ *  NavDisplay cannot render. */
+private fun switchTab(backStack: NavBackStack<NavKey>, target: NavKey) {
+    backStack.add(target)
+    while (backStack.size > 1) backStack.removeAt(0)
 }
 
 /** NavDisplay's default is the saveable-state decorator alone, which leaves every entry resolving
@@ -75,7 +80,17 @@ private fun rememberEntryDecorators(): List<NavEntryDecorator<NavKey>> {
     return remember(saveableState, viewModelStore) { listOf(saveableState, viewModelStore) }
 }
 
-/** Signed-in shell: navigation suite (bottom bar on phones, rail at >= 600 dp) + Nav3 display. */
+/**
+ * Signed-in shell: the floating navy nav pill (§4, D3) over the Nav3 display. The pill draws
+ * *above* the content rather than beside it — every screen pads its own last row clear of it with
+ * [uz.etalon.crm.core.designsystem.theme.EtalonSpace.underNav] and the [BottomNavScrim] fades
+ * whatever scrolls under it. The ≥ 600 dp rail is gone with `NavigationSuiteScaffold` (R8: phones
+ * only).
+ *
+ * The lit cell is the *tab the current route belongs to* ([tabFor]), not the route itself, so an
+ * order detail keeps «Буюртма» lit and the account sheet's three screens keep «Бош» lit. A route
+ * belonging to no cell leaves `selected` at -1, which lights nothing.
+ */
 @Composable
 fun SignedInShell(
     me: Me,
@@ -85,27 +100,15 @@ fun SignedInShell(
 ) {
     val destinations = destinationsFor(me)
     val current = backStack.lastOrNull()
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            destinations.forEach { d ->
-                val target = d.key()
-                val selected = current == target ||
-                    (d == Destination.ORDERS && current is OrderDetail) ||
-                    (d == Destination.CLIENTS && current is ClientDetail)
-                item(
-                    selected = selected,
-                    // Add first, then trim: clear-then-add would leave the stack momentarily
-                    // empty, which NavDisplay cannot render.
-                    onClick = {
-                        backStack.add(target)
-                        while (backStack.size > 1) backStack.removeAt(0)
-                    },
-                    icon = { Icon(d.icon(), contentDescription = stringResource(d.labelRes)) },
-                    label = { Text(stringResource(d.shortLabelRes), maxLines = 1) },
-                )
-            }
-        },
-    ) {
+    val selected = destinations.indexOf(current?.let(::tabFor))
+    var showAccount by remember { mutableStateOf(false) }
+    val labels = destinations.map { stringResource(it.shortLabelRes) }
+    val descriptions = destinations.map { stringResource(it.labelRes) }
+    val items = remember(destinations, labels) {
+        destinations.mapIndexed { i, d -> BottomNavItem(d.icon(), labels[i], descriptions[i]) }
+    }
+
+    Box(Modifier.fillMaxSize().background(EtalonColors.page)) {
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
@@ -127,7 +130,14 @@ fun SignedInShell(
                 // tiles are gated, and HomeViewModel handles that itself (dashboard.viewBasic
                 // or dashboard.view gates the one endpoint that carries both the tiles and
                 // today's deliveries — see HomeViewModel's KDoc).
-                entry<Home> { HomeRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                entry<Home> {
+                    HomeRoute(
+                        me = me,
+                        onOpenOrder = { backStack.add(OrderDetail(it)) },
+                        onOpenOrders = { switchTab(backStack, Orders) },
+                        onOpenAccount = { showAccount = true },
+                    )
+                }
                 entry<Orders> { OrdersListRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
                 entry<OrderDetail> { k ->
                     OrderDetailRoute(
@@ -236,22 +246,28 @@ fun SignedInShell(
                         )
                     }
                 }
-                entry<More> {
-                    MoreRoute(
-                        me = me,
-                        onOpen = { d -> backStack.add(d.key()) },
-                        onOpenDrivers = { backStack.add(Drivers) },
-                        onOpenDiscrepancies = { backStack.add(Discrepancies) },
-                        onChangePin = { backStack.add(ChangePin(forced = false)) },
-                        onSignOut = onSignOut,
-                    )
-                }
                 // The server bumps tokenVersion on a PIN change, so the current token is dead the
                 // moment this succeeds. Sign out deliberately instead of walking back into the app
                 // and hitting a silent 401.
                 entry<ChangePin> { k -> ChangePinRoute(forced = k.forced, onDone = onPinChanged) }
-                entry<ComingSoon> { k -> ComingSoonScreen(k.labelRes) }
             },
+        )
+        Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+            BottomNavScrim()
+            BottomNav(items = items, selectedIndex = selected, onSelect = { i -> switchTab(backStack, destinations[i].key()) })
+        }
+    }
+    if (showAccount) {
+        val vm: AccountViewModel = hiltViewModel()
+        val pending by vm.pendingUploads.collectAsStateWithLifecycle()
+        AccountSheet(
+            me = me,
+            pendingUploads = pending,
+            onDrivers = { showAccount = false; backStack.add(Drivers) },
+            onDiscrepancies = { showAccount = false; backStack.add(Discrepancies) },
+            onChangePin = { showAccount = false; backStack.add(ChangePin(forced = false)) },
+            onSignOut = { showAccount = false; onSignOut() },
+            onDismiss = { showAccount = false },
         )
     }
 }

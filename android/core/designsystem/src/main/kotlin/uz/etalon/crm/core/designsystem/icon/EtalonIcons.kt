@@ -34,6 +34,7 @@ object EtalonIcons {
     val Ellipsis = R.drawable.ic_lu_ellipsis
     val EllipsisVertical = R.drawable.ic_lu_ellipsis_vertical
     val Factory = R.drawable.ic_lu_factory
+    val FileText = R.drawable.ic_lu_file_text
     val GripHorizontal = R.drawable.ic_lu_grip_horizontal
     val House = R.drawable.ic_lu_house
     val Images = R.drawable.ic_lu_images
@@ -64,7 +65,8 @@ object EtalonIcons {
         "calculator" to Calculator, "camera" to Camera, "check" to Check, "chevron-down" to ChevronDown,
         "chevron-right" to ChevronRight, "chevron-up" to ChevronUp, "circle-alert" to CircleAlert,
         "cloud-upload" to CloudUpload, "delete" to Delete, "ellipsis" to Ellipsis,
-        "ellipsis-vertical" to EllipsisVertical, "factory" to Factory, "grip-horizontal" to GripHorizontal,
+        "ellipsis-vertical" to EllipsisVertical, "factory" to Factory, "file-text" to FileText,
+        "grip-horizontal" to GripHorizontal,
         "house" to House, "images" to Images, "message-circle" to MessageCircle, "minus" to Minus,
         "navigation" to Navigation, "package" to Package, "pencil" to Pencil, "phone" to Phone,
         "plus" to Plus, "save" to Save, "search" to Search, "send" to Send, "share-2" to Share,
