@@ -56,6 +56,9 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun updateDriver(id: String, body: DriverUpdateRequest): DriverListItemDto = unused("updateDriver")
     override suspend fun setDriverActive(id: String, body: DriverActiveRequest): DriverListItemDto = unused("setDriverActive")
 
+    override suspend fun comments(id: String): List<CommentDto> = unused("comments")
+    override suspend fun postComment(id: String, body: CommentCreateRequest, idempotencyKey: String): CommentDto = unused("postComment")
+
     override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> = unused("payments")
     override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto = unused("recordPayment")
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto = unused("confirmPayment")

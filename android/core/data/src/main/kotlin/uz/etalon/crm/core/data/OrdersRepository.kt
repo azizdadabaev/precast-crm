@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.Json
+import uz.etalon.crm.core.data.mapper.toCommentThread
 import uz.etalon.crm.core.data.mapper.toDomain
 import uz.etalon.crm.core.data.mapper.toEntity
 import uz.etalon.crm.core.database.dao.OrdersDao
@@ -16,9 +17,11 @@ import uz.etalon.crm.core.database.entity.OrderDetailEntity
 import uz.etalon.crm.core.model.*
 import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.core.network.EtalonApi
+import uz.etalon.crm.core.network.dto.CommentCreateRequest
 import uz.etalon.crm.core.network.dto.OrderDetailDto
 import java.time.Instant
 import java.time.LocalDate
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Named
@@ -48,6 +51,12 @@ data class OrdersFilter(
 private data class ListOutcome(val rows: List<OrderSummary>?, val error: AppError?)
 private data class DetailOutcome(val detail: OrderDetail?, val error: AppError?)
 
+/** The order's «Шарҳлар» thread and the outcome of the last fetch for it. [comments] is null only
+ *  until something has been fetched; a failed refresh keeps whatever the map already held, so the
+ *  screen shows the thread it had with the error above it. Not Room-backed: comments are read
+ *  online, never offline, and there is no queue behind the composer. */
+private data class CommentsOutcome(val comments: List<OrderComment>?, val error: AppError?)
+
 @Singleton
 class OrdersRepository @Inject constructor(
     private val api: EtalonApi, private val dao: OrdersDao, private val json: Json, @Named("apiBaseUrl") private val mediaBase: String,
@@ -56,6 +65,7 @@ class OrdersRepository @Inject constructor(
     private val detailOutcomes = MutableStateFlow<Map<String, DetailOutcome>>(emptyMap())
     private val facetsByKey = MutableStateFlow<Map<String, OrderFacets>>(emptyMap())
     private val totalsByKey = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private val commentOutcomes = MutableStateFlow<Map<String, CommentsOutcome>>(emptyMap())
 
     /** Bumped by [clearCache]. A refresh captures the epoch before its network call and drops its
      *  write if the epoch moved meanwhile — otherwise an in-flight request started by user A can
@@ -71,6 +81,9 @@ class OrdersRepository @Inject constructor(
         detailOutcomes.value = emptyMap()
         facetsByKey.value = emptyMap()
         totalsByKey.value = emptyMap()
+        // Comments carry the previous operator's name against their own words; they live nowhere
+        // but here, so this is the only place they can be dropped on sign-out.
+        commentOutcomes.value = emptyMap()
     }
 
     fun list(filter: OrdersFilter): Flow<Resource<List<OrderSummary>>> {
@@ -169,5 +182,63 @@ class OrdersRepository @Inject constructor(
                 }
             }
         }
+    }
+
+    // ── «Шарҳлар» ────────────────────────────────────────────────
+    //
+    // Online only, and deliberately not in Room. The detail cache exists because a loader in a
+    // yard with no signal still has to know what goes on the truck; a conversation is not that,
+    // and a thread cached from yesterday would show as the current one with no way to tell.
+
+    /** The order's thread, oldest first as the route orders it. `Loading(null)` until the first
+     *  answer for this order lands; a failed refresh keeps the thread it already had. */
+    fun comments(orderId: String): Flow<Resource<List<OrderComment>>> = commentOutcomes.map { m ->
+        val outcome = m[orderId]
+        when {
+            outcome == null -> Resource.Loading(null)
+            outcome.error != null -> Resource.Error(outcome.comments, outcome.error)
+            else -> Resource.Success(outcome.comments.orEmpty())
+        }
+    }.distinctUntilChanged()
+
+    suspend fun refreshComments(orderId: String) {
+        val started = epoch.get()
+        try {
+            val thread = api.comments(orderId).toCommentThread()
+            commentOutcomes.update { m ->
+                if (epoch.get() != started) m else m + (orderId to CommentsOutcome(thread, null))
+            }
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t // a cancelled scope is not an app error
+            commentOutcomes.update { m ->
+                if (epoch.get() != started) m else m + (orderId to CommentsOutcome(m[orderId]?.comments, t.toAppError()))
+            }
+        }
+    }
+
+    /**
+     * Posts one note and appends the row the server created to the thread, so the composer's own
+     * comment appears without a second round trip. Mentions are extracted server-side from the
+     * `@name` text — this sends the body exactly as typed.
+     *
+     * The `Idempotency-Key` is minted per **attempt**, not per submission: a retry of the same
+     * draft therefore posts a second comment rather than replaying the first. That is the cheap
+     * trade a comment can afford and a payment cannot — a duplicated note is noise someone can
+     * read past, and the alternative (pinning a key to a draft) buys nothing against the only
+     * failure it would cover, a response lost after the row committed.
+     */
+    suspend fun postComment(orderId: String, body: String): Result<OrderComment> = runCatchingCancellable {
+        val started = epoch.get()
+        val comment = api.postComment(orderId, CommentCreateRequest(body), UUID.randomUUID().toString()).toDomain()
+        commentOutcomes.update { m ->
+            if (epoch.get() != started) {
+                m // signed out mid-flight; this comment belongs to the old session
+            } else {
+                // Appended, never re-sorted: the route hands the thread back oldest-first and the
+                // row just created is the newest there is.
+                m + (orderId to CommentsOutcome(m[orderId]?.comments.orEmpty() + comment, null))
+            }
+        }
+        comment
     }
 }

@@ -123,6 +123,28 @@ interface EtalonApi {
     @PATCH("/api/drivers/{id}/deactivate")
     suspend fun setDriverActive(@Path("id") id: String, @Body body: DriverActiveRequest): DriverListItemDto
 
+    // ── Comments (Шарҳлар) ───────────────────────────────────────
+
+    /**
+     * The deal's whole thread: the server unions the comments on the order with the ones left on
+     * its source draft (`Order.projectId`), oldest first. `order.view` — every operator who can
+     * open the order can read and write it.
+     */
+    @GET("/api/orders/{id}/comments")
+    suspend fun comments(@Path("id") id: String): List<CommentDto>
+
+    /**
+     * `withIdempotency`-wrapped server-side, so the key is required here as it is on
+     * [recordPayment]. Unlike a payment this is never queued: a note that arrives an hour late is
+     * not worth the outbox's machinery, and the composer keeps the draft when the send fails.
+     */
+    @POST("/api/orders/{id}/comments")
+    suspend fun postComment(
+        @Path("id") id: String,
+        @Body body: CommentCreateRequest,
+        @Header("Idempotency-Key") idempotencyKey: String,
+    ): CommentDto
+
     // ── Payments & discrepancies ─────────────────────────────────
 
     @GET("/api/payments")
