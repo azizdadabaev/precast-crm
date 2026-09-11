@@ -65,9 +65,20 @@ val OrderDetail.discountPercent: BigDecimal      // OrderDetailDto.discountPerce
 
 - [ ] Commit `Feat(android) · order comments: read the thread, post a note, mentions resolved server-side`.
 
-### Task 4: Close — sweep, verification, captures
+### Task 4: Close — the beam-key bug, the review's follow-ups, sweep, verification, captures
+
+**Carried from Task 2's review (all in scope here):**
+- **Beam keys must agree with the server everywhere.** `feature/logistics/.../shipments/BeamAllowance.kt:11` keys beam lengths with `String.format("%.2f", BigDecimal)` = decimal HALF_UP, while the server caps and the detail's load list key with JS `toFixed(2)` on the binary double — a 3.505 m beam posts `{"3.51": n}` against a server total of 0 and takes a permanent 422 in the yard. Lift the key into ONE function in `:core:model` (`fun beamLengthKey(v: BigDecimal): String = BigDecimal(v.toDouble()).setScale(2, HALF_UP).toPlainString()`, KDoc'd as the sanctioned `Double` crossing), use it from `OrderDetail.loadList` AND `BeamAllowance`, and pin 3.505 → "3.50" on both sides (`OrderDetailDerivedTest` + the allowance test).
+- `rememberSaveable` for the two expansion states (canceled load list, history).
+- «Барчаси (N)» gets a «Камроқ» to collapse; KDoc that the server returns at most 100 events.
+- Capture the discount caption: `order_detail_discount_light.png` from the existing scrolling assertion.
+- Tests for the null-`canceledAt` («Бекор қилинди» without a date) and no-reason («Сабаб кўрсатилмаган») branches.
+- A `Blocked` + `fontScale 1.3` frame; derive the bar's extra clearance from the reason line's measured height (or `maxLines = 1` + ellipsis) so the last card never sits under it.
+- One `STOCK_WARNING` constant in `EventLabels.kt`; the weight KDoc in `Order.kt` says `totalArea` is Σ monolith area (the physical slab), not the billed tiles nor the rows' sum.
+- Task 3 follow-ups the reviewer names.
+
 - [ ] Standard command with `--rerun-tasks`; list baselines moved; captures to the workspace; report which §5.1a rows are now Always/Collapsed/Conditional on the built screen.
-- [ ] Commit any sweep.
+- [ ] Commit: `Fix(android) · beam keys agree with the server; detail follow-ups from review`.
 
 ## Self-review
 - §5.1a rows covered: panel (exists), canceled notice (T2), load list + blocks + weight (T1/T2), progress (exists), costs with the discount percent (T1/T2), payments with the CANCELED denominator (T2), delivery/shipments/photos (exist), comments (T3), history collapsed with the `STOCK_WARNING` label rule (T2), bar rules (T2 R4). Not-on-mobile list respected (nothing added); «Чатга юбориш», share, phone-as-text, receipt thumbnails recorded as Later in §5.1a. Types: `LoadLine`/`loadList`/`weightKg`/`discountPercent` (T1) consumed by T2; `PaymentDoor` (T2) tested in `NextStepTest`; `OrderComment` (T3) has no consumer outside T3.
