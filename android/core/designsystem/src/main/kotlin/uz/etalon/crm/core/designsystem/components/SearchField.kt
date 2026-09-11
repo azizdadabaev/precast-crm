@@ -2,20 +2,25 @@ package uz.etalon.crm.core.designsystem.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.R
@@ -25,6 +30,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
+import uz.etalon.crm.core.designsystem.theme.etalonRipple
 
 /**
  * §2: h40 white pill, hairline, 16 dp search glyph in ink3, 13 sp text, placeholder in ink3.
@@ -55,7 +61,10 @@ fun SearchField(
         .clip(EtalonShapes.pill)
         .background(EtalonColors.surface)
         .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.pill)
-        .padding(start = 14.dp),
+        // No end padding while the × is showing: it carries its own 48 dp slot, which already
+        // holds the glyph 10 dp in from the pill's edge. With nothing to clear, the text would
+        // otherwise run to the hairline.
+        .padding(start = 14.dp, end = if (value.isNotEmpty() && onClear != null) 0.dp else 14.dp),
     verticalAlignment = Alignment.CenterVertically,
 ) {
     EtalonIcon(EtalonIcons.Search, null, size = 16.dp, tint = EtalonColors.ink3)
@@ -74,9 +83,24 @@ fun SearchField(
             modifier = Modifier.fillMaxWidth(),
         )
     }
-    // No trailing padding on the row: [EtalonIconButton] carries its own 48 dp hit box, so the
-    // 28 dp circle it paints already sits 10 dp in from the pill's edge.
+    // Borderless: the field already has one white pill and one hairline, and a second white pill
+    // with a second hairline drawn inside it reads as a button sitting on a button. What is left
+    // is the glyph itself, in ink3 like the search one — 28 dp of it, inside D7's 48 dp slot.
     if (value.isNotEmpty() && onClear != null) {
-        EtalonIconButton(EtalonIcons.X, stringResource(R.string.ds_search_clear), onClear, size = 28.dp)
+        Box(
+            Modifier
+                .minimumInteractiveComponentSize()
+                .size(28.dp)
+                .clip(EtalonShapes.pill)
+                .clickable(
+                    role = Role.Button,
+                    indication = etalonRipple(false),
+                    interactionSource = remember { MutableInteractionSource() },
+                    onClick = onClear,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            EtalonIcon(EtalonIcons.X, stringResource(R.string.ds_search_clear), size = 16.dp, tint = EtalonColors.ink3)
+        }
     }
 }
