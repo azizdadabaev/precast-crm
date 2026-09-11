@@ -96,4 +96,6 @@ data class CalculatorUiState(
     val unpersistableRoomNames: List<String> get() = rows.filter { it.result != null && !it.canPersist }.map { it.name }
 }
 
+/** Same rule of thumb as [uz.etalon.crm.core.model.ORDER_KG_PER_M2], for the calculator's
+ *  in-progress (not-yet-an-order) Double totals. */
 const val KG_PER_M2 = 180.0

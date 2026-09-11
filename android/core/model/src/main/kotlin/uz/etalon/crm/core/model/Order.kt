@@ -1,6 +1,7 @@
 package uz.etalon.crm.core.model
 
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
 
 data class ClientRef(val id: String, val name: String, val phone: String, val address: String?)
@@ -94,6 +95,11 @@ data class OrderDetail(
     val events: List<OrderEventLine>,
     val dispatch: DispatchInfo?,
     val fetchedAt: Instant,
+    // Kept last (with defaults) so the many existing positional/partly-named-argument fixtures
+    // that don't care about these don't all need updating for their sake.
+    val cancelReason: String? = null,
+    val canceledAt: Instant? = null,
+    val discountPercent: BigDecimal = BigDecimal.ZERO,
 ) {
     val pendingAmount: Money get() = payments.filter { it.status == PaymentStatus.PENDING_CONFIRMATION }.fold(Money.ZERO) { a, p -> a + p.amount }
     val remaining: Money get() = (summary.totalPrice - summary.confirmedPaid - writeOffAmount).coerceAtLeastZero()
@@ -109,3 +115,34 @@ data class OrderDetail(
     /** Kept for 1a's screens: a flat URL list derived from [loadedPhotos]. */
     val loadedPhotoUrls: List<String> get() = loadedPhotos.map { it.url }
 }
+
+/** One row of the order's load list — a beam length shared by one or more rooms, with the
+ *  rooms' beam counts summed. Mirrors the web's `beamGroups` (orders/[id]/page.tsx). */
+data class LoadLine(val lengthKey: String, val beamLength: BigDecimal, val beams: Int)
+
+/** The order's beams grouped by length, in first-appearance order — matches the web's
+ *  `beamGroups`: `Map` keyed by `Number(c.beamLength).toFixed(2)`, summing `c.beamCount`. */
+val OrderDetail.loadList: List<LoadLine>
+    get() {
+        val counts = LinkedHashMap<String, Int>()
+        val lengths = LinkedHashMap<String, BigDecimal>()
+        for (room in rooms) {
+            val scaled = room.beamLength.setScale(2, RoundingMode.HALF_UP)
+            val key = scaled.toPlainString()
+            counts[key] = (counts[key] ?: 0) + room.beamCount
+            lengths.putIfAbsent(key, scaled)
+        }
+        return counts.map { (key, beams) -> LoadLine(key, lengths.getValue(key), beams) }
+    }
+
+/** Σ every room's block count. */
+val OrderDetail.totalBlocks: Int get() = rooms.sumOf { it.totalBlocks }
+
+/** The factory's rule-of-thumb weight for finished beam-and-block flooring, per m² of billed
+ *  area — shared with the calculator's `KG_PER_M2` (feature/calculator/CalculatorUiState.kt),
+ *  which is the single source of truth; this is the same constant for order-detail use. */
+val ORDER_KG_PER_M2: BigDecimal = BigDecimal(180)
+
+/** [OrderSummary.totalArea] × [ORDER_KG_PER_M2] — matches the web's
+ *  `Number(order.totalArea) * 180` rounded to 0 decimals. */
+val OrderDetail.weightKg: BigDecimal get() = (summary.totalArea * ORDER_KG_PER_M2).setScale(0, RoundingMode.HALF_UP)

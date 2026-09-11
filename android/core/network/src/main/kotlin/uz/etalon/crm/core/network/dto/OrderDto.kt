@@ -71,4 +71,11 @@ data class GalleryPhotoDto(
     val events: List<OrderEventDto> = emptyList(),
     val galleryPhotos: List<GalleryPhotoDto> = emptyList(),
     val dispatch: DispatchDto? = null,
+    // Kept last (with defaults) so the existing positional/partly-named test fixtures still
+    // compile unchanged. The GET returns the whole Prisma row, so all three are always on the
+    // wire (schema.prisma:583, 605-606); discountPercent is a decimal STRING like the other
+    // money-shaped fields on this DTO (see discountAmount).
+    val cancelReason: String? = null,
+    val canceledAt: String? = null,
+    val discountPercent: String = "0",
 )
