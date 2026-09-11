@@ -1,10 +1,20 @@
 <resources>
     <string name="orders_title">Буюртмалар</string>
-    <string name="orders_search_hint">Буюртма № · Мижоз · Телефон · Манзил</string>
-    <string name="orders_all">Барчаси</string>
-    <string name="orders_empty">Буюртма йўқ.</string>
-    <string name="paging_prev">Олдинги</string>
-    <string name="paging_next">Кейинги</string>
+    <string name="orders_count_area">%1$d буюртма · %2$s</string>
+    <string name="orders_new">Янги</string>
+    <string name="orders_search_placeholder">Мижоз, № ёки телефон</string>
+    <string name="orders_filter_day">Кун бўйича</string>
+    <string name="orders_list_title">Рўйхат</string>
+    <string name="orders_seg_all">Барчаси</string>
+    <string name="orders_seg_debt">Қарз</string>
+    <string name="orders_seg_paid">Тўланган</string>
+    <string name="orders_not_found">Буюртма топилмади.</string>
+    <string name="orders_paid">тўланган</string>
+    <string name="orders_debt">қолди %1$s</string>
+    <string name="orders_day_title">Кунни танланг</string>
+    <string name="orders_day_none">Кун танланмаган</string>
+    <string name="orders_day_pick">Танлаш</string>
+    <string name="orders_day_clear">Тозалаш</string>
     <string name="action_call">Қўнғироқ қилиш</string>
     <string name="orders_action_navigate">Навигация</string>
     <string name="scheduled_on">Жадвал: %1$s</string>

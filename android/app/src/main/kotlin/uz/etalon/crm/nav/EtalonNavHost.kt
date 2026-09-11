@@ -147,7 +147,15 @@ fun SignedInShell(
                         onOpenAccount = { showAccount = true },
                     )
                 }
-                entry<Orders> { OrdersListRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                entry<Orders> {
+                    OrdersListRoute(
+                        onOpenOrder = { backStack.add(OrderDetail(it)) },
+                        // «+ Янги» hands over to the calculator, which is where a new order is
+                        // quoted and placed. Without calculator.use that tab does not exist, so
+                        // the button is not drawn at all rather than drawn and dead.
+                        onNewOrder = if (me.can(PERM_CALCULATOR_USE)) ({ switchTab(backStack, Calculator) }) else null,
+                    )
+                }
                 entry<OrderDetail> { k ->
                     OrderDetailRoute(
                         orderId = k.id,

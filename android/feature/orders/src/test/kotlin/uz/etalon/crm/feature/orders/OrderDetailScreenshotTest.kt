@@ -27,9 +27,9 @@ import java.time.Instant
 
 /**
  * The sticky action bar itself (`NextStepBar` in OrderDetailScreen.kt) is `private`, so — exactly
- * like [OrderCardScreenshotTest] shoots the real `OrderCard` rather than a fragment of it — these
- * tests render the whole (stateless) `OrderDetailScreen`, which is enough to capture the bar at
- * the bottom of the frame in both of its forms.
+ * like [OrdersListScreenshotTest] shoots the whole list rather than a single row — these tests
+ * render the whole (stateless) `OrderDetailScreen`, which is enough to capture the bar at the
+ * bottom of the frame in both of its forms.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
