@@ -78,6 +78,11 @@ fun formatMeters(v: Double, decimals: Int = 2): String =
  *  Whole kilograms — a tenth of a kilo on a twelve-tonne load is noise. */
 fun formatWeightKg(kg: Double): String = formatDecimal(BigDecimal.valueOf(kg), 0) + " кг"
 
+/** The same figure where it is already exact: the order detail's load list derives its weight as
+ *  `totalArea × 180` in [BigDecimal] ([uz.etalon.crm.core.model.weightKg]), and routing it
+ *  through a `Double` on the way to the screen would be a rounding for nothing. */
+fun formatWeightKg(kg: BigDecimal): String = formatDecimal(kg, 0) + " кг"
+
 /** Digits-only storage → `+998 90 111 22 33`. Mirrors src/lib/phone.ts formatPhone. */
 fun formatPhone(raw: String): String {
     val d = raw.filter { it.isDigit() }

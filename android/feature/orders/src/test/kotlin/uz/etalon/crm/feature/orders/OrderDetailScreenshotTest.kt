@@ -5,8 +5,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -77,16 +80,22 @@ class OrderDetailScreenshotTest {
      *  read-only card. */
     private val dispatcher = Me("u2", "Диспетчер", Role.SALES, me.permissions + "dispatch.create", false)
 
-    private fun room(name: String, w: String, l: String, area: String, subtotal: String) = RoomLine(
+    private fun room(
+        name: String, w: String, l: String, area: String, subtotal: String,
+        beamLength: String, beams: Int, blocks: Int,
+    ) = RoomLine(
         name = name, innerWidth = BigDecimal(w), innerLength = BigDecimal(l), pattern = "Г-Б",
-        beamLength = BigDecimal("6.00"), beamCount = 12, totalBlocks = 96,
+        beamLength = BigDecimal(beamLength), beamCount = beams, totalBlocks = blocks,
         billedArea = BigDecimal(area), subtotal = Money.parse(subtotal),
     )
 
+    /** Two beam lengths across three rooms, so «Юклаш рўйхати» records both the grouping (two
+     *  3,80 m rooms summed into one row) and the first-appearance order: 3,80 m × 14, 5,05 m × 3,
+     *  282 blocks — the owner's own screenshot of the web page. */
     private val rooms = listOf(
-        room("Зал", "5.80", "6.40", "37.10", "6293000.00"),
-        room("Хона 1", "4.40", "5.20", "22.90", "3884500.00"),
-        room("Хона 2", "4.00", "4.80", "19.20", "3172500.00"),
+        room("Зал", "5.80", "6.40", "37.10", "6293000.00", beamLength = "3.80", beams = 8, blocks = 132),
+        room("Хона 1", "4.40", "5.20", "22.90", "3884500.00", beamLength = "5.05", beams = 3, blocks = 60),
+        room("Хона 2", "4.00", "4.80", "19.20", "3172500.00", beamLength = "3.80", beams = 6, blocks = 90),
     )
 
     private val payment = PaymentLine(
@@ -107,6 +116,18 @@ class OrderDetailScreenshotTest {
     )
 
     /**
+     * Six, so «Тарих» has something to collapse. The last one is the `STOCK_WARNING` rule:
+     * the server writes that event's `message` as English prose for the desk, and the phone shows
+     * the type's Uzbek wording instead — the only type whose message is dropped.
+     */
+    private val sixEvents = events + listOf(
+        OrderEventLine("e3", "ORDER_LOADED", null, "Азиз", Instant.parse("2026-09-02T04:10:00Z")),
+        OrderEventLine("e4", "SCHEDULED_DATE_CHANGED", "Сана 30 авг га кўчирилди", "Оператор", Instant.parse("2026-09-01T11:00:00Z")),
+        OrderEventLine("e5", "ORDER_PLACED", null, "Оператор", Instant.parse("2026-08-30T06:00:00Z")),
+        OrderEventLine("e6", "STOCK_WARNING", "Reserved stock exceeds available inventory", null, Instant.parse("2026-08-30T06:00:10Z")),
+    )
+
+    /**
      * The capture's order: 78,7 м² over three rooms, 13 350 000 total, 6 000 000 confirmed
      * (45 %), DISPATCHED on 3 September with Азиз at the wheel.
      *
@@ -124,7 +145,11 @@ class OrderDetailScreenshotTest {
         // The breakdown balances: roomsSubtotal − discount + delivery = totalPrice.
         roomsSubtotal: String = "13350000.00",
         discount: String = "0.00",
+        discountPercent: String = "0",
         delivery: String = "0.00",
+        events: List<OrderEventLine> = this.events,
+        cancelReason: String? = null,
+        canceledAt: Instant? = null,
     ) = OrderDetail(
         summary = OrderSummary(
             id = "o3", orderNumber = "2026-09-0003", status = status,
@@ -134,7 +159,7 @@ class OrderDetailScreenshotTest {
                 else -> PaymentState.PARTIALLY_PAID
             },
             totalPrice = Money.parse("13350000.00"), confirmedPaid = Money.parse(paid),
-            totalArea = BigDecimal("78.70"), totalBlocks = 288, totalBeams = 36,
+            totalArea = BigDecimal("78.70"), totalBlocks = 282, totalBeams = 17,
             scheduledAt = Instant.parse("2026-08-30T06:00:00Z"),
             placedAt = Instant.parse("2026-08-30T06:00:00Z"),
             client = ClientRef("c3", "Yusupov & Sons", "998901112233", "Бухоро, Эски шаҳар, Хўжа Нуробод кўч. 7"),
@@ -155,6 +180,9 @@ class OrderDetailScreenshotTest {
             null
         },
         fetchedAt = Instant.parse("2026-09-04T00:00:00Z"),
+        cancelReason = cancelReason,
+        canceledAt = canceledAt,
+        discountPercent = BigDecimal(discountPercent),
     )
 
     private fun show(o: OrderDetail, pending: List<PendingUpload> = emptyList(), who: Me = me) {
@@ -171,6 +199,12 @@ class OrderDetailScreenshotTest {
             }
         }
     }
+
+    /** The screen's own list. A bare `hasScrollAction()` also matches the photo strip's `LazyRow`
+     *  on any frame that draws one, so the vertical axis is what picks the column out. */
+    private fun list() = rule.onNode(
+        hasScrollAction() and SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange),
+    )
 
     private fun shoot(
         name: String,
@@ -193,13 +227,17 @@ class OrderDetailScreenshotTest {
      * This is also the frame that records the two things the capture's order has no occasion to
      * show: the cost breakdown (13 550 000 − 500 000 + 300 000 = 13 350 000) and, through
      * [dispatcher], the shipments door with its chevron and «Жўнатмаларга бўлиш».
+     *
+     * The discount line carries its rate: 500 000 off 13 550 000 is 3,69 %, which the card writes
+     * «Чегирма 3,7 %» at the web's one decimal.
      */
     @Test @Config(qualifiers = "w411dp-h891dp")
     fun placedLight() = shoot(
         "order_detail_placed_light",
         order(
             status = OrderStatus.PLACED, paid = "0.00", payments = emptyList(),
-            roomsSubtotal = "13550000.00", discount = "500000.00", delivery = "300000.00",
+            roomsSubtotal = "13550000.00", discount = "500000.00", discountPercent = "3.69",
+            delivery = "300000.00",
         ),
         who = dispatcher,
     )
@@ -236,17 +274,93 @@ class OrderDetailScreenshotTest {
      * card nor the cost breakdown is drawn — the Orders and Home rows already draw nothing for a
      * canceled order, and the screen they open must agree with them.
      *
-     * Nothing paid, and a cost breakdown that *would* render on any live status, so the frame
-     * records both absences at once; the red «Бекор қилинган» tag sits on the panel.
+     * A cost breakdown that *would* render on any live status, so the frame records both absences
+     * at once; the red «Бекор қилинган» tag sits on the panel.
+     *
+     * It also carries what §5.1a adds for a canceled order: the red notice with the date and the
+     * reason, «Юклаш рўйхати» collapsed behind its chevron — the list is history now, not a job —
+     * and, because 6 000 000 really was taken before the cancellation, the payments card's
+     * «Тасдиқланган: 6 000 000 / 13 350 000». That footer is the only denominator left on the
+     * screen once the progress and cost cards are gone.
      */
     @Test @Config(qualifiers = "w411dp-h891dp")
     fun canceledLight() = shoot(
         "order_detail_canceled_light",
         order(
-            status = OrderStatus.CANCELED, paid = "0.00", payments = emptyList(),
+            status = OrderStatus.CANCELED, paid = "6000000.00",
             roomsSubtotal = "13550000.00", discount = "500000.00", delivery = "300000.00",
+            cancelReason = "Мижоз бекор қилишни сўради",
+            canceledAt = Instant.parse("2026-09-03T09:00:00Z"),
         ),
     )
+
+    /**
+     * Spec §5.1a's disable-with-a-reason. The whole 13 350 000 is sitting in the confirmation
+     * queue, so `POST /api/payments` would take nothing more: «Тўлов қайд қилиш» stays where the
+     * thumb expects it, greyed, with «Тасдиқ кутилмоқда: 13 350 000» under it. Hiding it would
+     * read as a bug to the operator who recorded that very payment.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun pendingCapLight() = shoot(
+        "order_detail_pending_cap_light",
+        order(
+            status = OrderStatus.PLACED, paid = "0.00",
+            payments = listOf(
+                payment.copy(
+                    id = "p9", amount = Money.parse("13350000.00"),
+                    status = PaymentStatus.PENDING_CONFIRMATION,
+                    recordedAt = Instant.parse("2026-09-03T12:40:00Z"),
+                ),
+            ),
+        ),
+    )
+
+    /**
+     * «Тарих» collapsed: three of six lines and «Барчаси (6)». The last of the six is a
+     * `STOCK_WARNING` whose server `message` is English prose — it is below the fold here, and
+     * [theStockWarningShowsItsUzbekLabelNotTheServersEnglish] asserts the rule directly.
+     *
+     * The card is the last thing on the screen, so the frame scrolls to it: a `LazyColumn` does
+     * not compose what it does not draw, and a frame of the panel would record nothing.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun historyLight() {
+        show(order(events = sixEvents))
+        list().performScrollToNode(hasText("Барчаси (6)"))
+        rule.onRoot().captureRoboImage("screenshots/order_detail_history_light.png")
+    }
+
+    /**
+     * The rate beside the discount sum, which [placedLight]'s viewport cuts off: 500 000 off
+     * 13 550 000 is 3,69 %, written at the web's one decimal. A client who negotiated a percentage
+     * asks about the percentage, and the sum alone does not answer.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theDiscountLineCarriesItsRate() {
+        show(
+            order(
+                status = OrderStatus.PLACED, paid = "0.00", payments = emptyList(),
+                roomsSubtotal = "13550000.00", discount = "500000.00", discountPercent = "3.69",
+                delivery = "300000.00",
+            ),
+        )
+        val line = hasText("Чегирма 3,7%")
+        list().performScrollToNode(line)
+        rule.onNode(line).assertIsDisplayed()
+    }
+
+    /** §5.1a: the stock-reserve warning is resolved at the desk and its server message is written
+     *  in English for the desk, so «Тарих» shows the type's Uzbek wording instead. Every other
+     *  type keeps its message — which is why «Жўнатилди» is still asserted beside it. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theStockWarningShowsItsUzbekLabelNotTheServersEnglish() {
+        show(order(events = sixEvents))
+        val all = hasText("Барчаси (6)")
+        list().performScrollToNode(all)
+        rule.onNode(all).performClick()
+        list().performScrollToNode(hasText("Қолдиқ огоҳлантириши", substring = true))
+        rule.onNode(hasText("Reserved stock exceeds available inventory", substring = true)).assertDoesNotExist()
+    }
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
     fun largeFont() = shoot("order_detail_font13", order())
@@ -261,7 +375,7 @@ class OrderDetailScreenshotTest {
     fun aCanceledOrderStillListsThePaymentsItTook() {
         show(order(status = OrderStatus.CANCELED, paid = "6000000.00"))
         val card = hasText("Тўловлар")
-        rule.onNode(hasScrollAction()).performScrollToNode(card)
+        list().performScrollToNode(card)
         rule.onNode(card).assertIsDisplayed()
     }
 
@@ -275,7 +389,7 @@ class OrderDetailScreenshotTest {
     fun shipmentsDoorIsOfferedOnAPlacedOrder() {
         show(order(status = OrderStatus.PLACED, paid = "0.00", payments = emptyList()), who = dispatcher)
         val door = hasText("Жўнатмаларга бўлиш")
-        rule.onNode(hasScrollAction()).performScrollToNode(door)
+        list().performScrollToNode(door)
         rule.onNode(door).assertIsDisplayed()
     }
 }

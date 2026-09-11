@@ -35,6 +35,12 @@ class FormattersTest {
         // U+202F NARROW NO-BREAK SPACE (D8), written as an escape so the expectation stays readable.
         assertEquals("12\u202F240 кг", formatWeightKg(12240.0))
     }
+    /** The order detail derives its weight as an exact BigDecimal (`totalArea × 180`); the
+     *  overload must read identically to the Double one and must not show a fraction of a kilo. */
+    @Test fun `weight also takes the exact BigDecimal the order detail derives`() {
+        assertEquals("14\u202F166 кг", formatWeightKg(BigDecimal("14166")))
+        assertEquals("14\u202F166 кг", formatWeightKg(BigDecimal("14165.60")))
+    }
     @Test fun `phone renders +998 90 111 22 33 from digits`() {
         assertEquals("+998 90 111 22 33", formatPhone("998901112233"))
         assertEquals("+998 90 111 22 33", formatPhone("901112233"))

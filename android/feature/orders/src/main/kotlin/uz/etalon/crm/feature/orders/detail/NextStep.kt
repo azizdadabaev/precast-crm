@@ -1,6 +1,7 @@
 package uz.etalon.crm.feature.orders.detail
 
 import uz.etalon.crm.core.model.Me
+import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
@@ -117,4 +118,37 @@ fun canRecordPayment(order: OrderDetail, me: Me): Boolean {
     val s = order.summary
     if (s.status == OrderStatus.CANCELED) return false
     return !(s.status == OrderStatus.DELIVERED && s.paymentState == PaymentState.FULLY_PAID)
+}
+
+/** What the sticky bar does with «Тўлов қайд қилиш» — see [paymentDoorFor]. */
+sealed interface PaymentDoor {
+    /** Offered, and the server will accept something. */
+    data object Open : PaymentDoor
+
+    /** Offered but greyed: money is still owed and every som of it is already awaiting
+     *  confirmation, so the server's cap is zero. [pending] is that queued sum — the composable
+     *  turns it into the sentence, because this file stays free of an Android `Context`. */
+    data class Blocked(val pending: Money) : PaymentDoor
+
+    /** Not offered at all — this role, or this order's lifecycle, has no payment to record. */
+    data object Hidden : PaymentDoor
+}
+
+/**
+ * Spec §5.1a's hide-vs-disable rule applied to the payment door.
+ *
+ * A refusal that belongs to the role or to the lifecycle **hides** the button: a DRIVER without
+ * `payment.record`, a canceled order, a delivered order already settled — nothing an operator can
+ * do here, and a greyed button would only invite tapping.
+ *
+ * A refusal that is merely true *right now* **disables with a reason**. There is exactly one:
+ * `recordableRemaining` is zero (`POST /api/payments` would 422) while `remaining` is not, i.e.
+ * the whole outstanding balance is sitting in the confirmation queue. Hiding the door there would
+ * leave the operator who just recorded that payment with no explanation of where it went; a
+ * missing button reads as a bug, a greyed one with a sentence teaches.
+ */
+fun paymentDoorFor(order: OrderDetail, me: Me): PaymentDoor = when {
+    !canRecordPayment(order, me) -> PaymentDoor.Hidden
+    order.recordableRemaining.isZero && !order.remaining.isZero -> PaymentDoor.Blocked(order.pendingAmount)
+    else -> PaymentDoor.Open
 }

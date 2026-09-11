@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,16 +74,23 @@ import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.OrderDetail
+import uz.etalon.crm.core.model.OrderEventLine
 import uz.etalon.crm.core.model.PendingUpload
 import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.model.loadList
 import uz.etalon.crm.core.model.owesNothing
+import uz.etalon.crm.core.model.totalBlocks
+import uz.etalon.crm.core.model.weightKg
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
+import uz.etalon.crm.core.ui.format.formatCount
 import uz.etalon.crm.core.ui.format.formatDate
 import uz.etalon.crm.core.ui.format.formatDateTime
 import uz.etalon.crm.core.ui.format.formatDecimal
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatOrderNo
+import uz.etalon.crm.core.ui.format.formatPercent
+import uz.etalon.crm.core.ui.format.formatWeightKg
 import uz.etalon.crm.feature.orders.R
 import java.math.RoundingMode
 import kotlin.math.roundToInt
@@ -163,8 +172,8 @@ fun OrderDetailScreen(
     val failedUploads = pending.count { it.failed }
     val firstFailed = pending.firstOrNull { it.failed }
     val step = o?.let { nextStepFor(it, me, unfinishedUploads, failedUploads) } ?: NextStep.None
-    val canPay = o != null && canRecordPayment(o, me)
-    val hasBar = o != null && (step != NextStep.None || canPay)
+    val door = o?.let { paymentDoorFor(it, me) } ?: PaymentDoor.Hidden
+    val hasBar = o != null && (step != NextStep.None || door != PaymentDoor.Hidden)
     val photos = o?.let { stripPhotos(it) }.orEmpty()
     var lightboxAt by remember { mutableStateOf<Int?>(null) }
     var deleteCandidate by remember { mutableStateOf<PhotoRef?>(null) }
@@ -190,7 +199,13 @@ fun OrderDetailScreen(
                     start = EtalonSpace.cardMargin,
                     end = EtalonSpace.cardMargin,
                     top = EtalonSpace.sm,
-                    extraBottom = if (hasBar) StickyActionBarDefaults.height else 0.dp,
+                    // A blocked payment door hangs its reason under the button, so the bar is one
+                    // `meta` line taller than the constant describes.
+                    extraBottom = when {
+                        !hasBar -> 0.dp
+                        door is PaymentDoor.Blocked -> StickyActionBarDefaults.height + EtalonSpace.xl
+                        else -> StickyActionBarDefaults.height
+                    },
                 ),
                 verticalArrangement = Arrangement.spacedBy(EtalonSpace.md),
             ) {
@@ -209,11 +224,18 @@ fun OrderDetailScreen(
                 if (actionError != null) item { ErrorBanner(actionError) }
                 if (o == null) return@LazyColumn
                 item { Panel(o, onBack = onBack, onCall = { dial(ctx, o.summary.client.phone) }) }
+                val canceled = o.summary.status.owesNothing
+                if (canceled) item { CanceledNotice(o) }
+                // Spec §5.1a: the loader's own section, and the one the owner named as the reason
+                // the phone could not replace the web page at the truck. Always drawn — on a
+                // canceled order collapsed, because what was quoted is still worth reading but
+                // nothing is going on a lorry.
+                if (o.rooms.isNotEmpty()) item { LoadListCard(o, collapsible = canceled) }
                 // A canceled order has no balance to make progress against and no live price to
                 // break down (`OrderStatus.owesNothing`): a «45 % тўланган» bar or a «Жами» on a
                 // sale that never happened is a claim about money that is not owed. The payments
                 // card below still draws — cash that was taken is history and stays visible.
-                if (!o.summary.status.owesNothing) {
+                if (!canceled) {
                     item { PaymentProgress(o) }
                     if (hasCostBreakdown(o)) item { CostsCard(o) }
                 }
@@ -255,28 +277,10 @@ fun OrderDetailScreen(
                         }
                     }
                 }
-                if (o.events.isNotEmpty()) {
-                    item {
-                        WhiteCard(stringResource(R.string.events)) {
-                            o.events.take(20).forEach { e ->
-                                // The server's own `message` first — it carries the specifics a
-                                // type name cannot. Without one, the type's Uzbek wording; the raw
-                                // English enum is never printed at an operator (`orderEventLabel`).
-                                val what = e.message
-                                    ?: stringResource(orderEventLabel(e.type) ?: R.string.event_generic)
-                                Text(
-                                    "${formatDateTime(e.createdAt)} · $what${e.actorName?.let { " · $it" } ?: ""}",
-                                    style = EtalonType.meta,
-                                    color = EtalonColors.ink2,
-                                    modifier = Modifier.padding(top = EtalonSpace.xs),
-                                )
-                            }
-                        }
-                    }
-                }
+                if (o.events.isNotEmpty()) item { EventsCard(o.events) }
             }
         }
-        if (o != null) ActionBar(step, canPay, onLoadTruck, onDeliveryProof, onOpenShipments, onRecordPayment)
+        if (o != null) ActionBar(step, door, onLoadTruck, onDeliveryProof, onOpenShipments, onRecordPayment)
     }
 
     lightboxAt?.let { at -> Lightbox(photos, at, onDismiss = { lightboxAt = null }) }
@@ -417,6 +421,152 @@ private fun WhiteCard(
     content()
 }
 
+/**
+ * Why this order is dead, in the two facts the web page carries: when, and on what grounds.
+ *
+ * The panel's red «Бекор қилинган» tag already says *that* it was canceled; this says *why*, which
+ * is the one thing nobody can reconstruct from the rest of the screen — §5.1a's «anyone can see in
+ * ten seconds what is owed and why an order was cancelled». An order canceled before the server
+ * recorded the date keeps the sentence and drops the «· 3 сен 2026».
+ */
+@Composable
+private fun CanceledNotice(o: OrderDetail) = Column(
+    Modifier.fillMaxWidth().clip(EtalonShapes.xl).background(EtalonColors.redBg)
+        .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
+) {
+    Text(
+        o.canceledAt?.let { stringResource(R.string.detail_canceled_title, formatDate(it)) }
+            ?: stringResource(R.string.detail_canceled_no_date),
+        style = EtalonType.label,
+        color = EtalonColors.red,
+    )
+    val reason = o.cancelReason?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.detail_cancel_reason_none)
+    Text(
+        stringResource(R.string.detail_cancel_reason, reason),
+        style = EtalonType.meta,
+        color = EtalonColors.red,
+        modifier = Modifier.padding(top = EtalonSpace.xs),
+    )
+}
+
+/**
+ * What goes on the truck: every beam length with the number of beams of it, the block total, and
+ * the weight the lorry has to carry. Spec §5.1a's «Юклаш рўйхати» — the section the owner named as
+ * the reason a loader still had to open the web page in the yard.
+ *
+ * Derived exactly as the web's `beamGroups` (`OrderDetail.loadList`), first-appearance order and
+ * all, so the two lists can be read side by side row for row. The key arrives as «3.80»; the point
+ * becomes the house decimal comma here and the figure is never rounded a second time.
+ *
+ * @param collapsible a canceled order: the list is history rather than a job, so it opens shut
+ *   behind a chevron instead of taking a screenful above the payments that were actually taken.
+ */
+@Composable
+private fun LoadListCard(o: OrderDetail, collapsible: Boolean) {
+    var expanded by remember(collapsible) { mutableStateOf(!collapsible) }
+    WhiteCard(
+        title = stringResource(R.string.detail_load_list),
+        onClick = if (collapsible) ({ expanded = !expanded }) else null,
+        trailing = if (collapsible) {
+            {
+                EtalonIcon(
+                    if (expanded) EtalonIcons.ChevronUp else EtalonIcons.ChevronDown,
+                    null,
+                    tint = EtalonColors.ink3,
+                )
+            }
+        } else {
+            null
+        },
+    ) {
+        if (!expanded) return@WhiteCard
+        o.loadList.forEach { line ->
+            LoadRow(
+                stringResource(R.string.detail_load_row, line.lengthKey.replace('.', ',')),
+                formatCount(line.beams),
+            )
+        }
+        HorizontalDivider(
+            Modifier.padding(vertical = EtalonSpace.sm),
+            thickness = EtalonSpace.hairline,
+            color = EtalonColors.surfaceBorder,
+        )
+        LoadRow(stringResource(R.string.detail_blocks_total), formatCount(o.totalBlocks))
+        Text(
+            stringResource(R.string.detail_weight, formatWeightKg(o.weightKg)),
+            style = EtalonType.meta,
+            color = EtalonColors.ink2,
+            modifier = Modifier.padding(top = EtalonSpace.sm),
+        )
+    }
+}
+
+/** One «3,80 м … 14 та» line. Both halves are the card's own weight: a loader counting beams at
+ *  the truck reads the length as hard as the count. */
+@Composable
+private fun LoadRow(label: String, amount: String) = Row(
+    Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs),
+    Arrangement.SpaceBetween,
+    Alignment.CenterVertically,
+) {
+    Text(
+        label,
+        style = EtalonType.label,
+        color = EtalonColors.ink,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+    )
+    Spacer(Modifier.width(EtalonSpace.sm))
+    Text(amount, style = EtalonType.rowAmount, color = EtalonColors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+
+/** How many «Тарих» rows are drawn before «Барчаси (N)». Spec §5.1a: the section is a *collapsed*
+ *  one — three lines of context, and the rest a tap away. */
+private const val COLLAPSED_EVENTS = 3
+
+/**
+ * «Тарих», collapsed. The expansion happens in place: there is no history screen to navigate to,
+ * and the newest three lines are what anyone checking an order actually reads.
+ *
+ * `STOCK_WARNING` is the one type whose `message` is not printed. The server writes it as English
+ * prose for the desk, and §5.1a rules that the phone shows the Uzbek label instead; every other
+ * type keeps its message, which carries the specifics — which driver, how much — that a type name
+ * cannot.
+ */
+@Composable
+private fun EventsCard(events: List<OrderEventLine>) {
+    var expanded by remember { mutableStateOf(false) }
+    WhiteCard(stringResource(R.string.events)) {
+        (if (expanded) events else events.take(COLLAPSED_EVENTS)).forEach { e ->
+            val what = e.message?.takeUnless { e.type == STOCK_WARNING }
+                ?: stringResource(orderEventLabel(e.type) ?: R.string.event_generic)
+            Text(
+                "${formatDateTime(e.createdAt)} · $what${e.actorName?.let { " · $it" } ?: ""}",
+                style = EtalonType.meta,
+                color = EtalonColors.ink2,
+                modifier = Modifier.padding(top = EtalonSpace.xs),
+            )
+        }
+        if (!expanded && events.size > COLLAPSED_EVENTS) {
+            Text(
+                stringResource(R.string.detail_events_all, events.size),
+                style = EtalonType.label,
+                color = EtalonColors.indigo,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.Button) { expanded = true }
+                    .heightIn(min = EtalonSpace.minTouch)
+                    .wrapContentHeight(Alignment.CenterVertically),
+            )
+        }
+    }
+}
+
+/** The one event type whose server `message` is English prose written for the desk. */
+private const val STOCK_WARNING = "STOCK_WARNING"
+
 /** A card with nothing to say: only the rooms priced the order, and the panel's «Жами» already
  *  carries that figure. */
 private fun hasCostBreakdown(o: OrderDetail): Boolean =
@@ -433,7 +583,18 @@ private const val MINUS = '−'
 @Composable
 private fun CostsCard(o: OrderDetail) = WhiteCard(title = null) {
     CostRow(stringResource(R.string.rooms_subtotal), formatMoney(o.roomsSubtotal))
-    if (!o.discountAmount.isZero) CostRow(stringResource(R.string.discount), "$MINUS${formatMoney(o.discountAmount)}")
+    // The rate the discount was struck at, when the order carries one — the web writes the same
+    // «Чегирма 2,1%» beside the sum, and it is what a client asks about.
+    if (!o.discountAmount.isZero) {
+        CostRow(
+            if (o.discountPercent.signum() > 0) {
+                stringResource(R.string.detail_discount_pct, formatPercent(o.discountPercent, 1))
+            } else {
+                stringResource(R.string.discount)
+            },
+            "$MINUS${formatMoney(o.discountAmount)}",
+        )
+    }
     if (!o.deliveryCost.isZero) CostRow(stringResource(R.string.delivery), formatMoney(o.deliveryCost))
     if (!o.otherCost.isZero) CostRow(stringResource(R.string.other_cost), formatMoney(o.otherCost))
     HorizontalDivider(
@@ -493,6 +654,21 @@ private fun PaymentsCard(o: OrderDetail) = WhiteCard(stringResource(R.string.det
             stringResource(R.string.pending_amount, formatMoney(o.pendingAmount)),
             style = EtalonType.meta,
             color = EtalonColors.indigo,
+            modifier = Modifier.padding(top = EtalonSpace.xs),
+        )
+    }
+    // On a canceled order the progress card and the cost breakdown are both gone, so these rows
+    // would be sums with nothing to be read against. This is the only place left that can state
+    // the denominator — how much of the order's price the cash on file actually covered.
+    if (o.summary.status.owesNothing) {
+        Text(
+            stringResource(
+                R.string.detail_payments_confirmed_of,
+                formatMoney(o.summary.confirmedPaid),
+                formatMoney(o.summary.totalPrice),
+            ),
+            style = EtalonType.meta,
+            color = EtalonColors.ink2,
             modifier = Modifier.padding(top = EtalonSpace.xs),
         )
     }
@@ -594,7 +770,7 @@ private fun ShipmentsCard(o: OrderDetail, pending: List<PendingUpload>, onOpen: 
 @Composable
 private fun BoxScope.ActionBar(
     step: NextStep,
-    canPay: Boolean,
+    door: PaymentDoor,
     onLoadTruck: () -> Unit,
     onDeliveryProof: () -> Unit,
     onOpenShipments: () -> Unit,
@@ -607,11 +783,31 @@ private fun BoxScope.ActionBar(
         is NextStep.Blocked -> { { SecondaryButton(step.reason, onClick = {}, Modifier.weight(1f), enabled = false) } }
         NextStep.None -> null
     }
-    if (secondary == null && !canPay) return
+    if (secondary == null && door == PaymentDoor.Hidden) return
     Box(Modifier.align(Alignment.BottomCenter)) {
         StickyActionBar {
             secondary?.invoke(this)
-            if (canPay) PrimaryButton(stringResource(R.string.action_record_payment), onRecordPayment, Modifier.weight(1f))
+            val record = stringResource(R.string.action_record_payment)
+            when (door) {
+                PaymentDoor.Open -> PrimaryButton(record, onRecordPayment, Modifier.weight(1f))
+                // §5.1a's disable-with-a-reason: the button stays where the thumb expects it, greyed,
+                // with the sentence that explains the refusal — the whole balance is already waiting
+                // to be confirmed, so the server would take nothing more.
+                is PaymentDoor.Blocked -> Column(Modifier.weight(1f)) {
+                    PrimaryButton(record, onClick = {}, enabled = false)
+                    Text(
+                        stringResource(R.string.pending_amount, formatMoney(door.pending)),
+                        style = EtalonType.meta,
+                        color = EtalonColors.ink2,
+                        // Two, because the line sits under the button rather than across the bar:
+                        // a nine-digit sum at a large font scale wraps instead of losing its tail.
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = EtalonSpace.xs),
+                    )
+                }
+                PaymentDoor.Hidden -> Unit
+            }
         }
     }
 }

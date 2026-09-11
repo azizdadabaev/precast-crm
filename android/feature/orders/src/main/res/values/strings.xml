@@ -40,7 +40,29 @@
     <string name="detail_driver">Ҳайдовчи</string>
     <string name="detail_no_driver">—</string>
     <string name="detail_payments">Тўловлар</string>
+    <!-- On a canceled order the progress card and the cost breakdown are both hidden, so the
+         payment rows would have no total to be read against; this footer is the only place that
+         states the denominator. -->
+    <string name="detail_payments_confirmed_of">Тасдиқланган: %1$s / %2$s</string>
     <string name="action_load">Юклаш</string>
+
+    <!-- ── The load list: what a loader reads at the truck (spec §5.1a) ─────── -->
+    <string name="detail_load_list">Юклаш рўйхати</string>
+    <!-- One beam length. The figure arrives already rounded to two decimals with a point, exactly
+         as the web keys its own list; the screen swaps the point for the house decimal comma. -->
+    <string name="detail_load_row">%1$s м</string>
+    <string name="detail_blocks_total">Ғишт · жами</string>
+    <string name="detail_weight">Оғирлик ~%1$s</string>
+
+    <!-- The cancellation notice. «Сабаб кўрсатилмаган» is honest about an order that was canceled
+         before the reason field existed, rather than leaving the line blank. -->
+    <string name="detail_canceled_title">Бекор қилинди · %1$s</string>
+    <!-- The same notice for an order canceled before the server recorded the date. -->
+    <string name="detail_canceled_no_date">Бекор қилинди</string>
+    <string name="detail_cancel_reason">Сабаб: %1$s</string>
+    <string name="detail_cancel_reason_none">Сабаб кўрсатилмаган</string>
+
+    <string name="detail_events_all">Барчаси (%1$d)</string>
     <string name="action_delivered">Етказилди</string>
     <string name="action_record_payment">Тўлов қайд қилиш</string>
 
@@ -48,6 +70,8 @@
          own subtotal. «Етказиш» here is the delivery *cost* line, not the delivery card. -->
     <string name="rooms_subtotal">Хоналар жами</string>
     <string name="discount">Чегирма</string>
+    <!-- The same line once the order carries a percentage: «Чегирма 2,1%», as the web writes it. -->
+    <string name="detail_discount_pct">Чегирма %1$s</string>
     <string name="delivery">Етказиш</string>
     <string name="other_cost">Бошқа</string>
     <string name="total">Жами</string>

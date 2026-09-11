@@ -10,15 +10,20 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.OrderSummary
+import uz.etalon.crm.core.model.PaymentLine
+import uz.etalon.crm.core.model.PaymentMethod
 import uz.etalon.crm.core.model.PaymentState
+import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.feature.orders.detail.NextStep
+import uz.etalon.crm.feature.orders.detail.PaymentDoor
 import uz.etalon.crm.feature.orders.detail.canAddPhoto
 import uz.etalon.crm.feature.orders.detail.canOpenShipments
 import uz.etalon.crm.feature.orders.detail.canRecordPayment
 import uz.etalon.crm.feature.orders.detail.nextStepFor
+import uz.etalon.crm.feature.orders.detail.paymentDoorFor
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -34,15 +39,25 @@ class NextStepTest {
         driverName = null, truckIdentifier = null,
     )
 
+    /** A payment sitting in the confirmation queue: it does not move `confirmedPaid`, but it does
+     *  eat the cap `POST /api/payments` will accept. */
+    private fun pending(amount: String) = PaymentLine(
+        id = "p1", amount = Money.parse(amount), method = PaymentMethod.CASH,
+        status = PaymentStatus.PENDING_CONFIRMATION, recordedAt = Instant.EPOCH,
+        recordedByName = null, receiptUrls = emptyList(),
+    )
+
     private fun order(
         status: OrderStatus,
         shipments: List<ShipmentLine> = emptyList(),
         paymentState: PaymentState = PaymentState.AWAITING_PAYMENT,
+        payments: List<PaymentLine> = emptyList(),
+        confirmedPaid: Money = Money.ZERO,
     ) = OrderDetail(
         summary = OrderSummary(
             id = "o1", orderNumber = "2026-09-0001", status = status,
             paymentState = paymentState,
-            totalPrice = Money.parse("1000000"), confirmedPaid = Money.ZERO,
+            totalPrice = Money.parse("1000000"), confirmedPaid = confirmedPaid,
             totalArea = BigDecimal.ONE, totalBlocks = 1, totalBeams = 1,
             scheduledAt = Instant.EPOCH, placedAt = Instant.EPOCH,
             client = ClientRef("c", "Мижоз", "998901112233", null),
@@ -51,7 +66,7 @@ class NextStepTest {
         deliveryLat = null, deliveryLng = null, deliveryLocationUrl = null, deliveryLocationLabel = null,
         discountAmount = Money.ZERO, deliveryCost = Money.ZERO, otherCost = Money.ZERO,
         roomsSubtotal = Money.ZERO, writeOffAmount = Money.ZERO,
-        rooms = emptyList(), payments = emptyList(), shipments = shipments,
+        rooms = emptyList(), payments = payments, shipments = shipments,
         loadedPhotos = emptyList(), deliveryProofUrl = null, events = emptyList(), dispatch = null,
         fetchedAt = Instant.EPOCH,
     )
@@ -242,5 +257,57 @@ class NextStepTest {
     @Test fun `a delivered order that still owes money keeps the door open`() {
         assertTrue(canRecordPayment(order(OrderStatus.DELIVERED, paymentState = PaymentState.PARTIALLY_PAID), driver))
         assertTrue(canRecordPayment(order(OrderStatus.DISPATCHED, paymentState = PaymentState.FULLY_PAID), driver))
+    }
+
+    // ── Hide vs disable (spec §5.1a, ruling R4) ───────────────────────────────
+
+    @Test fun `the door is open when the server would accept something`() {
+        assertEquals(PaymentDoor.Open, paymentDoorFor(order(OrderStatus.PLACED), driver))
+    }
+
+    /** Part of the balance queued still leaves a cap, so nothing is blocked. */
+    @Test fun `a partial pending payment leaves the door open`() {
+        val o = order(OrderStatus.PLACED, payments = listOf(pending("400000")))
+        assertEquals(PaymentDoor.Open, paymentDoorFor(o, driver))
+    }
+
+    /**
+     * The one disable-with-a-reason case: every som still owed is already awaiting confirmation,
+     * so `POST /api/payments` would 422 on any amount. Hiding the button here would leave the
+     * operator who just recorded that payment with no account of where it went.
+     */
+    @Test fun `the door is blocked, with the queued sum, when the whole balance awaits confirmation`() {
+        val o = order(OrderStatus.PLACED, payments = listOf(pending("1000000")))
+        assertEquals(PaymentDoor.Blocked(Money.parse("1000000")), paymentDoorFor(o, driver))
+    }
+
+    /** Nothing left to owe is not a block — it is a door the server still accepts nothing through
+     *  but that no rule refuses; only the status/permission refusals hide it. */
+    @Test fun `a settled live order is not blocked, because nothing is owed`() {
+        val o = order(
+            OrderStatus.DISPATCHED, paymentState = PaymentState.FULLY_PAID,
+            confirmedPaid = Money.parse("1000000"),
+        )
+        assertEquals(PaymentDoor.Open, paymentDoorFor(o, driver))
+    }
+
+    /** Lifecycle and role refusals hide, they never grey out: there is nothing here to explain. */
+    @Test fun `the role and lifecycle refusals hide the door instead of greying it`() {
+        assertEquals(PaymentDoor.Hidden, paymentDoorFor(order(OrderStatus.PLACED), sales))
+        assertEquals(PaymentDoor.Hidden, paymentDoorFor(order(OrderStatus.CANCELED), driver))
+        assertEquals(
+            PaymentDoor.Hidden,
+            paymentDoorFor(
+                order(OrderStatus.DELIVERED, paymentState = PaymentState.FULLY_PAID, confirmedPaid = Money.parse("1000000")),
+                driver,
+            ),
+        )
+    }
+
+    /** A refusal that hides outranks the queued-balance reason — a canceled order with a payment
+     *  still in the queue must not offer a greyed door onto a 422. */
+    @Test fun `a hidden door stays hidden even with the whole balance queued`() {
+        val o = order(OrderStatus.CANCELED, payments = listOf(pending("1000000")))
+        assertEquals(PaymentDoor.Hidden, paymentDoorFor(o, driver))
     }
 }
