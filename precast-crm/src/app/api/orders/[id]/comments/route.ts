@@ -28,11 +28,18 @@ export const GET = withPermission<Params>(
     // itself PLUS the ones left on its source draft (project) before it was placed
     // (Order.projectId is @unique → exactly one draft per order). The comments stay
     // anchored where they were created; edit/delete routes per-comment on the client.
+    //
+    // The projectId branch is only added when the order HAS a draft. Prisma reads
+    // `{ projectId: null }` as `projectId IS NULL`, so on an order placed without one
+    // that branch would match every order-anchored comment in the database and leak
+    // other deals' conversations into this thread.
     const comments = await prisma.comment.findMany({
-      where: {
-        deletedAt: null,
-        OR: [{ orderId: params.id }, { projectId: order.projectId }],
-      },
+      where: order.projectId
+        ? {
+            deletedAt: null,
+            OR: [{ orderId: params.id }, { projectId: order.projectId }],
+          }
+        : { deletedAt: null, orderId: params.id },
       orderBy: { createdAt: "asc" },
       include: {
         author: { select: authorSelect },
