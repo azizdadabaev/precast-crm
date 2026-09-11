@@ -1,34 +1,85 @@
 package uz.etalon.crm.feature.orders.detail
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.layout.*
+import androidx.annotation.StringRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import uz.etalon.crm.core.designsystem.components.*
+import uz.etalon.crm.core.designsystem.components.DetailPanel
+import uz.etalon.crm.core.designsystem.components.ErrorBanner
+import uz.etalon.crm.core.designsystem.components.Lightbox
+import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.OutboxBanner
+import uz.etalon.crm.core.designsystem.components.PanelTotal
+import uz.etalon.crm.core.designsystem.components.PaymentStatusTag
+import uz.etalon.crm.core.designsystem.components.PhotoRef
+import uz.etalon.crm.core.designsystem.components.PhotoStrip
+import uz.etalon.crm.core.designsystem.components.PrimaryButton
+import uz.etalon.crm.core.designsystem.components.ProgressCard
+import uz.etalon.crm.core.designsystem.components.RoomTile
+import uz.etalon.crm.core.designsystem.components.SecondaryButton
+import uz.etalon.crm.core.designsystem.components.ShipmentStatusTag
+import uz.etalon.crm.core.designsystem.components.StatusTag
+import uz.etalon.crm.core.designsystem.components.StepTimeline
+import uz.etalon.crm.core.designsystem.components.StickyActionBar
+import uz.etalon.crm.core.designsystem.components.TagSurface
+import uz.etalon.crm.core.designsystem.components.TimelineStep
+import uz.etalon.crm.core.designsystem.icon.EtalonIcon
+import uz.etalon.crm.core.designsystem.icon.EtalonIcons
+import uz.etalon.crm.core.designsystem.theme.EtalonColors
+import uz.etalon.crm.core.designsystem.theme.EtalonShapes
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
-import uz.etalon.crm.core.designsystem.theme.LocalEtalonColors
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.OrderDetail
-import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PendingUpload
 import uz.etalon.crm.core.model.Resource
-import uz.etalon.crm.core.ui.format.*
+import uz.etalon.crm.core.ui.format.formatAddressLine
+import uz.etalon.crm.core.ui.format.formatArea
+import uz.etalon.crm.core.ui.format.formatDate
+import uz.etalon.crm.core.ui.format.formatDateTime
+import uz.etalon.crm.core.ui.format.formatDecimal
+import uz.etalon.crm.core.ui.format.formatMoney
+import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.feature.orders.R
+import java.math.RoundingMode
+import kotlin.math.roundToInt
 
 /** Adaptation: the brief's ViewModel reads `orderId` from a Nav `SavedStateHandle`. Nav 3's
  *  entryProvider hands the key to the entry instead, so this route takes `orderId` explicitly and
@@ -60,9 +111,6 @@ fun OrderDetailRoute(
     )
 }
 
-private val FLOW = listOf(OrderStatus.PLACED, OrderStatus.LOADED, OrderStatus.DELIVERED)
-private fun OrderStatus.collapsed() = when (this) { OrderStatus.IN_PRODUCTION -> OrderStatus.PLACED; OrderStatus.DISPATCHED -> OrderStatus.LOADED; else -> this }
-
 /** The delivery proof is not part of the gallery the server hands back, so it is appended as a
  *  strip entry with no id — it is shown, never deleted from here. Guarded against the server one
  *  day listing it in the gallery too, which would otherwise show it twice. */
@@ -70,6 +118,20 @@ private fun stripPhotos(o: OrderDetail): List<PhotoRef> =
     o.loadedPhotos.map { PhotoRef(it.id, it.url) } +
         listOfNotNull(o.deliveryProofUrl?.takeIf { url -> o.loadedPhotos.none { it.url == url } }?.let { PhotoRef(null, it) })
 
+private fun dial(ctx: Context, phone: String) {
+    ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:+$phone")))
+}
+
+/**
+ * `2b-order-detail.png`: the navy [DetailPanel] over the «Тўлов ҳолати» [ProgressCard], the
+ * «Етказиш» card with its [StepTimeline], and then the cards R7 keeps — payments, shipments,
+ * photos, events — under a sticky action bar.
+ *
+ * The shell draws the floating nav pill *over* this screen and has no `Scaffold`, so the root is a
+ * plain `Box`: it pads the status bar itself, the list reserves
+ * [EtalonSpace.underStickyBar] / [EtalonSpace.underNav] at the bottom, and the action bar is
+ * bottom-aligned inside the box with the pill's band beneath it.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrderDetailScreen(
@@ -96,6 +158,8 @@ fun OrderDetailScreen(
     val failedUploads = pending.count { it.failed }
     val firstFailed = pending.firstOrNull { it.failed }
     val step = o?.let { nextStepFor(it, me, unfinishedUploads, failedUploads) } ?: NextStep.None
+    val canPay = o != null && canRecordPayment(o, me)
+    val hasBar = o != null && (step != NextStep.None || canPay)
     val photos = o?.let { stripPhotos(it) }.orEmpty()
     var lightboxAt by remember { mutableStateOf<Int?>(null) }
     var deleteCandidate by remember { mutableStateOf<PhotoRef?>(null) }
@@ -106,185 +170,98 @@ fun OrderDetailScreen(
         null
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text(o?.summary?.orderNumber ?: "", style = EtalonType.monoTitle) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } })
-        },
-        bottomBar = { NextStepBar(step, onLoadTruck, onDeliveryProof, onOpenShipments) },
-    ) { pad ->
-        PullToRefreshBox(isRefreshing = r is Resource.Loading && o == null, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
-            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding()) {
+        PullToRefreshBox(
+            isRefreshing = r is Resource.Loading && o == null,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = EtalonSpace.cardMargin,
+                    end = EtalonSpace.cardMargin,
+                    top = EtalonSpace.sm,
+                    // The other sticky-bar screens sit in a Scaffold, which adds the bar's own
+                    // height to their content padding; this one has no Scaffold, so the clearance
+                    // is spelled out: the pill's band the bar is lifted by, plus the bar itself.
+                    // Measured on the emulator — with `underStickyBar` alone the last card stayed
+                    // behind the buttons at the end of the scroll.
+                    bottom = if (hasBar) EtalonSpace.underNav + EtalonSpace.underStickyBar else EtalonSpace.underNav,
+                ),
+                verticalArrangement = Arrangement.spacedBy(EtalonSpace.md),
+            ) {
                 // 0 · outbox — a queued photo the operator must be able to see, retry or drop
-                if (pending.isNotEmpty()) item {
-                    OutboxBanner(
-                        pending = unfinishedUploads,
-                        failedMessage = firstFailed?.let { it.error ?: stringResource(R.string.orders_upload_failed) },
-                        onRetry = { firstFailed?.let { onRetryUpload(it.id) } },
-                        onCancel = { firstFailed?.let { onCancelUpload(it.id) } },
-                    )
+                if (pending.isNotEmpty()) {
+                    item {
+                        OutboxBanner(
+                            pending = unfinishedUploads,
+                            failedMessage = firstFailed?.let { it.error ?: stringResource(R.string.orders_upload_failed) },
+                            onRetry = { firstFailed?.let { onRetryUpload(it.id) } },
+                            onCancel = { firstFailed?.let { onCancelUpload(it.id) } },
+                        )
+                    }
                 }
                 if (r is Resource.Error) item { ErrorBanner(r.error.message, onRetry = onRefresh) }
                 if (actionError != null) item { ErrorBanner(actionError) }
                 if (o == null) return@LazyColumn
-                // 1 · header
+                item { Panel(o, onBack = onBack, onCall = { dial(ctx, o.summary.client.phone) }) }
+                item { PaymentProgress(o) }
+                if (o.payments.isNotEmpty() || !o.pendingAmount.isZero) item { PaymentsCard(o) }
                 item {
-                    StatusStripeCard(stripe = toneColor(orderStatusTone(o.summary.status))) {
-                        Text(o.summary.client.name, style = MaterialTheme.typography.titleMedium)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(formatPhone(o.summary.client.phone), style = EtalonType.monoBody, color = MaterialTheme.colorScheme.primary)
-                            IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:+${o.summary.client.phone}"))) }) { Icon(Icons.Default.Call, stringResource(R.string.action_call)) }
-                            // With order.edit the pin is editable, so the icon opens the location
-                            // screen (which offers navigation of its own). A read-only operator
-                            // keeps the straight hand-off to the maps app, and only when a pin exists.
-                            if (canEdit) {
-                                IconButton(onClick = onOpenLocation) { Icon(Icons.Default.Navigation, stringResource(R.string.action_location)) }
-                            } else if (o.deliveryLat != null && o.deliveryLng != null) {
-                                IconButton(onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${o.deliveryLat},${o.deliveryLng}?q=${o.deliveryLat},${o.deliveryLng}"))) }) { Icon(Icons.Default.Navigation, stringResource(R.string.orders_action_navigate)) }
+                    DeliveryCard(
+                        o = o,
+                        // With order.edit the pin is editable, so the control opens the location
+                        // screen (which offers navigation of its own). A read-only operator keeps
+                        // the straight hand-off to the maps app, and only when a pin exists.
+                        onLocation = when {
+                            canEdit -> onOpenLocation
+                            o.deliveryLat != null && o.deliveryLng != null -> {
+                                { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${o.deliveryLat},${o.deliveryLng}?q=${o.deliveryLat},${o.deliveryLng}"))) }
                             }
-                        }
-                        o.summary.client.address?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        Text(stringResource(R.string.scheduled_on, formatDate(o.summary.scheduledAt)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                // 2 · status timeline (read-only in 1a)
-                item {
-                    StatusStripeCard(stripe = LocalEtalonColors.current.border) {
-                        val current = o.summary.status.collapsed()
-                        val idx = FLOW.indexOf(current)
-                        FLOW.forEachIndexed { i, st ->
-                            val done = idx >= i && o.summary.status != OrderStatus.CANCELED
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-                                Text(if (done) "●" else "○", color = if (done) LocalEtalonColors.current.success else MaterialTheme.colorScheme.onSurfaceVariant)
-                                Spacer(Modifier.width(10.dp))
-                                Text(stringResource(orderStatusLabel(st)), style = MaterialTheme.typography.bodyMedium, fontWeight = if (i == idx) FontWeight.Bold else FontWeight.Normal)
-                            }
-                        }
-                        if (o.summary.status == OrderStatus.CANCELED) StatusChip(OrderStatus.CANCELED)
-                    }
-                }
-                // 3 · payments
-                item {
-                    StatusStripeCard(stripe = if (o.remaining.isZero) LocalEtalonColors.current.success else MaterialTheme.colorScheme.primary) {
-                        SectionLabel(stringResource(R.string.remaining))
-                        MoneyHeroText(o.remaining, style = EtalonType.monoDisplay)
-                        Text(stringResource(R.string.paid_of_total, formatMoney(o.summary.confirmedPaid), formatMoney(o.summary.totalPrice)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (!o.pendingAmount.isZero) Text(stringResource(R.string.pending_amount, formatMoney(o.pendingAmount)), style = MaterialTheme.typography.bodySmall, color = LocalEtalonColors.current.warning)
-                        o.payments.forEach { p ->
-                            Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    MoneyText(p.amount)
-                                    Text("${formatDateTime(p.recordedAt)}${p.recordedByName?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                // The canonical mapping lives in :core:designsystem. The local copy
-                                // this replaces toned PENDING_CONFIRMATION as WARNING, against the
-                                // product rule that a pending payment is muted, and against what
-                                // the confirmation queue shows for the very same payment.
-                                PaymentStatusChip(p.status)
-                            }
-                        }
-                        // The server refuses a payment on a canceled order and on a delivered one
-                        // that is already fully paid, so the door is not offered there.
-                        if (canRecordPayment(o, me)) {
-                            SecondaryButton(
-                                stringResource(R.string.order_action_record_payment),
-                                onClick = onRecordPayment,
-                                modifier = Modifier.padding(top = 12.dp),
-                            )
-                        }
-                    }
-                }
-                // 4 · shipments. Once the order is split this lists the trucks; before it is split
-                // it is the ONLY way into the split flow (the web app has a dedicated button and
-                // Android had nothing), so it also renders empty for an operator who may create
-                // one. Tappable only with dispatch.create — every route behind it needs it.
-                val canOpenShipments = canOpenShipments(o, me)
-                if (o.shipments.isNotEmpty() || canOpenShipments) item {
-                    StatusStripeCard(
-                        stripe = LocalEtalonColors.current.border,
-                        onClick = if (canOpenShipments) onOpenShipments else null,
-                    ) {
-                        SectionLabel(stringResource(R.string.shipments))
-                        if (o.shipments.isEmpty()) {
-                            Text(
-                                stringResource(R.string.split_into_shipments),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(vertical = 6.dp),
-                            )
-                        }
-                        o.shipments.forEach { sh ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(stringResource(R.string.orders_shipment_n, sh.number), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                    val who = listOfNotNull(sh.driverName, sh.truckIdentifier).joinToString(" · ")
-                                    if (who.isNotEmpty()) Text(who, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    // A load queued offline leaves the truck looking untouched; say
-                                    // so here so nobody loads it a second time from the shipment
-                                    // list. A row the server has already rejected gets its own
-                                    // wording and colour — it is not on its way anywhere, and the
-                                    // outbox banner at the top of this screen is where the retry
-                                    // and the cancel are.
-                                    val truckRows = pending.filter { it.shipmentId == sh.id }
-                                    when {
-                                        truckRows.any { it.failed } -> Text(
-                                            stringResource(R.string.orders_upload_failed_short),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                        truckRows.isNotEmpty() -> Text(
-                                            stringResource(R.string.orders_upload_sending),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = LocalEtalonColors.current.warning,
-                                        )
-                                    }
-                                }
-                                ShipmentStatusChip(sh.status)
-                            }
-                        }
-                    }
-                }
-                // 5 · rooms
-                item {
-                    StatusStripeCard(stripe = LocalEtalonColors.current.border) {
-                        SectionLabel(stringResource(R.string.rooms))
-                        o.rooms.forEachIndexed { i, rm ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(rm.name ?: stringResource(R.string.room_n, i + 1), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                    Text("${formatDecimal(rm.innerWidth, 2)} × ${formatDecimal(rm.innerLength, 2)} м · ${rm.pattern} · ${rm.beamCount} балка ${formatDecimal(rm.beamLength, 2)} · ${rm.totalBlocks} блок", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                MoneyText(rm.subtotal)
-                            }
-                        }
-                        HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                        Row(Modifier.fillMaxWidth()) { Text(stringResource(R.string.total_area), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); AreaText(o.summary.totalArea) }
-                        if (!o.discountAmount.isZero) Row(Modifier.fillMaxWidth()) { Text(stringResource(R.string.discount), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); MoneyText(o.discountAmount) }
-                        if (!o.deliveryCost.isZero) Row(Modifier.fillMaxWidth()) { Text(stringResource(R.string.delivery), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); MoneyText(o.deliveryCost) }
-                        Row(Modifier.fillMaxWidth()) { Text(stringResource(R.string.total), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold); MoneyText(o.summary.totalPrice, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold)) }
-                    }
-                }
-                // 6 · photos
-                val canAdd = canAddPhoto(o, me)
-                if (photos.isNotEmpty() || canAdd) item {
-                    SectionLabel(stringResource(R.string.photos))
-                    Spacer(Modifier.height(6.dp))
-                    PhotoStrip(
-                        photos = photos,
-                        onOpen = { lightboxAt = it },
-                        onAdd = if (canAdd) onAddPhoto else null,
-                        onLongPress = onPhotoLongPress,
+                            else -> null
+                        },
+                        locationLabel = if (canEdit) R.string.action_location else R.string.orders_action_navigate,
                     )
                 }
-                // 7 · timeline
-                item {
-                    SectionLabel(stringResource(R.string.events))
-                    o.events.take(20).forEach { e ->
-                        Text("${formatDateTime(e.createdAt)} · ${e.message ?: e.type}${e.actorName?.let { " · $it" } ?: ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                // Once the order is split this lists the trucks; before it is split it is the ONLY
+                // way into the split flow (the web app has a dedicated button and Android had
+                // nothing), so it also renders empty for an operator who may create one. Tappable
+                // only with dispatch.create — every route behind it needs it.
+                val shipmentsDoor = canOpenShipments(o, me)
+                if (o.shipments.isNotEmpty() || shipmentsDoor) {
+                    item { ShipmentsCard(o, pending, if (shipmentsDoor) onOpenShipments else null) }
+                }
+                val canAdd = canAddPhoto(o, me)
+                if (photos.isNotEmpty() || canAdd) {
+                    item {
+                        WhiteCard(stringResource(R.string.photos)) {
+                            PhotoStrip(
+                                photos = photos,
+                                onOpen = { lightboxAt = it },
+                                onAdd = if (canAdd) onAddPhoto else null,
+                                onLongPress = onPhotoLongPress,
+                            )
+                        }
+                    }
+                }
+                if (o.events.isNotEmpty()) {
+                    item {
+                        WhiteCard(stringResource(R.string.events)) {
+                            o.events.take(20).forEach { e ->
+                                Text(
+                                    "${formatDateTime(e.createdAt)} · ${e.message ?: e.type}${e.actorName?.let { " · $it" } ?: ""}",
+                                    style = EtalonType.meta,
+                                    color = EtalonColors.ink2,
+                                    modifier = Modifier.padding(top = EtalonSpace.xs),
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
+        if (o != null) ActionBar(step, canPay, onLoadTruck, onDeliveryProof, onOpenShipments, onRecordPayment)
     }
 
     lightboxAt?.let { at -> Lightbox(photos, at, onDismiss = { lightboxAt = null }) }
@@ -304,23 +281,242 @@ fun OrderDetailScreen(
     }
 }
 
-/** The order's single next action. [NextStep.None] renders nothing at all — an empty bar would
- *  eat thumb space and read as a disabled action. */
+/** The hero. R7: no «Хона қўшиш» tile and no ↗ on a room — there is no order editing on mobile,
+ *  so a tile is a figure, not a door. An odd room count keeps the capture's two-column geometry by
+ *  leaving the empty half empty rather than stretching the last tile across it. */
 @Composable
-private fun NextStepBar(
+private fun Panel(o: OrderDetail, onBack: () -> Unit, onCall: () -> Unit) = DetailPanel(
+    caption = stringResource(R.string.detail_caption),
+    headline = formatOrderNo(o.summary.orderNumber),
+    // The full wording, «Жўнатилган», exactly as the capture draws it — the abbreviations
+    // («Йўлда») exist for the list rows' width, and `orderStatusShortLabel` itself says the full
+    // words stay in use on panels and detail screens.
+    statusTag = { StatusTag(o.summary.status, TagSurface.PANEL_ON_INDIGO) },
+    clientName = o.summary.client.name,
+    addressLine = formatAddressLine(o.summary.client.address),
+    tiles = {
+        o.rooms.forEachIndexed { i, rm ->
+            RoomTile(
+                areaText = formatArea(rm.billedArea),
+                caption = stringResource(
+                    R.string.detail_room_dims,
+                    rm.name ?: stringResource(R.string.room_n, i + 1),
+                    formatDecimal(rm.innerWidth, 1),
+                    formatDecimal(rm.innerLength, 1),
+                ),
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (o.rooms.size % 2 == 1) Spacer(Modifier.weight(1f))
+    },
+    totals = {
+        PanelTotal(stringResource(R.string.detail_area), formatArea(o.summary.totalArea), modifier = Modifier.weight(1f))
+        PanelTotal(stringResource(R.string.detail_total), formatMoney(o.summary.totalPrice), modifier = Modifier.weight(1f))
+        PanelTotal(
+            stringResource(R.string.detail_remaining),
+            formatMoney(o.remaining),
+            valueColor = if (o.remaining.isZero) EtalonColors.paidOnDark else EtalonColors.onDark,
+            modifier = Modifier.weight(1f),
+        )
+    },
+    onBack = onBack,
+    dateLabel = formatDate(o.summary.scheduledAt),
+    onCall = onCall,
+)
+
+/** The one permitted BigDecimal→Float crossing on this screen: bar geometry, never a figure. */
+private fun paidFraction(o: OrderDetail): Float {
+    val total = o.summary.totalPrice.amount
+    if (total.signum() <= 0) return 0f
+    return o.summary.confirmedPaid.amount.divide(total, 4, RoundingMode.HALF_UP).toFloat().coerceIn(0f, 1f)
+}
+
+@Composable
+private fun PaymentProgress(o: OrderDetail) {
+    val fraction = paidFraction(o)
+    ProgressCard(
+        label = stringResource(R.string.detail_payment_state),
+        fraction = fraction,
+        percentText = stringResource(R.string.detail_percent_paid, (fraction * 100).roundToInt()),
+        paidLabel = stringResource(R.string.detail_paid_amount, formatMoney(o.summary.confirmedPaid)),
+        remainingLabel = stringResource(R.string.detail_remaining_amount, formatMoney(o.remaining)),
+        settled = o.remaining.isZero,
+    )
+}
+
+/** §2's white card: `xl`, hairline border, 16/14 padding, a 14/700 title over its content. */
+@Composable
+private fun WhiteCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) = Column(
+    modifier.fillMaxWidth().clip(EtalonShapes.xl).background(EtalonColors.surface)
+        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
+        .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+        .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
+) {
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        Text(
+            title,
+            style = EtalonType.sectionTitle,
+            color = EtalonColors.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (trailing != null) trailing()
+    }
+    Spacer(Modifier.height(EtalonSpace.rowGap))
+    content()
+}
+
+@Composable
+private fun PaymentsCard(o: OrderDetail) = WhiteCard(stringResource(R.string.detail_payments)) {
+    o.payments.forEach { p ->
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                MoneyText(p.amount, style = EtalonType.rowAmount, color = EtalonColors.ink)
+                Text(
+                    "${formatDateTime(p.recordedAt)}${p.recordedByName?.let { " · $it" } ?: ""}",
+                    style = EtalonType.meta,
+                    color = EtalonColors.ink2,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            PaymentStatusTag(p.status)
+        }
+    }
+    if (!o.pendingAmount.isZero) {
+        Text(
+            stringResource(R.string.pending_amount, formatMoney(o.pendingAmount)),
+            style = EtalonType.meta,
+            color = EtalonColors.indigo,
+            modifier = Modifier.padding(top = EtalonSpace.xs),
+        )
+    }
+}
+
+/**
+ * The «Етказиш» card: the four-step timeline over the `Сана · Ҳайдовчи` footer.
+ *
+ * The location control rides in the card's header. [DetailPanel] offers one trailing slot and the
+ * dialer has it, so the pin — which is a *delivery* affordance — lives with the delivery card
+ * rather than being dropped.
+ */
+@Composable
+private fun DeliveryCard(o: OrderDetail, onLocation: (() -> Unit)?, @StringRes locationLabel: Int) = WhiteCard(
+    title = stringResource(R.string.detail_delivery),
+    trailing = onLocation?.let {
+        {
+            SecondaryButton(
+                text = stringResource(locationLabel),
+                onClick = it,
+                leadingIcon = EtalonIcons.Navigation,
+                compact = true,
+            )
+        }
+    },
+) {
+    StepTimeline(timelineFor(o).map { TimelineStep(stringResource(it.labelRes), it.caption, it.state) })
+    Spacer(Modifier.height(EtalonSpace.md))
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.detail_date), style = EtalonType.meta, color = EtalonColors.ink2)
+            Text(formatDate(o.summary.scheduledAt), style = EtalonType.label, color = EtalonColors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+            Text(stringResource(R.string.detail_driver), style = EtalonType.meta, color = EtalonColors.ink2)
+            Text(
+                o.dispatch?.driverName
+                    ?: o.shipments.firstNotNullOfOrNull { it.driverName }
+                    ?: stringResource(R.string.detail_no_driver),
+                style = EtalonType.label,
+                color = EtalonColors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShipmentsCard(o: OrderDetail, pending: List<PendingUpload>, onOpen: (() -> Unit)?) = WhiteCard(
+    title = stringResource(R.string.shipments),
+    onClick = onOpen,
+    trailing = if (onOpen != null) {
+        { EtalonIcon(EtalonIcons.ChevronRight, null, tint = EtalonColors.ink3) }
+    } else {
+        null
+    },
+) {
+    if (o.shipments.isEmpty()) {
+        Text(stringResource(R.string.split_into_shipments), style = EtalonType.label, color = EtalonColors.indigo)
+    }
+    o.shipments.forEach { sh ->
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.orders_shipment_n, sh.number), style = EtalonType.rowTitle, color = EtalonColors.ink)
+                val who = listOfNotNull(sh.driverName, sh.truckIdentifier).joinToString(" · ")
+                if (who.isNotEmpty()) {
+                    Text(who, style = EtalonType.meta, color = EtalonColors.ink2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                // A load queued offline leaves the truck looking untouched; say so here so nobody
+                // loads it a second time from the shipment list. A row the server has already
+                // rejected gets its own wording and colour — it is not on its way anywhere, and
+                // the outbox banner at the top of this screen is where the retry and the cancel are.
+                val truckRows = pending.filter { it.shipmentId == sh.id }
+                when {
+                    truckRows.any { it.failed } ->
+                        Text(stringResource(R.string.orders_upload_failed_short), style = EtalonType.meta, color = EtalonColors.red)
+                    truckRows.isNotEmpty() ->
+                        Text(stringResource(R.string.orders_upload_sending), style = EtalonType.meta, color = EtalonColors.indigo)
+                }
+            }
+            ShipmentStatusTag(sh.status)
+        }
+    }
+}
+
+/**
+ * R7's bar: the existing next step as a [SecondaryButton] beside «Тўлов қайд қилиш». A lone button
+ * fills the width; with neither, no bar at all — an empty bar would eat thumb space and read as a
+ * disabled action.
+ *
+ * The shell's floating pill is drawn over this screen at the window's bottom edge, so the bar is
+ * lifted by [EtalonSpace.underNav]; without it the buttons sit behind the pill (measured on the
+ * emulator, exactly as on the nine screens lifted in this phase's task 4).
+ */
+@Composable
+private fun BoxScope.ActionBar(
     step: NextStep,
+    canPay: Boolean,
     onLoadTruck: () -> Unit,
     onDeliveryProof: () -> Unit,
     onOpenShipments: () -> Unit,
+    onRecordPayment: () -> Unit,
 ) {
-    if (step == NextStep.None) return
-    StickyActionBar {
-        when (step) {
-            NextStep.LoadTruck -> PrimaryButton(stringResource(R.string.action_load_truck), onLoadTruck)
-            NextStep.DeliveryProof -> PrimaryButton(stringResource(R.string.action_delivery_proof), onDeliveryProof)
-            NextStep.ManageShipments -> PrimaryButton(stringResource(R.string.action_shipments), onOpenShipments)
-            is NextStep.Blocked -> PrimaryButton(step.reason, onClick = {}, enabled = false)
-            NextStep.None -> Unit
+    val secondary: (@Composable RowScope.() -> Unit)? = when (step) {
+        NextStep.LoadTruck -> { { SecondaryButton(stringResource(R.string.action_load), onLoadTruck, Modifier.weight(1f)) } }
+        NextStep.DeliveryProof -> { { SecondaryButton(stringResource(R.string.action_delivered), onDeliveryProof, Modifier.weight(1f)) } }
+        NextStep.ManageShipments -> { { SecondaryButton(stringResource(R.string.action_shipments), onOpenShipments, Modifier.weight(1f)) } }
+        is NextStep.Blocked -> { { SecondaryButton(step.reason, onClick = {}, Modifier.weight(1f), enabled = false) } }
+        NextStep.None -> null
+    }
+    if (secondary == null && !canPay) return
+    Box(Modifier.align(Alignment.BottomCenter).padding(bottom = EtalonSpace.underNav)) {
+        StickyActionBar {
+            secondary?.invoke(this)
+            if (canPay) PrimaryButton(stringResource(R.string.action_record_payment), onRecordPayment, Modifier.weight(1f))
         }
     }
 }

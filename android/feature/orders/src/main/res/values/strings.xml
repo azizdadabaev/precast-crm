@@ -17,29 +17,41 @@
     <string name="orders_day_none">Кун танланмаган</string>
     <string name="orders_day_pick">Танлаш</string>
     <string name="orders_day_clear">Тозалаш</string>
-    <string name="action_call">Қўнғироқ қилиш</string>
-    <string name="orders_action_navigate">Навигация</string>
-    <string name="scheduled_on">Жадвал: %1$s</string>
-    <string name="remaining">Қолди</string>
-    <string name="paid_of_total">Тўланган %1$s / %2$s</string>
+
+    <!-- ── Order detail, spec §3.3 / `2b-order-detail.png` ──────────────────── -->
+    <string name="detail_caption">Буюртма</string>
+    <string name="detail_area">Майдон</string>
+    <string name="detail_total">Жами</string>
+    <string name="detail_remaining">Қолди</string>
+    <string name="detail_room_dims">%1$s · %2$s × %3$s</string>
+    <string name="detail_payment_state">Тўлов ҳолати</string>
+    <string name="detail_percent_paid">%1$d%% тўланган</string>
+    <string name="detail_paid_amount">Тўланган %1$s</string>
+    <string name="detail_remaining_amount">Қолди %1$s</string>
+    <string name="detail_delivery">Етказиш</string>
+    <string name="step_placed">Қабул</string>
+    <string name="step_production">Ишлаб чиқ.</string>
+    <string name="step_dispatched">Йўлда</string>
+    <string name="step_delivered">Етказилди</string>
+    <string name="detail_date">Сана</string>
+    <string name="detail_driver">Ҳайдовчи</string>
+    <string name="detail_no_driver">—</string>
+    <string name="detail_payments">Тўловлар</string>
+    <string name="action_load">Юклаш</string>
+    <string name="action_delivered">Етказилди</string>
+    <string name="action_record_payment">Тўлов қайд қилиш</string>
+
     <string name="pending_amount">Тасдиқ кутилмоқда: %1$s</string>
-    <!-- The payment-status labels that stood here were a second copy of :core:designsystem's,
-         merged over them by name; the card now uses PaymentStatusChip, which reads the originals. -->
-    <string name="order_action_record_payment">Тўлов қайд этиш</string>
-    <string name="rooms">Хоналар</string>
     <string name="room_n">Хона %1$d</string>
-    <string name="total_area">Майдон</string>
-    <string name="discount">Чегирма</string>
-    <string name="delivery">Етказиш</string>
-    <string name="total">Жами</string>
     <string name="photos">Расмлар</string>
     <string name="events">Тарих</string>
     <string name="shipments">Жўнатмалар</string>
     <string name="split_into_shipments">Жўнатмаларга бўлиш</string>
     <string name="orders_shipment_n">Жўнатма %1$d</string>
+    <!-- The location control on the «Етказиш» card: the editable pin screen, or, for a read-only
+         operator, the straight hand-off to the maps app. -->
     <string name="action_location">Етказиш жойи</string>
-    <string name="action_load_truck">Юкланди — расм олиш</string>
-    <string name="action_delivery_proof">Етказилди — исбот</string>
+    <string name="orders_action_navigate">Навигация</string>
     <string name="action_shipments">Жўнатмалар</string>
     <string name="action_delete">Ўчириш</string>
     <string name="orders_action_cancel">Бекор қилиш</string>
