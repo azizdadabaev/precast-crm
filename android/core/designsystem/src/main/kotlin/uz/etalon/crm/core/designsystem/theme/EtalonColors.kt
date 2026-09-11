@@ -43,10 +43,12 @@ object EtalonColors {
     val debtOnDark = Color(0xFFFF8A8E)
     val paidOnDark = Color(0xFF5CD6A6)
 
-    /** Seven avatar fills, §1.1. Index is deterministic per client name — see [avatarColor]. */
+    /** Seven avatar fills, §1.1. Index is deterministic per client name — see [avatarColor].
+     *  Five of them are the palette's own colours and say so; the sand and the amber exist only
+     *  here, to break up a screen of otherwise identical indigo circles. */
     val avatarPalette = listOf(
-        Color(0xFF5646EE), Color(0xFF8A82F1), Color(0xFF625BB8), Color(0xFFE5BBAD),
-        Color(0xFF22B07D), Color(0xFF7770CC), Color(0xFFF0A868),
+        indigo, indigoTint, indigoPanel, Color(0xFFE5BBAD),
+        green, indigoTile, Color(0xFFF0A868),
     )
 
     /**

@@ -44,6 +44,10 @@ import uz.etalon.crm.core.model.OrderStatus
  *   `null` or zero renders [paidLabel].
  * @param debtLabel the caller's wording, e.g. `{ "қолди ${formatMoney(it)}" }`.
  * @param onDark the row sits inside a [NavySheet]; false is the white-card variant of `2b-home.png`.
+ *
+ * §2 also gives the row a `navy2` **hover** state. That is deliberately not implemented: this app
+ * is touch-only, a finger has no hover, and a state nothing can enter is a state nobody maintains.
+ * The press below is the one feedback the row gives.
  */
 @Composable
 fun OrderRow(

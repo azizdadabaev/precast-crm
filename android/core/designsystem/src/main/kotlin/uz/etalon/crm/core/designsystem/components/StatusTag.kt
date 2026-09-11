@@ -34,7 +34,7 @@ internal fun OrderStatus.family() = when (this) {
 
 /**
  * The §2 palette table, one row per family and one column per context. `internal` rather than
- * private so [uz.etalon.crm.core.designsystem.StatusTagPaletteTest] can assert the criterion the
+ * private so [uz.etalon.crm.core.designsystem.StatusChipMappingTest] can assert the criterion the
  * whole design turns on: on each of the three backgrounds the five families must render as five
  * distinct fill/text pairs.
  */
@@ -54,7 +54,9 @@ internal fun tagColors(family: TagFamily, surface: TagSurface): Pair<Color, Colo
         TagFamily.RED -> EtalonColors.redBg to EtalonColors.red
     }
     TagSurface.PANEL_ON_INDIGO -> when (family) {
-        TagFamily.NEUTRAL -> EtalonColors.onDark.copy(alpha = 0.18f) to EtalonColors.onDark
+        // The same white-18 % the panel's own divider is drawn in — read from the token rather
+        // than re-derived, so the tag and the rule under it can never drift apart.
+        TagFamily.NEUTRAL -> EtalonColors.onDarkDivider to EtalonColors.onDark
         TagFamily.LAVENDER -> EtalonColors.onDark to EtalonColors.indigo
         TagFamily.INDIGO -> EtalonColors.navy to EtalonColors.onDark
         TagFamily.GREEN -> EtalonColors.green to EtalonColors.onDark
