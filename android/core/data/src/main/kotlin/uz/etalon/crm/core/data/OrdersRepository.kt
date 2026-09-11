@@ -28,7 +28,10 @@ data class OrdersFilter(
     val q: String? = null, val status: OrderStatus? = null, val day: LocalDate? = null, val page: Int = 1,
     val payment: PaymentFilter? = null, val sort: String = "asc", val pageSize: Int = 20,
 ) {
-    val listKey: String get() = "q=${q.orEmpty()}|status=${status?.name.orEmpty()}|day=${day?.toString().orEmpty()}|payment=${payment?.name.orEmpty()}|sort=$sort|size=$pageSize|page=$page"
+    /** The whole filter except the page — every page of one filter shares a
+     *  [OrdersRepository.total]. Keep [listKey] derived from it so the two can never drift apart. */
+    val totalKey: String get() = "q=${q.orEmpty()}|status=${status?.name.orEmpty()}|day=${day?.toString().orEmpty()}|payment=${payment?.name.orEmpty()}|sort=$sort|size=$pageSize"
+    val listKey: String get() = "$totalKey|page=$page"
     /** Facets ignore status, payment and page — this is the key they are stored under. */
     val facetKey: String get() = "q=${q.orEmpty()}|day=${day?.toString().orEmpty()}"
 }
@@ -52,6 +55,7 @@ class OrdersRepository @Inject constructor(
     private val listOutcomes = MutableStateFlow<Map<String, ListOutcome>>(emptyMap())
     private val detailOutcomes = MutableStateFlow<Map<String, DetailOutcome>>(emptyMap())
     private val facetsByKey = MutableStateFlow<Map<String, OrderFacets>>(emptyMap())
+    private val totalsByKey = MutableStateFlow<Map<String, Int>>(emptyMap())
 
     /** Bumped by [clearCache]. A refresh captures the epoch before its network call and drops its
      *  write if the epoch moved meanwhile — otherwise an in-flight request started by user A can
@@ -66,6 +70,7 @@ class OrdersRepository @Inject constructor(
         listOutcomes.value = emptyMap()
         detailOutcomes.value = emptyMap()
         facetsByKey.value = emptyMap()
+        totalsByKey.value = emptyMap()
     }
 
     fun list(filter: OrdersFilter): Flow<Resource<List<OrderSummary>>> {
@@ -89,6 +94,15 @@ class OrdersRepository @Inject constructor(
      *  until the first refresh from a Task-1-or-later server for that key. */
     fun facets(filter: OrdersFilter): Flow<OrderFacets?> = facetsByKey.map { it[filter.facetKey] }.distinctUntilChanged()
 
+    /** How many orders the server holds for the WHOLE of [filter] — `status` and `payment`
+     *  included, which is exactly what [OrderFacets.total] does not count (it describes `q`/`day`
+     *  alone so the chips can show every option while one is selected). This is the number a
+     *  paging caller must stop at: with a chip or a segment on, `facets.total` is larger than the
+     *  filtered list can ever grow, and paging against it never ends. Keyed by
+     *  [OrdersFilter.totalKey] so every page of one filter reads the same figure; null until the
+     *  first page for that filter has landed. */
+    fun total(filter: OrdersFilter): Flow<Int?> = totalsByKey.map { it[filter.totalKey] }.distinctUntilChanged()
+
     suspend fun refreshList(filter: OrdersFilter) {
         val key = filter.listKey
         val started = epoch.get()
@@ -103,6 +117,7 @@ class OrdersRepository @Inject constructor(
             // this triggers is already self-consistent; the DAO write below is for persistence only.
             listOutcomes.update { m -> if (epoch.get() != started) m else m + (key to ListOutcome(rows, null)) }
             page.facets?.let { f -> facetsByKey.update { m -> if (epoch.get() != started) m else m + (filter.facetKey to f.toDomain()) } }
+            totalsByKey.update { m -> if (epoch.get() != started) m else m + (filter.totalKey to page.total) }
             val now = System.currentTimeMillis()
             dao.replaceList(key, rows.mapIndexed { i, o -> o.toEntity(key, i, now) })
         } catch (t: Throwable) {

@@ -25,11 +25,14 @@ interface OrdersSource {
     fun list(filter: OrdersFilter): Flow<Resource<List<OrderSummary>>>
     suspend fun refreshList(filter: OrdersFilter)
     fun facets(filter: OrdersFilter): Flow<OrderFacets?>
+    /** The count for the filter as asked, chip and segment included — see [OrdersRepository.total]. */
+    fun total(filter: OrdersFilter): Flow<Int?>
 }
 class RepositoryOrdersSource @Inject constructor(private val repo: OrdersRepository) : OrdersSource {
     override fun list(filter: OrdersFilter) = repo.list(filter)
     override suspend fun refreshList(filter: OrdersFilter) = repo.refreshList(filter)
     override fun facets(filter: OrdersFilter) = repo.facets(filter)
+    override fun total(filter: OrdersFilter) = repo.total(filter)
 }
 
 data class OrdersListUiState(
@@ -72,24 +75,41 @@ open class OrdersListViewModel(private val source: OrdersSource) : ViewModel() {
 
     private val facetsFlow: Flow<OrderFacets?> = base.flatMapLatest { source.facets(it) }
 
+    /**
+     * The server's count for the filter as asked — the ONLY figure paging may stop at.
+     *
+     * [OrderFacets.total] counts the `q`/`day` filter with `status` and `payment` deliberately
+     * ignored (that is what lets an unselected chip still show its count), so with a chip or a
+     * segment on it is larger than the filtered list can ever grow: `rows.size` never reaches it,
+     * the near-end effect asks for page after page, and each one adds a `pageFlow` that never
+     * settles. Live, that ran to `page=49` on a «Қабул» filter holding two orders.
+     *
+     * A StateFlow, not just a `combine` input, because [loadMore] reads it synchronously to cap
+     * the page counter.
+     */
+    private val filteredTotal: StateFlow<Int?> =
+        base.flatMapLatest { source.total(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     private data class Filters(val q: String, val status: OrderStatus?, val payment: PaymentFilter?, val day: LocalDate?)
     private data class Busy(val refreshing: Boolean, val loadingMore: Boolean)
+    private data class Counts(val facets: OrderFacets?, val total: Int?)
 
     val state: StateFlow<OrdersListUiState> = combine(
         combine(query, status, payment, day) { q, s, p, d -> Filters(q, s, p, d) },
         resource,
-        facetsFlow,
+        combine(facetsFlow, filteredTotal) { f, t -> Counts(f, t) },
         pages,
         combine(refreshing, loadingMore) { r, m -> Busy(r, m) },
-    ) { f, r, facets, n, busy ->
+    ) { f, r, counts, n, busy ->
         val rows = r.dataOrNull.orEmpty()
         OrdersListUiState(
             query = f.q, status = f.status, payment = f.payment, day = f.day,
-            groups = groupByMonth(rows), facets = facets,
+            groups = groupByMonth(rows), facets = counts.facets,
             isRefreshing = busy.refreshing || (r is Resource.Loading && r.cached == null),
             loadingMore = busy.loadingMore,
-            // Without facets (an older server) the only signal is "the last page came back full".
-            hasMore = facets?.let { rows.size < it.total } ?: (rows.size >= PAGE_SIZE * n),
+            // Before the first page lands there is no total, and the only signal left is "the last
+            // page came back full". Never `facets.total` — see [filteredTotal].
+            hasMore = counts.total?.let { rows.size < it } ?: (rows.size >= PAGE_SIZE * n),
             error = (r as? Resource.Error)?.error?.message,
             hasCache = r.dataOrNull != null,
         )
@@ -113,6 +133,12 @@ open class OrdersListViewModel(private val source: OrdersSource) : ViewModel() {
     fun loadMore() {
         if (loadingMore.value || !state.value.hasMore) return
         val next = pages.value + 1
+        // A second guard on the page counter itself, not just on `hasMore`: the screen's near-end
+        // effect can fire against a state snapshot taken before the last page landed, and a page
+        // past the last one would come back empty forever. `ceil(total / PAGE_SIZE)` is the last
+        // page there is, written as multiplication so no rounding can be off by one.
+        val total = filteredTotal.value
+        if (total != null && (next - 1) * PAGE_SIZE >= total) return
         pages.value = next
         viewModelScope.launch {
             loadingMore.value = true
