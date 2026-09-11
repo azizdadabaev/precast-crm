@@ -121,7 +121,7 @@ fun formatLongDate(t: Instant): String {
 fun formatMonthYear(ym: YearMonth): String =
     UZ_MONTHS_FULL[ym.monthValue - 1].replaceFirstChar { it.uppercase() } + " " + ym.year
 
-private const val NB_HYPHEN = '‑'
+private const val NB_HYPHEN = '\u2011' // NON-BREAKING HYPHEN — an escape, like THIN, so a diff can tell it from '-'
 
 /** «№ 09‑0003» for `2026-09-0003`: the year is dropped (it is on every row of a list), the
  *  remaining hyphen is U+2011 so a number never breaks across lines. */

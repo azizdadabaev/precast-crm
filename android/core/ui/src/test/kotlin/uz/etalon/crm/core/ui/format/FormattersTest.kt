@@ -94,7 +94,7 @@ class FormattersTest {
     }
     @Test fun monthYearHeader() { assertEquals("Сентябрь 2026", formatMonthYear(YearMonth.of(2026, 9))) }
     @Test fun orderNoDropsTheYearAndUsesANonBreakingHyphen() {
-        assertEquals("№ 09‑0003", formatOrderNo("2026-09-0003"))
+        assertEquals("№ 09\u20110003", formatOrderNo("2026-09-0003"))
         assertEquals("№ X17", formatOrderNo("X17"))
     }
 }
