@@ -43,6 +43,9 @@ private val NAV_ITEMS = listOf(
 
 private const val LONGEST = "Буюртма"
 
+/** §4's side margin, restated here because `BottomNav` keeps its geometry private. */
+private val BAR_SIDE_MARGIN = 16.dp
+
 /**
  * The floating pill, §4. The light sheet draws it once per active cell so a reviewer can see that
  * the white pill grows to its own label while the four icon-only cells stay equal — which is how
@@ -79,17 +82,46 @@ class BottomNavScreenshotTest {
     }
 
     /**
-     * The gate. Two claims, both measured rather than eyeballed:
+     * The gate. Three claims, all measured rather than eyeballed:
      *
      * 1. the active label is drawn at its natural width — `Text` here has the default
      *    `TextOverflow.Clip`, so a label that does not fit is silently cut and its laid-out width
      *    collapses to the space it was given; comparing against the same string measured
      *    unconstrained catches exactly that, and an ellipsis would show up the same way;
-     * 2. every cell still holds a 48 dp hit area (D7) once the active one has taken its share.
+     * 2. every cell still holds a 48 dp hit area (D7) once the active one has taken its share;
+     * 3. the five cells together still fit inside §4's 16 dp side margins.
      */
     @Test
     @Config(sdk = [36], qualifiers = "w360dp-h800dp")
     fun fiveCellsFitAt360dp() {
+        assertNarrowBarHolds()
+    }
+
+    /**
+     * The same gate at the largest font scale the app is tested against. It is the tightest case
+     * the bar ever sees: the label grows with the scale while the dot, the glyph and the paddings
+     * do not, so the four icon-only cells are what pays for it.
+     *
+     * Measured 2026-09-11: «Буюртма» is 62,0 dp at fontScale 1,3 (53,0 at 1,0), the active cell
+     * 120,0 dp, and each of the four others 49,0 dp — 1 dp above D7's floor. The label is drawn
+     * whole; no runtime floor is needed and none is implemented. `ds_bottom_nav_360_font13_light`
+     * is what that looks like.
+     */
+    @Test
+    @Config(sdk = [36], qualifiers = "w360dp-h800dp", fontScale = 1.3f)
+    fun fiveCellsFitAt360dpAtFontScale13() {
+        assertNarrowBarHolds()
+    }
+
+    /** The font-scale-1,3 twin of [bottomNav360Light] — the owner sees the tightest bar there is. */
+    @Test
+    @Config(sdk = [36], qualifiers = "w360dp-h800dp", fontScale = 1.3f)
+    fun bottomNav360FontScale13Light() {
+        rule.setContent { EtalonTheme { Narrow() } }
+        rule.onRoot().captureRoboImage("screenshots/ds_bottom_nav_360_font13_light.png")
+    }
+
+    private fun assertNarrowBarHolds() {
         var naturalLabelPx = 0
         rule.setContent {
             EtalonTheme {
@@ -117,6 +149,15 @@ class BottomNavScreenshotTest {
                 cell.size.width >= minTouchPx && cell.size.height >= minTouchPx,
             )
         }
+        // §4's floating pill keeps a 16 dp margin either side; the cells live inside that, so if
+        // they outgrow it the bar is already off the screen and the reviewer cannot see it happen.
+        val rootPx = rule.onRoot().fetchSemanticsNode().size.width
+        val marginsPx = with(rule.density) { (BAR_SIDE_MARGIN * 2).roundToPx() }
+        val cellsPx = cells.sumOf { it.size.width }
+        assertTrue(
+            "the five cells measure ${toDp(cellsPx)} — wider than the ${toDp(rootPx - marginsPx)} the bar has",
+            cellsPx <= rootPx - marginsPx,
+        )
     }
 }
 

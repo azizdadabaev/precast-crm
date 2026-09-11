@@ -2,7 +2,6 @@ package uz.etalon.crm.core.designsystem.components
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +14,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -33,8 +33,9 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.etalonRipple
 import uz.etalon.crm.core.designsystem.theme.etalonShadow
 
-/** One cell. [contentDescription] is what the screen reader announces; [label] is only drawn on
- *  the active cell, so the two are not the same string on an icon-only cell. */
+/** One cell. [contentDescription] is what the screen reader announces on an **icon-only** cell,
+ *  where there is no [label] drawn to read; on the active cell the label is the announcement and
+ *  the glyph is decorative, so the two are not the same string. */
 data class BottomNavItem(
     @DrawableRes val icon: Int,
     val label: String,
@@ -68,6 +69,13 @@ private val ACTIVE_PAD = 10.dp
  *
  * The cells are 48 dp tall (60 less the 6 dp inner padding, twice) and never narrower than
  * 48 dp — D7 without needing `minimumInteractiveComponentSize`.
+ *
+ * **The labels are load-bearing and there is no runtime floor.** Nothing here caps the active
+ * cell: it takes what its own label needs and the four icon-only cells divide the rest, so a
+ * label longer than «Буюртма» eats into their hit area until one of them drops under 48 dp.
+ * `fiveCellsFitAt360dpAtFontScale13` measures the tightest case the app is tested at — 62,0 dp
+ * of label, a 120,0 dp active cell and 49,0 dp each for the other four — which leaves 1 dp of
+ * headroom. Any new label, or a sixth cell, must be re-measured against that gate before it ships.
  */
 @Composable
 fun BottomNav(
@@ -81,8 +89,10 @@ fun BottomNav(
         .padding(horizontal = BAR_SIDE_MARGIN)
         .navigationBarsPadding()
         .padding(bottom = BAR_BOTTOM_MARGIN)
+        // `shadow` clips to the shape it is given whenever the elevation is non-zero, so the navy
+        // fill and the cells are already inside the pill — a second `clip` here would be a second
+        // graphics layer for nothing.
         .etalonShadow(EtalonElevation.floatingNav, EtalonShapes.pill, EtalonColors.navy)
-        .clip(EtalonShapes.pill)
         .background(EtalonColors.navy)
         .height(BAR_HEIGHT)
         .padding(BAR_INNER_PAD),
@@ -95,7 +105,11 @@ fun BottomNav(
                 .fillMaxHeight()
                 .clip(EtalonShapes.pill)
                 .then(if (active) Modifier.background(EtalonColors.surface) else Modifier)
-                .clickable(
+                // `selectable`, not `clickable`: it publishes the selected state, which is how
+                // TalkBack tells the active cell from the other four. The white pill alone says
+                // nothing to a screen reader.
+                .selectable(
+                    selected = active,
                     role = Role.Tab,
                     indication = etalonRipple(!active),
                     interactionSource = remember { MutableInteractionSource() },
@@ -107,7 +121,9 @@ fun BottomNav(
             if (active) {
                 Box(Modifier.size(DOT).clip(EtalonShapes.pill).background(EtalonColors.indigo))
                 Spacer(Modifier.width(CELL_GAP))
-                EtalonIcon(item.icon, item.contentDescription, size = ICON, tint = EtalonColors.navy)
+                // The label is drawn on this cell, so the glyph is decorative here — described, it
+                // would make TalkBack read the destination twice («Буюртмалар, Буюртма»).
+                EtalonIcon(item.icon, null, size = ICON, tint = EtalonColors.navy)
                 Spacer(Modifier.width(CELL_GAP))
                 Text(item.label, style = EtalonType.label, color = EtalonColors.navy, maxLines = 1)
             } else {
