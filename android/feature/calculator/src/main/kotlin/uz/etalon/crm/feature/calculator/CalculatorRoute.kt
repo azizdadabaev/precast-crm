@@ -25,24 +25,24 @@ fun CalculatorRoute(onOpenOrder: (String) -> Unit, vm: CalculatorViewModel = hil
             onOpenOrder(id)
         }
     }
-    val roomCallbacks = RoomExtrasCallbacks(
-        onExtraBeams = vm::setExtraBeams,
-        onBearing = vm::setBearing,
-        onCorrection = vm::setCorrection,
-        onForceStartBeam = vm::setForceStartBeam,
-        onPattern = vm::setPattern,
-        onApplyRateOverride = vm::applyRateOverride,
-        onClearRateOverride = vm::clearRateOverride,
-    )
     CalculatorScreen(
         s = s,
-        roomCallbacks = roomCallbacks,
         onAddRoom = vm::addRoom,
         onDuplicateRoom = vm::duplicateRoom,
         onDeleteRoom = vm::deleteRoom,
-        onMoveRoom = vm::moveRoom,
+        onMoveRoomUp = vm::moveRoomUp,
+        onMoveRoomDown = vm::moveRoomDown,
         onSetName = vm::setName,
         onToggleExpanded = vm::toggleExpanded,
+        onWidthText = vm::setWidthText,
+        onLengthText = vm::setLengthText,
+        onBearingText = vm::setBearingText,
+        onCorrectionText = vm::setCorrectionText,
+        onCyclePattern = vm::cyclePattern,
+        onExtraBeams = vm::setExtraBeams,
+        onForceStartBeam = vm::setForceStartBeam,
+        onApplyRateOverride = vm::applyRateOverride,
+        onClearRateOverride = vm::clearRateOverride,
         clientBarCollapsed = { ClientBarCollapsed(state = s, onReopen = vm::toggleClientForm) },
         clientBarExpanded = { ClientBarExpanded(state = s, vm = vm) },
         totalsSheetContent = { TotalsSheet(state = s, vm = vm) { CalculatorActions(state = s, vm = vm) } },

@@ -21,9 +21,11 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.material3.rememberStandardBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -45,17 +47,6 @@ import uz.etalon.crm.core.designsystem.components.navPillPadding
  * update this one too, or the peek clips again exactly as it did before this fix.
  */
 internal val CALC_SHEET_PEEK_HEIGHT: Dp = 48.dp + 12.dp + 48.dp
-
-/**
- * The client bar occupies the room `LazyColumn`'s own item index 0 — either as a `stickyHeader`
- * ([clientBarCollapsed]) or as a plain scrolling `item` ([clientBarExpanded]), exactly one of the
- * two per [CalculatorUiState.clientFormOpen] (see the `LazyColumn` body below) — so a room at
- * position `i` within [CalculatorUiState.rows] sits at overall list index `i + ROOM_LIST_HEADER_OFFSET`
- * either way. `RoomCard.kt`'s `DragHandle` needs that translation: it reads
- * [androidx.compose.foundation.lazy.LazyListState.layoutInfo] (overall indices) but calls back
- * with room-local ones (`onMove`, `CalculatorViewModel.moveRoom`).
- */
-internal const val ROOM_LIST_HEADER_OFFSET = 1
 
 /**
  * The room list, with the totals sheet ([TotalsSheet]) as a PERSISTENT bottom sheet beneath it
@@ -82,18 +73,30 @@ internal const val ROOM_LIST_HEADER_OFFSET = 1
 @Composable
 fun CalculatorScreen(
     s: CalculatorUiState,
-    roomCallbacks: RoomExtrasCallbacks,
     onAddRoom: () -> Unit,
     onDuplicateRoom: (String) -> Unit,
     onDeleteRoom: (String) -> Unit,
-    onMoveRoom: (Int, Int) -> Unit,
+    onMoveRoomUp: (String) -> Unit,
+    onMoveRoomDown: (String) -> Unit,
     onSetName: (String, String) -> Unit,
     onToggleExpanded: (String) -> Unit,
+    onWidthText: (String, String) -> Unit,
+    onLengthText: (String, String) -> Unit,
+    onBearingText: (String, String) -> Unit,
+    onCorrectionText: (String, String) -> Unit,
+    onCyclePattern: (String) -> Unit,
+    onExtraBeams: (String, Int) -> Unit,
+    onForceStartBeam: (String, Boolean) -> Unit,
+    onApplyRateOverride: (String, Double, String) -> Unit,
+    onClearRateOverride: (String) -> Unit,
     clientBarCollapsed: @Composable () -> Unit,
     clientBarExpanded: @Composable () -> Unit,
     totalsSheetContent: @Composable ColumnScope.() -> Unit,
 ) {
     val listState = rememberLazyListState()
+    // One requester per room, owned here rather than inside the card: «next» on the Бўйи cell
+    // hands the keyboard to the NEXT room's Эни, which no card can reach from inside itself.
+    val widthFocus = remember { mutableMapOf<String, FocusRequester>() }
     val sheetState = rememberStandardBottomSheetState(initialValue = SheetValue.PartiallyExpanded, skipHiddenState = true)
     val scaffoldState = rememberBottomSheetScaffoldState(bottomSheetState = sheetState)
 
@@ -125,8 +128,8 @@ fun CalculatorScreen(
                     contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    // Only the collapsed one-liner is ever pinned — see [ROOM_LIST_HEADER_OFFSET]'s
-                    // own doc. Either branch occupies exactly one list index before the rooms.
+                    // Only the collapsed one-liner is ever pinned (see this file's own KDoc);
+                    // either branch occupies exactly one list index before the rooms.
                     if (s.clientFormOpen) {
                         item { clientBarExpanded() }
                     } else {
@@ -134,14 +137,35 @@ fun CalculatorScreen(
                     }
                     if (s.rows.isEmpty()) item { EmptyState(stringResource(R.string.calc_empty), modifier = Modifier.padding(horizontal = 16.dp)) }
                     itemsIndexed(s.rows, key = { _, row -> row.id }) { index, row ->
+                        val nextId = s.rows.getOrNull(index + 1)?.id
                         RoomCard(
-                            row = row, index = index, listState = listState,
-                            expanded = s.expandedRowId == row.id, callbacks = roomCallbacks,
+                            row = row,
+                            draft = s.draft(row.id),
+                            expanded = s.expandedRowId == row.id,
+                            canMoveUp = index > 0,
+                            canMoveDown = index < s.rows.lastIndex,
+                            focusRequester = widthFocus.getOrPut(row.id) { FocusRequester() },
+                            // The next room may not be composed yet (it is below the fold), and a
+                            // requester that is not attached throws rather than doing nothing —
+                            // in which case the keyboard simply stays where it is.
+                            onNext = nextId?.let { id ->
+                                { runCatching { widthFocus.getOrPut(id) { FocusRequester() }.requestFocus() } }
+                            },
                             onNameChange = { onSetName(row.id, it) },
+                            onWidthChange = { onWidthText(row.id, it) },
+                            onLengthChange = { onLengthText(row.id, it) },
+                            onBearingChange = { onBearingText(row.id, it) },
+                            onCorrectionChange = { onCorrectionText(row.id, it) },
+                            onCyclePattern = { onCyclePattern(row.id) },
                             onToggleExpanded = { onToggleExpanded(row.id) },
+                            onExtraBeams = { onExtraBeams(row.id, it) },
+                            onForceStartBeam = { onForceStartBeam(row.id, it) },
                             onDuplicate = { onDuplicateRoom(row.id) },
                             onDelete = { onDeleteRoom(row.id) },
-                            onMove = onMoveRoom,
+                            onMoveUp = { onMoveRoomUp(row.id) },
+                            onMoveDown = { onMoveRoomDown(row.id) },
+                            onApplyRateOverride = { price, reason -> onApplyRateOverride(row.id, price, reason) },
+                            onClearRateOverride = { onClearRateOverride(row.id) },
                             modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }

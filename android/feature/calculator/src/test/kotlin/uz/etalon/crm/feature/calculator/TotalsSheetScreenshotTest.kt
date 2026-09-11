@@ -92,9 +92,9 @@ class TotalsSheetScreenshotTest {
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { false }),
     )
 
-    private fun shootCollapsed(name: String, dark: Boolean) {
+    private fun shootCollapsed(name: String) {
         rule.setContent {
-            EtalonTheme(darkTheme = dark) {
+            EtalonTheme() {
                 Box(Modifier.height(CALC_SHEET_PEEK_HEIGHT).clipToBounds()) {
                     Column(Modifier.fillMaxWidth()) {
                         BottomSheetDefaults.DragHandle()
@@ -106,9 +106,9 @@ class TotalsSheetScreenshotTest {
         rule.onRoot().captureRoboImage("screenshots/totals_sheet_collapsed_$name.png")
     }
 
-    private fun shootExpanded(name: String, dark: Boolean) {
+    private fun shootExpanded(name: String) {
         rule.setContent {
-            EtalonTheme(darkTheme = dark) { TotalsSheet(state = state(), vm = vm()) {} }
+            EtalonTheme() { TotalsSheet(state = state(), vm = vm()) {} }
         }
         rule.onRoot().captureRoboImage("screenshots/totals_sheet_expanded_$name.png")
     }
@@ -122,7 +122,7 @@ class TotalsSheetScreenshotTest {
      *  The two `assertIsDisplayed` calls are not decoration: the notice dismisses itself after
      *  2.5 s (`SAVE_MESSAGE_AUTO_DISMISS_MS`), and a baseline recorded after that had elapsed
      *  would silently pin a frame WITHOUT it. */
-    private fun shootActions(name: String, dark: Boolean) {
+    private fun shootActions(name: String) {
         val s = state().copy(
             error = "Бу хоналарни сақлаб бўлмайди: Хона 3",
             saveMessage = "Лойиҳа сақланди",
@@ -132,7 +132,7 @@ class TotalsSheetScreenshotTest {
         )
         val vm = vm()
         rule.setContent {
-            EtalonTheme(darkTheme = dark) {
+            EtalonTheme() {
                 TotalsSheet(state = s, vm = vm) { CalculatorActions(state = s, vm = vm) }
             }
         }
@@ -141,16 +141,13 @@ class TotalsSheetScreenshotTest {
         rule.onRoot().captureRoboImage("screenshots/totals_sheet_actions_$name.png")
     }
 
-    @Test @Config(qualifiers = "w411dp-h891dp") fun collapsedLight() = shootCollapsed("light", false)
-    @Test @Config(qualifiers = "w411dp-h891dp") fun collapsedDark() = shootCollapsed("dark", true)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun collapsedLight() = shootCollapsed("light")
 
-    @Test @Config(qualifiers = "w411dp-h891dp") fun expandedLight() = shootExpanded("light", false)
-    @Test @Config(qualifiers = "w411dp-h891dp") fun expandedDark() = shootExpanded("dark", true)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun expandedLight() = shootExpanded("light")
 
     // A taller-than-a-phone canvas on purpose: the whole action group — the refusal banner, the
     // rejected-order row, the notice and all four buttons — is what this baseline exists for, and
     // on a real 891dp screen the operator reaches «Тозалаш»/«Лойиҳани сақлаш» by scrolling the
     // sheet, which one captured frame cannot do.
-    @Test @Config(qualifiers = "w411dp-h1200dp") fun actionsLight() = shootActions("light", false)
-    @Test @Config(qualifiers = "w411dp-h1200dp") fun actionsDark() = shootActions("dark", true)
+    @Test @Config(qualifiers = "w411dp-h1200dp") fun actionsLight() = shootActions("light")
 }

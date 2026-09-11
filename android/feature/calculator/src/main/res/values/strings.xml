@@ -12,32 +12,49 @@
     <string name="calc_action_duplicate">Нусха олиш</string>
     <string name="calc_action_delete">Ўчириш</string>
     <string name="calc_action_clear">Тозалаш</string>
-    <string name="calc_result_strip">%1$s · %2$s · %3$s</string>
-    <string name="calc_blocks">%1$s ғишт</string>
-    <string name="calc_beams">%1$s балка</string>
     <string name="calc_room_not_persistable">Бу хона фақат қўшимча балкадан иборат — сақлаб бўлмайди</string>
     <string name="calc_no_write_permission">Буюртма яратишга рухсат йўқ</string>
-    <!-- Pulled forward from Task 5's string list: the pattern chip on the collapsed RoomCard
-         (this task) already needs these four names, ahead of the rest of Task 5's «Қўшимча»
-         strings which are not needed until the extras panel itself is built. -->
+    <!-- The pattern chip on the room card: the label, and the « авто» suffix it carries while the
+         engine is picking the pattern itself (§3.4 row 1). -->
     <string name="calc_pattern_auto">Авто</string>
+    <string name="calc_pattern_auto_suffix">авто</string>
     <string name="calc_pattern_gb">Г-Б</string>
     <string name="calc_pattern_bgb">Б-Г-Б</string>
     <string name="calc_pattern_gbg">Г-Б-Г</string>
-    <string name="calc_extras">Қўшимча</string>
-    <string name="calc_action_reorder">Тартибини ўзгартириш</string>
     <string name="calc_action_more">Кўпроқ амаллар</string>
+    <string name="calc_action_move_up">Юқорига</string>
+    <string name="calc_action_move_down">Пастга</string>
     <string name="calc_field_bearing">Таяниш</string>
     <string name="calc_field_correction">Корр.</string>
-    <string name="calc_field_extra_beams">+Б</string>
-    <string name="calc_field_start_beam">Бош Б.</string>
-    <string name="calc_field_pattern">Шаблон</string>
-    <string name="calc_working_out">Ҳисоб-китоб</string>
+    <!-- An empty numeric cell, §3.4 row 2: «placeholder `0,00`». -->
+    <string name="calc_cell_placeholder">0,00</string>
+    <!-- An unnamed room, §3.4 row 1 — the name field is borderless, so this is what stands in it. -->
+    <string name="calc_room_placeholder">Хона</string>
+    <!-- The ⋯ panel (§3.4 row 3) -->
+    <string name="calc_more_extra_beams">+Б қўшимча</string>
+    <string name="calc_more_start_beam">Бош балка</string>
     <string name="calc_out_monolith_length">Монолит узунлиги</string>
     <string name="calc_out_beam_length">Балка узунлиги</string>
     <string name="calc_out_pitches">Қадам</string>
     <string name="calc_out_block_rows">Қатор</string>
     <string name="calc_out_blocks_per_row">Гишт/Қатор</string>
+    <!-- The four-column result strip and the formula footer, §3.4 rows 4–5. `calc_footer_extras`
+         keeps its leading space: it is appended to the м² leg of the same sentence. -->
+    <string name="calc_out_monolith">Монолит Б</string>
+    <string name="calc_out_beams">Балка</string>
+    <string name="calc_out_blocks">Ғишт</string>
+    <string name="calc_out_area">Майдон</string>
+    <string name="calc_unit_m">м</string>
+    <string name="calc_unit_pcs">та</string>
+    <string name="calc_unit_m2">м²</string>
+    <string name="calc_footer_formula">%1$s × %2$s м²</string>
+    <!-- Quoted so aapt keeps the leading space: this is appended to the м² leg above, and without
+         it the footer reads «38,28 м²+ 440 000 балка». -->
+    <string name="calc_footer_extras">" + %1$s балка"</string>
+    <!-- The rate cell, §3.4 row 2: «Нарх/м²» over «140k · авто» / «140k · қўлда». -->
+    <string name="calc_rate_cell">Нарх/м²</string>
+    <string name="calc_rate_manual_suffix">қўлда</string>
+    <string name="calc_rate_suffix">· %1$s</string>
     <string name="calc_rate">м² нархи</string>
     <string name="calc_rate_auto">Авто: %1$s</string>
     <!-- The badge on the tier the engine would have picked, in the override sheet. Bare, unlike
