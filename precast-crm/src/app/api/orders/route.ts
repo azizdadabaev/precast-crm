@@ -10,15 +10,19 @@ import { can } from "@/lib/permissions";
 import { createOrder } from "@/lib/create-order";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms } from "@/lib/regions";
+import { facetsFrom } from "@/lib/order-facets";
 
-/** GET /api/orders — order.view. Paginated. Search/status/day filters
+/** GET /api/orders — order.view. Paginated. Search/status/day/payment filters
  * run server-side so `q` matches the full DB even when only one page
- * of rows is rendered. Response: { items, total, page, pageSize, totalPages }. */
+ * of rows is rendered. `sort` orders by `scheduledAt` ("asc" default, or "desc").
+ * Response: { items, total, page, pageSize, totalPages, facets }. */
 export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status") ?? undefined;
   const day = searchParams.get("day") ?? undefined;
+  const payment = searchParams.get("payment");
+  const sort = searchParams.get("sort") === "desc" ? "desc" : "asc";
 
   const pageRaw = Number(searchParams.get("page") ?? "1");
   const sizeRaw = Number(searchParams.get("pageSize") ?? "20");
@@ -28,7 +32,6 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     : 20;
 
   const where: Record<string, unknown> = {};
-  if (status) where.status = status;
   if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
     // Bucket by the server's local timezone so the day window matches
     // the capacity calendar (which uses Date#getDate() — also local).
@@ -70,17 +73,35 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     where.OR = filters;
   }
 
-  const [total, items] = await Promise.all([
+  // Facets describe the q/day filter with status/payment/page ignored, so the chips can show
+  // how many orders each status holds while one status is selected.
+  const facetWhere: Record<string, unknown> = { ...where };
+  if (status) where.status = status;
+  if (payment === "paid") where.paymentState = "FULLY_PAID";
+  else if (payment === "debt") where.paymentState = { not: "FULLY_PAID" };
+
+  const [total, items, statusGroups, paymentGroups] = await Promise.all([
     prisma.order.count({ where }),
     prisma.order.findMany({
       where,
-      orderBy: [{ scheduledAt: "asc" }, { placedAt: "desc" }],
+      orderBy: [{ scheduledAt: sort }, { placedAt: "desc" }],
       include: {
         client: true,
         project: { select: { id: true, name: true } },
       },
       skip: (page - 1) * pageSize,
       take: pageSize,
+    }),
+    prisma.order.groupBy({
+      by: ["status"],
+      where: facetWhere,
+      _count: { _all: true },
+      _sum: { totalArea: true },
+    }),
+    prisma.order.groupBy({
+      by: ["paymentState"],
+      where: facetWhere,
+      _count: { _all: true },
     }),
   ]);
 
@@ -90,6 +111,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     page,
     pageSize,
     totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    facets: facetsFrom(statusGroups, paymentGroups),
   });
 });
 

@@ -1,5 +1,6 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type OrderStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { remainingBalance } from '@/lib/payment-state';
 import { aggregateByRegion, type RegionRow } from '@/lib/dashboard-regions';
 import { attributionDate } from '@/lib/payment-attribution';
 import {
@@ -145,7 +146,10 @@ export interface DashboardPayload {
     count: number;
     totalArea: number;
     date: string;
-    orders: Array<{ id: string; orderNumber: string; clientName: string; totalArea: number }>;
+    orders: Array<{
+      id: string; orderNumber: string; clientName: string; totalArea: number;
+      status: OrderStatus; clientAddress: string | null; totalPrice: number; remaining: number;
+    }>;
   };
   openDiscrepancies: { count: number; totalAmount: number };
   cashOnTheRoad: { total: number; dispatchCount: number; drivers: Array<{ id: string; name: string; expected: number }> };
@@ -184,10 +188,15 @@ export interface DashboardPayload {
     id: string;
     orderNumber: string;
     clientName: string;
+    clientPhone: string;
+    clientAddress: string | null;
     primaryProductLabel: string;
     totalArea: number;
     totalPrice: number;
     paymentState: 'FULLY_PAID' | 'PARTIALLY_PAID' | 'AWAITING_PAYMENT';
+    status: OrderStatus;
+    scheduledAt: string;
+    remaining: number;
   }>;
 }
 
@@ -377,7 +386,11 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
         id: true,
         orderNumber: true,
         totalArea: true,
-        client: { select: { name: true } },
+        status: true,
+        totalPrice: true,
+        confirmedPaid: true,
+        writeOffAmount: true,
+        client: { select: { name: true, address: true } },
       },
       orderBy: { scheduledAt: 'asc' },
     }),
@@ -455,6 +468,10 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
         totalBeams: true,
         totalBlocks: true,
         paymentState: true,
+        status: true,
+        scheduledAt: true,
+        confirmedPaid: true,
+        writeOffAmount: true,
         client: { select: { name: true, phone: true, address: true } },
       },
     }),
@@ -838,6 +855,9 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     totalArea: Math.round(Number(r.totalArea) * 10) / 10,
     totalPrice: Math.round(Number(r.totalPrice)),
     paymentState: r.paymentState as 'FULLY_PAID' | 'PARTIALLY_PAID' | 'AWAITING_PAYMENT',
+    status: r.status,
+    scheduledAt: r.scheduledAt.toISOString(),
+    remaining: Math.round(remainingBalance(Number(r.totalPrice), Number(r.confirmedPaid), Number(r.writeOffAmount))),
   }));
 
   const payload: DashboardPayload = {
@@ -884,6 +904,10 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
         orderNumber: o.orderNumber,
         clientName: o.client.name,
         totalArea: Math.round(Number(o.totalArea) * 10) / 10,
+        status: o.status,
+        clientAddress: o.client.address ?? null,
+        totalPrice: Math.round(Number(o.totalPrice)),
+        remaining: Math.round(remainingBalance(Number(o.totalPrice), Number(o.confirmedPaid), Number(o.writeOffAmount))),
       })),
     },
     openDiscrepancies: {
