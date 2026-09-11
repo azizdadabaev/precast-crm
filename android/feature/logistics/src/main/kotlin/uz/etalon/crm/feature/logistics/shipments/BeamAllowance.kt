@@ -3,12 +3,15 @@ package uz.etalon.crm.feature.logistics.shipments
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OutboxKind
 import uz.etalon.crm.core.model.PendingUpload
-import java.util.Locale
+import uz.etalon.crm.core.model.beamLengthKey
 
-/** What this truck may still take, per beam length and for blocks. */
+/** What this truck may still take, per beam length and for blocks. The keys are
+ *  [beamLengthKey]'s — the same spelling the server's over-load guard and the order detail's
+ *  «Юклаш рўйхати» use, so a cap offered here is a cap the load route will honour. This used to
+ *  format the `BigDecimal` with `%.2f`, which rounds the DECIMAL value: a 3.505 m beam was offered
+ *  under «3.51» and posted under it, against a server total filed under «3.50» — a permanent 422
+ *  in the yard. */
 data class Allowance(val beams: Map<String, Int>, val blocks: Int)
-
-private fun key(v: java.math.BigDecimal) = String.format(Locale.ROOT, "%.2f", v)
 
 /**
  * What one truck may still take. The server enforces the same arithmetic and
@@ -31,7 +34,7 @@ fun allowanceFor(
     val totalBeams = mutableMapOf<String, Int>()
     var totalBlocks = 0
     order.rooms.forEach { r ->
-        totalBeams.merge(key(r.beamLength), r.beamCount, Int::plus)
+        totalBeams.merge(beamLengthKey(r.beamLength), r.beamCount, Int::plus)
         totalBlocks += r.totalBlocks
     }
     var takenBlocks = 0
@@ -39,7 +42,7 @@ fun allowanceFor(
     order.shipments.filter { it.id != excludingShipmentId }.forEach { s ->
         // A key the server never would have written (corrupt cache, a future format change)
         // must not crash this computation; skip it rather than let it count against nothing.
-        s.loadedBeams.forEach { (k, v) -> k.toBigDecimalOrNull()?.let { takenBeams.merge(key(it), v, Int::plus) } }
+        s.loadedBeams.forEach { (k, v) -> k.toBigDecimalOrNull()?.let { takenBeams.merge(beamLengthKey(it), v, Int::plus) } }
         takenBlocks += s.loadedBlocks ?: 0
     }
     // A queued load whose shipment the server HAS already confirmed would be counted twice, so the
@@ -51,7 +54,7 @@ fun allowanceFor(
         .filter { it.kind == OutboxKind.LOAD_SHIPMENT }
         .filter { it.shipmentId != null && it.shipmentId != excludingShipmentId && it.shipmentId !in alreadyCounted }
         .forEach { row ->
-            row.loadedBeams.forEach { (k, v) -> k.toBigDecimalOrNull()?.let { takenBeams.merge(key(it), v, Int::plus) } }
+            row.loadedBeams.forEach { (k, v) -> k.toBigDecimalOrNull()?.let { takenBeams.merge(beamLengthKey(it), v, Int::plus) } }
             takenBlocks += row.loadedBlocks
         }
     return Allowance(

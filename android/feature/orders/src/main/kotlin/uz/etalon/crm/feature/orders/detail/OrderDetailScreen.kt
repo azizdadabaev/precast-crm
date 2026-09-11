@@ -42,9 +42,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -196,6 +199,16 @@ fun OrderDetailScreen(
     val door = o?.let { paymentDoorFor(it, me) } ?: PaymentDoor.Hidden
     val hasBar = o != null && (step != NextStep.None || door != PaymentDoor.Hidden)
     val photos = o?.let { stripPhotos(it) }.orEmpty()
+    // What a blocked payment door adds to the bar: the reason line's own box at its
+    // [BLOCKED_REASON_LINES] maximum, plus the `xs` that separates it from the button. Measured
+    // rather than guessed at a constant, so at font scale 1,3 the clearance grows with the text
+    // and the last card still ends clear of the bar. `meta` declares no line height of its own,
+    // so the figure can only come from the font metrics.
+    val blockedBarExtra = with(LocalDensity.current) {
+        rememberTextMeasurer()
+            .measure(BLOCKED_REASON_PROBE, EtalonType.meta, maxLines = BLOCKED_REASON_LINES)
+            .size.height.toDp()
+    } + EtalonSpace.xs
     var lightboxAt by remember { mutableStateOf<Int?>(null) }
     var deleteCandidate by remember { mutableStateOf<PhotoRef?>(null) }
     // Only a photo the server already knows can be deleted; a queued one has no id to delete by.
@@ -221,10 +234,10 @@ fun OrderDetailScreen(
                     end = EtalonSpace.cardMargin,
                     top = EtalonSpace.sm,
                     // A blocked payment door hangs its reason under the button, so the bar is one
-                    // `meta` line taller than the constant describes.
+                    // `meta` line taller than the constant describes — see [blockedBarExtra].
                     extraBottom = when {
                         !hasBar -> 0.dp
-                        door is PaymentDoor.Blocked -> StickyActionBarDefaults.height + EtalonSpace.xl
+                        door is PaymentDoor.Blocked -> StickyActionBarDefaults.height + blockedBarExtra
                         else -> StickyActionBarDefaults.height
                     },
                 ),
@@ -491,10 +504,12 @@ private fun CanceledNotice(o: OrderDetail) = Column(
  *
  * @param collapsible a canceled order: the list is history rather than a job, so it opens shut
  *   behind a chevron instead of taking a screenful above the payments that were actually taken.
+ *   The state is `rememberSaveable` — a loader who opened the list and then turned the phone to
+ *   read a long row must not find it folded shut again.
  */
 @Composable
 private fun LoadListCard(o: OrderDetail, collapsible: Boolean) {
-    var expanded by remember(collapsible) { mutableStateOf(!collapsible) }
+    var expanded by rememberSaveable(collapsible) { mutableStateOf(!collapsible) }
     WhiteCard(
         title = stringResource(R.string.detail_load_list),
         onClick = if (collapsible) ({ expanded = !expanded }) else null,
@@ -669,14 +684,20 @@ private fun CommentRow(c: OrderComment) = Row(
  * «Тарих», collapsed. The expansion happens in place: there is no history screen to navigate to,
  * and the newest three lines are what anyone checking an order actually reads.
  *
- * `STOCK_WARNING` is the one type whose `message` is not printed. The server writes it as English
+ * [STOCK_WARNING] is the one type whose `message` is not printed. The server writes it as English
  * prose for the desk, and §5.1a rules that the phone shows the Uzbek label instead; every other
  * type keeps its message, which carries the specifics — which driver, how much — that a type name
  * cannot.
+ *
+ * Expanding shows the whole list with no cap of its own, which is safe because the route caps
+ * itself: `GET /api/orders/{id}` takes the newest 100 events (`take: 100`), so «Барчаси» is at
+ * most a hundred lines. «Камроқ» folds it back — an expansion with no way out leaves the composer
+ * and the bar a hundred rows away, and the state is `rememberSaveable` so a rotation does not
+ * decide it either way.
  */
 @Composable
 private fun EventsCard(events: List<OrderEventLine>) {
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(false) }
     WhiteCard(stringResource(R.string.events)) {
         (if (expanded) events else events.take(COLLAPSED_EVENTS)).forEach { e ->
             val what = e.message?.takeUnless { e.type == STOCK_WARNING }
@@ -688,14 +709,19 @@ private fun EventsCard(events: List<OrderEventLine>) {
                 modifier = Modifier.padding(top = EtalonSpace.xs),
             )
         }
-        if (!expanded && events.size > COLLAPSED_EVENTS) {
+        if (events.size > COLLAPSED_EVENTS) {
             Text(
-                stringResource(R.string.detail_events_all, events.size),
+                if (expanded) {
+                    stringResource(R.string.detail_events_less)
+                } else {
+                    stringResource(R.string.detail_events_all, events.size)
+                },
                 style = EtalonType.label,
                 color = EtalonColors.indigo,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(role = Role.Button) { expanded = true }
+                    .testTag(TAG_EVENTS_ALL)
+                    .clickable(role = Role.Button) { expanded = !expanded }
                     .heightIn(min = EtalonSpace.minTouch)
                     .wrapContentHeight(Alignment.CenterVertically),
             )
@@ -703,8 +729,18 @@ private fun EventsCard(events: List<OrderEventLine>) {
     }
 }
 
-/** The one event type whose server `message` is English prose written for the desk. */
-private const val STOCK_WARNING = "STOCK_WARNING"
+/** The two expand/collapse rows, tagged so a test can find them by role rather than by the wording
+ *  they carry — «Барчаси (5)» changes with the count and «Камроқ» is the same word in both cards. */
+internal const val TAG_COMMENTS_ALL = "detail_comments_all"
+internal const val TAG_EVENTS_ALL = "detail_events_all"
+
+/** How many `meta` lines the blocked payment door's reason may take, and a probe of exactly that
+ *  many to measure their box against. Two, because the line sits under the button rather than
+ *  across the bar: «Тасдиқ кутилмоқда: 13 350 000» at font scale 1,3 does not fit one, and a sum
+ *  ellipsised to «13 35…» is the one part of the sentence the operator needed. The probe's
+ *  characters are irrelevant — only the box's height is read. */
+private const val BLOCKED_REASON_LINES = 2
+private const val BLOCKED_REASON_PROBE = "0\n0"
 
 /** A card with nothing to say: only the rooms priced the order, and the panel's «Жами» already
  *  carries that figure. */
@@ -938,9 +974,10 @@ private fun BoxScope.ActionBar(
                         stringResource(R.string.pending_amount, formatMoney(door.pending)),
                         style = EtalonType.meta,
                         color = EtalonColors.ink2,
-                        // Two, because the line sits under the button rather than across the bar:
-                        // a nine-digit sum at a large font scale wraps instead of losing its tail.
-                        maxLines = 2,
+                        // Two at most — the list's bottom clearance is measured for exactly this
+                        // many ([blockedBarExtra]), so the two cannot drift apart. A nine-digit sum
+                        // at a large font scale wraps here instead of losing its tail.
+                        maxLines = BLOCKED_REASON_LINES,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = EtalonSpace.xs),
                     )

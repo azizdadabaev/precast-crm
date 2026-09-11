@@ -87,6 +87,28 @@ class BeamAllowanceTest {
         assertEquals(setOf("4.30"), allowanceFor(o, null).beams.keys)
     }
 
+    /**
+     * The yard bug. This used to format the `BigDecimal` with `%.2f`, which rounds the DECIMAL
+     * value, so a 3.505 m beam was offered under «3.51» and posted under it — against a server
+     * total filed under «3.50» by `toFixed(2)`, i.e. against zero, which is a permanent 422 the
+     * operator cannot get past. `beamLengthKey` is now the one spelling both sides use, and this
+     * pins it here as `OrderDetailDerivedTest` pins it on the detail screen's load list.
+     *
+     * 3.505 and 4.005 are exact halves that `Decimal(10,3)` really can hold, and they are exactly
+     * where decimal HALF_UP and `toFixed(2)` disagree.
+     */
+    @Test fun `an exact-half length is keyed the way toFixed spells it, not decimal HALF_UP`() {
+        val o = order(listOf(room("3.505", 4, 0), room("4.005", 2, 0)), emptyList())
+        assertEquals(mapOf("3.50" to 4, "4.00" to 2), allowanceFor(o, null).beams)
+    }
+
+    /** …and a truck that already took some of them is subtracted under that same key, which is
+     *  the half the 422 actually came from: the posted map and the totals have to meet. */
+    @Test fun `a load already taken at an exact-half length subtracts under the same key`() {
+        val o = order(listOf(room("3.505", 10, 0)), listOf(shipment("s1", mapOf("3.50" to 4), 0)))
+        assertEquals(mapOf("3.50" to 6), allowanceFor(o, null).beams)
+    }
+
     private fun queuedLoad(
         shipmentId: String?, beams: Map<String, Int>, blocks: Int,
         kind: OutboxKind = OutboxKind.LOAD_SHIPMENT, failed: Boolean = false,

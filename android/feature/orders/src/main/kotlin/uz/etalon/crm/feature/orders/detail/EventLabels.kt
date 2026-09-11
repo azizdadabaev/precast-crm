@@ -3,6 +3,11 @@ package uz.etalon.crm.feature.orders.detail
 import androidx.annotation.StringRes
 import uz.etalon.crm.feature.orders.R
 
+/** The one event type whose server `message` is English prose written for the desk, so «Тарих»
+ *  prints [orderEventLabel]'s Uzbek wording instead of it. Named here, beside the map that
+ *  spells every other type, rather than in the screen that applies the rule. */
+internal const val STOCK_WARNING = "STOCK_WARNING"
+
 /**
  * Uzbek Cyrillic wording for every `OrderEventType` the server has
  * (`precast-crm/prisma/schema.prisma`, written by the routes under `precast-crm/src/app/api`).
@@ -28,7 +33,7 @@ internal fun orderEventLabel(type: String): Int? = when (type) {
     "ORDER_CANCELED" -> R.string.event_order_canceled
     "ORDER_EDITED" -> R.string.event_order_edited
     "NOTE_ADDED" -> R.string.event_note_added
-    "STOCK_WARNING" -> R.string.event_stock_warning
+    STOCK_WARNING -> R.string.event_stock_warning
     "ORDER_DISPATCHED" -> R.string.event_order_dispatched
     "DISPATCH_RETURNED" -> R.string.event_dispatch_returned
     "PAYMENT_RECORDED" -> R.string.event_payment_recorded

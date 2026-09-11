@@ -124,25 +124,18 @@ data class LoadLine(val lengthKey: String, val beamLength: BigDecimal, val beams
  * The order's beams grouped by length, in first-appearance order — matches the web's
  * `beamGroups`: `Map` keyed by `Number(c.beamLength).toFixed(2)`, summing `c.beamCount`.
  *
- * The key rounds the **binary** value, not the decimal one, because `toFixed(2)` does and a
- * loader reads the two lists side by side. `beamLength` is `Decimal(10,3)` on the server
- * (`round3(innerWidth + 2 × bearing)`), so an exact half — 3.505 — is a value that really occurs,
- * and the two roundings disagree on it: decimal HALF_UP says «3.51», `toFixed(2)` says «3.50»,
- * because the nearest `Double` to 3.505 is 3.504999…. `BigDecimal(Double)` is that expansion
- * exactly, so a decimal tie never arises and the result equals `toFixed(2)` for every input.
- *
- * This is the one `Double` on the model and it stays here: beam length is geometry a truck is
- * loaded from, not money, and the figure being matched is the web's own rounding.
+ * The key is [beamLengthKey] — the one spelling this client has, shared with the load stepper's
+ * rows and with the map posted at `POST /api/shipments/{id}/load`, whose over-load guard compares
+ * against totals it built the same way. See that function for why the rounding is binary.
  */
 val OrderDetail.loadList: List<LoadLine>
     get() {
         val counts = LinkedHashMap<String, Int>()
         val lengths = LinkedHashMap<String, BigDecimal>()
         for (room in rooms) {
-            val scaled = BigDecimal(room.beamLength.toDouble()).setScale(2, RoundingMode.HALF_UP)
-            val key = scaled.toPlainString()
+            val key = beamLengthKey(room.beamLength)
             counts[key] = (counts[key] ?: 0) + room.beamCount
-            lengths.putIfAbsent(key, scaled)
+            lengths.putIfAbsent(key, BigDecimal(key))
         }
         return counts.map { (key, beams) -> LoadLine(key, lengths.getValue(key), beams) }
     }
@@ -155,6 +148,15 @@ val OrderDetail.totalBlocks: Int get() = rooms.sumOf { it.totalBlocks }
  *  which is the single source of truth; this is the same constant for order-detail use. */
 val ORDER_KG_PER_M2: BigDecimal = BigDecimal(180)
 
-/** [OrderSummary.totalArea] × [ORDER_KG_PER_M2] — matches the web's
- *  `Number(order.totalArea) * 180` rounded to 0 decimals. */
+/**
+ * [OrderSummary.totalArea] × [ORDER_KG_PER_M2] — matches the web's
+ * `Number(order.totalArea) * 180` rounded to 0 decimals.
+ *
+ * `totalArea` is Σ **monolith** area (`computeOrderTotals` in `src/lib/order-totals.ts`:
+ * `Σ result.monolith_area`) — the physical slab the lorry has to carry. It is deliberately not
+ * Σ [RoomLine.billedArea]: billing counts whole tiles at N × PITCH and a room is billed for more
+ * than it is poured, so the billed figure would overstate the load. Nor is it re-derived from the
+ * rows at all — the server denormalises it onto the order at placement, and computing it here
+ * would quietly disagree with the figure every other screen shows.
+ */
 val OrderDetail.weightKg: BigDecimal get() = (summary.totalArea * ORDER_KG_PER_M2).setScale(0, RoundingMode.HALF_UP)

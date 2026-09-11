@@ -24,6 +24,19 @@ class OrderDetailDerivedTest {
     }
 
     /**
+     * The rule at its source, one call from the load list and from `allowanceFor`'s caps alike.
+     * `toFixed(2)` rounds the binary double: 3.505 is stored as the nearest `Double`, 3.504999…,
+     * and reads «3.50». Decimal HALF_UP would read «3.51», and a beam posted under «3.51» is
+     * compared against a server total of zero — a permanent 422 in the yard.
+     */
+    @Test fun `beamLengthKey spells a length exactly as toFixed does`() {
+        assertEquals("3.50", beamLengthKey(BigDecimal("3.505")))
+        assertEquals("4.00", beamLengthKey(BigDecimal("4.005")))
+        assertEquals("3.30", beamLengthKey(BigDecimal("3.3")))
+        assertEquals("5.05", beamLengthKey(BigDecimal("5.05")))
+    }
+
+    /**
      * The web keys its load list with `Number(beamLength).toFixed(2)`, which rounds the binary
      * double: 3.505 is stored as the nearest `Double`, 3.504999…, and reads «3.50». A decimal
      * HALF_UP would read «3.51» and the loader's two lists would disagree on a length that the

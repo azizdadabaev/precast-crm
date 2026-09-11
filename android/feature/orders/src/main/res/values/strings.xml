@@ -63,6 +63,7 @@
     <string name="detail_cancel_reason_none">Сабаб кўрсатилмаган</string>
 
     <string name="detail_events_all">Барчаси (%1$d)</string>
+    <string name="detail_events_less">Камроқ</string>
     <string name="action_delivered">Етказилди</string>
     <string name="action_record_payment">Тўлов қайд қилиш</string>
 
