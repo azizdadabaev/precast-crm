@@ -17,7 +17,9 @@ import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.HomeSummary
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.TodayDelivery
+import uz.etalon.crm.core.model.Trend
 import java.math.BigDecimal
 import javax.inject.Inject
 
@@ -34,12 +36,22 @@ data class HomeTiles(
     val openDiscrepancyTotal: Money,
     val receivables: Money,
     val receivableOrders: Int,
+    /** Ruling R2: the collected card is the calendar **month** the server sums, not the
+     *  prototype's «ҳафталик» — the wording follows the data, never the other way round. */
+    val collectedThisMonth: Money,
+    /** Absent when the server sends no comparison (a first month has nothing to compare to). */
+    val collectedTrend: Trend?,
+    /** Twelve months oldest-first; the card's sparkline draws the last six of them. */
+    val collectedByMonth: List<Money>,
 )
 
 data class HomeUiState(
     val loading: Boolean = true,
     val error: String? = null,
     val today: List<TodayDelivery> = emptyList(),
+    /** The «Сўнгги буюртмалар» card: the most recently scheduled orders, newest first. Empty
+     *  without dashboard access, for the same reason [today] is. */
+    val recent: List<RecentOrder> = emptyList(),
     /** The signed-in operator's own queue — [uz.etalon.crm.core.data.OutboxRepository.observePendingCount]
      *  is already owner-scoped, so this is never another operator's work. */
     val pendingUploads: Int = 0,
@@ -60,6 +72,11 @@ data class HomeUiState(
      *  never share a string. Never an error affordance — the operator cannot act on a permission
      *  they don't hold, so a retry-capable red banner here would be noise, not help. */
     val showNoAccessState: Boolean get() = permissionsResolved && !hasDashboardAccess && !loading && error == null
+
+    /** The recent card's «Ҳали буюртма йўқ» follows the same rule as [showEmptyState]: it may only
+     *  appear once a permitted fetch has actually settled, so it never stands in for "still
+     *  loading" or for a refresh that failed. Until then the card is not drawn at all. */
+    val showRecentEmpty: Boolean get() = permissionsResolved && hasDashboardAccess && recent.isEmpty() && !loading && error == null
 }
 
 fun interface HomeUseCase { suspend operator fun invoke(): Result<HomeSummary> }
@@ -113,11 +130,13 @@ open class HomeViewModel(
                     _state.update {
                         it.copy(
                             loading = false, error = null,
-                            today = s.today,
+                            today = s.today, recent = s.recent,
                             tiles = HomeTiles(
                                 todayCount = s.today.size, todayArea = s.todayArea,
                                 openDiscrepancies = s.openDiscrepancies, openDiscrepancyTotal = s.openDiscrepancyTotal,
                                 receivables = s.receivables, receivableOrders = s.receivableOrders,
+                                collectedThisMonth = s.collectedThisMonth, collectedTrend = s.collectedTrend,
+                                collectedByMonth = s.collectedByMonth.map { it.collected },
                             ),
                         )
                     }
@@ -129,7 +148,10 @@ open class HomeViewModel(
                     // red banner — see the class doc.
                     if (e is AppError.Forbidden) {
                         _state.update {
-                            it.copy(loading = false, error = null, hasDashboardAccess = false, tiles = null, today = emptyList())
+                            it.copy(
+                                loading = false, error = null, hasDashboardAccess = false,
+                                tiles = null, today = emptyList(), recent = emptyList(),
+                            )
                         }
                     } else {
                         _state.update { it.copy(loading = false, error = e.message) }

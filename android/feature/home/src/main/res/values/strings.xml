@@ -1,9 +1,25 @@
 <resources>
-    <string name="home_today_section">Бугун</string>
+    <!-- The app bar row. «ETALON» is the wordmark and is the only Latin on the screen (R4). -->
+    <string name="home_brand">ETALON</string>
+    <string name="home_tagline">Йиғма монолит</string>
+    <string name="home_title">Бошқарув</string>
+    <string name="home_subtitle_suffix">барча буюртмалар бир жойда</string>
+    <string name="home_kpi_receivables">Қарздорлик</string>
+    <string name="home_kpi_receivables_note">%1$d буюртмада қолди</string>
+    <string name="home_kpi_collected">Ойлик тушум</string>
+    <string name="home_kpi_collected_up">↑ %1$s ўтган ойга нисбатан</string>
+    <string name="home_kpi_collected_down">↓ %1$s ўтган ойга нисбатан</string>
+    <string name="home_kpi_today">Бугунги етказиш</string>
+    <string name="home_kpi_today_note">%1$d буюртма</string>
+    <string name="home_recent">Сўнгги буюртмалар</string>
+    <string name="home_recent_all">Барчаси</string>
+    <string name="home_recent_empty">Ҳали буюртма йўқ</string>
+    <string name="home_paid">тўланган</string>
+    <string name="home_debt">қолди %1$s</string>
+    <string name="home_bell">Юборилмаган маълумотлар</string>
+    <string name="home_account">Ҳисоб қайдномаси</string>
+    <string name="home_close">Ёпиш</string>
     <string name="home_today_empty">Бугунга буюртма йўқ</string>
     <string name="home_today_no_access">Бугунги етказишларни кўриш ҳуқуқингиз йўқ</string>
     <string name="home_outbox_clear">Юборилмаган расм йўқ</string>
-    <string name="home_tile_today">Бугунги етказишлар</string>
-    <string name="home_tile_discrepancies">Очиқ фарқлар</string>
-    <string name="home_tile_receivables">Қарздорлик</string>
 </resources>

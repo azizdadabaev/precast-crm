@@ -174,6 +174,64 @@ class HomeViewModelTest {
         assertEquals(7, tiles.receivableOrders)
     }
 
+    /** The editorial Home's own two lists: the recent orders it renders in the white card, and
+     *  the twelve-month series its collected card draws as a sparkline. Both are carried whole —
+     *  the series is mapped to its amounts, not truncated here — and the trend rides along. */
+    @Test fun `the recent orders and the collected series reach the state whole`() = runTest {
+        val s = summary(
+            recent = listOf(recentOrder("r1"), recentOrder("r2")),
+            collectedThisMonth = Money.parse("13500000"),
+            collectedTrend = Trend(BigDecimal("8.2"), up = true),
+            collectedByMonth = (1..12).map { MonthCollected("2026-%02d".format(it), Money.parse("${it}000000")) },
+        )
+        val vm = viewModel(home = { Result.success(s) })
+        advanceUntilIdle()
+        val tiles = vm.state.value.tiles!!
+        assertEquals(2, vm.state.value.recent.size)
+        assertEquals(listOf("r1", "r2"), vm.state.value.recent.map { it.orderId })
+        assertEquals(12, tiles.collectedByMonth.size)
+        assertEquals(Money.parse("12000000"), tiles.collectedByMonth.last())
+        assertEquals(Money.parse("13500000"), tiles.collectedThisMonth)
+        assertEquals(BigDecimal("8.2"), tiles.collectedTrend?.deltaPct)
+        assertTrue(tiles.collectedTrend?.up == true)
+    }
+
+    /** «Ҳали буюртма йўқ» is a claim about the server, not about the screen: it may only be made
+     *  once a permitted fetch has settled — never while loading and never over a failed refresh. */
+    @Test fun `the recent empty state waits for a settled fetch`() = runTest {
+        val failing = viewModel(home = { Result.failure(IOException("no net")) })
+        assertFalse(failing.state.value.showRecentEmpty, "still loading")
+        advanceUntilIdle()
+        assertFalse(failing.state.value.showRecentEmpty, "an error banner is showing")
+
+        val empty = viewModel(home = { Result.success(summary(recent = emptyList())) })
+        advanceUntilIdle()
+        assertTrue(empty.state.value.showRecentEmpty)
+
+        val noAccess = viewModel(permissions = { false })
+        advanceUntilIdle()
+        assertFalse(noAccess.state.value.showRecentEmpty, "withheld, not empty")
+    }
+
+    /** A withdrawn permission clears the recent card along with the rest — a stale list of other
+     *  people's orders left standing under a "cannot check" sheet is the worst of both states. */
+    @Test fun `a 403 clears the recent orders too`() = runTest {
+        var forbidden = false
+        val vm = viewModel(
+            home = {
+                if (forbidden) Result.failure(ApiException(403, "Рухсат йўқ · Permission denied"))
+                else Result.success(summary(recent = listOf(recentOrder("r1"))))
+            },
+        )
+        advanceUntilIdle()
+        assertEquals(1, vm.state.value.recent.size)
+
+        forbidden = true
+        vm.refresh()
+        advanceUntilIdle()
+        assertEquals(emptyList<RecentOrder>(), vm.state.value.recent)
+    }
+
     // ── the operator's own outbox status ─────────────────────────────────────────────
 
     @Test fun `the pending upload count tracks the outbox flow`() = runTest {
@@ -202,6 +260,12 @@ class HomeViewModelTest {
     private fun delivery(id: String) = TodayDelivery(
         orderId = id, orderNumber = "ORD-$id", clientName = "Навоий Build", clientAddress = "Навоий кўча 1",
         area = BigDecimal("10.000"), status = OrderStatus.PLACED, totalPrice = Money.parse("1000000"), remaining = Money.parse("1000000"),
+    )
+
+    private fun recentOrder(id: String) = RecentOrder(
+        orderId = id, orderNumber = "ORD-$id", clientName = "Навоий Build", status = OrderStatus.PLACED,
+        scheduledAt = java.time.Instant.parse("2026-09-04T06:00:00Z"),
+        totalPrice = Money.parse("1000000"), remaining = Money.parse("1000000"),
     )
 
     private fun summary(

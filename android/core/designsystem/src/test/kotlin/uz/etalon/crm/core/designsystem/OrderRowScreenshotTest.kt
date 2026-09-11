@@ -47,19 +47,21 @@ private val SEGMENTS = listOf(
 
 /**
  * @param debt null = settled, which is the only difference between the red line and the green one.
+ * @param status null = the untagged variant Home's «Бугунги етказиш» sheet uses.
  */
 private data class Sample(
     val client: String,
-    val status: OrderStatus,
+    val status: OrderStatus?,
     val meta: String,
     val total: String,
     val debt: String?,
 )
 
 /**
- * `2b-orders.png`'s own rows, with two additions the prototype does not show and a reviewer needs:
- * a CANCELED row (the fifth tag family) and a client name long enough that the title has to
- * ellipsize while the amount column keeps its full width.
+ * `2b-orders.png`'s own rows, with three additions the prototype's orders list does not show and a
+ * reviewer needs: a CANCELED row (the fifth tag family), a client name long enough that the title
+ * has to ellipsize while the amount column keeps its full width, and the untagged row Home's
+ * «Бугунги етказиш» sheet draws, whose meta line stands alone where the tag row was.
  */
 private val SAMPLES = listOf(
     Sample("Fergana Dom", OrderStatus.PLACED, "№ 09−0005 · 36,5 м²", "6210000.00", "6210000.00"),
@@ -70,6 +72,7 @@ private val SAMPLES = listOf(
         "Andijon Qurilish Materiallari Savdo Markazi MChJ", OrderStatus.CANCELED,
         "№ 08−0002 · 42,6 м²", "4947920.00", "4947920.00",
     ),
+    Sample("BuildPro Group", null, "Тошкент · Мирзо-Улуғбек · 42,6 м²", "7340840.00", "4340840.00"),
 )
 
 /**

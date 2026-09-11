@@ -39,6 +39,9 @@ import uz.etalon.crm.core.model.OrderStatus
  * The row takes strings for everything the *screen* words and [Money] for everything that is
  * money, so no Uzbek copy and no number formatting is invented inside the design system.
  *
+ * @param status null draws no tag and lifts the meta line up beside the avatar on its own. Home's
+ *   «Бугунги етказиш» rows are the case: everything on that sheet is scheduled for today, so the
+ *   tag would repeat what the sheet's own title says (`2b-home.png`).
  * @param metaLine already composed by the caller, e.g. "№ 09−0003 · 78,7 м²".
  * @param debt the server's `remaining` — it counts write-offs, so it is never re-derived here.
  *   `null` or zero renders [paidLabel].
@@ -52,7 +55,7 @@ import uz.etalon.crm.core.model.OrderStatus
 @Composable
 fun OrderRow(
     clientName: String,
-    status: OrderStatus,
+    status: OrderStatus?,
     metaLine: String,
     total: Money,
     debt: Money?,
@@ -101,8 +104,10 @@ fun OrderRow(
             )
             Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                StatusTag(status, if (onDark) TagSurface.ROW_ON_NAVY else TagSurface.ROW_ON_LIGHT, short = true)
-                Spacer(Modifier.width(6.dp))
+                if (status != null) {
+                    StatusTag(status, if (onDark) TagSurface.ROW_ON_NAVY else TagSurface.ROW_ON_LIGHT, short = true)
+                    Spacer(Modifier.width(6.dp))
+                }
                 Text(
                     metaLine,
                     style = EtalonType.meta,
