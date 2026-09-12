@@ -17,6 +17,16 @@ import javax.inject.Inject
 /** Seam so the ViewModel is testable without Hilt. */
 fun interface LoginUseCase { suspend operator fun invoke(loginName: String, pin: String): Result<Me> }
 
+/**
+ * The PIN this app signs in with is four digits — the length the server's own `pin` field holds.
+ *
+ * One constant for the whole module: the login pad submits on the fourth digit, the dots draw four
+ * of them, and Change PIN caps all three of its fields at it. Three separate `4`s were three places
+ * to miss if the server ever took five, and one of them was in a screen rather than beside the
+ * rule.
+ */
+internal const val PIN_LENGTH = 4
+
 data class LoginUiState(val loginName: String = "", val pin: String = "", val isSubmitting: Boolean = false, val error: String? = null, val done: Me? = null)
 
 open class LoginViewModel(private val login: LoginUseCase, initialLoginName: String) : ViewModel() {
@@ -27,14 +37,14 @@ open class LoginViewModel(private val login: LoginUseCase, initialLoginName: Str
     fun backspace() = _state.update { it.copy(pin = it.pin.dropLast(1), error = null) }
     fun pressDigit(d: Char) {
         if (!d.isDigit() || _state.value.isSubmitting) return
-        val next = (_state.value.pin + d).take(4)
+        val next = (_state.value.pin + d).take(PIN_LENGTH)
         _state.update { it.copy(pin = next, error = null) }
-        if (next.length == 4) submit()
+        if (next.length == PIN_LENGTH) submit()
     }
     fun submit() {
         val s = _state.value
         if (s.loginName.isBlank()) { _state.update { it.copy(error = "Логин киритинг", pin = "") }; return }
-        if (s.pin.length != 4) return
+        if (s.pin.length != PIN_LENGTH) return
         _state.update { it.copy(isSubmitting = true) }
         viewModelScope.launch {
             login(s.loginName, s.pin).fold(

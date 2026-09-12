@@ -66,6 +66,18 @@ fun formatDecimal(v: BigDecimal, maxDigits: Int = 1): String {
 fun formatArea(m2: BigDecimal): String = formatDecimal(m2, 2) + " м²"
 fun formatCount(n: Int): String = groupThousands(n.toString()) + " та"
 
+/**
+ * A count with no counter word: «312», «8», «1 240» — grouped by the same thin space every other
+ * figure in the app is, so a four-digit count never reads as two numbers.
+ *
+ * For counts a sentence already names: «312 мижоздан», «2 буюртма», «8 хона». [formatCount]'s
+ * « та» is Uzbek's own counter and belongs where the noun is absent («Буюртмалар · 7 та»);
+ * repeating it in front of a noun that follows («312 та мижоздан 8 таси») is a register the
+ * prototype's rows never use. Passing the raw `%1$d` instead is the other half of the bug — it
+ * drops the grouping and prints «1240».
+ */
+fun formatCountBare(n: Int): String = groupThousands(n.toString())
+
 /** A discount percentage, e.g. "10%" or "13,33%" — the calculator's discount field. */
 fun formatPercent(v: BigDecimal, decimals: Int = 2): String = formatDecimal(v, decimals) + "%"
 

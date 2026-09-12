@@ -448,7 +448,7 @@ fun RecordPaymentScreen(
                             // gate there asked the operator to confirm on the navy panel in front of
                             // the customer and then recorded nothing. `RecordGateTest` pins it.
                             PrimaryButton(
-                                text = stringResource(R.string.action_record_payment),
+                                text = stringResource(R.string.record_action_submit),
                                 onClick = {
                                     if (!s.isOffline && validateRecord(s) == null) gateOpen = true else onSubmit()
                                 },
@@ -593,7 +593,7 @@ fun RecordPaymentScreen(
                     )
                 },
                 dismissText = stringResource(DesignSystemR.string.ds_action_cancel),
-                confirmText = stringResource(R.string.action_record_payment),
+                confirmText = stringResource(R.string.record_action_submit),
                 onDismiss = { gateOpen = false },
                 // The gate closes and the screen behind it carries the outcome — the spinner while
                 // the call is in flight, the reason if it fails. A refused record must land where

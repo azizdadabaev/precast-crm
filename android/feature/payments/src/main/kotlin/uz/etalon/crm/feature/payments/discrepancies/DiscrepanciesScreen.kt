@@ -375,11 +375,11 @@ private fun DiscrepancyRow(
 }
 
 /** `№ 09−0003 · Жасур · 3 сен` — §3.5's meta line, the driver named plainly the way the queue's own
- *  row names whoever recorded a payment. */
-@Composable
-private fun metaLine(d: Discrepancy, now: Instant): String = listOfNotNull(
+ *  row names whoever recorded a payment. An unnamed driver keeps its slot as [UNKNOWN] rather than
+ *  vanishing, so the row reads the same three ways round as the gate tile below it does. */
+private fun metaLine(d: Discrepancy, now: Instant): String = listOf(
     formatOrderNo(d.orderNumber),
-    d.driverName,
+    d.driverName ?: UNKNOWN,
     formatScheduleDate(d.reportedAt, now),
 ).joinToString(" · ")
 

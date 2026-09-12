@@ -58,7 +58,7 @@ private val SHELL_NAV_PILL_INSET = 84.dp
  *  merged resources of the module under test and this string is defined one module down. */
 private const val CONFIRM = "Тасдиқлаш"
 
-/** `action_record_payment` — the button that opens the record screen's summary gate. */
+/** `record_action_submit` — the button that opens the record screen's summary gate. */
 private const val RECORD = "Қайд этиш"
 
 /** `discrepancy_action_resolve` — the resolve sheet's primary, which opens its summary gate. */

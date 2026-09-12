@@ -18,14 +18,14 @@ data class ChangePinUiState(val current: String = "", val next: String = "", val
 open class ChangePinViewModel(private val changePin: ChangePinUseCase) : ViewModel() {
     private val _state = MutableStateFlow(ChangePinUiState())
     val state = _state.asStateFlow()
-    fun setCurrent(v: String) = _state.update { it.copy(current = v.filter(Char::isDigit).take(4), error = null) }
-    fun setNext(v: String) = _state.update { it.copy(next = v.filter(Char::isDigit).take(4), error = null) }
-    fun setConfirm(v: String) = _state.update { it.copy(confirm = v.filter(Char::isDigit).take(4), error = null) }
+    fun setCurrent(v: String) = _state.update { it.copy(current = v.filter(Char::isDigit).take(PIN_LENGTH), error = null) }
+    fun setNext(v: String) = _state.update { it.copy(next = v.filter(Char::isDigit).take(PIN_LENGTH), error = null) }
+    fun setConfirm(v: String) = _state.update { it.copy(confirm = v.filter(Char::isDigit).take(PIN_LENGTH), error = null) }
     fun submit(forced: Boolean) {
         val s = _state.value
-        if (s.next.length != 4) { _state.update { it.copy(error = "Янги PIN 4 та рақам бўлиши керак") }; return }
+        if (s.next.length != PIN_LENGTH) { _state.update { it.copy(error = "Янги PIN 4 та рақам бўлиши керак") }; return }
         if (s.next != s.confirm) { _state.update { it.copy(error = "PIN лар мос эмас") }; return }
-        if (!forced && s.current.length != 4) { _state.update { it.copy(error = "Жорий PIN керак") }; return }
+        if (!forced && s.current.length != PIN_LENGTH) { _state.update { it.copy(error = "Жорий PIN керак") }; return }
         _state.update { it.copy(isSubmitting = true) }
         viewModelScope.launch {
             changePin(if (forced) "" else s.current, s.next).fold(

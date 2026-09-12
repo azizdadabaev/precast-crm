@@ -1,11 +1,6 @@
 package uz.etalon.crm.core.designsystem.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,9 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.R
@@ -35,9 +28,7 @@ import uz.etalon.crm.core.designsystem.icon.EtalonIcon
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
-import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
-import uz.etalon.crm.core.designsystem.theme.etalonRipple
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.ui.format.MONEY_UNIT
 import uz.etalon.crm.core.ui.format.formatMoney
@@ -146,22 +137,15 @@ fun NumericKeypad(
 }
 
 /** §2's key: `md` on the page ground with the system's hairline — the keypad is a table of
- *  numeric inputs, and it wears the same skin as one. */
+ *  numeric inputs, and it wears the same skin as one. The ripple is the whole press here: this pad
+ *  sits inside a sheet at arm's length, unlike the PIN pad, so [EtalonKey] gets the same colour
+ *  for its resting and pressed fills. */
 @Composable
-private fun RowScope.KeypadKey(onClick: () -> Unit, content: @Composable BoxScope.() -> Unit) = Box(
-    Modifier
-        .weight(1f)
-        .height(KEY_HEIGHT)
-        .clip(EtalonShapes.md)
-        .background(EtalonColors.page)
-        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.md)
-        .clickable(
-            role = Role.Button,
-            indication = etalonRipple(),
-            interactionSource = remember { MutableInteractionSource() },
-            onClick = onClick,
-        ),
-    contentAlignment = Alignment.Center,
+private fun RowScope.KeypadKey(onClick: () -> Unit, content: @Composable BoxScope.() -> Unit) = EtalonKey(
+    height = KEY_HEIGHT,
+    fill = EtalonColors.page,
+    pressedFill = EtalonColors.page,
+    onClick = onClick,
     content = content,
 )
 

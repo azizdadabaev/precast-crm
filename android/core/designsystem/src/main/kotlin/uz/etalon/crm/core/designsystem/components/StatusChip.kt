@@ -160,8 +160,12 @@ internal fun ChipTone.family() = when (this) {
 fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) =
     Tag(tone.family(), text, TagSurface.ROW_ON_LIGHT, modifier)
 
-// ── The six typed chips. Call [StatusTag] and friends instead; these survive so that twelve
-// feature files compile until their screens are redrawn in phases 2–5. ──────────────────────────
+// ── The six typed chips. Call [StatusTag] and friends instead; these survive so that the
+// remaining feature files compile until their screens are redrawn in phase 5. Phase 3 emptied
+// [DiscrepancyStatusChip]'s last caller (the discrepancies screen now draws `DiscrepancyStatusTag`
+// on navy), so it has no production use left — kept only because deleting one of a matched set
+// while its five siblings wait for phase 5 would make the group read as arbitrary. It goes with
+// them. ─────────────────────────────────────────────────────────────────────────────────────────
 @Composable fun StatusChip(status: OrderStatus, modifier: Modifier = Modifier) =
     StatusTag(status, TagSurface.ROW_ON_LIGHT, modifier = modifier)
 @Composable fun PaymentChip(state: PaymentState, modifier: Modifier = Modifier) =

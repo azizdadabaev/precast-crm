@@ -33,7 +33,7 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 
-/** `action_record_payment`, and `:core:designsystem`'s `ds_action_cancel`. «Бекор қилиш» exists ONLY
+/** `record_action_submit`, and `:core:designsystem`'s `ds_action_cancel`. «Бекор қилиш» exists ONLY
  *  on the navy gate — the screen's own bar is a single «Қайд этиш» — so its presence IS "the gate is
  *  open". «Қайд этиш» appears twice once it is: the bar's button and the gate's confirm. */
 private const val RECORD = "Қайд этиш"

@@ -5,14 +5,14 @@
     <string name="clients_title">Мижозлар</string>
     <!-- What the list is ordered by is said out loud: the biggest customer is at the top, and
          nothing else on the screen would explain why. -->
-    <string name="clients_subtitle">%1$d мижоз · жами айланма бўйича</string>
+    <string name="clients_subtitle">%1$s мижоз · жами айланма бўйича</string>
     <string name="clients_search_hint">Исм ёки телефон рақами</string>
     <string name="clients_empty">Мижоз топилмади</string>
     <string name="clients_action_add">Мижоз қўшиш</string>
-    <string name="clients_truncated">%1$d та мижоздан %2$d таси кўрсатилди. Керакли мижозни қидирув орқали топинг</string>
+    <string name="clients_truncated">%1$s мижоздан %2$s таси кўрсатилди. Керакли мижозни қидирув орқали топинг</string>
     <!-- The list row's second line, worded as `2b-clients.png` draws it («1 буюртма»). Uzbek
          counts a noun after a numeral in the singular, so there is no plural form to declare. -->
-    <string name="client_order_count">%1$d буюртма</string>
+    <string name="client_order_count">%1$s буюртма</string>
     <!-- the detail panel: caption over the client's name, and its two footer columns. «Қарз» is
          deliberately absent — GET /api/clients/{id} carries no remaining, and a receivable
          figure is never derived on the phone. -->

@@ -47,9 +47,6 @@ import uz.etalon.crm.core.model.Me
 /** §3.7's PIN indicator: four 12 dp dots. Named because the dot is one drawn object, not spacing. */
 private val PIN_DOT = 12.dp
 
-/** The PIN this app signs in with is four digits — [LoginViewModel] submits on the fourth. */
-private const val PIN_LENGTH = 4
-
 /** A hairline of motion, not Material's 4 dp bar: the screen is already flat and white. */
 private val PROGRESS_HEIGHT = 2.dp
 

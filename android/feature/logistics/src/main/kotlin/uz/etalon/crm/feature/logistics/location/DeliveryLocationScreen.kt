@@ -202,7 +202,10 @@ fun DeliveryLocationScreen(
 
                 PrimaryButton(
                     text = stringResource(R.string.location_my_position),
-                    enabled = !permanentlyDenied && !s.busy,
+                    // Only the real blocker. `loading` already takes the click away — the buttons
+                    // are `enabled && !loading` — so `&& !s.busy` here just painted the disabled
+                    // skin over a fix that is already running.
+                    enabled = !permanentlyDenied,
                     loading = s.busy,
                     onClick = {
                         if (granted) onUseMyLocation()
@@ -232,7 +235,7 @@ fun DeliveryLocationScreen(
                 )
                 SecondaryButton(
                     text = stringResource(R.string.location_resolve), onClick = onResolveLink,
-                    enabled = s.linkInput.isNotBlank() && !s.busy && !s.isOffline, loading = s.busy,
+                    enabled = s.linkInput.isNotBlank() && !s.isOffline, loading = s.busy,
                 )
 
                 OutlinedTextField(

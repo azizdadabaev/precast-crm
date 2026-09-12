@@ -178,7 +178,10 @@ private fun AddDriverSheet(submitting: Boolean, onDismiss: () -> Unit, onCreate:
             PrimaryButton(
                 stringResource(R.string.action_add_driver),
                 onClick = { onCreate(name, "998$phoneDigits", notes.ifBlank { null }) },
-                enabled = !submitting, loading = submitting,
+                // `loading` already takes the click away (PrimaryButton: enabled && !loading), so a
+                // separate `enabled = !submitting` only repeated it — and repeating it paints the
+                // disabled skin over a save that IS going through.
+                loading = submitting,
             )
         }
     }

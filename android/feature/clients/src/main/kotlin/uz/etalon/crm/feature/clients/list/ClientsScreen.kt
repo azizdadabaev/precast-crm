@@ -49,6 +49,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.ClientSummary
 import uz.etalon.crm.core.ui.format.formatAddressLine
+import uz.etalon.crm.core.ui.format.formatCountBare
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.feature.clients.R
@@ -125,7 +126,7 @@ fun ClientsScreen(
                 // `s.total` is what the server says MATCHED, not how many rows arrived — the same
                 // figure `showTruncatedNotice` compares the loaded page against.
                 Text(
-                    stringResource(R.string.clients_subtitle, s.total),
+                    stringResource(R.string.clients_subtitle, formatCountBare(s.total)),
                     style = EtalonType.meta,
                     color = EtalonColors.ink2,
                 )
@@ -175,7 +176,15 @@ fun ClientsScreen(
                     // operator who has not found their customer would otherwise conclude the
                     // customer is not in the CRM.
                     if (s.showTruncatedNotice) {
-                        item { NoticeBanner(stringResource(R.string.clients_truncated, s.total, s.items.size)) }
+                        item {
+                            NoticeBanner(
+                                stringResource(
+                                    R.string.clients_truncated,
+                                    formatCountBare(s.total),
+                                    formatCountBare(s.items.size),
+                                ),
+                            )
+                        }
                     }
                 }
             }
@@ -236,7 +245,8 @@ private fun ClientCard(items: List<ClientSummary>, onOpenClient: (String) -> Uni
             status = null,
             // An address is optional and `formatAddressLine` says so with null, so the separator
             // is only drawn when there is something on both sides of it.
-            metaLine = listOfNotNull(formatPhone(c.phone), formatAddressLine(c.address)).joinToString(" · "),
+            metaLine = listOfNotNull(formatPhone(c.phone).ifBlank { null }, formatAddressLine(c.address))
+                .joinToString(" · "),
             total = c.totalBooked,
             // A client is not an order: nothing here is owed or settled, so neither of the row's
             // money lines applies and the slot below the figure is the order count instead.
@@ -245,7 +255,7 @@ private fun ClientCard(items: List<ClientSummary>, onOpenClient: (String) -> Uni
             debtLabel = { formatMoney(it) },
             onDark = false,
             onClick = { onOpenClient(c.id) },
-            trailing = { Text(stringResource(R.string.client_order_count, c.orderCount)) },
+            trailing = { Text(stringResource(R.string.client_order_count, formatCountBare(c.orderCount))) },
         )
     }
 }

@@ -61,6 +61,7 @@ import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentFilter
 import uz.etalon.crm.core.model.owesNothing
 import uz.etalon.crm.core.ui.format.formatArea
+import uz.etalon.crm.core.ui.format.formatCountBare
 import uz.etalon.crm.core.ui.format.formatDate
 import uz.etalon.crm.core.ui.format.formatMonthYear
 import uz.etalon.crm.core.ui.format.formatMoney
@@ -144,7 +145,7 @@ fun OrdersListScreen(
                 Text(stringResource(R.string.orders_title), style = EtalonType.displayTitle, color = EtalonColors.ink)
                 s.facets?.let {
                     Text(
-                        stringResource(R.string.orders_count_area, it.total, formatArea(it.totalArea)),
+                        stringResource(R.string.orders_count_area, formatCountBare(it.total), formatArea(it.totalArea)),
                         style = EtalonType.meta,
                         color = EtalonColors.ink2,
                     )
