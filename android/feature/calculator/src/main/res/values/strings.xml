@@ -155,14 +155,16 @@
     <string name="calc_action_share">Юбориш</string>
     <string name="calc_share_failed">Расмни тайёрлаб бўлмади</string>
     <string name="calc_quote_share_subject">Ҳисоб-китоб</string>
-    <!-- Company header on the shared quote card — a brand name/tagline, not translated content;
-         values match precast-crm/src/lib/table-design-config.ts's DEFAULT_TABLE_DESIGN. -->
-    <string name="calc_quote_company">EtalonSlabs</string>
-    <string name="calc_quote_company_tagline">Yig\'ma monolit</string>
+    <!-- The shared card's header: the app's own wordmark and tagline, the ones Home's app bar
+         carries, so a customer's copy and the operator's screen read as one product. «ETALON» is
+         Latin by design — it is the wordmark, not translated content. The discount, delivery and
+         other lines the card used to name itself are now the place-order sheet's own
+         `calc_place_summary_*` strings: one roll-up, one set of words. -->
+    <string name="calc_quote_company">ETALON</string>
+    <string name="calc_quote_company_tagline">Йиғма монолит</string>
     <string name="calc_quote_company_phone">998934813330</string>
     <string name="calc_quote_room_unnamed">Номсиз хона</string>
-    <!-- Shown on the shared card only while a discount is actually applied, so a customer never
-         reads a Жами lower than the rooms above it with nothing to explain the difference. -->
-    <string name="calc_quote_discount">Чегирма</string>
-    <string name="calc_quote_discount_percent">Чегирма %1$s</string>
+    <!-- The room's own measurements under its name on the shared card — what the price was quoted
+         against, so a customer can check the figure came from their room. -->
+    <string name="calc_quote_room_dims">%1$s × %2$s м</string>
 </resources>

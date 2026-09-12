@@ -8,11 +8,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uz.etalon.crm.core.data.CalculatorRepository
 import uz.etalon.crm.core.data.HomeRepository
 import uz.etalon.crm.core.data.OutboxRepository
 import uz.etalon.crm.core.data.PermissionGate
+import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.HomeSummary
@@ -55,6 +58,11 @@ data class HomeUiState(
     /** The signed-in operator's own queue — [uz.etalon.crm.core.data.OutboxRepository.observePendingCount]
      *  is already owner-scoped, so this is never another operator's work. */
     val pendingUploads: Int = 0,
+    /** Orders the server permanently refused while they sat in that queue (design D10, ruling R6).
+     *  By the time a rejection arrives the calculator has long been cleared, so the bell is the
+     *  only surface that can tell the operator it happened — see
+     *  [uz.etalon.crm.core.data.CalculatorRepository.observeRejectedOrders]. */
+    val rejectedOrders: List<RejectedOrder> = emptyList(),
     /** "Not yet known" is not "no" — nothing about the tiles renders before this is true. */
     val permissionsResolved: Boolean = false,
     val hasDashboardAccess: Boolean = false,
@@ -62,6 +70,11 @@ data class HomeUiState(
      *  [HomeTiles]) whenever the operator lacks `dashboard.viewBasic`/`dashboard.view`. */
     val tiles: HomeTiles? = null,
 ) {
+    /** What the bell badges: work still unsent PLUS rejections nobody has read yet. Both are the
+     *  operator's own outbox and both are dismissed from the one sheet, so one dot counts them —
+     *  a rejection that showed no badge would sit unread behind a bell that looked idle. */
+    val outboxBadge: Int get() = pendingUploads + rejectedOrders.size
+
     /** A genuine "nothing scheduled today" — never true while loading, while an error banner
      *  shows, or without dashboard access. That last exclusion matters: without it, a DRIVER
      *  reading this text sees «Бугунга буюртма йўқ» when the truth is "cannot check", which may
@@ -82,6 +95,8 @@ data class HomeUiState(
 fun interface HomeUseCase { suspend operator fun invoke(): Result<HomeSummary> }
 fun interface HomePermissionUseCase { suspend operator fun invoke(action: String): Boolean }
 fun interface HomeOutboxUseCase { operator fun invoke(): Flow<Int> }
+fun interface HomeRejectedOrdersUseCase { operator fun invoke(): Flow<List<RejectedOrder>> }
+fun interface DiscardRejectedOrderUseCase { suspend operator fun invoke(id: String) }
 
 /**
  * The «Бугун» column. Every signed-in operator gets one — this ViewModel needs no permission to
@@ -100,6 +115,10 @@ open class HomeViewModel(
     private val home: HomeUseCase,
     private val permissions: HomePermissionUseCase,
     outboxPending: HomeOutboxUseCase,
+    // Defaulted to nothing at all so the existing tests — and any caller that has no interest in
+    // the queue — need not know these exist. A Home with no rejections is the ordinary Home.
+    rejectedOrders: HomeRejectedOrdersUseCase = HomeRejectedOrdersUseCase { flowOf(emptyList()) },
+    private val discardRejected: DiscardRejectedOrderUseCase = DiscardRejectedOrderUseCase { },
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -113,6 +132,17 @@ open class HomeViewModel(
         viewModelScope.launch {
             outboxPending().collectLatest { n -> _state.update { it.copy(pendingUploads = n) } }
         }
+        // Rejections outlive the quote they came from, so this is collected for the whole life of
+        // the screen rather than once: one can land while Home is already open.
+        viewModelScope.launch {
+            rejectedOrders().collectLatest { rows -> _state.update { it.copy(rejectedOrders = rows) } }
+        }
+    }
+
+    /** «Тушунарли» on the outbox sheet: the operator has read the rejection and the row goes for
+     *  good. The list refreshes itself — the flow above is watching the same rows. */
+    fun discardRejectedOrder(id: String) {
+        viewModelScope.launch { discardRejected(id) }
     }
 
     /** Pull-to-refresh and the error banner's retry. A no-op without dashboard access: there is
@@ -167,8 +197,11 @@ class HiltHomeViewModel @Inject constructor(
     home: HomeRepository,
     outbox: OutboxRepository,
     permissions: PermissionGate,
+    calculator: CalculatorRepository,
 ) : HomeViewModel(
     home = HomeUseCase { home.home() },
     permissions = HomePermissionUseCase { action -> permissions.can(action) },
     outboxPending = HomeOutboxUseCase { outbox.observePendingCount() },
+    rejectedOrders = HomeRejectedOrdersUseCase { calculator.observeRejectedOrders() },
+    discardRejected = DiscardRejectedOrderUseCase { id -> calculator.discardRejectedOrder(id) },
 )

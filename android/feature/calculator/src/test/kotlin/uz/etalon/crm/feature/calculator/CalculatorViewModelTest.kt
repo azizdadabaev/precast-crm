@@ -31,7 +31,6 @@ import uz.etalon.crm.core.calc.money
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
-import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.network.ApiException
 import uz.etalon.crm.core.model.Money
@@ -84,8 +83,6 @@ class CalculatorViewModelTest {
         saveDraft: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.success("proj-1") },
         placeOrder: PlaceOrderUseCase = PlaceOrderUseCase { _, _ -> Result.success("order-1") },
         queuePlaceOrder: QueuePlaceOrderUseCase = QueuePlaceOrderUseCase { _, key -> Result.success(key) },
-        rejected: ObserveRejectedOrdersUseCase = ObserveRejectedOrdersUseCase { flowOf(emptyList()) },
-        discardRejected: DiscardRejectedOrderUseCase = DiscardRejectedOrderUseCase { },
         saved: SavedStateHandle = SavedStateHandle(),
     ) = CalculatorViewModel(
         session = FakeSessionPricing(defaultAndroidPricing()),
@@ -93,7 +90,6 @@ class CalculatorViewModelTest {
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
         observeDraft = observeDraft, persistDraft = persistDraft, clearDraftUseCase = clearDraft, saveDraftUseCase = saveDraft,
         placeOrderUseCase = placeOrder, queuePlaceOrderUseCase = queuePlaceOrder,
-        observeRejectedOrders = rejected, discardRejectedOrderUseCase = discardRejected,
         saved = saved,
     )
 
@@ -1171,26 +1167,4 @@ class CalculatorViewModelTest {
         assertNotEquals(keys[0], keys[1])
     }
 
-    /**
-     * A queued order the server later refuses has nowhere else to surface — it never became an
-     * order, so no order screen lists it, and the quote it came from was cleared the moment it was
-     * queued. The calculator is where the operator finds out, and «Тозалаш» must not be a way to
-     * lose that: it belongs to a different quote entirely.
-     */
-    @Test fun `a rejected queued order stays visible, and survives Тозалаш`() = runTest {
-        val discarded = mutableListOf<String>()
-        val rejected = RejectedOrder(id = "row-1", clientName = "Aziz", message = "Мижоз манзили керак")
-        val v = vm(
-            rejected = ObserveRejectedOrdersUseCase { flowOf(listOf(rejected)) },
-            discardRejected = DiscardRejectedOrderUseCase { id -> discarded += id },
-        )
-        advanceUntilIdle()
-
-        assertEquals(listOf(rejected), v.state.value.rejectedOrders)
-        v.clearAll(); advanceUntilIdle()
-        assertEquals(listOf(rejected), v.state.value.rejectedOrders)
-
-        v.discardRejectedOrder("row-1"); advanceUntilIdle()
-        assertEquals(listOf("row-1"), discarded)
-    }
 }

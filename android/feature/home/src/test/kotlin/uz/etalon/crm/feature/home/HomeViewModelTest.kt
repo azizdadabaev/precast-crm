@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.model.HomeSummary
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.MonthCollected
@@ -246,16 +247,50 @@ class HomeViewModelTest {
         assertEquals(2, vm.state.value.pendingUploads)
     }
 
+    /**
+     * D10 / R6: a rejected queued order is unfinished work like any unsent upload, and the bell is
+     * the only place it can be found — a rejection that left the badge dark would sit unread
+     * behind a bell that looked idle. So the dot counts BOTH, and «Тушунарли» discards by id.
+     */
+    @Test fun `the bell counts rejected orders beside the pending uploads`() = runTest {
+        val discarded = mutableListOf<String>()
+        val rejected = MutableStateFlow(
+            listOf(RejectedOrder(id = "row-1", clientName = "Karimov LLC", message = "Мижоз топилмади")),
+        )
+        val vm = viewModel(
+            outboxPending = { flowOf(2) },
+            rejectedOrders = { rejected },
+            discardRejected = { id -> discarded += id },
+        )
+        advanceUntilIdle()
+
+        assertEquals(rejected.value, vm.state.value.rejectedOrders)
+        assertEquals(3, vm.state.value.outboxBadge, "two uploads plus one rejection")
+
+        vm.discardRejectedOrder("row-1")
+        advanceUntilIdle()
+        assertEquals(listOf("row-1"), discarded)
+
+        // The list is the flow's, not the ViewModel's: the row leaves only once the outbox says so.
+        rejected.value = emptyList()
+        advanceUntilIdle()
+        assertEquals(2, vm.state.value.outboxBadge)
+    }
+
     // ── fixtures ──────────────────────────────────────────────────────────────────
 
     private fun viewModel(
         home: suspend () -> Result<HomeSummary> = { Result.success(summary()) },
         permissions: suspend (String) -> Boolean = { true },
         outboxPending: () -> kotlinx.coroutines.flow.Flow<Int> = { flowOf(0) },
+        rejectedOrders: () -> kotlinx.coroutines.flow.Flow<List<RejectedOrder>> = { flowOf(emptyList()) },
+        discardRejected: suspend (String) -> Unit = { },
     ) = HomeViewModel(
         home = HomeUseCase { home() },
         permissions = HomePermissionUseCase { permissions(it) },
         outboxPending = HomeOutboxUseCase { outboxPending() },
+        rejectedOrders = HomeRejectedOrdersUseCase { rejectedOrders() },
+        discardRejected = DiscardRejectedOrderUseCase { id -> discardRejected(id) },
     )
 
     private fun delivery(id: String) = TodayDelivery(

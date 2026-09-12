@@ -27,4 +27,11 @@
     <!-- «маълумот», not «расм»: a queued PLACE_ORDER row counts here too, and the sheet's own
          title and its `outbox_pending` plural both already say маълумот. -->
     <string name="home_outbox_clear_data">Юборилмаган маълумот йўқ</string>
+    <!-- D10 / R6: queued orders the server refused outright. They cannot retry themselves, so the
+         operator reads each one and dismisses it with «Тушунарли» — the row is then gone for good. -->
+    <string name="home_outbox_rejected_title">Рад этилган буюртмалар</string>
+    <string name="home_outbox_rejected_ack">Тушунарли</string>
+    <!-- A queued row whose payload carried no client name — the operator still has to be able to
+         tell the rows apart and dismiss the right one. -->
+    <string name="home_outbox_rejected_no_client">Номсиз мижоз</string>
 </resources>

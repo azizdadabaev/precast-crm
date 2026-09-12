@@ -16,6 +16,7 @@ import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.ui.regions.ParsedAddress
+import java.time.Instant
 
 /**
  * [QuoteCard] pins its own light-only layout — see that composable's own KDoc for why. Rendered
@@ -52,10 +53,14 @@ class QuoteCardScreenshotTest {
         )
     }
 
+    /** A fixed day, never `Instant.now()`: the card carries the date it was made, and a baseline
+     *  that re-dates itself every morning fails `verifyRoborazziDebug` on a frame nobody touched. */
+    private val made = Instant.parse("2026-09-11T06:00:00Z")
+
     @Test
     @Config(qualifiers = "w411dp-h891dp")
     fun quoteCardIsAlwaysLight() {
-        rule.setContent { EtalonTheme(darkTheme = true) { QuoteCard(state()) } }
+        rule.setContent { EtalonTheme(darkTheme = true) { QuoteCard(state(), now = made) } }
         rule.onRoot().captureRoboImage("screenshots/quote_card_light.png")
     }
 }

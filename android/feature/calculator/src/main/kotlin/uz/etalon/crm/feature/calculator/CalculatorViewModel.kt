@@ -36,7 +36,6 @@ import uz.etalon.crm.core.calc.toPriceConfig
 import uz.etalon.crm.core.data.CalculatorRepository
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
-import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.data.mapper.normalizePhone
 import uz.etalon.crm.core.data.toAppError
@@ -157,14 +156,6 @@ fun interface QueuePlaceOrderUseCase {
     suspend operator fun invoke(input: PlaceOrderInput, idempotencyKey: String): Result<String>
 }
 
-fun interface ObserveRejectedOrdersUseCase {
-    operator fun invoke(): Flow<List<RejectedOrder>>
-}
-
-fun interface DiscardRejectedOrderUseCase {
-    suspend operator fun invoke(id: String)
-}
-
 /**
  * Rooms, the text typed into their cells, live pricing and totals for a quote — the state and behaviour
  * behind the calculator screen, with no Compose in it: the screen (a later task) is built on top
@@ -195,8 +186,6 @@ open class CalculatorViewModel(
     private val saveDraftUseCase: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.failure(IllegalStateException("no draft to save")) },
     private val placeOrderUseCase: PlaceOrderUseCase = PlaceOrderUseCase { _, _ -> Result.failure(IllegalStateException("no order to place")) },
     private val queuePlaceOrderUseCase: QueuePlaceOrderUseCase = QueuePlaceOrderUseCase { _, _ -> Result.failure(IllegalStateException("no order to queue")) },
-    private val observeRejectedOrders: ObserveRejectedOrdersUseCase = ObserveRejectedOrdersUseCase { flowOf(emptyList()) },
-    private val discardRejectedOrderUseCase: DiscardRejectedOrderUseCase = DiscardRejectedOrderUseCase { },
     private val saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
@@ -273,12 +262,6 @@ open class CalculatorViewModel(
                         draftRowCleared = false
                     }
                 }
-        }
-        // Rejections outlive the quote they came from: by the time the server refuses a queued
-        // order the calculator has long been cleared, so this is the only surface that can tell
-        // the operator it happened. Collected for the whole life of the screen, not once.
-        viewModelScope.launch {
-            observeRejectedOrders().collect { rejected -> _state.update { it.copy(rejectedOrders = rejected) } }
         }
         // Collected once, here: until it lands every row prices against DEFAULT_PRICE_CONFIG,
         // which is what an operator's real bootstrap Pricing reproduces anyway (see
@@ -567,9 +550,7 @@ open class CalculatorViewModel(
                 matchedClientId = null, clientLookupError = null, clientFormOpen = true,
                 projectId = null, saveMessage = null, toast = null, saving = false,
                 // Same reasoning as `saving`: a stale placement's completion discards itself, so
-                // nothing else would ever put the spinner down. [rejectedOrders] is deliberately
-                // NOT cleared — it is not part of this quote, it is the record of a DIFFERENT one
-                // the server refused, and «Тозалаш» must not be a way to lose that.
+                // nothing else would ever put the spinner down.
                 placing = false, queueOffered = false,
             )
         }
@@ -750,11 +731,6 @@ open class CalculatorViewModel(
 
     /** The route has navigated to the placed order — see [CalculatorUiState.placedOrderId]. */
     fun consumePlacedOrder() = _state.update { it.copy(placedOrderId = null) }
-
-    /** The operator has read the rejection and is done with it. */
-    fun discardRejectedOrder(id: String) {
-        viewModelScope.launch { discardRejectedOrderUseCase(id) }
-    }
 
     /** Why this quote may not be placed, in Uzbek — or null when it may. Mirrors
      *  `CalculatorRepository.toRequest`'s refusals so the screen never offers an action the
@@ -993,7 +969,5 @@ class HiltCalculatorViewModel @Inject constructor(
     saveDraftUseCase = SaveDraftUseCase { draft, key -> repository.saveDraft(draft, key) },
     placeOrderUseCase = PlaceOrderUseCase { input, key -> repository.placeOrder(input, key) },
     queuePlaceOrderUseCase = QueuePlaceOrderUseCase { input, key -> repository.queuePlaceOrder(input, key) },
-    observeRejectedOrders = ObserveRejectedOrdersUseCase { repository.observeRejectedOrders() },
-    discardRejectedOrderUseCase = DiscardRejectedOrderUseCase { id -> repository.discardRejectedOrder(id) },
     saved = saved,
 )

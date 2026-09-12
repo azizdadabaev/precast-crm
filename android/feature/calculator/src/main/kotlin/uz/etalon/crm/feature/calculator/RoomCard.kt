@@ -394,7 +394,7 @@ private fun PatternChip(pattern: Pattern, auto: Boolean, onClick: () -> Unit) {
     }
 }
 
-private fun patternLabel(p: Pattern): Int = when (p) {
+internal fun patternLabel(p: Pattern): Int = when (p) {
     Pattern.GB -> R.string.calc_pattern_gb
     Pattern.BGB -> R.string.calc_pattern_bgb
     Pattern.GBG -> R.string.calc_pattern_gbg
@@ -619,7 +619,7 @@ private fun appliedRate(row: SlabRow): Double =
  * does not compute yet reads [DASH] in all four (rule 10).
  */
 @Composable
-private fun ResultRow(r: SlabResult?) = Row(
+internal fun ResultRow(r: SlabResult?) = Row(
     Modifier.fillMaxWidth().padding(top = RESULT_TOP),
     horizontalArrangement = Arrangement.spacedBy(EtalonSpace.xs),
 ) {
@@ -684,7 +684,7 @@ private fun RowScope.ResultCell(
  * An extras-only room has no m² leg at all (§4.1 rule 9), so it shows the beam line alone.
  */
 @Composable
-private fun FooterRow(row: SlabRow, r: SlabResult?) = Row(
+internal fun FooterRow(row: SlabRow, r: SlabResult?) = Row(
     Modifier.fillMaxWidth().padding(top = FOOTER_TOP),
     horizontalArrangement = Arrangement.spacedBy(FOOTER_GAP),
     verticalAlignment = Alignment.Bottom,

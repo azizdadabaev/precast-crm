@@ -164,7 +164,8 @@ class CalculatorRepository @Inject constructor(
 
     /** Orders the server permanently rejected while they sat in the queue. By then the quote is
      *  long gone from the calculator, so this is the only thing that keeps the rejection findable
-     *  rather than silent — the calculator shows it, named by customer, until it is acknowledged. */
+     *  rather than silent — Home's outbox sheet (design D10 / ruling R6) lists them, named by
+     *  customer, until each is acknowledged. */
     fun observeRejectedOrders(): Flow<List<RejectedOrder>> =
         outbox.observeFailed(OutboxKind.PLACE_ORDER).map { rows ->
             rows.map { r ->

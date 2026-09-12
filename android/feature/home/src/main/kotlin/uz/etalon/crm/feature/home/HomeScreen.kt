@@ -108,7 +108,14 @@ fun HomeRoute(
         onOpenOrder = onOpenOrder, onOpenOrders = onOpenOrders, onOpenAccount = onOpenAccount,
         onOpenOutbox = { showOutbox = true },
     )
-    if (showOutbox) OutboxSheet(pending = s.pendingUploads, onDismiss = { showOutbox = false })
+    if (showOutbox) {
+        OutboxSheet(
+            pending = s.pendingUploads,
+            rejected = s.rejectedOrders,
+            onDiscard = vm::discardRejectedOrder,
+            onDismiss = { showOutbox = false },
+        )
+    }
 }
 
 /**
@@ -147,7 +154,7 @@ fun HomeScreen(
             contentPadding = navPillContentPadding(top = EtalonSpace.sm),
             verticalArrangement = Arrangement.spacedBy(SECTION_GAP),
         ) {
-            item { AppBarRow(me, s.pendingUploads > 0, onOpenOutbox, onOpenAccount) }
+            item { AppBarRow(me, s.outboxBadge > 0, onOpenOutbox, onOpenAccount) }
             item { TitleBlock(now) }
             // First of the data blocks, as on every other list in this app: a failed refresh must
             // never leave a stale figure above the reason it is stale.

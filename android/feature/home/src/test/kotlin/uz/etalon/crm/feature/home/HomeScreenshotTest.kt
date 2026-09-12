@@ -1,14 +1,19 @@
 package uz.etalon.crm.feature.home
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import uz.etalon.crm.core.data.RejectedOrder
+import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Money
@@ -20,6 +25,10 @@ import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.model.TrendDirection
 import java.math.BigDecimal
 import java.time.Instant
+
+/** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
+ *  inset: the pill's 84 dp band alone, so this frame carries the clearance a real phone shows. */
+private val SHELL_NAV_PILL_INSET = 84.dp
 
 /**
  * `2b-home.png` reproduced with the data the server actually sends (rulings R1 and R2), so the
@@ -129,6 +138,16 @@ class HomeScreenshotTest {
         tiles = tiles().copy(todayCount = 0, todayArea = BigDecimal.ZERO),
     )
 
+    /** One upload still queued and one order the server refused: what the bell badges, and what
+     *  the sheet has to explain. The message is the server's own Uzbek half, as the outbox stored
+     *  it — «Karimov LLC» has no client record with that phone. */
+    private fun rejectedState() = loaded().copy(
+        pendingUploads = 1,
+        rejectedOrders = listOf(
+            RejectedOrder(id = "row-1", clientName = "Karimov LLC", message = "Мижоз топилмади"),
+        ),
+    )
+
     /** A DRIVER: no dashboard permission at all, so the tiles are absent — not zeroed — and the
      *  sheet says «кўриш ҳуқуқингиз йўқ» rather than «буюртма йўқ». */
     private fun noAccess() = HomeUiState(
@@ -145,6 +164,36 @@ class HomeScreenshotTest {
             }
         }
         rule.onRoot().captureRoboImage("screenshots/$name.png")
+    }
+
+    /**
+     * D10 / R6: the bell's sheet, with one upload still queued and one order the server refused
+     * outright. A whole-screen capture rather than `onRoot()` — the sheet is a `ModalBottomSheet`
+     * in a window of its own, and the scrim over Home is part of what the frame has to show.
+     *
+     * [LocalNavPillInset] is provided the way `SignedInShell` provides it (Robolectric reports no
+     * system navigation bar, so the shell's band is its whole 84 dp), matching every other feature
+     * module's screenshot test.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun outboxRejectedLight() {
+        rule.setContent {
+            EtalonTheme {
+                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
+                    HomeScreen(
+                        s = rejectedState(), me = owner, now = now, onRefresh = {},
+                        onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    )
+                    OutboxSheet(
+                        pending = rejectedState().pendingUploads,
+                        rejected = rejectedState().rejectedOrders,
+                        onDiscard = {},
+                        onDismiss = {},
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/home_outbox_rejected_light.png")
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun light() = shoot("home_light", loaded())

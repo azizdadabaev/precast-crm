@@ -7,7 +7,6 @@ import uz.etalon.crm.core.calc.ProjectTotals
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
-import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.ui.regions.ParsedAddress
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -172,10 +171,6 @@ data class CalculatorUiState(
     /** Set once, after a successful ONLINE placement, for the route to navigate with — cleared by
      *  `CalculatorViewModel.consumePlacedOrder` so a recomposition cannot navigate twice. */
     val placedOrderId: String? = null,
-    /** Orders the server permanently refused while they sat in the queue. By then the quote has
-     *  been cleared, so this list is the only place the operator can learn it happened — see
-     *  `CalculatorRepository.observeRejectedOrders`. */
-    val rejectedOrders: List<RejectedOrder> = emptyList(),
 ) {
     val totalWeightKg: Double get() = totals.monolithArea * KG_PER_M2
 
