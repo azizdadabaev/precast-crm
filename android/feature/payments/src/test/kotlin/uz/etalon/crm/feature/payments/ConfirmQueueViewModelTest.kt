@@ -10,10 +10,13 @@ import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.CustodyChain
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.PaymentCounts
 import uz.etalon.crm.core.model.PaymentMethod
+import uz.etalon.crm.core.model.PaymentQueue
 import uz.etalon.crm.core.model.PaymentQueueItem
 import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.core.network.ApiException
+import uz.etalon.crm.core.ui.format.formatMoneyHero
 import uz.etalon.crm.feature.payments.queue.*
 import java.time.Instant
 
@@ -464,6 +467,143 @@ class ConfirmQueueViewModelTest {
         assertFalse(vm.state.value.busy)
     }
 
+    // ── R7: the tab counts ────────────────────────────────────────────────────────
+
+    @Test fun `the tab counts arrive with the page and survive a tab switch`() = runTest {
+        val vm = viewModel(counts = PaymentCounts(pending = 3, confirmed = 3, rejected = 1))
+        advanceUntilIdle()
+        assertEquals(PaymentCounts(3, 3, 1), vm.state.value.counts)
+
+        vm.setTab(PaymentStatus.CONFIRMED)
+        // Mid-switch, before the new page lands: the rows are cleared, the counts are not. They
+        // describe all three tabs whichever one is open, and blanking them would flicker the
+        // numbers off the switch on every tap.
+        assertEquals(PaymentCounts(3, 3, 1), vm.state.value.counts)
+        assertTrue(vm.state.value.items.isEmpty())
+        advanceUntilIdle()
+        assertEquals(PaymentCounts(3, 3, 1), vm.state.value.counts)
+    }
+
+    /** An older server sends no counts, and R7 says the labels then show without numbers rather
+     *  than with three zeroes — which would read as "there is nothing in any tab". */
+    @Test fun `counts stay null when the server does not send them`() = runTest {
+        val vm = viewModel(counts = null, queue = { Result.success(listOf(item())) })
+        advanceUntilIdle()
+        assertNull(vm.state.value.counts)
+        assertEquals(1, vm.state.value.items.size)
+    }
+
+    /** A failed refresh must not blank a figure the owner is still looking at. */
+    @Test fun `a failed refresh keeps the last known counts`() = runTest {
+        var fail = false
+        val vm = viewModel(
+            counts = PaymentCounts(3, 3, 1),
+            queue = { if (fail) Result.failure(java.io.IOException("no net")) else Result.success(emptyList()) },
+        )
+        advanceUntilIdle()
+        fail = true
+        vm.refresh()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.error)
+        assertEquals(PaymentCounts(3, 3, 1), vm.state.value.counts)
+    }
+
+    // ── R8: the toasts ────────────────────────────────────────────────────────────
+
+    @Test fun `a confirmation toasts the amount that was actually confirmed`() = runTest {
+        val row = item(id = "t1", amount = "1000000")
+        val vm = viewModel(queue = { Result.success(listOf(row)) })
+        advanceUntilIdle()
+        vm.openApprove(row)
+        vm.setAmountDigits("950000")
+        vm.setAdjustmentNote("чекдан тузатилди")
+        vm.submitApprove()
+        advanceUntilIdle()
+
+        // The adjusted figure, not the recorded one, and carrying its unit. Built through
+        // `formatMoneyHero` rather than typed out: its separators are U+202F, which a literal in
+        // this file could not be told apart from a plain space in a diff.
+        assertEquals("${formatMoneyHero(Money.parse("950000"))} тасдиқланди", vm.state.value.toast)
+    }
+
+    @Test fun `a rejection toasts, and the screen can clear either toast`() = runTest {
+        val row = item(id = "t2", amount = "1000000")
+        val vm = viewModel(queue = { Result.success(listOf(row)) })
+        advanceUntilIdle()
+        vm.openReject(row)
+        vm.setRejectReason("сумма нотўғри")
+        vm.submitReject()
+        advanceUntilIdle()
+
+        assertEquals("Тўлов рад этилди", vm.state.value.toast)
+        vm.clearToast()
+        assertNull(vm.state.value.toast)
+    }
+
+    /** Nothing happened, so nothing is announced: a refused write must not congratulate anyone. */
+    @Test fun `a refused write raises no toast`() = runTest {
+        val row = item(id = "t3", amount = "800000", expected = "1000000", fromDriver = true)
+        val vm = viewModel(
+            queue = { Result.success(listOf(row)) },
+            confirm = { _, _, _, _, _ -> Result.failure(IllegalStateException("сервер хатоси")) },
+        )
+        advanceUntilIdle()
+
+        // First refused locally (a shortfall with no action), then by the server.
+        vm.openApprove(row)
+        vm.submitApprove()
+        advanceUntilIdle()
+        assertNull(vm.state.value.toast)
+
+        vm.setAction(DiscrepancyAction.TRACK)
+        vm.setNote("жумагача тўлайди")
+        vm.submitApprove()
+        advanceUntilIdle()
+        assertNull(vm.state.value.toast)
+    }
+
+    // ── R9: the discrepancies pill ────────────────────────────────────────────────
+
+    @Test fun `the open-discrepancy count is read only with discrepancy view`() = runTest {
+        var reads = 0
+        val blind = viewModel(permissions = { it != "discrepancy.view" }, openDiscrepancies = { reads++; Result.success(4) })
+        advanceUntilIdle()
+        assertEquals(0, reads)
+        assertEquals(0, blind.state.value.openDiscrepancies)
+
+        val owner = viewModel(permissions = { true }, openDiscrepancies = { reads++; Result.success(4) })
+        advanceUntilIdle()
+        assertEquals(1, reads)
+        assertEquals(4, owner.state.value.openDiscrepancies)
+    }
+
+    /** The pill is a secondary door to a screen the Home avatar sheet already opens. A failure
+     *  there must not put a banner over the queue the owner actually came for. */
+    @Test fun `a failed discrepancy count is silent`() = runTest {
+        val vm = viewModel(openDiscrepancies = { Result.failure(java.io.IOException("no net")) })
+        advanceUntilIdle()
+        assertEquals(0, vm.state.value.openDiscrepancies)
+        assertNull(vm.state.value.error)
+    }
+
+    /** A TRACK confirmation opens a discrepancy row, so the pill must not go on showing the
+     *  figure it had before the owner created one. */
+    @Test fun `confirming a shortfall re-reads the discrepancy count`() = runTest {
+        var open = 1
+        val row = item(id = "t4", amount = "800000", expected = "1000000", fromDriver = true)
+        val vm = viewModel(queue = { Result.success(listOf(row)) }, openDiscrepancies = { Result.success(open) })
+        advanceUntilIdle()
+        assertEquals(1, vm.state.value.openDiscrepancies)
+
+        open = 2
+        vm.openApprove(row)
+        vm.setAction(DiscrepancyAction.TRACK)
+        vm.setNote("жумагача тўлайди")
+        vm.submitApprove()
+        advanceUntilIdle()
+        assertEquals(2, vm.state.value.openDiscrepancies)
+    }
+
     /** Read during composition, so it must never throw — the same rule the record sheet follows. */
     @Test fun `an unparsable amount reads as zero rather than crashing the sheet`() {
         val row = item(amount = "1000000")
@@ -474,18 +614,23 @@ class ConfirmQueueViewModelTest {
 
     // ── fixtures ──────────────────────────────────────────────────────────────────
 
+    /** The queue seam speaks rows here and the counts are passed separately: all but two of the
+     *  tests below are about what is confirmed or refused, not about what the tabs read. */
     private fun viewModel(
         queue: suspend (PaymentStatus) -> Result<List<PaymentQueueItem>> = { Result.success(emptyList()) },
+        counts: PaymentCounts? = null,
         confirm: suspend (String, Money?, String?, String?, String?) -> Result<Unit> = { _, _, _, _, _ -> Result.success(Unit) },
         reject: suspend (String, String) -> Result<Unit> = { _, _ -> Result.success(Unit) },
         permissions: suspend (String) -> Boolean = { true },
+        openDiscrepancies: suspend () -> Result<Int> = { Result.success(0) },
     ) = ConfirmQueueViewModel(
-        queue = PaymentQueueUseCase { queue(it) },
+        queue = PaymentQueueUseCase { status -> queue(status).map { PaymentQueue(it, counts) } },
         confirm = PaymentConfirmUseCase { id, amount, adjustmentNote, action, note ->
             confirm(id, amount, adjustmentNote, action, note)
         },
         reject = PaymentRejectUseCase { id, reason -> reject(id, reason) },
         permissions = ConfirmPermissionUseCase { permissions(it) },
+        openDiscrepancies = OpenDiscrepancyCountUseCase { openDiscrepancies() },
     )
 
     private fun sheet(item: PaymentQueueItem, amountDigits: String) =

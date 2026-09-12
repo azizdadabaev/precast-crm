@@ -263,7 +263,17 @@ fun SignedInShell(
                     // payment.confirm on top of this, which ConfirmQueueViewModel checks for itself —
                     // an ACCOUNTANT holds payment.view alone and reads the queue without acting on it.
                     if (me.can(PERM_PAYMENT_VIEW)) {
-                        entry<Payments> { ConfirmQueueRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                        entry<Payments> {
+                            ConfirmQueueRoute(
+                                onOpenOrder = { backStack.add(OrderDetail(it)) },
+                                // Ruling R9's second door into the discrepancies list, beside the
+                                // Home avatar sheet's. Null without the permission — the
+                                // `Discrepancies` entry below is not registered then either, so a
+                                // pill that opened it would walk into a route that does not exist.
+                                onOpenDiscrepancies =
+                                    if (me.can(PERM_DISCREPANCY_VIEW)) ({ backStack.add(Discrepancies) }) else null,
+                            )
+                        }
                     }
                     if (me.can(PERM_DISCREPANCY_VIEW)) {
                         entry<Discrepancies> {

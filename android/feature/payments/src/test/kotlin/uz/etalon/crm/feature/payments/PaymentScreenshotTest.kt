@@ -1,10 +1,13 @@
 package uz.etalon.crm.feature.payments
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -21,6 +24,7 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.OrderSummary
+import uz.etalon.crm.core.model.PaymentCounts
 import uz.etalon.crm.core.model.PaymentLine
 import uz.etalon.crm.core.model.PaymentMethod
 import uz.etalon.crm.core.model.PaymentQueueItem
@@ -29,8 +33,11 @@ import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.feature.payments.discrepancies.DiscrepanciesScreen
 import uz.etalon.crm.feature.payments.discrepancies.DiscrepanciesUiState
+import uz.etalon.crm.feature.payments.queue.ConfirmMode
 import uz.etalon.crm.feature.payments.queue.ConfirmQueueScreen
 import uz.etalon.crm.feature.payments.queue.ConfirmQueueUiState
+import uz.etalon.crm.feature.payments.queue.ConfirmSheetState
+import uz.etalon.crm.feature.payments.queue.DiscrepancyAction
 import uz.etalon.crm.feature.payments.record.RecordPaymentScreen
 import uz.etalon.crm.feature.payments.record.RecordPaymentUiState
 import java.math.BigDecimal
@@ -38,15 +45,14 @@ import java.time.Instant
 import java.time.LocalDate
 
 /** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
- *  inset: the pill's 84 dp band alone, so the record frame carries the clearance a real phone
- *  shows. Only the record sheet takes it — the queue and discrepancies frames are lists whose
- *  clearance is bottom `contentPadding` below the viewport, which photographs as nothing. */
+ *  inset: the pill's 84 dp band alone, so a frame carries the clearance a real phone shows. The
+ *  discrepancies frame does not take it yet — that screen is rebuilt in its own task. */
 private val SHELL_NAV_PILL_INSET = 84.dp
 
 /**
- * Three baselines: the record sheet, a confirm-queue card with a shortfall, and the discrepancies
- * list. Every clock and every figure below is fixed — a baseline must not change meaning with the
- * day it happens to be recorded.
+ * The module's frames: the record sheet, the confirm queue in its three states with its two
+ * sheets, and the discrepancies list. Every clock and every figure below is fixed — a baseline
+ * must not change meaning with the day it happens to be recorded.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -120,42 +126,165 @@ class PaymentScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp") fun recordDark() = shootRecord("dark", true)
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun recordLargeFont() = shootRecord("font13", false)
 
-    // ── Confirm queue: a driver-collected payment that came back short of what the dispatch
-    // expected, so the card renders the shortfall line in the danger colour. ────────────────
+    // ── Confirm queue: `2b-payments.png`'s own three rows, then the two cases the capture does
+    // not draw (the confirmed tab's tags, a driver shortfall) and the two sheets. ───────────
 
-    private fun queueItem() = PaymentQueueItem(
-        id = "pay1", orderId = "o2", orderNumber = "2026-09-0028", clientName = "Юсупова Дилноза Акрамовна",
-        amount = Money.parse("7500000.00"), originalAmount = null, method = PaymentMethod.CASH,
-        status = PaymentStatus.PENDING_CONFIRMATION, recordedAt = Instant.parse("2026-09-03T15:20:00Z"),
-        paidOn = Instant.parse("2026-09-03T15:20:00Z"), expectedCollection = Money.parse("9000000.00"),
-        fromDriver = true,
-        custody = CustodyChain(collectedBy = "Жасур (ҳайдовчи)", recordedBy = "Жасур", handedOverTo = null, confirmedBy = null),
+    /**
+     * The capture's three payments, in its order, with the counts it shows on the switch. The
+     * clock below is fixed for the same reason every other figure in this file is — and it is
+     * passed to the screen rather than read inside it, so the meta line's date cannot change with
+     * the day the baseline happens to be recorded.
+     */
+    private fun pending() = listOf(
+        queueItem(
+            id = "pay1", orderNumber = "2026-09-0003", client = "Yusupov & Sons",
+            amount = "3000000.00", method = PaymentMethod.CASH, recordedBy = "Азиз Рашидов",
+        ),
+        queueItem(
+            id = "pay2", orderNumber = "2026-09-0002", client = "BuildPro Group",
+            amount = "1500000.00", method = PaymentMethod.CLICK, recordedBy = "Дилноза Акрамовна",
+        ),
+        queueItem(
+            id = "pay3", orderNumber = "2026-07-0001", client = "Rahimov Construction",
+            amount = "4500000.00", method = PaymentMethod.CASH, recordedBy = "Жасур Тошматов",
+        ),
+    )
+
+    private fun queueItem(
+        id: String,
+        orderNumber: String,
+        client: String,
+        amount: String,
+        method: PaymentMethod,
+        recordedBy: String,
+        status: PaymentStatus = PaymentStatus.PENDING_CONFIRMATION,
+        expected: String? = null,
+        fromDriver: Boolean = false,
+    ) = PaymentQueueItem(
+        id = id, orderId = "o-$id", orderNumber = orderNumber, clientName = client,
+        amount = Money.parse(amount), originalAmount = null, method = method,
+        status = status, recordedAt = Instant.parse("2026-09-03T15:20:00Z"),
+        paidOn = Instant.parse("2026-09-03T15:20:00Z"),
+        expectedCollection = expected?.let(Money::parse), fromDriver = fromDriver,
+        custody = CustodyChain(
+            collectedBy = if (fromDriver) "$recordedBy (ҳайдовчи)" else null,
+            recordedBy = recordedBy, handedOverTo = null, confirmedBy = null,
+        ),
         receiptUrls = emptyList(), orderReceiptUrls = emptyList(), rejectionReason = null,
     )
 
-    private fun queueState() = ConfirmQueueUiState(
-        tab = PaymentStatus.PENDING_CONFIRMATION,
-        items = listOf(queueItem()),
-        loading = false,
-        canConfirm = true,
+    /** The one payment that came back short of what the dispatch expected — the kept lines the
+     *  capture has no row for: «Кутилган …», «Камомад …» in red, and the custody chain. */
+    private fun shortfallItem() = queueItem(
+        id = "pay9", orderNumber = "2026-09-0028", client = "Юсупова Дилноза Акрамовна",
+        amount = "7500000.00", method = PaymentMethod.CASH, recordedBy = "Жасур",
+        expected = "9000000.00", fromDriver = true,
     )
 
-    private fun shootQueue(name: String, dark: Boolean) {
+    private fun queueState(
+        items: List<PaymentQueueItem> = pending(),
+        tab: PaymentStatus = PaymentStatus.PENDING_CONFIRMATION,
+        sheet: ConfirmSheetState? = null,
+        openDiscrepancies: Int = 0,
+    ) = ConfirmQueueUiState(
+        tab = tab,
+        items = items,
+        counts = PaymentCounts(pending = 3, confirmed = 3, rejected = 1),
+        openDiscrepancies = openDiscrepancies,
+        loading = false,
+        canConfirm = true,
+        permissionsResolved = true,
+        sheet = sheet,
+    )
+
+    @Composable
+    private fun Queue(s: ConfirmQueueUiState) = CompositionLocalProvider(
+        LocalNavPillInset provides SHELL_NAV_PILL_INSET,
+    ) {
+        ConfirmQueueScreen(
+            s = s, now = fixedInstant, onOpenOrder = {}, onOpenDiscrepancies = {}, onRefresh = {},
+            onSetTab = {}, onApprove = {}, onReject = {}, onCloseSheet = {}, onSetAmountDigits = {},
+            onSetAdjustmentNote = {}, onSetAction = {}, onSetNote = {}, onSetRejectReason = {},
+            onSubmitApprove = {}, onSubmitReject = {}, onToastShown = {},
+        )
+    }
+
+    private fun shootQueue(name: String, s: ConfirmQueueUiState) {
+        rule.setContent { EtalonTheme { Queue(s) } }
+        rule.onRoot().captureRoboImage("screenshots/queue_$name.png")
+    }
+
+    /** `2b-payments.png` itself: three pending rows, 3/3/1 on the switch, one «Кўриб чиқиш» pill
+     *  per row — plus R9's «Тафовутлар 2», which the capture has no open discrepancy for. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun queuePendingLight() =
+        shootQueue("pending_light", queueState(openDiscrepancies = 2))
+
+    /** The other side of the switch: a settled tab, where the pill gives way to the state tag. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun queueConfirmedLight() = shootQueue(
+        "confirmed_light",
+        queueState(
+            tab = PaymentStatus.CONFIRMED,
+            items = pending().map { it.copy(status = PaymentStatus.CONFIRMED) } +
+                pending()[0].copy(id = "payr", status = PaymentStatus.REJECTED, rejectionReason = "Сумма квитанцияга мос эмас"),
+        ),
+    )
+
+    /** The kept lines: expected, the red shortfall, and the custody chain under them. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun queueShortfallLight() =
+        shootQueue("shortfall_light", queueState(items = listOf(shortfallItem())))
+
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun queueLargeFont() =
+        shootQueue("font13", queueState(openDiscrepancies = 2))
+
+    // ── The two sheets. `captureScreenRoboImage`, not `onRoot()`: a ModalBottomSheet lives in a
+    // window of its own, which `onRoot()` does not photograph. ───────────────────────────────
+
+    /** The approve sheet on the short payment, so every block it can carry is on one frame: the
+     *  editable hero, the recorded and expected figures, the three discrepancy options with one
+     *  chosen, the note, and the «Рад этиш» / «Тасдиқлаш» pair. */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun approveSheetLight() {
+        val item = shortfallItem()
         rule.setContent {
-            EtalonTheme(darkTheme = dark) {
-                ConfirmQueueScreen(
-                    s = queueState(), onOpenOrder = {}, onRefresh = {}, onSetTab = {}, onApprove = {}, onReject = {},
-                    onCloseSheet = {}, onSetAmountDigits = {}, onSetAdjustmentNote = {}, onSetAction = {},
-                    onSetNote = {}, onSetRejectReason = {}, onSubmitApprove = {}, onSubmitReject = {},
+            EtalonTheme {
+                Queue(
+                    queueState(
+                        items = listOf(item),
+                        sheet = ConfirmSheetState(
+                            item = item,
+                            mode = ConfirmMode.APPROVE,
+                            action = DiscrepancyAction.TRACK,
+                            note = "Мижоз жумагача қолганини тўлашга рози бўлди",
+                        ),
+                    ),
                 )
             }
         }
-        rule.onRoot().captureRoboImage("screenshots/queue_card_shortfall_$name.png")
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/approve_sheet_light.png")
     }
 
-    @Test @Config(qualifiers = "w411dp-h891dp") fun queueLight() = shootQueue("light", false)
-    @Test @Config(qualifiers = "w411dp-h891dp") fun queueDark() = shootQueue("dark", true)
-    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun queueLargeFont() = shootQueue("font13", false)
+    /** The reject sheet: the recorded figure read-only over the mandatory reason. */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun rejectSheetLight() {
+        val item = pending()[0]
+        rule.setContent {
+            EtalonTheme {
+                Queue(
+                    queueState(
+                        items = listOf(item),
+                        sheet = ConfirmSheetState(
+                            item = item,
+                            mode = ConfirmMode.REJECT,
+                            rejectReason = "Квитанциядаги сумма бошқача",
+                        ),
+                    ),
+                )
+            }
+        }
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/reject_sheet_light.png")
+    }
 
     // ── Discrepancies list: one still open, one already resolved as a discount. ─────────────
 

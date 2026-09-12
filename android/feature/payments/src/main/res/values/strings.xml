@@ -61,6 +61,14 @@
          the whole APK, and the module nearer :app silently wins. Where a word already
          exists in the design system (Тасдиқлаш, Кутилмоқда, Тасдиқланган, Рад этилган,
          Бекор қилиш) the queue reads THAT string instead of redefining it. -->
+    <string name="payments_title">Тўловлар</string>
+    <string name="payments_subtitle">Ходимлар қайд қилган тўловларни тасдиқлаш</string>
+    <!-- The one action a pending row offers (§3.5). It opens the approve sheet, where «Рад этиш»
+         also lives — the capture draws ONE pill per row, not a confirm/reject pair. -->
+    <string name="payments_review">Кўриб чиқиш</string>
+    <!-- R9's second door into the discrepancies screen, drawn only when there is something behind
+         it and the operator may open it. -->
+    <string name="payments_discrepancies_pill">Тафовутлар %1$d</string>
     <string name="queue_empty">Тўлов йўқ</string>
     <string name="queue_recorded">Қайд этилди: %1$s</string>
     <string name="queue_expected">Кутилган: %1$s</string>
@@ -73,6 +81,9 @@
     <string name="confirm_adjustment_note_label">Созлаш изоҳи (мажбурий, мин. 5 белги)</string>
     <string name="confirm_adjustment_note_hint">масалан: Оператор хатоси — квитанциядан тузатилди</string>
     <string name="confirm_receipts_label">Чеклар</string>
+    <!-- The navy gate's two tiles (R3). «Усул» is already defined as `record_method_label` one
+         screen up and is read from there rather than defined twice. -->
+    <string name="confirm_tile_recorded_by">Ходим</string>
 
     <string name="discrepancy_action_label">Тафовут амали</string>
     <string name="discrepancy_action_track">Тасдиқлаш + очиқ тафовут</string>

@@ -8,14 +8,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uz.etalon.crm.core.data.DiscrepanciesRepository
 import uz.etalon.crm.core.data.PaymentsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.isConflictClass
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
+import uz.etalon.crm.core.model.DiscrepancyStatus
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.PaymentCounts
+import uz.etalon.crm.core.model.PaymentQueue
 import uz.etalon.crm.core.model.PaymentQueueItem
 import uz.etalon.crm.core.model.PaymentStatus
+import uz.etalon.crm.core.ui.format.formatMoneyHero
 import javax.inject.Inject
 
 /** Same wording the shipments, drivers and record-payment screens use for a refused action. */
@@ -26,6 +31,20 @@ private const val OFFLINE_MESSAGE = "Интернет йўқ — бу амал �
 private const val NO_PERMISSION_MESSAGE = "Тўловларни тасдиқлашга рухсат йўқ"
 
 private const val PAYMENT_CONFIRM = "payment.confirm"
+
+/** What `GET /api/discrepancies` is gated on, server-side. Ruling R9's second door into the
+ *  discrepancies screen is drawn only for an operator who may actually open it. */
+private const val DISCREPANCY_VIEW = "discrepancy.view"
+
+/**
+ * Ruling R8's two toasts. Kotlin constants rather than string resources for the same reason
+ * [OFFLINE_MESSAGE], [NO_PERMISSION_MESSAGE] and every sentence [confirmBlocker] returns are: a
+ * ViewModel in this app takes no `Context`, and inventing one seam per message would put the
+ * queue's wording in two places. The figure is formatted by `formatMoneyHero` — whose own KDoc
+ * names a toast as the case it exists for — so the amount carries its UZS, as design §3.5 draws it.
+ */
+private const val TOAST_CONFIRMED = "%s тасдиқланди"
+private const val TOAST_REJECTED = "Тўлов рад этилди"
 
 /** `discrepancyNote` and `DiscrepancyUpdateSchema` both say `min(5)`; `adjustmentNote` is checked
  *  by the confirm route itself with the same figure. */
@@ -141,6 +160,26 @@ data class ConfirmSheetState(
 data class ConfirmQueueUiState(
     val tab: PaymentStatus = PaymentStatus.PENDING_CONFIRMATION,
     val items: List<PaymentQueueItem> = emptyList(),
+    /**
+     * The three tab counts (R7). Null while they are unknown — a first load, or a server old
+     * enough not to send them — and the switch then shows its labels without numbers rather than
+     * three zeroes, which would read as "there is nothing in any tab".
+     *
+     * Deliberately NOT cleared when the tab changes or a fetch fails: the counts are computed
+     * server-side with every filter except `status`, so they describe the same three tabs
+     * whichever one is open, and blanking them mid-switch would flicker the numbers off the
+     * control on every tap.
+     */
+    val counts: PaymentCounts? = null,
+    /**
+     * Open cash discrepancies, for R9's «Тафовутлар N» pill. Zero means either "none open" or
+     * "not allowed to look" — the count is fetched only for an operator holding `discrepancy.view`
+     * — and both answers draw the same thing: no pill. One field, because a screen that shows the
+     * pill on `N > 0` has no use for the two cases apart.
+     */
+    val openDiscrepancies: Int = 0,
+    /** R8's toast, cleared by the screen after [uz.etalon.crm.core.designsystem.components.TOAST_DURATION_MS]. */
+    val toast: String? = null,
     val loading: Boolean = true,
     val busy: Boolean = false,
     val error: String? = null,
@@ -170,7 +209,13 @@ data class ConfirmQueueUiState(
 }
 
 fun interface PaymentQueueUseCase {
-    suspend operator fun invoke(status: PaymentStatus): Result<List<PaymentQueueItem>>
+    suspend operator fun invoke(status: PaymentStatus): Result<PaymentQueue>
+}
+
+/** How many cash discrepancies are still OPEN, for R9's header pill. A seam like the four above
+ *  so the count can be fixed in a test without a repository. */
+fun interface OpenDiscrepancyCountUseCase {
+    suspend operator fun invoke(): Result<Int>
 }
 
 fun interface PaymentConfirmUseCase {
@@ -196,21 +241,40 @@ open class ConfirmQueueViewModel(
     confirm: PaymentConfirmUseCase,
     reject: PaymentRejectUseCase,
     permissions: ConfirmPermissionUseCase,
+    openDiscrepancies: OpenDiscrepancyCountUseCase = OpenDiscrepancyCountUseCase { Result.success(0) },
 ) : ViewModel() {
     private val loadQueue = queue
     private val confirmPayment = confirm
     private val rejectPayment = reject
     private val can = permissions
+    private val countOpenDiscrepancies = openDiscrepancies
 
     private val _state = MutableStateFlow(ConfirmQueueUiState())
     val state: StateFlow<ConfirmQueueUiState> = _state.asStateFlow()
+
+    /** Not on the state: nothing draws it. It exists only so a re-count after a confirmation does
+     *  not fire a request that the server would answer with 403. */
+    private var mayReadDiscrepancies = false
 
     init {
         viewModelScope.launch {
             val confirm0 = can(PAYMENT_CONFIRM)
             _state.update { it.copy(canConfirm = confirm0, permissionsResolved = true) }
+            mayReadDiscrepancies = can(DISCREPANCY_VIEW)
+            loadDiscrepancyCount()
         }
         refresh()
+    }
+
+    /**
+     * R9's pill count. A failure is SILENT: this is a secondary door to a screen the Home avatar
+     * sheet already opens, and an error banner over the payments queue about a list the owner did
+     * not ask for would bury the one that matters. Nothing is logged either — the count is a
+     * figure about money the owner holds, not a diagnostic.
+     */
+    private suspend fun loadDiscrepancyCount() {
+        if (!mayReadDiscrepancies) return
+        countOpenDiscrepancies().onSuccess { n -> _state.update { it.copy(openDiscrepancies = n) } }
     }
 
     /** Status is a server-side filter, so switching tabs re-fetches rather than filtering a
@@ -229,8 +293,16 @@ open class ConfirmQueueViewModel(
         _state.update { it.copy(loading = true, error = carry) }
         viewModelScope.launch {
             loadQueue(_state.value.tab).fold(
-                onSuccess = { rows ->
-                    _state.update { it.copy(items = rows, loading = false, error = carry, lastRefreshError = null) }
+                onSuccess = { page ->
+                    _state.update {
+                        it.copy(
+                            items = page.items,
+                            // Null counts (an older server) leave the last known ones standing
+                            // rather than blanking the switch mid-session.
+                            counts = page.counts ?: it.counts,
+                            loading = false, error = carry, lastRefreshError = null,
+                        )
+                    }
                 },
                 onFailure = { t ->
                     val e = t.toAppError()
@@ -259,7 +331,15 @@ open class ConfirmQueueViewModel(
         val sheet = guardedSheet(ConfirmMode.APPROVE) ?: return
         val changed = sheet.amountChanged
         val short = sheet.hasShortfall
-        runAction {
+        // The figure the owner actually confirmed, not the one that was recorded — captured here
+        // because the sheet is gone by the time the toast is shown.
+        val confirmed = sheet.amount
+        runAction(
+            toast = TOAST_CONFIRMED.format(formatMoneyHero(confirmed)),
+            // A TRACK confirmation opens a new discrepancy row, so R9's pill would otherwise
+            // carry yesterday's count until the tab was left and re-entered.
+            recountDiscrepancies = short,
+        ) {
             // Only what the route will actually read. An adjustment note without an amount change,
             // or a discrepancy action on a payment that is not short, would be dropped server-side
             // — sending them would only make the request disagree with what was approved. `short`
@@ -277,8 +357,13 @@ open class ConfirmQueueViewModel(
 
     fun submitReject() {
         val sheet = guardedSheet(ConfirmMode.REJECT) ?: return
-        runAction { rejectPayment(sheet.item.id, sheet.rejectReason.trim()) }
+        runAction(toast = TOAST_REJECTED) { rejectPayment(sheet.item.id, sheet.rejectReason.trim()) }
     }
+
+    /** R8: the screen shows the toast for [uz.etalon.crm.core.designsystem.components.TOAST_DURATION_MS]
+     *  and then calls this. The ViewModel does not time it — only the screen knows whether the
+     *  toast was ever on screen, and a composition that never ran must not consume one. */
+    fun clearToast() = _state.update { it.copy(toast = null) }
 
     /**
      * The four guards both actions share, in the order that gives the owner the most useful
@@ -314,13 +399,18 @@ open class ConfirmQueueViewModel(
      * actionable, so the owner retries an action that can never succeed. The sheet stays open
      * only for a network-class failure, where retrying is the whole point.
      */
-    private fun runAction(call: suspend () -> Result<Unit>) {
+    private fun runAction(
+        toast: String,
+        recountDiscrepancies: Boolean = false,
+        call: suspend () -> Result<Unit>,
+    ) {
         _state.update { it.copy(busy = true) }
         viewModelScope.launch {
             call().fold(
                 onSuccess = {
-                    _state.update { it.copy(busy = false, sheet = null) }
+                    _state.update { it.copy(busy = false, sheet = null, toast = toast) }
                     refresh()
+                    if (recountDiscrepancies) loadDiscrepancyCount()
                 },
                 onFailure = { t ->
                     val e = t.toAppError()
@@ -342,14 +432,18 @@ open class ConfirmQueueViewModel(
 @HiltViewModel
 class HiltConfirmQueueViewModel @Inject constructor(
     payments: PaymentsRepository,
+    discrepancies: DiscrepanciesRepository,
     permissions: PermissionGate,
 ) : ConfirmQueueViewModel(
-    // `.items` only, for now — PaymentsRepository.queue() carries the three tab counts alongside
-    // the rows (Phase 3 Task 3), but this screen does not yet show them (Task 4).
-    queue = PaymentQueueUseCase { status -> payments.queue(status).map { it.items } },
+    queue = PaymentQueueUseCase { status -> payments.queue(status) },
     confirm = PaymentConfirmUseCase { id, amount, adjustmentNote, action, note ->
         payments.confirm(id, amount, adjustmentNote, action, note)
     },
     reject = PaymentRejectUseCase { id, reason -> payments.reject(id, reason) },
     permissions = ConfirmPermissionUseCase { action -> permissions.can(action) },
+    // The existing list route, read for its size alone: the discrepancies screen itself is what
+    // shows the rows, and this ViewModel only needs the figure for R9's pill.
+    openDiscrepancies = OpenDiscrepancyCountUseCase {
+        discrepancies.list(status = DiscrepancyStatus.OPEN).map { it.size }
+    },
 )

@@ -27,7 +27,12 @@ data class CustodyChain(
     val recordedBy: String?,
     val handedOverTo: String?,
     val confirmedBy: String?,
-)
+) {
+    /** How many people the money has passed through. One is not a chain — it is the operator who
+     *  recorded an office payment, whom the row's own meta line already names — so a caller that
+     *  draws the chain beside that meta line asks for this before drawing anything. */
+    val stages: Int get() = listOfNotNull(collectedBy, recordedBy, handedOverTo, confirmedBy).size
+}
 
 /** One row of GET /api/payments, with the order context the confirm queue shows. */
 data class PaymentQueueItem(
