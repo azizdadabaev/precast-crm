@@ -1,61 +1,62 @@
 package uz.etalon.crm.feature.clients.detail
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import uz.etalon.crm.core.designsystem.components.ChipTone
-import uz.etalon.crm.core.designsystem.components.EmptyState
+import uz.etalon.crm.core.designsystem.components.DetailPanel
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
-import uz.etalon.crm.core.designsystem.components.MoneyText
-import uz.etalon.crm.core.designsystem.components.SectionLabel
-import uz.etalon.crm.core.designsystem.components.StatusChip
-import uz.etalon.crm.core.designsystem.components.StatusStripeCard
+import uz.etalon.crm.core.designsystem.components.EtalonIconButton
+import uz.etalon.crm.core.designsystem.components.NoticeBanner
+import uz.etalon.crm.core.designsystem.components.OrderRow
+import uz.etalon.crm.core.designsystem.components.PanelTotal
 import uz.etalon.crm.core.designsystem.components.navPillContentPadding
-import uz.etalon.crm.core.designsystem.components.orderStatusTone
-import uz.etalon.crm.core.designsystem.components.toneColor
+import uz.etalon.crm.core.designsystem.icon.EtalonIcons
+import uz.etalon.crm.core.designsystem.theme.EtalonColors
+import uz.etalon.crm.core.designsystem.theme.EtalonShapes
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
-import uz.etalon.crm.core.model.ClientOrderLine
+import uz.etalon.crm.core.model.ClientDetail
+import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.ui.format.formatAddressLine
+import uz.etalon.crm.core.ui.format.formatCount
+import uz.etalon.crm.core.ui.format.formatMoney
+import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.core.ui.format.formatScheduleDate
 import uz.etalon.crm.feature.clients.R
 import uz.etalon.crm.feature.clients.dial
 import uz.etalon.crm.feature.clients.edit.ClientEditSheet
+import java.time.Instant
 
-/** The minimum comfortable touch target, per spec §6 — the call button is the one control on
- *  this screen an operator uses while holding a phone in one hand. */
-private val TOUCH = 48.dp
+/** The card's own inset around its rows — the same 6 dp Home's recent-orders card and the clients
+ *  list keep, which puts an avatar 14 dp from the card's edge. */
+private val ROW_INSET = 6.dp
+
+/** A section title sits 4 dp inside the card below it, the relationship Home draws between
+ *  «Сўнгги буюртмалар» and its card (headerMargin 20 over cardMargin 16). */
+private val TITLE_INSET = 4.dp
 
 @Composable
 fun ClientDetailRoute(
@@ -67,13 +68,40 @@ fun ClientDetailRoute(
     ),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
-    ClientDetailScreen(s = s, onBack = onBack, onRefresh = vm::refresh, onOpenOrder = onOpenOrder)
+    ClientDetailScreen(
+        s = s,
+        // Read here rather than inside the screen so a frame can pin the day it is drawn on —
+        // `formatScheduleDate` drops the year only for the CURRENT one.
+        now = Instant.now(),
+        onBack = onBack,
+        onRefresh = vm::refresh,
+        onOpenOrder = onOpenOrder,
+    )
 }
 
+/**
+ * One customer, ruling R5: the order detail's navy [DetailPanel] with the client in it — «Мижоз»
+ * over the name, the phone where an order panel carries its client (tap the header's phone button
+ * to dial it), the address under it, and the footer counting what they have booked. No status tag,
+ * because a client has no lifecycle; no tiles, because a client has no rooms; no «Қарз», because
+ * `GET /api/clients/{id}` carries no remaining and a receivable figure must never be invented.
+ *
+ * The panel's own header carries the edit pencil (the panel's `actions` slot). It appears only
+ * once `client.edit` is KNOWN to be held — a button that appears and then vanishes is worse than
+ * one that arrives a frame late — and is disabled while offline, with the reason said out loud
+ * beneath the panel: `PATCH /api/clients/{id}` is not `withIdempotency`-wrapped, so an edit made
+ * offline could not be queued and would simply be lost.
+ *
+ * The shell draws its floating nav pill over this screen and gives it no `Scaffold`, so the root
+ * pads the status bar itself and the list reserves the pill's band at the bottom. No `imePadding`
+ * (ruling R13): this screen has no text field — the fields are in [ClientEditSheet], which is a
+ * `ModalBottomSheet` and pads itself for the keyboard.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClientDetailScreen(
     s: ClientDetailUiState,
+    now: Instant,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onOpenOrder: (String) -> Unit,
@@ -81,78 +109,40 @@ fun ClientDetailScreen(
     val ctx = LocalContext.current
     val client = s.client
     var editing by remember { mutableStateOf(false) }
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        client?.name.orEmpty(),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.client_action_back))
-                    }
-                },
-                actions = {
-                    // Only once `client.edit` is known to be held, and only once there is a
-                    // client to edit. Disabled offline: PATCH /api/clients/{id} is not
-                    // `withIdempotency`-wrapped, so it may not be queued.
-                    if (s.showEditAction && client != null) {
-                        IconButton(onClick = { editing = true }, enabled = !s.isOffline) {
-                            Icon(Icons.Default.Edit, stringResource(R.string.client_action_edit))
-                        }
-                    }
-                },
-            )
-        },
-    ) { pad ->
-        PullToRefreshBox(isRefreshing = s.loading, onRefresh = onRefresh, modifier = Modifier.padding(pad)) {
+
+    Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding()) {
+        PullToRefreshBox(isRefreshing = s.loading, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                // The floating nav pill is drawn over this screen (R8: it shows on every signed-in
-                // route), so the last card needs the pill's band to scroll clear of it.
-                // Clearance only — this screen is restyled in phase 3.
-                contentPadding = navPillContentPadding(start = 16.dp, end = 16.dp, top = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = navPillContentPadding(
+                    start = EtalonSpace.cardMargin,
+                    end = EtalonSpace.cardMargin,
+                    top = EtalonSpace.sm,
+                ),
+                verticalArrangement = Arrangement.spacedBy(EtalonSpace.md),
             ) {
                 val error = s.error
                 if (error != null) item { ErrorBanner(error, onRetry = onRefresh) }
                 if (client == null) return@LazyColumn
 
                 item {
-                    StatusStripeCard(stripe = toneColor(ChipTone.NEUTRAL)) {
-                        Text(
-                            client.name,
-                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                formatPhone(client.phone),
-                                style = EtalonType.monoBody, color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.weight(1f),
-                            )
-                            // ACTION_DIAL: it fills the number in and leaves the decision to the
-                            // operator. ACTION_CALL would need CALL_PHONE and would ring a
-                            // customer on a mis-tap.
-                            IconButton(
-                                onClick = { dial(ctx, client.phone) },
-                                modifier = Modifier.size(TOUCH),
-                            ) {
-                                Icon(Icons.Default.Call, stringResource(R.string.client_action_call))
-                            }
-                        }
-                        formatAddressLine(client.address)?.let { LabelledLine(R.string.client_address_label, it) }
-                        client.notes?.takeIf { it.isNotBlank() }?.let { LabelledLine(R.string.client_notes_label, it) }
-                    }
+                    Panel(
+                        client = client,
+                        showEdit = s.showEditAction,
+                        editEnabled = !s.isOffline,
+                        onBack = onBack,
+                        onCall = { dial(ctx, client.phone) },
+                        onEdit = { editing = true },
+                    )
                 }
-
-                item { SectionLabel(stringResource(R.string.client_orders_section)) }
-                if (s.showNoOrders) item { EmptyState(stringResource(R.string.client_no_orders)) }
-                items(client.orders, key = { it.id }) { line ->
-                    OrderLineCard(line) { onOpenOrder(line.id) }
+                // §5.1a: an action that is merely blocked right now is disabled WITH a reason. The
+                // greyed pencil above is the "not now"; this is the sentence that teaches.
+                if (s.showEditAction && s.isOffline) {
+                    item { NoticeBanner(stringResource(R.string.client_edit_offline)) }
                 }
+                val notes = client.notes?.takeIf { it.isNotBlank() }
+                if (notes != null) item { NotesCard(notes) }
+                item { OrdersCard(client, s.showNoOrders, now, onOpenOrder) }
             }
         }
     }
@@ -172,36 +162,129 @@ fun ClientDetailScreen(
     }
 }
 
+/**
+ * The hero. The `clientName` slot carries the PHONE — on an order panel that slot is who the order
+ * is for, and here the name is already the headline, so the one fact the slot can still add is the
+ * number an operator calls. The avatar keeps the client's own initials and colour (`avatarName`),
+ * so the circle is the one the clients list drew for this row a tap ago; a phone has no letters to
+ * make initials from.
+ *
+ * The footer is two columns, not three: «Буюртмалар» and «Жами». The sum is a [Money] fold over
+ * the order lines — never a `Double`, and never a figure the server did not send.
+ */
 @Composable
-private fun LabelledLine(labelRes: Int, value: String) {
-    Text(
-        stringResource(labelRes),
-        style = EtalonType.monoLabel, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 6.dp),
-    )
-    Text(value, style = MaterialTheme.typography.bodyMedium)
+private fun Panel(
+    client: ClientDetail,
+    showEdit: Boolean,
+    editEnabled: Boolean,
+    onBack: () -> Unit,
+    onCall: () -> Unit,
+    onEdit: () -> Unit,
+) = DetailPanel(
+    caption = stringResource(R.string.client_detail_caption),
+    headline = client.name,
+    clientName = formatPhone(client.phone),
+    addressLine = formatAddressLine(client.address),
+    tiles = {},
+    totals = {
+        PanelTotal(
+            stringResource(R.string.client_orders_section),
+            formatCount(client.orders.size),
+            modifier = Modifier.weight(1f),
+        )
+        PanelTotal(
+            stringResource(R.string.client_total_label),
+            formatMoney(client.orders.fold(Money.ZERO) { acc, o -> acc + o.totalPrice }),
+            modifier = Modifier.weight(1f),
+        )
+    },
+    onBack = onBack,
+    // A client has no date of their own. The panel draws nothing for a blank label, and the two
+    // header buttons keep the row's height, so the space simply closes up.
+    dateLabel = "",
+    onCall = onCall,
+    actions = if (showEdit) {
+        {
+            EtalonIconButton(
+                EtalonIcons.Pencil,
+                stringResource(R.string.client_action_edit),
+                onEdit,
+                onDark = true,
+                enabled = editEnabled,
+            )
+        }
+    } else {
+        null
+    },
+    avatarName = client.name,
+)
+
+/** What somebody wrote about this customer. Prose, so it wraps rather than ellipsizing — a note
+ *  cut at one line is a note nobody can act on. */
+@Composable
+private fun NotesCard(notes: String) = Column(
+    Modifier.fillMaxWidth().clip(EtalonShapes.xl).background(EtalonColors.surface)
+        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
+        .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
+    verticalArrangement = Arrangement.spacedBy(EtalonSpace.sm),
+) {
+    Text(stringResource(R.string.client_notes_label), style = EtalonType.sectionTitle, color = EtalonColors.ink)
+    Text(notes, style = EtalonType.body, color = EtalonColors.ink2)
 }
 
 /**
- * One of the client's orders. The status stripe, chip and money all come from the design system —
- * this screen maps nothing itself, so an order reads the same here as it does in the orders list.
+ * Everything this customer has ordered, as the design system's light [OrderRow] — the same row the
+ * clients list and Home draw, so an order reads the same wherever it appears. `debt = null,
+ * paidLabel = null` (R5): `GET /api/clients/{id}` sends no `remaining` per line, and a «тўланган»
+ * printed without one would be a claim about money nobody checked.
+ *
+ * @param showNoOrders the ViewModel's own rule: this client LOADED and has never ordered anything,
+ *   which is not the same state as "we could not read them" — that one shows the banner above and
+ *   never this line.
  */
 @Composable
-private fun OrderLineCard(line: ClientOrderLine, onClick: () -> Unit) {
-    StatusStripeCard(stripe = toneColor(orderStatusTone(line.status)), onClick = onClick) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun OrdersCard(
+    client: ClientDetail,
+    showNoOrders: Boolean,
+    now: Instant,
+    onOpenOrder: (String) -> Unit,
+) = Column(
+    verticalArrangement = Arrangement.spacedBy(EtalonSpace.sm),
+) {
+    Text(
+        stringResource(R.string.client_orders_section),
+        style = EtalonType.sectionTitle,
+        color = EtalonColors.ink,
+        modifier = Modifier.padding(horizontal = TITLE_INSET),
+    )
+    Column(
+        Modifier.fillMaxWidth().clip(EtalonShapes.xl).background(EtalonColors.surface)
+            .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
+            .padding(horizontal = ROW_INSET, vertical = EtalonSpace.xs),
+    ) {
+        if (showNoOrders) {
             Text(
-                line.orderNumber,
-                style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary,
+                stringResource(R.string.client_no_orders),
+                style = EtalonType.body,
+                color = EtalonColors.ink3,
+                modifier = Modifier.padding(EtalonSpace.md),
             )
-            Text(
-                formatScheduleDate(line.scheduledAt),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            MoneyText(line.totalPrice, style = EtalonType.monoBody.copy(fontWeight = FontWeight.Bold))
+        } else {
+            client.orders.forEach { line ->
+                OrderRow(
+                    // The row's title slot is the customer — that is what gives it its avatar and
+                    // its colour. The order's own identity is the first half of the meta line.
+                    clientName = client.name,
+                    status = line.status,
+                    metaLine = "${formatOrderNo(line.orderNumber)} · ${formatScheduleDate(line.scheduledAt, now)}",
+                    total = line.totalPrice,
+                    debt = null,
+                    paidLabel = null,
+                    debtLabel = { formatMoney(it) },
+                    onDark = false,
+                    onClick = { onOpenOrder(line.id) },
+                )
+            }
         }
-        Row(Modifier.padding(top = 6.dp)) { StatusChip(line.status) }
     }
 }

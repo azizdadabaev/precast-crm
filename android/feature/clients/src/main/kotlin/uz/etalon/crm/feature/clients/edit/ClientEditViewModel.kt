@@ -99,7 +99,16 @@ data class ClientEditState(
 
     private val permitted: Boolean get() = if (isEditing) canEdit else canCreate
 
-    val canSave: Boolean get() = permissionsResolved && permitted && !submitting && !isOffline
+    /**
+     * May this operator save at all — the permission and the connection, with [submitting]
+     * deliberately left out. It is what the button's ENABLED SKIN reads: the button's own
+     * `loading` already takes the click away, and disabling it as well would paint the lavender
+     * "you cannot do this" skin over a save that is going through. The guard on the action itself
+     * is [canSave], which does count [submitting].
+     */
+    val saveAllowed: Boolean get() = permissionsResolved && permitted && !isOffline
+
+    val canSave: Boolean get() = saveAllowed && !submitting
 
     /**
      * A stored value that a clear cannot remove, so the sheet says so where the operator can see

@@ -13,12 +13,17 @@
     <!-- The list row's second line, worded as `2b-clients.png` draws it («1 буюртма»). Uzbek
          counts a noun after a numeral in the singular, so there is no plural form to declare. -->
     <string name="client_order_count">%1$d буюртма</string>
+    <!-- the detail panel: caption over the client's name, and its two footer columns. «Қарз» is
+         deliberately absent — GET /api/clients/{id} carries no remaining, and a receivable
+         figure is never derived on the phone. -->
+    <string name="client_detail_caption">Мижоз</string>
     <string name="client_orders_section">Буюртмалар</string>
+    <string name="client_total_label">Жами</string>
     <string name="client_no_orders">Буюртма йўқ</string>
-    <string name="client_action_call">Қўнғироқ қилиш</string>
     <string name="client_action_edit">Таҳрирлаш</string>
-    <string name="client_action_back">Орқага</string>
-    <string name="client_address_label">Манзил</string>
+    <!-- Why the pencil is greyed: PATCH /api/clients/{id} is not idempotency-wrapped, so an edit
+         made offline could not be queued and would be lost. -->
+    <string name="client_edit_offline">Оффлайн — мижозни таҳрирлаб бўлмайди</string>
     <string name="client_notes_label">Изоҳ</string>
 
     <!-- the create / edit sheet -->

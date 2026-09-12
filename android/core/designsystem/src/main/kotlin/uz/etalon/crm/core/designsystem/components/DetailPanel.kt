@@ -152,6 +152,16 @@ fun PanelTotal(
  * @param totals two or three [PanelTotal]s, **each carrying `Modifier.weight(1f)`** — without it
  *   a long figure pushes its neighbours out of the row instead of ellipsizing inside its own third.
  * @param onCall null hides the call button and leaves its 48 dp in place, so the date stays centred.
+ * @param dateLabel an empty string draws nothing: the `Text` measures zero wide and the row keeps
+ *   its height from the 48 dp buttons beside it, so a panel with no date to show (the client
+ *   detail) is not left with a gap where one would be.
+ * @param actions screen-level buttons in the header row, drawn to the LEFT of the call button so
+ *   the two trailing controls read as one group — the client detail's edit pencil. Null (the
+ *   default) leaves the header exactly as the order detail has always drawn it.
+ * @param avatarName whose initials and colour the 34 dp circle carries. Defaults to [clientName],
+ *   which is the name on an order panel; the client detail puts the PHONE in that slot (the name
+ *   is already the headline) and a phone has no letters to make initials from, so it passes the
+ *   client's name here instead — and gets the same circle the clients list draws for that row.
  */
 @Composable
 fun DetailPanel(
@@ -165,6 +175,8 @@ fun DetailPanel(
     onBack: () -> Unit,
     dateLabel: String,
     onCall: (() -> Unit)?,
+    actions: (@Composable RowScope.() -> Unit)? = null,
+    avatarName: String = clientName,
     modifier: Modifier = Modifier,
 ) = Column(
     modifier.fillMaxWidth().clip(EtalonShapes.sheet).background(EtalonColors.navy).padding(10.dp),
@@ -172,8 +184,17 @@ fun DetailPanel(
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
         EtalonIconButton(EtalonIcons.ArrowLeft, stringResource(R.string.ds_cd_back), onBack, onDark = true)
         Text(dateLabel, style = EtalonType.label, color = EtalonColors.onDarkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (onCall != null) EtalonIconButton(EtalonIcons.Phone, stringResource(R.string.ds_cd_call), onCall, onDark = true)
-        else Spacer(Modifier.size(EtalonSpace.minTouch))
+        // Only wrapped in a Row when there is something to put beside the call button: an extra
+        // layout node around the lone button would be a chance for the order detail's frames to
+        // move, and they must not.
+        if (actions != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                actions()
+                PanelCall(onCall)
+            }
+        } else {
+            PanelCall(onCall)
+        }
     }
     Spacer(Modifier.height(6.dp))
     Column(
@@ -191,7 +212,7 @@ fun DetailPanel(
         }
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(clientName, size = 34.dp, onPanel = true)
+            Avatar(avatarName, size = 34.dp, onPanel = true)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(clientName, style = EtalonType.rowTitle, color = EtalonColors.onDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -219,4 +240,12 @@ fun DetailPanel(
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, content = totals)
     }
+}
+
+/** The header's trailing control: the call button, or the 48 dp it occupies, so a panel with no
+ *  number to dial keeps the geometry of one that has. */
+@Composable
+private fun PanelCall(onCall: (() -> Unit)?) {
+    if (onCall != null) EtalonIconButton(EtalonIcons.Phone, stringResource(R.string.ds_cd_call), onCall, onDark = true)
+    else Spacer(Modifier.size(EtalonSpace.minTouch))
 }
