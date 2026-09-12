@@ -9,11 +9,13 @@ import { withPermission } from "@/lib/api-auth";
 import { withIdempotency } from "@/lib/idempotency";
 import { can } from "@/lib/permissions";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
+import { countsFrom } from "@/lib/payment-counts";
 
 /**
  * GET /api/payments
  *   ?orderId=...        scope to one order
  *   ?status=PENDING_CONFIRMATION|CONFIRMED|REJECTED   filter
+ *   ?withCounts=1       add tab counts (Android payments queue) — see below
  *
  * Returns payments newest-first with chain-of-custody refs included so
  * the /payments confirmer page can render the chain panel without an
@@ -22,6 +24,14 @@ import { emitNotifications, usersWithPermission } from "@/lib/notifications";
  * Capped at LIST_LIMIT rows. Unbounded, the confirmed tab grows with every
  * payment the business ever takes and is re-fetched on every tab switch and
  * pull-to-refresh — on a phone, over mobile data.
+ *
+ * Response shape: without `withCounts=1` this stays the bare array it has
+ * always been — every existing (web) consumer depends on that. Only when a
+ * caller sends `withCounts=1` (the Android queue, which needs the three tab
+ * counts alongside its current list) does the response switch to the
+ * envelope `{ items: <same array>, counts: { pending, confirmed, rejected } }`.
+ * `counts` is computed with every filter EXCEPT `status`, so the three tab
+ * counts stay stable while the caller flips between tabs.
  */
 const LIST_LIMIT = 500;
 
@@ -29,59 +39,71 @@ export const GET = withPermission("payment.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const orderId = searchParams.get("orderId") ?? undefined;
   const status = searchParams.get("status") ?? undefined;
+  const withCounts = searchParams.get("withCounts") === "1";
 
-  const where: Record<string, unknown> = {};
-  if (orderId) where.orderId = orderId;
+  // countWhere excludes `status` so the tab counts don't collapse to just
+  // whichever tab the caller currently has selected.
+  const countWhere: Record<string, unknown> = {};
+  if (orderId) countWhere.orderId = orderId;
+
+  const where: Record<string, unknown> = { ...countWhere };
   if (status) where.status = status;
 
-  const payments = await prisma.payment.findMany({
-    where,
-    orderBy: { recordedAt: "desc" },
-    take: LIST_LIMIT,
-    include: {
-      order: {
-        select: {
-          id: true,
-          orderNumber: true,
-          totalPrice: true,
-          // Discount snapshot — surfaced next to the amount so a confirmer can
-          // see the order was discounted without opening the order page.
-          roomsSubtotal: true,
-          discountAmount: true,
-          discountPercent: true,
-          confirmedPaid: true,
-          paymentState: true,
-          status: true,
-          client: { select: { id: true, name: true, phone: true, address: true } },
-          dispatch: {
-            select: {
-              id: true,
-              expectedCollection: true,
-              returnedAt: true,
-              driver: { select: { id: true, name: true } },
+  const [payments, groups] = await Promise.all([
+    prisma.payment.findMany({
+      where,
+      orderBy: { recordedAt: "desc" },
+      take: LIST_LIMIT,
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            totalPrice: true,
+            // Discount snapshot — surfaced next to the amount so a confirmer can
+            // see the order was discounted without opening the order page.
+            roomsSubtotal: true,
+            discountAmount: true,
+            discountPercent: true,
+            confirmedPaid: true,
+            paymentState: true,
+            status: true,
+            client: { select: { id: true, name: true, phone: true, address: true } },
+            dispatch: {
+              select: {
+                id: true,
+                expectedCollection: true,
+                returnedAt: true,
+                driver: { select: { id: true, name: true } },
+              },
+            },
+            // Order-level (unlinked) receipts so the confirm dialog can show
+            // bot-forwarded proof that predates any payment row.
+            receipts: {
+              where: { paymentId: null },
+              orderBy: { createdAt: "asc" },
+              select: { id: true, imageUrl: true },
             },
           },
-          // Order-level (unlinked) receipts so the confirm dialog can show
-          // bot-forwarded proof that predates any payment row.
-          receipts: {
-            where: { paymentId: null },
-            orderBy: { createdAt: "asc" },
-            select: { id: true, imageUrl: true },
-          },
+        },
+        collectedByDriver: { select: { id: true, name: true, phone: true } },
+        recordedBy: { select: { id: true, name: true, email: true } },
+        handedOverTo: { select: { id: true, name: true } },
+        confirmedBy: { select: { id: true, name: true } },
+        rejectedBy: { select: { id: true, name: true } },
+        receipts: {
+          orderBy: { createdAt: "asc" },
+          select: { id: true, imageUrl: true, paymentId: true },
         },
       },
-      collectedByDriver: { select: { id: true, name: true, phone: true } },
-      recordedBy: { select: { id: true, name: true, email: true } },
-      handedOverTo: { select: { id: true, name: true } },
-      confirmedBy: { select: { id: true, name: true } },
-      rejectedBy: { select: { id: true, name: true } },
-      receipts: {
-        orderBy: { createdAt: "asc" },
-        select: { id: true, imageUrl: true, paymentId: true },
-      },
-    },
-  });
-  return ok(payments);
+    }),
+    withCounts
+      ? prisma.payment.groupBy({ by: ["status"], where: countWhere, _count: { _all: true } })
+      : Promise.resolve([]),
+  ]);
+
+  if (!withCounts) return ok(payments);
+  return ok({ items: payments, counts: countsFrom(groups) });
 });
 
 /**

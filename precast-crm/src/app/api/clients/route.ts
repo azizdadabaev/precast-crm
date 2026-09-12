@@ -14,6 +14,7 @@ import {
   parseTableQuery,
   type SortDir,
 } from "@/lib/table-query";
+import { attachTotals, sortByTotal } from "@/lib/client-totals";
 
 /** Columns the clients table may be ordered by. Never trust a raw sortBy. */
 const CLIENT_SORT_FIELDS = [
@@ -23,6 +24,7 @@ const CLIENT_SORT_FIELDS = [
   "source",
   "createdAt",
   "orders",
+  "totalBooked",
 ] as const;
 
 /** Whitelisted sortBy → Prisma orderBy. `orders` is a relation aggregate. */
@@ -59,6 +61,9 @@ function clientOrderBy(
  * Sending `page` opts into the envelope { rows, total, page, pageSize,
  * pageCount, sources }. Without it the response stays a bare array, which is
  * what the calculator's phone autocomplete (ClientInfoBar) expects.
+ *
+ * Every paginated row carries `totalBooked` (whole-UZS sum of the client's
+ * live, non-canceled/non-draft orders). `sortBy=totalBooked` sorts by it.
  */
 export const GET = withPermission("client.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
@@ -122,6 +127,36 @@ export const GET = withPermission("client.view", async (req: NextRequest) => {
   const include = { _count: { select: { deals: true, orders: true } } };
 
   if (isPaginated(searchParams)) {
+    // `totalBooked` (sum of a client's live-order totalPrice) is a groupBy
+    // aggregate, not a Client column, so it can't be a Prisma `orderBy` key —
+    // sorting by it means fetching every filtered client and sorting in JS.
+    if (sortBy === "totalBooked") {
+      const [allRows, total, sourceRows] = await prisma.$transaction([
+        prisma.client.findMany({ where, include }),
+        prisma.client.count({ where }),
+        prisma.client.findMany({
+          where: { source: { not: null } },
+          select: { source: true },
+          distinct: ["source"],
+          orderBy: { source: "asc" },
+        }),
+      ]);
+      const ids = allRows.map((r) => r.id);
+      const groups = ids.length
+        ? await prisma.order.groupBy({
+            by: ["clientId"],
+            where: { clientId: { in: ids }, status: { notIn: ["CANCELED", "DRAFT"] } },
+            _sum: { totalPrice: true },
+          })
+        : [];
+      const withTotals = sortByTotal(attachTotals(allRows, groups), sortDir);
+      const rows = withTotals.slice(skip, skip + pageSize);
+      const sources = sourceRows
+        .map((r) => r.source)
+        .filter((s): s is string => Boolean(s?.trim()));
+      return ok({ rows, ...buildPageMeta(total, page, pageSize), sources });
+    }
+
     // One transaction so `total` can never disagree with `rows`. The source
     // list is deliberately unfiltered — it feeds the Манба filter dropdown,
     // which must keep offering every value even once one is selected.
@@ -138,7 +173,21 @@ export const GET = withPermission("client.view", async (req: NextRequest) => {
     const sources = sourceRows
       .map((r) => r.source)
       .filter((s): s is string => Boolean(s?.trim()));
-    return ok({ rows, ...buildPageMeta(total, page, pageSize), sources });
+    // totalBooked rides along on every paginated row regardless of sort, so
+    // the mobile client list can show it without a second round trip.
+    const ids = rows.map((r) => r.id);
+    const groups = ids.length
+      ? await prisma.order.groupBy({
+          by: ["clientId"],
+          where: { clientId: { in: ids }, status: { notIn: ["CANCELED", "DRAFT"] } },
+          _sum: { totalPrice: true },
+        })
+      : [];
+    return ok({
+      rows: attachTotals(rows, groups),
+      ...buildPageMeta(total, page, pageSize),
+      sources,
+    });
   }
 
   const clients = await prisma.client.findMany({ where, orderBy, include });
