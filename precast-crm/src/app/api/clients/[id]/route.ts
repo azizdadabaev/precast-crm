@@ -9,6 +9,7 @@ import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { deleteClientCascade } from "@/lib/record-delete";
+import { totalForClient } from "@/lib/client-totals";
 
 type Ctx = { params: { id: string } };
 
@@ -26,7 +27,20 @@ export const GET = withPermission<Ctx["params"]>(
       },
     });
     if (!client) return fail("Мижоз топилмади · Client not found", 404);
-    return ok(client);
+
+    // `orders` above is capped at the 20 most recent, so neither a count nor a sum taken over it
+    // is the client's real figure. These two are aggregates over ALL their orders, by exactly the
+    // rule `GET /api/clients` uses for its rows — otherwise the panel and the list row disagree
+    // about the same customer. Additive: every existing reader of this route ignores them.
+    const [orderCount, groups] = await Promise.all([
+      prisma.order.count({ where: { clientId: client.id } }),
+      prisma.order.groupBy({
+        by: ["clientId"],
+        where: { clientId: client.id, status: { notIn: ["CANCELED", "DRAFT"] } },
+        _sum: { totalPrice: true },
+      }),
+    ]);
+    return ok({ ...client, totalBooked: totalForClient(client.id, groups), orderCount });
   },
 );
 

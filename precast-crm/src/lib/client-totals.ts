@@ -17,6 +17,17 @@ export function attachTotals<T extends { id: string }>(
   return rows.map((r) => ({ ...r, totalBooked: byId.get(r.id) ?? 0 }));
 }
 
+/**
+ * The same rule for a single client — `GET /api/clients/{id}`'s `totalBooked`.
+ *
+ * The detail route includes only the 20 most recent orders, so a total summed over what it
+ * returns would disagree with the list row for any client with more than that. This is the
+ * aggregate over ALL their live orders, computed the one way [attachTotals] computes it.
+ */
+export function totalForClient(clientId: string, groups: Group[]): number {
+  return attachTotals([{ id: clientId }], groups)[0].totalBooked;
+}
+
 /** Sort by totalBooked, ties broken by name — stable regardless of fetch order. */
 export function sortByTotal<T extends { name: string; totalBooked: number }>(
   rows: T[],
