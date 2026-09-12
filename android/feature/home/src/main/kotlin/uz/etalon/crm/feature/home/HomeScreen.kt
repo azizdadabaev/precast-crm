@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,6 +100,10 @@ fun HomeRoute(
     onOpenOrder: (String) -> Unit,
     onOpenOrders: () -> Unit,
     onOpenAccount: () -> Unit,
+    /** Ruling I3: where «Калькуляторда очиш» goes once the refused order is back in the draft.
+     *  Null for an operator without `calculator.use` — that tab does not exist for them, so the
+     *  action is not offered at all (the same rule as «+ Янги» on the orders list). */
+    onOpenCalculator: (() -> Unit)? = null,
     vm: HiltHomeViewModel = hiltViewModel(),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
@@ -108,12 +113,23 @@ fun HomeRoute(
         onOpenOrder = onOpenOrder, onOpenOrders = onOpenOrders, onOpenAccount = onOpenAccount,
         onOpenOutbox = { showOutbox = true },
     )
+    // The draft is written before the flag is set, so by the time the calculator opens its own
+    // `observeDraft` already has the restored quote to show.
+    LaunchedEffect(s.reopenedInCalculator) {
+        if (s.reopenedInCalculator) {
+            vm.consumeReopen()
+            showOutbox = false
+            onOpenCalculator?.invoke()
+        }
+    }
     if (showOutbox) {
         OutboxSheet(
             pending = s.pendingUploads,
             rejected = s.rejectedOrders,
             onDiscard = vm::discardRejectedOrder,
             onDismiss = { showOutbox = false },
+            onReopen = if (onOpenCalculator != null) vm::reopenRejectedOrder else null,
+            reopenError = s.reopenError,
         )
     }
 }

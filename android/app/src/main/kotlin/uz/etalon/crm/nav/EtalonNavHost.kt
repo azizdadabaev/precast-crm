@@ -162,6 +162,10 @@ fun SignedInShell(
                             onOpenOrder = { backStack.add(OrderDetail(it)) },
                             onOpenOrders = { switchTab(backStack, Orders) },
                             onOpenAccount = { showAccount = true },
+                            // Where a rejected queued order reopens (ruling I3). Gated exactly as
+                            // the orders list's «+ Янги» is: without calculator.use that tab does
+                            // not exist, so the sheet does not offer the action at all.
+                            onOpenCalculator = if (me.can(PERM_CALCULATOR_USE)) ({ switchTab(backStack, Calculator) }) else null,
                         )
                     }
                     entry<Orders> {

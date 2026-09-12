@@ -1,10 +1,12 @@
 package uz.etalon.crm.feature.home
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
@@ -190,12 +192,44 @@ class HomeScreenshotTest {
                         rejected = rejectedState().rejectedOrders,
                         onDiscard = {},
                         onDismiss = {},
+                        // Ruling I3's pair of actions, as an operator who may quote sees them.
+                        onReopen = {},
                     )
                 }
             }
         }
         rule.waitForIdle()
         captureScreenRoboImage("screenshots/home_outbox_rejected_light.png")
+    }
+
+    /**
+     * Ruling I3's confirmation, the one thing «Тушунарли» now goes through. It is the shared
+     * `ConfirmSheet` drawn with no figure — the first time that component has been asked a question
+     * that is not about money — so the arrangement is recorded rather than assumed: the question in
+     * the hero's own place, the customer under it, «Бекор қилиш» beside «Ўчириш».
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun outboxDiscardConfirmLight() {
+        rule.setContent {
+            EtalonTheme {
+                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
+                    HomeScreen(
+                        s = rejectedState(), me = owner, now = now, onRefresh = {},
+                        onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    )
+                    OutboxSheet(
+                        pending = 0,
+                        rejected = rejectedState().rejectedOrders,
+                        onDiscard = {},
+                        onDismiss = {},
+                        onReopen = {},
+                    )
+                }
+            }
+        }
+        rule.onNodeWithText("Тушунарли").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText("Ҳисоб-китоб ўчирилади").assertIsDisplayed()
+        captureScreenRoboImage("screenshots/home_outbox_discard_confirm_light.png")
     }
 
     /**

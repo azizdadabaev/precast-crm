@@ -28,9 +28,16 @@
          title and its `outbox_pending` plural both already say маълумот. -->
     <string name="home_outbox_clear_data">Юборилмаган маълумот йўқ</string>
     <!-- D10 / R6: queued orders the server refused outright. They cannot retry themselves, so the
-         operator reads each one and dismisses it with «Тушунарли» — the row is then gone for good. -->
+         operator either reopens the quote in the calculator and places it again, or reads the
+         refusal and dismisses it with «Тушунарли» — which, being the end of the only copy of that
+         quote, asks first. -->
     <string name="home_outbox_rejected_title">Рад этилган буюртмалар</string>
     <string name="home_outbox_rejected_ack">Тушунарли</string>
+    <!-- The row's primary action: the rejected order's own figures become the calculator's draft,
+         and the operator fixes whatever the server objected to. -->
+    <string name="home_outbox_open_in_calculator">Калькуляторда очиш</string>
+    <string name="home_outbox_discard_title">Ҳисоб-китоб ўчирилади</string>
+    <string name="home_outbox_discard_confirm">Ўчириш</string>
     <!-- A queued row whose payload carried no client name — the operator still has to be able to
          tell the rows apart and dismiss the right one. -->
     <string name="home_outbox_rejected_no_client">Номсиз мижоз</string>

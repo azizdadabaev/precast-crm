@@ -63,6 +63,13 @@ data class HomeUiState(
      *  only surface that can tell the operator it happened — see
      *  [uz.etalon.crm.core.data.CalculatorRepository.observeRejectedOrders]. */
     val rejectedOrders: List<RejectedOrder> = emptyList(),
+    /** Ruling I3: set once a rejected order's own figures have been written back as the
+     *  calculator's draft. The route reads it, switches to the calculator tab and clears it —
+     *  one navigation per tap, whatever recompositions happen in between. */
+    val reopenedInCalculator: Boolean = false,
+    /** Why a re-open failed, in Uzbek, shown above the list. Nothing was deleted — the row is
+     *  still there to try again or to dismiss. */
+    val reopenError: String? = null,
     /** "Not yet known" is not "no" — nothing about the tiles renders before this is true. */
     val permissionsResolved: Boolean = false,
     val hasDashboardAccess: Boolean = false,
@@ -98,6 +105,10 @@ fun interface HomeOutboxUseCase { operator fun invoke(): Flow<Int> }
 fun interface HomeRejectedOrdersUseCase { operator fun invoke(): Flow<List<RejectedOrder>> }
 fun interface HomeDiscardRejectedOrderUseCase { suspend operator fun invoke(id: String) }
 
+/** Ruling I3: writes a rejected order's payload back as the calculator's draft and drops the row —
+ *  see `CalculatorRepository.reopenRejectedOrder` for what survives that round trip. */
+fun interface HomeReopenRejectedOrderUseCase { suspend operator fun invoke(id: String): Result<Unit> }
+
 /**
  * The «Бугун» column. Every signed-in operator gets one — this ViewModel needs no permission to
  * construct — but the one endpoint Task 2/3 modelled for today's deliveries and the operational
@@ -119,6 +130,7 @@ open class HomeViewModel(
     // the queue — need not know these exist. A Home with no rejections is the ordinary Home.
     rejectedOrders: HomeRejectedOrdersUseCase = HomeRejectedOrdersUseCase { flowOf(emptyList()) },
     private val discardRejected: HomeDiscardRejectedOrderUseCase = HomeDiscardRejectedOrderUseCase { },
+    private val reopenRejected: HomeReopenRejectedOrderUseCase = HomeReopenRejectedOrderUseCase { Result.success(Unit) },
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -143,6 +155,27 @@ open class HomeViewModel(
      *  good. The list refreshes itself — the flow above is watching the same rows. */
     fun discardRejectedOrder(id: String) {
         viewModelScope.launch { discardRejected(id) }
+    }
+
+    /**
+     * «Калькуляторда очиш»: the refused order becomes the calculator's draft and the row goes.
+     *
+     * On success the route is told to switch tabs ([HomeUiState.reopenedInCalculator]); on failure
+     * the sheet says why and the row stays. The list needs no nudging either way — the rejections
+     * flow is watching the same rows.
+     */
+    fun reopenRejectedOrder(id: String) {
+        viewModelScope.launch {
+            reopenRejected(id).fold(
+                onSuccess = { _state.update { it.copy(reopenedInCalculator = true, reopenError = null) } },
+                onFailure = { t -> _state.update { it.copy(reopenError = t.toAppError().message) } },
+            )
+        }
+    }
+
+    /** The route has switched to the calculator; the flag is spent. */
+    fun consumeReopen() {
+        _state.update { it.copy(reopenedInCalculator = false) }
     }
 
     /** Pull-to-refresh and the error banner's retry. A no-op without dashboard access: there is
@@ -204,4 +237,5 @@ class HiltHomeViewModel @Inject constructor(
     outboxPending = HomeOutboxUseCase { outbox.observePendingCount() },
     rejectedOrders = HomeRejectedOrdersUseCase { calculator.observeRejectedOrders() },
     discardRejected = HomeDiscardRejectedOrderUseCase { id -> calculator.discardRejectedOrder(id) },
+    reopenRejected = HomeReopenRejectedOrderUseCase { id -> calculator.reopenRejectedOrder(id) },
 )

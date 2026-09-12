@@ -3,6 +3,7 @@ package uz.etalon.crm.core.data
 import app.cash.turbine.test
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -430,5 +431,96 @@ class CalculatorRepositoryTest {
 
         repo.discardRejectedOrder("row-1")
         assertEquals(listOf("row-1"), outbox.discarded)
+    }
+
+    // ── «Калькуляторда очиш»: the rejection re-hydrates the quote ───
+
+    /**
+     * Ruling I3's own equality, and the mirror of the queued-JSON round trip above: the payload a
+     * rejected row holds must come back as the SAME quote the operator typed. Anything less and
+     * re-opening a refusal quietly reprices somebody's order.
+     *
+     * The quote goes out through `queuePlaceOrder` — the real encoder — and comes back through
+     * `reopenRejectedOrder`, so nothing here trusts a hand-built payload. The two fields that
+     * cannot survive (`scheduledAt` and `notes`, both typed on the place-order sheet and held by
+     * no draft) are not part of a [CalculatorDraft] to begin with, and the room ids are this
+     * client's own handles, which the server never saw — so the comparison replaces them.
+     */
+    @Test fun `a rejected payload re-opens as the quote it was built from`() = runTest {
+        val rows = listOf(
+            room("Зал", width = 5.2, length = 7.1),
+            room("Ошхона").copy(
+                bearing = 0.2, correction = 0.05, extraBeams = 3, forceStartBeam = true,
+                m2PriceOverride = true, m2PriceOverrideValue = 160000.0, m2PriceReason = "чегирма",
+            ),
+        )
+        val input = placeInput(
+            rows = rows, notes = "тезкор", deliveryCost = 150_000.0, otherCost = 25_000.0,
+            projectId = "proj-7",
+        ).let { it.copy(draft = it.draft.copy(discountPercent = 2.5, discountAmount = 300_000.0)) }
+
+        val outbox = CalcSpyOutbox()
+        val dao = FakeDraftDao()
+        val repo = repo(CalcPlacingApi(), dao = dao, outbox = outbox)
+        repo.queuePlaceOrder(input, "row-1").getOrThrow()
+        outbox.failed.value = listOf(
+            FailedOutboxRow(id = "row-1", error = "Мижоз топилмади", payload = outbox.calls.single().payload),
+        )
+
+        repo.reopenRejectedOrder("row-1").getOrThrow()
+
+        val restored = repo.observeDraft().first()!!
+        // The phone comes back NORMALISED — `toRequest` is what normalised it on the way out, and
+        // 998901234567 is the number the order was actually placed against.
+        assertEquals(
+            input.draft.copy(clientPhone = "998901234567", rows = emptyList()),
+            restored.copy(rows = emptyList()),
+        )
+        // Room for room, every input the operator typed. The local id is minted fresh (the server
+        // never saw the old one) and the engine result is recomputed on restore, so neither takes
+        // part in the comparison.
+        assertEquals(
+            rows.map { it.copy(id = "", result = null) },
+            restored.rows.map { it.copy(id = "", result = null) },
+        )
+        assertTrue(restored.rows.map { it.id }.toSet().size == rows.size, "each restored room has its own id")
+        assertEquals(listOf("row-1"), outbox.discarded, "the row goes only once the draft is written")
+    }
+
+    /** A payload this build cannot read must not cost the operator the rejection as well as the
+     *  quote: nothing is written, nothing is deleted, and «Тушунарли» is still their way out. */
+    @Test fun `an unreadable payload leaves the rejection where it is`() = runTest {
+        val outbox = CalcSpyOutbox()
+        val dao = FakeDraftDao()
+        val repo = repo(CalcPlacingApi(), dao = dao, outbox = outbox)
+        outbox.failed.value = listOf(
+            FailedOutboxRow(id = "row-1", error = "Мижоз топилмади", payload = JsonObject(emptyMap())),
+        )
+
+        assertTrue(repo.reopenRejectedOrder("row-1").isFailure)
+        assertTrue(outbox.discarded.isEmpty(), "the row must survive a payload that could not be read")
+        assertNull(repo.observeDraft().first())
+    }
+
+    /** Nobody signed in: `persistDraft` is a no-op by design, so re-opening would delete the row
+     *  and write the quote nowhere at all. */
+    @Test fun `re-opening with nobody signed in deletes nothing`() = runTest {
+        val outbox = CalcSpyOutbox()
+        val repo = repo(CalcPlacingApi(), currentUser = user(null), outbox = outbox)
+        outbox.failed.value = listOf(
+            FailedOutboxRow(
+                id = "row-1", error = "Мижоз топилмади",
+                payload = jsonInstance().encodeToJsonElement(
+                    PlaceOrderRequest.serializer(),
+                    PlaceOrderRequest(
+                        clientName = "Aziz", clientPhone = "998901234567", clientAddress = "Тошкент",
+                        rooms = emptyList(), scheduledAt = SCHEDULED_AT,
+                    ),
+                ).jsonObject,
+            ),
+        )
+
+        assertTrue(repo.reopenRejectedOrder("row-1").isFailure)
+        assertTrue(outbox.discarded.isEmpty())
     }
 }

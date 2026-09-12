@@ -57,18 +57,22 @@ fun ConfirmTile(caption: String, value: String, modifier: Modifier = Modifier) =
  * It draws the scrim and the sheet, and nothing else: it is composed into a screen's own `Box`
  * rather than a `Dialog`, so the screen keeps control of when it exists and what is behind it.
  *
- * @param caption the line above the figure, e.g. «Тўловни тасдиқлаш · № 09−0003».
+ * @param caption the line above the figure, e.g. «Тўловни тасдиқлаш · № 09−0003». With no [amount]
+ *   it IS the question, and it is drawn in the figure's place and weight.
+ * @param amount the figure the decision is about. Null for a decision that is not about money —
+ *   discarding something, say — where a «UZS 0» hero would be an answer to a question nobody asked.
  * @param meta the smaller line under it («Нақд · Азиз Р. · 16 сен»), or null.
- * @param tiles two [ConfirmTile]s, each carrying `Modifier.weight(1f)`.
+ * @param tiles two [ConfirmTile]s, each carrying `Modifier.weight(1f)`; null when the decision has
+ *   no figures to lay out.
  * @param confirmEnabled false while the confirm is in flight or the amount is not yet valid;
  *   dismissing stays available either way, because a modal a user cannot leave is a trap.
  */
 @Composable
 fun ConfirmSheet(
     caption: String,
-    amount: Money,
+    amount: Money?,
     meta: String?,
-    tiles: @Composable RowScope.() -> Unit,
+    tiles: (@Composable RowScope.() -> Unit)?,
     dismissText: String,
     confirmText: String,
     onDismiss: () -> Unit,
@@ -96,15 +100,22 @@ fun ConfirmSheet(
             Modifier.fillMaxWidth().clip(EtalonShapes.xxl).background(EtalonColors.indigoPanel)
                 .padding(horizontal = 14.dp, vertical = 16.dp),
         ) {
-            Text(
-                caption,
-                style = EtalonType.captionLight,
-                color = EtalonColors.onDarkMuted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(8.dp))
-            MoneyHeroText(amount, style = EtalonType.amountLg, onDark = true)
+            if (amount != null) {
+                Text(
+                    caption,
+                    style = EtalonType.captionLight,
+                    color = EtalonColors.onDarkMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(8.dp))
+                MoneyHeroText(amount, style = EtalonType.amountLg, onDark = true)
+            } else {
+                // No figure to lead with, so the question takes the hero's place rather than being
+                // whispered above an empty one. Two lines: «Ҳисоб-китоб ўчирилади» fits one at
+                // every font scale the app supports, a longer question wraps instead of vanishing.
+                Text(caption, style = EtalonType.titleSm, color = EtalonColors.onDark, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
             if (meta != null) {
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -115,8 +126,10 @@ fun ConfirmSheet(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), content = tiles)
+            if (tiles != null) {
+                Spacer(Modifier.height(14.dp))
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), content = tiles)
+            }
         }
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), Arrangement.spacedBy(8.dp)) {

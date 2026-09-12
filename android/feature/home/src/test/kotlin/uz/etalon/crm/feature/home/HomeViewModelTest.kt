@@ -277,6 +277,38 @@ class HomeViewModelTest {
         assertEquals(2, vm.state.value.outboxBadge)
     }
 
+    /**
+     * Ruling I3. A successful re-open raises the flag the route navigates on, and clears it once —
+     * a flag that stayed set would send the operator back to the calculator on every recomposition
+     * of Home.
+     */
+    @Test fun `a reopened rejection sends the route to the calculator, once`() = runTest {
+        val reopened = mutableListOf<String>()
+        val vm = viewModel(reopenRejected = { id -> reopened += id; Result.success(Unit) })
+        advanceUntilIdle()
+
+        vm.reopenRejectedOrder("row-1")
+        advanceUntilIdle()
+        assertEquals(listOf("row-1"), reopened)
+        assertTrue(vm.state.value.reopenedInCalculator)
+        assertNull(vm.state.value.reopenError)
+
+        vm.consumeReopen()
+        assertFalse(vm.state.value.reopenedInCalculator)
+    }
+
+    /** A re-open that failed navigates nowhere and says why — the row is still in the list, and
+     *  the quote with it. */
+    @Test fun `a failed reopen shows the reason and stays put`() = runTest {
+        val vm = viewModel(reopenRejected = { Result.failure(IllegalStateException("Ҳисоб-китобни очиб бўлмади")) })
+        advanceUntilIdle()
+
+        vm.reopenRejectedOrder("row-1")
+        advanceUntilIdle()
+        assertFalse(vm.state.value.reopenedInCalculator)
+        assertEquals("Ҳисоб-китобни очиб бўлмади", vm.state.value.reopenError)
+    }
+
     // ── fixtures ──────────────────────────────────────────────────────────────────
 
     private fun viewModel(
@@ -285,12 +317,14 @@ class HomeViewModelTest {
         outboxPending: () -> kotlinx.coroutines.flow.Flow<Int> = { flowOf(0) },
         rejectedOrders: () -> kotlinx.coroutines.flow.Flow<List<RejectedOrder>> = { flowOf(emptyList()) },
         discardRejected: suspend (String) -> Unit = { },
+        reopenRejected: suspend (String) -> Result<Unit> = { Result.success(Unit) },
     ) = HomeViewModel(
         home = HomeUseCase { home() },
         permissions = HomePermissionUseCase { permissions(it) },
         outboxPending = HomeOutboxUseCase { outboxPending() },
         rejectedOrders = HomeRejectedOrdersUseCase { rejectedOrders() },
         discardRejected = HomeDiscardRejectedOrderUseCase { id -> discardRejected(id) },
+        reopenRejected = HomeReopenRejectedOrderUseCase { id -> reopenRejected(id) },
     )
 
     private fun delivery(id: String) = TodayDelivery(

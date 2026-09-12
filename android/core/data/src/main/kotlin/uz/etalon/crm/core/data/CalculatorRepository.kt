@@ -2,6 +2,7 @@ package uz.etalon.crm.core.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
@@ -24,6 +25,7 @@ import uz.etalon.crm.core.network.dto.PlaceOrderRequest
 import uz.etalon.crm.core.network.dto.RoomCalcInputDto
 import uz.etalon.crm.core.network.dto.SaveProjectDraftRequest
 import java.math.BigDecimal
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,6 +47,15 @@ private fun blockedRoomsMessage(names: List<String>): String =
 /** What a rejected queued order shows when the row carries no message of its own — the worker
  *  always writes one, so this is the "row hand-edited / written by another build" case. */
 private const val REJECTED_FALLBACK_MESSAGE = "Буюртма қабул қилинмади"
+
+/** [CalculatorRepository.reopenRejectedOrder] could not find the row (another device already
+ *  acknowledged it, or nobody is signed in). The row stays wherever it is; nothing is deleted. */
+private const val REOPEN_FAILED_MESSAGE = "Ҳисоб-китобни очиб бўлмади"
+
+/** The row is there but this build cannot read what was in it — a payload written by a newer
+ *  version, or a truncated write. Said plainly rather than reopening an empty quote, and the row
+ *  is kept so «Тушунарли» is still the operator's way out. */
+private const val REOPEN_UNREADABLE_MESSAGE = "Ҳисоб-китоб маълумотлари ўқилмади"
 
 /** One order the server permanently refused after it had already been queued. [message] is the
  *  server's own Uzbek half, as the worker stored it. */
@@ -179,6 +190,79 @@ class CalculatorRepository @Inject constructor(
 
     /** The operator has read the rejection and is done with it — the row goes for good. */
     suspend fun discardRejectedOrder(id: String) = outbox.discard(id)
+
+    /**
+     * Ruling I3 · «Калькуляторда очиш». Turns a rejected queued order back into the operator's
+     * current draft, then drops the row.
+     *
+     * The rejected row holds the only copy of that quote: the calculator was cleared the moment the
+     * order was queued, hours before the refusal arrived. Acknowledging the rejection therefore
+     * used to delete the work as well as the notice — an order for a real customer, priced room by
+     * room, gone with one tap and no way back. This reads the payload the row was going to send and
+     * rebuilds the quote from it, so the operator fixes whatever the server objected to and places
+     * it again.
+     *
+     * **The inverse of [toRequest], and NOT a lossless one.** What comes back: every room's inputs
+     * (dimensions, bearing, correction, extra beams, start beam, pattern override, rate override
+     * and its reason), the client's name, phone and address, the discount (percent and amount),
+     * delivery and other, and the `projectId` that keeps a saved draft from being duplicated. What
+     * does not, because [CalculatorDraft] has no place for either — both are typed on the
+     * place-order sheet at the moment of placing, not held by the quote:
+     *
+     * - `scheduledAt`, the delivery date, and
+     * - `notes`.
+     *
+     * Each room's local `id` is minted fresh: it is this client's own handle, never sent, and
+     * nothing outside the quote refers to it. `paidAmount`/`receiptUrls` are always zero and empty
+     * on this route (see [toRequest]), so there is nothing to restore.
+     *
+     * **It overwrites whatever draft is open.** One draft per operator is the model the calculator
+     * has always had, and the autosave would have replaced it a keystroke later anyway; but an
+     * operator with a half-typed quote on screen loses it. The row is deleted only AFTER the draft
+     * has been written, so a failure at any step leaves the rejection where it was.
+     */
+    suspend fun reopenRejectedOrder(id: String): Result<Unit> = runCatchingCancellable {
+        // Before anything is deleted: with nobody signed in `persistDraft` is a no-op, and the row
+        // would go with the quote still nowhere.
+        if (currentUser.id() == null) error(REOPEN_FAILED_MESSAGE)
+        val row = outbox.observeFailed(OutboxKind.PLACE_ORDER).first().firstOrNull { it.id == id }
+            ?: error(REOPEN_FAILED_MESSAGE)
+        val request = runCatching { json.decodeFromJsonElement(PlaceOrderRequest.serializer(), row.payload) }
+            .getOrElse { error(REOPEN_UNREADABLE_MESSAGE) }
+        persistDraft(request.toDraft())
+        outbox.discard(id)
+    }
+
+    /** The inverse of [toWire] — see [reopenRejectedOrder] for what survives the round trip. */
+    private fun PlaceOrderRequest.toDraft() = CalculatorDraft(
+        rows = rooms.map { it.toRow() },
+        clientPhone = clientPhone,
+        clientName = clientName,
+        clientAddress = clientAddress,
+        discountPercent = discountPercent,
+        discountAmount = discountAmount.toDouble(),
+        deliveryCost = deliveryCost.toDouble(),
+        otherCost = otherCost.toDouble(),
+        projectId = projectId,
+    )
+
+    /** `result = null` on purpose: the engine reprices every restored row against the CURRENT
+     *  pricing config, exactly as it does for a draft read back out of Room. */
+    private fun RoomCalcInputDto.toRow() = SlabRow(
+        id = UUID.randomUUID().toString(),
+        name = name.orEmpty(),
+        innerWidth = innerWidth,
+        innerLength = innerLength,
+        bearing = bearing,
+        correction = correction,
+        extraBeams = extraBeams,
+        forceStartBeam = forceStartBeam,
+        patternOverride = patternOverride?.let { p -> runCatching { Pattern.valueOf(p) }.getOrNull() },
+        m2PriceOverride = m2PriceOverride,
+        m2PriceOverrideValue = m2PriceOverrideValue?.toDouble(),
+        m2PriceReason = m2PriceReason,
+        result = null,
+    )
 
     /**
      * The one place a quote becomes `POST /api/orders`'s body, shared by both paths above.
