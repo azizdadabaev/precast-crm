@@ -178,6 +178,12 @@ open class HomeViewModel(
         _state.update { it.copy(reopenedInCalculator = false) }
     }
 
+    /** The sheet closed: a failed re-open's message must not greet the next opening, which may
+     *  be about a different row entirely. */
+    fun dismissReopenError() {
+        _state.update { it.copy(reopenError = null) }
+    }
+
     /** Pull-to-refresh and the error banner's retry. A no-op without dashboard access: there is
      *  nothing server-side this operator may ask for, and asking anyway would only turn a silent
      *  empty state into a 403 the operator cannot act on. */

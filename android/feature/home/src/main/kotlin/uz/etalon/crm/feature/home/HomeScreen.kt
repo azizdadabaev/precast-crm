@@ -127,7 +127,10 @@ fun HomeRoute(
             pending = s.pendingUploads,
             rejected = s.rejectedOrders,
             onDiscard = vm::discardRejectedOrder,
-            onDismiss = { showOutbox = false },
+            onDismiss = {
+                showOutbox = false
+                vm.dismissReopenError()
+            },
             onReopen = if (onOpenCalculator != null) vm::reopenRejectedOrder else null,
             reopenError = s.reopenError,
         )

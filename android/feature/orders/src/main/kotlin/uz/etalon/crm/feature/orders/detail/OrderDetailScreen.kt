@@ -259,7 +259,7 @@ fun OrderDetailScreen(
                     // A blocked payment door hangs its reason under the button, so the bar is one
                     // `meta` line taller than the constant describes — see [blockedBarExtra].
                     extraBottom = when {
-                        !hasBar -> 0.dp
+                        !hasBar || !barVisible -> 0.dp
                         door is PaymentDoor.Blocked -> StickyActionBarDefaults.height + blockedBarExtra
                         else -> StickyActionBarDefaults.height
                     },

@@ -490,7 +490,7 @@ export default function OrderDetailPage() {
     },
     pricing: {
       subtotal: Number(order.roomsSubtotal),
-      discountAmount: discountNum,
+      discountAmount: shownDiscount,
       discountPercent: Number(order.discountPercent),
       deliveryCost: deliveryNum,
       otherCost: otherNum,
