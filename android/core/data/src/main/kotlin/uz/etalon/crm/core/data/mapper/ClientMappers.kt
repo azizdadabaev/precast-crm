@@ -10,6 +10,7 @@ import uz.etalon.crm.core.network.dto.ClientDetailDto
 import uz.etalon.crm.core.network.dto.ClientOrderLineDto
 import uz.etalon.crm.core.network.dto.ClientRowDto
 import uz.etalon.crm.core.network.dto.ClientsPageDto
+import java.math.BigDecimal
 import java.time.Instant
 
 /**
@@ -49,6 +50,9 @@ fun ClientsPageDto.toDomain() = ClientPage(items = rows.map { it.toDomain() }, t
 fun ClientOrderLineDto.toDomain() = ClientOrderLine(
     id = id, orderNumber = orderNumber, status = OrderStatus.from(status),
     totalPrice = Money.parse(totalPrice), scheduledAt = Instant.parse(scheduledAt),
+    // `BigDecimal(String)`, the same conversion `OrderRowDto.toDomain` does for the same column —
+    // never `toDouble()`, which would round a Decimal(10,3) area before it is ever displayed.
+    totalArea = BigDecimal(totalArea),
 )
 
 /** The two aggregates stay NULL when the response carried none — an older server — so the screen

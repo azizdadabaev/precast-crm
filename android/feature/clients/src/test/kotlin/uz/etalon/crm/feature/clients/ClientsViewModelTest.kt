@@ -30,6 +30,7 @@ import uz.etalon.crm.feature.clients.list.ClientsListUseCase
 import uz.etalon.crm.feature.clients.list.ClientsPermissionUseCase
 import uz.etalon.crm.feature.clients.list.ClientsViewModel
 import java.io.IOException
+import java.math.BigDecimal
 import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -343,5 +344,6 @@ class ClientsViewModelTest {
     private fun orderLine(id: String) = ClientOrderLine(
         id = id, orderNumber = "ORD-$id", status = OrderStatus.PLACED,
         totalPrice = Money.parse("12000000"), scheduledAt = Instant.EPOCH,
+        totalArea = BigDecimal("42.500"),
     )
 }

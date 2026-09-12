@@ -1,10 +1,9 @@
 package uz.etalon.crm.core.designsystem.components
 
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -50,19 +49,24 @@ val LocalNavPillInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.d
  * provides into [LocalNavPillInset]; screens read the local rather than calling this, so a locked
  * route can provide `0.dp` instead.
  *
- * **Zero while the keyboard is up.** The pill is drawn on the navigation bar, so the IME covers it
- * completely — and every screen with a text field (Record payment, Change PIN, the clients search)
- * was reserving the pill's whole 84 dp band on top of the keyboard's own inset, pushing content up
- * by a band that nothing occupies. Decided once here rather than per screen, so the rule cannot
- * drift: no pill on screen, no clearance for it. Screenshot frames are unaffected — Robolectric
- * reports the IME absent whatever is focused.
+ * **The band shrinks by however much of it the keyboard already covers.** The pill is drawn on the
+ * navigation bar, so a full-height IME hides it completely and the clearance goes to zero — which
+ * is the bug this fixes, because Record payment, Change PIN and the clients search were each
+ * reserving the whole 84 dp band *on top of* the keyboard's own inset, pushing content up by a
+ * band nothing occupied. But "keyboard up" is not one state: a floating or hardware-keyboard IME
+ * reports ~45 dp of toolbar, the pill stays fully visible above it, and a flat zero would slide
+ * content back under the pill. So the two are netted rather than switched — `ime` is subtracted
+ * from the band, floored at zero — and every keyboard height between the two extremes gets the
+ * clearance it actually needs.
+ *
+ * Screenshot frames are unaffected: Robolectric reports no IME whatever is focused, so `ime` is 0
+ * and the sum is the one every existing baseline was recorded under.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun navPillInsetOf(): Dp = if (WindowInsets.isImeVisible) {
-    0.dp
-} else {
-    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + NAV_PILL_BAND
+fun navPillInsetOf(): Dp {
+    val systemBars = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val ime = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    return (systemBars + NAV_PILL_BAND - ime).coerceAtLeast(0.dp)
 }
 
 /** Lifts whatever this modifies clear of the nav pill — the fixed sheet or bar at a screen's foot. */

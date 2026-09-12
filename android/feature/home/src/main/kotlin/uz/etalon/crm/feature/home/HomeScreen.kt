@@ -58,6 +58,7 @@ import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.model.owesNothing
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
+import uz.etalon.crm.core.ui.format.formatCountBare
 import uz.etalon.crm.core.ui.format.formatLongDate
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatPercent
@@ -242,7 +243,7 @@ private fun KpiRow(t: HomeTiles) {
         KpiMoneyCard(
             stringResource(R.string.home_kpi_receivables), t.receivables,
             accent = KpiAccent.RED, icon = EtalonIcons.CircleAlert,
-            footnote = stringResource(R.string.home_kpi_receivables_note, t.receivableOrders),
+            footnote = stringResource(R.string.home_kpi_receivables_note, formatCountBare(t.receivableOrders)),
             footnotePositive = false,
             modifier = Modifier.fillMaxHeight(),
         )
@@ -271,7 +272,7 @@ private fun KpiRow(t: HomeTiles) {
         KpiCard(
             stringResource(R.string.home_kpi_today), formatArea(t.todayArea),
             accent = KpiAccent.INDIGO, icon = EtalonIcons.Package,
-            footnote = stringResource(R.string.home_kpi_today_note, t.todayCount),
+            footnote = stringResource(R.string.home_kpi_today_note, formatCountBare(t.todayCount)),
             modifier = Modifier.fillMaxHeight(),
         )
     }

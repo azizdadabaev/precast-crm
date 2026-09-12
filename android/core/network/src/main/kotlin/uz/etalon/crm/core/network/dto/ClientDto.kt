@@ -65,6 +65,14 @@ data class ClientOrderLineDto(
     val status: String,
     val totalPrice: String,
     val scheduledAt: String,
+    /**
+     * Σ monolith area, `Decimal(10,3)` — a QUOTED string like [totalPrice] beside it, because this
+     * route serializes the raw Prisma row and Prisma writes a Decimal as a JSON string (the same
+     * shape `OrderRowDto.totalArea` reads). Defaulted to `"0"` so a response that somehow omits it
+     * still decodes: an order row missing its area is worth drawing without the area, never worth
+     * throwing away.
+     */
+    val totalArea: String = "0",
 )
 
 /** `GET /api/clients/{id}`. */

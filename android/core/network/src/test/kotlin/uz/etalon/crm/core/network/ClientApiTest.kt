@@ -83,6 +83,35 @@ class ClientApiTest {
         assertEquals(41, detail.orderCount)
     }
 
+    /**
+     * Each order line carries its area. The route serializes the raw Prisma row, so `totalArea` is
+     * a QUOTED `Decimal(10,3)` exactly as `totalPrice` beside it is — the client row's meta line
+     * writes it «81,99 м²», the same figure the orders tab shows for the same order.
+     */
+    @Test fun `client detail decodes each order line's area`() = runTest {
+        server.enqueue(ok(
+            """{"ok":true,"data":{"id":"c1","name":"Client","phone":"998901112233","orders":[
+              |{"id":"o1","orderNumber":"2026-09-0021","status":"ACCEPTED","totalPrice":"15370049.00",
+              |"scheduledAt":"2026-09-20T04:00:00.000Z","totalArea":"81.990"}]}}"""
+                .trimMargin().replace("\n", ""),
+        ))
+        val detail = api.client("c1")
+        assertEquals("81.990", detail.orders.single().totalArea)
+    }
+
+    /** No `totalArea` key at all defaults to `"0"`. An order line missing its area is worth drawing
+     *  without the area; it is never worth throwing the whole client away. */
+    @Test fun `client detail decodes an order line with no area as zero`() = runTest {
+        server.enqueue(ok(
+            """{"ok":true,"data":{"id":"c1","name":"Client","phone":"998901112233","orders":[
+              |{"id":"o1","orderNumber":"2026-09-0021","status":"ACCEPTED","totalPrice":"15370049.00",
+              |"scheduledAt":"2026-09-20T04:00:00.000Z"}]}}"""
+                .trimMargin().replace("\n", ""),
+        ))
+        val detail = api.client("c1")
+        assertEquals("0", detail.orders.single().totalArea)
+    }
+
     /** A server older than those two fields sends neither. They stay NULL rather than defaulting
      *  to zero: a zero total would be a claim that this customer has booked nothing. */
     @Test fun `client detail from an older server leaves both aggregates null`() = runTest {

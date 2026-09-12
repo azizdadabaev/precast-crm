@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -117,7 +118,11 @@ fun OrdersListRoute(
  *
  * The shell no longer wraps the tabs in a `Scaffold`, so the screen applies
  * [statusBarsPadding] itself — without it the header draws under the clock. The bottom is the
- * list's own [navPillContentPadding], which is what the floating nav pill needs to scroll clear.
+ * list's own [navPillContentPadding], which is what the floating nav pill needs to scroll clear,
+ * plus [imePadding] (ruling R13): `enableEdgeToEdge` makes the manifest's `adjustResize` inert, so
+ * without it the search field at the top stays put while the keyboard eats the list under it. This
+ * is the one pill consumer with a text field and no sticky bar to hide in its place — the pill's
+ * own band nets the keyboard out inside `navPillInsetOf`.
  *
  * @param onNewOrder null for an operator without `calculator.use` — they get no «+ Янги» at all,
  * rather than a button that opens a tab they do not have.
@@ -136,7 +141,7 @@ fun OrdersListScreen(
     onNewOrder: (() -> Unit)?,
 ) {
     var pickDay by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding().imePadding()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.headerMargin, vertical = EtalonSpace.md),
             verticalAlignment = Alignment.Bottom,

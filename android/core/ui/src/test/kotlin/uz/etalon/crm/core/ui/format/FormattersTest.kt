@@ -30,6 +30,19 @@ class FormattersTest {
         assertEquals("24,75 м²", formatArea(BigDecimal("24.75")))
     }
     @Test fun `count uses та`() { assertEquals("12 та", formatCount(12)) }
+
+    /**
+     * The bare count, for the places a sentence already names what is being counted — «312
+     * мижоздан», «2 буюртма». Grouped by the same U+202F every other figure in the app is, which is
+     * the half of this that a raw `%1$d` used to drop: «1240» reads as two numbers, «1 240» reads
+     * as one. Written as an escape rather than an invisible literal, as the money case is.
+     */
+    @Test fun `a bare count is grouped and carries no counter word`() {
+        assertEquals("1\u202F240", formatCountBare(1240))
+        assertEquals("999", formatCountBare(999))
+        assertEquals("0", formatCountBare(0))
+        assertEquals("1\u202F000\u202F000", formatCountBare(1_000_000))
+    }
     @Test fun `meters use comma decimal and м`() { assertEquals("4,25 м", formatMeters(4.25)) }
     @Test fun `weight is grouped with a thin space and кг`() {
         // U+202F NARROW NO-BREAK SPACE (D8), written as an escape so the expectation stays readable.

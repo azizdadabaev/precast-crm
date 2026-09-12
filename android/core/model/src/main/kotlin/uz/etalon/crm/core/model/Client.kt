@@ -1,5 +1,6 @@
 package uz.etalon.crm.core.model
 
+import java.math.BigDecimal
 import java.time.Instant
 
 /** One row of GET /api/clients. `phone` is the unique customer identity — never `name`,
@@ -29,6 +30,9 @@ data class ClientOrderLine(
     val status: OrderStatus,
     val totalPrice: Money,
     val scheduledAt: Instant,
+    /** Σ monolith area, the same figure [OrderSummary.totalArea] carries in the orders list — so a
+     *  row under a client reads «дата · 81,99 м²» exactly as the orders tab's rows do. */
+    val totalArea: BigDecimal,
 )
 
 /**

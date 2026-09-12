@@ -40,6 +40,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.ui.format.formatAddressLine
+import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatCount
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatOrderNo
@@ -284,7 +285,11 @@ private fun OrdersCard(
                     // client's initials repeated down the card distinguishes no row from any other.
                     clientName = formatOrderNo(line.orderNumber),
                     status = line.status,
-                    metaLine = formatScheduleDate(line.scheduledAt, now),
+                    // «20 сен · 81,99 м²» — the date and the size, which is what tells two orders
+                    // for one customer apart once the number has moved up to the title. The area
+                    // is written exactly as the orders tab writes it (`formatArea`), so the same
+                    // order reads the same in both lists.
+                    metaLine = "${formatScheduleDate(line.scheduledAt, now)} · ${formatArea(line.totalArea)}",
                     total = line.totalPrice,
                     debt = null,
                     paidLabel = null,

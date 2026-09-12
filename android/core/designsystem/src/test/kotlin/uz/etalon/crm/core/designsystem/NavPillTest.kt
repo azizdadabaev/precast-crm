@@ -48,13 +48,17 @@ import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 class NavPillTest {
     @get:Rule val rule = createComposeRule()
 
-    private fun navPillInsetUnder(navigationBar: Dp): Dp {
+    private fun navPillInsetUnder(navigationBar: Dp, ime: Dp = 0.dp): Dp {
         var measured = Dp.Unspecified
         lateinit var view: View
-        var px = 0
+        var navPx = 0
+        var imePx = 0
         rule.setContent {
             view = LocalView.current
-            px = with(LocalDensity.current) { navigationBar.roundToPx() }
+            with(LocalDensity.current) {
+                navPx = navigationBar.roundToPx()
+                imePx = ime.roundToPx()
+            }
             measured = navPillInsetOf()
         }
         // After the first composition, never during it: Compose installs the listener this dispatch
@@ -63,7 +67,9 @@ class NavPillTest {
         rule.runOnIdle {
             view.dispatchApplyWindowInsets(
                 WindowInsets.Builder()
-                    .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, px))
+                    .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, navPx))
+                    .setInsets(WindowInsets.Type.ime(), Insets.of(0, 0, 0, imePx))
+                    .setVisible(WindowInsets.Type.ime(), imePx > 0)
                     .build(),
             )
         }
@@ -77,6 +83,31 @@ class NavPillTest {
 
     @Test fun `three-button navigation inset plus the pill band`() {
         assertEquals(132.dp, navPillInsetUnder(48.dp))
+    }
+
+    // ── The keyboard is netted out of the band, not switched against it. Three heights matter,
+    // all measured under gesture navigation's 24 dp, so the un-covered figure is 108 dp. One test
+    // each, because `ComposeTestRule.setContent` may be called only once per test.
+
+    /** No keyboard: the whole band. */
+    @Test fun `no keyboard leaves the whole pill band`() {
+        assertEquals(108.dp, navPillInsetUnder(24.dp, ime = 0.dp))
+    }
+
+    /**
+     * A 45 dp floating / hardware-keyboard toolbar — the AVD's own case, and a real phone with a
+     * Bluetooth keyboard. The pill is still fully visible above it, so 63 dp of band is still owed.
+     * A flat zero here, which is what the first version of this rule did, slides the last row
+     * straight under the pill.
+     */
+    @Test fun `a short keyboard still leaves the uncovered part of the band`() {
+        assertEquals(63.dp, navPillInsetUnder(24.dp, ime = 45.dp))
+    }
+
+    /** A 300 dp soft keyboard buries the pill: nothing is owed, and the figure floors at zero
+     *  rather than going negative and *pulling* content down past the window's edge. */
+    @Test fun `a full keyboard buries the pill and the band floors at zero`() {
+        assertEquals(0.dp, navPillInsetUnder(24.dp, ime = 300.dp))
     }
 
     /** A screen composed outside the shell — a preview, a screenshot test, a signed-out route —

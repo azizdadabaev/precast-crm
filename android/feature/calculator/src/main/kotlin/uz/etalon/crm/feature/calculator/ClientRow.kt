@@ -33,6 +33,7 @@ import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.EtalonTextField
 import uz.etalon.crm.core.designsystem.components.FormCard
 import uz.etalon.crm.core.designsystem.components.FormField
+import uz.etalon.crm.core.designsystem.components.PHONE_LOCAL_DIGITS
 import uz.etalon.crm.core.designsystem.components.PhoneDigitsMask
 import uz.etalon.crm.core.designsystem.components.RegionField
 import uz.etalon.crm.core.designsystem.components.RegionPickerSheet
@@ -70,9 +71,6 @@ private val FORM_GAP = EtalonSpace.rowGap
 private const val SEGMENT_SEPARATOR = " · "
 /** «Самарқанд, Регистон» — how §3.4's `region, district` meta joins its two halves. */
 private const val REGION_SEPARATOR = ", "
-
-/** The nine local digits, which is all [CalculatorUiState.clientPhoneDigits] ever holds. */
-private const val PHONE_DIGITS = 9
 
 /** Which of the two linked catalogues the form is browsing, if either — the same shape
  *  `ClientEditSheet`'s own `RegionPick` uses. */
@@ -191,7 +189,7 @@ fun ClientForm(state: CalculatorUiState, vm: CalculatorViewModel, modifier: Modi
             FormField(stringResource(R.string.calc_client_phone_req)) {
                 EtalonTextField(
                     value = state.clientPhoneDigits,
-                    onValueChange = { vm.setClientPhoneDigits(it.filter(Char::isDigit).take(PHONE_DIGITS)) },
+                    onValueChange = { vm.setClientPhoneDigits(it.filter(Char::isDigit).take(PHONE_LOCAL_DIGITS)) },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = stringResource(R.string.calc_client_phone_mask),
                     prefix = "+998 ",

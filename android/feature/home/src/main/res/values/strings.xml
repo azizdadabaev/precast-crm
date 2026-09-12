@@ -3,7 +3,7 @@
     <string name="home_title">Бошқарув</string>
     <string name="home_subtitle_suffix">барча буюртмалар бир жойда</string>
     <string name="home_kpi_receivables">Қарздорлик</string>
-    <string name="home_kpi_receivables_note">%1$d буюртмада қолди</string>
+    <string name="home_kpi_receivables_note">%1$s буюртмада қолди</string>
     <string name="home_kpi_collected">Ойлик тушум</string>
     <string name="home_kpi_collected_up">↑ %1$s ўтган ойга нисбатан</string>
     <string name="home_kpi_collected_down">↓ %1$s ўтган ойга нисбатан</string>
@@ -11,7 +11,7 @@
          point at. Drawn in neutral ink — an unchanged month is neither good news nor bad. -->
     <string name="home_kpi_collected_flat">ўтган ойга нисбатан ўзгаришсиз</string>
     <string name="home_kpi_today">Бугунги етказиш</string>
-    <string name="home_kpi_today_note">%1$d буюртма</string>
+    <string name="home_kpi_today_note">%1$s буюртма</string>
     <string name="home_recent">Сўнгги буюртмалар</string>
     <string name="home_recent_all">Барчаси</string>
     <string name="home_recent_empty">Ҳали буюртма йўқ</string>

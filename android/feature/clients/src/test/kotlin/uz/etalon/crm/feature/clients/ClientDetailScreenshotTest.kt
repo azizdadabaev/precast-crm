@@ -24,6 +24,7 @@ import uz.etalon.crm.core.ui.format.formatCount
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.feature.clients.detail.ClientDetailScreen
 import uz.etalon.crm.feature.clients.detail.ClientDetailUiState
+import java.math.BigDecimal
 import java.time.Instant
 
 /** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
@@ -62,10 +63,13 @@ class ClientDetailScreenshotTest {
             ClientOrderLine(
                 id = "o1", orderNumber = "2026-09-0003", status = OrderStatus.DISPATCHED,
                 totalPrice = Money.parse("13350000.00"), scheduledAt = at("2026-09-18T04:00:00Z"),
+                // `2b-order-detail.png`'s own order, which is this client's 09−0003.
+                totalArea = BigDecimal("78.700"),
             ),
             ClientOrderLine(
                 id = "o2", orderNumber = "2026-08-0041", status = OrderStatus.DELIVERED,
                 totalPrice = Money.parse("2851580.00"), scheduledAt = at("2026-08-27T04:00:00Z"),
+                totalArea = BigDecimal("24.030"),
             ),
         ),
         // The server's own aggregates — here the same two orders the list row counted, which is
