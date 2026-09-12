@@ -204,22 +204,36 @@ private val BADGE_INSET = 5.dp
  * @param enabled false greys the glyph **and** takes the click away. Both halves matter: a
  *   [CountStepper] at its bound used to paint an ink3 minus that TalkBack still announced as a
  *   live button, so the one user who could not see the tint was the one told it worked.
+ * @param pressedFill the fill while the finger is down, the way every [EtalonButtonBase] button
+ *   carries one. Null keeps the resting fill and leaves the ripple to say it was touched — enough
+ *   for a button that only navigates. A button that DESTROYS something states it in colour too:
+ *   the room card's delete passes `redBg`, so the half-second before a room disappears is already
+ *   red under the thumb.
  */
 @Composable
 fun EtalonIconButton(
     icon: Int, contentDescription: String?, onClick: () -> Unit, modifier: Modifier = Modifier,
     onDark: Boolean = false, badge: Boolean = false, size: Dp = 40.dp,
     shape: Shape = EtalonShapes.pill, tint: Color? = null, enabled: Boolean = true,
+    pressedFill: Color? = null,
 ) = Box(modifier.size(EtalonSpace.minTouch), contentAlignment = Alignment.Center) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     Box(Modifier.size(size)) {
         Box(
             Modifier
                 .fillMaxSize().clip(shape)
-                .background(if (onDark) EtalonColors.navy2 else EtalonColors.surface)
+                .background(
+                    when {
+                        pressedFill != null && pressed && enabled -> pressedFill
+                        onDark -> EtalonColors.navy2
+                        else -> EtalonColors.surface
+                    },
+                )
                 .then(if (onDark) Modifier else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, shape))
                 .clickable(
                     enabled = enabled, role = Role.Button, indication = etalonRipple(onDark),
-                    interactionSource = remember { MutableInteractionSource() }, onClick = onClick,
+                    interactionSource = interaction, onClick = onClick,
                 ),
             contentAlignment = Alignment.Center,
         ) {

@@ -29,7 +29,7 @@ import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.io.IOException
 
 /** No pricing is needed for any test here — the client bar prices nothing. */
-private class ClientBarInertSessionPricing : SessionPricing {
+private class ClientRowInertSessionPricing : SessionPricing {
     override val pricing: StateFlow<Pricing?> = MutableStateFlow(null)
 }
 
@@ -40,13 +40,13 @@ private class ClientBarInertSessionPricing : SessionPricing {
  * `ClientsViewModelTest`'s debounce-timing style, kept in its own file per this task's brief.
  */
 @ExperimentalCoroutinesApi
-class ClientBarStateTest {
+class ClientRowStateTest {
     private val dispatcher = StandardTestDispatcher()
     @BeforeEach fun up() = Dispatchers.setMain(dispatcher)
     @AfterEach fun down() = Dispatchers.resetMain()
 
     private fun vm(clients: suspend (phone: String?) -> ClientsPageDto = { emptyPage() }) = CalculatorViewModel(
-        session = ClientBarInertSessionPricing(),
+        session = ClientRowInertSessionPricing(),
         permissions = PermissionGate { true },
         clients = ClientsRepository(
             api = object : FakeEtalonApi() {

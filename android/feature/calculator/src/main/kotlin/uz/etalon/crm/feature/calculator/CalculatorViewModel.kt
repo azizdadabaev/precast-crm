@@ -166,10 +166,11 @@ fun interface QueuePlaceOrderUseCase {
  * already-fakeable abstractions (see [SessionPricing], [PermissionGate]), so a second layer of
  * indirection here would buy nothing. [CalculatorRepository] is the opposite case — it bundles a
  * Room DAO the feature module cannot reach without pulling `:core:database` onto its own test
- * classpath — so its four operations ARE wrapped, the same way `RecordPaymentViewModel` wraps
- * `PaymentsRepository` and `DiscrepanciesViewModel` wraps `DiscrepanciesRepository`; the four
- * fun-interface params below default to inert no-ops so every existing test that never touches a
- * draft need not know they exist.
+ * classpath — so its six operations ARE wrapped (observe, persist and clear the draft; save it;
+ * place the order and queue it), the same way `RecordPaymentViewModel` wraps `PaymentsRepository`
+ * and `DiscrepanciesViewModel` wraps `DiscrepanciesRepository`; the six fun-interface params below
+ * default to inert no-ops so every existing test that never touches a draft need not know they
+ * exist.
  *
  * `:core:calc` is a `Double` engine on purpose (bit-parity with the server's TS engine); this
  * class holds that `Double` state for live recompute, but never exposes a `Double` as money —
@@ -568,14 +569,12 @@ open class CalculatorViewModel(
 
     // ── draft persistence and «Лойиҳани сақлаш» ─────────────────────
 
-    fun dismissSaveMessage() = _state.update { it.copy(saveMessage = null) }
-
     /** The restyled screen shows the save confirmation as a Toast — see [CalculatorUiState.toast]. */
     fun dismissToast() = _state.update { it.copy(toast = null) }
 
-    /** Drops whatever refusal is on screen. `CalculatorActions` calls it when «Буюртма бериш»
-     *  opens the placement sheet: a save that failed minutes ago belongs to the quote, and the
-     *  sheet renders `state.error` too — a stale one there reads as the placement's own refusal. */
+    /** Drops whatever refusal is on screen. `SummarySheet` calls it when «Буюртма бериш» opens the
+     *  placement sheet: a save that failed minutes ago belongs to the quote, and the sheet renders
+     *  `state.error` too — a stale one there reads as the placement's own refusal. */
     fun dismissError() = _state.update { it.copy(error = null) }
 
     /**
@@ -608,9 +607,10 @@ open class CalculatorViewModel(
                         // process death in the gap before the debounce would otherwise have
                         // flushed it — mirrors RecordPaymentViewModel persisting KEY_PAYMENT_ID
                         // the moment the row is known to exist.
-                        _state.update {
-                            it.copy(saving = false, projectId = id, saveMessage = SAVE_SUCCESS_MESSAGE, toast = SAVE_SUCCESS_MESSAGE)
-                        }
+                        // The toast is the whole confirmation. `saveMessage` is not also written:
+                        // the screen renders it only when it is [QUEUED_MESSAGE], so a success
+                        // written there was state nothing could ever read.
+                        _state.update { it.copy(saving = false, projectId = id, toast = SAVE_SUCCESS_MESSAGE) }
                         // The CURRENT quote, not the one captured when the request went out: the
                         // operator keeps typing while the save is in flight, and writing the stale
                         // snapshot back would undo up to a debounce window of their edits.

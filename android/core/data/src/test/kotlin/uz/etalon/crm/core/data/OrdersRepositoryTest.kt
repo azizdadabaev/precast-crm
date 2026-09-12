@@ -202,6 +202,55 @@ class OrdersRepositoryTest {
         }
     }
 
+    // ── total(): the paging stop the chips must not move ─────────
+
+    /** Null until a page for THAT filter has landed — a paging caller with no figure yet must wait
+     *  rather than page against a zero it would read as "no more". */
+    @Test fun `total is null until the first page for that filter lands`() = runTest {
+        val api = FakeApi().apply { page = OrdersPageDto(listOf(summary), 41, 1, 20, 3) }
+        val repo = OrdersRepository(api, FakeDao(), Json { ignoreUnknownKeys = true }, "https://x")
+        repo.total(OrdersFilter()).test {
+            assertNull(awaitItem())
+            repo.refreshList(OrdersFilter())
+            assertEquals(41, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    /**
+     * `total` is keyed by [OrdersFilter.totalKey], which drops only the PAGE — so page 2 of one
+     * filter reads the figure page 1 recorded, and a different status is a different figure. This
+     * is the whole reason it is not `facets.total`: that one describes `q`/`day` alone, is larger
+     * than a chipped list can grow, and paging against it never ends.
+     */
+    @Test fun `every page of one filter shares a total, and a different filter has its own`() = runTest {
+        val api = FakeApi().apply { page = OrdersPageDto(listOf(summary), 41, 1, 20, 3) }
+        val repo = OrdersRepository(api, FakeDao(), Json { ignoreUnknownKeys = true }, "https://x")
+        repo.refreshList(OrdersFilter())
+
+        repo.total(OrdersFilter(page = 2)).test {
+            assertEquals(41, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        repo.total(OrdersFilter(status = OrderStatus.DELIVERED)).test {
+            assertNull(awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    /** Signing out drops it with the rest: the next operator must not page the previous one's
+     *  filtered list. */
+    @Test fun `clearCache forgets the totals too`() = runTest {
+        val api = FakeApi().apply { page = OrdersPageDto(listOf(summary), 41, 1, 20, 3) }
+        val repo = OrdersRepository(api, FakeDao(), Json { ignoreUnknownKeys = true }, "https://x")
+        repo.refreshList(OrdersFilter())
+        repo.clearCache()
+        repo.total(OrdersFilter()).test {
+            assertNull(awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test fun `a corrupt cached detail JSON does not crash the flow`() = runTest {
         val dao = FakeDao().apply { details.value = mapOf("o1" to OrderDetailEntity("o1", "{}", 0)) }
         val repo = OrdersRepository(FakeApi(), dao, Json { ignoreUnknownKeys = true }, "https://x")

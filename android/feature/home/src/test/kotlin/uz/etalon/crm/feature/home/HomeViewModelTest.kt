@@ -290,7 +290,7 @@ class HomeViewModelTest {
         permissions = HomePermissionUseCase { permissions(it) },
         outboxPending = HomeOutboxUseCase { outboxPending() },
         rejectedOrders = HomeRejectedOrdersUseCase { rejectedOrders() },
-        discardRejected = DiscardRejectedOrderUseCase { id -> discardRejected(id) },
+        discardRejected = HomeDiscardRejectedOrderUseCase { id -> discardRejected(id) },
     )
 
     private fun delivery(id: String) = TodayDelivery(

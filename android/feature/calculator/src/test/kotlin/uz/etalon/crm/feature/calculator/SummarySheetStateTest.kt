@@ -22,7 +22,7 @@ import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.math.BigDecimal
 
 /** A [SessionPricing] that already holds a value — no bootstrap round trip to fake. */
-private class TotalsSheetFakeSessionPricing(pricing: Pricing?) : SessionPricing {
+private class SummarySheetFakeSessionPricing(pricing: Pricing?) : SessionPricing {
     override val pricing: StateFlow<Pricing?> = MutableStateFlow(pricing)
 }
 
@@ -47,16 +47,16 @@ private fun defaultAndroidPricing(): Pricing = Pricing(
 )
 
 /** Task-6 brief, verbatim. Adds one room and sets its ЭНИ/БЎЙИ through the docked keypad, the same
- *  path a real operator drives — comma-decimal, unlike `RoomExtrasStateTest`'s whole-metre-only
+ *  path a real operator drives — comma-decimal, unlike `MoreRowStateTest`'s whole-metre-only
  *  `setDims`, since this brief's own vectors need a fractional width (`4.03`). */
 @ExperimentalCoroutinesApi
-class TotalsSheetStateTest {
+class SummarySheetStateTest {
     private val dispatcher = StandardTestDispatcher()
     @BeforeEach fun up() = Dispatchers.setMain(dispatcher)
     @AfterEach fun down() = Dispatchers.resetMain()
 
     private fun vm() = CalculatorViewModel(
-        session = TotalsSheetFakeSessionPricing(defaultAndroidPricing()),
+        session = SummarySheetFakeSessionPricing(defaultAndroidPricing()),
         permissions = PermissionGate { true },
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
     )

@@ -96,7 +96,7 @@ fun interface HomeUseCase { suspend operator fun invoke(): Result<HomeSummary> }
 fun interface HomePermissionUseCase { suspend operator fun invoke(action: String): Boolean }
 fun interface HomeOutboxUseCase { operator fun invoke(): Flow<Int> }
 fun interface HomeRejectedOrdersUseCase { operator fun invoke(): Flow<List<RejectedOrder>> }
-fun interface DiscardRejectedOrderUseCase { suspend operator fun invoke(id: String) }
+fun interface HomeDiscardRejectedOrderUseCase { suspend operator fun invoke(id: String) }
 
 /**
  * The «Бугун» column. Every signed-in operator gets one — this ViewModel needs no permission to
@@ -118,7 +118,7 @@ open class HomeViewModel(
     // Defaulted to nothing at all so the existing tests — and any caller that has no interest in
     // the queue — need not know these exist. A Home with no rejections is the ordinary Home.
     rejectedOrders: HomeRejectedOrdersUseCase = HomeRejectedOrdersUseCase { flowOf(emptyList()) },
-    private val discardRejected: DiscardRejectedOrderUseCase = DiscardRejectedOrderUseCase { },
+    private val discardRejected: HomeDiscardRejectedOrderUseCase = HomeDiscardRejectedOrderUseCase { },
 ) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
@@ -203,5 +203,5 @@ class HiltHomeViewModel @Inject constructor(
     permissions = HomePermissionUseCase { action -> permissions.can(action) },
     outboxPending = HomeOutboxUseCase { outbox.observePendingCount() },
     rejectedOrders = HomeRejectedOrdersUseCase { calculator.observeRejectedOrders() },
-    discardRejected = DiscardRejectedOrderUseCase { id -> calculator.discardRejectedOrder(id) },
+    discardRejected = HomeDiscardRejectedOrderUseCase { id -> calculator.discardRejectedOrder(id) },
 )

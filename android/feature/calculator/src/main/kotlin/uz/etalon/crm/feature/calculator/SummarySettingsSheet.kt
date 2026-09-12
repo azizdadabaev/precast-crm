@@ -58,6 +58,10 @@ private val ROW_GAP = EtalonSpace.sm
 fun SummarySettingsSheet(state: CalculatorUiState, vm: CalculatorViewModel, onDismiss: () -> Unit) = ModalBottomSheet(
     onDismissRequest = onDismiss,
     containerColor = EtalonColors.surface,
+    // §3.4's own scrim — navy at 55 %, the same one `RateSheet`, `RateConfirm` and
+    // `PlaceOrderSheet` dim the calculator behind them with. M3's default is a black wash that
+    // reads as a different app's modal over the navy summary bar.
+    scrimColor = SHEET_SCRIM,
     shape = EtalonShapes.sheetTop,
     dragHandle = null,
     // Straight to full height. At Material's half-screen partial anchor a beam schedule of any

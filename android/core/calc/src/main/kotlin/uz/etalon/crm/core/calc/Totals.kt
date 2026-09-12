@@ -34,6 +34,16 @@ data class BeamScheduleLine(val lengthKey: String, val beams: Int)
  * else in this repo bans — is the only thing that gives the exact value, and this is the one
  * place that wants it: `String.format("%.2f", 2.675)` gives "2.68" while JS gives "2.67", which
  * would split one production beam length into two rows the factory then cuts twice.
+ *
+ * **Two of these exist and they must agree character for character** — see
+ * [uz.etalon.crm.core.model.beamLengthKey]. They differ only in what they are handed: this one
+ * takes the engine's own `Double` (`SlabResult.beamLength`, a room being typed right now), that
+ * one the `BigDecimal` a placed order carries back from the server (`Decimal(10,3)`), which it
+ * crosses to `Double` in its first line precisely to land on this rule. Two entry points rather
+ * than one because this module is a line-for-line port of `calculation-engine.ts` and takes the
+ * engine's types unchanged; the domain model has no `Double` to give it. The calculator's beam
+ * schedule and the order's load list must nevertheless label the same beam the same way, or the
+ * yard cuts to one list and loads from another — `BeamLengthKeyAgreementTest` pins it.
  */
 fun beamLengthKey(beamLength: Double): String =
     java.math.BigDecimal(beamLength).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()

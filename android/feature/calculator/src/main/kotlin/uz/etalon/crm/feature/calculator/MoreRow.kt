@@ -86,8 +86,10 @@ private val WorkingValueStyle = EtalonType.labelSm
  *
  * D7 vs the drawn geometry, the [uz.etalon.crm.core.designsystem.components.SegmentedControl]
  * pattern: every control here paints §3.4's size and reserves 48 dp of touch around it — the
- * toggle cell and the delete button through `minimumInteractiveComponentSize`, the stepper's two
- * buttons through `requiredSize` — and that slot overhangs the 40 dp row, so the row's cells are
+ * toggle cell through `minimumInteractiveComponentSize`, the delete and reorder buttons through
+ * [uz.etalon.crm.core.designsystem.components.EtalonIconButton]'s own 48 dp outer box (the painted
+ * 40 dp square sits inside it), the stepper's two buttons through `requiredSize` — and that slot
+ * overhangs the 40 dp row, so the row's cells are
  * painted with `background(colour, shape)` rather than `clip(shape).background(colour)`. A clip is
  * a graphics layer, and a layer clips touch as well as paint, which would hand back the hit area
  * D7 just bought. Where two slots would overlap they are tiled instead (see [StepperCell]): an
@@ -130,6 +132,10 @@ fun MoreRow(
             size = DELETE_BUTTON,
             shape = EtalonShapes.md,
             tint = EtalonColors.red,
+            // The one destructive control on the card: it fills red under the thumb, so the room
+            // is already visibly going before the finger lifts. `clearAll` apart, deleting a room
+            // is the only calculator action with nothing to undo it.
+            pressedFill = EtalonColors.redBg,
             // Last in the row: its slot overhangs the card's end padding so the 40 dp button is
             // painted flush with the content edge the ⋯ above it sits on.
             modifier = Modifier.offset(x = ICON_SLOT_SLACK),

@@ -48,14 +48,14 @@ internal fun moneyOf(d: Double): Money = Money(BigDecimal.valueOf(d).setScale(2,
 fun tierPriceMoney(price: Double): Money = moneyOf(price)
 
 /**
- * An operator-entered whole-UZS amount from the totals sheet — discount amount, delivery cost,
- * or other cost, typed on `TotalsSheet`'s modal keypad (`allowDecimal = false`, the same "cash
- * has no kopeks" rule `RecordPaymentScreen` uses for a payment amount). Unlike [moneyOf]/
+ * An operator-entered whole-UZS amount — discount amount, delivery cost or other cost, typed on
+ * the place-order sheet's number fields (`allowDecimal = false`: a digits-only keyboard, the same
+ * "cash has no kopeks" rule `RecordPaymentScreen` uses for a payment amount). Unlike [moneyOf]/
  * [tierPriceMoney] this `Double` never passed through the calc engine's [round2] — it is raw UI
  * input, not an already-rounded engine result — so it deliberately does NOT go through [moneyOf]'s
  * `RoundingMode.UNNECESSARY`: nothing here promises exactly two decimals, only that none ever
- * appear because the keypad itself disallows them. [Double.toLong] truncates toward zero, which
- * is exact (never lossy) precisely because of that keypad restriction.
+ * appear because the field itself disallows them. [Double.toLong] truncates toward zero, which
+ * is exact (never lossy) precisely because of that restriction.
  */
 fun operatorAmountMoney(d: Double): Money = Money(BigDecimal.valueOf(d.toLong()))
 

@@ -125,7 +125,7 @@ data class CalculatorUiState(
     val canWrite: Boolean = false,          // order.create
     val error: String? = null,
 
-    // ── The client bar: who the quote is for — see `ClientBar.kt` and
+    // ── The client row: who the quote is for — see `ClientRow.kt` and
     // `CalculatorViewModel`'s client-bar section. ──
     /** The NINE local digits only, exactly like `ClientEditState.phoneDigits` — the `+998` the
      *  bar shows is display-only. */
@@ -154,12 +154,13 @@ data class CalculatorUiState(
      *  their restored quote with a stray empty card in it. */
     val restored: Boolean = false,
     val saving: Boolean = false,
-    /** A transient Uzbek confirmation shown after a successful save — cleared by
-     *  `CalculatorViewModel.dismissSaveMessage` once the screen has shown it. */
+    /** The ONE notice the restyled screen reads from this field: [QUEUED_MESSAGE], the banner on
+     *  the placement sheet saying the order will go out when there is a signal. Cleared with the
+     *  rest of the quote by `clearAll` and by the next placement attempt; a successful SAVE writes
+     *  [toast] instead, which is where every other confirmation goes. */
     val saveMessage: String? = null,
-    /** The same confirmation as a TOAST, which is where the restyled screen shows it — cleared by
-     *  `CalculatorViewModel.dismissToast`. [saveMessage] stays the field the queued-placement
-     *  notice is read from: that one is a banner on the placement sheet, not a toast. */
+    /** A transient Uzbek confirmation shown as a TOAST — «Лойиҳа сақланди» after a successful save
+     *  — cleared by `CalculatorViewModel.dismissToast` once the screen has shown it. */
     val toast: String? = null,
 
     // ── «Буюртма бериш» — see `PlaceOrderSheet.kt` ──────────────────

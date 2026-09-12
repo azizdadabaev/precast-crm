@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -19,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
@@ -26,6 +30,10 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.R as DesignSystemR
+
+/** How tall the rejected list may grow before it scrolls instead — three rows of a two-line
+ *  refusal, which is as much as fits over «Ёпиш» on the shortest phone the app supports. */
+private val REJECTED_LIST_MAX = 260.dp
 
 /**
  * What the app bar's bell opens (ruling R3): how much of this operator's own work is still
@@ -54,16 +62,21 @@ fun OutboxSheet(
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.xl, vertical = EtalonSpace.lg)) {
         Text(stringResource(R.string.home_bell), style = EtalonType.sectionTitle, color = EtalonColors.ink)
-        Spacer(Modifier.height(EtalonSpace.sm))
-        Text(
-            if (pending > 0) {
-                pluralStringResource(DesignSystemR.plurals.outbox_pending, pending, pending)
-            } else {
-                stringResource(R.string.home_outbox_clear_data)
-            },
-            style = EtalonType.body,
-            color = EtalonColors.ink2,
-        )
+        // «Юборилмаган маълумот йўқ» is hidden while rejections are listed: nothing is waiting to
+        // send, but saying so above a list of orders that FAILED to send reads as a contradiction.
+        // A pending count is different — it is a second fact, and it stays.
+        if (pending > 0 || rejected.isEmpty()) {
+            Spacer(Modifier.height(EtalonSpace.sm))
+            Text(
+                if (pending > 0) {
+                    pluralStringResource(DesignSystemR.plurals.outbox_pending, pending, pending)
+                } else {
+                    stringResource(R.string.home_outbox_clear_data)
+                },
+                style = EtalonType.body,
+                color = EtalonColors.ink2,
+            )
+        }
         if (rejected.isNotEmpty()) {
             Spacer(Modifier.height(EtalonSpace.lg))
             Text(
@@ -71,12 +84,19 @@ fun OutboxSheet(
                 style = EtalonType.sectionTitle,
                 color = EtalonColors.ink,
             )
-            rejected.forEach { row ->
-                Box(
-                    Modifier.padding(top = EtalonSpace.sm).fillMaxWidth()
-                        .height(EtalonSpace.hairline).background(EtalonColors.surfaceBorder),
-                )
-                RejectedRow(row, onDiscard)
+            // The list scrolls inside its own band rather than growing the sheet: a dozen refusals
+            // is an ordinary week after a bad connection, and every one of them off the bottom edge
+            // would take «Ёпиш» — the only way out of this sheet — with them.
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = REJECTED_LIST_MAX).verticalScroll(rememberScrollState()),
+            ) {
+                rejected.forEach { row ->
+                    Box(
+                        Modifier.padding(top = EtalonSpace.sm).fillMaxWidth()
+                            .height(EtalonSpace.hairline).background(EtalonColors.surfaceBorder),
+                    )
+                    RejectedRow(row, onDiscard)
+                }
             }
         }
         Spacer(Modifier.height(EtalonSpace.lg))

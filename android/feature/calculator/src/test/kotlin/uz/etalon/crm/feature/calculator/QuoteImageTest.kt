@@ -74,7 +74,7 @@ class QuoteImageTest {
         assertTrue(second.exists())
     }
 
-    /** The failure `ShareQuoteButton` catches. Reproduced by taking the directory's own name with a
+    /** The failure `rememberShareQuote` catches. Reproduced by taking the directory's own name with a
      *  plain file, which is what a full or read-only cache partition amounts to here. */
     @Test
     fun `writeQuoteFile fails with an IOException when the quotes directory cannot be used`() = runTest {

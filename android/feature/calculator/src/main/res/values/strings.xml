@@ -24,9 +24,8 @@
     <string name="calc_action_clear">Тозалаш</string>
     <string name="calc_room_not_persistable">Бу хона фақат қўшимча балкадан иборат — сақлаб бўлмайди</string>
     <string name="calc_no_write_permission">Буюртма яратишга рухсат йўқ</string>
-    <!-- The pattern chip on the room card: the label, and the « авто» suffix it carries while the
-         engine is picking the pattern itself (§3.4 row 1). -->
-    <string name="calc_pattern_auto">Авто</string>
+    <!-- The « авто» suffix the pattern chip carries while the engine is picking the pattern
+         itself (§3.4 row 1). -->
     <string name="calc_pattern_auto_suffix">авто</string>
     <string name="calc_pattern_gb">Г-Б</string>
     <string name="calc_pattern_bgb">Б-Г-Б</string>
@@ -124,7 +123,6 @@
     <!-- «Буюртма бериш» — task 9 -->
     <string name="calc_action_place_order">Буюртма бериш</string>
     <string name="calc_place_title">Буюртмани расмийлаштириш</string>
-    <string name="calc_place_client">Мижоз</string>
     <string name="calc_place_scheduled_at">Етказиб бериш санаси</string>
     <string name="calc_place_pick_date">Сана танланг</string>
     <string name="calc_place_date_done">Тайёр</string>

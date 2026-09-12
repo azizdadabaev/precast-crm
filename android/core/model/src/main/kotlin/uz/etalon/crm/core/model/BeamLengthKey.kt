@@ -24,6 +24,14 @@ import java.math.RoundingMode
  * arise and `setScale(2, HALF_UP)` on it equals `toFixed(2)` for every input. Beam length is
  * geometry a truck is loaded from, not money, and the figure being matched is the server's own
  * rounding — which is why the rule that money never crosses a `Double` does not reach this line.
+ *
+ * **Its twin is `uz.etalon.crm.core.calc.beamLengthKey`, and the two must agree character for
+ * character.** That one is handed the engine's own `Double` straight out of a live calculator row
+ * (`:core:calc` is a line-for-line port of `calculation-engine.ts` and takes the engine's types
+ * unchanged); this one is handed the `BigDecimal` a placed order carries back from the server, and
+ * its `v.toDouble()` is what puts the two on the same rule. `BeamLengthKeyAgreementTest` pins them
+ * against each other: the calculator's beam schedule and the order's load list must label the same
+ * beam the same way, or the yard cuts to one list and loads from another.
  */
 fun beamLengthKey(v: BigDecimal): String =
     BigDecimal(v.toDouble()).setScale(2, RoundingMode.HALF_UP).toPlainString()

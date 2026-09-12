@@ -3,10 +3,28 @@ package uz.etalon.crm.feature.orders.detail
 import androidx.annotation.StringRes
 import uz.etalon.crm.feature.orders.R
 
+// ── Event-type names ──────────────────────────────────────────────
+//
+// Every `OrderEventType` this client reasons about by NAME lives here, beside the map that spells
+// all of them — never as a second literal in the screen or the timeline that applies the rule. A
+// type renamed on the server then breaks in one file, and `EventLabelsTest`'s literal enum list is
+// what catches it.
+
 /** The one event type whose server `message` is English prose written for the desk, so «Тарих»
- *  prints [orderEventLabel]'s Uzbek wording instead of it. Named here, beside the map that
- *  spells every other type, rather than in the screen that applies the rule. */
+ *  prints [orderEventLabel]'s Uzbek wording instead of it. */
 internal const val STOCK_WARNING = "STOCK_WARNING"
+
+/** The whole-order load: one photo, one status change. A split order writes [SHIPMENT_LOADED] per
+ *  truck instead, which is why `timelineFor` falls back to the shipments' own `loadedAt`. */
+internal const val ORDER_LOADED = "ORDER_LOADED"
+
+/** A split order's per-truck load — the event `timelineFor` does NOT read (a truck's own
+ *  `loadedAt` carries the instant; this only names the type for the label map). */
+internal const val SHIPMENT_LOADED = "SHIPMENT_LOADED"
+
+/** A split order's per-truck delivery. A whole-order delivery writes `STATUS_CHANGED` with the new
+ *  status in a `payload` this client does not carry, so that case falls through to the check. */
+internal const val SHIPMENT_DELIVERED = "SHIPMENT_DELIVERED"
 
 /**
  * Uzbek Cyrillic wording for every `OrderEventType` the server has
@@ -43,10 +61,10 @@ internal fun orderEventLabel(type: String): Int? = when (type) {
     "PAYMENT_ADJUSTED" -> R.string.event_payment_adjusted
     "DISCREPANCY_OPENED" -> R.string.event_discrepancy_opened
     "DISCREPANCY_RESOLVED" -> R.string.event_discrepancy_resolved
-    "ORDER_LOADED" -> R.string.event_order_loaded
+    ORDER_LOADED -> R.string.event_order_loaded
     "SHIPMENT_CREATED" -> R.string.event_shipment_created
-    "SHIPMENT_LOADED" -> R.string.event_shipment_loaded
+    SHIPMENT_LOADED -> R.string.event_shipment_loaded
     "SHIPMENT_DISPATCHED" -> R.string.event_shipment_dispatched
-    "SHIPMENT_DELIVERED" -> R.string.event_shipment_delivered
+    SHIPMENT_DELIVERED -> R.string.event_shipment_delivered
     else -> null
 }

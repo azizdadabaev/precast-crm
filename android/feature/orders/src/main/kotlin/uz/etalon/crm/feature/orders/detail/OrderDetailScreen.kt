@@ -865,7 +865,7 @@ private fun PaymentsCard(o: OrderDetail) = WhiteCard(stringResource(R.string.det
 }
 
 /**
- * The «Етказиш» card: the four-step timeline over the `Сана · Ҳайдовчи` footer.
+ * The «Етказиш» card: the three-step timeline ([timelineFor]) over the `Сана · Ҳайдовчи` footer.
  *
  * The location control rides in the card's header. [DetailPanel] offers one trailing slot and the
  * dialer has it, so the pin — which is a *delivery* affordance — lives with the delivery card

@@ -54,7 +54,7 @@ private class ShareInertSessionPricing : SessionPricing {
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36])
-class ShareQuoteButtonTest {
+class ShareQuoteTest {
     @get:Rule val rule = createComposeRule()
 
     private val context: Context get() = ApplicationProvider.getApplicationContext()

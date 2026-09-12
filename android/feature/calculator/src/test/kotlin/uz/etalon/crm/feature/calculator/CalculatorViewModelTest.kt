@@ -531,8 +531,11 @@ class CalculatorViewModelTest {
         advanceUntilIdle()
 
         assertEquals("proj-1", v.state.value.projectId)
-        assertEquals("Лойиҳа сақланди", v.state.value.saveMessage)
         assertEquals("Лойиҳа сақланди", v.state.value.toast, "the restyled screen shows it as a Toast")
+        assertNull(
+            v.state.value.saveMessage,
+            "and ONLY as a toast — the screen renders saveMessage only when it is the queued notice",
+        )
         v.dismissToast(); assertNull(v.state.value.toast)
         assertFalse(v.state.value.saving)
         assertEquals("proj-1", persisted?.projectId, "the returned id is written to Room right away, not left to the autosave debounce")

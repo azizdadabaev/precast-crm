@@ -46,4 +46,49 @@ class OutboxSheetTest {
         rule.waitForIdle()
         assertEquals(listOf("row-2"), discarded)
     }
+
+    /** Nothing is waiting to send AND nothing was refused: the sheet says so, which is the only
+     *  thing it has to say. */
+    @Test fun `an idle outbox says there is nothing unsent`() {
+        rule.setContent {
+            EtalonTheme { OutboxSheet(pending = 0, rejected = emptyList(), onDiscard = {}, onDismiss = {}) }
+        }
+        rule.onNodeWithText(NOTHING_UNSENT).assertIsDisplayed()
+    }
+
+    /**
+     * Nothing waiting to send, but orders the server REFUSED. «Юборилмаган маълумот йўқ» over a
+     * list of orders that failed to send reads as a contradiction — technically true (the queue is
+     * empty) and exactly the opposite of what the operator is looking at.
+     */
+    @Test fun `nothing unsent is not claimed above a list of refusals`() {
+        rule.setContent {
+            EtalonTheme { OutboxSheet(pending = 0, rejected = rows, onDiscard = {}, onDismiss = {}) }
+        }
+        rule.onNodeWithText(NOTHING_UNSENT).assertDoesNotExist()
+        rule.onNodeWithText("Рад этилган буюртмалар").assertIsDisplayed()
+    }
+
+    /** A pending count is a second fact, not a contradiction — it stays above the refusals. */
+    @Test fun `a pending count stays even when refusals are listed`() {
+        rule.setContent {
+            EtalonTheme { OutboxSheet(pending = 2, rejected = rows, onDiscard = {}, onDismiss = {}) }
+        }
+        rule.onNodeWithText(NOTHING_UNSENT).assertDoesNotExist()
+        rule.onNodeWithText("Рад этилган буюртмалар").assertIsDisplayed()
+    }
+
+    /** «Ёпиш» is the only way out of the sheet, so a long list of refusals must never be able to
+     *  push it off the bottom edge — the list scrolls inside its own band instead. */
+    @Test fun `a dozen refusals cannot push Ёпиш off the screen`() {
+        val many = (1..12).map { RejectedOrder(id = "row-$it", clientName = "Мижоз $it", message = "Сана нотўғри") }
+        rule.setContent {
+            EtalonTheme { OutboxSheet(pending = 0, rejected = many, onDiscard = {}, onDismiss = {}) }
+        }
+        rule.onNodeWithText("Ёпиш").assertIsDisplayed()
+    }
+
+    private companion object {
+        const val NOTHING_UNSENT = "Юборилмаган маълумот йўқ"
+    }
 }

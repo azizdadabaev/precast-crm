@@ -28,7 +28,7 @@ import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.math.BigDecimal
 
 /** A [SessionPricing] that already holds a value — no bootstrap round trip to fake. */
-private class RoomExtrasFakeSessionPricing(pricing: Pricing?) : SessionPricing {
+private class MoreRowFakeSessionPricing(pricing: Pricing?) : SessionPricing {
     override val pricing: StateFlow<Pricing?> = MutableStateFlow(pricing)
 }
 
@@ -55,13 +55,13 @@ private fun defaultAndroidPricing(): Pricing = Pricing(
 /** «Қўшимча»'s ViewModel-level contract — Task 5's brief, verbatim. `room(v)` reads the id of the
  *  single room `addRoom()` already placed at `rows[0]`; it does not add a second one. */
 @ExperimentalCoroutinesApi
-class RoomExtrasStateTest {
+class MoreRowStateTest {
     private val dispatcher = StandardTestDispatcher()
     @BeforeEach fun up() = Dispatchers.setMain(dispatcher)
     @AfterEach fun down() = Dispatchers.resetMain()
 
     private fun vm() = CalculatorViewModel(
-        session = RoomExtrasFakeSessionPricing(defaultAndroidPricing()),
+        session = MoreRowFakeSessionPricing(defaultAndroidPricing()),
         permissions = PermissionGate { true },
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
     )

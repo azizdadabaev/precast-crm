@@ -1,7 +1,9 @@
 package uz.etalon.crm.feature.home
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -194,6 +196,45 @@ class HomeScreenshotTest {
         }
         rule.waitForIdle()
         captureScreenRoboImage("screenshots/home_outbox_rejected_light.png")
+    }
+
+    /**
+     * The third state of the trend footnote, which no frame drew: an unchanged month.
+     *
+     * FLAT makes no claim — no arrow, no percentage, and neutral ink rather than green. Folding it
+     * into "up" is the defect `TrendDirection` is three-valued to prevent: it drew «↑ 0,0 %» in
+     * green at a month that had not risen. An UNKNOWN direction reads the same way, which is the
+     * honest answer to a word this client does not know.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun anUnchangedMonthClaimsNothing() {
+        val flat = loaded().copy(
+            tiles = tiles().copy(collectedTrend = Trend(BigDecimal.ZERO, TrendDirection.FLAT)),
+        )
+        shoot("home_trend_flat_light", flat)
+        rule.onNodeWithText("ўтган ойга нисбатан ўзгаришсиз").assertExists()
+        rule.onNode(hasText("↑", substring = true)).assertDoesNotExist()
+        rule.onNode(hasText("↓", substring = true)).assertDoesNotExist()
+    }
+
+    /** …and a direction the server invents after this client shipped falls into the same line,
+     *  rather than a raw word or a guessed arrow. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun anUnknownDirectionReadsAsUnchanged() {
+        val unknown = loaded().copy(
+            tiles = tiles().copy(collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UNKNOWN)),
+        )
+        rule.setContent {
+            EtalonTheme {
+                HomeScreen(
+                    s = unknown, me = owner, now = now, onRefresh = {},
+                    onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                )
+            }
+        }
+        rule.onNodeWithText("ўтган ойга нисбатан ўзгаришсиз").assertExists()
+        // The trend's own two claims, neither of which an unknown direction may make. («8,2» itself
+        // is not the assertion: a room's «108,2 м²» carries those digits for a different reason.)
+        rule.onNode(hasText("↑ 8,2%", substring = true)).assertDoesNotExist()
+        rule.onNode(hasText("↓ 8,2%", substring = true)).assertDoesNotExist()
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun light() = shoot("home_light", loaded())

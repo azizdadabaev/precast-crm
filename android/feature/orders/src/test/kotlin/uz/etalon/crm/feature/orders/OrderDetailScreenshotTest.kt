@@ -3,8 +3,11 @@ package uz.etalon.crm.feature.orders
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.filterToOne
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -14,6 +17,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -442,6 +446,66 @@ class OrderDetailScreenshotTest {
         rule.onNode(all).performClick()
         list().performScrollToNode(hasText("Қолдиқ огоҳлантириши", substring = true))
         rule.onNode(hasText("Reserved stock exceeds available inventory", substring = true)).assertDoesNotExist()
+    }
+
+    /**
+     * The other half of that rule, and the defect `orderEventLabel` exists for: most events carry
+     * NO `message` at all, and «Тарих» used to print the raw enum name at an operator who reads
+     * Uzbek. `ORDER_LOADED` is one of them — it must read «Юк ортилди», and the identifier must
+     * not be on the screen anywhere.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun anEventWithNoMessageReadsInUzbekRatherThanAsItsEnumName() {
+        show(order(events = sixEvents))
+        val all = hasTestTag(TAG_EVENTS_ALL)
+        list().performScrollToNode(all)
+        rule.onNode(all).performClick()
+        list().performScrollToNode(hasText("Юк ортилди", substring = true))
+        rule.onNode(hasText("Юк ортилди", substring = true)).assertIsDisplayed()
+        rule.onNode(hasText("ORDER_LOADED", substring = true)).assertDoesNotExist()
+    }
+
+    /**
+     * §5.1a's disabled-with-a-reason bar has TWO lines where every other bar has one, and the list
+     * pays for the second out of its own bottom clearance (`blockedBarExtra`). If that clearance
+     * were ever measured for the one-line bar the reason — the whole point of disabling rather
+     * than hiding — would be the thing covering the card the operator scrolled down to read.
+     *
+     * So: with the door blocked, scroll the list to its last card and assert that card ends ABOVE
+     * the greyed button, with both of the bar's lines on screen.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theBlockedPaymentBarNeverCoversTheLastCard() {
+        show(
+            order(
+                status = OrderStatus.PLACED, paid = "0.00",
+                events = sixEvents,
+                payments = listOf(
+                    payment.copy(
+                        id = "p9", amount = Money.parse("13350000.00"),
+                        status = PaymentStatus.PENDING_CONFIRMATION,
+                        recordedAt = Instant.parse("2026-09-03T12:40:00Z"),
+                    ),
+                ),
+            ),
+        )
+        val lastCard = hasTestTag(TAG_EVENTS_ALL)
+        list().performScrollToNode(lastCard)
+        rule.waitForIdle()
+
+        val button = rule.onNode(hasText("Тўлов қайд қилиш")).getUnclippedBoundsInRoot()
+        val card = rule.onNode(lastCard).getUnclippedBoundsInRoot()
+        rule.onNode(hasText("Тўлов қайд қилиш")).assertIsDisplayed()
+        // «Тасдиқ кутилмоқда: …» reads twice on this screen — the payments card says it about the
+        // payment, the sticky bar says it about the button. The bar's copy is the one OUTSIDE the
+        // scrolling list, and it is the one that has to be on screen.
+        rule.onAllNodes(hasText("Тасдиқ кутилмоқда", substring = true))
+            .filterToOne(!hasAnyAncestor(hasScrollAction()))
+            .assertIsDisplayed()
+        assertTrue(
+            "«Барчаси» ends at ${card.bottom}, the blocked bar starts at ${button.top}",
+            card.bottom <= button.top,
+        )
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
