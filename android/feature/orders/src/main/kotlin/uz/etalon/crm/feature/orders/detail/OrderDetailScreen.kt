@@ -87,6 +87,7 @@ import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderEventLine
 import uz.etalon.crm.core.model.PendingUpload
 import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.model.displayedDiscount
 import uz.etalon.crm.core.model.loadList
 import uz.etalon.crm.core.model.owesNothing
 import uz.etalon.crm.core.model.totalBlocks
@@ -774,15 +775,18 @@ private const val MINUS = '−'
 private fun CostsCard(o: OrderDetail) = WhiteCard(title = null) {
     CostRow(stringResource(R.string.rooms_subtotal), formatMoney(o.roomsSubtotal))
     // The rate the discount was struck at, when the order carries one — the web writes the same
-    // «Чегирма 2,1%» beside the sum, and it is what a client asks about.
-    if (!o.discountAmount.isZero) {
+    // «Чегирма 2,1%» beside the sum, and it is what a client asks about. The FIGURE is
+    // [displayedDiscount], not `discountAmount`: see that property for why the column would
+    // otherwise be a UZS short of «Жами» on a discount that lands on a half.
+    val discount = o.displayedDiscount
+    if (discount.amount.signum() > 0) {
         CostRow(
             if (o.discountPercent.signum() > 0) {
                 stringResource(R.string.detail_discount_pct, formatPercent(o.discountPercent, 1))
             } else {
                 stringResource(R.string.discount)
             },
-            "$MINUS${formatMoney(o.discountAmount)}",
+            "$MINUS${formatMoney(discount)}",
         )
     }
     if (!o.deliveryCost.isZero) CostRow(stringResource(R.string.delivery), formatMoney(o.deliveryCost))

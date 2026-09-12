@@ -63,7 +63,46 @@ class OrderDetailDerivedTest {
         val d = detailWith(rooms = emptyList(), totalArea = BigDecimal("78.70"))
         assertEquals(BigDecimal("14166"), d.weightKg)
     }
+
+    /**
+     * The cost card's column has to add up. A real order placed from this app: 2,5 % of
+     * 15 456 460 is 386 411,50, so `discountAmount` printed on its own reads «386 412» against a
+     * «Жами» struck from 15 370 048,50 — «15 370 049». The customer adding the printed figures
+     * gets one UZS less than the price they are asked for.
+     */
+    @Test fun `the printed discount makes the cost column add up on an exact half`() {
+        val d = costs(subtotal = "15456460.00", discount = "386411.50", delivery = "300000.00", total = "15370048.50")
+        assertEquals(BigDecimal("386411"), d.displayedDiscount.amount)
+        assertEquals(
+            d.summary.totalPrice.roundedWhole(),
+            d.roomsSubtotal.roundedWhole() - d.displayedDiscount.amount + d.deliveryCost.roundedWhole(),
+        )
+    }
+
+    /** A discount that needs no help prints exactly what the server stored. */
+    @Test fun `a whole discount is printed unchanged`() {
+        val d = costs(subtotal = "13542460.00", discount = "677123.00", delivery = "300000.00", total = "13165337.00")
+        assertEquals(BigDecimal("677123"), d.displayedDiscount.amount)
+    }
+
+    /** No discount at all derives to nothing, so the card leaves the line out. */
+    @Test fun `no discount derives to zero`() {
+        val d = costs(subtotal = "13542460.00", discount = "0", delivery = "300000.00", total = "13842460.00")
+        assertEquals(0, d.displayedDiscount.amount.signum())
+    }
 }
+
+/** An order priced the way `POST /api/orders` stores one: whole-UZS costs, a `Decimal(14,2)`
+ *  discount and the total the server struck from them. */
+private fun costs(subtotal: String, discount: String, delivery: String, total: String): OrderDetail =
+    detailWith(rooms = emptyList()).let { d ->
+        d.copy(
+            roomsSubtotal = Money.parse(subtotal),
+            discountAmount = Money.parse(discount),
+            deliveryCost = Money.parse(delivery),
+            summary = d.summary.copy(totalPrice = Money.parse(total)),
+        )
+    }
 
 private fun room(beamLength: String, beamCount: Int, totalBlocks: Int) = RoomLine(
     name = null, innerWidth = BigDecimal.ZERO, innerLength = BigDecimal.ZERO, pattern = "GBG",

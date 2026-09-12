@@ -151,6 +151,31 @@ val OrderDetail.loadList: List<LoadLine>
 /** Σ every room's block count. */
 val OrderDetail.totalBlocks: Int get() = rooms.sumOf { it.totalBlocks }
 
+/**
+ * The discount as the cost card PRINTS it, so that column adds up.
+ *
+ * `Order.discountAmount` is `Decimal(14,2)` and a percentage discount lands on a half often
+ * enough to matter: 2,5 % of 15 456 460 is 386 411,50, which on its own prints «386 412» while
+ * «Жами» — struck from 15 370 048,50 — prints «15 370 049». The four printed figures then come to
+ * one UZS less than the bottom line, on the screen an operator reads a price back to a customer
+ * from.
+ *
+ * So the discount is derived from its printed neighbours: `roomsSubtotal − (total − delivery −
+ * other)`, all four whole. The three it is derived from are what was quoted and what is invoiced;
+ * the discount is the line the arithmetic can absorb a half into. Nothing charged changes —
+ * [OrderSummary.totalPrice] is the server's own figure and is untouched.
+ *
+ * The calculator does the same thing at the moment of placing (`rollupLines` in
+ * `:feature:calculator`), so the quote, the customer's PNG and this card all agree to the UZS.
+ * Two helpers rather than one because they take different types: that one works from the engine's
+ * live totals, this one from a placed order.
+ */
+val OrderDetail.displayedDiscount: Money
+    get() = Money(
+        roomsSubtotal.roundedWhole() -
+            (summary.totalPrice.roundedWhole() - deliveryCost.roundedWhole() - otherCost.roundedWhole()),
+    )
+
 /** The factory's rule-of-thumb weight for finished beam-and-block flooring, per m² of **monolith**
  *  area — the slab actually poured, NOT the area the order is billed on (billing counts whole tiles
  *  at N × PITCH, which overstates what a lorry carries; [weightKg] argues it out in full, and the

@@ -2,6 +2,7 @@ package uz.etalon.crm.feature.orders
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.filterToOne
 import androidx.compose.ui.test.hasAnyAncestor
@@ -47,6 +48,7 @@ import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.model.RoomLine
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
+import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.feature.orders.detail.OrderDetailScreen
 import uz.etalon.crm.feature.orders.detail.TAG_COMMENTS_ALL
 import uz.etalon.crm.feature.orders.detail.TAG_EVENTS_ALL
@@ -157,6 +159,9 @@ class OrderDetailScreenshotTest {
         discount: String = "0.00",
         discountPercent: String = "0",
         delivery: String = "0.00",
+        /** The server's own `Order.totalPrice`, which is where a half hides — see
+         *  [theCostColumnAddsUpOnADiscountThatLandsOnAHalf]. */
+        total: String = "13350000.00",
         events: List<OrderEventLine> = this.events,
         cancelReason: String? = null,
         canceledAt: Instant? = null,
@@ -168,7 +173,7 @@ class OrderDetailScreenshotTest {
                 Money.parse(paid) >= Money.parse("13350000.00") -> PaymentState.FULLY_PAID
                 else -> PaymentState.PARTIALLY_PAID
             },
-            totalPrice = Money.parse("13350000.00"), confirmedPaid = Money.parse(paid),
+            totalPrice = Money.parse(total), confirmedPaid = Money.parse(paid),
             totalArea = BigDecimal("78.70"), totalBlocks = 282, totalBeams = 17,
             scheduledAt = Instant.parse("2026-08-30T06:00:00Z"),
             placedAt = Instant.parse("2026-08-30T06:00:00Z"),
@@ -403,6 +408,36 @@ class OrderDetailScreenshotTest {
         list().performScrollToNode(hasText("Ҳайдовчи"))
         rule.onRoot().captureRoboImage("screenshots/order_detail_discount_light.png")
     }
+
+    /**
+     * …and the column that rate belongs to has to ADD UP. A real order placed from the calculator:
+     * 2,5 % of 15 456 460 is 386 411,50, which printed on its own reads «386 412» against a «Жами»
+     * struck from 15 370 048,50 — «15 370 049». The operator reading the price back to a customer
+     * would be a UZS out. `OrderDetail.displayedDiscount` derives the printed figure from its
+     * printed neighbours; this is that rule on the screen.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theCostColumnAddsUpOnADiscountThatLandsOnAHalf() {
+        show(
+            order(
+                status = OrderStatus.PLACED, paid = "0.00", payments = emptyList(),
+                roomsSubtotal = "15456460.00", discount = "386411.50", discountPercent = "2.50",
+                delivery = "300000.00", total = "15370048.50",
+            ),
+        )
+        list().performScrollToNode(hasText("Чегирма 2,5%"))
+        // Built, never spelt: the group separator is U+202F, which a hand-typed literal gets wrong
+        // in a way that reads as a passing test.
+        rule.onNode(hasText(uzs(15_456_460))).assertExists()
+        rule.onNode(hasText("−${uzs(386_411)}")).assertExists()
+        rule.onNode(hasText(uzs(300_000))).assertExists()
+        // The bottom line reads three times on this screen and must be one figure everywhere: the
+        // panel's «Жами», the panel's «Қолди» (nothing is paid) and this card's own «Жами».
+        rule.onAllNodes(hasText(uzs(15_370_049))).assertCountEquals(3)
+    }
+
+    /** A whole-UZS figure as every money row writes it. */
+    private fun uzs(whole: Long) = formatMoney(Money(BigDecimal.valueOf(whole)))
 
     /**
      * A cancellation the server recorded no date for: the notice keeps its sentence and simply
