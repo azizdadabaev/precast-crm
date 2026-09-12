@@ -9,6 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
@@ -81,6 +82,23 @@ private val ACTION_TOP = 12.dp
 private val ACTION_GAP = 8.dp
 /** The air between the figure and the material line — the two columns share one baseline band. */
 private val CAPTION_GAP = 2.dp
+
+/**
+ * Under this much room INSIDE the sheet, the hero stops sharing a row with the material line and
+ * takes the whole width, with «Жами» and the material line stacked above it.
+ *
+ * The sheet's inner width is the window less 52 dp ([SHEET_MARGIN_H] twice, [SHEET_PAD_H] twice):
+ * 359 dp on the 411 dp phone §3.4 is drawn for, 308 dp on a 360 dp one. At 308 the material line
+ * measures first (it carries no weight) and the 26 sp figure is left with less than it needs, so
+ * «13 542 460» ellipsised and «UZS» — measured after it, into nothing at all — vanished from the
+ * screen. The customer's PNG hits the same wall at its fixed 360 dp and already stacks for it
+ * (`QuoteImage.QuoteTotal`); this is that arrangement, on the same grounds, applied only where
+ * §3.4's own cannot fit.
+ *
+ * 330 dp sits between the two: §3.4's side-by-side row is what every phone from roughly 382 dp up
+ * still shows, and `calculator_light` — recorded at 411 dp — is untouched.
+ */
+private val HERO_STACK_BELOW = 330.dp
 
 /**
  * R7's hero figure, and the ONE definition of it: «13 542 460 UZS», 26/800 tabular then 12/600 at
@@ -163,17 +181,36 @@ fun SummarySheet(
                 .background(EtalonColors.navy)
                 .padding(start = SHEET_PAD_H, end = SHEET_PAD_H, top = SHEET_PAD_TOP, bottom = SHEET_PAD_BOTTOM),
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                Column(Modifier.weight(1f)) {
+            // The hero and the material line share a row only while there is room for both — see
+            // [HERO_STACK_BELOW]. `BoxWithConstraints` measures the sheet's own inner width rather
+            // than asking the window how wide the phone is: it is this box the figure has to fit.
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val stacked = maxWidth < HERO_STACK_BELOW
+                val caption: @Composable () -> Unit = {
                     Text(
                         stringResource(R.string.calc_summary_total),
                         style = EtalonType.tagPanel,
                         color = EtalonColors.onDarkMuted,
                         maxLines = 1,
                     )
-                    SummaryTotal(state.orderTotals.totalPriceMoney())
                 }
-                MaterialLine(state)
+                if (stacked) {
+                    Column(Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                            caption()
+                            MaterialLine(state, Modifier.weight(1f).padding(start = ACTION_GAP))
+                        }
+                        SummaryTotal(state.orderTotals.totalPriceMoney())
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                        Column(Modifier.weight(1f)) {
+                            caption()
+                            SummaryTotal(state.orderTotals.totalPriceMoney())
+                        }
+                        MaterialLine(state)
+                    }
+                }
             }
 
             share.error?.let { Box(Modifier.padding(top = ACTION_TOP)) { ErrorBanner(it) } }
@@ -272,7 +309,7 @@ private fun SummaryTotal(total: Money) {
  * (which appends «та») would read «31 та балка».
  */
 @Composable
-private fun MaterialLine(state: CalculatorUiState) {
+private fun MaterialLine(state: CalculatorUiState, modifier: Modifier = Modifier) {
     val area = formatArea(BigDecimal.valueOf(state.totals.monolithArea))
     val line = stringResource(
         R.string.calc_summary_line,
@@ -280,7 +317,7 @@ private fun MaterialLine(state: CalculatorUiState) {
         formatDecimal(BigDecimal.valueOf(state.totals.beams.toLong()), 0),
         formatDecimal(BigDecimal.valueOf(state.totals.blocks.toLong()), 0),
     )
-    Column(horizontalAlignment = Alignment.End) {
+    Column(modifier, horizontalAlignment = Alignment.End) {
         Text(
             buildAnnotatedString {
                 // `calc_summary_line` opens with the area (`%1$s · …`), so the emphasised run is

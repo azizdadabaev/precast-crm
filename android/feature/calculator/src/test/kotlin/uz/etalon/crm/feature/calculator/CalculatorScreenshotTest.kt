@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsOff
@@ -23,6 +25,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.filterToOne
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -41,9 +44,11 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -102,6 +107,23 @@ private const val BACK = "Орқага"
 /** Enough half-viewport swipes to reach the end of a three-room list at any font scale — past the
  *  end they do nothing, so the count only has to be generous. */
 private const val SWIPES_TO_THE_END = 6
+
+/**
+ * How many characters of this text are actually on screen, taken off the layout Compose performed
+ * rather than guessed from the node's width. A single-line run that had to ellipsise ends before
+ * its own last character, which is what «the figure is cut off» means.
+ *
+ * `internal` because `SummarySheetScreenshotTest` asks the same question of the same hero at 130 %.
+ *
+ * `hasVisualOverflow` would be the obvious flag and is the wrong one: it compares the node's
+ * rounded size against the paragraph's fractional width and reports true for text that fits
+ * perfectly well (137 px of figure inside 308 px of sheet).
+ */
+internal fun SemanticsNodeInteraction.visibleCharacters(): Int {
+    val layouts = mutableListOf<TextLayoutResult>()
+    fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+    return layouts.first().getLineEnd(0, visibleEnd = true)
+}
 
 /**
  * The three §7 fixtures the whole calculator is accepted against, as the operator types them —
@@ -387,6 +409,48 @@ class CalculatorScreenshotTest {
         rule.onNode(hasScrollAction()).performScrollToIndex(0)
         rule.waitForIdle()
         rule.onRoot().captureRoboImage("screenshots/calculator_light.png")
+    }
+
+    /**
+     * I2 · the same hero on the narrowest phone the app targets. §3.4 draws «Жами» + the figure
+     * beside the material line, and at 360 dp — a 308 dp inner width — that leaves the 26 sp figure
+     * less than it needs: «13 542 460» came out ellipsised and «UZS», measured after it into what
+     * was left, was not drawn at all. Under `HERO_STACK_BELOW` the sheet stacks the caption and the
+     * material line above the figure, which then has the whole width (the arrangement the
+     * customer's PNG has always used at its fixed 360 dp).
+     *
+     * Both runs are asserted from their own text layout rather than by eye — an ellipsis and a
+     * missing three-letter unit are exactly what a reviewer's glance at a 360 dp frame misses.
+     */
+    @Test @Config(qualifiers = "w360dp-h800dp")
+    fun calculatorW360Light() {
+        val vm = viewModel()
+        screen(vm)
+        typeTheFixtures(vm)
+        rule.onNode(hasScrollAction()).performScrollToIndex(0)
+        rule.waitForIdle()
+        assertTheWholeHeroIsDrawn()
+        rule.onRoot().captureRoboImage("screenshots/calculator_w360_light.png")
+    }
+
+    /** [FIXTURE_TOTAL] and «UZS», both whole: neither run was cut short, and the unit was measured
+     *  into a box at all. The same phone at 130 % is `SummarySheetScreenshotTest.heroW360Font13` —
+     *  this screen's own helpers cannot type the fixtures at that combination (a cell's text gains
+     *  a scroll action of its own there, and `fillLastRoom` can no longer tell the list from it). */
+    private fun assertTheWholeHeroIsDrawn() {
+        // The SHEET's hero, not the off-screen share card's copy of the same figure: only the sheet
+        // publishes «13 542 460 UZS» as one description, with R7's unit after the number.
+        val hero = hasAnyAncestor(hasContentDescription("$FIXTURE_TOTAL $MONEY_UNIT"))
+        val figure = rule.onAllNodesWithText(FIXTURE_TOTAL, useUnmergedTree = true).filterToOne(hero)
+        val unit = rule.onAllNodesWithText(MONEY_UNIT, useUnmergedTree = true).filterToOne(hero)
+        assertEquals("«$FIXTURE_TOTAL» is cut short in the summary sheet", FIXTURE_TOTAL.length, figure.visibleCharacters())
+        assertEquals("«$MONEY_UNIT» is cut short in the summary sheet", MONEY_UNIT.length, unit.visibleCharacters())
+        // The unit used to be measured into nothing at all — laid out after the figure, in what was
+        // left of a row that had already run out.
+        assertTrue(
+            "«$MONEY_UNIT» measured ${unit.getUnclippedBoundsInRoot().width}",
+            unit.getUnclippedBoundsInRoot().width > 0.dp,
+        )
     }
 
     /** The same screen as it opens for a new quote: no client yet, so the form is expanded under
