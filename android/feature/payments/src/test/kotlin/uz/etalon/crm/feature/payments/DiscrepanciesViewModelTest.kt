@@ -301,6 +301,46 @@ class DiscrepanciesViewModelTest {
         assertEquals(2, fetches)
     }
 
+    // ── R8: the toast ────────────────────────────────────────────────────────────
+
+    @Test fun `a resolution toasts, and the screen can clear the toast`() = runTest {
+        val row = item(id = "d10")
+        val vm = viewModel(list = { Result.success(listOf(row)) })
+        advanceUntilIdle()
+
+        vm.openResolve(row)
+        vm.setStatus(DiscrepancyStatus.RESOLVED_WRITEOFF)
+        vm.setNote("зарар сифатида ёпилди")
+        vm.submitResolve()
+        advanceUntilIdle()
+
+        assertEquals("Тафовут ҳал қилинди", vm.state.value.toast)
+        vm.clearToast()
+        assertNull(vm.state.value.toast)
+    }
+
+    /** The toast says the decision landed, so a write the ViewModel refused — or the server did —
+     *  must never raise one. */
+    @Test fun `a refused resolution raises no toast`() = runTest {
+        val row = item(id = "d11")
+        val vm = viewModel(
+            list = { Result.success(listOf(row)) },
+            resolve = { _, _, _ -> Result.failure(ApiException(500, "Сервер хатоси")) },
+        )
+        advanceUntilIdle()
+
+        vm.openResolve(row)
+        vm.submitResolve() // no status chosen: the guard refuses it before the network
+        advanceUntilIdle()
+        assertNull(vm.state.value.toast)
+
+        vm.setStatus(DiscrepancyStatus.RESOLVED_RECOVERED)
+        vm.setNote("жумагача тўлайди")
+        vm.submitResolve() // reaches the network, which fails
+        advanceUntilIdle()
+        assertNull(vm.state.value.toast)
+    }
+
     /**
      * The same rule the confirm queue follows. A discrepancy the server no longer has, or no
      * longer accepts a resolution for, leaves the row on screen still offering «Ҳал қилиш» — and

@@ -2,6 +2,8 @@ package uz.etalon.crm.feature.payments
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -36,6 +38,7 @@ import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.feature.payments.discrepancies.DiscrepanciesScreen
 import uz.etalon.crm.feature.payments.discrepancies.DiscrepanciesUiState
+import uz.etalon.crm.feature.payments.discrepancies.ResolveSheetState
 import uz.etalon.crm.feature.payments.queue.ConfirmMode
 import uz.etalon.crm.feature.payments.queue.ConfirmQueueScreen
 import uz.etalon.crm.feature.payments.queue.ConfirmQueueUiState
@@ -48,8 +51,7 @@ import java.time.Instant
 import java.time.LocalDate
 
 /** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
- *  inset: the pill's 84 dp band alone, so a frame carries the clearance a real phone shows. The
- *  discrepancies frame does not take it yet — that screen is rebuilt in its own task. */
+ *  inset: the pill's 84 dp band alone, so a frame carries the clearance a real phone shows. */
 private val SHELL_NAV_PILL_INSET = 84.dp
 
 /** `:core:designsystem`'s `action_confirm`, written out because a Robolectric test reads the
@@ -58,6 +60,9 @@ private const val CONFIRM = "Тасдиқлаш"
 
 /** `action_record_payment` — the button that opens the record screen's summary gate. */
 private const val RECORD = "Қайд этиш"
+
+/** `discrepancy_action_resolve` — the resolve sheet's primary, which opens its summary gate. */
+private const val RESOLVE = "Ҳал қилиш"
 
 /**
  * The module's frames: the record sheet, the confirm queue in its three states with its two
@@ -379,13 +384,21 @@ class PaymentScreenshotTest {
         captureScreenRoboImage("screenshots/reject_sheet_light.png")
     }
 
-    // ── Discrepancies list: one still open, one already resolved as a discount. ─────────────
+    // ── Discrepancies: the navy list, then the resolve sheet and the gate behind it. ────────
 
+    /** Two still open — one short by a million and a half, one by two hundred thousand — and one
+     *  already closed as a discount, so the list shows both what needs a decision and what a
+     *  decision looks like once it is taken. The order is the ViewModel's own: unfinished first. */
     private fun discrepancies() = listOf(
         Discrepancy(
             id = "d1", orderId = "o3", orderNumber = "2026-09-0019", clientName = "Тошматов Илҳом Каримович",
             driverName = "Жасур", expectedAmount = Money.parse("9000000.00"), receivedAmount = Money.parse("7500000.00"),
             status = DiscrepancyStatus.OPEN, reportedAt = Instant.parse("2026-09-03T15:25:00Z"), resolutionNote = null,
+        ),
+        Discrepancy(
+            id = "d3", orderId = "o5", orderNumber = "2026-09-0011", clientName = "BuildPro Group",
+            driverName = "Отабек", expectedAmount = Money.parse("6000000.00"), receivedAmount = Money.parse("5800000.00"),
+            status = DiscrepancyStatus.OPEN, reportedAt = Instant.parse("2026-09-02T11:40:00Z"), resolutionNote = null,
         ),
         Discrepancy(
             id = "d2", orderId = "o4", orderNumber = "2026-09-0004", clientName = "Эргашева Нигора Собировна",
@@ -395,25 +408,66 @@ class PaymentScreenshotTest {
         ),
     )
 
-    private fun discrepanciesState() = DiscrepanciesUiState(
+    private fun discrepanciesState(sheet: ResolveSheetState? = null) = DiscrepanciesUiState(
         items = discrepancies(),
         loading = false,
         canResolve = true,
+        permissionsResolved = true,
+        sheet = sheet,
     )
 
-    private fun shootDiscrepancies(name: String, dark: Boolean) {
-        rule.setContent {
-            EtalonTheme(darkTheme = dark) {
-                DiscrepanciesScreen(
-                    s = discrepanciesState(), onOpenOrder = {}, onBack = {}, onRefresh = {}, onOpenResolve = {},
-                    onCloseSheet = {}, onSetStatus = {}, onSetNote = {}, onSubmitResolve = {},
-                )
-            }
-        }
-        rule.onRoot().captureRoboImage("screenshots/discrepancies_list_$name.png")
+    @Composable
+    private fun Discrepancies(s: DiscrepanciesUiState) = CompositionLocalProvider(
+        LocalNavPillInset provides SHELL_NAV_PILL_INSET,
+    ) {
+        DiscrepanciesScreen(
+            s = s, now = fixedInstant, onOpenOrder = {}, onBack = {}, onRefresh = {}, onOpenResolve = {},
+            onCloseSheet = {}, onSetStatus = {}, onSetNote = {}, onSubmitResolve = {}, onToastShown = {},
+        )
     }
 
-    @Test @Config(qualifiers = "w411dp-h891dp") fun discrepanciesLight() = shootDiscrepancies("light", false)
-    @Test @Config(qualifiers = "w411dp-h891dp") fun discrepanciesDark() = shootDiscrepancies("dark", true)
-    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun discrepanciesLargeFont() = shootDiscrepancies("font13", false)
+    private fun shootDiscrepancies(name: String) {
+        rule.setContent { EtalonTheme { Discrepancies(discrepanciesState()) } }
+        rule.onRoot().captureRoboImage("screenshots/discrepancies_$name.png")
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp") fun discrepanciesLight() = shootDiscrepancies("light")
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun discrepanciesLargeFont() = shootDiscrepancies("font13")
+
+    /**
+     * The sheet opened on the row that was ALREADY resolved, so every block it can carry is on one
+     * frame: the read-only «Аввалги қарор» an owner is about to overwrite, the four resolution rows
+     * with a new one chosen, the note, and the «Бекор қилиш» / «Ҳал қилиш» pair.
+     */
+    private fun resolveSheet() = ResolveSheetState(
+        discrepancy = discrepancies()[2],
+        status = DiscrepancyStatus.RESOLVED_WRITEOFF,
+        note = "Мижоз қолганини тўламади — зарар сифатида ёпилди",
+    )
+
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun resolveSheetLight() {
+        rule.setContent { EtalonTheme { Discrepancies(discrepanciesState(sheet = resolveSheet())) } }
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/resolve_sheet_light.png")
+    }
+
+    /**
+     * R3's gate over the sheet that opened it. The figure on the navy panel is the GAP — 200 000,
+     * not the 4 000 000 that did arrive — because that is what the decision is about, over «Тури»
+     * and «Ҳайдовчи».
+     *
+     * Reached by tapping «Ҳал қилиш» rather than by a flag: the gate is the button's own state, and
+     * a frame that composed it directly would not prove the button opens it. The tap goes to the
+     * LAST «Ҳал қилиш» carrying a click action — in window order that is the sheet's own primary,
+     * the list rows' offers coming first.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun resolveGateLight() {
+        rule.setContent { EtalonTheme { Discrepancies(discrepanciesState(sheet = resolveSheet())) } }
+        val buttons = rule.onAllNodes(hasClickAction() and hasText(RESOLVE))
+        buttons[buttons.fetchSemanticsNodes().size - 1].performClick()
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/resolve_gate_light.png")
+    }
 }

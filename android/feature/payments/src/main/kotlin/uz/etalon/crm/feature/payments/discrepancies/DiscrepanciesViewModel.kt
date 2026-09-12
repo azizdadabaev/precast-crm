@@ -26,6 +26,14 @@ private const val NO_PERMISSION_MESSAGE = "Тафовутларни ҳал қи�
 
 private const val DISCREPANCY_RESOLVE = "discrepancy.resolve"
 
+/**
+ * Ruling R8's toast for this screen. A Kotlin constant rather than a string resource, for the same
+ * reason [OFFLINE_MESSAGE] and [NO_PERMISSION_MESSAGE] are: a ViewModel in this app takes no
+ * `Context`, and the confirm queue's own two toasts are written the same way one package over.
+ * No figure in it — a resolution is a decision about a gap, not a sum that changed hands.
+ */
+private const val TOAST_RESOLVED = "Тафовут ҳал қилинди"
+
 /** `resolutionNote` and `DiscrepancyUpdateSchema` both say `min(5)`. */
 private const val MIN_NOTE = 5
 
@@ -101,6 +109,9 @@ data class DiscrepanciesUiState(
      */
     val permissionsResolved: Boolean = false,
     val sheet: ResolveSheetState? = null,
+    /** R8's toast, cleared by the screen after
+     *  [uz.etalon.crm.core.designsystem.components.TOAST_DURATION_MS]. */
+    val toast: String? = null,
 ) {
     /** Shown only once the answer is known — and as a neutral notice, not an error: reading the
      *  discrepancy list without being able to resolve is a real, intended account shape. */
@@ -197,7 +208,7 @@ open class DiscrepanciesViewModel(
         viewModelScope.launch {
             resolveDiscrepancy(sheet.discrepancy.id, status, sheet.note.trim()).fold(
                 onSuccess = {
-                    _state.update { it.copy(busy = false, sheet = null) }
+                    _state.update { it.copy(busy = false, sheet = null, toast = TOAST_RESOLVED) }
                     refresh()
                 },
                 // Same rule the confirm queue follows: a conflict-class failure means this row has
@@ -216,6 +227,12 @@ open class DiscrepanciesViewModel(
             )
         }
     }
+
+    /** R8: the screen shows the toast for
+     *  [uz.etalon.crm.core.designsystem.components.TOAST_DURATION_MS] and then calls this. The
+     *  ViewModel does not time it — only the screen knows whether the toast was ever on screen,
+     *  and a composition that never ran must not consume one. */
+    fun clearToast() = _state.update { it.copy(toast = null) }
 
     /**
      * The three guards the action shares, in the order that gives the owner the most useful
