@@ -249,4 +249,73 @@ class RateSheetTest {
         rule.onNodeWithText("↓ чегирма").assertExists()
         rule.onNodeWithText("↑ устама").assertDoesNotExist()
     }
+
+    /**
+     * D5 again, from the other side: a reason already on file belongs to the rate it was written
+     * for. Re-opening the confirmation on a DIFFERENT tier must start empty — a pre-filled sentence
+     * about the previous price would leave «Тасдиқлаш» live from the first frame, and the mandatory
+     * reason would be one tap away from meaning nothing.
+     */
+    @Test fun `a second override does not inherit the first one's reason`() {
+        val vm = viewModel()
+        quote(vm)
+        card(vm)
+        openSheet()
+        rule.onNodeWithText(money(DEAREST)).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription(REASON).performTextInput("Йирик буюртма")
+        rule.onNodeWithText(CONFIRM).performClick()
+        rule.waitForIdle()
+        assertEquals("Йирик буюртма", row(vm).m2PriceReason)
+
+        openSheet()
+        rule.onNodeWithText(money(CHEAPEST)).performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText(CONFIRM).assertIsNotEnabled()
+        rule.onNodeWithText("Йирик буюртма").assertDoesNotExist()
+    }
+
+    /** …and the same tier DOES come back with what was written for it, so rewording a reason is not
+     *  retyping it. The rule is one expression: [reasonSeed]. */
+    @Test fun `re-opening the same override shows the reason on file`() {
+        val vm = viewModel()
+        quote(vm)
+        card(vm)
+        openSheet()
+        rule.onNodeWithText(money(DEAREST)).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription(REASON).performTextInput("Йирик буюртма")
+        rule.onNodeWithText(CONFIRM).performClick()
+        rule.waitForIdle()
+
+        openSheet()
+        rule.onNodeWithText(money(DEAREST)).performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText("Йирик буюртма").assertExists()
+        rule.onNodeWithText(CONFIRM).assertIsEnabled()
+    }
+
+    /**
+     * `RoomCalcInputBaseSchema.m2PriceReason` is capped at 200 server-side, so the field caps at
+     * 200 here — a 201st character is never typed rather than 422'd after the customer has waited.
+     * The counter says so while it is being typed.
+     */
+    @Test fun `the reason stops at two hundred characters, and the counter says so`() {
+        val vm = viewModel()
+        quote(vm)
+        card(vm)
+        openSheet()
+        rule.onNodeWithText(money(DEAREST)).performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithContentDescription(REASON).performTextInput("а".repeat(MAX_REASON + 1))
+        rule.waitForIdle()
+
+        rule.onNodeWithText("$MAX_REASON / $MAX_REASON").assertExists()
+        rule.onNodeWithText(CONFIRM).performClick()
+        rule.waitForIdle()
+        assertEquals(MAX_REASON, row(vm).m2PriceReason?.length)
+    }
 }

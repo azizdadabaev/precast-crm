@@ -90,9 +90,7 @@ private val HelperStyle = EtalonType.label
 @Composable
 fun RateConfirm(row: SlabRow, price: Double, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     val auto = autoPickedRate(row)
-    // Seeded from the row so re-opening the confirmation on an already-overridden room shows the
-    // reason that is on file rather than an empty field the operator has to retype.
-    var reason by remember(row.id, price) { mutableStateOf(row.m2PriceReason.orEmpty()) }
+    var reason by remember(row.id, price) { mutableStateOf(reasonSeed(row, price)) }
     val markup = price > auto
 
     ModalBottomSheet(
@@ -158,6 +156,19 @@ fun RateConfirm(row: SlabRow, price: Double, onDismiss: () -> Unit, onConfirm: (
         }
     }
 }
+
+/**
+ * What the reason field opens with.
+ *
+ * The reason on file belongs to the rate on file, and to no other. Re-opening the confirmation on
+ * the SAME override — the operator tapped the tier that is already applied, or came back to reword
+ * why — shows what was written, rather than making them retype a sentence the quote already
+ * carries. Picking a DIFFERENT tier starts empty: D5 wants a reason for THIS price, and a
+ * pre-filled «Мижоз доимий» from the previous override would be confirmable in one tap, which is
+ * the mandatory reason defeating itself — «Тасдиқлаш» must start disabled.
+ */
+internal fun reasonSeed(row: SlabRow, price: Double): String =
+    if (row.m2PriceOverrideValue == price) row.m2PriceReason.orEmpty() else ""
 
 /**
  * The second tile: what the room will be priced at, and which way that moved. White on the indigo
