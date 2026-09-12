@@ -1,8 +1,10 @@
 package uz.etalon.crm.core.designsystem.components
 
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -47,10 +49,21 @@ val LocalNavPillInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.d
  * three-button navigation ~48 dp, and both get the same 84 dp band on top. This is what the shell
  * provides into [LocalNavPillInset]; screens read the local rather than calling this, so a locked
  * route can provide `0.dp` instead.
+ *
+ * **Zero while the keyboard is up.** The pill is drawn on the navigation bar, so the IME covers it
+ * completely — and every screen with a text field (Record payment, Change PIN, the clients search)
+ * was reserving the pill's whole 84 dp band on top of the keyboard's own inset, pushing content up
+ * by a band that nothing occupies. Decided once here rather than per screen, so the rule cannot
+ * drift: no pill on screen, no clearance for it. Screenshot frames are unaffected — Robolectric
+ * reports the IME absent whatever is focused.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun navPillInsetOf(): Dp =
+fun navPillInsetOf(): Dp = if (WindowInsets.isImeVisible) {
+    0.dp
+} else {
     WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + NAV_PILL_BAND
+}
 
 /** Lifts whatever this modifies clear of the nav pill — the fixed sheet or bar at a screen's foot. */
 @Composable

@@ -46,10 +46,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import uz.etalon.crm.core.designsystem.components.ConfirmGate
 import uz.etalon.crm.core.designsystem.components.ConfirmSheet
 import uz.etalon.crm.core.designsystem.components.ConfirmTile
 import uz.etalon.crm.core.designsystem.components.DangerButton
@@ -573,10 +572,7 @@ fun RecordPaymentScreen(
     // R3's summary gate. In a `Dialog` of its own, the way the approve sheet's gate is: a
     // full-screen scrim composed inside the column above would be laid out INSIDE the scroll.
     if (gateOpen) {
-        Dialog(
-            onDismissRequest = { gateOpen = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
+        ConfirmGate(onDismiss = { gateOpen = false }) {
             ConfirmSheet(
                 caption = stringResource(R.string.record_summary_caption),
                 amount = s.amount,

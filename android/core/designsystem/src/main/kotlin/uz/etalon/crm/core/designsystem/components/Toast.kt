@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +26,7 @@ import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonElevation
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.etalonShadow
 
@@ -40,6 +42,12 @@ const val TOAST_DURATION_MS = 2600L
  *
  * The 96 dp and the side margins are the toast's own padding, so a screen only has to align it to
  * the bottom of its `Box`; the gap clears the floating nav.
+ *
+ * The hairline is always on. Over the page's light ground the navy pill needs no outline, but this
+ * toast also rises over the app's NAVY surfaces — the discrepancies sheet, the confirm gates — and
+ * there it dissolves into its own background without one. A border that appears only sometimes is
+ * a second toast to maintain, so `onDarkDivider` sits under it everywhere: invisible on white,
+ * and the edge that makes it a separate object on navy.
  */
 @Composable
 fun EtalonToast(message: String, visible: Boolean, modifier: Modifier = Modifier) = AnimatedVisibility(
@@ -55,6 +63,7 @@ fun EtalonToast(message: String, visible: Boolean, modifier: Modifier = Modifier
             .etalonShadow(EtalonElevation.overlay, EtalonShapes.toast, EtalonColors.navy)
             .clip(EtalonShapes.toast)
             .background(EtalonColors.navy)
+            .border(EtalonSpace.hairline, EtalonColors.onDarkDivider, EtalonShapes.toast)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

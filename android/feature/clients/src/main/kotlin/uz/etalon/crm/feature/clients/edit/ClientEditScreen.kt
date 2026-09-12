@@ -32,6 +32,8 @@ import uz.etalon.crm.core.designsystem.components.EtalonTextField
 import uz.etalon.crm.core.designsystem.components.FormCard
 import uz.etalon.crm.core.designsystem.components.FormField
 import uz.etalon.crm.core.designsystem.components.NoticeBanner
+import uz.etalon.crm.core.designsystem.components.PHONE_LOCAL_DIGITS
+import uz.etalon.crm.core.designsystem.components.PhoneDigitsMask
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.RegionField
 import uz.etalon.crm.core.designsystem.components.RegionPickerSheet
@@ -48,9 +50,6 @@ private enum class RegionPick { VILOYAT, TUMAN }
 /** §2's form sheet: the 20/16 every restyled sheet in the app uses. */
 private val SHEET_PAD_H = EtalonSpace.xl
 private val SHEET_PAD_V = EtalonSpace.lg
-
-/** `normalizePhone` turns exactly nine local digits into `998` + those nine. */
-private const val PHONE_DIGITS = 9
 
 /** How far «Изоҳ» may grow before it scrolls inside itself. */
 private const val NOTES_MAX_LINES = 3
@@ -183,14 +182,18 @@ fun ClientEditSheet(
                     )
                 }
                 // The "+998 " is display-only: the field holds the nine local digits and the
-                // ViewModel sends the twelve-digit form, exactly as the drivers sheet does.
+                // ViewModel sends the twelve-digit form, exactly as the drivers sheet does. The
+                // digits are DRAWN «90 111 22 33» by the shared `PhoneDigitsMask` — the same
+                // grouping the calculator's client form shows, because a customer checking a
+                // number read aloud must not have to regroup it in their head on one screen only.
                 FormField(stringResource(R.string.client_field_phone)) {
                     EtalonTextField(
                         value = s.phoneDigits,
-                        onValueChange = { vm.setPhoneDigits(it.filter { c -> c in '0'..'9' }.take(PHONE_DIGITS)) },
+                        onValueChange = { vm.setPhoneDigits(it.filter { c -> c in '0'..'9' }.take(PHONE_LOCAL_DIGITS)) },
                         modifier = Modifier.fillMaxWidth(),
                         prefix = "+998 ",
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        visualTransformation = PhoneDigitsMask,
                     )
                 }
                 // `RegionField` publishes no `Modifier`, so the two columns take their width from

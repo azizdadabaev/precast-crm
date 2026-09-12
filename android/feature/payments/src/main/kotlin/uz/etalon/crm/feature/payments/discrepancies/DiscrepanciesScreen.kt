@@ -43,12 +43,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import uz.etalon.crm.core.designsystem.components.Avatar
+import uz.etalon.crm.core.designsystem.components.ConfirmGate
 import uz.etalon.crm.core.designsystem.components.ConfirmSheet
 import uz.etalon.crm.core.designsystem.components.ConfirmTile
 import uz.etalon.crm.core.designsystem.components.DiscrepancyStatusTag
@@ -532,10 +531,7 @@ private fun ResolveSheet(
     // above already occupies a window, and a full-screen scrim composed inside its column would be
     // laid out INSIDE the sheet rather than over it.
     if (gateOpen) {
-        Dialog(
-            onDismissRequest = { gateOpen = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
+        ConfirmGate(onDismiss = { gateOpen = false }) {
             ConfirmSheet(
                 caption = stringResource(R.string.discrepancy_action_resolve),
                 // The gap is what the decision is about — how much never arrived — not the sum

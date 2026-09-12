@@ -26,9 +26,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import uz.etalon.crm.core.data.RejectedOrder
+import uz.etalon.crm.core.designsystem.components.ConfirmGate
 import uz.etalon.crm.core.designsystem.components.ConfirmSheet
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
@@ -137,10 +136,7 @@ fun OutboxSheet(
     // confirmation composed inside its column would be laid out INSIDE the sheet rather than over
     // it — a question about deleting something must not be reachable only by scrolling.
     discardCandidate?.let { row ->
-        Dialog(
-            onDismissRequest = { discardCandidate = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
+        ConfirmGate(onDismiss = { discardCandidate = null }) {
             ConfirmSheet(
                 caption = stringResource(R.string.home_outbox_discard_title),
                 // Not a decision about money: the sheet leads with the question instead of a figure.

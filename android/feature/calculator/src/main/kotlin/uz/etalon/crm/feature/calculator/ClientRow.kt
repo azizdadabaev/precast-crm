@@ -26,17 +26,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.EtalonTextField
 import uz.etalon.crm.core.designsystem.components.FormCard
 import uz.etalon.crm.core.designsystem.components.FormField
+import uz.etalon.crm.core.designsystem.components.PhoneDigitsMask
 import uz.etalon.crm.core.designsystem.components.RegionField
 import uz.etalon.crm.core.designsystem.components.RegionPickerSheet
 import uz.etalon.crm.core.designsystem.icon.EtalonIcon
@@ -227,44 +224,3 @@ fun ClientForm(state: CalculatorUiState, vm: CalculatorViewModel, modifier: Modi
         }
     }
 }
-
-/**
- * §3.4's phone mask, `+998 90 ___ __ __`: the nine stored digits drawn as `90 123 45 67` behind
- * the field's own fixed «+998 » prefix.
- *
- * Only the DRAWING changes — [CalculatorUiState.clientPhoneDigits] stays nine bare digits, which
- * is what `normalizePhone` and the lookup want. The offset mapping is the reason this is a
- * transformation rather than a formatted value: with the spaces unmapped the cursor and any
- * selection drift by one character per group, and backspace starts eating the wrong digit.
- */
-internal object PhoneDigitsMask : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val d = text.text.take(PHONE_DIGITS)
-        val out = buildString {
-            d.forEachIndexed { i, c ->
-                // The group boundaries of `90 123 45 67`, counted in original digits.
-                if (i == 2 || i == 5 || i == 7) append(' ')
-                append(c)
-            }
-        }
-        return TransformedText(AnnotatedString(out), PhoneOffsets)
-    }
-}
-
-/** How many spaces [PhoneDigitsMask] has inserted before a given original offset, and back. */
-private object PhoneOffsets : OffsetMapping {
-    override fun originalToTransformed(offset: Int): Int = when {
-        offset <= 2 -> offset
-        offset <= 5 -> offset + 1
-        offset <= 7 -> offset + 2
-        else -> offset + 3
-    }
-
-    override fun transformedToOriginal(offset: Int): Int = when {
-        offset <= 2 -> offset
-        offset <= 6 -> offset - 1
-        offset <= 9 -> offset - 2
-        else -> offset - 3
-    }
-}
-

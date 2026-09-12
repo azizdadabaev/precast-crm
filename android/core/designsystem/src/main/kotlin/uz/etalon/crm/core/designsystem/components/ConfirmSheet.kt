@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonElevation
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -138,3 +140,25 @@ fun ConfirmSheet(
         }
     }
 }
+
+/**
+ * The window a [ConfirmSheet] gate opens in — decided once here so all four gates draw the same
+ * one (the approve gate, the record-payment summary, the resolve gate, and Home's outbox discard).
+ *
+ * A gate is raised OVER a sheet that already owns a window, so it cannot be composed into that
+ * sheet's column: it would be laid out INSIDE the sheet, below the fold. Hence a `Dialog` of its
+ * own, full-width (`usePlatformDefaultWidth = false`) and — the part that matters visually —
+ * `decorFitsSystemWindows = false`. Without that the dialog's decor is inset by the status and
+ * gesture bars, so [ConfirmSheet]'s `fillMaxSize` scrim stops short of both edges and leaves two
+ * pale strips: the question then reads as a card sitting on the screen rather than a modal thrown
+ * over everything, which is the wrong impression for a step that moves money.
+ *
+ * The content keeps responsibility for its own safe area. [ConfirmSheet] centres itself and is far
+ * shorter than the screen, so it never reaches a system bar.
+ */
+@Composable
+fun ConfirmGate(onDismiss: () -> Unit, content: @Composable () -> Unit) = Dialog(
+    onDismissRequest = onDismiss,
+    properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    content = content,
+)
