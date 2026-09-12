@@ -439,6 +439,37 @@ class CalculatorViewModelTest {
 
     // ── Task 8: draft restore, autosave, save, clear ───────────────────────────────
 
+    /**
+     * R8's gate. The screen's «open with one blank card» rule waits on [CalculatorUiState.restored],
+     * and the whole point of the flag is the window BEFORE Room has answered: asked then, the screen
+     * would add a room that the restored draft lands beside.
+     *
+     * Both cases, because the flag means «Room has been asked», not «Room had something»: a first
+     * run with no draft at all must still end up true, or the operator would be looking at an
+     * empty calculator with no card to type into.
+     */
+    @Test fun `restored is false until the draft has been looked for — with a draft`() = runTest {
+        val draft = CalculatorDraft(
+            rows = listOf(recomputeRow(SlabRow(id = "r1", name = "Хона 1", innerWidth = 4.0, innerLength = 6.0))),
+            clientPhone = "998901234567", clientName = "Aziz", clientAddress = "",
+            discountPercent = 0.0, discountAmount = 0.0, deliveryCost = 0.0, otherCost = 0.0,
+            projectId = null,
+        )
+        val v = vm(observeDraft = ObserveDraftUseCase { flowOf(draft) })
+        assertFalse(v.state.value.restored, "the init coroutine has not run yet")
+        advanceUntilIdle()
+        assertTrue(v.state.value.restored)
+        assertEquals(listOf("Хона 1"), v.state.value.rows.map { it.name }, "and the draft is what it found")
+    }
+
+    @Test fun `restored is false until the draft has been looked for — with nothing to restore`() = runTest {
+        val v = vm(observeDraft = ObserveDraftUseCase { flowOf(null) })
+        assertFalse(v.state.value.restored)
+        advanceUntilIdle()
+        assertTrue(v.state.value.restored, "nothing found is still an answer")
+        assertTrue(v.state.value.rows.isEmpty(), "and the ViewModel adds no room of its own — the screen does")
+    }
+
     @Test fun `a persisted draft is restored into state before the operator types anything`() = runTest {
         val restored = CalculatorDraft(
             rows = listOf(recomputeRow(SlabRow(id = "r1", name = "Хона 3", innerWidth = 4.0, innerLength = 6.0))),

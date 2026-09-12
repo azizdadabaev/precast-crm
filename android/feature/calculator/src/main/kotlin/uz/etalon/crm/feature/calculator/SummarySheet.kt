@@ -1,12 +1,20 @@
 package uz.etalon.crm.feature.calculator
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -99,9 +107,25 @@ private val MetaStyle = EtalonType.meta.copy(lineHeight = 1.5.em)
  *
  * Without `order.create` only «Юбориш» remains (§3.4's actions all commit something server-side;
  * showing a customer a price on a PNG does not — see [rememberShareQuote]).
+ *
+ * @param barVisible whether the navy bar itself is drawn. It steps aside for the keyboard: the bar
+ *   is fixed over the room list rather than laid out under it, so the list's `imePadding` cannot
+ *   lift it, and a bar sitting BEHIND the keyboard covers the very room being typed into while
+ *   showing a total the keystroke has already changed. The card's own footer carries that room's
+ *   subtotal meanwhile. Only the bar goes: the three modals below stay composed, or focusing the
+ *   place-order sheet's notes field would dismiss the sheet it was typed into.
+ *
+ *   Defaulted from the window and passed in only by the tests — Robolectric reports the ime inset
+ *   as absent whatever is focused, so this is the only way the rule can be asserted at all.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SummarySheet(state: CalculatorUiState, vm: CalculatorViewModel, modifier: Modifier = Modifier) {
+fun SummarySheet(
+    state: CalculatorUiState,
+    vm: CalculatorViewModel,
+    modifier: Modifier = Modifier,
+    barVisible: Boolean = !WindowInsets.isImeVisible,
+) {
     var showSettings by remember { mutableStateOf(false) }
     var showPlaceSheet by remember { mutableStateOf(false) }
     val share = rememberShareQuote(state)
@@ -113,65 +137,76 @@ fun SummarySheet(state: CalculatorUiState, vm: CalculatorViewModel, modifier: Mo
         if (state.placedOrderId != null || state.saveMessage == QUEUED_MESSAGE) showPlaceSheet = false
     }
 
-    Column(
-        modifier.fillMaxWidth()
-            .padding(horizontal = SHEET_MARGIN_H)
-            .padding(bottom = SHEET_MARGIN_BOTTOM)
-            .clip(EtalonShapes.sheet)
-            .background(EtalonColors.navy)
-            .padding(start = SHEET_PAD_H, end = SHEET_PAD_H, top = SHEET_PAD_TOP, bottom = SHEET_PAD_BOTTOM),
+    AnimatedVisibility(
+        visible = barVisible,
+        modifier = modifier,
+        enter = slideInVertically { it } + fadeIn(),
+        exit = slideOutVertically { it } + fadeOut(),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    stringResource(R.string.calc_summary_total),
-                    style = EtalonType.tagPanel,
-                    color = EtalonColors.onDarkMuted,
-                    maxLines = 1,
-                )
-                SummaryTotal(state.orderTotals.totalPriceMoney())
-            }
-            MaterialLine(state)
-        }
-
-        share.error?.let { Box(Modifier.padding(top = ACTION_TOP)) { ErrorBanner(it) } }
-
-        Row(
-            Modifier.fillMaxWidth().padding(top = ACTION_TOP),
-            horizontalArrangement = Arrangement.spacedBy(ACTION_GAP),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            Modifier.fillMaxWidth()
+                .padding(horizontal = SHEET_MARGIN_H)
+                .padding(bottom = SHEET_MARGIN_BOTTOM)
+                .clip(EtalonShapes.sheet)
+                .background(EtalonColors.navy)
+                .padding(start = SHEET_PAD_H, end = SHEET_PAD_H, top = SHEET_PAD_TOP, bottom = SHEET_PAD_BOTTOM),
         ) {
-            if (state.canWrite) {
-                val saveLabel = stringResource(R.string.calc_action_save)
-                DarkButton(
-                    onClick = vm::saveDraft,
-                    modifier = Modifier.semantics { contentDescription = saveLabel },
-                    enabled = !state.saving && !state.placing,
-                    leadingIcon = EtalonIcons.Save,
-                )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.calc_summary_total),
+                        style = EtalonType.tagPanel,
+                        color = EtalonColors.onDarkMuted,
+                        maxLines = 1,
+                    )
+                    SummaryTotal(state.orderTotals.totalPriceMoney())
+                }
+                MaterialLine(state)
             }
-            val shareLabel = stringResource(R.string.calc_action_share)
-            DarkButton(
-                onClick = share.onClick,
-                modifier = Modifier.semantics { contentDescription = shareLabel },
-                enabled = share.enabled,
-                leadingIcon = EtalonIcons.Send,
-            )
-            if (state.canWrite) {
-                val settingsLabel = stringResource(R.string.calc_action_settings)
+
+            share.error?.let { Box(Modifier.padding(top = ACTION_TOP)) { ErrorBanner(it) } }
+
+            Row(
+                Modifier.fillMaxWidth().padding(top = ACTION_TOP),
+                horizontalArrangement = Arrangement.spacedBy(ACTION_GAP),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (state.canWrite) {
+                    val saveLabel = stringResource(R.string.calc_action_save)
+                    DarkButton(
+                        onClick = vm::saveDraft,
+                        modifier = Modifier.semantics { contentDescription = saveLabel },
+                        enabled = !state.placing,
+                        // A save in flight is «working», not «unavailable»: the pill keeps its
+                        // navy2 fill and swaps the save glyph for the spinner, the way the primary
+                        // button has always done. `enabled` is left to the OTHER blocker.
+                        loading = state.saving,
+                        leadingIcon = EtalonIcons.Save,
+                    )
+                }
+                val shareLabel = stringResource(R.string.calc_action_share)
                 DarkButton(
-                    onClick = { showSettings = true },
-                    modifier = Modifier.semantics { contentDescription = settingsLabel },
-                    leadingIcon = EtalonIcons.Ellipsis,
+                    onClick = share.onClick,
+                    modifier = Modifier.semantics { contentDescription = shareLabel },
+                    enabled = share.enabled,
+                    leadingIcon = EtalonIcons.Send,
                 )
-                InverseButton(
-                    text = stringResource(R.string.calc_action_place_order),
-                    // The sheet renders `state.error` itself, and a save that failed minutes ago
-                    // belongs to the quote, not to the placement only now starting.
-                    onClick = { vm.dismissError(); showPlaceSheet = true },
-                    modifier = Modifier.weight(1f),
-                    enabled = !state.saving && !state.placing,
-                )
+                if (state.canWrite) {
+                    val settingsLabel = stringResource(R.string.calc_action_settings)
+                    DarkButton(
+                        onClick = { showSettings = true },
+                        modifier = Modifier.semantics { contentDescription = settingsLabel },
+                        leadingIcon = EtalonIcons.Ellipsis,
+                    )
+                    InverseButton(
+                        text = stringResource(R.string.calc_action_place_order),
+                        // The sheet renders `state.error` itself, and a save that failed minutes
+                        // ago belongs to the quote, not to the placement only now starting.
+                        onClick = { vm.dismissError(); showPlaceSheet = true },
+                        modifier = Modifier.weight(1f),
+                        enabled = !state.saving && !state.placing,
+                    )
+                }
             }
         }
     }

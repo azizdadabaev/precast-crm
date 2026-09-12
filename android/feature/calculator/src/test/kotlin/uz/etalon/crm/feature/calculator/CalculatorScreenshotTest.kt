@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.height
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -54,6 +56,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import uz.etalon.crm.core.calc.CalculatorDraft
 import uz.etalon.crm.core.calc.Pattern
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.money
@@ -156,7 +159,10 @@ class CalculatorScreenshotTest {
      *  R8 rule opens with one blank card), and a clients API that answers every phone lookup with
      *  a clean miss — these fixtures are a new customer, and a THROWING api would surface as a
      *  lookup banner in the middle of the frame. */
-    private fun viewModel(canWrite: Boolean = true) = CalculatorViewModel(
+    private fun viewModel(
+        canWrite: Boolean = true,
+        observeDraft: ObserveDraftUseCase = ObserveDraftUseCase { flowOf(null) },
+    ) = CalculatorViewModel(
         session = InertSessionPricing(),
         permissions = PermissionGate { canWrite },
         clients = ClientsRepository(
@@ -166,12 +172,13 @@ class CalculatorScreenshotTest {
             },
             permissions = PermissionGate { canWrite },
         ),
+        observeDraft = observeDraft,
     )
 
     /** The whole screen, driven by a real [CalculatorViewModel] — the only way the §8 rule («the
      *  fixtures are typed through the UI and read back off it») can be an acceptance test rather
      *  than a picture of a hand-built state. */
-    private fun screen(vm: CalculatorViewModel, onBack: (() -> Unit)? = {}) {
+    private fun screen(vm: CalculatorViewModel, onBack: (() -> Unit)? = {}, imeVisible: Boolean = false) {
         rule.setContent {
             val s by vm.state.collectAsState()
             EtalonTheme {
@@ -199,7 +206,7 @@ class CalculatorScreenshotTest {
                         onToggleClientForm = vm::toggleClientForm,
                         onDismissToast = vm::dismissToast,
                         clientForm = { ClientForm(state = s, vm = vm) },
-                        summarySheet = { SummarySheet(state = s, vm = vm) },
+                        summarySheet = { SummarySheet(state = s, vm = vm, barVisible = !imeVisible) },
                     )
                 }
             }
@@ -361,6 +368,12 @@ class CalculatorScreenshotTest {
      * [FIXTURE_TOTAL]. Every number on it came out of the engine on the way through the UI —
      * [typeTheFixtures] asserts each room's §7 subtotal as it is typed, and the summary is
      * asserted here.
+     *
+     * **This frame draws a back circle the app never draws.** The calculator is a bottom-bar tab,
+     * so `CalculatorRoute` passes `onBack = null` and the real header renders the title block
+     * alone; the recording passes a non-null `onBack` on purpose, so the frame can be held beside
+     * `3a-calculator.png` element for element. What the app actually does is pinned by
+     * [theBackCircleIsNotDrawnWithNowhereToGoBackTo], not by this picture.
      */
     @Test @Config(qualifiers = "w411dp-h891dp")
     fun calculatorLight() {
@@ -438,6 +451,58 @@ class CalculatorScreenshotTest {
         fields()[2].performImeAction()
         rule.waitForIdle()
         fields()[FIELDS_PER_ROOM + 1].assertIsFocused()
+    }
+
+    /**
+     * The fixed summary sheet steps aside for the keyboard, and comes back when it closes.
+     *
+     * The IME cannot be raised under Robolectric — `WindowInsets.isImeVisible` reports absent
+     * whatever is focused — so the screen is driven through [SummarySheet]'s own `barVisible`,
+     * which is what that inset feeds in the app. The measurement is the thing that matters: the
+     * tagged box is what `calculatorFont13` proves the last card clears, and while the keyboard
+     * is up it must measure nothing at all rather than sit behind the keys covering the room
+     * being typed into.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theSummarySheetIsNotDrawnWhileTheKeyboardIsUp() {
+        val vm = viewModel()
+        screen(vm, imeVisible = true)
+        rule.onNodeWithContentDescription("$FIXTURE_TOTAL $MONEY_UNIT").assertDoesNotExist()
+        assertEquals(0.dp, rule.onNodeWithTag(SUMMARY_SHEET_TAG).getUnclippedBoundsInRoot().height)
+    }
+
+    /** And the same screen with the keyboard down: the sheet is back, at a real height. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theSummarySheetReturnsWhenTheKeyboardCloses() {
+        val vm = viewModel()
+        screen(vm)
+        assertTrue(rule.onNodeWithTag(SUMMARY_SHEET_TAG).getUnclippedBoundsInRoot().height > 0.dp)
+    }
+
+    /**
+     * R8's other half. The screen adds a blank card when the quote is empty — but only once
+     * `restored` says Room has been asked. A draft that restores ONE room must therefore open with
+     * exactly one card, carrying that room's name, and no blank card beside it: asked on the first
+     * composition instead, the operator would find their restored quote with a stray empty room in
+     * it (and the autosave would then persist that room).
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun aRestoredDraftOpensWithItsOwnRoomAndNoBlankOneBesideIt() {
+        val draft = CalculatorDraft(
+            rows = listOf(recomputeRow(SlabRow(id = "r1", name = "Долон", innerWidth = 4.0, innerLength = 6.0))),
+            clientPhone = "998935554466", clientName = CLIENT_NAME, clientAddress = "",
+            discountPercent = 0.0, discountAmount = 0.0, deliveryCost = 0.0, otherCost = 0.0,
+            projectId = null,
+        )
+        val vm = viewModel(observeDraft = ObserveDraftUseCase { flowOf(draft) })
+        screen(vm)
+
+        assertEquals(listOf("Долон"), vm.state.value.rows.map { it.name })
+        // The EDITABLE «Долон» — one card's name field, and exactly one. (The same name also
+        // reaches the off-screen `QuoteCard` the share action keeps composed, as plain text.)
+        rule.onNode(hasSetTextAction() and hasText("Долон")).assertExists()
+        // «Хона 1» is what `addRoom` would have named the stray card.
+        rule.onAllNodesWithText("Хона 1").assertCountEquals(0)
     }
 
     /** On the bottom-bar tab there is nothing to pop, so the header draws no back circle at all —

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -247,7 +248,11 @@ fun CalculatorScreen(
     Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding()) {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize(),
+            // The app draws edge to edge, which makes the window's own `adjustResize` inert: without
+            // this the keyboard covers the bottom of the list and a cell tapped there is typed into
+            // blind. `imePadding` shortens the list by the keyboard instead, so the focused cell is
+            // scrolled above it.
+            modifier = Modifier.fillMaxSize().imePadding(),
             // Each item carries its own 16 dp inset (see [LIST_MARGIN_H]) so a banner or a card can
             // never disagree with the header about where the page's edge is.
             contentPadding = navPillContentPadding(extraBottom = SUMMARY_CLEARANCE),
@@ -299,6 +304,11 @@ fun CalculatorScreen(
                     Brush.verticalGradient(listOf(EtalonColors.page.copy(alpha = 0f), EtalonColors.page)),
                 ),
             )
+            // The slot, not the sheet: [SummarySheet] hides its own navy bar while the keyboard is
+            // up (see its `barVisible`) and keeps the three modals it hosts composed — hiding the
+            // whole slot here would take an open place-order sheet down with it the instant its
+            // notes field was focused. The tagged box then measures zero, which is exactly what
+            // «the sheet does not cover the last card» means while it is away.
             Box(Modifier.onSizeChanged { sheetHeight = it.height }.testTag(SUMMARY_SHEET_TAG)) { summarySheet() }
         }
 
