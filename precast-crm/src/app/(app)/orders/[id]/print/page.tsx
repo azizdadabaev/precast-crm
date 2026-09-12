@@ -7,6 +7,7 @@ import QRCode from "react-qr-code";
 import { api } from "@/lib/fetcher";
 import { formatDate, formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
+import { displayedDiscount } from "@/lib/order-display";
 
 interface OrderDetail {
   id: string;
@@ -362,7 +363,7 @@ export default function OrderPrintPage() {
           {Number(order.discountPercent) > 0 && (
             <Row
               label={`Чегирма ${formatNumber(order.discountPercent, 1)}%`}
-              value={`− ${formatNumber(order.discountAmount, 0)}`}
+              value={`− ${formatNumber(displayedDiscount(order), 0)}`}
             />
           )}
           {Number(order.deliveryCost) > 0 && (

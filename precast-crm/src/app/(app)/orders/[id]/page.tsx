@@ -25,6 +25,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { ReceiptStrip } from "@/components/payments/ReceiptStrip";
 import { formatDate, formatNumber } from "@/lib/utils";
+import { displayedDiscount } from "@/lib/order-display";
 import { PhoneLink } from "@/components/PhoneLink";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
@@ -445,6 +446,9 @@ export default function OrderDetailPage() {
   const deliveryNum = Number(order.deliveryCost);
   const otherNum = Number(order.otherCost);
   const hasPriceAdjustments = discountNum > 0 || deliveryNum > 0 || otherNum > 0;
+  // The discount as this column prints it — derived from its printed neighbours so the four
+  // whole-UZS figures sum to the printed «Жами». See lib/order-display.ts.
+  const shownDiscount = displayedDiscount(order);
 
   // Build the share-card payload from the order. The offscreen
   // <ShareTarget> below renders this at 1100 px regardless of
@@ -988,7 +992,7 @@ export default function OrderDetailPage() {
                         </span>
                       )}
                     </dt>
-                    <dd className="font-mono tabular-nums">− {formatNumber(order.discountAmount, 0)}</dd>
+                    <dd className="font-mono tabular-nums">− {formatNumber(shownDiscount, 0)}</dd>
                   </div>
                 )}
                 {deliveryNum > 0 && (
