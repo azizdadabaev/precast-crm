@@ -71,21 +71,26 @@
     <string name="calc_rate_cell">Нарх/м²</string>
     <string name="calc_rate_manual_suffix">қўлда</string>
     <string name="calc_rate_suffix">· %1$s</string>
-    <string name="calc_rate">м² нархи</string>
-    <string name="calc_rate_auto">Авто: %1$s</string>
-    <!-- The badge on the tier the engine would have picked, in the override sheet. Bare, unlike
-         `calc_rate_auto`: that row already prints the very same price beside it. -->
-    <string name="calc_rate_auto_badge">Авто</string>
-    <string name="calc_rate_override_title">м² нархини ўзгартириш</string>
-    <string name="calc_rate_reason">Сабаби</string>
-    <string name="calc_rate_reason_required">Сабабини ёзинг</string>
-    <string name="calc_rate_reason_counter">%1$d/%2$d</string>
-    <string name="calc_rate_apply">Қўллаш</string>
-    <string name="calc_rate_clear">Авто нархга қайтариш</string>
-    <!-- D10: the discount, delivery and other costs move onto the place-order sheet (task 5), which
-         is where they are agreed. Only the share card renders the last two today. -->
-    <string name="calc_discount_percent">Чегирма %</string>
-    <string name="calc_discount_amount">Чегирма (сўм)</string>
+    <!-- §3.4 «RateSheet»: the six rows the m² rate can be. The auto row's sub prints the rate the
+         engine picked; each tier's sub prints the beam-length bracket it belongs to. -->
+    <string name="calc_rate_sheet_caption">М² нархи · %1$s</string>
+    <string name="calc_rate_sheet_title">Тарифни танланг</string>
+    <string name="calc_rate_auto_row">Авто</string>
+    <string name="calc_rate_auto_sub">%1$s · енг тарифи</string>
+    <string name="calc_rate_tier_sub">балка ≤ %1$s м</string>
+    <!-- §3.4 «RateConfirm»: the mandatory reason (D5) for a rate that is not the engine's. -->
+    <string name="calc_rate_confirm_caption">Нархни ўзгартириш · %1$s</string>
+    <string name="calc_rate_confirm_help">Фақат шу хона учун. Авто-га қайтариш енг тарифини тиклайди.</string>
+    <string name="calc_rate_tile_auto">Авто</string>
+    <string name="calc_rate_tile_chosen">Танланган</string>
+    <string name="calc_rate_markup">↑ устама</string>
+    <string name="calc_rate_discount">↓ чегирма</string>
+    <string name="calc_rate_reason_mandatory">Сабаб (мажбурий)</string>
+    <string name="calc_rate_reason_counter">%1$d / %2$d</string>
+    <string name="calc_rate_cancel">Бекор</string>
+    <string name="calc_rate_confirm_action">Тасдиқлаш</string>
+    <!-- D10: the discount, delivery and other costs live on the place-order sheet, where they are
+         agreed. The last two are also the share card's own labels — one wording, one string. -->
     <string name="calc_delivery_cost">Етказиб бериш</string>
     <string name="calc_other_cost">Бошқа харажат</string>
     <string name="calc_total_weight">Жами маҳсулот оғирлиги</string>
@@ -126,8 +131,20 @@
     <string name="calc_place_cancel">Бекор қилиш</string>
     <string name="calc_place_notes">Изоҳ</string>
     <string name="calc_place_notes_counter">%1$d/%2$d</string>
+    <!-- D10's three relocated money fields and the rows they add to the roll-up. The discount is
+         one field with two units behind a chip pair, the way the engine takes it: a percentage or
+         a flat sum, never both. -->
+    <string name="calc_place_discount">Чегирма</string>
+    <string name="calc_place_discount_pct">%</string>
+    <string name="calc_place_discount_sum">сўм</string>
     <string name="calc_place_summary_rooms">Хоналар</string>
     <string name="calc_place_summary_area">Майдон</string>
+    <string name="calc_place_summary_rooms_subtotal">Хоналар жами</string>
+    <string name="calc_place_summary_discount">Чегирма %1$s</string>
+    <string name="calc_place_summary_delivery">Етказиш</string>
+    <string name="calc_place_summary_other">Бошқа</string>
+    <!-- What is taken OFF the subtotal, so the column of figures reads as a sum. -->
+    <string name="calc_place_minus">−%1$s</string>
     <string name="calc_place_summary_total">Жами</string>
     <string name="calc_place_queue">Навбатга қўйиш</string>
     <string name="calc_place_queued">Интернет пайдо бўлганда юборилади</string>

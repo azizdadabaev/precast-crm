@@ -1,19 +1,24 @@
 package uz.etalon.crm.feature.calculator
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,20 +32,38 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import uz.etalon.crm.core.calc.money
+import uz.etalon.crm.core.calc.operatorAmountMoney
 import uz.etalon.crm.core.calc.totalPriceMoney
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
-import uz.etalon.crm.core.designsystem.components.MoneyHeroText
+import uz.etalon.crm.core.designsystem.components.EtalonFilterChip
+import uz.etalon.crm.core.designsystem.components.EtalonTextField
+import uz.etalon.crm.core.designsystem.components.FormCard
+import uz.etalon.crm.core.designsystem.components.FormField
+import uz.etalon.crm.core.designsystem.components.FormFieldValue
 import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
-import uz.etalon.crm.core.designsystem.components.SectionLabel
+import uz.etalon.crm.core.designsystem.icon.EtalonIcon
+import uz.etalon.crm.core.designsystem.icon.EtalonIcons
+import uz.etalon.crm.core.designsystem.theme.EtalonColors
+import uz.etalon.crm.core.designsystem.theme.EtalonShapes
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatCount
 import uz.etalon.crm.core.ui.format.formatDate
+import uz.etalon.crm.core.ui.format.formatDecimal
+import uz.etalon.crm.core.ui.format.formatMoney
+import uz.etalon.crm.core.ui.format.formatPercent
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.core.ui.regions.composeAddress
 import java.math.BigDecimal
@@ -53,6 +76,31 @@ internal const val PLACE_NOTES_MAX = 2000
 /** Milliseconds in a day — `DatePickerState` speaks UTC epoch millis, `LocalDate` speaks days.
  *  The same conversion `RecordPaymentScreen` does for `paidOn`. */
 private const val MILLIS_PER_DAY = 86_400_000L
+
+// ── The sheet's own sizes ─────────────────────────────────────────
+
+/** §2's form sheet, the same 20/16 the ⋯ settings sheet and `OutboxSheet` use. */
+private val SHEET_PAD_H = EtalonSpace.xl
+private val SHEET_PAD_V = EtalonSpace.lg
+/** The air between the title, the client tile, the form card, the roll-up and the actions. */
+private val BLOCK_GAP = EtalonSpace.md
+/** Between the two discount chips, and between the two action buttons. */
+private val ROW_GAP = EtalonSpace.sm
+/** The client tile: §1.3's white row on the page ground, `lg` at the row padding every list row
+ *  in the app uses. */
+private val TILE_PAD_H = EtalonSpace.md
+private val TILE_PAD_V = EtalonSpace.rowGap
+/** A roll-up row — tall enough to read as a line of a receipt, short of a 48 dp touch row: none of
+ *  them is tappable. */
+private val SUMMARY_ROW_HEIGHT = 30.dp
+/** The rule above «Жами». */
+private val RULE_PAD_V = EtalonSpace.sm
+/** §3.4's date row carries the same 10 dp chevron the rate cell does. */
+private val CHEVRON = EtalonSpace.rowGap
+
+/** «Жами» — `label` (12/600) lifted to 700, the weight §2 gives the one figure of a roll-up that
+ *  is agreed rather than merely shown. */
+private val TotalStyle = EtalonType.label.copy(fontWeight = FontWeight.W700)
 
 /**
  * Whether the client bar has collected everything `PlaceOrderSchema` insists on: a name, a full
@@ -98,9 +146,15 @@ internal fun scheduledAtInstant(date: LocalDate): String =
 /**
  * «Буюртма бериш» — the sheet that turns the quote on screen into a real order.
  *
- * It computes nothing. Every figure it shows is read off [CalculatorUiState] exactly as
- * `TotalsSheet` renders it, and the SERVER recomputes every room from the inputs the repository
- * sends; nothing here is ever the source of a number the customer is charged.
+ * **D10 put three money fields here**: the discount (a percentage or a flat sum, never both), the
+ * delivery cost and any other cost. They were on the old expandable totals sheet, where they sat
+ * beside the quote at all times; they belong at the moment they are agreed, which is this one, and
+ * the summary sheet's headline total behind this sheet moves live as they are typed.
+ *
+ * It computes nothing. Every figure it shows is read off [CalculatorUiState] — the engine priced
+ * the rooms, [uz.etalon.crm.core.calc.OrderTotals] rolled them up — and the SERVER recomputes
+ * every room from the inputs the repository sends; nothing here is ever the source of a number the
+ * customer is charged.
  *
  * Two ways out, and the second is the reason this screen exists at all: a calculator is used at a
  * customer's site, where signal is worst. When the placement fails for want of a signal the sheet
@@ -111,74 +165,130 @@ internal fun scheduledAtInstant(date: LocalDate): String =
 @Composable
 fun PlaceOrderSheet(
     state: CalculatorUiState,
+    vm: CalculatorViewModel,
     onDismiss: () -> Unit,
     onPlace: (scheduledAt: String, notes: String) -> Unit,
     onQueue: (scheduledAt: String, notes: String) -> Unit,
+    initialScheduledAt: LocalDate? = null,
 ) {
     // rememberSaveable: the sheet survives a rotation or a process death with the date and the
-    // note the operator already typed, the same way the quote behind it survives.
-    var scheduledEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    // note the operator already typed, the same way the quote behind it survives. The three money
+    // fields need no such treatment — they live on the ViewModel and are autosaved with the draft.
+    //
+    // [initialScheduledAt] is null in the app — there is deliberately NO default date (see the
+    // picker below). It is passed only by the screenshot tests: a date picked through the dialog
+    // is today's, which would re-date the baseline every morning and fail `verifyRoborazzi` on a
+    // frame nobody touched.
+    var scheduledEpochDay by rememberSaveable { mutableStateOf(initialScheduledAt?.toEpochDay()) }
     var notes by rememberSaveable { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
     val scheduledAt = scheduledEpochDay?.let(LocalDate::ofEpochDay)
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = EtalonColors.surface,
+        scrimColor = SHEET_SCRIM,
+        shape = EtalonShapes.sheetTop,
+        dragHandle = null,
+        // Straight to full height: at Material's half-screen anchor the roll-up and «Буюртма
+        // бериш» sit below the fold, and the one action the sheet exists for must not have to be
+        // dragged into view.
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            Modifier.fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = SHEET_PAD_H, vertical = SHEET_PAD_V),
+            verticalArrangement = Arrangement.spacedBy(BLOCK_GAP),
         ) {
-            Text(stringResource(R.string.calc_place_title), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(R.string.calc_place_title),
+                style = EtalonType.sectionTitle,
+                color = EtalonColors.ink,
+            )
 
-            // Read-only: the client bar is where this is edited, and re-offering it here would be
-            // a second place to change the customer a committed order belongs to.
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                SectionLabel(stringResource(R.string.calc_place_client))
-                Text(state.clientName, style = MaterialTheme.typography.bodyLarge)
-                Text(formatPhone(state.clientPhoneDigits), style = EtalonType.monoBody)
-                Text(
-                    composeAddress(state.clientAddress.viloyat, state.clientAddress.tuman, state.clientAddress.street),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            ClientTile(state)
 
-            // No default. `scheduledAt` is required server-side and a silent "today" would be a
-            // real production commitment nobody chose.
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel(stringResource(R.string.calc_place_scheduled_at))
-                SecondaryButton(
-                    text = scheduledAt?.let { formatDate(it.atStartOfDay(TASHKENT).toInstant()) }
-                        ?: stringResource(R.string.calc_place_pick_date),
-                    onClick = { showDatePicker = true },
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { if (it.length <= PLACE_NOTES_MAX) notes = it },
-                    label = { Text(stringResource(R.string.calc_place_notes)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    stringResource(R.string.calc_place_notes_counter, notes.length, PLACE_NOTES_MAX),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            // The quote, read-only — the same three figures the totals sheet's peek shows.
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SummaryRow(stringResource(R.string.calc_place_summary_rooms)) {
-                    Text(formatCount(state.rows.count { it.canPersist }), style = EtalonType.monoBody)
+            FormCard {
+                FormField(stringResource(R.string.calc_place_scheduled_at)) {
+                    DateRow(
+                        value = scheduledAt?.let { formatDate(it.atStartOfDay(TASHKENT).toInstant()) },
+                        onClick = { showDatePicker = true },
+                    )
                 }
-                SummaryRow(stringResource(R.string.calc_place_summary_area)) {
-                    Text(formatArea(BigDecimal.valueOf(state.totals.monolithArea)), style = EtalonType.monoBody)
+
+                FormField(stringResource(R.string.calc_place_notes)) {
+                    Column(Modifier.fillMaxWidth()) {
+                        EtalonTextField(
+                            value = notes,
+                            onValueChange = { if (it.length <= PLACE_NOTES_MAX) notes = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = false,
+                            maxLines = 3,
+                        )
+                        Text(
+                            stringResource(R.string.calc_place_notes_counter, notes.length, PLACE_NOTES_MAX),
+                            style = EtalonType.meta,
+                            color = EtalonColors.ink3,
+                            modifier = Modifier.padding(top = EtalonSpace.xs),
+                        )
+                    }
                 }
-                SummaryRow(stringResource(R.string.calc_place_summary_total)) {
-                    MoneyHeroText(state.orderTotals.totalPriceMoney(), style = EtalonType.monoTitle)
+
+                // D10. The two chips are the UNIT, not two fields: `setDiscountMode` zeroes the
+                // one being left, exactly as the engine boundary resolves them (a positive UZS
+                // amount always wins over a percentage — see `withTotals`).
+                FormField(stringResource(R.string.calc_place_discount)) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ROW_GAP)) {
+                            EtalonFilterChip(
+                                label = stringResource(R.string.calc_place_discount_pct),
+                                selected = state.discountMode == DiscountMode.PERCENT,
+                                onClick = { vm.setDiscountMode(DiscountMode.PERCENT) },
+                            )
+                            EtalonFilterChip(
+                                label = stringResource(R.string.calc_place_discount_sum),
+                                selected = state.discountMode == DiscountMode.AMOUNT,
+                                onClick = { vm.setDiscountMode(DiscountMode.AMOUNT) },
+                            )
+                        }
+                        when (state.discountMode) {
+                            DiscountMode.PERCENT -> AmountField(
+                                value = state.discountPercent,
+                                idleText = { formatDecimal(BigDecimal.valueOf(it), maxDigits = 2) },
+                                allowDecimal = true,
+                                onValue = vm::setDiscountPercent,
+                            )
+                            DiscountMode.AMOUNT -> AmountField(
+                                value = state.discountAmount,
+                                idleText = { formatMoney(operatorAmountMoney(it)) },
+                                allowDecimal = false,
+                                onValue = vm::setDiscountAmount,
+                            )
+                        }
+                    }
+                }
+
+                FormField(stringResource(R.string.calc_delivery_cost)) {
+                    AmountField(
+                        value = state.deliveryCost,
+                        idleText = { formatMoney(operatorAmountMoney(it)) },
+                        allowDecimal = false,
+                        onValue = vm::setDeliveryCost,
+                    )
+                }
+
+                FormField(stringResource(R.string.calc_other_cost), divider = false) {
+                    AmountField(
+                        value = state.otherCost,
+                        idleText = { formatMoney(operatorAmountMoney(it)) },
+                        allowDecimal = false,
+                        onValue = vm::setOtherCost,
+                    )
                 }
             }
+
+            OrderSummary(state)
 
             // Named, never silently dropped — see canPlaceOrder's own doc.
             if (state.unpersistableRoomNames.isNotEmpty()) {
@@ -226,25 +336,230 @@ fun PlaceOrderSheet(
                 TextButton(onClick = {
                     pickerState.selectedDateMillis?.let { scheduledEpochDay = it.floorDiv(MILLIS_PER_DAY) }
                     showDatePicker = false
-                }) { Text(stringResource(R.string.calc_place_date_done)) }
+                }) {
+                    Text(
+                        stringResource(R.string.calc_place_date_done),
+                        style = EtalonType.sectionTitle,
+                        color = EtalonColors.indigo,
+                    )
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.calc_place_cancel)) }
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text(
+                        stringResource(R.string.calc_place_cancel),
+                        style = EtalonType.sectionTitle,
+                        color = EtalonColors.ink2,
+                    )
+                }
             },
-        ) { DatePicker(pickerState) }
+            colors = DatePickerDefaults.colors(containerColor = EtalonColors.surface),
+        ) {
+            DatePicker(
+                state = pickerState,
+                showModeToggle = false,
+                // The same token colours the orders list's day picker carries — M3's defaults
+                // would paint the selection in the Material primary this app never uses.
+                colors = DatePickerDefaults.colors(
+                    containerColor = EtalonColors.surface,
+                    selectedDayContainerColor = EtalonColors.indigo,
+                    todayDateBorderColor = EtalonColors.indigo,
+                ),
+            )
+        }
     }
 }
 
-/** A read-only label/value row — the same shape `TotalsSheet.kt`'s `LabelValueRow` uses, kept
- *  local per this module's existing per-file convention for these small helpers. */
+/** Who the order is for. Read-only: the client bar on the screen behind is where this is edited,
+ *  and re-offering it here would be a second place to change the customer a committed order
+ *  belongs to. */
 @Composable
-private fun SummaryRow(label: String, value: @Composable () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        value()
+private fun ClientTile(state: CalculatorUiState) = Column(
+    Modifier.fillMaxWidth()
+        .clip(EtalonShapes.lg)
+        .background(EtalonColors.page)
+        .padding(horizontal = TILE_PAD_H, vertical = TILE_PAD_V),
+) {
+    Text(
+        state.clientName,
+        style = EtalonType.rowTitle,
+        color = EtalonColors.ink,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+    Text(formatPhone(state.clientPhoneDigits), style = EtalonType.meta, color = EtalonColors.ink2, maxLines = 1)
+    Text(
+        composeAddress(state.clientAddress.viloyat, state.clientAddress.tuman, state.clientAddress.street),
+        style = EtalonType.meta,
+        color = EtalonColors.ink2,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+/** The date field's value line: what was picked, or the prompt, with the chevron that says a
+ *  picker opens. No default date — `scheduledAt` is required server-side and a silent "today"
+ *  would be a real production commitment nobody chose. */
+@Composable
+private fun DateRow(value: String?, onClick: () -> Unit) = Row(
+    Modifier.fillMaxWidth()
+        .heightIn(min = EtalonSpace.minTouch)
+        .clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onClick,
+        ),
+    verticalAlignment = Alignment.CenterVertically,
+) {
+    Text(
+        value ?: stringResource(R.string.calc_place_pick_date),
+        style = FormFieldValue,
+        color = if (value != null) EtalonColors.ink else EtalonColors.ink3,
+        maxLines = 1,
+        modifier = Modifier.weight(1f),
+    )
+    EtalonIcon(EtalonIcons.ChevronDown, null, size = CHEVRON, tint = EtalonColors.ink3)
+}
+
+/**
+ * One of D10's three money inputs.
+ *
+ * The text is local while the field has focus and the FORMATTED value when it does not: the group
+ * separator this app writes sums with is U+202F, which no keyboard can type back, so a field that
+ * echoed `formatMoney` on every keystroke would be untypable after the first thousand. Handing the
+ * plain digits over on focus and the grouped figure back on blur is what lets the operator read
+ * «300 000» and still edit it. [RoomDraft] makes the same distinction for the room cells.
+ *
+ * [parseDecimal] is the ONE text → `Double` boundary in this feature; a blank field is 0, which is
+ * also what a cleared discount means.
+ *
+ * @param allowDecimal false for the three UZS fields — cash has no kopeks, the same rule the old
+ *   money keypad enforced, and [operatorAmountMoney] truncates anything below a whole UZS anyway.
+ */
+@Composable
+private fun AmountField(
+    value: Double,
+    idleText: (Double) -> String,
+    allowDecimal: Boolean,
+    onValue: (Double) -> Unit,
+) {
+    var typed by remember { mutableStateOf("") }
+    var focused by remember { mutableStateOf(false) }
+    // Zero shows as an EMPTY field, never «0»: a zero an operator did not enter reads as one they
+    // did, and it has to be cleared before a real figure can be typed.
+    val shown = when {
+        focused -> typed
+        value == 0.0 -> ""
+        else -> idleText(value)
     }
+    EtalonTextField(
+        value = shown,
+        onValueChange = { raw ->
+            val text = if (allowDecimal) filterDecimalText(raw) else raw.filter(Char::isDigit)
+            typed = text
+            onValue(parseDecimal(text) ?: 0.0)
+        },
+        modifier = Modifier.fillMaxWidth().onFocusChanged { focus ->
+            focused = focus.isFocused
+            // Seeded on the way IN, so the caret lands on the digits and not on a thin space.
+            if (focus.isFocused) typed = if (value == 0.0) "" else plainText(value, allowDecimal)
+        },
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (allowDecimal) KeyboardType.Decimal else KeyboardType.Number,
+        ),
+    )
+}
+
+/** The same number as [AmountField]'s idle text but typable: no grouping, and the decimal comma
+ *  only where decimals are allowed at all. `internal` so `PlaceOrderSheetStateTest` can pin the
+ *  one property the focus swap turns on — what this writes, [parseDecimal] reads back unchanged. */
+internal fun plainText(value: Double, allowDecimal: Boolean): String =
+    if (allowDecimal) {
+        BigDecimal.valueOf(value).stripTrailingZeros().toPlainString().replace('.', ',')
+    } else {
+        value.toLong().toString()
+    }
+
+/**
+ * The quote as a receipt: the rooms, what they came to, what was taken off and what was added, and
+ * the one figure the customer is committing to.
+ *
+ * Every money line crosses `Double` → `Money` through `:core:calc`'s sanctioned boundary and no
+ * other way: the two engine sums through [uz.etalon.crm.core.calc.ProjectTotal.money] (already
+ * `round2`'d by the engine), the two operator-entered costs through [operatorAmountMoney], and the
+ * headline through [totalPriceMoney]. Nothing here adds two figures together — the engine did.
+ *
+ * The parts can therefore disagree with «Жами» by at most a tiyin (`computeOrderTotals` leaves its
+ * discount unrounded where `projectTotal` rounds it), which whole-UZS display cannot show.
+ */
+@Composable
+private fun OrderSummary(state: CalculatorUiState) {
+    val project = state.totals.projTotal.money()
+    Column(Modifier.fillMaxWidth()) {
+        SummaryRow(stringResource(R.string.calc_place_summary_rooms), formatCount(state.rows.count { it.canPersist }))
+        SummaryRow(
+            stringResource(R.string.calc_place_summary_area),
+            formatArea(BigDecimal.valueOf(state.totals.monolithArea)),
+        )
+        SummaryRow(stringResource(R.string.calc_place_summary_rooms_subtotal), formatMoney(project.roomsSubtotal))
+        if (project.discountAmount.amount.signum() > 0) {
+            SummaryRow(
+                // The percentage is part of the LABEL when it is what the operator entered — the
+                // figure on the right is what it came to in UZS either way.
+                label = if (state.discountMode == DiscountMode.PERCENT) {
+                    stringResource(R.string.calc_place_summary_discount, formatPercent(project.discountPercent))
+                } else {
+                    stringResource(R.string.calc_place_discount)
+                },
+                value = stringResource(R.string.calc_place_minus, formatMoney(project.discountAmount)),
+            )
+        }
+        if (state.deliveryCost > 0) {
+            SummaryRow(
+                stringResource(R.string.calc_place_summary_delivery),
+                formatMoney(operatorAmountMoney(state.deliveryCost)),
+            )
+        }
+        if (state.otherCost > 0) {
+            SummaryRow(
+                stringResource(R.string.calc_place_summary_other),
+                formatMoney(operatorAmountMoney(state.otherCost)),
+            )
+        }
+        Box(
+            Modifier.padding(vertical = RULE_PAD_V).fillMaxWidth()
+                .height(EtalonSpace.hairline).background(EtalonColors.surfaceBorder),
+        )
+        SummaryRow(
+            label = stringResource(R.string.calc_place_summary_total),
+            value = formatMoney(state.orderTotals.totalPriceMoney()),
+            emphasis = true,
+        )
+    }
+}
+
+/** One line of the roll-up: the caption left, the figure right. [emphasis] is «Жами» — `label` at
+ *  700 in `ink`, against the other lines' `meta`/`rowAmount` in `ink2`, because it is the one
+ *  figure of the column the customer actually agrees to. */
+@Composable
+private fun SummaryRow(label: String, value: String, emphasis: Boolean = false) = Row(
+    Modifier.fillMaxWidth().heightIn(min = SUMMARY_ROW_HEIGHT),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+) {
+    Text(
+        label,
+        style = if (emphasis) TotalStyle else EtalonType.meta,
+        color = if (emphasis) EtalonColors.ink else EtalonColors.ink2,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f),
+    )
+    Text(
+        value,
+        style = if (emphasis) TotalStyle else EtalonType.rowAmount,
+        color = if (emphasis) EtalonColors.ink else EtalonColors.ink2,
+        maxLines = 1,
+        modifier = Modifier.padding(start = ROW_GAP),
+    )
 }

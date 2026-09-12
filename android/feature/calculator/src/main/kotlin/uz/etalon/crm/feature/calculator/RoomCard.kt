@@ -172,6 +172,12 @@ private val THOUSAND = BigDecimal(1000)
  * [focusRequester] is this room's Эни cell, owned by the screen so the room ABOVE can send the
  * keyboard's «next» into it; [onNext] does the same in the other direction and is `null` on the
  * last room, where Бўйи closes the keyboard with «done» instead.
+ *
+ * @param rateConfirmPrice the tier this room is waiting on a reason for, or null — read off
+ *   [CalculatorUiState.rateConfirm] by the screen. While it is set the card shows [RateConfirm]
+ *   INSTEAD of [RateSheet] rather than over it: two stacked modal windows is a Compose shape with
+ *   its own focus problems, and the swap keeps «Бекор» meaning "back to the price list", which is
+ *   what a confirmation drawn over that list would have meant anyway.
  */
 @Composable
 fun RoomCard(
@@ -195,8 +201,10 @@ fun RoomCard(
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
-    onApplyRateOverride: (Double, String) -> Unit,
-    onClearRateOverride: () -> Unit,
+    rateConfirmPrice: Double?,
+    onPickRate: (Double?) -> Unit,
+    onConfirmRate: (String) -> Boolean,
+    onDismissRateConfirm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val r = row.result
@@ -329,12 +337,28 @@ fun RoomCard(
         }
     }
 
-    if (showRateSheet) {
-        RateOverrideSheet(
+    // R2 in the two branches below. A pick that is NOT an override (Авто, or the tier the engine
+    // would have picked anyway) changes the quote immediately and there is nothing left to show,
+    // so the sheet closes with it; every other tier leaves the sheet open BEHIND the confirmation,
+    // which is what brings the price list back when «Бекор» clears `rateConfirm`.
+    if (showRateSheet && rateConfirmPrice == null) {
+        RateSheet(
             row = row,
             onDismiss = { showRateSheet = false },
-            onApply = { price, reason -> onApplyRateOverride(price, reason); showRateSheet = false },
-            onClear = { onClearRateOverride(); showRateSheet = false },
+            onPick = { price ->
+                onPickRate(price)
+                if (price == null || price == autoPickedRate(row)) showRateSheet = false
+            },
+        )
+    }
+    rateConfirmPrice?.let { price ->
+        RateConfirm(
+            row = row,
+            price = price,
+            onDismiss = onDismissRateConfirm,
+            // Only a reason that actually landed closes the price list too — a refusal leaves
+            // both open rather than returning the operator to a quote that did not change.
+            onConfirm = { reason -> if (onConfirmRate(reason)) showRateSheet = false },
         )
     }
 }

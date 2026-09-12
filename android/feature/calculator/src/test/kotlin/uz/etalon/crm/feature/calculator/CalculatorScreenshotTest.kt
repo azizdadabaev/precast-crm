@@ -193,8 +193,9 @@ class CalculatorScreenshotTest {
                         onCyclePattern = vm::cyclePattern,
                         onExtraBeams = vm::setExtraBeams,
                         onForceStartBeam = vm::setForceStartBeam,
-                        onApplyRateOverride = vm::applyRateOverride,
-                        onClearRateOverride = vm::clearRateOverride,
+                        onPickRate = vm::pickRate,
+                        onConfirmRate = vm::confirmRate,
+                        onDismissRateConfirm = vm::dismissRateConfirm,
                         onToggleClientForm = vm::toggleClientForm,
                         onDismissToast = vm::dismissToast,
                         clientForm = { ClientForm(state = s, vm = vm) },
@@ -283,7 +284,7 @@ class CalculatorScreenshotTest {
             onCyclePattern = {}, onToggleExpanded = {},
             onExtraBeams = {}, onForceStartBeam = {},
             onDuplicate = {}, onDelete = {}, onMoveUp = {}, onMoveDown = {},
-            onApplyRateOverride = { _, _ -> }, onClearRateOverride = {},
+            rateConfirmPrice = null, onPickRate = {}, onConfirmRate = { true }, onDismissRateConfirm = {},
         )
     }
 
@@ -470,7 +471,7 @@ class CalculatorScreenshotTest {
                         onCyclePattern = {}, onToggleExpanded = {},
                         onExtraBeams = { changes += it }, onForceStartBeam = {},
                         onDuplicate = {}, onDelete = {}, onMoveUp = {}, onMoveDown = {},
-                        onApplyRateOverride = { _, _ -> }, onClearRateOverride = {},
+                        rateConfirmPrice = null, onPickRate = {}, onConfirmRate = { true }, onDismissRateConfirm = {},
                     )
                 }
             }
@@ -505,7 +506,7 @@ class CalculatorScreenshotTest {
                         onCyclePattern = {}, onToggleExpanded = {},
                         onExtraBeams = {}, onForceStartBeam = { row = recomputeRow(row.copy(forceStartBeam = it)) },
                         onDuplicate = {}, onDelete = {}, onMoveUp = {}, onMoveDown = {},
-                        onApplyRateOverride = { _, _ -> }, onClearRateOverride = {},
+                        rateConfirmPrice = null, onPickRate = {}, onConfirmRate = { true }, onDismissRateConfirm = {},
                     )
                 }
             }

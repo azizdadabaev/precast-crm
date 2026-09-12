@@ -144,8 +144,9 @@ fun CalculatorScreen(
     onCyclePattern: (String) -> Unit,
     onExtraBeams: (String, Int) -> Unit,
     onForceStartBeam: (String, Boolean) -> Unit,
-    onApplyRateOverride: (String, Double, String) -> Unit,
-    onClearRateOverride: (String) -> Unit,
+    onPickRate: (String, Double?) -> Unit,
+    onConfirmRate: (String) -> Boolean,
+    onDismissRateConfirm: () -> Unit,
     onToggleClientForm: () -> Unit,
     onDismissToast: () -> Unit,
     clientForm: @Composable () -> Unit,
@@ -275,8 +276,12 @@ fun CalculatorScreen(
                     onDelete = { onDeleteRoom(row.id) },
                     onMoveUp = { onMoveRoomUp(row.id) },
                     onMoveDown = { onMoveRoomDown(row.id) },
-                    onApplyRateOverride = { price, reason -> onApplyRateOverride(row.id, price, reason) },
-                    onClearRateOverride = { onClearRateOverride(row.id) },
+                    // The pending confirmation belongs to ONE room — every other card is handed
+                    // null, so only the room whose rate was tapped opens the navy panel.
+                    rateConfirmPrice = s.rateConfirm?.takeIf { it.rowId == row.id }?.price,
+                    onPickRate = { price -> onPickRate(row.id, price) },
+                    onConfirmRate = onConfirmRate,
+                    onDismissRateConfirm = onDismissRateConfirm,
                     modifier = Modifier.padding(horizontal = LIST_MARGIN_H).padding(top = ITEM_GAP),
                 )
             }

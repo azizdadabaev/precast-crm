@@ -107,7 +107,7 @@ private const val KEY_PLACE_IDEMPOTENCY = "calc.placeIdempotencyKey"
 private const val KEY_PLACE_IDEMPOTENCY_FOR = "calc.placeIdempotencyFor"
 
 /** `RoomCalcInputBaseSchema.m2PriceReason`'s cap on the server (validation.ts) — `internal` so
- *  `RateOverrideSheet` can enforce the same limit on the reason field it collects. */
+ *  `RateConfirm` can enforce the same limit on the reason field it collects. */
 internal const val MAX_REASON = 200
 
 /** `normalizePhone` turns exactly nine digits into `998` + those nine — the same figure

@@ -180,6 +180,9 @@ fun SummarySheet(state: CalculatorUiState, vm: CalculatorViewModel, modifier: Mo
     if (showPlaceSheet) {
         PlaceOrderSheet(
             state = state,
+            // D10's three money fields are edited on that sheet and live on the ViewModel, so it
+            // takes the ViewModel the way the ⋯ settings sheet beside it already does.
+            vm = vm,
             onDismiss = { showPlaceSheet = false },
             onPlace = vm::placeOrder,
             onQueue = vm::queuePlaceOrder,

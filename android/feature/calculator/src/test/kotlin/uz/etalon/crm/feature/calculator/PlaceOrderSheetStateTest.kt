@@ -103,4 +103,47 @@ class PlaceOrderSheetStateTest {
     @Test fun `the picked day is resolved at Tashkent midnight, not UTC`() {
         assertEquals("2026-09-19T19:00:00Z", scheduledAtInstant(date))
     }
+
+    // ── D10's three money fields ───────────────────────────────────────────────────
+
+    /**
+     * The whole of the focus swap in one property: the digits a field hands the operator when they
+     * tap into it must parse back to the very number it was showing them a moment earlier.
+     *
+     * The idle text is `formatMoney`/`formatDecimal`, which groups thousands with U+202F — a
+     * character no keyboard can type and [parseDecimal] refuses. Handing that back on focus would
+     * make any figure above 999 uneditable: one keystroke and the cell would read 0.
+     */
+    @Test fun `what a money field hands to the keyboard parses back to the same number`() {
+        listOf(0.0, 5.0, 300_000.0, 13_542_460.0).forEach { v ->
+            val typable = plainText(v, allowDecimal = false)
+            assertEquals(typable, typable.filter(Char::isDigit), "«$typable» is plain digits")
+            assertEquals(v, parseDecimal(typable) ?: 0.0)
+        }
+    }
+
+    /** The percentage field is the one that may carry decimals — with D8's comma, which is what
+     *  the decimal keyboard offers and what [parseDecimal] accepts. */
+    @Test fun `what the percent field hands to the keyboard round-trips through the comma`() {
+        assertEquals("5", plainText(5.0, allowDecimal = true))
+        assertEquals("7,5", plainText(7.5, allowDecimal = true))
+        assertEquals("12,25", plainText(12.25, allowDecimal = true))
+        assertEquals(7.5, parseDecimal(plainText(7.5, allowDecimal = true)))
+    }
+
+    /**
+     * The three costs never block the submit. They are money the operator agreed to, not fields
+     * the server requires: `PlaceOrderSchema` defaults every one of them to 0, and an order with
+     * no delivery charge is an ordinary order.
+     */
+    @Test fun `a discount, a delivery charge and an other cost do not change what may be placed`() {
+        val s = ready().copy(
+            discountMode = DiscountMode.PERCENT,
+            discountPercent = 5.0,
+            deliveryCost = 300_000.0,
+            otherCost = 50_000.0,
+        )
+        assertTrue(canPlaceOrder(s, date))
+        assertTrue(canPlaceOrder(ready().copy(discountMode = DiscountMode.AMOUNT, discountAmount = 1_000_000.0), date))
+    }
 }
