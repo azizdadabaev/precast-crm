@@ -25,21 +25,18 @@ export const GET = withPermission<Params>(
     if (!order) return fail("Order not found", 404);
 
     // The order's thread is the WHOLE deal's conversation: comments on the order
-    // itself PLUS the ones left on its source draft (project) before it was placed
-    // (Order.projectId is @unique → exactly one draft per order). The comments stay
-    // anchored where they were created; edit/delete routes per-comment on the client.
-    //
-    // The projectId branch is only added when the order HAS a draft. Prisma reads
-    // `{ projectId: null }` as `projectId IS NULL`, so on an order placed without one
-    // that branch would match every order-anchored comment in the database and leak
-    // other deals' conversations into this thread.
+    // itself PLUS the ones left on its source draft (project) before it was placed.
+    // Order.projectId is `String @unique` — NOT NULL — so every order has exactly one
+    // draft and the projectId branch always applies; there is no null case to guard
+    // (a guard there would also be the dangerous shape: Prisma reads
+    // `{ projectId: null }` as `projectId IS NULL`, which matches every other deal's
+    // order-anchored comments). The comments stay anchored where they were created;
+    // edit/delete routes per-comment on the client.
     const comments = await prisma.comment.findMany({
-      where: order.projectId
-        ? {
-            deletedAt: null,
-            OR: [{ orderId: params.id }, { projectId: order.projectId }],
-          }
-        : { deletedAt: null, orderId: params.id },
+      where: {
+        deletedAt: null,
+        OR: [{ orderId: params.id }, { projectId: order.projectId }],
+      },
       orderBy: { createdAt: "asc" },
       include: {
         author: { select: authorSelect },
