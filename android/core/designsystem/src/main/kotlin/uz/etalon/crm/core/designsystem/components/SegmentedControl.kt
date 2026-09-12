@@ -95,7 +95,23 @@ fun SegmentedControl(
             // mid-glyph reads as a rendering fault; a cut one that ends in «…» reads as a label.
             // In hug mode the item is exactly its label, so this can never fire there — the
             // `ds_controls_light` rows above the filled samples are byte-identical either way.
-            Text(item.label, style = EtalonType.labelSm, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            //
+            // `weight(1f, fill = false)` is what makes that ellipsis actually engage, and it is
+            // the count beside it that needs it: an UNWEIGHTED label measures against the item's
+            // whole inner width, takes all of it, and the count is then placed past the item's
+            // right edge — the «3» ends up on the navy track or under the next pill. Weighted, the
+            // label is measured with the count's width already taken out of its share, so it is
+            // the LABEL that gives way and the number always lands inside its own pill.
+            // `fill = false` keeps it hugging when there is room, so the centred pair stays
+            // centred rather than the label stretching and pushing the count to the edge.
+            Text(
+                item.label,
+                style = EtalonType.labelSm,
+                color = fg,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
             if (item.count != null) {
                 Text(
                     "${item.count}",

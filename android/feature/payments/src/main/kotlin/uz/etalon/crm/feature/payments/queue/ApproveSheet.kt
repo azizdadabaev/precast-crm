@@ -261,8 +261,17 @@ fun ApproveSheet(
                 // flight. Disabling it as well paints the lavender "you cannot do this" skin over
                 // the action the owner has just taken — which is the one thing that must not
                 // happen on a confirmation that IS going through.
+                // The gate is a CONFIRMATION, and there is nothing to confirm while the sheet is
+                // still missing something the route will refuse — a shortfall with no «Тафовут
+                // амали» chosen, an adjusted figure with no note. Opening it there asked the owner
+                // to approve, took the tap, and then showed a red banner on the sheet BEHIND the
+                // gate they were looking at. So a blocked tap goes straight to the ViewModel,
+                // which refuses it and writes the Uzbek reason into this sheet's own error banner,
+                // beside the field that caused it. `blocker` is the same rule the ViewModel guards
+                // with, read once — not a second copy of it.
                 PrimaryButton(
-                    text = stringResource(DesignSystemR.string.action_confirm), onClick = { gateOpen = true },
+                    text = stringResource(DesignSystemR.string.action_confirm),
+                    onClick = { if (sheet.blocker == null) gateOpen = true else onSubmitApprove() },
                     loading = submitting, modifier = Modifier.weight(1f),
                 )
             }

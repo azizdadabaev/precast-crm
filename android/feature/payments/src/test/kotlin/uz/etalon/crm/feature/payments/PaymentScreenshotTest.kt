@@ -3,7 +3,9 @@ package uz.etalon.crm.feature.payments
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -48,6 +50,10 @@ import java.time.LocalDate
  *  inset: the pill's 84 dp band alone, so a frame carries the clearance a real phone shows. The
  *  discrepancies frame does not take it yet — that screen is rebuilt in its own task. */
 private val SHELL_NAV_PILL_INSET = 84.dp
+
+/** `:core:designsystem`'s `action_confirm`, written out because a Robolectric test reads the
+ *  merged resources of the module under test and this string is defined one module down. */
+private const val CONFIRM = "Тасдиқлаш"
 
 /**
  * The module's frames: the record sheet, the confirm queue in its three states with its two
@@ -219,13 +225,29 @@ class PaymentScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp") fun queuePendingLight() =
         shootQueue("pending_light", queueState(openDiscrepancies = 2))
 
-    /** The other side of the switch: a settled tab, where the pill gives way to the state tag. */
+    /**
+     * The other side of the switch: a settled tab, where the pill gives way to the state tag.
+     *
+     * Every row is CONFIRMED, because the tab IS a server-side status filter — a rejected row
+     * inside «Тасдиқланган» is a state `GET /api/payments?status=CONFIRMED` cannot return, and a
+     * baseline that draws one teaches a reviewer to expect something the app never shows.
+     */
     @Test @Config(qualifiers = "w411dp-h891dp") fun queueConfirmedLight() = shootQueue(
         "confirmed_light",
+        queueState(tab = PaymentStatus.CONFIRMED, items = pending().map { it.copy(status = PaymentStatus.CONFIRMED) }),
+    )
+
+    /** The third tab, and the only place the rejection reason is ever drawn. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun queueRejectedLight() = shootQueue(
+        "rejected_light",
         queueState(
-            tab = PaymentStatus.CONFIRMED,
-            items = pending().map { it.copy(status = PaymentStatus.CONFIRMED) } +
-                pending()[0].copy(id = "payr", status = PaymentStatus.REJECTED, rejectionReason = "Сумма квитанцияга мос эмас"),
+            tab = PaymentStatus.REJECTED,
+            items = listOf(
+                pending()[0].copy(
+                    status = PaymentStatus.REJECTED,
+                    rejectionReason = "Квитанциядаги сумма бошқача — ходим билан аниқланмоқда",
+                ),
+            ),
         ),
     )
 
@@ -262,6 +284,37 @@ class PaymentScreenshotTest {
         }
         rule.waitForIdle()
         captureScreenRoboImage("screenshots/approve_sheet_light.png")
+    }
+
+    /**
+     * R3's final gate, over the sheet that opened it. The figure on the navy panel is the
+     * ADJUSTED one — 2 750 000 against the 3 000 000 «Қайд этилди» line still visible behind it —
+     * because that is the number the confirmation will actually put on the order.
+     *
+     * Reached by tapping «Тасдиқлаш» rather than by a flag: the gate is the button's own state,
+     * and a frame that composed it directly would not prove the button opens it.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun approveGateLight() {
+        val item = pending()[0]
+        rule.setContent {
+            EtalonTheme {
+                Queue(
+                    queueState(
+                        items = listOf(item),
+                        sheet = ConfirmSheetState(
+                            item = item,
+                            mode = ConfirmMode.APPROVE,
+                            amountDigits = "2750000",
+                            adjustmentNote = "Квитанциядан тузатилди",
+                        ),
+                    ),
+                )
+            }
+        }
+        rule.onNodeWithText(CONFIRM).performClick()
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/approve_gate_light.png")
     }
 
     /** The reject sheet: the recorded figure read-only over the mandatory reason. */
