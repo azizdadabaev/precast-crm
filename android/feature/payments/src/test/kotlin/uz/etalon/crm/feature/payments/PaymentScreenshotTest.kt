@@ -22,6 +22,7 @@ import uz.etalon.crm.core.model.ClientRef
 import uz.etalon.crm.core.model.CustodyChain
 import uz.etalon.crm.core.model.Discrepancy
 import uz.etalon.crm.core.model.DiscrepancyStatus
+import uz.etalon.crm.core.model.Driver
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
@@ -54,6 +55,9 @@ private val SHELL_NAV_PILL_INSET = 84.dp
 /** `:core:designsystem`'s `action_confirm`, written out because a Robolectric test reads the
  *  merged resources of the module under test and this string is defined one module down. */
 private const val CONFIRM = "Тасдиқлаш"
+
+/** `action_record_payment` — the button that opens the record screen's summary gate. */
+private const val RECORD = "Қайд этиш"
 
 /**
  * The module's frames: the record sheet, the confirm queue in its three states with its two
@@ -99,6 +103,12 @@ class PaymentScreenshotTest {
         events = emptyList(), dispatch = null, fetchedAt = fixedInstant,
     )
 
+    /** The one driver the driver-collected frame picks, and the only one the picker would list. */
+    private val driver = Driver(
+        id = "d1", name = "Жасур Тўраев", phone = "998901234567", notes = null, active = true,
+        activeDispatchCount = 1, discrepancyCount30d = 0, lastDispatchAt = null,
+    )
+
     private fun recordState() = RecordPaymentUiState(
         order = recordOrder(),
         amountDigits = "8000000",
@@ -112,25 +122,55 @@ class PaymentScreenshotTest {
         canSeeDrivers = true,
     )
 
-    private fun shootRecord(name: String, dark: Boolean, fontScale: Float? = null) {
-        rule.setContent {
-            EtalonTheme(darkTheme = dark) {
-                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
-                    RecordPaymentScreen(
-                        s = recordState(), onLeave = {}, onSetAmountDigits = {}, onSetMethod = {}, onSetSource = {},
-                        onSetHandOverNow = {}, onSetDriverId = {}, onSetNotes = {}, onSetPaidOn = {},
-                        onCaptureReceipt = {}, onRemoveReceipt = {}, onSubmit = {}, onFinishWithoutReceipts = {},
-                        onRetryLoad = {},
-                    )
-                }
-            }
+    @Composable
+    private fun Record(s: RecordPaymentUiState) {
+        CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
+            RecordPaymentScreen(
+                s = s, onLeave = {}, onSetAmountDigits = {}, onSetMethod = {}, onSetSource = {},
+                onSetHandOverNow = {}, onSetDriverId = {}, onSetNotes = {}, onSetPaidOn = {},
+                onCaptureReceipt = {}, onRemoveReceipt = {}, onSubmit = {}, onFinishWithoutReceipts = {},
+                onRetryLoad = {},
+                // Robolectric reports the ime inset as absent whatever is focused, so the bar's own
+                // seam is the only way a frame can say which side of ruling R13 it is on. Every
+                // frame here is the keyboard-down one the operator opens the screen to.
+                barVisible = true,
+            )
         }
-        rule.onRoot().captureRoboImage("screenshots/record_sheet_$name.png")
     }
 
-    @Test @Config(qualifiers = "w411dp-h891dp") fun recordLight() = shootRecord("light", false)
-    @Test @Config(qualifiers = "w411dp-h891dp") fun recordDark() = shootRecord("dark", true)
-    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun recordLargeFont() = shootRecord("font13", false)
+    private fun shootRecord(name: String, s: RecordPaymentUiState = recordState()) {
+        rule.setContent { EtalonTheme { Record(s) } }
+        rule.onRoot().captureRoboImage("screenshots/record_$name.png")
+    }
+
+    /** Office cash: no driver field, the hand-over switch present, the cap explained. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun recordLight() = shootRecord("light")
+
+    /** The one source that carries a driver — the field appears and the picker's choice is shown. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun recordDriverLight() = shootRecord(
+        "driver_light",
+        recordState().copy(
+            source = PaymentSource.FROM_DRIVER_AT_DELIVERY,
+            drivers = listOf(driver),
+            driverId = driver.id,
+        ),
+    )
+
+    /**
+     * R3's summary gate over the form that opened it. Reached by tapping «Қайд этиш» rather than by
+     * a flag: the gate is the button's own state, and a frame that composed it directly would not
+     * prove the button opens it. `captureScreenRoboImage`, not `onRoot()`: the gate is a `Dialog`
+     * in a window of its own.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun recordSummaryLight() {
+        rule.setContent { EtalonTheme { Record(recordState()) } }
+        rule.onNodeWithText(RECORD).performClick()
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/record_summary_light.png")
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun recordLargeFont() = shootRecord("font13")
 
     // ── Confirm queue: `2b-payments.png`'s own three rows, then the two cases the capture does
     // not draw (the confirmed tab's tags, a driver shortfall) and the two sheets. ───────────

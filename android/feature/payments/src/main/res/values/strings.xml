@@ -46,6 +46,11 @@
     <string name="leave_recorded_message">Чиқсангиз, олинган чек расмлари тўловга бириктирилмайди.</string>
     <string name="action_leave">Чиқиш</string>
 
+    <!-- The caption above the figure on the navy summary gate (R3). The two tiles under it read
+         `record_method_label` and `record_source_label` from above rather than defining «Усул» and
+         «Манба» a second time — the same rule the confirm queue's own gate follows. -->
+    <string name="record_summary_caption">Тўлов</string>
+
     <string name="record_will_auto_confirm">Тўлов дарҳол тасдиқланади — сизда тасдиқлаш ҳуқуқи бор.</string>
     <string name="record_will_be_pending">Тўлов эга тасдиғини кутади.</string>
 
