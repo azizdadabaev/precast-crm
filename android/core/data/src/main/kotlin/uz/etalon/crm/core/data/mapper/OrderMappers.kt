@@ -92,5 +92,7 @@ fun OrderDetailDto.toDomain(mediaBase: String, fetchedAt: Instant): OrderDetail 
         cancelReason = cancelReason,
         canceledAt = canceledAt?.toInstant(),
         discountPercent = BigDecimal(discountPercent),
+        loadedAt = loadedAt?.toInstant(),
+        deliveredAt = deliveredAt?.toInstant(),
     )
 }

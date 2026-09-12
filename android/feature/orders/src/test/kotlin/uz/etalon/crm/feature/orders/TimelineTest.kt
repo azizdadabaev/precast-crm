@@ -32,6 +32,8 @@ class TimelineTest {
         dispatchedAt: Instant? = null,
         events: List<OrderEventLine> = emptyList(),
         shipments: List<ShipmentLine> = emptyList(),
+        loadedAt: Instant? = null,
+        deliveredAt: Instant? = null,
     ) = OrderDetail(
         summary = OrderSummary(
             id = "o1", orderNumber = "2026-09-0003", status = status,
@@ -55,6 +57,8 @@ class TimelineTest {
             )
         },
         fetchedAt = Instant.parse("2026-09-04T00:00:00Z"),
+        loadedAt = loadedAt,
+        deliveredAt = deliveredAt,
     )
 
     private fun loadedEvent(at: String) =
@@ -175,5 +179,59 @@ class TimelineTest {
     @Test
     fun `an upcoming step says nothing at all`() {
         assertTrue(timelineFor(order(OrderStatus.PLACED)).drop(1).all { it.caption == null })
+    }
+
+    // ── the order's own stamps (`Order.loadedAt` / `Order.deliveredAt`) ──
+
+    /** The single-truck load flow stamps the ORDER, which is the fact itself rather than a trace
+     *  of it — so it dates «Юкланди» where the card used to fall back to a check. */
+    @Test
+    fun `the order's own loaded stamp dates step two`() {
+        val t = timelineFor(order(OrderStatus.LOADED, loadedAt = Instant.parse("2026-09-02T04:10:00Z")))
+        assertEquals("2 сен 2026", t[1].caption)
+    }
+
+    /** …and the order's own delivered stamp dates «Етказилди», which the whole-order delivery
+     *  (a STATUS_CHANGED whose payload this client does not carry) otherwise could not. */
+    @Test
+    fun `the order's own delivered stamp dates step three`() {
+        val t = timelineFor(order(OrderStatus.DELIVERED, deliveredAt = Instant.parse("2026-09-06T07:00:00Z")))
+        assertEquals("6 сен 2026", t[2].caption)
+    }
+
+    /** The order's own stamp is the FIRST place looked, not merely one of three: when it disagrees
+     *  with a truck's, the order's is the one the desk sees. */
+    @Test
+    fun `the order's stamps win over the events and the shipments`() {
+        val t = timelineFor(
+            order(
+                OrderStatus.DELIVERED,
+                events = listOf(loadedEvent("2026-09-02T04:10:00Z")),
+                shipments = listOf(
+                    shipment("s1", loadedAt = Instant.parse("2026-09-02T06:00:00Z"), deliveredAt = Instant.parse("2026-09-04T07:00:00Z")),
+                ),
+                loadedAt = Instant.parse("2026-09-03T04:00:00Z"),
+                deliveredAt = Instant.parse("2026-09-05T04:00:00Z"),
+            ),
+        )
+        assertEquals("3 сен 2026", t[1].caption)
+        assertEquals("5 сен 2026", t[2].caption)
+    }
+
+    /** An order from before those columns were stamped still reads its history: with no order-level
+     *  date and no truck signed for, the last SHIPMENT_DELIVERED event dates step three. This is
+     *  the branch the fallback chain ends on, and nothing else covered it. */
+    @Test
+    fun `a shipment-delivered event dates step three when nothing else can`() {
+        val t = timelineFor(
+            order(
+                OrderStatus.DELIVERED,
+                events = listOf(
+                    OrderEventLine("e2", "SHIPMENT_DELIVERED", null, "Азиз", Instant.parse("2026-09-04T07:00:00Z")),
+                    OrderEventLine("e3", "SHIPMENT_DELIVERED", null, "Азиз", Instant.parse("2026-09-05T07:00:00Z")),
+                ),
+            ),
+        )
+        assertEquals("5 сен 2026", t[2].caption)
     }
 }

@@ -18,7 +18,7 @@ class OrderDetailDerivedTest {
         )
         val d = detailWith(rooms)
         assertEquals(
-            listOf(LoadLine("3.80", BigDecimal("3.80"), 14), LoadLine("5.05", BigDecimal("5.05"), 3)),
+            listOf(LoadLine("3.80", 14), LoadLine("5.05", 3)),
             d.loadList,
         )
     }

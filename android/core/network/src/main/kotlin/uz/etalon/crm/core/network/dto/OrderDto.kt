@@ -78,4 +78,11 @@ data class GalleryPhotoDto(
     val cancelReason: String? = null,
     val canceledAt: String? = null,
     val discountPercent: String = "0",
+    /** When the whole order was loaded onto its lorry (`Order.loadedAt`, schema.prisma:615) and
+     *  when it was signed for (`Order.deliveredAt`, :603). Both are on the wire already — the GET
+     *  returns the Prisma row whole — and both are null until the flow that stamps them runs, which
+     *  is why the timeline still falls back to the shipments and the events. Not to be confused
+     *  with [ShipmentDto]'s same-named fields: those are one truck's. */
+    val loadedAt: String? = null,
+    val deliveredAt: String? = null,
 )

@@ -100,6 +100,12 @@ data class OrderDetail(
     val cancelReason: String? = null,
     val canceledAt: Instant? = null,
     val discountPercent: BigDecimal = BigDecimal.ZERO,
+    /** The order's OWN load and delivery stamps (`Order.loadedAt` / `Order.deliveredAt`), as
+     *  against a single truck's on [ShipmentLine]. Null until the flow that stamps them runs —
+     *  a split order loads truck by truck and may never carry an order-level `loadedAt` — so the
+     *  «Етказиш» timeline treats them as the FIRST place to look, not the only one. */
+    val loadedAt: Instant? = null,
+    val deliveredAt: Instant? = null,
 ) {
     val pendingAmount: Money get() = payments.filter { it.status == PaymentStatus.PENDING_CONFIRMATION }.fold(Money.ZERO) { a, p -> a + p.amount }
     val remaining: Money get() = (summary.totalPrice - summary.confirmedPaid - writeOffAmount).coerceAtLeastZero()
@@ -117,8 +123,12 @@ data class OrderDetail(
 }
 
 /** One row of the order's load list — a beam length shared by one or more rooms, with the
- *  rooms' beam counts summed. Mirrors the web's `beamGroups` (orders/[id]/page.tsx). */
-data class LoadLine(val lengthKey: String, val beamLength: BigDecimal, val beams: Int)
+ *  rooms' beam counts summed. Mirrors the web's `beamGroups` (orders/[id]/page.tsx).
+ *
+ *  The length is the two-decimal STRING and nothing else: it is what the label reads and what the
+ *  load map is posted under, and a `BigDecimal` beside it would be a second spelling of the same
+ *  number for anything to disagree with. See [beamLengthKey]. */
+data class LoadLine(val lengthKey: String, val beams: Int)
 
 /**
  * The order's beams grouped by length, in first-appearance order — matches the web's
@@ -131,21 +141,22 @@ data class LoadLine(val lengthKey: String, val beamLength: BigDecimal, val beams
 val OrderDetail.loadList: List<LoadLine>
     get() {
         val counts = LinkedHashMap<String, Int>()
-        val lengths = LinkedHashMap<String, BigDecimal>()
         for (room in rooms) {
             val key = beamLengthKey(room.beamLength)
             counts[key] = (counts[key] ?: 0) + room.beamCount
-            lengths.putIfAbsent(key, BigDecimal(key))
         }
-        return counts.map { (key, beams) -> LoadLine(key, lengths.getValue(key), beams) }
+        return counts.map { (key, beams) -> LoadLine(key, beams) }
     }
 
 /** Σ every room's block count. */
 val OrderDetail.totalBlocks: Int get() = rooms.sumOf { it.totalBlocks }
 
-/** The factory's rule-of-thumb weight for finished beam-and-block flooring, per m² of billed
- *  area — shared with the calculator's `KG_PER_M2` (feature/calculator/CalculatorUiState.kt),
- *  which is the single source of truth; this is the same constant for order-detail use. */
+/** The factory's rule-of-thumb weight for finished beam-and-block flooring, per m² of **monolith**
+ *  area — the slab actually poured, NOT the area the order is billed on (billing counts whole tiles
+ *  at N × PITCH, which overstates what a lorry carries; [weightKg] argues it out in full, and the
+ *  calculator's `KG_PER_M2` multiplies the same monolith figure). Shared with that constant
+ *  (feature/calculator/CalculatorUiState.kt), which is the single source of truth; this is the same
+ *  constant for order-detail use. */
 val ORDER_KG_PER_M2: BigDecimal = BigDecimal(180)
 
 /**

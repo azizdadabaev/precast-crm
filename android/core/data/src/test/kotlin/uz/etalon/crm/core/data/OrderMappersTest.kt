@@ -112,5 +112,23 @@ class OrderMappersTest {
         assertNull(o.cancelReason)
         assertNull(o.canceledAt)
         assertEquals(BigDecimal.ZERO, o.discountPercent)
+        // …and so are the order's own load/delivery stamps, which an order that got nowhere near a
+        // lorry genuinely does not have. The timeline shows a check, not a date.
+        assertNull(o.loadedAt)
+        assertNull(o.deliveredAt)
+    }
+
+    /** `Order.loadedAt` / `Order.deliveredAt` — the ORDER's own stamps, distinct from the
+     *  same-named fields on a shipment (one truck's). The «Етказиш» timeline reads these first. */
+    @Test fun `detail maps the order's own loaded and delivered stamps`() {
+        val d = OrderDetailDto(
+            "o1", "2026-09-0041", "DELIVERED", "FULLY_PAID", "100.00", "100.00", "10.000", 1, 1,
+            "2026-09-04T00:00:00.000Z", "2026-09-01T00:00:00.000Z", ClientDto("c1", "A", "998901112233", null),
+            roomsSubtotal = "100.00", discountAmount = "0", deliveryCost = "0", otherCost = "0", writeOffAmount = "0",
+            loadedAt = "2026-09-02T04:10:00.000Z", deliveredAt = "2026-09-03T11:30:00.000Z",
+        )
+        val o = d.toDomain("https://etalontbm.uz", Instant.EPOCH)
+        assertEquals(Instant.parse("2026-09-02T04:10:00Z"), o.loadedAt)
+        assertEquals(Instant.parse("2026-09-03T11:30:00Z"), o.deliveredAt)
     }
 }

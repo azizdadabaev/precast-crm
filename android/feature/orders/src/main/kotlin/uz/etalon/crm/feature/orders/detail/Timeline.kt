@@ -13,14 +13,6 @@ data class StepSpec(@StringRes val labelRes: Int, val caption: String?, val stat
 
 private const val CHECK = "✓"
 
-/** The whole-order load: one photo, one status change. A split order writes `SHIPMENT_LOADED`
- *  per truck instead, which is why the shipments' own `loadedAt` is the fallback. */
-private const val ORDER_LOADED = "ORDER_LOADED"
-
-/** A split order's per-truck delivery. A whole-order delivery writes `STATUS_CHANGED` with the
- *  new status in a `payload` this client does not carry, so that case falls through to the check. */
-private const val SHIPMENT_DELIVERED = "SHIPMENT_DELIVERED"
-
 /**
  * The «Етказиш» card's three columns: «Буюртма» → «Юкланди» → «Етказилди».
  *
@@ -39,6 +31,12 @@ private const val SHIPMENT_DELIVERED = "SHIPMENT_DELIVERED"
  * Reaching a step is not this function's business: step 2 needs a truck photo and step 3 needs the
  * delivery proof, both enforced by the flows that move the status. The timeline only states where
  * the order got to.
+ *
+ * Each step's caption is the DATE it happened where the order knows one and a check where it does
+ * not — the order's own `loadedAt`/`deliveredAt` first, then its events, then its shipments. A
+ * check is not a failure: a split order that was never stamped at the order level genuinely has no
+ * single instant for «Юкланди», and a date invented from the nearest event would be a claim about
+ * a lorry nobody made.
  */
 fun timelineFor(o: OrderDetail): List<StepSpec> {
     val s = o.summary.status
@@ -48,13 +46,17 @@ fun timelineFor(o: OrderDetail): List<StepSpec> {
         OrderStatus.DELIVERED -> 2
         else -> -1 // DRAFT, CANCELED, UNKNOWN
     }
-    // When the load happened. The whole-order event where there is one; otherwise the FIRST truck
-    // to be loaded, which is when the order started going on lorries.
-    val loadedAt = o.events.filter { it.type == ORDER_LOADED }.minOfOrNull { it.createdAt }
+    // When the load happened. The order's OWN stamp first — `Order.loadedAt`, what the single-truck
+    // load flow writes, and the only one of the three that is the order's own fact rather than a
+    // trace of it. Then the whole-order event, for a row stamped before that column existed.
+    // Otherwise the FIRST truck to be loaded, which is when the order started going on lorries.
+    val loadedAt = o.loadedAt
+        ?: o.events.filter { it.type == ORDER_LOADED }.minOfOrNull { it.createdAt }
         ?: o.shipments.mapNotNull { it.loadedAt }.minOrNull()
-    // …and when it arrived: the LAST truck to be signed for, since the order is delivered when the
-    // last of it is.
-    val deliveredAt = o.shipments.mapNotNull { it.deliveredAt }.maxOrNull()
+    // …and when it arrived: `Order.deliveredAt` where the server set it, otherwise the LAST truck
+    // to be signed for, since the order is delivered when the last of it is.
+    val deliveredAt = o.deliveredAt
+        ?: o.shipments.mapNotNull { it.deliveredAt }.maxOrNull()
         ?: o.events.filter { it.type == SHIPMENT_DELIVERED }.maxOfOrNull { it.createdAt }
     val dates = listOf(o.summary.placedAt, loadedAt, deliveredAt)
     val labels = listOf(R.string.step_placed, R.string.step_loaded, R.string.step_delivered)
