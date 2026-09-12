@@ -441,9 +441,18 @@ fun RecordPaymentScreen(
                             // nothing on screen saying why. A tap the validator would refuse goes
                             // straight to `submit()`, which writes the Uzbek reason into the banner
                             // above; only a tap that would actually go through opens the gate.
+                            //
+                            // `isOffline` is part of that question, not a separate one: `submit()`
+                            // refuses on it BEFORE it validates, and a cached order sitting beside a
+                            // failed fetch is a state this screen is built to be in — so a form the
+                            // validator is perfectly happy with can still be unsendable. Opening the
+                            // gate there asked the operator to confirm on the navy panel in front of
+                            // the customer and then recorded nothing. `RecordGateTest` pins it.
                             PrimaryButton(
                                 text = stringResource(R.string.action_record_payment),
-                                onClick = { if (validateRecord(s) == null) gateOpen = true else onSubmit() },
+                                onClick = {
+                                    if (!s.isOffline && validateRecord(s) == null) gateOpen = true else onSubmit()
+                                },
                                 enabled = s.canRecord, loading = s.submitting,
                             )
                         }
@@ -592,9 +601,10 @@ fun RecordPaymentScreen(
                 onDismiss = { gateOpen = false },
                 // The gate closes and the screen behind it carries the outcome — the spinner while
                 // the call is in flight, the reason if it fails. A refused record must land where
-                // the fields that caused the refusal still are.
+                // the fields that caused the refusal still are. That ordering is also why no
+                // `confirmEnabled` is passed: the gate is never composed while a call is in flight,
+                // so a guard on `submitting` here could only ever read true.
                 onConfirm = { gateOpen = false; onSubmit() },
-                confirmEnabled = !s.submitting,
             )
         }
     }
