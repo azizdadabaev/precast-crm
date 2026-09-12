@@ -28,6 +28,20 @@ export function totalForClient(clientId: string, groups: Group[]): number {
   return attachTotals([{ id: clientId }], groups)[0].totalBooked;
 }
 
+/**
+ * Re-orders a page's freshly-fetched rows into the id order [sortByTotal] decided.
+ *
+ * The total-sort picks a page's ids from a cheap `{ id, name }` scan and only then fetches those
+ * rows with their `_count` include; `findMany({ where: { id: { in: ids } } })` answers in the
+ * database's own order, not in `ids` order, so without this the sorted page would come back
+ * effectively unsorted. An id with no row (deleted between the two queries) is dropped rather
+ * than left as a hole in the page.
+ */
+export function orderByIds<T extends { id: string }>(rows: T[], ids: string[]): T[] {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return ids.map((id) => byId.get(id)).filter((r): r is T => r !== undefined);
+}
+
 /** Sort by totalBooked, ties broken by name — stable regardless of fetch order. */
 export function sortByTotal<T extends { name: string; totalBooked: number }>(
   rows: T[],

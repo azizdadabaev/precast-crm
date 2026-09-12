@@ -14,7 +14,7 @@ import {
   parseTableQuery,
   type SortDir,
 } from "@/lib/table-query";
-import { attachTotals, sortByTotal } from "@/lib/client-totals";
+import { attachTotals, orderByIds, sortByTotal } from "@/lib/client-totals";
 
 /** Columns the clients table may be ordered by. Never trust a raw sortBy. */
 const CLIENT_SORT_FIELDS = [
@@ -129,10 +129,15 @@ export const GET = withPermission("client.view", async (req: NextRequest) => {
   if (isPaginated(searchParams)) {
     // `totalBooked` (sum of a client's live-order totalPrice) is a groupBy
     // aggregate, not a Client column, so it can't be a Prisma `orderBy` key —
-    // sorting by it means fetching every filtered client and sorting in JS.
+    // the order has to be decided in JS, over the whole filtered set.
+    //
+    // Which is why the set scanned here is `{ id, name }` (the sort key and its
+    // tiebreaker) and nothing else: the phone sends this sort on every Clients
+    // open and every keystroke, so a page of rows with their `_count` includes
+    // is fetched only once the page's ids are known.
     if (sortBy === "totalBooked") {
-      const [allRows, total, sourceRows] = await prisma.$transaction([
-        prisma.client.findMany({ where, include }),
+      const [keyRows, total, sourceRows] = await prisma.$transaction([
+        prisma.client.findMany({ where, select: { id: true, name: true } }),
         prisma.client.count({ where }),
         prisma.client.findMany({
           where: { source: { not: null } },
@@ -141,16 +146,25 @@ export const GET = withPermission("client.view", async (req: NextRequest) => {
           orderBy: { source: "asc" },
         }),
       ]);
-      const ids = allRows.map((r) => r.id);
-      const groups = ids.length
+      const groups = keyRows.length
         ? await prisma.order.groupBy({
             by: ["clientId"],
-            where: { clientId: { in: ids }, status: { notIn: ["CANCELED", "DRAFT"] } },
+            where: {
+              clientId: { in: keyRows.map((r) => r.id) },
+              status: { notIn: ["CANCELED", "DRAFT"] },
+            },
             _sum: { totalPrice: true },
           })
         : [];
-      const withTotals = sortByTotal(attachTotals(allRows, groups), sortDir);
-      const rows = withTotals.slice(skip, skip + pageSize);
+      const pageIds = sortByTotal(attachTotals(keyRows, groups), sortDir)
+        .slice(skip, skip + pageSize)
+        .map((r) => r.id);
+      // `in` answers in the database's order, so the page is put back into the
+      // order the sort chose; the totals ride along from the same groupBy.
+      const pageRows = pageIds.length
+        ? await prisma.client.findMany({ where: { id: { in: pageIds } }, include })
+        : [];
+      const rows = attachTotals(orderByIds(pageRows, pageIds), groups);
       const sources = sourceRows
         .map((r) => r.source)
         .filter((s): s is string => Boolean(s?.trim()));
