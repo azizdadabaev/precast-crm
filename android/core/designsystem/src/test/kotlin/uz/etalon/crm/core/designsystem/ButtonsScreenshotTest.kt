@@ -97,6 +97,10 @@ class ButtonsScreenshotTest {
         val pill = rule.onNodeWithText("Янги").fetchSemanticsNode().size.width
         val label = rule.onNodeWithText("Янги", useUnmergedTree = true).fetchSemanticsNode().size.width
         assertEquals(48f, (pill - label) / rule.density.density, 1f)
+        // 75, not the prototype's 70: Robolectric substitutes its own font for Plus Jakarta Sans,
+        // and «Янги» measures 27 dp in the substitute against 22 in the design file. The pin is
+        // therefore a regression guard for THIS renderer — read the chrome assert above for the
+        // figure the component actually owns, which no font can move.
         assertEquals(75f, pill / rule.density.density, 1f)
     }
 }

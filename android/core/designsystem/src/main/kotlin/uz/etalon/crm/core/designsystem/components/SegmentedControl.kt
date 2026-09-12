@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -89,7 +90,12 @@ fun SegmentedControl(
             horizontalArrangement = if (fill) Arrangement.Center else Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(item.label, style = EtalonType.labelSm, color = fg, maxLines = 1)
+            // Ellipsis, not clip: under `fill` an item is only its third of the track, and on a
+            // 360 dp phone at font scale 1,3 «Тасдиқланган» no longer fits it. A label cut
+            // mid-glyph reads as a rendering fault; a cut one that ends in «…» reads as a label.
+            // In hug mode the item is exactly its label, so this can never fire there — the
+            // `ds_controls_light` rows above the filled samples are byte-identical either way.
+            Text(item.label, style = EtalonType.labelSm, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (item.count != null) {
                 Text(
                     "${item.count}",

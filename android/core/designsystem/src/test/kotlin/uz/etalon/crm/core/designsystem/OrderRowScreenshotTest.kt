@@ -89,6 +89,14 @@ private val SAMPLES = listOf(
         "Каримов Акмал", null, "+998 90 481 33 30 · Тошкент", "18420000.00", null,
         paid = null, trailing = "1 буюртма",
     ),
+    // The rule `trailing` is bound by, drawn rather than merely documented: a row states ONE
+    // thing under its amount. This one is handed a debt AND a trailing line, and the debt wins —
+    // «қолди 2 100 000» in red, with «4 буюртма» nowhere on the row. If a future edit ever lets
+    // both through, this is the sample that shows two lines where the others show one.
+    Sample(
+        "Эргашева Нигора", null, "+998 93 214 08 77 · Самарқанд", "9800000.00", "2100000.00",
+        paid = null, trailing = "4 буюртма",
+    ),
 )
 
 /**
@@ -101,7 +109,7 @@ private val SAMPLES = listOf(
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 // Tall enough for both grounds to show every sample: the frame grows with SAMPLES, and a row that
 // falls off the bottom is a row no reviewer checks.
-@Config(sdk = [36], qualifiers = "w411dp-h1380dp")
+@Config(sdk = [36], qualifiers = "w411dp-h1500dp")
 class OrderRowScreenshotTest {
     @get:Rule val rule = createComposeRule()
 

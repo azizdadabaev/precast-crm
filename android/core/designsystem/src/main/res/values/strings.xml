@@ -55,12 +55,12 @@
     <string name="ds_search_clear">Тозалаш</string>
     <!-- DetailPanel's two header IconButtons (§2). Content descriptions only — neither button
          carries a visible label. -->
+    <string name="ds_cd_back">Орқага</string>
+    <string name="ds_cd_call">Қўнғироқ қилиш</string>
     <!-- BrandMark, moved out of :feature:home so Home and the login screen draw one wordmark.
          «ETALON» is the trademark and stays in Latin; the tagline is the Uzbek it always was. -->
     <string name="ds_brand">ETALON</string>
     <string name="ds_brand_tagline">Йиғма монолит</string>
-    <string name="ds_cd_back">Орқага</string>
-    <string name="ds_cd_call">Қўнғироқ қилиш</string>
     <!-- «маълумот», not «расм»: the outbox carries a queued PLACE_ORDER row as well as photos
          since Phase 2b, and that row is an ORDER. The count was right; the noun was not. -->
     <plurals name="outbox_pending">

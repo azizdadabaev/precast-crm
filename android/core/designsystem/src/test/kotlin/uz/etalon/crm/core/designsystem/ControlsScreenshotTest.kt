@@ -104,6 +104,25 @@ class ControlsScreenshotTest {
     }
 
     /**
+     * The filled track where it is actually tightest: a 360 dp phone, which is the narrowest
+     * device this app ships to. Each of the three tabs gets ~111 dp, and «Тасдиқланган 3» is
+     * wider than that — so this frame is where the label's ellipsis has to appear rather than a
+     * letter cut in half. Compare with the same row in `ds_controls_light`, where 411 dp fits it.
+     */
+    @Test @Config(qualifiers = "w360dp-h780dp") fun filledSegmentsW360() {
+        rule.setContent { EtalonTheme { FilledSegments() } }
+        rule.onRoot().captureRoboImage("screenshots/ds_segments_fill_w360.png")
+    }
+
+    /** The same 360 dp track at the accessibility font scale the app supports — the app's true
+     *  worst case, and the only frame in which the labels actually run out of room. This is what
+     *  the `overflow` on the label buys: «Тасдиқланган» ends in «…» instead of half a «н». */
+    @Test @Config(qualifiers = "w360dp-h780dp", fontScale = 1.3f) fun filledSegmentsLargeFont() {
+        rule.setContent { EtalonTheme { FilledSegments() } }
+        rule.onRoot().captureRoboImage("screenshots/ds_segments_fill_font13.png")
+    }
+
+    /**
      * What `fill = true` claims, in numbers rather than in a picture: the track spans its parent —
      * 379 dp inside a 411 dp frame's 16 dp card margins — and the tabs divide it evenly, so the
      * selected pill does not move when the operator switches tabs. Rounding may hand one tab a
@@ -125,6 +144,18 @@ class ControlsScreenshotTest {
         val trackDp = widths.sum() / rule.density.density + 8f
         assertTrue("the track measures %.1f dp, not the card's 379".format(trackDp), kotlin.math.abs(trackDp - 379f) <= 1f)
     }
+}
+
+/** `2b-payments.png`'s filter on its own, on the page margins the payments screen gives it. */
+@Composable
+private fun FilledSegments() = Column(
+    Modifier.fillMaxWidth().background(EtalonColors.page)
+        .padding(horizontal = EtalonSpace.cardMargin, vertical = 16.dp),
+    verticalArrangement = Arrangement.spacedBy(10.dp),
+) {
+    SegmentedControl(PAYMENT_SEGMENTS, selectedIndex = 0, onSelect = {}, onNavy = false, fill = true)
+    SegmentedControl(PAYMENT_SEGMENTS, selectedIndex = 1, onSelect = {}, onNavy = false, fill = true)
+    SegmentedControl(PAYMENT_SEGMENTS, selectedIndex = 2, onSelect = {}, onNavy = false, fill = true)
 }
 
 @Composable
