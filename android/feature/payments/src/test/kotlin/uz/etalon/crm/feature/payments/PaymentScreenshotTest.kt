@@ -2,6 +2,7 @@ package uz.etalon.crm.feature.payments
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -63,6 +64,17 @@ private const val RECORD = "Қайд этиш"
 
 /** `discrepancy_action_resolve` — the resolve sheet's primary, which opens its summary gate. */
 private const val RESOLVE = "Ҳал қилиш"
+
+/**
+ * The counts belonging to a ONE-row pending queue — the state every frame below that draws a
+ * single payment is in.
+ *
+ * A fixture whose open tab counts more than its `items` is the TRUNCATED state, and the screen
+ * says so in a notice at the end of the list. That notice is correct, and these frames are about
+ * something else (a shortfall's kept lines, the two sheets), so they keep the two figures in
+ * agreement. `queue_truncated_light` is where the disagreement is drawn on purpose.
+ */
+private val ONE_PENDING = PaymentCounts(pending = 1, confirmed = 3, rejected = 1)
 
 /**
  * The module's frames: the record sheet, the confirm queue in its three states with its two
@@ -237,10 +249,14 @@ class PaymentScreenshotTest {
         tab: PaymentStatus = PaymentStatus.PENDING_CONFIRMATION,
         sheet: ConfirmSheetState? = null,
         openDiscrepancies: Int = 0,
+        /** The capture's own 3/3/1. A fixture whose open tab counts MORE than its `items` is the
+         *  truncated state, and draws the notice — so a frame about something else keeps the two
+         *  in agreement. */
+        counts: PaymentCounts = PaymentCounts(pending = 3, confirmed = 3, rejected = 1),
     ) = ConfirmQueueUiState(
         tab = tab,
         items = items,
-        counts = PaymentCounts(pending = 3, confirmed = 3, rejected = 1),
+        counts = counts,
         openDiscrepancies = openDiscrepancies,
         loading = false,
         canConfirm = true,
@@ -296,9 +312,35 @@ class PaymentScreenshotTest {
         ),
     )
 
-    /** The kept lines: expected, the red shortfall, and the custody chain under them. */
-    @Test @Config(qualifiers = "w411dp-h891dp") fun queueShortfallLight() =
-        shootQueue("shortfall_light", queueState(items = listOf(shortfallItem())))
+    /** The kept lines: expected, the red shortfall, and the custody chain under them. One pending
+     *  payment, and the switch says one — the frame is about the row, not about a capped list. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun queueShortfallLight() = shootQueue(
+        "shortfall_light",
+        queueState(items = listOf(shortfallItem()), counts = ONE_PENDING),
+    )
+
+    /**
+     * `GET /api/payments` caps its rows at `LIST_LIMIT` (500) while the tab counts are computed
+     * with no cap, so a business's third year puts a figure on the «Тасдиқланган» pill that the
+     * list under it cannot reach. Unsaid, the last row reads as the oldest payment there is.
+     *
+     * The notice is the list's LAST item, which is where an owner who scrolled to the end would
+     * draw that conclusion — and both figures are grouped, so «2 481» is the same shape on the
+     * pill and in the sentence.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun queueTruncatedLight() {
+        val s = queueState(
+            tab = PaymentStatus.CONFIRMED,
+            items = pending().map { it.copy(status = PaymentStatus.CONFIRMED) },
+            counts = PaymentCounts(pending = 4, confirmed = 2481, rejected = 17),
+        )
+        rule.setContent { EtalonTheme { Queue(s) } }
+        // The separator between «2» and «481» below is U+202F NARROW NO-BREAK SPACE,
+        // which is what `formatCountBare` groups with (D8) — not the plain space it resembles.
+        rule.onNodeWithText("2 481 та тўловдан 3 таси кўрсатилди", substring = true)
+            .assertIsDisplayed()
+        rule.onRoot().captureRoboImage("screenshots/queue_truncated_light.png")
+    }
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun queueLargeFont() =
         shootQueue("font13", queueState(openDiscrepancies = 2))
@@ -317,6 +359,7 @@ class PaymentScreenshotTest {
                 Queue(
                     queueState(
                         items = listOf(item),
+                        counts = ONE_PENDING,
                         sheet = ConfirmSheetState(
                             item = item,
                             mode = ConfirmMode.APPROVE,
@@ -347,6 +390,7 @@ class PaymentScreenshotTest {
                 Queue(
                     queueState(
                         items = listOf(item),
+                        counts = ONE_PENDING,
                         sheet = ConfirmSheetState(
                             item = item,
                             mode = ConfirmMode.APPROVE,
@@ -371,6 +415,7 @@ class PaymentScreenshotTest {
                 Queue(
                     queueState(
                         items = listOf(item),
+                        counts = ONE_PENDING,
                         sheet = ConfirmSheetState(
                             item = item,
                             mode = ConfirmMode.REJECT,

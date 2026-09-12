@@ -56,10 +56,10 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.etalonRipple
-import uz.etalon.crm.core.model.PaymentCounts
 import uz.etalon.crm.core.model.PaymentMethod
 import uz.etalon.crm.core.model.PaymentQueueItem
 import uz.etalon.crm.core.model.PaymentStatus
+import uz.etalon.crm.core.ui.format.formatCountBare
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.core.ui.format.formatScheduleDate
@@ -186,14 +186,17 @@ fun ConfirmQueueScreen(
                 if (onOpenDiscrepancies != null && s.openDiscrepancies > 0) {
                     Spacer(Modifier.width(EtalonSpace.sm))
                     TonalButton(
-                        stringResource(R.string.payments_discrepancies_pill, s.openDiscrepancies),
+                        stringResource(
+                            R.string.payments_discrepancies_pill,
+                            formatCountBare(s.openDiscrepancies),
+                        ),
                         onOpenDiscrepancies,
                     )
                 }
             }
             SegmentedControl(
                 items = TABS.map { (status, label) ->
-                    SegmentItem(stringResource(label), s.counts?.let { tabCount(it, status) })
+                    SegmentItem(stringResource(label), s.counts?.let { tabCountOf(it, status) })
                 },
                 selectedIndex = TABS.indexOfFirst { it.first == s.tab }.coerceAtLeast(0),
                 onSelect = { onSetTab(TABS[it].first) },
@@ -236,6 +239,21 @@ fun ConfirmQueueScreen(
                             onReview = { onApprove(item) },
                         )
                     }
+                    // The route caps its rows while the tab counts are uncapped, so the figure on
+                    // the pill can be larger than the list under it. Said at the bottom, which is
+                    // exactly where an owner who has scrolled to the end would otherwise read the
+                    // last row as the oldest payment there is.
+                    if (s.showTruncatedNotice) {
+                        item {
+                            NoticeBanner(
+                                stringResource(
+                                    R.string.queue_truncated,
+                                    formatCountBare(s.tabCount ?: 0),
+                                    formatCountBare(s.items.size),
+                                ),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -258,6 +276,8 @@ fun ConfirmQueueScreen(
             ConfirmMode.APPROVE -> ApproveSheet(
                 sheet = sheet,
                 submitting = s.busy,
+                canConfirm = s.canConfirm,
+                isOffline = s.isOffline,
                 onDismiss = onCloseSheet,
                 onReject = { onReject(sheet.item) },
                 onSetAmountDigits = onSetAmountDigits,
@@ -275,14 +295,6 @@ fun ConfirmQueueScreen(
             )
         }
     }
-}
-
-/** Which of the three figures belongs beside which tab (R7). */
-private fun tabCount(counts: PaymentCounts, tab: PaymentStatus): Int? = when (tab) {
-    PaymentStatus.PENDING_CONFIRMATION -> counts.pending
-    PaymentStatus.CONFIRMED -> counts.confirmed
-    PaymentStatus.REJECTED -> counts.rejected
-    PaymentStatus.UNKNOWN -> null
 }
 
 /**

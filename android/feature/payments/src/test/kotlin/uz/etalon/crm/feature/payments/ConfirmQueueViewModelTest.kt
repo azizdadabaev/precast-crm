@@ -176,6 +176,35 @@ class ConfirmQueueViewModelTest {
     }
 
     /**
+     * `GET /api/payments` caps its rows at `LIST_LIMIT` (500) while `counts` is computed with no
+     * cap, so the figure on the tab can exceed the list under it — and the last row then reads as
+     * the oldest payment there is. The notice says otherwise, but only where the list on screen is
+     * actually the thing being described.
+     */
+    @Test fun `the truncated notice appears only over a settled list its count outruns`() {
+        val capped = ConfirmQueueUiState(
+            items = listOf(item()),
+            counts = PaymentCounts(pending = 2481, confirmed = 0, rejected = 0),
+            loading = false,
+        )
+        assertEquals(2481, capped.tabCount)
+        assertTrue(capped.showTruncatedNotice)
+
+        // The ordinary case: the two figures agree, so there is nothing missing to mention.
+        assertFalse(capped.copy(counts = PaymentCounts(1, 0, 0)).showTruncatedNotice)
+        // A server old enough to send no counts gives nothing to compare (R7's same third state).
+        assertFalse(capped.copy(counts = null).showTruncatedNotice)
+        // Never while the list is being replaced, and never beside either banner — for the reason
+        // `showEmptyState` is not shown there: a sentence about what the list is missing, next to
+        // "couldn't check", describes the wrong thing.
+        assertFalse(capped.copy(loading = true).showTruncatedNotice)
+        assertFalse(capped.copy(error = "Хатолик").showTruncatedNotice)
+        assertFalse(capped.copy(lastRefreshError = AppError.Network("Интернет йўқ")).showTruncatedNotice)
+        // …and never over an empty list, where the count and the emptiness contradict each other.
+        assertFalse(capped.copy(items = emptyList()).showTruncatedNotice)
+    }
+
+    /**
      * "Not yet known" is not "no". An ACCOUNTANT holds `payment.view` without `payment.confirm`
      * by design and is meant to read this queue, so the notice is neither an error nor something
      * to flash at every owner for a frame before the answer arrives.

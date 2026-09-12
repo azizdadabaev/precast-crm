@@ -73,8 +73,14 @@
     <string name="payments_review">Кўриб чиқиш</string>
     <!-- R9's second door into the discrepancies screen, drawn only when there is something behind
          it and the operator may open it. -->
-    <string name="payments_discrepancies_pill">Тафовутлар %1$d</string>
+    <string name="payments_discrepancies_pill">Тафовутлар %1$s</string>
     <string name="queue_empty">Тўлов йўқ</string>
+    <!-- GET /api/payments caps its rows while the tab counts are uncapped, so the figure on the
+         pill can be larger than the list under it. Worded like `clients_truncated`, and placed at
+         the end of the list rather than the top — that is where an owner reads the last row as the
+         oldest payment there is. The route orders by `recordedAt desc`, so what is shown is the
+         newest. -->
+    <string name="queue_truncated">%1$s та тўловдан %2$s таси кўрсатилди. Энг янги тўловлар рўйхат бошида</string>
     <string name="queue_recorded">Қайд этилди: %1$s</string>
     <string name="queue_expected">Кутилган: %1$s</string>
     <string name="queue_shortfall">Камомад: %1$s</string>

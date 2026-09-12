@@ -98,6 +98,8 @@ private const val UNKNOWN = "—"
 fun ApproveSheet(
     sheet: ConfirmSheetState,
     submitting: Boolean,
+    canConfirm: Boolean,
+    isOffline: Boolean,
     onDismiss: () -> Unit,
     onReject: () -> Unit,
     onSetAmountDigits: (String) -> Unit,
@@ -268,9 +270,20 @@ fun ApproveSheet(
                 // which refuses it and writes the Uzbek reason into this sheet's own error banner,
                 // beside the field that caused it. `blocker` is the same rule the ViewModel guards
                 // with, read once — not a second copy of it.
+                //
+                // `blocker` is not the WHOLE of that rule, though: `guardedSheet` refuses on the
+                // permission and on being offline BEFORE it looks at the blocker, and a sheet the
+                // blocker is perfectly happy with can still be unsendable for either. The queue
+                // behind this sheet is on screen from the cache while its fetch fails for want of
+                // a network, so offline-with-a-complete-sheet is a state this screen is built to
+                // be in. Opening the gate there asked the owner to approve on the navy panel and
+                // then sent nothing. `ApproveGateTest` pins all three.
                 PrimaryButton(
                     text = stringResource(DesignSystemR.string.action_confirm),
-                    onClick = { if (sheet.blocker == null) gateOpen = true else onSubmitApprove() },
+                    onClick = {
+                        if (sheet.blocker == null && canConfirm && !isOffline) gateOpen = true
+                        else onSubmitApprove()
+                    },
                     loading = submitting, modifier = Modifier.weight(1f),
                 )
             }

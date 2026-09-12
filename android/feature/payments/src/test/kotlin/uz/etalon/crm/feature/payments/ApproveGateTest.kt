@@ -13,6 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.CustodyChain
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PaymentMethod
@@ -73,14 +74,42 @@ class ApproveGateTest {
         assertEquals(1, submits.size)
     }
 
+    /**
+     * The regression this case exists for. The sheet is complete — `blocker` has nothing to say —
+     * and the queue behind it is on screen because it came from the cache; only the fetch beside
+     * it failed for want of a network. `guardedSheet` refuses on exactly that, BEFORE it looks at
+     * the blocker, so the gate must stay shut and the tap must reach the ViewModel.
+     */
+    @Test fun `an offline queue never opens the gate even with a complete sheet`() {
+        val submits = mutableListOf<Unit>()
+        val sheet = sendableSheet()
+        assertTrue("the fixture is meant to be sendable", sheet.blocker == null)
+        show(sheet, offline = true) { submits += Unit }
+
+        rule.onNodeWithText(CONFIRM).performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText(GATE_DISMISS).assertDoesNotExist()
+        assertEquals(1, submits.size)
+    }
+
+    /** Reading the queue without `payment.confirm` is a real account shape (an ACCOUNTANT), and
+     *  the ViewModel refuses the write for it. The sheet's own button stays live so the reason is
+     *  shown in its banner. */
+    @Test fun `without the confirm permission the gate never opens`() {
+        val submits = mutableListOf<Unit>()
+        show(sendableSheet(), canConfirm = false) { submits += Unit }
+
+        rule.onNodeWithText(CONFIRM).performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText(GATE_DISMISS).assertDoesNotExist()
+        assertEquals(1, submits.size)
+    }
+
     @Test fun `a complete sheet opens the gate instead of submitting`() {
         val submits = mutableListOf<Unit>()
-        val sheet = ConfirmSheetState(
-            item = shortPayment(),
-            mode = ConfirmMode.APPROVE,
-            action = DiscrepancyAction.TRACK,
-            note = "Мижоз жумагача тўлайди",
-        )
+        val sheet = sendableSheet()
         assertTrue("the fixture is meant to be sendable", sheet.blocker == null)
         show(sheet) { submits += Unit }
 
@@ -92,13 +121,28 @@ class ApproveGateTest {
         assertEquals(0, submits.size)
     }
 
-    private fun show(sheet: ConfirmSheetState, onSubmitApprove: () -> Unit) {
+    /** A shortfall with both of the things the confirm route demands of one, so `blocker` is null
+     *  and only a guard outside the sheet can stop it. */
+    private fun sendableSheet() = ConfirmSheetState(
+        item = shortPayment(),
+        mode = ConfirmMode.APPROVE,
+        action = DiscrepancyAction.TRACK,
+        note = "Мижоз жумагача тўлайди",
+    )
+
+    private fun show(
+        sheet: ConfirmSheetState,
+        canConfirm: Boolean = true,
+        offline: Boolean = false,
+        onSubmitApprove: () -> Unit,
+    ) {
         rule.setContent {
             EtalonTheme {
                 ConfirmQueueScreen(
                     s = ConfirmQueueUiState(
-                        items = listOf(sheet.item), loading = false, canConfirm = true,
+                        items = listOf(sheet.item), loading = false, canConfirm = canConfirm,
                         permissionsResolved = true, sheet = sheet,
+                        lastRefreshError = if (offline) AppError.Network("Интернет йўқ") else null,
                     ),
                     now = Instant.parse("2026-09-04T09:00:00Z"),
                     onOpenOrder = {}, onOpenDiscrepancies = {}, onRefresh = {}, onSetTab = {},

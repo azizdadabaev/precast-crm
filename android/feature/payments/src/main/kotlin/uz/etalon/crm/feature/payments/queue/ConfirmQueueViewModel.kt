@@ -206,6 +206,32 @@ data class ConfirmQueueUiState(
     /** Neither confirm nor reject is `withIdempotency`-wrapped server-side, so neither may ever be
      *  queued — with no signal they are refused rather than sent and failed. */
     val isOffline: Boolean get() = lastRefreshError is AppError.Network
+
+    /** The open tab's own figure off [counts] — the number the switch draws beside its label. */
+    val tabCount: Int? get() = counts?.let { tabCountOf(it, tab) }
+
+    /**
+     * `GET /api/payments` caps its rows at `LIST_LIMIT` (500) while `counts` is computed with no
+     * cap at all, so on a business's third year the «Тасдиқланган» pill reads a figure the list
+     * under it cannot reach. Unsaid, the last row reads as the oldest payment there is.
+     *
+     * Excluded while loading and beside either banner for the same reason [showEmptyState] is:
+     * a sentence about what is missing from the list, next to "couldn't check", describes the
+     * wrong thing. And never over an empty list, where the count and the emptiness contradict
+     * each other outright.
+     */
+    val showTruncatedNotice: Boolean
+        get() = !loading && error == null && !isOffline &&
+            items.isNotEmpty() && (tabCount ?: 0) > items.size
+}
+
+/** Which of the three figures belongs beside which tab (R7). The screen reads it for all three
+ *  labels; [ConfirmQueueUiState.tabCount] reads it for the open one. */
+internal fun tabCountOf(counts: PaymentCounts, tab: PaymentStatus): Int? = when (tab) {
+    PaymentStatus.PENDING_CONFIRMATION -> counts.pending
+    PaymentStatus.CONFIRMED -> counts.confirmed
+    PaymentStatus.REJECTED -> counts.rejected
+    PaymentStatus.UNKNOWN -> null
 }
 
 fun interface PaymentQueueUseCase {
