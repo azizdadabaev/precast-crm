@@ -297,7 +297,14 @@ fun SignedInShell(
                     // The server bumps tokenVersion on a PIN change, so the current token is dead the
                     // moment this succeeds. Sign out deliberately instead of walking back into the app
                     // and hitting a silent 401.
-                    entry<ChangePin> { k -> ChangePinRoute(forced = k.forced, onDone = onPinChanged) }
+                    entry<ChangePin> { k ->
+                        ChangePinRoute(
+                            forced = k.forced,
+                            onDone = onPinChanged,
+                            // Only the voluntary change has an arrow; the forced one draws none.
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
                 },
             )
         }
