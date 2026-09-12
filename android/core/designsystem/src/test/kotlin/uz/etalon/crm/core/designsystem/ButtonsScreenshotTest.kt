@@ -103,6 +103,10 @@ private fun ButtonSheet() {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The icon-only pill and the same pill mid-save: the fill and the size do not move,
+                // only the glyph becomes the spinner (see DarkButton's `loading`).
+                DarkButton(onClick = {}, leadingIcon = EtalonIcons.Save)
+                DarkButton(onClick = {}, loading = true, leadingIcon = EtalonIcons.Save)
                 DarkButton("Рад этиш", onClick = {}, modifier = Modifier.weight(1f))
                 InverseButton("Сақлаш", onClick = {}, modifier = Modifier.weight(1f))
             }

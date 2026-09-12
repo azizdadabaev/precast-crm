@@ -88,7 +88,9 @@ private fun EtalonButtonBase(
 @Composable
 private fun RowScope.ButtonBody(text: String?, loading: Boolean, leading: ImageVector?, leadingIcon: Int?, color: Color) {
     when {
-        loading -> { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = color); Spacer(Modifier.width(10.dp)) }
+        // The spacer is the gap to the LABEL, so a button with no label must not carry it — an
+        // icon-only DarkButton would otherwise sit its spinner 10 dp left of centre.
+        loading -> { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = color); if (text != null) Spacer(Modifier.width(10.dp)) }
         leadingIcon != null -> { EtalonIcon(leadingIcon, null, size = 18.dp, tint = color); if (text != null) Spacer(Modifier.width(10.dp)) }
         // Kept for the feature screens that still pass a Material vector; phases 2–5 move each of
         // them to `leadingIcon` as they are redrawn.
@@ -158,15 +160,23 @@ fun DangerButton(
     border = null, onDark = true,
 ) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.onDark else EtalonColors.red) }
 
-/** On navy: the quiet half of a pair («Рад этиш», the two icon actions on the summary sheet). */
+/**
+ * On navy: the quiet half of a pair («Рад этиш», the two icon actions on the summary sheet).
+ *
+ * @param loading the same distinction [PrimaryButton] draws, for the same reason: a working button
+ *   keeps its navy2 fill and its onDark content and only loses the click — greying it would say
+ *   «you cannot do this» about the very action just tapped. The spinner replaces [leadingIcon], so
+ *   an icon-only pill (the calculator's «Лойиҳани сақлаш») stays exactly the same size while it
+ *   saves.
+ */
 @Composable
 fun DarkButton(
     text: String? = null, onClick: () -> Unit, modifier: Modifier = Modifier,
-    enabled: Boolean = true, leadingIcon: Int? = null,
+    enabled: Boolean = true, loading: Boolean = false, leadingIcon: Int? = null,
 ) = EtalonButtonBase(
-    onClick = onClick, enabled = enabled, modifier = modifier, height = H_REGULAR, shape = EtalonShapes.pill,
+    onClick = onClick, enabled = enabled && !loading, modifier = modifier, height = H_REGULAR, shape = EtalonShapes.pill,
     fill = EtalonColors.navy2, pressedFill = EtalonColors.navy, border = null, onDark = true,
-) { ButtonBody(text, false, null, leadingIcon, EtalonColors.onDark) }
+) { ButtonBody(text, loading, null, leadingIcon, EtalonColors.onDark) }
 
 /** On navy: the affirmative half — white pill, navy text. Give it `Modifier.weight(1f)`. */
 @Composable
