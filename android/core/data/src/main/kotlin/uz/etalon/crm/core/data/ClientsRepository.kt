@@ -36,9 +36,18 @@ class ClientsRepository @Inject constructor(
      * bar destroys its NavEntry on each tab switch, so an unbounded read would re-download every
      * customer on every switch. [uz.etalon.crm.core.model.ClientPage.total] carries how many
      * matched, so the screen can say when there are more than it holds.
+     *
+     * [sortByTotal] defaults to true: the Clients list's own reason to exist is the same one the
+     * web's `sortBy=totalBooked` serves, ranking customers by what they've actually booked. A
+     * caller doing something else — the calculator's phone lookup, `findByPhone` — can turn it off.
      */
-    suspend fun list(query: String?): Result<ClientPage> =
-        runCatchingCancellable { api.clients(q = query).toDomain() }
+    suspend fun list(query: String?, sortByTotal: Boolean = true): Result<ClientPage> = runCatchingCancellable {
+        api.clients(
+            q = query,
+            sortBy = if (sortByTotal) "totalBooked" else null,
+            sortDir = if (sortByTotal) "desc" else null,
+        ).toDomain()
+    }
 
     suspend fun detail(id: String): Result<ClientDetail> =
         runCatchingCancellable { api.client(id).toDomain() }

@@ -4,7 +4,7 @@ import uz.etalon.crm.core.data.mapper.toDomain
 import uz.etalon.crm.core.image.PreparedImage
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OutboxKind
-import uz.etalon.crm.core.model.PaymentQueueItem
+import uz.etalon.crm.core.model.PaymentQueue
 import uz.etalon.crm.core.model.PaymentRecordInput
 import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.core.network.EtalonApi
@@ -80,8 +80,8 @@ class PaymentsRepository @Inject constructor(
     // no screen calls is dead code. The route is still there for the web. Likewise no `forOrder`
     // — the order cockpit reads its payments off the order detail it already holds.
 
-    suspend fun queue(status: PaymentStatus?): Result<List<PaymentQueueItem>> =
-        runCatchingCancellable { api.payments(orderId = null, status = status?.name).map { it.toDomain(mediaBase) } }
+    suspend fun queue(status: PaymentStatus?): Result<PaymentQueue> =
+        runCatchingCancellable { api.paymentsWithCounts(status = status?.name).toDomain(mediaBase) }
 
     // ── Queued: the server route is withIdempotency-wrapped ───────
 

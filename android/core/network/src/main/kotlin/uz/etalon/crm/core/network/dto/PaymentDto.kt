@@ -68,6 +68,27 @@ data class PaymentRowDto(
     val order: PaymentOrderRefDto? = null,
 )
 
+/**
+ * The `withCounts=1` envelope of `GET /api/payments` — see [uz.etalon.crm.core.network.EtalonApi.paymentsWithCounts].
+ * `items` is the exact same row shape [PaymentRowDto] models; `counts` is only absent when a
+ * caller who does not know about it still reaches this method some other way, which never
+ * happens in practice since `withCounts` defaults to 1 here.
+ */
+@Serializable
+data class PaymentsWithCountsDto(
+    val items: List<PaymentRowDto>,
+    val counts: PaymentCountsDto? = null,
+)
+
+/** `countsFrom` in `src/lib/payment-counts.ts` — one payment count per status, computed with
+ *  every filter except `status` so the three tabs never move while the caller flips between them. */
+@Serializable
+data class PaymentCountsDto(
+    val pending: Int = 0,
+    val confirmed: Int = 0,
+    val rejected: Int = 0,
+)
+
 @Serializable data class PaymentOrderClientRefDto(val name: String)
 
 @Serializable data class PaymentOrderDispatchRefDto(val expectedCollection: String)

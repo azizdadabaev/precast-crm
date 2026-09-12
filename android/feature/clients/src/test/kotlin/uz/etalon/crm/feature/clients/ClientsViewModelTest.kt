@@ -305,7 +305,7 @@ class ClientsViewModelTest {
     )
 
     private fun row(id: String = "c1", name: String = "Навоий Build", phone: String = "998901112233") =
-        ClientSummary(id = id, name = name, phone = phone, address = null, orderCount = 3)
+        ClientSummary(id = id, name = name, phone = phone, address = null, orderCount = 3, totalBooked = Money.ZERO)
 
     private fun detail(orders: List<ClientOrderLine> = emptyList()) = ClientDetail(
         id = "c1", name = "Навоий Build", phone = "998901112233",

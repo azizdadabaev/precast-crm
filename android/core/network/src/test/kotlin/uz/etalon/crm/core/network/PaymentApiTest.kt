@@ -103,6 +103,32 @@ class PaymentApiTest {
         assertEquals("/api/payments?orderId=o1&status=PENDING_CONFIRMATION", server.takeRequest().path)
     }
 
+    // ── paymentsWithCounts: GET /api/payments?withCounts=1 ────────────────────────
+
+    @Test fun `paymentsWithCounts decodes the items-plus-counts envelope`() = runTest {
+        server.enqueue(ok(
+            """{"ok":true,"data":{"items":[{"id":"p1","orderId":"o1","amount":"60.00","method":"CASH","status":"PENDING_CONFIRMATION","recordedAt":"2026-09-02T00:00:00.000Z"}],
+              |"counts":{"pending":3,"confirmed":40,"rejected":1}}}"""
+                .trimMargin().replace("\n", ""),
+        ))
+        val res = api.paymentsWithCounts(status = "PENDING_CONFIRMATION")
+        assertEquals(1, res.items.size)
+        assertEquals(3, res.counts?.pending)
+        assertEquals(40, res.counts?.confirmed)
+        assertEquals(1, res.counts?.rejected)
+        assertEquals("/api/payments?status=PENDING_CONFIRMATION&withCounts=1", server.takeRequest().path)
+    }
+
+    /** `counts` is nullable in [uz.etalon.crm.core.network.dto.PaymentsWithCountsDto] so a response
+     *  carrying no `counts` key at all still decodes — the repository reads that as "unknown", not
+     *  as a fabricated zero. */
+    @Test fun `paymentsWithCounts decodes items with null counts when the server sent none`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":{"items":[]}}"""))
+        val res = api.paymentsWithCounts()
+        assertTrue(res.items.isEmpty())
+        assertNull(res.counts)
+    }
+
     @Test fun `payments list decodes chain-of-custody rows whose actors were never set`() = runTest {
         // The list route IS include-based and does send order — a genuinely empty to-one
         // relation (no collectedByDriver/recordedBy/handedOverTo/confirmedBy, no dispatch) comes

@@ -10,6 +10,9 @@ data class ClientSummary(
     val phone: String,
     val address: String?,
     val orderCount: Int,
+    /** Whole-UZS sum of this client's live (non-cancelled/non-draft) order totals — zero when
+     *  the response carried none, which the create/update rows never do. */
+    val totalBooked: Money,
 )
 
 /**

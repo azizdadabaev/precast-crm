@@ -150,6 +150,19 @@ interface EtalonApi {
     @GET("/api/payments")
     suspend fun payments(@Query("orderId") orderId: String? = null, @Query("status") status: String? = null): List<PaymentRowDto>
 
+    /**
+     * The same `GET /api/payments`, but with `withCounts=1` — which switches the response from the
+     * bare array [payments] reads to `{ items: [...same rows...], counts: { pending, confirmed,
+     * rejected } }`. The three counts are computed with every filter EXCEPT `status`, so they stay
+     * stable across a tab switch. Only the confirm queue's three tabs need them; every other
+     * caller keeps using [payments].
+     */
+    @GET("/api/payments")
+    suspend fun paymentsWithCounts(
+        @Query("status") status: String? = null,
+        @Query("withCounts") withCounts: Int = 1,
+    ): PaymentsWithCountsDto
+
     // `withIdempotency`-wrapped server-side, so the key is REQUIRED here rather than optional:
     // the record screen offers a retry, and a response lost after the row committed would
     // otherwise let one tap write two real payments against the order.
@@ -209,6 +222,10 @@ interface EtalonApi {
      * match on the normalised number (`src/app/api/clients/route.ts:88`), which is the dedup the
      * web calculator's ClientInfoBar does. `q` stays the list screen's search — it matches names
      * and trailing digits, which is the wrong shape for "is this exact number already a customer".
+     *
+     * `sortBy=totalBooked` (paired with `sortDir`) orders the page by each client's live-order
+     * total instead of the server's `createdAt` default — the whitelist this route enforces is
+     * `CLIENT_SORT_FIELDS` in `src/app/api/clients/route.ts`.
      */
     @GET("/api/clients")
     suspend fun clients(
@@ -216,6 +233,8 @@ interface EtalonApi {
         @Query("phone") phone: String? = null,
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = CLIENTS_PAGE_SIZE,
+        @Query("sortBy") sortBy: String? = null,
+        @Query("sortDir") sortDir: String? = null,
     ): ClientsPageDto
 
     @POST("/api/clients")

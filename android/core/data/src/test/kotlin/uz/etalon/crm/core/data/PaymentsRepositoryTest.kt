@@ -10,6 +10,7 @@ import uz.etalon.crm.core.data.mapper.toDomain
 import uz.etalon.crm.core.image.PreparedImage
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OutboxKind
+import uz.etalon.crm.core.model.PaymentCounts
 import uz.etalon.crm.core.model.PaymentMethod
 import uz.etalon.crm.core.model.PaymentRecordInput
 import uz.etalon.crm.core.model.PaymentSource
@@ -45,11 +46,14 @@ private class PayFailingApi : PayStubApi()
 private class PayRecordingApi : PayStubApi() {
     val calls = mutableListOf<String>()
     var row = PaymentRowDto(id = "p1", orderId = "o1", amount = "1000000", method = "CASH", status = "PENDING_CONFIRMATION", recordedAt = "2026-01-01T00:00:00Z")
+    var counts: PaymentCountsDto? = null
 
     override suspend fun recordPayment(body: PaymentRecordRequest, idempotencyKey: String): PaymentRowDto { calls += "recordPayment:${body.orderId}:${body.receiptUrls}:$idempotencyKey"; return row }
     override suspend fun confirmPayment(id: String, body: PaymentConfirmRequest): PaymentRowDto { calls += "confirmPayment:$id"; return row }
     override suspend fun rejectPayment(id: String, body: PaymentRejectRequest): PaymentRowDto { calls += "rejectPayment:$id:${body.reason}"; return row }
-    override suspend fun payments(orderId: String?, status: String?): List<PaymentRowDto> { calls += "payments:$orderId:$status"; return listOf(row) }
+    override suspend fun paymentsWithCounts(status: String?, withCounts: Int): PaymentsWithCountsDto {
+        calls += "paymentsWithCounts:$status:$withCounts"; return PaymentsWithCountsDto(items = listOf(row), counts = counts)
+    }
 }
 
 private class PayNoopOrders : OrdersGateway {
@@ -145,6 +149,26 @@ class PaymentsRepositoryTest {
     @Test fun `an api failure comes back as a Result failure, not an exception`() = runTest {
         val res = PaymentsRepository(PayFailingApi(), PaySpyOutbox(), PayNoopOrders(), PAY_GRANTED, mediaBase = "https://api.example").record(input(), "idem-1")
         assertTrue(res.isFailure)
+    }
+
+    // ── queue: the confirm tabs' counts alongside the rows ───────────────────────
+
+    @Test fun `queue carries the server's counts through, alongside the mapped rows`() = runTest {
+        val api = PayRecordingApi().apply { counts = PaymentCountsDto(pending = 3, confirmed = 40, rejected = 1) }
+        val queue = PaymentsRepository(api, PaySpyOutbox(), PayNoopOrders(), PAY_GRANTED, mediaBase = "https://api.example")
+            .queue(PaymentStatus.PENDING_CONFIRMATION).getOrThrow()
+        assertEquals(1, queue.items.size)
+        assertEquals(PaymentCounts(pending = 3, confirmed = 40, rejected = 1), queue.counts)
+        assertEquals(listOf("paymentsWithCounts:PENDING_CONFIRMATION:1"), api.calls)
+    }
+
+    /** R7: the server not sending counts (an older deploy, in principle) must not fabricate a
+     *  zero — the tabs then show their labels without a number rather than a wrong one. */
+    @Test fun `queue returns null counts when the server did not send any`() = runTest {
+        val api = PayRecordingApi() // counts defaults to null
+        val queue = PaymentsRepository(api, PaySpyOutbox(), PayNoopOrders(), PAY_GRANTED, mediaBase = "https://api.example")
+            .queue(null).getOrThrow()
+        assertNull(queue.counts)
     }
 
     // ── Mapper: driver-collected-with-shortfall vs. in-office-with-none ──────────

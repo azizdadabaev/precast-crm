@@ -77,6 +77,15 @@ data class PaymentQueueItem(
         get() = expectedFromDriver?.let { (it - amount).coerceAtLeastZero() } ?: Money.ZERO
 }
 
+/** The confirm queue's three tab counts — `countsFrom` in `src/lib/payment-counts.ts`, computed
+ *  with every filter except `status` so they stay stable while the owner flips between tabs. */
+data class PaymentCounts(val pending: Int, val confirmed: Int, val rejected: Int)
+
+/** One page of GET /api/payments. [counts] is null when the server was asked without
+ *  `withCounts=1` — R7: the tabs then show their labels without a number rather than a stale or
+ *  fabricated one. */
+data class PaymentQueue(val items: List<PaymentQueueItem>, val counts: PaymentCounts?)
+
 data class Discrepancy(
     val id: String,
     val orderId: String,

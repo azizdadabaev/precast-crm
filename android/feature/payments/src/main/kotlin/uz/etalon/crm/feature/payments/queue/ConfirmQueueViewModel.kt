@@ -344,7 +344,9 @@ class HiltConfirmQueueViewModel @Inject constructor(
     payments: PaymentsRepository,
     permissions: PermissionGate,
 ) : ConfirmQueueViewModel(
-    queue = PaymentQueueUseCase { status -> payments.queue(status) },
+    // `.items` only, for now — PaymentsRepository.queue() carries the three tab counts alongside
+    // the rows (Phase 3 Task 3), but this screen does not yet show them (Task 4).
+    queue = PaymentQueueUseCase { status -> payments.queue(status).map { it.items } },
     confirm = PaymentConfirmUseCase { id, amount, adjustmentNote, action, note ->
         payments.confirm(id, amount, adjustmentNote, action, note)
     },

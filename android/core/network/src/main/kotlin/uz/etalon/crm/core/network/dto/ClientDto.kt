@@ -2,6 +2,8 @@ package uz.etalon.crm.core.network.dto
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import uz.etalon.crm.core.network.BigDecimalSerializer
+import java.math.BigDecimal
 
 /**
  * `_count.orders` — present on every row `GET /api/clients` returns (the route always
@@ -25,6 +27,15 @@ data class ClientRowDto(
      *  row it got back against what it sent to tell a real create from a dedup hit. */
     val notes: String? = null,
     @SerialName("_count") val counts: ClientCountsDto = ClientCountsDto(),
+    /**
+     * Whole-UZS sum of the client's live (non-CANCELED/non-DRAFT) order totals — `attachTotals`
+     * in `src/lib/client-totals.ts`, riding along on every row of the paginated `GET /api/clients`
+     * regardless of sort. A bare JSON number, never a string — `BigDecimalSerializer` reads its
+     * raw literal text, so a genuine number decodes exactly. Defaulted to zero so a response from
+     * an older server (or `POST`/`PATCH`, which sends the raw Prisma row with no such field at
+     * all) still decodes rather than throwing.
+     */
+    @Serializable(with = BigDecimalSerializer::class) val totalBooked: BigDecimal = BigDecimal.ZERO,
 )
 
 /**

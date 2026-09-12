@@ -35,9 +35,11 @@ fun normalizePhone(input: String): String {
 }
 
 /** `GET /api/clients` row. `counts` defaults to zero orders when the response carries no
- *  `_count` at all — see [ClientRowDto]'s own doc for which responses that is. */
+ *  `_count` at all — see [ClientRowDto]'s own doc for which responses that is. `totalBooked`
+ *  defaults to zero the same way, for the same create/update responses. */
 fun ClientRowDto.toDomain() = ClientSummary(
     id = id, name = name, phone = phone, address = address, orderCount = counts.orders,
+    totalBooked = Money(totalBooked),
 )
 
 /** `GET /api/clients?page=…`. `total` is carried through unchanged — it counts the matches, not

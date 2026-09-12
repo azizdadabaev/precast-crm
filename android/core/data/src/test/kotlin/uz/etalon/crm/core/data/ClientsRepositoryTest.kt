@@ -4,9 +4,11 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.ClientInput
+import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.network.CLIENTS_PAGE_SIZE
 import uz.etalon.crm.core.network.dto.*
 import uz.etalon.crm.core.testing.FakeEtalonApi
+import java.math.BigDecimal
 
 /** Every member of [FakeEtalonApi] throws, so ClientFailingApi below needs no overrides at all
  *  and ClientRecordingApi overrides only what it exercises. */
@@ -23,8 +25,8 @@ private class ClientRecordingApi : ClientStubApi() {
     var listResult = ClientsPageDto(rows = emptyList(), total = 0, page = 1, pageSize = 50, pageCount = 1)
     var detailResult = ClientDetailDto(id = "c1", name = "Navoi Build", phone = "998901112233")
 
-    override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int): ClientsPageDto {
-        calls += "clients:$q:$page:$pageSize"; return listResult
+    override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int, sortBy: String?, sortDir: String?): ClientsPageDto {
+        calls += "clients:$q:$page:$pageSize:$sortBy:$sortDir"; return listResult
     }
     override suspend fun createClient(body: ClientWriteRequest): ClientRowDto {
         calls += "createClient:${body.name}:${body.phone}:${body.address}:${body.notes}"; return createResult
@@ -110,7 +112,24 @@ class ClientsRepositoryTest {
         ClientsRepository(api, CLIENT_GRANTED).list("Navoi").getOrThrow()
         // The page arguments are not decoration: without `page` the route answers a bare array of
         // EVERY client row, and this list has no cache to spare the operator the re-download.
-        assertEquals(listOf("clients:Navoi:1:$CLIENTS_PAGE_SIZE"), api.calls)
+        // sortBy/sortDir default on — see the next test for the reason.
+        assertEquals(listOf("clients:Navoi:1:$CLIENTS_PAGE_SIZE:totalBooked:desc"), api.calls)
+    }
+
+    /** The Clients list's whole point is ranking customers by what they've actually booked, the
+     *  same job the web's own `sortBy=totalBooked` does — so `list` defaults to it. */
+    @Test fun `list defaults to sorting by total booked, descending`() = runTest {
+        val api = ClientRecordingApi()
+        ClientsRepository(api, CLIENT_GRANTED).list(null).getOrThrow()
+        assertEquals(listOf("clients:null:1:$CLIENTS_PAGE_SIZE:totalBooked:desc"), api.calls)
+    }
+
+    /** A caller doing something other than ranking customers — none exists yet, but the seam must
+     *  work — can turn the sort off and get the server's plain default order. */
+    @Test fun `sortByTotal false sends no sort at all`() = runTest {
+        val api = ClientRecordingApi()
+        ClientsRepository(api, CLIENT_GRANTED).list(null, sortByTotal = false).getOrThrow()
+        assertEquals(listOf("clients:null:1:$CLIENTS_PAGE_SIZE:null:null"), api.calls)
     }
 
     /** `total` counts the MATCHES server-side, not the rows on this page — the screen needs the
@@ -201,7 +220,7 @@ class ClientsRepositoryTest {
     @Test fun `findByPhone normalises before asking and returns the exact match only`() = runTest {
         var asked: String? = null
         val api = object : FakeEtalonApi() {
-            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int): ClientsPageDto {
+            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int, sortBy: String?, sortDir: String?): ClientsPageDto {
                 asked = phone
                 return ClientsPageDto(rows = listOf(row(phone = "998901112233")), total = 1, page = 1, pageSize = 50, pageCount = 1)
             }
@@ -213,7 +232,7 @@ class ClientsRepositoryTest {
 
     @Test fun `a prefix match that is not the same number is not a match`() = runTest {
         val api = object : FakeEtalonApi() {
-            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int) =
+            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int, sortBy: String?, sortDir: String?) =
                 ClientsPageDto(rows = listOf(row(phone = "998901112234")), total = 1, page = 1, pageSize = 50, pageCount = 1)
         }
         assertNull(repo(api).findByPhone("998901112233").getOrThrow())
@@ -221,7 +240,7 @@ class ClientsRepositoryTest {
 
     @Test fun `no rows at all is simply no match, not an error`() = runTest {
         val api = object : FakeEtalonApi() {
-            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int) =
+            override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int, sortBy: String?, sortDir: String?) =
                 ClientsPageDto(rows = emptyList(), total = 0, page = 1, pageSize = 50, pageCount = 1)
         }
         assertNull(repo(api).findByPhone("998901112233").getOrThrow())
@@ -256,5 +275,25 @@ class ClientsRepositoryTest {
         }
         val page = ClientsRepository(api, CLIENT_GRANTED).list(null).getOrThrow()
         assertEquals(0, page.items.single().orderCount)
+    }
+
+    @Test fun `a row's totalBooked maps to Money exactly`() = runTest {
+        val row = ClientRowDto(id = "c1", name = "Navoi Build", phone = "998901112233", totalBooked = BigDecimal("12345679"))
+        val api = ClientRecordingApi().apply {
+            listResult = ClientsPageDto(rows = listOf(row), total = 1, page = 1, pageSize = 50, pageCount = 1)
+        }
+        val page = ClientsRepository(api, CLIENT_GRANTED).list(null).getOrThrow()
+        assertEquals(Money(BigDecimal("12345679")), page.items.single().totalBooked)
+    }
+
+    /** `POST`/`PATCH /api/clients` send the raw Prisma row with no `totalBooked` at all — the
+     *  default must land on zero, mirroring the `_count` default just above. */
+    @Test fun `a row with no totalBooked at all still maps to zero`() = runTest {
+        val row = ClientRowDto(id = "c1", name = "Navoi Build", phone = "998901112233")
+        val api = ClientRecordingApi().apply {
+            listResult = ClientsPageDto(rows = listOf(row), total = 1, page = 1, pageSize = 50, pageCount = 1)
+        }
+        val page = ClientsRepository(api, CLIENT_GRANTED).list(null).getOrThrow()
+        assertEquals(Money.ZERO, page.items.single().totalBooked)
     }
 }

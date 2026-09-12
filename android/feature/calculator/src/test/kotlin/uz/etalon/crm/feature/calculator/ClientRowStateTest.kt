@@ -50,7 +50,7 @@ class ClientRowStateTest {
         permissions = PermissionGate { true },
         clients = ClientsRepository(
             api = object : FakeEtalonApi() {
-                override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int) = clients(phone)
+                override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int, sortBy: String?, sortDir: String?) = clients(phone)
             },
             permissions = PermissionGate { true },
         ),

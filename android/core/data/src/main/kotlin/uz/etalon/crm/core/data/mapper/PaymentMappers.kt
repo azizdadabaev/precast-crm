@@ -4,12 +4,16 @@ import uz.etalon.crm.core.model.CustodyChain
 import uz.etalon.crm.core.model.Discrepancy
 import uz.etalon.crm.core.model.DiscrepancyStatus
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.PaymentCounts
 import uz.etalon.crm.core.model.PaymentMethod
+import uz.etalon.crm.core.model.PaymentQueue
 import uz.etalon.crm.core.model.PaymentQueueItem
 import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.core.network.MediaUrl
 import uz.etalon.crm.core.network.dto.DiscrepancyDto
+import uz.etalon.crm.core.network.dto.PaymentCountsDto
 import uz.etalon.crm.core.network.dto.PaymentRowDto
+import uz.etalon.crm.core.network.dto.PaymentsWithCountsDto
 import java.time.Instant
 
 /**
@@ -40,6 +44,16 @@ fun PaymentRowDto.toDomain(mediaBase: String) = PaymentQueueItem(
     receiptUrls = receipts.mapNotNull { MediaUrl.absolute(mediaBase, it.imageUrl) },
     orderReceiptUrls = order?.receipts.orEmpty().mapNotNull { MediaUrl.absolute(mediaBase, it.imageUrl) },
     rejectionReason = rejectionReason,
+)
+
+fun PaymentCountsDto.toDomain() = PaymentCounts(pending = pending, confirmed = confirmed, rejected = rejected)
+
+/** `GET /api/payments?withCounts=1`. [PaymentsWithCountsDto.counts] is only ever null when a
+ *  caller reaches this route without `withCounts=1`, which [uz.etalon.crm.core.data.PaymentsRepository.queue]
+ *  never does — see [PaymentQueue]'s own doc for what a null there means to the confirm queue. */
+fun PaymentsWithCountsDto.toDomain(mediaBase: String) = PaymentQueue(
+    items = items.map { it.toDomain(mediaBase) },
+    counts = counts?.toDomain(),
 )
 
 /**

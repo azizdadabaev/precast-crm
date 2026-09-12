@@ -46,6 +46,41 @@ class ClientApiTest {
         assertEquals(1, page.total)
     }
 
+    /** `totalBooked` rides along on every paginated row as a bare JSON NUMBER — never a quoted
+     *  string — because `BigDecimalSerializer` reads its raw literal text. */
+    @Test fun `clients list decodes totalBooked as a bare json number`() = runTest {
+        server.enqueue(ok(
+            """{"ok":true,"data":{"rows":[{"id":"c1","name":"Client","phone":"998901112233","totalBooked":12345679}],
+              |"total":1,"page":1,"pageSize":50,"pageCount":1,"sources":[]}}"""
+                .trimMargin().replace("\n", ""),
+        ))
+        val page = api.clients(q = "Client")
+        assertEquals(java.math.BigDecimal("12345679"), page.rows[0].totalBooked)
+    }
+
+    /** `POST`/`PATCH /api/clients` send the raw Prisma row with no `totalBooked` at all — same
+     *  reason `_count` defaults, see the `createClient` test below. */
+    @Test fun `clients list decodes a row with no totalBooked key as zero`() = runTest {
+        server.enqueue(ok(
+            """{"ok":true,"data":{"rows":[{"id":"c1","name":"Client","phone":"998901112233"}],
+              |"total":1,"page":1,"pageSize":50,"pageCount":1,"sources":[]}}"""
+                .trimMargin().replace("\n", ""),
+        ))
+        val page = api.clients(q = "Client")
+        assertEquals(java.math.BigDecimal.ZERO, page.rows[0].totalBooked)
+    }
+
+    /** `sortBy=totalBooked&sortDir=desc` — the whitelist `CLIENT_SORT_FIELDS` in
+     *  `src/app/api/clients/route.ts` enforces, sent only when a caller asks for it. */
+    @Test fun `clients sends sortBy and sortDir only when given`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":{"rows":[],"total":0,"page":1,"pageSize":50,"pageCount":1,"sources":[]}}"""))
+        api.clients(q = "Client", sortBy = "totalBooked", sortDir = "desc")
+        assertEquals(
+            "/api/clients?q=Client&page=1&pageSize=$CLIENTS_PAGE_SIZE&sortBy=totalBooked&sortDir=desc",
+            server.takeRequest().path,
+        )
+    }
+
     /**
      * `page` is what opts `GET /api/clients` into the paginated envelope at all — without it the
      * route answers a bare array of EVERY client (`isPaginated` in src/lib/table-query.ts). This

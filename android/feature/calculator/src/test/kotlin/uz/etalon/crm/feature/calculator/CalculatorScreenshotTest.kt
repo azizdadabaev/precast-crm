@@ -189,7 +189,7 @@ class CalculatorScreenshotTest {
         permissions = PermissionGate { canWrite },
         clients = ClientsRepository(
             api = object : FakeEtalonApi() {
-                override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int) =
+                override suspend fun clients(q: String?, phone: String?, page: Int, pageSize: Int, sortBy: String?, sortDir: String?) =
                     ClientsPageDto(rows = emptyList(), total = 0, page = 1, pageSize = 50, pageCount = 1)
             },
             permissions = PermissionGate { canWrite },
