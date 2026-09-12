@@ -12,13 +12,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -163,8 +167,19 @@ private fun dial(ctx: Context, phone: String) {
  * plain `Box`: it pads the status bar itself, the list reserves the pill's band plus
  * [StickyActionBarDefaults.height] at the bottom, and the action bar is bottom-aligned inside the
  * box with the pill's band beneath it.
+ *
+ * @param barVisible whether the sticky [ActionBar] is drawn at all. It steps aside for the
+ *   keyboard, the same rule the calculator's summary sheet follows: the app draws edge to edge, so
+ *   the window's own `adjustResize` is inert and the root's `imePadding` is what shortens the
+ *   screen by the keyboard. The bar is bottom-aligned INSIDE that shortened box, so it would land
+ *   directly on top of the «Шарҳлар» field the operator is typing into — over the very words being
+ *   written. The comment card carries its own «Юбориш», and the keyboard's own Send key posts the
+ *   note, so nothing is out of reach while the bar is away.
+ *
+ *   Defaulted from the window and passed in only by the tests — Robolectric reports the ime inset
+ *   as absent whatever is focused, so this is the only way the rule can be asserted at all.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun OrderDetailScreen(
     r: Resource<OrderDetail>,
@@ -191,6 +206,7 @@ fun OrderDetailScreen(
     onCommentDraftChange: (String) -> Unit = {},
     onPostComment: () -> Unit = {},
     onRetryComments: () -> Unit = {},
+    barVisible: Boolean = !WindowInsets.isImeVisible,
 ) {
     val o = r.dataOrNull
     val ctx = LocalContext.current
@@ -221,7 +237,11 @@ fun OrderDetailScreen(
         null
     }
 
-    Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding()) {
+    // `imePadding` on the root, not on the list: the sticky bar is bottom-aligned inside this box
+    // rather than laid out under the list, so padding the list alone would leave the bar — and the
+    // comment field's own «Юбориш» beneath it — behind the keyboard. The whole screen shortens, and
+    // the focused field is scrolled into what is left of it.
+    Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding().imePadding()) {
         PullToRefreshBox(
             isRefreshing = r is Resource.Loading && o == null,
             onRefresh = onRefresh,
@@ -327,7 +347,9 @@ fun OrderDetailScreen(
                 if (o.events.isNotEmpty()) item { EventsCard(o.events) }
             }
         }
-        if (o != null) ActionBar(step, door, onLoadTruck, onDeliveryProof, onOpenShipments, onRecordPayment)
+        if (o != null && barVisible) {
+            ActionBar(step, door, onLoadTruck, onDeliveryProof, onOpenShipments, onRecordPayment)
+        }
     }
 
     lightboxAt?.let { at -> Lightbox(photos, at, onDismiss = { lightboxAt = null }) }

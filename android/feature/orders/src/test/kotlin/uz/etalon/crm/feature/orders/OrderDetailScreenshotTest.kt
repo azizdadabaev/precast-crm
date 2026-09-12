@@ -222,6 +222,7 @@ class OrderDetailScreenshotTest {
         who: Me = me,
         comments: Resource<List<OrderComment>> = Resource.Success(emptyList()),
         commentDraft: String = "",
+        imeVisible: Boolean = false,
     ) {
         rule.setContent {
             EtalonTheme {
@@ -232,6 +233,7 @@ class OrderDetailScreenshotTest {
                         onOpenShipments = {}, onOpenLocation = {}, onRecordPayment = {},
                         onDeletePhoto = {}, onRetryUpload = {}, onCancelUpload = {},
                         comments = comments, commentDraft = commentDraft,
+                        barVisible = !imeVisible,
                     )
                 }
             }
@@ -541,6 +543,33 @@ class OrderDetailScreenshotTest {
             "«Барчаси» ends at ${card.bottom}, the blocked bar starts at ${button.top}",
             card.bottom <= button.top,
         )
+    }
+
+    /**
+     * I1. «Шарҳлар» is near the bottom of the list and the sticky bar is bottom-aligned over it, so
+     * with the keyboard up the bar sat on the field being typed into — and on the card's own
+     * «Юбориш» under it. The root's `imePadding` shortens the screen and the bar steps aside; the
+     * keyboard's own Send key and that «Юбориш» are what post the note meanwhile.
+     *
+     * The IME cannot be raised under Robolectric — `WindowInsets.isImeVisible` reports absent
+     * whatever is focused — so the screen is driven through `barVisible`, which is exactly what
+     * that inset feeds on a phone.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theStickyBarIsNotDrawnWhileTheKeyboardIsUp() {
+        show(order(), imeVisible = true)
+        rule.onNode(hasText("Тўлов қайд қилиш")).assertDoesNotExist()
+        // «Етказилди» is the «Етказиш» card's third timeline column as well as the bar's secondary
+        // button, so the ONE left is the timeline's and the bar's is the one that went.
+        rule.onAllNodes(hasText("Етказилди")).assertCountEquals(1)
+    }
+
+    /** And the same order with the keyboard down: both of the bar's buttons are back. */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun theStickyBarReturnsWhenTheKeyboardCloses() {
+        show(order())
+        rule.onNode(hasText("Тўлов қайд қилиш")).assertIsDisplayed()
+        rule.onAllNodes(hasText("Етказилди")).assertCountEquals(2)
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
