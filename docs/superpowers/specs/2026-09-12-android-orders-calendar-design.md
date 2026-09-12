@@ -22,7 +22,7 @@ The web already answers both (`src/components/orders/CapacityCalendar.tsx` + the
 One screen, `OrdersListRoute`, gains a navy `SegmentedControl(fill = true)` under the subtitle: **Рўйхат** | **Жадвал**. The chosen view persists per operator (DataStore) and is restored on the next open.
 
 - Title «Буюртмалар». Subtitle: list → «N буюртма · X м²» (as today); calendar → «Жойлаштириш жадвали · кун сиғими м²».
-- Header action: list → «+ Янги» (compact primary, opens the calculator; `calculator.use` gate as today); calendar → the export icon button (`EtalonIcons.Download`, 40 dp circle) — visible only when the operator holds the permission the web route checks (`src/app/api/orders/export/route.ts`, `withPermission(...)`); otherwise the slot is empty.
+- Header action: list → «+ Янги» (compact primary, opens the calculator; `calculator.use` gate as today); calendar → the export icon button (`EtalonIcons.Download`, 40 dp circle) — visible only when the operator holds `order.exportBackup` (the permission `src/app/api/orders/export/route.ts` checks); otherwise the slot is empty.
 - Shared state: `query`, `status`, `payment`, `day` already live in `OrdersListViewModel` (`OrdersListUiState`). The calendar reads and writes the same `day`; switching views never resets any of them (acceptance §9).
 
 ## 3. Рўйхат (list)
@@ -79,7 +79,7 @@ White card, radius `xl` (16), hairline, `cardMargin` sides.
 
 ## 5. Export (calendar header)
 
-Tap → `GET /api/orders/export` (streams `orders-backup-<stamp>.xlsx`, `Content-Disposition: attachment`) → the file is written to the app's cache via the existing `FileProvider` (the quote-PNG share path) → the system share sheet. A spinner replaces the icon while downloading; failure → `ErrorBanner` «Экспорт қилиб бўлмади» with retry. Never built on the client. The route is owner-scoped on the web; Android shows the button only with that permission (read the route's `withPermission` argument at implementation time — do not guess).
+Tap → `GET /api/orders/export` (streams `orders-backup-<stamp>.xlsx`, `Content-Disposition: attachment`) → the file is written to the app's cache via the existing `FileProvider` (the quote-PNG share path) → the system share sheet. A spinner replaces the icon while downloading; failure → `ErrorBanner` «Экспорт қилиб бўлмади» with retry. Never built on the client. The route is gated by `order.exportBackup`; Android shows the button only with that permission.
 
 ## 6. Tiers and labels (one source)
 
