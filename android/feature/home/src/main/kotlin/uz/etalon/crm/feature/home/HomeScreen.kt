@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,15 +31,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.Avatar
+import uz.etalon.crm.core.designsystem.components.BrandMark
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.EtalonIconButton
 import uz.etalon.crm.core.designsystem.components.KpiAccent
@@ -74,9 +70,6 @@ import java.time.Instant
  * this screen the 4-pt grid does not name. Named once here rather than inlined at five call sites.
  */
 private val SECTION_GAP = 14.dp
-
-/** The wordmark's own gap to the brand block; 10 dp, off the prototype, is not on the grid either. */
-private val BRAND_GAP = 10.dp
 
 /** The sparkline draws half a year — six bars is what fits a 210 dp card without crowding. */
 private const val SPARKLINE_MONTHS = 6
@@ -198,19 +191,7 @@ private fun AppBarRow(me: Me, hasPending: Boolean, onOpenOutbox: () -> Unit, onO
     Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.headerMargin),
     verticalAlignment = Alignment.CenterVertically,
 ) {
-    Box(
-        Modifier.size(34.dp).clip(EtalonShapes.md)
-            .background(Brush.linearGradient(listOf(EtalonColors.indigo, EtalonColors.indigoTint))),
-    )
-    Spacer(Modifier.width(BRAND_GAP))
-    Column {
-        Text(
-            stringResource(R.string.home_brand),
-            style = EtalonType.titleSm.copy(fontWeight = FontWeight.W800, fontSize = 14.sp),
-            color = EtalonColors.ink,
-        )
-        Text(stringResource(R.string.home_tagline), style = EtalonType.meta, color = EtalonColors.ink2)
-    }
+    BrandMark()
     Spacer(Modifier.weight(1f))
     // A rounded square, not a circle: `2b-home.png` draws the bell in a 36 dp `md` box and keeps
     // the pill shape for the avatar beside it, so the two do not read as a pair of buttons.

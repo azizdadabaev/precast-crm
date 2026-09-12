@@ -1,7 +1,5 @@
 <resources>
-    <!-- The app bar row. «ETALON» is the wordmark and is the only Latin on the screen (R4). -->
-    <string name="home_brand">ETALON</string>
-    <string name="home_tagline">Йиғма монолит</string>
+    <!-- The app bar row. The wordmark itself lives in the design system (BrandMark). -->
     <string name="home_title">Бошқарув</string>
     <string name="home_subtitle_suffix">барча буюртмалар бир жойда</string>
     <string name="home_kpi_receivables">Қарздорлик</string>

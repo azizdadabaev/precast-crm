@@ -102,6 +102,29 @@ class ControlsScreenshotTest {
             )
         }
     }
+
+    /**
+     * What `fill = true` claims, in numbers rather than in a picture: the track spans its parent —
+     * 379 dp inside a 411 dp frame's 16 dp card margins — and the tabs divide it evenly, so the
+     * selected pill does not move when the operator switches tabs. Rounding may hand one tab a
+     * single extra pixel; anything more means the items went back to hugging their labels.
+     */
+    @Test fun aFilledTrackSpansTheCardAndSplitsItEvenly() {
+        rule.setContent {
+            EtalonTheme {
+                Column(Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.cardMargin)) {
+                    SegmentedControl(PAYMENT_SEGMENTS, selectedIndex = 0, onSelect = {}, onNavy = false, fill = true)
+                }
+            }
+        }
+        val widths = rule.onAllNodes(hasClickAction(), useUnmergedTree = true)
+            .fetchSemanticsNodes().map { it.size.width }
+        assertEquals(PAYMENT_SEGMENTS.size, widths.size)
+        assertTrue("the tabs are not equal width: $widths", widths.max() - widths.min() <= 1)
+        // The track is the three items plus its own 4 dp of padding on each side.
+        val trackDp = widths.sum() / rule.density.density + 8f
+        assertTrue("the track measures %.1f dp, not the card's 379".format(trackDp), kotlin.math.abs(trackDp - 379f) <= 1f)
+    }
 }
 
 @Composable
@@ -146,6 +169,13 @@ private fun ControlsSheet() = Column(
         }
         Caption("SegmentedControl · саҳифада", EtalonColors.ink2)
         SegmentedControl(PAYMENT_SEGMENTS, selectedIndex = 0, onSelect = {}, onNavy = false)
+        // `2b-payments.png`'s own filter: the track spans the page — 379 dp inside the 16 dp card
+        // margins of a 411 dp frame — and the three tabs split it in equal thirds, so the white
+        // pill lands in the same place whichever one is on. The second copy has «Тасдиқланган»
+        // selected, which is the widest label: if equal weight cost anything, it would clip here.
+        Caption("SegmentedControl · саҳифада, тўлиқ кенглик", EtalonColors.ink2)
+        SegmentedControl(PAYMENT_SEGMENTS, selectedIndex = 0, onSelect = {}, onNavy = false, fill = true)
+        SegmentedControl(PAYMENT_SEGMENTS, selectedIndex = 1, onSelect = {}, onNavy = false, fill = true)
     }
 }
 

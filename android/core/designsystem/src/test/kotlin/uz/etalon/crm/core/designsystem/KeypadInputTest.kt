@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.designsystem.components.applyBackspace
 import uz.etalon.crm.core.designsystem.components.applyDigit
+import uz.etalon.crm.core.designsystem.components.moneyEcho
 
 class KeypadInputTest {
     @Test fun `digits append`() {
@@ -38,5 +39,24 @@ class KeypadInputTest {
     @Test fun `a comma on an empty pad starts from an implied zero, and a second comma is refused`() {
         assertEquals("0,", applyDigit("", ',', allowDecimal = true))
         assertEquals("0,", applyDigit("0,", ',', allowDecimal = true))
+    }
+
+    /**
+     * The echo over a money keypad is the one figure an operator checks against a bank slip, and
+     * they check it by digit groups. The separator is `formatMoney`'s U+202F, spelled as an escape
+     * here for the same reason it is spelled as one there: a literal is invisible in a diff.
+     */
+    @Test fun `a money echo groups its digits`() {
+        assertEquals("0", moneyEcho(""))
+        assertEquals("150", moneyEcho("150"))
+        assertEquals("4\u202F000\u202F000", moneyEcho("4000000"))
+        assertEquals("185\u202F000\u202F000", moneyEcho("185000000"))
+    }
+
+    /** Grouping rounds to whole UZS, so it must not touch a number the thumb has not finished:
+     *  «12,» would come back as «12» and eat the separator the moment it was typed. */
+    @Test fun `a money echo leaves a half-typed decimal alone`() {
+        assertEquals("12,", moneyEcho("12,"))
+        assertEquals("12,5", moneyEcho("12,5"))
     }
 }

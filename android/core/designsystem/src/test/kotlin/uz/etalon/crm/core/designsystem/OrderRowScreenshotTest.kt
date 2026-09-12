@@ -57,15 +57,18 @@ private data class Sample(
     val total: String,
     val debt: String?,
     val paid: String? = PAID,
+    /** The clients-list line: what the row says under the amount when the money says nothing. */
+    val trailing: String? = null,
 )
 
 /**
- * `2b-orders.png`'s own rows, with four additions the prototype's orders list does not show and a
+ * `2b-orders.png`'s own rows, with five additions the prototype's orders list does not show and a
  * reviewer needs: a CANCELED row (the fifth tag family, and the one row with **no second line** —
  * neither «қолди …» nor «тўланган» is true of an order that was called off), a second CANCELED row
  * whose client name is long enough that the title has to ellipsize while the amount column keeps
- * its full width, a LOADED row (the sixth family), and the untagged row Home's «Бугунги етказиш»
- * sheet draws, whose meta line stands alone where the tag row was.
+ * its full width, a LOADED row (the sixth family), the untagged row Home's «Бугунги етказиш»
+ * sheet draws, whose meta line stands alone where the tag row was, and the clients-list row that
+ * puts a `trailing` line where the payment state would be.
  */
 private val SAMPLES = listOf(
     Sample("Fergana Dom", OrderStatus.PLACED, "№ 09−0005 · 36,5 м²", "6210000.00", "6210000.00"),
@@ -79,6 +82,13 @@ private val SAMPLES = listOf(
         "№ 08−0002 · 42,6 м²", "4947920.00", null, paid = null,
     ),
     Sample("BuildPro Group", null, "Тошкент · Мирзо-Улуғбек · 42,6 м²", "7340840.00", "4340840.00"),
+    // §3.6's client row: the amount is a lifetime total, so neither «қолди …» nor «тўланган» is a
+    // true thing to write under it. `trailing` is what stands there instead, and it must read as
+    // quiet meta — the same ink3 / onDarkMuted the meta line above uses — not as a payment state.
+    Sample(
+        "Каримов Акмал", null, "+998 90 481 33 30 · Тошкент", "18420000.00", null,
+        paid = null, trailing = "1 буюртма",
+    ),
 )
 
 /**
@@ -91,7 +101,7 @@ private val SAMPLES = listOf(
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 // Tall enough for both grounds to show every sample: the frame grows with SAMPLES, and a row that
 // falls off the bottom is a row no reviewer checks.
-@Config(sdk = [36], qualifiers = "w411dp-h1250dp")
+@Config(sdk = [36], qualifiers = "w411dp-h1380dp")
 class OrderRowScreenshotTest {
     @get:Rule val rule = createComposeRule()
 
@@ -129,6 +139,7 @@ private fun Rows(onDark: Boolean) = SAMPLES.forEach { s ->
         debtLabel = debtLabel,
         onDark = onDark,
         onClick = {},
+        trailing = s.trailing?.let { line -> { Text(line, maxLines = 1) } },
     )
 }
 

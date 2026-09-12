@@ -159,6 +159,21 @@ class StatusChipMappingTest {
         ).forEach { assertEquals(orderStatusLabel(it), orderStatusShortLabel(it), "$it should fall back") }
     }
 
+    /**
+     * A draft is a state the business has a word for. It used to borrow «Номаълум», which says the
+     * app failed to read the status rather than that nothing has been placed yet — and phase 3's
+     * clients and payments lists put unplaced calculations next to real orders, where that reads as
+     * a bug. Short and long are the same word: «Лойиҳа» already fits a row tag.
+     */
+    @Test fun `a draft says Лойиҳа, and only a genuinely unknown status says Номаълум`() {
+        assertEquals(R.string.ds_status_draft, orderStatusLabel(OrderStatus.DRAFT))
+        assertEquals(R.string.ds_status_draft, orderStatusShortLabel(OrderStatus.DRAFT))
+        assertNotEquals(R.string.status_unknown, orderStatusLabel(OrderStatus.DRAFT))
+        assertEquals(R.string.status_unknown, orderStatusLabel(OrderStatus.UNKNOWN))
+        // The family is unchanged: a draft is still the quiet neutral tag, not a new colour.
+        assertEquals(TagFamily.NEUTRAL, OrderStatus.DRAFT.family())
+    }
+
     /** The six chips are shims now; the tone tables they used to read are still the ones the
      *  stripe cards read, so both vocabularies have to stay reachable and in step. */
     @Test fun `the old tone table and the new family table agree on the positive and danger ends`() {

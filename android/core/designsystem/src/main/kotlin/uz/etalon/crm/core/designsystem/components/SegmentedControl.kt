@@ -2,7 +2,9 @@ package uz.etalon.crm.core.designsystem.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
@@ -30,7 +32,8 @@ private val ITEM_HEIGHT = 30.dp
 
 /**
  * §2's switch: a pill track carrying pill items, the active one inverted to white with navy text.
- * Items hug their own label — they are not equal-width — which is how `2b-payments.png` draws it.
+ * Items hug their own label by default — they are not equal-width — which is how §3.2's header
+ * switch draws it. [fill] is the other case, the full-width payments filter.
  *
  * D7 vs the drawn geometry: each item reserves the 48 dp slot
  * ([minimumInteractiveComponentSize]) while painting 30, so the item overhangs the 38 dp track by
@@ -40,6 +43,11 @@ private val ITEM_HEIGHT = 30.dp
  *
  * @param onNavy the track sits on a navy sheet, so the track itself is navy2 (§3.2's «Рўйхат»
  * header). False = on the light page, where the track is navy (§3.5's payments filter).
+ * @param fill the three-way payments filter of `2b-payments.png`: the track spans the page and the
+ * items split it in equal thirds, so the selected pill lands in the same place whichever tab is on
+ * and the row reads as one control rather than three words that happen to be adjacent. Off by
+ * default — the header switch beside a section title must still hug its own labels, because a
+ * full-width track there would push the title out of the row.
  */
 @Composable
 fun SegmentedControl(
@@ -48,8 +56,10 @@ fun SegmentedControl(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
     onNavy: Boolean = true,
+    fill: Boolean = false,
 ) = Row(
     modifier
+        .then(if (fill) Modifier.fillMaxWidth() else Modifier)
         .height(TRACK_HEIGHT)
         .background(if (onNavy) EtalonColors.navy2 else EtalonColors.navy, EtalonShapes.pill)
         .padding(horizontal = 4.dp),
@@ -60,6 +70,7 @@ fun SegmentedControl(
         val fg = if (active) EtalonColors.navy else EtalonColors.onDark.copy(alpha = 0.7f)
         Row(
             Modifier
+                .then(if (fill) Modifier.weight(1f) else Modifier)
                 .minimumInteractiveComponentSize()
                 .height(ITEM_HEIGHT)
                 .clip(EtalonShapes.pill)
@@ -73,6 +84,9 @@ fun SegmentedControl(
                     interactionSource = remember { MutableInteractionSource() },
                 ) { onSelect(i) }
                 .padding(horizontal = 12.dp),
+            // An equal-weight item is wider than its label, so the label has to be centred in it;
+            // a hugging item is exactly its label and Start is the same picture with less work.
+            horizontalArrangement = if (fill) Arrangement.Center else Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(item.label, style = EtalonType.labelSm, color = fg, maxLines = 1)

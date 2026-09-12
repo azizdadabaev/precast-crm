@@ -38,7 +38,10 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.etalonRipple
+import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.ui.format.MONEY_UNIT
+import uz.etalon.crm.core.ui.format.formatMoney
+import java.math.BigDecimal
 
 private const val MAX_DIGITS = 12
 
@@ -55,6 +58,25 @@ fun applyDigit(current: String, digit: Char, allowDecimal: Boolean): String = wh
 }
 
 fun applyBackspace(current: String): String = current.dropLast(1)
+
+/**
+ * What the echo above the keys reads while a **sum** is being typed. Pure, so the grouping rule is
+ * unit-tested rather than photographed.
+ *
+ * A nine-digit sum entered ungrouped is unreadable — «185000000» is the one figure on the screen an
+ * operator has to check against a bank slip, and they check it by digit groups. [formatMoney] does
+ * the grouping (D8's thin space); nothing here writes a separator itself.
+ *
+ * While a decimal is open the raw string stands: `formatMoney` rounds to whole UZS, so it would
+ * swallow «12,» and «12,5» the moment they were typed and the keypad would fight the thumb. Tiyin
+ * is not money anyone enters here anyway — the decimal exists for м² on the calculator's keypad,
+ * which is not a money field and never reaches this branch.
+ */
+internal fun moneyEcho(value: String): String = when {
+    value.isEmpty() -> "0"
+    value.any { !it.isDigit() } -> value
+    else -> formatMoney(Money(BigDecimal(value)))
+}
 
 /**
  * Amount and count entry without a soft keyboard: the operator is wearing gloves
@@ -87,7 +109,7 @@ fun NumericKeypad(
                 Spacer(Modifier.width(6.dp))
             }
             Text(
-                value.ifEmpty { "0" },
+                if (suffix == MONEY_UNIT) moneyEcho(value) else value.ifEmpty { "0" },
                 style = EtalonType.amountLg,
                 color = EtalonColors.ink,
                 modifier = Modifier.weight(1f),

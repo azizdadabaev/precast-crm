@@ -48,7 +48,10 @@ fun orderStatusLabel(s: OrderStatus): Int = when (s) {
     OrderStatus.DISPATCHED -> R.string.status_dispatched
     OrderStatus.DELIVERED -> R.string.status_delivered
     OrderStatus.CANCELED -> R.string.status_canceled
-    OrderStatus.DRAFT, OrderStatus.UNKNOWN -> R.string.status_unknown
+    // A draft is not an unknown state. Phase 3's clients and payments screens list unplaced
+    // calculations beside real orders, and «Номаълум» there reads as data the app failed to load.
+    OrderStatus.DRAFT -> R.string.ds_status_draft
+    OrderStatus.UNKNOWN -> R.string.status_unknown
 }
 
 /** Row-sized wording from the prototype (`2b-orders.png`); falls back to the full label where the

@@ -6,6 +6,10 @@
     <string name="status_delivered">Етказилган</string>
     <string name="status_canceled">Бекор қилинган</string>
     <string name="status_unknown">Номаълум</string>
+    <!-- A calculation that has not been placed yet. It used to borrow «Номаълум», which said the
+         opposite of the truth: a draft is a known state, it is simply not an order yet. Same word
+         short and long — «Лойиҳа» already fits a row tag. -->
+    <string name="ds_status_draft">Лойиҳа</string>
     <!-- Row-sized forms from the prototype (2b-orders.png); the full words above are unchanged
          and stay in use on panels and detail screens. -->
     <string name="ds_status_placed_short">Қабул</string>
@@ -51,6 +55,10 @@
     <string name="ds_search_clear">Тозалаш</string>
     <!-- DetailPanel's two header IconButtons (§2). Content descriptions only — neither button
          carries a visible label. -->
+    <!-- BrandMark, moved out of :feature:home so Home and the login screen draw one wordmark.
+         «ETALON» is the trademark and stays in Latin; the tagline is the Uzbek it always was. -->
+    <string name="ds_brand">ETALON</string>
+    <string name="ds_brand_tagline">Йиғма монолит</string>
     <string name="ds_cd_back">Орқага</string>
     <string name="ds_cd_call">Қўнғироқ қилиш</string>
     <!-- «маълумот», not «расм»: the outbox carries a queued PLACE_ORDER row as well as photos

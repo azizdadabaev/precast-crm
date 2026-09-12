@@ -46,6 +46,24 @@ import uz.etalon.crm.core.designsystem.theme.etalonShadow
 private val H_REGULAR = 46.dp
 private val H_COMPACT = 36.dp
 
+/** [TonalButton] is the one button §3 draws off the 46/36 pair: 48 dp where it stands alone on a
+ *  form, 32 dp where it is the quiet offer at the end of a row. */
+private val H_TONAL_REGULAR = 48.dp
+private val H_TONAL_COMPACT = 32.dp
+
+/**
+ * A compact pill is tighter than the regular one on every axis, not only in height: 13 dp of side
+ * padding, a 16 dp glyph and a 6 dp gap between them — 48 dp of chrome around the label, against
+ * the regular form's 64. That is what lets «+ Янги» sit beside the search field in `2b-orders.png`'s
+ * header on a 360 dp phone; at 18/18/10 the pair did not fit.
+ */
+private val PAD_REGULAR = 18.dp
+private val PAD_COMPACT = 13.dp
+private val ICON_REGULAR = 18.dp
+private val ICON_COMPACT = 16.dp
+private val GAP_REGULAR = 10.dp
+private val GAP_COMPACT = 6.dp
+
 /**
  * The one shape every button in the system has. `clickable` is used rather than M3's `Button` so
  * the container, the ripple and the pressed fill are ours — M3's own colours, elevation overlay
@@ -59,7 +77,7 @@ private val H_COMPACT = 36.dp
 @Composable
 private fun EtalonButtonBase(
     onClick: () -> Unit, enabled: Boolean, modifier: Modifier,
-    height: Dp, shape: Shape, fill: Color, pressedFill: Color, border: Color?,
+    height: Dp, sidePadding: Dp, shape: Shape, fill: Color, pressedFill: Color, border: Color?,
     onDark: Boolean, shadow: Color? = null, content: @Composable RowScope.() -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -78,7 +96,7 @@ private fun EtalonButtonBase(
                 enabled = enabled, role = Role.Button,
                 interactionSource = interaction, indication = etalonRipple(onDark), onClick = onClick,
             )
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = sidePadding),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
         content = content,
@@ -86,15 +104,22 @@ private fun EtalonButtonBase(
 }
 
 @Composable
-private fun RowScope.ButtonBody(text: String?, loading: Boolean, leading: ImageVector?, leadingIcon: Int?, color: Color) {
+private fun RowScope.ButtonBody(
+    text: String?, loading: Boolean, leading: ImageVector?, leadingIcon: Int?, color: Color,
+    compact: Boolean = false,
+) {
+    // The spinner shares the glyph's slot, so it shares the glyph's size: a compact button that
+    // starts working must not grow by 2 dp under the thumb.
+    val glyph = if (compact) ICON_COMPACT else ICON_REGULAR
+    val gap = if (compact) GAP_COMPACT else GAP_REGULAR
     when {
         // The spacer is the gap to the LABEL, so a button with no label must not carry it — an
         // icon-only DarkButton would otherwise sit its spinner 10 dp left of centre.
-        loading -> { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = color); if (text != null) Spacer(Modifier.width(10.dp)) }
-        leadingIcon != null -> { EtalonIcon(leadingIcon, null, size = 18.dp, tint = color); if (text != null) Spacer(Modifier.width(10.dp)) }
+        loading -> { CircularProgressIndicator(Modifier.size(glyph), strokeWidth = 2.dp, color = color); if (text != null) Spacer(Modifier.width(gap)) }
+        leadingIcon != null -> { EtalonIcon(leadingIcon, null, size = glyph, tint = color); if (text != null) Spacer(Modifier.width(gap)) }
         // Kept for the feature screens that still pass a Material vector; phases 2–5 move each of
         // them to `leadingIcon` as they are redrawn.
-        leading != null -> { Icon(leading, null, Modifier.size(18.dp), tint = color); if (text != null) Spacer(Modifier.width(10.dp)) }
+        leading != null -> { Icon(leading, null, Modifier.size(glyph), tint = color); if (text != null) Spacer(Modifier.width(gap)) }
     }
     if (text != null) Text(text, style = EtalonType.rowTitle, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
@@ -121,12 +146,13 @@ fun PrimaryButton(
     onClick = onClick, enabled = enabled && !loading,
     modifier = if (compact) modifier else modifier.fillMaxWidth(),
     height = if (compact) H_COMPACT else H_REGULAR,
+    sidePadding = if (compact) PAD_COMPACT else PAD_REGULAR,
     shape = EtalonShapes.pill,
     fill = if (enabled) EtalonColors.indigo else EtalonColors.lavenderBg,
     pressedFill = EtalonColors.indigoPressed,
     border = null, onDark = true,
     shadow = if (enabled) EtalonColors.indigo else null,
-) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.onDark else EtalonColors.indigo.copy(alpha = 0.5f)) }
+) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.onDark else EtalonColors.indigo.copy(alpha = 0.5f), compact) }
 
 @Composable
 fun SecondaryButton(
@@ -137,10 +163,46 @@ fun SecondaryButton(
     onClick = onClick, enabled = enabled && !loading,
     modifier = if (compact) modifier else modifier.fillMaxWidth(),
     height = if (compact) H_COMPACT else H_REGULAR,
+    sidePadding = if (compact) PAD_COMPACT else PAD_REGULAR,
     shape = EtalonShapes.pill,
     fill = EtalonColors.surface, pressedFill = EtalonColors.lavenderBg,
     border = EtalonColors.surfaceBorder, onDark = false,
-) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.ink else EtalonColors.ink3) }
+) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.ink else EtalonColors.ink3, compact) }
+
+/**
+ * The third weight, between [PrimaryButton] (the one thing a screen is for) and [SecondaryButton]
+ * (the outlined alternative): a filled pill with no border and no shadow. §3.5 gives it to the
+ * offer at the end of a payments row — «Кўриб чиқиш» is something the operator *may* do, so it
+ * carries colour without claiming the screen's shadow.
+ *
+ * @param compact defaults **true**, unlike every other button here: the 32 dp pill is the form §3
+ *   actually draws, and the 48 dp one exists for the single-action forms of phase 6.
+ * @param onDark the pill sits on navy — navy2 with lavender text instead of lavender with indigo.
+ *
+ * On light, an *enabled* tonal pill and a *disabled* [PrimaryButton] share the lavenderBg fill and
+ * differ only in the text's opacity. That is §2's palette, not an accident: do not put the two side
+ * by side in one row, where the pair would read as one live button and one dead one.
+ */
+@Composable
+fun TonalButton(
+    text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
+    enabled: Boolean = true, compact: Boolean = true, onDark: Boolean = false,
+) = EtalonButtonBase(
+    onClick = onClick, enabled = enabled,
+    modifier = if (compact) modifier else modifier.fillMaxWidth(),
+    height = if (compact) H_TONAL_COMPACT else H_TONAL_REGULAR,
+    sidePadding = if (compact) PAD_COMPACT else PAD_REGULAR,
+    shape = EtalonShapes.pill,
+    fill = if (onDark) EtalonColors.navy2 else EtalonColors.lavenderBg,
+    // The press has to darken a fill that is already pale, and §1.1 is closed to new hexes: on
+    // light that leaves `lavender`, the next step down the same ramp; on navy it is DarkButton's
+    // own press, `navy`.
+    pressedFill = if (onDark) EtalonColors.navy else EtalonColors.lavender,
+    border = null, onDark = onDark,
+) {
+    val fg = if (onDark) EtalonColors.lavender else EtalonColors.indigo
+    ButtonBody(text, false, null, null, if (enabled) fg else fg.copy(alpha = 0.5f), compact)
+}
 
 /** Destructive: delete a shipment, remove a photo. Not in §2 — kept because five feature files
  *  call it and deleting a payment-adjacent action is exactly where a red button earns its keep.
@@ -155,10 +217,11 @@ fun DangerButton(
     onClick = onClick, enabled = enabled && !loading,
     modifier = if (compact) modifier else modifier.fillMaxWidth(),
     height = if (compact) H_COMPACT else H_REGULAR,
+    sidePadding = if (compact) PAD_COMPACT else PAD_REGULAR,
     shape = EtalonShapes.pill,
     fill = if (enabled) EtalonColors.red else EtalonColors.redBg, pressedFill = EtalonColors.red,
     border = null, onDark = true,
-) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.onDark else EtalonColors.red) }
+) { ButtonBody(text, loading, leading, leadingIcon, if (enabled) EtalonColors.onDark else EtalonColors.red, compact) }
 
 /**
  * On navy: the quiet half of a pair («Рад этиш», the two icon actions on the summary sheet).
@@ -174,7 +237,8 @@ fun DarkButton(
     text: String? = null, onClick: () -> Unit, modifier: Modifier = Modifier,
     enabled: Boolean = true, loading: Boolean = false, leadingIcon: Int? = null,
 ) = EtalonButtonBase(
-    onClick = onClick, enabled = enabled && !loading, modifier = modifier, height = H_REGULAR, shape = EtalonShapes.pill,
+    onClick = onClick, enabled = enabled && !loading, modifier = modifier, height = H_REGULAR,
+    sidePadding = PAD_REGULAR, shape = EtalonShapes.pill,
     fill = EtalonColors.navy2, pressedFill = EtalonColors.navy, border = null, onDark = true,
 ) { ButtonBody(text, loading, null, leadingIcon, EtalonColors.onDark) }
 
@@ -182,7 +246,8 @@ fun DarkButton(
 @Composable
 fun InverseButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) =
     EtalonButtonBase(
-        onClick = onClick, enabled = enabled, modifier = modifier, height = H_REGULAR, shape = EtalonShapes.pill,
+        onClick = onClick, enabled = enabled, modifier = modifier, height = H_REGULAR,
+        sidePadding = PAD_REGULAR, shape = EtalonShapes.pill,
         fill = EtalonColors.surface, pressedFill = EtalonColors.lavenderBg, border = null, onDark = false,
     ) { ButtonBody(text, false, null, null, if (enabled) EtalonColors.navy else EtalonColors.ink3) }
 

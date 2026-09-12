@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,8 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -51,6 +55,11 @@ import uz.etalon.crm.core.model.OrderStatus
  *   applies. Callers pass `debt = null, paidLabel = null` for that row.
  * @param debtLabel the caller's wording, e.g. `{ "қолди ${formatMoney(it)}" }`.
  * @param onDark the row sits inside a [NavySheet]; false is the white-card variant of `2b-home.png`.
+ * @param trailing a second line under the amount for a row whose money says nothing more — the
+ *   clients list's «1 буюртма» (§3.6), where the figure above is the client's lifetime total and
+ *   there is no debt or paid state to word. It is drawn only where [debt] and [paidLabel] leave the
+ *   second line empty: a row states one thing under its amount, never two. The slot arrives already
+ *   styled `tagPanel` in `ink3` / `onDarkMuted`, so the caller passes a bare `Text`.
  *
  * §2 also gives the row a `navy2` **hover** state. That is deliberately not implemented: this app
  * is touch-only, a finger has no hover, and a state nothing can enter is a state nobody maintains.
@@ -68,6 +77,7 @@ fun OrderRow(
     onDark: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    trailing: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     // Zero and null are the same state — settled — and neither may reach [debtLabel].
     val due = debt?.takeIf { it.amount.signum() > 0 }
@@ -140,6 +150,12 @@ fun OrderRow(
                         else -> EtalonColors.green
                     },
                 )
+            } else if (trailing != null) {
+                Spacer(Modifier.height(2.dp))
+                CompositionLocalProvider(
+                    LocalTextStyle provides EtalonType.tagPanel,
+                    LocalContentColor provides if (onDark) EtalonColors.onDarkMuted else EtalonColors.ink3,
+                ) { trailing() }
             }
         }
     }

@@ -20,6 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import uz.etalon.crm.core.designsystem.components.BrandMark
 import uz.etalon.crm.core.designsystem.components.ChipTone
 import uz.etalon.crm.core.designsystem.components.CountStepper
 import uz.etalon.crm.core.designsystem.components.CustodyChain
@@ -77,6 +78,10 @@ private fun KeptSheet() = Column(
     Modifier.fillMaxWidth().background(EtalonColors.page).padding(EtalonSpace.cardMargin),
     verticalArrangement = Arrangement.spacedBy(10.dp),
 ) {
+    // Extracted from Home's app bar in this task. It stands first here for the same reason it
+    // stands first on Home: a reviewer checks the gradient, the 14/800 wordmark and the tagline's
+    // ink2 before anything else on the page.
+    BrandMark()
     SectionLabel("Кутилаётган тўловлар")
     EmptyState("Буюртма йўқ.")
     ErrorBanner("Тармоққа уланиб бўлмади", onRetry = {})
