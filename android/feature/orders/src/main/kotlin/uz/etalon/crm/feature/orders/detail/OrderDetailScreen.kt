@@ -722,10 +722,9 @@ private fun CommentRow(c: OrderComment) = Row(
  * «Тарих», collapsed. The expansion happens in place: there is no history screen to navigate to,
  * and the newest three lines are what anyone checking an order actually reads.
  *
- * [STOCK_WARNING] is the one type whose `message` is not printed. The server writes it as English
- * prose for the desk, and §5.1a rules that the phone shows the Uzbek label instead; every other
- * type keeps its message, which carries the specifics — which driver, how much — that a type name
- * cannot.
+ * A server `message` written as English prose for the desk is not printed — [eventMessage] carries
+ * the list and the rule, and the phone shows the type's Uzbek wording instead. Every other message
+ * is kept: it carries the specifics — which driver, how much — that a type name cannot.
  *
  * Expanding shows the whole list with no cap of its own, which is safe because the route caps
  * itself: `GET /api/orders/{id}` takes the newest 100 events (`take: 100`), so «Барчаси» is at
@@ -738,7 +737,7 @@ private fun EventsCard(events: List<OrderEventLine>) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     WhiteCard(stringResource(R.string.events)) {
         (if (expanded) events else events.take(COLLAPSED_EVENTS)).forEach { e ->
-            val what = e.message?.takeUnless { e.type == STOCK_WARNING }
+            val what = eventMessage(e.type, e.message)
                 ?: stringResource(orderEventLabel(e.type) ?: R.string.event_generic)
             Text(
                 "${formatDateTime(e.createdAt)} · $what${e.actorName?.let { " · $it" } ?: ""}",

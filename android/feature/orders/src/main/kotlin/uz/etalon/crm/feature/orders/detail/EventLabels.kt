@@ -10,8 +10,9 @@ import uz.etalon.crm.feature.orders.R
 // type renamed on the server then breaks in one file, and `EventLabelsTest`'s literal enum list is
 // what catches it.
 
-/** The one event type whose server `message` is English prose written for the desk, so «Тарих»
- *  prints [orderEventLabel]'s Uzbek wording instead of it. */
+/** The type this carve-out started with: the server writes its `message` as English prose for the
+ *  desk, so «Тарих» prints [orderEventLabel]'s Uzbek wording instead. It is one of
+ *  [DESK_ENGLISH_EVENTS] now — see [eventMessage]. */
 internal const val STOCK_WARNING = "STOCK_WARNING"
 
 /** The whole-order load: one photo, one status change. A split order writes [SHIPMENT_LOADED] per
@@ -68,3 +69,65 @@ internal fun orderEventLabel(type: String): Int? = when (type) {
     SHIPMENT_DELIVERED -> R.string.event_shipment_delivered
     else -> null
 }
+
+/**
+ * Every event type whose `message` the web writes as English prose for the desk.
+ *
+ * Audited against the writers themselves — `precast-crm/src/lib/create-order.ts`,
+ * `src/lib/order-load.ts` and every `orderEvent.create` under `src/app/api` — rather than guessed
+ * from the type names. What each one writes, in the order this set is spelled:
+ * «Order placed for {client}» · «Delivered — proof photo uploaded» · «Schedule moved: … → …» ·
+ * «Order edited: total … → …» · «Client contact corrected · …» · «Stock went negative for …» ·
+ * «Dispatched: driver …» · «Driver returned to office» · «{n} UZS in cash recorded at office …» ·
+ * «Cash handed over to office (payment …)» · «Payment … confirmed: …» · «Payment … rejected: …» ·
+ * «Payment … adjusted: … → …» · «Discrepancy …: short by …» · «Discrepancy …: … → …».
+ *
+ * NOT in the set: `ORDER_CANCELED`, whose `message` is the operator's own reason typed into the
+ * cancel dialog, and the four `SHIPMENT_*` types plus `ORDER_LOADED`, which the routes already
+ * write in Uzbek. `DISCOUNT_APPLIED` has no writer at all.
+ *
+ * The server strings are the web's to fix (its own order page prints them too); this client refuses
+ * to show them, which is all it can do from here.
+ */
+private val DESK_ENGLISH_EVENTS = setOf(
+    "ORDER_PLACED",
+    "STATUS_CHANGED",
+    "SCHEDULED_DATE_CHANGED",
+    "ORDER_EDITED",
+    "NOTE_ADDED",
+    STOCK_WARNING,
+    "ORDER_DISPATCHED",
+    "DISPATCH_RETURNED",
+    "PAYMENT_RECORDED",
+    "PAYMENT_HANDED_OVER",
+    "PAYMENT_CONFIRMED",
+    "PAYMENT_REJECTED",
+    "PAYMENT_ADJUSTED",
+    "DISCREPANCY_OPENED",
+    "DISCREPANCY_RESOLVED",
+)
+
+/**
+ * What «Тарих» prints for one event: the server's own [message], or null when this client's Uzbek
+ * label should win instead (`orderEventLabel`, falling through to «Ҳодиса»).
+ *
+ * The server's `message` is normally the better line — it carries the specifics a type name cannot
+ * (which driver, how much, from what to what). For [DESK_ENGLISH_EVENTS] it is English prose
+ * written for a desk, and an operator who reads Uzbek got «Order placed for Yusupov & Sons» in
+ * their history.
+ *
+ * Two of those types are written by more than one route, and not all of them in English:
+ * `order-load.ts` writes `STATUS_CHANGED` as «Ишлаб чиқаришга ўтказилди», `settle-remaining`
+ * writes `DISCREPANCY_RESOLVED` with «Қолдиқ ҳисобдан чиқарилди …», and `PAYMENT_REJECTED` quotes
+ * the operator's own reason inside its English sentence. So the carve-out asks the message: one
+ * carrying Uzbek is either a route that already writes Uzbek or somebody's own words, and throwing
+ * either away for a bare label would lose more than it saved. One with no Cyrillic in it at all is
+ * the desk English this rule exists for.
+ */
+internal fun eventMessage(type: String, message: String?): String? =
+    message?.takeUnless { type in DESK_ENGLISH_EVENTS && it.none { c -> c.isCyrillic() } }
+
+/** U+0400…U+04FF, the Cyrillic block — every letter the UI's Uzbek is written in. A plain range
+ *  rather than `Character.UnicodeBlock`, which brings the whole block table in to answer the same
+ *  question. */
+private fun Char.isCyrillic(): Boolean = this in 'Ѐ'..'ӿ'
