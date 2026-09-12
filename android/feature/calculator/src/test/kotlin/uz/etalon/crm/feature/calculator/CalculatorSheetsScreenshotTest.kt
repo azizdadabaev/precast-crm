@@ -32,9 +32,12 @@ import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.testing.FakeEtalonApi
+import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.regions.ParsedAddress
+import java.math.BigDecimal
 import java.time.LocalDate
 
 /** §7's first fixture — «Зал» 5,2 × 7,1, whose beam length puts the engine in the 180 000 bracket. */
@@ -47,6 +50,20 @@ private const val CLIENT_NAME = "Karimov LLC"
 private const val CLIENT_PHONE = "935554466"
 private const val DISCOUNT_PERCENT = 5.0
 private const val DELIVERY = 300_000.0
+
+/**
+ * The percentage that lands the discount on an exact half: the three fixtures with «Зал» overridden
+ * to [CHOSEN_PRICE] come to 15 456 460, and 2,5 % of that is 386 411,50. Rounded on its own that
+ * line would print one UZS more than the column's own arithmetic allows — see [rollupLines].
+ */
+private const val HALF_DISCOUNT_PERCENT = 2.5
+private const val HALF_SUBTOTAL = 15_456_460L
+private const val HALF_DISCOUNT = 386_411L
+private const val HALF_TOTAL = 15_370_049L
+
+/** The figures above as the sheet writes them — U+202F groups and all — built rather than spelt,
+ *  so no separator can be mistyped into a test that then passes for the wrong reason. */
+private fun uzs(whole: Long): String = formatMoney(Money(BigDecimal.valueOf(whole)))
 
 /** A fixed day, never `LocalDate.now()`: a baseline that re-dates itself every morning fails
  *  `verifyRoborazziDebug` on a frame nobody has touched. */
@@ -80,20 +97,23 @@ class CalculatorSheetsScreenshotTest {
 
     /** The §7 fixtures as a placeable quote: three priced rooms, the full client, and D10's two
      *  agreed costs. Built the way `withTotals` builds it — PERCENT mode passes 0 as the amount. */
-    private fun placeableState(queueOffered: Boolean = false): CalculatorUiState {
-        val rows = listOf(
+    private fun placeableState(
+        queueOffered: Boolean = false,
+        percent: Double = DISCOUNT_PERCENT,
+        rows: List<SlabRow> = listOf(
             zal(),
             recomputeRow(SlabRow(id = "r2", name = "Хона 1", innerWidth = 4.0, innerLength = 6.0)),
             recomputeRow(SlabRow(id = "r3", name = "Ошхона", innerWidth = 3.6, innerLength = 4.5)),
-        )
+        ),
+    ): CalculatorUiState {
         return CalculatorUiState(
             rows = rows,
             drafts = rows.associate { it.id to draftOf(it) },
             discountMode = DiscountMode.PERCENT,
-            discountPercent = DISCOUNT_PERCENT,
+            discountPercent = percent,
             deliveryCost = DELIVERY,
-            totals = projectTotals(rows, DISCOUNT_PERCENT, 0.0),
-            orderTotals = computeOrderTotals(rows, DISCOUNT_PERCENT, 0.0, DELIVERY, 0.0),
+            totals = projectTotals(rows, percent, 0.0),
+            orderTotals = computeOrderTotals(rows, percent, 0.0, DELIVERY, 0.0),
             schedule = beamSchedule(rows),
             canWrite = true,
             clientName = CLIENT_NAME,
@@ -174,5 +194,47 @@ class CalculatorSheetsScreenshotTest {
         rule.waitForIdle()
         rule.onNodeWithText(QUEUE).assertExists()
         captureScreenRoboImage("screenshots/place_order_queue_light.png")
+    }
+
+    /**
+     * The roll-up on a discount that lands on an exact half — «Зал» at the 230 000 tier, 2,5 % off
+     * and 300 000 delivery. The four printed lines must ADD UP: before [rollupLines] the discount
+     * rounded to «386 412» on its own while «Жами» came from 15 370 048,50, and a customer adding
+     * the column got a UZS less than the bottom line.
+     *
+     * Asserted before it is photographed, so the baseline can never be re-recorded around a column
+     * that has quietly stopped summing.
+     */
+    @Test fun placeOrderHalfDiscountLight() {
+        val overridden = zal().let {
+            recomputeRow(it.copy(m2PriceOverride = true, m2PriceOverrideValue = CHOSEN_PRICE, m2PriceReason = "Йирик буюртма"))
+        }
+        val s = placeableState(
+            percent = HALF_DISCOUNT_PERCENT,
+            rows = listOf(
+                overridden,
+                recomputeRow(SlabRow(id = "r2", name = "Хона 1", innerWidth = 4.0, innerLength = 6.0)),
+                recomputeRow(SlabRow(id = "r3", name = "Ошхона", innerWidth = 3.6, innerLength = 4.5)),
+            ),
+        )
+        assertEquals(
+            "the column adds up",
+            HALF_TOTAL,
+            HALF_SUBTOTAL - HALF_DISCOUNT + DELIVERY.toLong(),
+        )
+        screen {
+            PlaceOrderSheet(
+                state = s, vm = vm(), onDismiss = {}, onPlace = { _, _ -> }, onQueue = { _, _ -> },
+                initialScheduledAt = SCHEDULED,
+            )
+        }
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText(uzs(HALF_TOTAL)))
+        rule.waitForIdle()
+        rule.onNodeWithText(uzs(HALF_SUBTOTAL)).assertExists()
+        // `calc_place_minus` is «−%1$s»: U+2212 MINUS SIGN (not a hyphen) straight against the
+        // figure, no space between.
+        rule.onNodeWithText("−${uzs(HALF_DISCOUNT)}").assertExists()
+        rule.onNodeWithText(uzs(HALF_TOTAL)).assertExists()
+        captureScreenRoboImage("screenshots/place_order_half_discount_light.png")
     }
 }

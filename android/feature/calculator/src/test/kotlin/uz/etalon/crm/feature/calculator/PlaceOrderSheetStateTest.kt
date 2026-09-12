@@ -5,9 +5,14 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.calc.DEFAULT_PRICE_CONFIG
+import uz.etalon.crm.core.calc.OrderTotals
+import uz.etalon.crm.core.calc.ProjectTotal
+import uz.etalon.crm.core.calc.ProjectTotals
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.ui.regions.ParsedAddress
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
 
 /**
@@ -145,5 +150,92 @@ class PlaceOrderSheetStateTest {
         )
         assertTrue(canPlaceOrder(s, date))
         assertTrue(canPlaceOrder(ready().copy(discountMode = DiscountMode.AMOUNT, discountAmount = 1_000_000.0), date))
+    }
+
+    // ── the roll-up's four printed lines ──────────────────────────
+
+    /** A quote whose engine figures are stated outright rather than typed through rooms: this
+     *  suite is about the DISPLAY arithmetic over the totals, and a subtotal that lands a discount
+     *  on an exact half is easier to state than to reach by picking room sizes. */
+    /** `projectTotal` rounds its discount and its total to two decimals before either can become
+     *  `Money` (`moneyOf` throws on anything else, on purpose). `round2` is internal to
+     *  `:core:calc`, so the same rounding is spelt here — this fixture stands in for the engine,
+     *  and a fixture that skipped it would be testing a state the engine cannot produce. */
+    private fun r2(v: Double): Double = BigDecimal.valueOf(v).setScale(2, RoundingMode.HALF_UP).toDouble()
+
+    private fun quote(subtotal: Double, percent: Double, delivery: Double, other: Double = 0.0): CalculatorUiState {
+        val discount = r2(subtotal * (percent / 100))
+        return ready().copy(
+            discountMode = DiscountMode.PERCENT,
+            discountPercent = percent,
+            deliveryCost = delivery,
+            otherCost = other,
+            totals = ProjectTotals(
+                projTotal = ProjectTotal(subtotal, percent, discount, r2(subtotal - discount)),
+                beams = 0, blocks = 0, monolithLength = 0.0, monolithArea = 0.0, concrete = 0.0,
+            ),
+            orderTotals = OrderTotals(
+                roomsSubtotal = subtotal,
+                discountAmount = discount,
+                // The ENGINE's enum, not this feature's same-named one — `OrderTotals` is
+                // `:core:calc`'s, and the two `DiscountMode`s are distinct types.
+                discountMode = uz.etalon.crm.core.calc.DiscountMode.PERCENT,
+                resolvedDiscountPercent = percent,
+                totalPrice = subtotal - discount + delivery + other,
+            ),
+        )
+    }
+
+    private fun whole(m: uz.etalon.crm.core.model.Money): Long = m.amount.toLong()
+
+    /**
+     * The half case the helper exists for: 5 % of 15 125 470 is 756 273,5. Rounded on its own that
+     * line prints «756 274» while «Жами» — computed from 14 669 196,50 — prints «14 669 197», and
+     * the four figures a customer adds up come to one UZS less than the bottom line.
+     */
+    @Test fun `a discount on an exact half still leaves a column that adds up`() {
+        val lines = rollupLines(quote(subtotal = 15_125_470.0, percent = 5.0, delivery = 300_000.0))
+        assertEquals(15_125_470L, whole(lines.roomsSubtotal))
+        assertEquals(756_273L, whole(lines.discount))
+        assertEquals(300_000L, whole(lines.delivery))
+        assertEquals(14_669_197L, whole(lines.total))
+        assertEquals(
+            whole(lines.total),
+            whole(lines.roomsSubtotal) - whole(lines.discount) + whole(lines.delivery) + whole(lines.other),
+        )
+    }
+
+    /** Nothing taken off and nothing added: the discount line derives to zero, so the sheet leaves
+     *  it out and «Жами» is the subtotal. */
+    @Test fun `with no discount the derived line is nothing at all`() {
+        val lines = rollupLines(quote(subtotal = 13_542_460.0, percent = 0.0, delivery = 0.0))
+        assertEquals(0L, whole(lines.discount))
+        assertEquals(13_542_460L, whole(lines.total))
+    }
+
+    /** Delivery and other are whole UZS already, so they cancel out of the derivation exactly —
+     *  what is left is the subtotal against the discounted subtotal, whatever else was added. */
+    @Test fun `delivery and other cannot disturb the derived discount`() {
+        val bare = rollupLines(quote(subtotal = 15_125_470.0, percent = 5.0, delivery = 0.0))
+        val loaded = rollupLines(quote(subtotal = 15_125_470.0, percent = 5.0, delivery = 300_000.0, other = 50_000.0))
+        assertEquals(whole(bare.discount), whole(loaded.discount))
+        assertEquals(
+            whole(loaded.total),
+            whole(loaded.roomsSubtotal) - whole(loaded.discount) + whole(loaded.delivery) + whole(loaded.other),
+        )
+    }
+
+    /** Every whole percent of a half-landing subtotal, so the derivation is pinned across the
+     *  rounding boundary rather than on the one case that prompted it. */
+    @Test fun `the column adds up at every whole percent`() {
+        (0..100).forEach { pct ->
+            val lines = rollupLines(quote(subtotal = 15_125_470.0, percent = pct.toDouble(), delivery = 300_000.0))
+            assertEquals(
+                whole(lines.total),
+                whole(lines.roomsSubtotal) - whole(lines.discount) + whole(lines.delivery),
+                "at $pct%",
+            )
+            assertTrue(lines.discount.amount.signum() >= 0, "at $pct% the discount is not negative")
+        }
     }
 }

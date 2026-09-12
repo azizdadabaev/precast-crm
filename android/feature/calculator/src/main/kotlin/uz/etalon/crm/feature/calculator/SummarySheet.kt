@@ -82,13 +82,25 @@ private val ACTION_GAP = 8.dp
 /** The air between the figure and the material line — the two columns share one baseline band. */
 private val CAPTION_GAP = 2.dp
 
-/** §3.4 SummarySheet: the total, «26/800 tabular». `amountLg` is the scale's 30/800. */
-private val TotalStyle = EtalonType.amountLg.copy(fontSize = 26.sp)
-/** §3.4 SummarySheet: «`UZS` 12/600 70%» — `label` is exactly 12/600. */
-private val TotalUnitStyle = EtalonType.label
+/**
+ * R7's hero figure, and the ONE definition of it: «13 542 460 UZS», 26/800 tabular then 12/600 at
+ * 70 %, with the unit AFTER the number — the single place in this app that orders them that way
+ * (everywhere else — `MoneyHeroText`, every KPI and confirm sheet — D8's «UZS 13 542 460» leads
+ * with the unit). `amountLg` is the scale's 30/800; `label` is exactly 12/600.
+ *
+ * `internal`, and shared with `QuoteImage.kt`, because the PNG the customer is sent draws the very
+ * same figure: two copies of these three numbers is two places for the card and the screen to
+ * drift apart. Both call sites are the same hero, not two that happen to look alike.
+ */
+internal val HeroFigureStyle = EtalonType.amountLg.copy(fontSize = 26.sp)
+
+/** @see HeroFigureStyle */
+internal val HeroUnitStyle = EtalonType.label
+
 /** That 70 %, applied to `onDark` rather than to `onDarkMuted` (which is already 72 %) — the unit
- *  is a quiet run of the same white the figure is set in, not a second muted colour. */
-private const val UNIT_ALPHA = 0.7f
+ *  is a quiet run of the same white the figure is set in, not a second muted colour.
+ *  @see HeroFigureStyle */
+internal const val HERO_UNIT_ALPHA = 0.7f
 /** §3.4 SummarySheet: the right column is «11 ink3-on-dark, 1.5 line-height». */
 private val MetaStyle = EtalonType.meta.copy(lineHeight = 1.5.em)
 
@@ -226,9 +238,8 @@ fun SummarySheet(
 }
 
 /**
- * R7, and the ONE place in this app where the unit follows the figure: «13 542 460 UZS», two runs
- * in one row, 26/800 then 12/600 at 70 %, exactly as `3a-calculator.png` draws it. Everywhere else
- * — `MoneyHeroText`, every KPI and confirm sheet — D8's «UZS 13 542 460» leads with the unit.
+ * The quote's grand total as `3a-calculator.png` draws it — [HeroFigureStyle] carries the rule and
+ * the reasoning, and `QuoteImage`'s own total is the same hero on the customer's copy.
  *
  * Two `Text`s are two announcements, so the row publishes the whole figure once and merges, the
  * way `MoneyHeroText` does.
@@ -240,11 +251,11 @@ private fun SummaryTotal(total: Money) {
         Modifier.semantics(mergeDescendants = true) { contentDescription = "$figure $MONEY_UNIT" },
         verticalAlignment = Alignment.Bottom,
     ) {
-        Text(figure, style = TotalStyle, color = EtalonColors.onDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(figure, style = HeroFigureStyle, color = EtalonColors.onDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
             MONEY_UNIT,
-            style = TotalUnitStyle,
-            color = EtalonColors.onDark.copy(alpha = UNIT_ALPHA),
+            style = HeroUnitStyle,
+            color = EtalonColors.onDark.copy(alpha = HERO_UNIT_ALPHA),
             maxLines = 1,
             modifier = Modifier.padding(start = CAPTION_GAP),
         )
@@ -252,7 +263,8 @@ private fun SummaryTotal(total: Money) {
 }
 
 /**
- * The right column: «**81,98 м²** · 31 балка · 656 ғишт» over «~14 757 кг» (§3.4).
+ * The right column: «**81,99 м²** · 31 балка · 656 ғишт» over «~14 758 кг» (§3.4, whose own example
+ * rounds the area down a hundredth — these are the three §7 fixtures as the engine prices them).
  *
  * The area leads the line in `onDark` at 700 while the counts stay muted — it is the figure an
  * operator reads back to the customer, and the one the order is billed on. The counts are grouped

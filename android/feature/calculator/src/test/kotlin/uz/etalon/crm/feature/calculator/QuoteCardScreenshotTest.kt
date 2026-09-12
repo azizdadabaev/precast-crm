@@ -1,8 +1,10 @@
 package uz.etalon.crm.feature.calculator
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -15,6 +17,7 @@ import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
 import uz.etalon.crm.core.calc.recomputeRow
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.regions.ParsedAddress
 import java.time.Instant
 
@@ -62,5 +65,38 @@ class QuoteCardScreenshotTest {
     fun quoteCardIsAlwaysLight() {
         rule.setContent { EtalonTheme(darkTheme = true) { QuoteCard(state(), now = made) } }
         rule.onRoot().captureRoboImage("screenshots/quote_card_light.png")
+    }
+
+    /**
+     * The customer's copy inherits the roll-up's sum rule (see [rollupLines]): two §7 fixtures come
+     * to 6 212 060, and 2,5 % of that is 155 301,50 — a discount that, rounded on its own, would
+     * leave the printed column a UZS short of the «Жами» underneath it. The customer is the one
+     * person certain to add the figures up, so this is asserted on the card and not only on the
+     * operator's sheet.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h891dp")
+    fun theQuoteCardsColumnAddsUpOnAHalfDiscount() {
+        val rows = listOf(room("r1", "Хона 1", 4.0, 6.0), room("r2", "Ошхона", 3.6, 4.5))
+        val percent = 2.5
+        val delivery = 150_000.0
+        val other = 25_000.0
+        val s = state().copy(
+            rows = rows,
+            discountPercent = percent,
+            deliveryCost = delivery, otherCost = other,
+            totals = projectTotals(rows, percent, 0.0),
+            orderTotals = computeOrderTotals(rows, percent, 0.0, delivery, other),
+            schedule = beamSchedule(rows),
+        )
+        val lines = rollupLines(s)
+        assertEquals(6_212_060L, lines.roomsSubtotal.amount.toLong())
+        assertEquals(155_301L, lines.discount.amount.toLong())
+        assertEquals(6_231_759L, lines.total.amount.toLong())
+
+        rule.setContent { EtalonTheme { QuoteCard(s, now = made) } }
+        rule.onNodeWithText(formatMoney(lines.roomsSubtotal)).assertExists()
+        rule.onNodeWithText("−${formatMoney(lines.discount)}").assertExists()
+        rule.onNodeWithText(formatMoney(lines.total)).assertExists()
     }
 }

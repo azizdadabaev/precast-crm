@@ -32,14 +32,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.money
-import uz.etalon.crm.core.calc.operatorAmountMoney
-import uz.etalon.crm.core.calc.totalPriceMoney
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
@@ -112,13 +109,6 @@ private val NAVY_PAD_BOTTOM = 12.dp
 
 /** One roll-up line, the height `PlaceOrderSheet` gives the same rows. */
 private val ROLLUP_ROW_HEIGHT = 28.dp
-
-/** §3.4 SummarySheet: the total, «26/800 tabular»; `amountLg` is the scale's 30/800. */
-private val TotalStyle = EtalonType.amountLg.copy(fontSize = 26.sp)
-
-/** R7: «UZS» 12/600 at 70 % AFTER the figure — the one place in this app the unit follows the
- *  number, and the customer's copy of the very figure the summary sheet draws that way. */
-private const val UNIT_ALPHA = 0.7f
 
 /** §3.4 RoomCard row 1: the room name, 14/800. */
 private val NameStyle = EtalonType.sectionTitle.copy(fontWeight = FontWeight.W800)
@@ -252,20 +242,18 @@ private fun PatternTag(label: String) = Box(
 
 /**
  * What the rooms come to and what moves it: the same four lines `PlaceOrderSheet` shows the
- * operator before placing, on the same strings — a customer who is later handed the order must
- * find the identical arithmetic.
- *
- * The discount comes off `totals.projTotal`, which is `round2`'d, not off
- * `orderTotals.discountAmount`, which the engine deliberately leaves unrounded (see `OrderTotals`'
- * class doc) and `moneyOf` would refuse.
+ * operator before placing, off the same [rollupLines] and on the same strings — a customer who is
+ * later handed the order must find the identical arithmetic, down to the last UZS. That helper is
+ * also why the column ADDS UP on a discount that lands on a half; see its own doc.
  */
 @Composable
 private fun QuoteRollup(state: CalculatorUiState) {
     val project = state.totals.projTotal.money()
+    val lines = rollupLines(state)
     QuoteSurface {
         Column(Modifier.padding(horizontal = CARD_PAD_H, vertical = EtalonSpace.sm)) {
-            RollupRow(stringResource(R.string.calc_place_summary_rooms_subtotal), formatMoney(project.roomsSubtotal))
-            if (project.discountAmount.amount.signum() > 0) {
+            RollupRow(stringResource(R.string.calc_place_summary_rooms_subtotal), formatMoney(lines.roomsSubtotal))
+            if (lines.discount.amount.signum() > 0) {
                 RollupRow(
                     // The percentage belongs to the LABEL when it is what the operator entered;
                     // the figure on the right is what it came to in UZS either way.
@@ -274,20 +262,14 @@ private fun QuoteRollup(state: CalculatorUiState) {
                     } else {
                         stringResource(R.string.calc_place_discount)
                     },
-                    value = stringResource(R.string.calc_place_minus, formatMoney(project.discountAmount)),
+                    value = stringResource(R.string.calc_place_minus, formatMoney(lines.discount)),
                 )
             }
-            if (state.deliveryCost > 0) {
-                RollupRow(
-                    stringResource(R.string.calc_place_summary_delivery),
-                    formatMoney(operatorAmountMoney(state.deliveryCost)),
-                )
+            if (lines.delivery.amount.signum() > 0) {
+                RollupRow(stringResource(R.string.calc_place_summary_delivery), formatMoney(lines.delivery))
             }
-            if (state.otherCost > 0) {
-                RollupRow(
-                    stringResource(R.string.calc_place_summary_other),
-                    formatMoney(operatorAmountMoney(state.otherCost)),
-                )
+            if (lines.other.amount.signum() > 0) {
+                RollupRow(stringResource(R.string.calc_place_summary_other), formatMoney(lines.other))
             }
         }
     }
@@ -314,7 +296,9 @@ private fun RollupRow(label: String, value: String) = Row(
  * by side the 26 sp figure and the material line together overflow — the first casualty being the
  * «UZS» after the figure, which clipped to «UZ». Stacked, the figure has the whole width.
  *
- * R7: «UZS» follows the figure here, as the summary sheet draws it, and nowhere else.
+ * R7: «UZS» follows the figure here because this IS the summary sheet's hero, drawn for the
+ * customer — same [HeroFigureStyle], same [HeroUnitStyle], same [HERO_UNIT_ALPHA], one definition
+ * (see that first one for the rule and why the app orders them this way nowhere else).
  */
 @Composable
 private fun QuoteTotal(state: CalculatorUiState) = Column(
@@ -343,13 +327,13 @@ private fun QuoteTotal(state: CalculatorUiState) = Column(
     }
     Row(verticalAlignment = Alignment.Bottom) {
         Text(
-            formatMoney(state.orderTotals.totalPriceMoney()),
-            style = TotalStyle, color = EtalonColors.onDark, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            formatMoney(rollupLines(state).total),
+            style = HeroFigureStyle, color = EtalonColors.onDark, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
         Text(
             MONEY_UNIT,
-            style = EtalonType.label,
-            color = EtalonColors.onDark.copy(alpha = UNIT_ALPHA),
+            style = HeroUnitStyle,
+            color = EtalonColors.onDark.copy(alpha = HERO_UNIT_ALPHA),
             maxLines = 1,
             modifier = Modifier.padding(start = EtalonSpace.xs / 2),
         )

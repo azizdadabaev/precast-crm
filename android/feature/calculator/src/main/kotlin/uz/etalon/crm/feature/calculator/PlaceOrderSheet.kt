@@ -41,7 +41,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.calc.money
 import uz.etalon.crm.core.calc.operatorAmountMoney
-import uz.etalon.crm.core.calc.totalPriceMoney
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.EtalonFilterChip
 import uz.etalon.crm.core.designsystem.components.EtalonTextField
@@ -492,37 +491,45 @@ private fun AmountField(
 
 /** The same number as [AmountField]'s idle text but typable: no grouping, and the decimal comma
  *  only where decimals are allowed at all. `internal` so `PlaceOrderSheetStateTest` can pin the
- *  one property the focus swap turns on — what this writes, [parseDecimal] reads back unchanged. */
+ *  one property the focus swap turns on — what this writes, [parseDecimal] reads back unchanged.
+ *
+ *  The whole-UZS branch goes through [operatorAmountMoney] rather than `Double.toLong()`: that is
+ *  the module's ONE sanctioned crossing for an operator-typed amount, and truncating money by hand
+ *  outside `:core:calc` is exactly what this app does not do — even where the keypad guarantees
+ *  there is nothing to truncate. */
 internal fun plainText(value: Double, allowDecimal: Boolean): String =
     if (allowDecimal) {
         BigDecimal.valueOf(value).stripTrailingZeros().toPlainString().replace('.', ',')
     } else {
-        value.toLong().toString()
+        operatorAmountMoney(value).amount.toPlainString()
     }
 
 /**
  * The quote as a receipt: the rooms, what they came to, what was taken off and what was added, and
  * the one figure the customer is committing to.
  *
- * Every money line crosses `Double` → `Money` through `:core:calc`'s sanctioned boundary and no
- * other way: the two engine sums through [uz.etalon.crm.core.calc.ProjectTotal.money] (already
- * `round2`'d by the engine), the two operator-entered costs through [operatorAmountMoney], and the
- * headline through [totalPriceMoney]. Nothing here adds two figures together — the engine did.
+ * Every figure comes from [rollupLines], the one helper the customer's quote card reads too — so
+ * the operator's receipt and the customer's copy cannot drift, and **the column adds up**: see
+ * that function for why the discount is the line that is derived rather than read.
  *
- * The parts can therefore disagree with «Жами» by at most a tiyin (`computeOrderTotals` leaves its
- * discount unrounded where `projectTotal` rounds it), which whole-UZS display cannot show.
+ * Every money line still crosses `Double` → `Money` through `:core:calc`'s sanctioned boundary and
+ * no other way; [rollupLines] does all four crossings in one place.
  */
 @Composable
 private fun OrderSummary(state: CalculatorUiState) {
     val project = state.totals.projTotal.money()
+    val lines = rollupLines(state)
     Column(Modifier.fillMaxWidth()) {
         SummaryRow(stringResource(R.string.calc_place_summary_rooms), formatCount(state.rows.count { it.canPersist }))
         SummaryRow(
             stringResource(R.string.calc_place_summary_area),
             formatArea(BigDecimal.valueOf(state.totals.monolithArea)),
         )
-        SummaryRow(stringResource(R.string.calc_place_summary_rooms_subtotal), formatMoney(project.roomsSubtotal))
-        if (project.discountAmount.amount.signum() > 0) {
+        SummaryRow(stringResource(R.string.calc_place_summary_rooms_subtotal), formatMoney(lines.roomsSubtotal))
+        // Shown when it is worth a UZS, the same rule the two costs below follow: a discount that
+        // rounds away to nothing is not a line on a receipt, and leaving it out keeps the column
+        // adding up either way.
+        if (lines.discount.amount.signum() > 0) {
             SummaryRow(
                 // The percentage is part of the LABEL when it is what the operator entered — the
                 // figure on the right is what it came to in UZS either way.
@@ -531,20 +538,14 @@ private fun OrderSummary(state: CalculatorUiState) {
                 } else {
                     stringResource(R.string.calc_place_discount)
                 },
-                value = stringResource(R.string.calc_place_minus, formatMoney(project.discountAmount)),
+                value = stringResource(R.string.calc_place_minus, formatMoney(lines.discount)),
             )
         }
-        if (state.deliveryCost > 0) {
-            SummaryRow(
-                stringResource(R.string.calc_place_summary_delivery),
-                formatMoney(operatorAmountMoney(state.deliveryCost)),
-            )
+        if (lines.delivery.amount.signum() > 0) {
+            SummaryRow(stringResource(R.string.calc_place_summary_delivery), formatMoney(lines.delivery))
         }
-        if (state.otherCost > 0) {
-            SummaryRow(
-                stringResource(R.string.calc_place_summary_other),
-                formatMoney(operatorAmountMoney(state.otherCost)),
-            )
+        if (lines.other.amount.signum() > 0) {
+            SummaryRow(stringResource(R.string.calc_place_summary_other), formatMoney(lines.other))
         }
         Box(
             Modifier.padding(vertical = RULE_PAD_V).fillMaxWidth()
@@ -552,7 +553,7 @@ private fun OrderSummary(state: CalculatorUiState) {
         )
         SummaryRow(
             label = stringResource(R.string.calc_place_summary_total),
-            value = formatMoney(state.orderTotals.totalPriceMoney()),
+            value = formatMoney(lines.total),
             emphasis = true,
         )
     }
