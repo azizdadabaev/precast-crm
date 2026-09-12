@@ -263,7 +263,7 @@ private fun SummaryTotal(total: Money) {
 }
 
 /**
- * The right column: «**81,99 м²** · 31 балка · 656 ғишт» over «~14 758 кг» (§3.4, whose own example
+ * The right column: «**81,99 м²** · 31 балка · 656 ғишт» over «~14 757 кг» (§3.4, whose own example
  * rounds the area down a hundredth — these are the three §7 fixtures as the engine prices them).
  *
  * The area leads the line in `onDark` at 700 while the counts stay muted — it is the figure an
