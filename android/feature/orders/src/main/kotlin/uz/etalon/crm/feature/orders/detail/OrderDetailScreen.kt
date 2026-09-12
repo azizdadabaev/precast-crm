@@ -798,7 +798,8 @@ private fun CostsCard(o: OrderDetail) = WhiteCard(title = null) {
     // The rate the discount was struck at, when the order carries one — the web writes the same
     // «Чегирма 2,1%» beside the sum, and it is what a client asks about. The FIGURE is
     // [displayedDiscount], not `discountAmount`: see that property for why the column would
-    // otherwise be a UZS short of «Жами» on a discount that lands on a half.
+    // otherwise be a UZS short of «Жами» on a discount that lands on a half — and why it falls back
+    // to the stored figure rather than to nothing when the derivation cannot be trusted.
     val discount = o.displayedDiscount
     if (discount.amount.signum() > 0) {
         CostRow(

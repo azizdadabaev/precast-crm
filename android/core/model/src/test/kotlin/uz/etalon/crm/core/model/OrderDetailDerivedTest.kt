@@ -90,6 +90,24 @@ class OrderDetailDerivedTest {
         val d = costs(subtotal = "13542460.00", discount = "0", delivery = "300000.00", total = "13842460.00")
         assertEquals(0, d.displayedDiscount.amount.signum())
     }
+
+    /**
+     * A total that was NOT struck from these four figures — an order whose price was moved on its
+     * own — derives a figure that is nowhere near the stored discount. The stored one is printed
+     * rather than an invented number, and the line is not dropped: the order really does carry a
+     * 386 411,50 discount and the operator has to see it.
+     */
+    @Test fun `a derivation far from the stored discount falls back to the stored figure`() {
+        val d = costs(subtotal = "15456460.00", discount = "386411.50", delivery = "300000.00", total = "15000000.00")
+        assertEquals(BigDecimal("386412"), d.displayedDiscount.amount)
+    }
+
+    /** A total ABOVE its own subtotal plus costs derives a negative discount — also the stored
+     *  figure, never a «− −100 000» line. */
+    @Test fun `a negative derivation falls back to the stored figure`() {
+        val d = costs(subtotal = "1000000.00", discount = "50000.00", delivery = "0", total = "1100000.00")
+        assertEquals(BigDecimal("50000"), d.displayedDiscount.amount)
+    }
 }
 
 /** An order priced the way `POST /api/orders` stores one: whole-UZS costs, a `Decimal(14,2)`

@@ -304,9 +304,12 @@ private fun SummaryTotal(total: Money) {
  * rounds the area down a hundredth — these are the three §7 fixtures as the engine prices them).
  *
  * The area leads the line in `onDark` at 700 while the counts stay muted — it is the figure an
- * operator reads back to the customer, and the one the order is billed on. The counts are grouped
- * but carry no «та»: the noun after each one already says what is being counted, so `formatCount`
- * (which appends «та») would read «31 та балка».
+ * operator reads back to the customer. It is the MONOLITH area, the slab actually poured, and NOT
+ * the area the order is billed on: billing counts whole tiles at N × PITCH, so each room is billed
+ * for a little more than it is poured (see `RoomLine.billedArea`, and `ORDER_KG_PER_M2` for the
+ * weight that hangs off the same monolith figure). The counts are grouped but carry no «та»: the
+ * noun after each one already says what is being counted, so `formatCount` (which appends «та»)
+ * would read «31 та балка».
  */
 @Composable
 private fun MaterialLine(state: CalculatorUiState, modifier: Modifier = Modifier) {

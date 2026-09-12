@@ -79,6 +79,9 @@ abstract class OrderDetailSourceModule {
 private const val KEY_COMMENT_IDEMPOTENCY = "detail.commentIdempotencyKey"
 private const val KEY_COMMENT_IDEMPOTENCY_FOR = "detail.commentIdempotencyFor"
 
+/** The note being typed, in the same handle as the two above — see [OrderDetailViewModel.commentDraft]. */
+private const val KEY_COMMENT_DRAFT = "detail.commentDraft"
+
 @HiltViewModel(assistedFactory = OrderDetailViewModel.Factory::class)
 class OrderDetailViewModel @AssistedInject constructor(
     private val source: OrderDetailSource,
@@ -108,8 +111,16 @@ class OrderDetailViewModel @AssistedInject constructor(
     private val _actionError = MutableStateFlow<String?>(null)
     val actionError: StateFlow<String?> = _actionError.asStateFlow()
 
-    private val _commentDraft = MutableStateFlow("")
-    val commentDraft: StateFlow<String> = _commentDraft.asStateFlow()
+    /**
+     * The note being typed, in `SavedStateHandle` beside the idempotency key its send will carry.
+     *
+     * The draft is deliberately kept until the server has the comment (see [postComment]), and
+     * process death is the other way it can be lost: an operator at a building site taps a photo,
+     * or takes a call, and comes back to an empty field with no idea a sentence was ever there.
+     * The key that guards the send against a double-post already rides here for the same reason;
+     * the words the key belongs to had better survive with it.
+     */
+    val commentDraft: StateFlow<String> = saved.getStateFlow(KEY_COMMENT_DRAFT, "")
 
     private val _postingComment = MutableStateFlow(false)
     val postingComment: StateFlow<Boolean> = _postingComment.asStateFlow()
@@ -133,7 +144,7 @@ class OrderDetailViewModel @AssistedInject constructor(
     /** Typing is the operator answering the failure, so the message goes with the next keystroke
      *  rather than sitting over a draft that has already been corrected. */
     fun setCommentDraft(text: String) {
-        _commentDraft.value = text
+        saved[KEY_COMMENT_DRAFT] = text
         _commentError.value = null
     }
 
@@ -146,7 +157,7 @@ class OrderDetailViewModel @AssistedInject constructor(
      * flight is ignored rather than queued.
      */
     fun postComment() {
-        val body = _commentDraft.value.trim()
+        val body = commentDraft.value.trim()
         if (body.isEmpty() || _postingComment.value) return
         viewModelScope.launch {
             _postingComment.value = true
@@ -157,7 +168,7 @@ class OrderDetailViewModel @AssistedInject constructor(
                     // comment's response instead of writing a new row.
                     saved.remove<String>(KEY_COMMENT_IDEMPOTENCY_FOR)
                     saved.remove<String>(KEY_COMMENT_IDEMPOTENCY)
-                    _commentDraft.value = ""
+                    saved[KEY_COMMENT_DRAFT] = ""
                     _commentError.value = null
                 },
                 onFailure = { t -> _commentError.value = t.toAppError().message },

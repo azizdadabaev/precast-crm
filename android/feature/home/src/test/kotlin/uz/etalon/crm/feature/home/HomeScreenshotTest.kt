@@ -203,6 +203,38 @@ class HomeScreenshotTest {
     }
 
     /**
+     * The same sheet after a bad week offline: nothing left waiting to send, and a dozen orders the
+     * server refused. Two rules are visible in this one frame, and both are asserted rather than
+     * left to the eye:
+     *
+     * - «Юборилмаган маълумот йўқ» is NOT printed. It would be true — the queue is empty — and read
+     *   as the opposite of the twelve failures listed under it.
+     * - «Ёпиш» is still on screen. It is the only way out of the sheet, so the list scrolls inside
+     *   its own band (`REJECTED_LIST_MAX`) instead of pushing the button off the bottom edge.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun outboxManyRejectedLight() {
+        val many = (1..12).map {
+            RejectedOrder(id = "row-$it", clientName = "Мижоз $it", message = "Сана нотўғри")
+        }
+        rule.setContent {
+            EtalonTheme {
+                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
+                    HomeScreen(
+                        s = loaded().copy(pendingUploads = 0, rejectedOrders = many),
+                        me = owner, now = now, onRefresh = {},
+                        onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    )
+                    OutboxSheet(pending = 0, rejected = many, onDiscard = {}, onDismiss = {}, onReopen = {})
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithText("Юборилмаган маълумот йўқ").assertDoesNotExist()
+        rule.onNodeWithText("Ёпиш").assertIsDisplayed()
+        captureScreenRoboImage("screenshots/home_outbox_many_rejected_light.png")
+    }
+
+    /**
      * Ruling I3's confirmation, the one thing «Тушунарли» now goes through. It is the shared
      * `ConfirmSheet` drawn with no figure — the first time that component has been asked a question
      * that is not about money — so the arrangement is recorded rather than assumed: the question in

@@ -163,7 +163,20 @@ class PlaceOrderSheetStateTest {
      *  and a fixture that skipped it would be testing a state the engine cannot produce. */
     private fun r2(v: Double): Double = BigDecimal.valueOf(v).setScale(2, RoundingMode.HALF_UP).toDouble()
 
-    private fun quote(subtotal: Double, percent: Double, delivery: Double, other: Double = 0.0): CalculatorUiState {
+    private fun quote(
+        subtotal: Double,
+        percent: Double,
+        delivery: Double,
+        other: Double = 0.0,
+        /**
+         * What `OrderTotals` carries: Σ of the rooms' own subtotals exactly as they summed, tiyin
+         * and all — the engine leaves that one raw, while the `ProjectTotal` beside it is `round2`'d
+         * (it could not reach `Money` otherwise; `moneyOf` throws on a third decimal). The roll-up
+         * reads the rounded one for the subtotal line and the raw one, through `totalPrice`, for
+         * «Жами». Defaults to [subtotal] — the ordinary case of rooms that summed to a whole UZS.
+         */
+        rawSubtotal: Double = subtotal,
+    ): CalculatorUiState {
         val discount = r2(subtotal * (percent / 100))
         return ready().copy(
             discountMode = DiscountMode.PERCENT,
@@ -175,13 +188,13 @@ class PlaceOrderSheetStateTest {
                 beams = 0, blocks = 0, monolithLength = 0.0, monolithArea = 0.0, concrete = 0.0,
             ),
             orderTotals = OrderTotals(
-                roomsSubtotal = subtotal,
+                roomsSubtotal = rawSubtotal,
                 discountAmount = discount,
                 // The ENGINE's enum, not this feature's same-named one — `OrderTotals` is
                 // `:core:calc`'s, and the two `DiscountMode`s are distinct types.
                 discountMode = uz.etalon.crm.core.calc.DiscountMode.PERCENT,
                 resolvedDiscountPercent = percent,
-                totalPrice = subtotal - discount + delivery + other,
+                totalPrice = rawSubtotal - discount + delivery + other,
             ),
         )
     }
@@ -213,8 +226,30 @@ class PlaceOrderSheetStateTest {
         assertEquals(13_542_460L, whole(lines.total))
     }
 
-    /** Delivery and other are whole UZS already, so they cancel out of the derivation exactly —
-     *  what is left is the subtotal against the discounted subtotal, whatever else was added. */
+    /**
+     * The engine's two subtotals are not the same number. `ProjectTotal.roomsSubtotal` is `round2`'d
+     * — `moneyOf`'s `RoundingMode.UNNECESSARY` would throw on anything else — while
+     * `OrderTotals.roomsSubtotal` is Σ of the rooms exactly as they summed, and it is the second one
+     * that reaches «Жами» through `totalPrice`. A fixture that made them identical would never
+     * exercise the pair the screen actually holds, so this case gives the raw sum a tenth of a tiyin
+     * the rounded one does not have.
+     */
+    @Test fun `the column adds up when the engine's two subtotals differ below a tiyin`() {
+        val lines = rollupLines(
+            quote(subtotal = 15_125_470.0, percent = 5.0, delivery = 300_000.0, rawSubtotal = 15_125_470.004),
+        )
+        assertEquals(15_125_470L, whole(lines.roomsSubtotal))
+        assertEquals(14_669_197L, whole(lines.total))
+        assertEquals(
+            whole(lines.total),
+            whole(lines.roomsSubtotal) - whole(lines.discount) + whole(lines.delivery),
+        )
+        assertTrue(lines.discount.amount.signum() >= 0, "the derived discount is not negative")
+    }
+
+    /** Delivery and other are whole UZS already (the fields refuse a decimal and
+     *  `operatorAmountMoney` truncates), so they cancel out of the derivation exactly — what is
+     *  left is the subtotal against the discounted subtotal, whatever else was added. */
     @Test fun `delivery and other cannot disturb the derived discount`() {
         val bare = rollupLines(quote(subtotal = 15_125_470.0, percent = 5.0, delivery = 0.0))
         val loaded = rollupLines(quote(subtotal = 15_125_470.0, percent = 5.0, delivery = 300_000.0, other = 50_000.0))

@@ -11,11 +11,15 @@
     <string name="calc_summary_weight">~%1$s</string>
     <string name="calc_settings_title">Созламалар</string>
     <string name="calc_action_settings">Созламалар</string>
-    <!-- `calc_room_default_name`, `calc_no_write_permission` and `calc_place_queued` are NOT dead:
-         each mirrors a literal in `CalculatorViewModel`/`CalculatorRepository`, which cannot reach
-         a resource (no Context, and the repository is in another module). They are the canonical
-         wording; the literals must match them WORD FOR WORD, and this is where that wording is
-         edited. -->
+    <!-- `calc_room_default_name` and `calc_no_write_permission` are NOT dead: each mirrors a literal
+         in `CalculatorViewModel`/`CalculatorRepository`, which cannot reach a resource (no Context,
+         and the repository is in another module). They are the canonical wording; the literals must
+         match them WORD FOR WORD, and this is where that wording is edited.
+
+         The queued-order notice is NOT one of them: its wording lives in exactly one place,
+         `CalculatorViewModel.QUEUED_MESSAGE`, which is both the banner's text and the flag the
+         screen and the summary sheet compare against. A second copy here was a second thing to
+         edit and nothing to check it against. -->
     <string name="calc_room_default_name">Хона %1$d</string>
     <string name="calc_field_width">Эни</string>
     <string name="calc_field_length">Бўйи</string>
@@ -145,7 +149,6 @@
     <string name="calc_place_minus">−%1$s</string>
     <string name="calc_place_summary_total">Жами</string>
     <string name="calc_place_queue">Навбатга қўйиш</string>
-    <string name="calc_place_queued">Интернет пайдо бўлганда юборилади</string>
     <!-- Mirrored word-for-word by `CalculatorViewModel`'s two refusals and
          `CalculatorRepository.blockedRoomsMessage` — one condition, one sentence. -->
     <string name="calc_cannot_save_rooms">Бу хоналарни сақлаб бўлмайди: %1$s</string>

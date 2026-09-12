@@ -39,9 +39,21 @@ internal data class RollupLines(
  * Nothing CHARGED changes: the server keeps the exact 14 669 196,50 — `OrderTotals.totalPrice`
  * is what is posted, and this function never touches it.
  *
- * The derived figure can never go negative for a non-negative discount: delivery and other are
- * whole UZS already (`operatorAmountMoney` truncates below a UZS), so they cancel exactly and what
- * is left is `round(subtotal) − round(subtotal − discount)`.
+ * The derived figure can never go negative for a non-negative discount, and it is delivery and
+ * other cancelling EXACTLY out of `total − delivery − other` that makes that true. Two rules
+ * upstream guarantee they do:
+ *
+ * - Both costs are whole UZS before they are money at all: the fields refuse a decimal and
+ *   `operatorAmountMoney` truncates below a UZS, so `total − delivery − other` shifts the figure by
+ *   whole units and cannot move the fraction inside it.
+ * - Both subtotals this works from have already been rounded to two decimals by `:core:calc`.
+ *   `ProjectTotal.roomsSubtotal` becomes [Money] through `moneyOf`, whose `RoundingMode.UNNECESSARY`
+ *   THROWS on a third decimal rather than absorbing it, and `OrderTotals.totalPrice` — left raw on
+ *   purpose — is `round2`'d inside `totalPriceMoney` on its way through the same door.
+ *
+ * So the only fraction anywhere in the four figures is the half a percentage discount put there,
+ * and what is left after the cancellation is `round(subtotal) − round(subtotal − discount)`: the
+ * discount, whole, never more than the subtotal and never less than nothing.
  *
  * Lives here rather than in `:core:calc` because it takes the SCREEN's state — the two engine
  * sums and the two operator-entered costs together — which `:core:calc` has no name for. Every

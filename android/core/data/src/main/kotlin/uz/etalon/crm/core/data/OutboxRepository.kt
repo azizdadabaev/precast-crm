@@ -137,6 +137,20 @@ class OutboxRepository @Inject constructor(
         scheduler.schedule(id)
     }
 
+    /**
+     * Delete one queued or failed row, and the photo it was carrying, for good.
+     *
+     * **Not owner-scoped, and deliberately so.** Every OBSERVER here filters by the signed-in user,
+     * so an id only ever reaches this function by way of a list that was already scoped to its
+     * owner — the sheet the operator is tapping shows their own rows and nothing else. Scoping the
+     * delete too would add a second query to re-check what the first one already established, and
+     * would silently do nothing on the one path where it mattered.
+     *
+     * What this does NOT protect against is an id from somewhere other than one of those observers.
+     * There is no such caller today ([discard] and the outbox sheets are all of them); a future one
+     * that takes an id from a push, a deep link or a saved-state handle must scope it itself, or
+     * this becomes a way to delete another operator's unsent work.
+     */
     suspend fun cancel(id: String) {
         dao.byId(id)?.filePath?.let { File(it).delete() }
         dao.delete(id)

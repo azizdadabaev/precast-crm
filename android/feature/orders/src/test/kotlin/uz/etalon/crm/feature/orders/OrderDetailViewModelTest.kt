@@ -1,5 +1,6 @@
 package uz.etalon.crm.feature.orders
 
+import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -178,6 +179,42 @@ class OrderDetailViewModelTest {
         assertNotNull(vm.commentError.value)
         vm.setCommentDraft("Юкланди.")
         assertNull(vm.commentError.value)
+    }
+
+    /**
+     * M4. The draft survives process death, in the same `SavedStateHandle` as the idempotency key
+     * its send will carry. A note kept across a dropped connection but lost to the system killing
+     * the app is a note the operator types twice — and the key that guards the send against a
+     * double-post already lives there for exactly this reason.
+     *
+     * The handle IS the restored state: a second ViewModel built from it is what the framework does
+     * after process death.
+     */
+    @Test fun `the draft survives a rebuild from the same saved state`() = runTest {
+        val saved = SavedStateHandle()
+        val first = OrderDetailViewModel(FakeSource(), "o3", saved)
+        collecting(first)
+        advanceUntilIdle()
+        first.setCommentDraft("Мижоз эртага тўлайман деди")
+
+        val restored = OrderDetailViewModel(FakeSource(), "o3", saved)
+        advanceUntilIdle()
+        assertEquals("Мижоз эртага тўлайман деди", restored.commentDraft.value)
+    }
+
+    /** And a sent note does NOT come back: the draft retires with the key it belonged to. */
+    @Test fun `a sent draft is not restored`() = runTest {
+        val saved = SavedStateHandle()
+        val src = FakeSource()
+        val vm = OrderDetailViewModel(src, "o3", saved)
+        collecting(vm)
+        advanceUntilIdle()
+        vm.setCommentDraft("Юкланди")
+        vm.postComment()
+        advanceUntilIdle()
+
+        assertEquals(listOf("Юкланди"), src.posted)
+        assertEquals("", OrderDetailViewModel(FakeSource(), "o3", saved).commentDraft.value)
     }
 
     /** The comments card's own error banner retries the thread alone — a failed thread is not a

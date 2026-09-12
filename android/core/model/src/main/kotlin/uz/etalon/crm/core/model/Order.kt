@@ -169,12 +169,24 @@ val OrderDetail.totalBlocks: Int get() = rooms.sumOf { it.totalBlocks }
  * `:feature:calculator`), so the quote, the customer's PNG and this card all agree to the UZS.
  * Two helpers rather than one because they take different types: that one works from the engine's
  * live totals, this one from a placed order.
+ *
+ * The derivation only holds while `totalPrice` really was struck from these four figures, which is
+ * every order this app has placed and every one the web places. An order edited by a route that
+ * moved the total on its own — or a legacy row — would derive something that is not a discount at
+ * all: negative, or nowhere near the stored figure. Then the STORED discount is printed instead and
+ * the column is left as the server wrote it. Losing a UZS off a sum is a rounding artefact; showing
+ * a discount the order does not have would be a lie, and dropping the line (`signum() > 0` at the
+ * call site) would hide a real one. Half a UZS can land on either side of each of the four
+ * roundings, so the tolerance is the whole 1 UZS the derivation is there to absorb.
  */
 val OrderDetail.displayedDiscount: Money
-    get() = Money(
-        roomsSubtotal.roundedWhole() -
-            (summary.totalPrice.roundedWhole() - deliveryCost.roundedWhole() - otherCost.roundedWhole()),
-    )
+    get() {
+        val stored = discountAmount.roundedWhole()
+        val derived = roomsSubtotal.roundedWhole() -
+            (summary.totalPrice.roundedWhole() - deliveryCost.roundedWhole() - otherCost.roundedWhole())
+        val trustworthy = derived.signum() >= 0 && (derived - stored).abs() <= BigDecimal.ONE
+        return Money(if (trustworthy) derived else stored)
+    }
 
 /** The factory's rule-of-thumb weight for finished beam-and-block flooring, per m² of **monolith**
  *  area — the slab actually poured, NOT the area the order is billed on (billing counts whole tiles
