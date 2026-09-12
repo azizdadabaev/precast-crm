@@ -54,9 +54,9 @@ import java.time.Instant
  *  list keep, which puts an avatar 14 dp from the card's edge. */
 private val ROW_INSET = 6.dp
 
-/** A section title sits 4 dp inside the card below it, the relationship Home draws between
- *  «Сўнгги буюртмалар» and its card (headerMargin 20 over cardMargin 16). */
-private val TITLE_INSET = 4.dp
+/** A section title sits one [EtalonSpace.xs] inside the card below it, the relationship Home draws
+ *  between «Сўнгги буюртмалар» and its card (headerMargin 20 over cardMargin 16). */
+private val TITLE_INSET = EtalonSpace.xs
 
 @Composable
 fun ClientDetailRoute(
@@ -71,8 +71,10 @@ fun ClientDetailRoute(
     ClientDetailScreen(
         s = s,
         // Read here rather than inside the screen so a frame can pin the day it is drawn on —
-        // `formatScheduleDate` drops the year only for the CURRENT one.
-        now = Instant.now(),
+        // `formatScheduleDate` drops the year only for the CURRENT one. `remember`ed so a
+        // recomposition (a refresh, the edit sheet opening) cannot silently redate the rows
+        // mid-screen; the route is rebuilt on every visit, which is often enough.
+        now = remember { Instant.now() },
         onBack = onBack,
         onRefresh = vm::refresh,
         onOpenOrder = onOpenOrder,
@@ -169,8 +171,11 @@ fun ClientDetailScreen(
  * so the circle is the one the clients list drew for this row a tap ago; a phone has no letters to
  * make initials from.
  *
- * The footer is two columns, not three: «Буюртмалар» and «Жами». The sum is a [Money] fold over
- * the order lines — never a `Double`, and never a figure the server did not send.
+ * The footer is two columns, not three: «Буюртмалар» and «Жами», both of them the SERVER's
+ * aggregates over every order this client has. Never a fold over [ClientDetail.orders]: the route
+ * caps that list at the 20 most recent, so a local sum would quietly disagree with the same
+ * client's row in the list — the figure an operator saw one tap ago. The fold is kept only as the
+ * fallback for a server too old to send them, where a truncated figure beats no figure at all.
  */
 @Composable
 private fun Panel(
@@ -189,12 +194,12 @@ private fun Panel(
     totals = {
         PanelTotal(
             stringResource(R.string.client_orders_section),
-            formatCount(client.orders.size),
+            formatCount(client.orderCount ?: client.orders.size),
             modifier = Modifier.weight(1f),
         )
         PanelTotal(
             stringResource(R.string.client_total_label),
-            formatMoney(client.orders.fold(Money.ZERO) { acc, o -> acc + o.totalPrice }),
+            formatMoney(client.totalBooked ?: client.orders.fold(Money.ZERO) { acc, o -> acc + o.totalPrice }),
             modifier = Modifier.weight(1f),
         )
     },
@@ -272,17 +277,21 @@ private fun OrdersCard(
         } else {
             client.orders.forEach { line ->
                 OrderRow(
-                    // The row's title slot is the customer — that is what gives it its avatar and
-                    // its colour. The order's own identity is the first half of the meta line.
-                    clientName = client.name,
+                    // Under a client's OWN panel every row belongs to the same customer, so the
+                    // name and its avatar would be the same four times over and tell an operator
+                    // nothing. The row leads with the one thing that differs — the order number —
+                    // and the avatar goes with it (`showAvatar = false`), since a circle of the
+                    // client's initials repeated down the card distinguishes no row from any other.
+                    clientName = formatOrderNo(line.orderNumber),
                     status = line.status,
-                    metaLine = "${formatOrderNo(line.orderNumber)} · ${formatScheduleDate(line.scheduledAt, now)}",
+                    metaLine = formatScheduleDate(line.scheduledAt, now),
                     total = line.totalPrice,
                     debt = null,
                     paidLabel = null,
                     debtLabel = { formatMoney(it) },
                     onDark = false,
                     onClick = { onOpenOrder(line.id) },
+                    showAvatar = false,
                 )
             }
         }

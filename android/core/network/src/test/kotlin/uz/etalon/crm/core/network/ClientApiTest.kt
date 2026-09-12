@@ -70,6 +70,28 @@ class ClientApiTest {
         assertEquals(java.math.BigDecimal.ZERO, page.rows[0].totalBooked)
     }
 
+    /** `GET /api/clients/{id}` carries the client's real figures beside its capped `orders` —
+     *  `totalBooked` as a bare JSON number, `orderCount` as a plain int. */
+    @Test fun `client detail decodes the server's total and order count`() = runTest {
+        server.enqueue(ok(
+            """{"ok":true,"data":{"id":"c1","name":"Client","phone":"998901112233","totalBooked":96400000,
+              |"orderCount":41,"orders":[]}}"""
+                .trimMargin().replace("\n", ""),
+        ))
+        val detail = api.client("c1")
+        assertEquals(java.math.BigDecimal("96400000"), detail.totalBooked)
+        assertEquals(41, detail.orderCount)
+    }
+
+    /** A server older than those two fields sends neither. They stay NULL rather than defaulting
+     *  to zero: a zero total would be a claim that this customer has booked nothing. */
+    @Test fun `client detail from an older server leaves both aggregates null`() = runTest {
+        server.enqueue(ok("""{"ok":true,"data":{"id":"c1","name":"Client","phone":"998901112233","orders":[]}}"""))
+        val detail = api.client("c1")
+        assertNull(detail.totalBooked)
+        assertNull(detail.orderCount)
+    }
+
     /** `sortBy=totalBooked&sortDir=desc` — the whitelist `CLIENT_SORT_FIELDS` in
      *  `src/app/api/clients/route.ts` enforces, sent only when a caller asks for it. */
     @Test fun `clients sends sortBy and sortDir only when given`() = runTest {

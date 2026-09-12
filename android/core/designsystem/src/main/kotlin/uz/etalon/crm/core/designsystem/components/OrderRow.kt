@@ -55,6 +55,10 @@ import uz.etalon.crm.core.model.OrderStatus
  *   applies. Callers pass `debt = null, paidLabel = null` for that row.
  * @param debtLabel the caller's wording, e.g. `{ "қолди ${formatMoney(it)}" }`.
  * @param onDark the row sits inside a [NavySheet]; false is the white-card variant of `2b-home.png`.
+ * @param showAvatar false drops the 36 dp circle and closes the gap it left, for a list where the
+ *   avatar would be the SAME one on every row and so distinguishes nothing — a client's own order
+ *   list, where [clientName] carries the order number instead of a person. Defaulted true, so
+ *   every other caller draws exactly what it drew before.
  * @param trailing a second line under the amount for a row whose money says nothing more — the
  *   clients list's «1 буюртма» (§3.6), where the figure above is the client's lifetime total and
  *   there is no debt or paid state to word. It is drawn only where [debt] and [paidLabel] leave the
@@ -77,6 +81,7 @@ fun OrderRow(
     onDark: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    showAvatar: Boolean = true,
     trailing: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     // Zero and null are the same state — settled — and neither may reach [debtLabel].
@@ -106,8 +111,10 @@ fun OrderRow(
             .padding(horizontal = EtalonSpace.rowPadH, vertical = EtalonSpace.rowPadV),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(clientName, size = 36.dp)
-        Spacer(Modifier.width(EtalonSpace.rowGap))
+        if (showAvatar) {
+            Avatar(clientName, size = 36.dp)
+            Spacer(Modifier.width(EtalonSpace.rowGap))
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 clientName,

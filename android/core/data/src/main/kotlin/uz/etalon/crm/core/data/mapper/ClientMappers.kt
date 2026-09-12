@@ -51,7 +51,11 @@ fun ClientOrderLineDto.toDomain() = ClientOrderLine(
     totalPrice = Money.parse(totalPrice), scheduledAt = Instant.parse(scheduledAt),
 )
 
+/** The two aggregates stay NULL when the response carried none — an older server — so the screen
+ *  can tell "this client has booked nothing" from "this server cannot say". */
 fun ClientDetailDto.toDomain() = ClientDetail(
     id = id, name = name, phone = phone, address = address, notes = notes,
     orders = orders.map { it.toDomain() },
+    totalBooked = totalBooked?.let { Money(it) },
+    orderCount = orderCount,
 )

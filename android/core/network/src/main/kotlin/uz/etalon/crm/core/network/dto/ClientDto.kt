@@ -76,6 +76,17 @@ data class ClientDetailDto(
     val address: String? = null,
     val notes: String? = null,
     val orders: List<ClientOrderLineDto> = emptyList(),
+    /**
+     * Whole-UZS sum of the client's live (non-CANCELED/non-DRAFT) order totals over ALL their
+     * orders — `totalForClient` in `src/lib/client-totals.ts`, the same rule the list rows carry.
+     * A bare JSON number. **Null from a server older than that field**, which is the only reason
+     * this is nullable: [orders] is capped at the 20 most recent, so a sum over it is not the
+     * client's total and the difference must stay visible to the mapper.
+     */
+    @Serializable(with = BigDecimalSerializer::class) val totalBooked: BigDecimal? = null,
+    /** How many orders this client has, uncapped. Null from an older server — [orders] is capped
+     *  at 20, so its size is a floor and never the count. */
+    val orderCount: Int? = null,
 )
 
 /** Body of `POST /api/clients` (`ClientCreateSchema`) and `PATCH /api/clients/{id}`

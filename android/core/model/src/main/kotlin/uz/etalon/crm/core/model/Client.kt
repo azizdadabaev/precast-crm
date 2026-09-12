@@ -31,7 +31,15 @@ data class ClientOrderLine(
     val scheduledAt: Instant,
 )
 
-/** GET /api/clients/{id}. */
+/**
+ * GET /api/clients/{id}.
+ *
+ * **[orders] is CAPPED** at the 20 most recent by the route, so neither its size nor a fold over
+ * it is this client's figure — [orderCount] and [totalBooked] are, because the server computes
+ * them over every order the client has. The two aggregates are nullable only because a server
+ * older than them sends neither; a screen that has to fall back onto [orders] is showing a
+ * truncated figure and should not pretend otherwise.
+ */
 data class ClientDetail(
     val id: String,
     val name: String,
@@ -39,6 +47,11 @@ data class ClientDetail(
     val address: String?,
     val notes: String?,
     val orders: List<ClientOrderLine>,
+    /** Whole-UZS sum of the client's live (non-cancelled/non-draft) order totals, over ALL their
+     *  orders — the same figure [ClientSummary.totalBooked] carries in the list. */
+    val totalBooked: Money? = null,
+    /** How many orders this client has in total, uncapped. */
+    val orderCount: Int? = null,
 )
 
 /**

@@ -3,6 +3,7 @@ package uz.etalon.crm.feature.clients
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -14,10 +15,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.ClientDetail
 import uz.etalon.crm.core.model.ClientOrderLine
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.ui.format.formatCount
+import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.feature.clients.detail.ClientDetailScreen
 import uz.etalon.crm.feature.clients.detail.ClientDetailUiState
 import java.time.Instant
@@ -64,11 +68,25 @@ class ClientDetailScreenshotTest {
                 totalPrice = Money.parse("2851580.00"), scheduledAt = at("2026-08-27T04:00:00Z"),
             ),
         ),
+        // The server's own aggregates — here the same two orders the list row counted, which is
+        // what makes these frames comparable with `2b-clients.png`'s third row.
+        totalBooked = Money.parse("16201580.00"),
+        orderCount = 2,
     )
 
     private fun loaded() = ClientDetailUiState(
         client = client, loading = false,
         canEdit = true, permissionsResolved = true,
+    )
+
+    /** `PATCH /api/clients/{id}` cannot be queued, so offline the pencil is greyed AND the reason
+     *  is said out loud under the panel — §5.1a's disabled-with-a-reason rule. */
+    private fun offline() = loaded().copy(lastRefreshError = AppError.Network("Интернет йўқ"))
+
+    /** A customer on file who has never ordered: «Буюртма йўқ», not an empty card and not the
+     *  error banner, which is what "we could not read them" looks like instead. */
+    private fun noOrders() = loaded().copy(
+        client = client.copy(orders = emptyList(), totalBooked = Money.ZERO, orderCount = 0),
     )
 
     private fun shoot(name: String, s: ClientDetailUiState) {
@@ -87,4 +105,31 @@ class ClientDetailScreenshotTest {
 
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
     fun largeFont() = shoot("client_detail_font13", loaded())
+
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun offlineLight() = shoot("client_detail_offline_light", offline())
+
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun noOrdersLight() = shoot("client_detail_no_orders_light", noOrders())
+
+    /**
+     * The route caps `orders` at the 20 most recent, so the panel must print the SERVER's
+     * aggregates and never a fold over what it was sent — otherwise a client with 41 orders reads
+     * as a client with 20, and the total disagrees with the row the operator tapped a moment ago.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun totalsAreTheServersNotTheCappedList() {
+        val big = client.copy(totalBooked = Money.parse("96400000.00"), orderCount = 41)
+        rule.setContent { EtalonTheme { Detail(loaded().copy(client = big)) } }
+        rule.onNodeWithText(formatCount(41)).assertExists()
+        rule.onNodeWithText(formatMoney(Money.parse("96400000.00"))).assertExists()
+    }
+
+    /** An older server sends neither figure. The panel then falls back onto the capped list — a
+     *  truncated figure beats a blank one — which is exactly what this pins. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun olderServerFallsBackToTheCappedList() {
+        val old = client.copy(totalBooked = null, orderCount = null)
+        rule.setContent { EtalonTheme { Detail(loaded().copy(client = old)) } }
+        rule.onNodeWithText(formatCount(2)).assertExists()
+        rule.onNodeWithText(formatMoney(Money.parse("16201580.00"))).assertExists()
+    }
 }

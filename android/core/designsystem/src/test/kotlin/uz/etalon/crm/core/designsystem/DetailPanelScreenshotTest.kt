@@ -25,10 +25,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.components.AddTile
 import uz.etalon.crm.core.designsystem.components.DetailPanel
+import uz.etalon.crm.core.designsystem.components.EtalonIconButton
 import uz.etalon.crm.core.designsystem.components.PanelTotal
 import uz.etalon.crm.core.designsystem.components.RoomTile
 import uz.etalon.crm.core.designsystem.components.StatusTag
 import uz.etalon.crm.core.designsystem.components.TagSurface
+import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
@@ -103,6 +105,18 @@ class DetailPanelScreenshotTest {
     }
 
     /**
+     * The `actions` slot, which the client detail is the first screen to use: an extra icon button
+     * to the LEFT of the call button, and the same panel with `onCall = null` so the header row
+     * proves it closes up rather than leaving a hole where the call button was. The enabled and
+     * disabled pencil are both in the frame — «disabled» is a state this app shows rather than
+     * hides, so it has to be legible on navy.
+     */
+    @Test fun detailPanelActionsLight() {
+        rule.setContent { EtalonTheme { ActionsSheet() } }
+        rule.onRoot().captureRoboImage("screenshots/ds_detail_panel_actions.png")
+    }
+
+    /**
      * The accessibility floor the totals have to survive: at 1.3× the three 13/700 figures are the
      * first thing in the panel to run out of column. `Density` is overridden rather than the
      * device's font setting so the check is exact and does not depend on Robolectric's config.
@@ -134,6 +148,40 @@ private fun PanelSheet() = Column(
     Panel(tileCount = 2)
     Caption("DetailPanel · 4 хона")
     Panel(tileCount = 4)
+}
+
+/** The client-detail shape: no status tag, no tiles, the phone in the `clientName` slot, the
+ *  client's own initials kept via `avatarName`, and a blank `dateLabel` (a client has no date). */
+@Composable
+private fun ActionsPanel(editEnabled: Boolean, onCall: (() -> Unit)?) = DetailPanel(
+    caption = "Мижоз",
+    headline = "Yusupov & Sons",
+    clientName = "+998 90 987 65 43",
+    addressLine = "Бухоро вилояти, Когон тумани, Мустақиллик кўчаси 4",
+    tiles = {},
+    totals = {
+        PanelTotal("Буюртмалар", "7 та", modifier = Modifier.weight(1f))
+        PanelTotal("Жами", formatMoney(Money.parse("41250000.00")), modifier = Modifier.weight(1f))
+    },
+    onBack = {},
+    dateLabel = "",
+    onCall = onCall,
+    actions = {
+        EtalonIconButton(EtalonIcons.Pencil, "Таҳрирлаш", onClick = {}, onDark = true, enabled = editEnabled)
+    },
+    avatarName = "Yusupov & Sons",
+    modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
+)
+
+@Composable
+private fun ActionsSheet() = Column(
+    Modifier.fillMaxWidth().background(EtalonColors.page).padding(vertical = 16.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp),
+) {
+    Caption("actions + onCall")
+    ActionsPanel(editEnabled = true, onCall = {})
+    Caption("actions ўчирилган + onCall = null")
+    ActionsPanel(editEnabled = false, onCall = null)
 }
 
 @Composable
