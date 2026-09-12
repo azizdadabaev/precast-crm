@@ -289,7 +289,9 @@ fun RecordPaymentScreen(
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(EtalonSpace.sm)) {
                     EtalonFilterChip(
-                        label = "${stringResource(R.string.record_quick_full)} · ${formatMoney(s.cap)}",
+                        // `fullAmount`, not `cap`: the chip SETS the cap rounded DOWN, and a label
+                        // off the HALF_UP figure would name one UZS more than the tap produces.
+                        label = "${stringResource(R.string.record_quick_full)} · ${formatMoney(s.fullAmount)}",
                         selected = s.amountDigits == s.fullAmountDigits,
                         onClick = { onSetAmountDigits(s.fullAmountDigits) },
                     )

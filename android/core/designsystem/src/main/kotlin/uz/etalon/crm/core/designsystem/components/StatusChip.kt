@@ -161,11 +161,16 @@ fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) =
     Tag(tone.family(), text, TagSurface.ROW_ON_LIGHT, modifier)
 
 // ── The six typed chips. Call [StatusTag] and friends instead; these survive so that the
-// remaining feature files compile until their screens are redrawn in phase 5. Phase 3 emptied
-// [DiscrepancyStatusChip]'s last caller (the discrepancies screen now draws `DiscrepancyStatusTag`
-// on navy), so it has no production use left — kept only because deleting one of a matched set
-// while its five siblings wait for phase 5 would make the group read as arbitrary. It goes with
-// them. ─────────────────────────────────────────────────────────────────────────────────────────
+// remaining feature files compile until their screens are redrawn in phase 5.
+//
+// Only TWO of the six still have a production caller — [ShipmentStatusChip] (`ShipmentsScreen`)
+// and [DriverStatusChip] (`DriversScreen`), both waiting for phase 5. Phases 2 and 3 emptied the
+// other four: [StatusChip] and [PaymentChip] (the orders list and order detail now draw
+// `StatusTag`/`PaymentStateTag`), [PaymentStatusChip] (the payments queue draws
+// `PaymentStatusTag`) and [DiscrepancyStatusChip] (the discrepancies screen draws
+// `DiscrepancyStatusTag` on navy). They are kept only because deleting four of a matched set
+// while its last two wait for phase 5 would make the group read as arbitrary — all six go
+// together, with the last screen that calls one. ───────────────────────────────────────────────
 @Composable fun StatusChip(status: OrderStatus, modifier: Modifier = Modifier) =
     StatusTag(status, TagSurface.ROW_ON_LIGHT, modifier = modifier)
 @Composable fun PaymentChip(state: PaymentState, modifier: Modifier = Modifier) =

@@ -164,7 +164,12 @@ private fun AddDriverSheet(submitting: Boolean, onDismiss: () -> Unit, onCreate:
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
-                value = phoneDigits, onValueChange = { phoneDigits = it.filter(Char::isDigit).take(9) },
+                // ASCII digits, not `Char.isDigit()`: Kotlin's is Unicode-aware, so an
+                // Arabic-Indic digit passes both this filter and the ViewModel's own check and
+                // then reaches a server whose `/\D+/` strips it — a driver saved under a number
+                // nobody typed. The same rule `normalizePhone` documents.
+                value = phoneDigits,
+                onValueChange = { phoneDigits = it.filter { c -> c in '0'..'9' }.take(9) },
                 label = { Text(stringResource(R.string.driver_phone)) },
                 prefix = { Text("+998 ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),

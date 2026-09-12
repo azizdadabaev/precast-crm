@@ -189,7 +189,13 @@ fun ClientForm(state: CalculatorUiState, vm: CalculatorViewModel, modifier: Modi
             FormField(stringResource(R.string.calc_client_phone_req)) {
                 EtalonTextField(
                     value = state.clientPhoneDigits,
-                    onValueChange = { vm.setClientPhoneDigits(it.filter(Char::isDigit).take(PHONE_LOCAL_DIGITS)) },
+                    // ASCII digits, not `Char.isDigit()`: Kotlin's is Unicode-aware and would let
+                    // an Arabic-Indic digit through to `normalizePhone`, whose own filter (and the
+                    // server's `/\D+/`) drops it — leaving an order under a phone the operator
+                    // typed and the CRM never stored. Same rule as `normalizePhone`'s KDoc.
+                    onValueChange = {
+                        vm.setClientPhoneDigits(it.filter { c -> c in '0'..'9' }.take(PHONE_LOCAL_DIGITS))
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = stringResource(R.string.calc_client_phone_mask),
                     prefix = "+998 ",

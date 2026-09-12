@@ -6,7 +6,13 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 
 /** `normalizePhone` turns exactly nine local digits into `998` + those nine — the length every
- *  phone field in the app stores and the length [PhoneDigitsMask] draws. */
+ *  phone field in the app stores and the length [PhoneDigitsMask] draws.
+ *
+ *  A field wearing this mask must filter its input with **ASCII** `'0'..'9'`, never
+ *  `Char.isDigit()`: Kotlin's is Unicode-aware and accepts an Arabic-Indic or Devanagari digit
+ *  that `normalizePhone`'s own filter — and the server's `/\D+/` — throws away, so the number the
+ *  operator sees typed and the number the CRM stores would differ. Phone is this product's unique
+ *  customer identity, so that difference is a customer saved under a phone nobody can look up. */
 const val PHONE_LOCAL_DIGITS = 9
 
 /**

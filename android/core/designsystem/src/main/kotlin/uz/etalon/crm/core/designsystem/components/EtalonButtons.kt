@@ -176,7 +176,11 @@ fun SecondaryButton(
  * carries colour without claiming the screen's shadow.
  *
  * @param compact defaults **true**, unlike every other button here: the 32 dp pill is the form §3
- *   actually draws, and the 48 dp one exists for the single-action forms of phase 6.
+ *   actually draws, and the 48 dp one exists for the single-action forms of phase 6. **No
+ *   production caller passes `compact = false` today** — every tonal pill in the app is a compact
+ *   one — and that is deliberate rather than an oversight: the parameter is specified, the 46 dp
+ *   geometry is pinned by `ds_buttons_light`, and a phase-6 form that needs a full-width tonal
+ *   button must not have to re-add it. Do not delete it as dead code.
  * @param onDark the pill sits on navy — navy2 with lavender text instead of lavender with indigo.
  *
  * On light, an *enabled* tonal pill and a *disabled* [PrimaryButton] share the lavenderBg fill and

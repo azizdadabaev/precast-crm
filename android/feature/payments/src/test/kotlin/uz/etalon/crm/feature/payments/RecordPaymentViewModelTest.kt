@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.image.PreparedImage
 import uz.etalon.crm.core.model.*
+import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.feature.payments.record.*
 import java.io.File
 import java.math.BigDecimal
@@ -131,6 +132,22 @@ class RecordPaymentViewModelTest {
         // would be worse than no chip at all.
         assertNull(validateRecord(s.copy(amountDigits = s.fullAmountDigits)))
         assertNull(validateRecord(s.copy(amountDigits = s.halfAmountDigits)))
+    }
+
+    /**
+     * A cap with a fraction — the state a write-off or a discount leaves — is where the chip's
+     * label and the chip's effect used to disagree: `formatMoney(cap)` rounds HALF_UP and printed
+     * one UZS more than `fullAmountDigits` puts in the field. The screen labels the chip with
+     * [RecordPaymentUiState.fullAmount] for exactly that reason.
+     */
+    @Test fun `the full chip is labelled with the figure it sets, not the rounded cap`() {
+        val s = form(total = "4499999.60", confirmed = "0", amount = "")
+        assertEquals(Money.parse("4499999.60"), s.cap)
+        assertEquals("4499999", s.fullAmountDigits)
+        assertEquals(Money.parse("4499999"), s.fullAmount)
+        // The defect, pinned: the two figures differ, so labelling with `cap` overstated the tap.
+        assertEquals("4 499 999", formatMoney(s.fullAmount))
+        assertEquals("4 500 000", formatMoney(s.cap))
     }
 
     /** Mirrors DeliveryProofUiState.amount: read during composition, so it must never throw. */

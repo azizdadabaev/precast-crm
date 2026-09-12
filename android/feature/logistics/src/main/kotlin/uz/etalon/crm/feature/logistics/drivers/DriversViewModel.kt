@@ -85,7 +85,9 @@ open class DriversViewModel(
         // value would still pass the repository's create() call and get stored as somebody's unique
         // phone. The screen always sends "998" + the 9 local digits it collected, so the whole
         // string must be exactly 12 digits, not merely non-blank.
-        if (phone.length != 12 || !phone.all(Char::isDigit)) {
+        // ASCII digits, for the reason `normalizePhone`'s KDoc gives: `Char.isDigit()` is
+        // Unicode-aware, and the server's `/\D+/` is not.
+        if (phone.length != 12 || !phone.all { c -> c in '0'..'9' }) {
             _state.update { it.copy(error = "Телефон рақами 9 та рақамдан иборат бўлиши керак") }
             return
         }

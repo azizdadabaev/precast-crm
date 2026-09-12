@@ -14,7 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -120,6 +122,26 @@ class ControlsScreenshotTest {
     @Test @Config(qualifiers = "w360dp-h780dp", fontScale = 1.3f) fun filledSegmentsLargeFont() {
         rule.setContent { EtalonTheme { FilledSegments() } }
         rule.onRoot().captureRoboImage("screenshots/ds_segments_fill_font13.png")
+    }
+
+    /**
+     * D8's thin space reaches the switch too. Asserted rather than drawn: no frame in this phase
+     * has a tab past 999 — the payments queue only grows into four figures on a real business's
+     * third year — and the grouping is text, not geometry, so a baseline would pin the same thing
+     * more expensively. The three-figure frames above are unaffected by definition.
+     */
+    @Test fun aFourFigureTabCountIsGrouped() {
+        rule.setContent {
+            EtalonTheme {
+                SegmentedControl(
+                    listOf(SegmentItem("Кутилмоқда", 3), SegmentItem("Тасдиқланган", 2481)),
+                    selectedIndex = 0,
+                    onSelect = {},
+                )
+            }
+        }
+        rule.onNodeWithText("2 481", useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithText("2481", useUnmergedTree = true).assertDoesNotExist()
     }
 
     /**

@@ -149,6 +149,13 @@ data class RecordPaymentUiState(
 
     /** Whole UZS, rounded DOWN so a quick chip can never land a hair above the cap. */
     val fullAmountDigits: String get() = cap.amount.setScale(0, java.math.RoundingMode.DOWN).toPlainString()
+
+    /**
+     * The figure [fullAmountDigits] actually puts in the field, as money — what the «Тўлиқ» chip
+     * has to be labelled with. `formatMoney(cap)` is not that figure: it rounds HALF_UP, so a cap
+     * of 4 499 999,60 would print «4 500 000» on a chip that fills 4 499 999.
+     */
+    val fullAmount: Money get() = Money(java.math.BigDecimal(fullAmountDigits))
     val halfAmountDigits: String
         get() = cap.amount.divide(java.math.BigDecimal(2), 0, java.math.RoundingMode.DOWN).toPlainString()
 }

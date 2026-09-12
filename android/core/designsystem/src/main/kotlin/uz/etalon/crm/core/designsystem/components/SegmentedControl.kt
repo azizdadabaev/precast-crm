@@ -22,6 +22,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.designsystem.theme.etalonRipple
+import uz.etalon.crm.core.ui.format.formatCountBare
 
 /** One cell of a [SegmentedControl]. The count is optional — §3.2's «Барчаси 9» carries one,
  *  §3.3's plain two-way switch does not. */
@@ -114,7 +115,9 @@ fun SegmentedControl(
             )
             if (item.count != null) {
                 Text(
-                    "${item.count}",
+                    // D8's thin space, same as every other count in the app: the «Тасдиқланган»
+                    // tab of a business's third year reads «2 481», not «2481».
+                    formatCountBare(item.count),
                     style = EtalonType.labelSm,
                     color = fg.copy(alpha = 0.55f),
                     maxLines = 1,
