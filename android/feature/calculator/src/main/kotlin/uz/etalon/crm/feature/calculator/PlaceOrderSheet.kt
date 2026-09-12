@@ -67,6 +67,7 @@ import uz.etalon.crm.core.ui.format.formatPercent
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.core.ui.regions.composeAddress
 import java.math.BigDecimal
+import java.time.Instant
 import java.time.LocalDate
 
 /** `PlaceOrderSchema.notes` is `z.string().max(2000)` — the field is capped here so an over-long
@@ -357,6 +358,25 @@ fun PlaceOrderSheet(
         ) {
             DatePicker(
                 state = pickerState,
+                // Both slots are given, as the orders list's day picker gives them: M3's own
+                // defaults are the ENGLISH «Select date» / «Selected date», and this UI is Uzbek.
+                title = {
+                    Text(
+                        stringResource(R.string.calc_place_scheduled_at),
+                        style = EtalonType.sectionTitle, color = EtalonColors.ink2,
+                        modifier = Modifier.padding(start = EtalonSpace.xl, top = EtalonSpace.lg),
+                    )
+                },
+                headline = {
+                    val picked = pickerState.selectedDateMillis
+                        ?.let { formatDate(Instant.ofEpochMilli(it)) }
+                    Text(
+                        picked ?: stringResource(R.string.calc_place_pick_date),
+                        style = EtalonType.headline,
+                        color = if (picked != null) EtalonColors.ink else EtalonColors.ink3,
+                        modifier = Modifier.padding(start = EtalonSpace.xl, bottom = EtalonSpace.md),
+                    )
+                },
                 showModeToggle = false,
                 // The same token colours the orders list's day picker carries — M3's defaults
                 // would paint the selection in the Material primary this app never uses.
