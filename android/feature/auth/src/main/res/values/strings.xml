@@ -2,7 +2,8 @@
     <string name="login_title">Кириш</string>
     <string name="login_subtitle">Исмингиз ва 4 рақамли PIN</string>
     <string name="login_name">Логин</string>
-    <string name="login_pin">PIN</string>
+    <!-- TalkBack's reading of the four PIN dots: how many of the four are in. -->
+    <string name="login_pin_progress">PIN: %1$d тадан %2$d таси киритилди</string>
     <string name="change_pin_title">PIN ни ўзгартириш</string>
     <string name="change_pin_forced_hint">Биринчи киришда янги PIN ўрнатинг</string>
     <string name="change_pin_current">Жорий PIN</string>

@@ -5,12 +5,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -71,12 +75,33 @@ fun LoginRoute(onLoggedIn: (Me) -> Unit, hint: String? = null, vm: HiltLoginView
  * now §2's key, the same one the numeric keypad draws — not the way the screen is used.
  *
  * The screen is outside the signed-in shell, so there is no nav pill to clear; the pad keeps the
- * gesture bar's inset instead. `imePadding` is the login-name field's (R13): with the keyboard up
- * the column shortens and the two weighted spacers give their room back, which is what keeps the
- * pad on screen rather than under the keyboard.
+ * gesture bar's inset instead.
+ *
+ * @param padVisible whether the pad is drawn at all (ruling R13). It steps aside for the keyboard
+ *   the login-name field raises: the root's [imePadding] shortens the screen by the keyboard's
+ *   ~300 dp, which is more than the two weighted spacers hold, and the column has no scroll — so
+ *   with the pad drawn the «0» and «⌫» row was pushed off the bottom edge with no way to reach it.
+ *   Nothing is lost by hiding it, because a pad under a keyboard cannot be tapped anyway; the
+ *   first key press clears the field's focus, so the keyboard leaves and the pad is back before a
+ *   digit is needed. Its gesture-bar inset goes with it: while the keyboard is up the root's own
+ *   ime inset already contains that band, and applying both counted it twice.
+ *
+ *   Defaulted from the window and passed in only by the tests — Robolectric reports the ime inset
+ *   as absent whatever is focused, so this is the only way the rule can be asserted at all.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun LoginScreen(state: LoginUiState, onLoginName: (String) -> Unit, onDigit: (Char) -> Unit, onBackspace: () -> Unit, hint: String? = null) {
+fun LoginScreen(
+    state: LoginUiState,
+    onLoginName: (String) -> Unit,
+    onDigit: (Char) -> Unit,
+    onBackspace: () -> Unit,
+    hint: String? = null,
+    padVisible: Boolean = !WindowInsets.isImeVisible,
+) {
+    // The name field keeps focus after the keyboard is dismissed, and a focused field brings the
+    // keyboard back on the next recomposition — which would take the pad away again mid-PIN.
+    val focus = LocalFocusManager.current
     Column(
         Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding().imePadding()
             .padding(horizontal = EtalonSpace.headerMargin, vertical = EtalonSpace.lg),
@@ -108,7 +133,14 @@ fun LoginScreen(state: LoginUiState, onLoginName: (String) -> Unit, onDigit: (Ch
             Spacer(Modifier.height(PROGRESS_HEIGHT))
         }
         Spacer(Modifier.weight(1f))
-        PinPad(onDigit, onBackspace, enabled = !state.isSubmitting, modifier = Modifier.navigationBarsPadding())
+        if (padVisible) {
+            PinPad(
+                onDigit = { d -> focus.clearFocus(); onDigit(d) },
+                onBackspace = { focus.clearFocus(); onBackspace() },
+                enabled = !state.isSubmitting,
+                modifier = Modifier.navigationBarsPadding(),
+            )
+        }
     }
 }
 
@@ -116,12 +148,14 @@ fun LoginScreen(state: LoginUiState, onLoginName: (String) -> Unit, onDigit: (Ch
  * How many digits are in, without showing them. Filled dots are indigo, the rest are the hairline
  * ring §2 draws around everything empty.
  *
- * TalkBack is told this row is the PIN — the dots themselves are unlabelled boxes, and the visible
- * «PIN» caption the old screen carried is gone with the Material form.
+ * TalkBack is told this row is the PIN *and how much of it is in* — the dots themselves are
+ * unlabelled boxes, the visible «PIN» caption the old screen carried is gone with the Material
+ * form, and an operator who cannot see the fill has no other way to tell how many digits landed
+ * before the pad auto-submits on the fourth.
  */
 @Composable
 private fun PinDots(filled: Int) {
-    val label = stringResource(R.string.login_pin)
+    val label = stringResource(R.string.login_pin_progress, PIN_LENGTH, filled)
     Row(
         Modifier.fillMaxWidth().semantics { contentDescription = label },
         horizontalArrangement = Arrangement.spacedBy(EtalonSpace.md, Alignment.CenterHorizontally),
