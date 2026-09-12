@@ -74,6 +74,27 @@ class ClientsViewModelTest {
         assertEquals(1, vm.state.value.items.size)
     }
 
+    /**
+     * The order on screen is the server's. `ClientsRepository.list` asks for
+     * `sortBy=totalBooked&sortDir=desc`, so the customer who has booked the most arrives first —
+     * which is what «жами айланма бўйича» under the title claims. Re-sorting the page here would
+     * be a second, disagreeing opinion about the same list, and it could not even be a correct
+     * one: this is the first 50 rows of the SERVER's ordering, so sorting them locally would
+     * reorder an arbitrary subset and still miss the customers that ordering left out.
+     */
+    @Test fun `the rows keep the order the server sent`() = runTest {
+        val rows = listOf(
+            row(id = "c1", name = "Rahimov Construction", phone = "998902239888", total = "29000000"),
+            row(id = "c2", name = "Tashkent Tower LLC", phone = "998901112233", total = "18420000"),
+            row(id = "c3", name = "Andijon Stroy", phone = "998934445566", total = "4947920"),
+        )
+        val vm = viewModel(list = { Result.success(rows) })
+        advanceUntilIdle()
+        assertEquals(rows, vm.state.value.items)
+        assertEquals(listOf("c1", "c2", "c3"), vm.state.value.items.map { it.id })
+        assertEquals(Money.parse("29000000"), vm.state.value.items.first().totalBooked)
+    }
+
     // ── phone-first search ────────────────────────────────────────────────────────
 
     /**
@@ -304,8 +325,15 @@ class ClientsViewModelTest {
         permissions = ClientDetailPermissionUseCase { permissions(it) },
     )
 
-    private fun row(id: String = "c1", name: String = "Навоий Build", phone: String = "998901112233") =
-        ClientSummary(id = id, name = name, phone = phone, address = null, orderCount = 3, totalBooked = Money.ZERO)
+    private fun row(
+        id: String = "c1",
+        name: String = "Навоий Build",
+        phone: String = "998901112233",
+        total: String = "0",
+    ) = ClientSummary(
+        id = id, name = name, phone = phone, address = null, orderCount = 3,
+        totalBooked = Money.parse(total),
+    )
 
     private fun detail(orders: List<ClientOrderLine> = emptyList()) = ClientDetail(
         id = "c1", name = "Навоий Build", phone = "998901112233",
