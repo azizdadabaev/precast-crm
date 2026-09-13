@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.data.mapper.toDomain
+import uz.etalon.crm.core.model.CapacityThresholds
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.network.dto.BootstrapDto
@@ -24,6 +25,13 @@ class SessionMappersTest {
         val b = json.decodeFromString(BootstrapDto.serializer(), bootstrapJson("""{"max_beam_length":4.3,"price":140000}""", "13500.5")).toDomain()
         assertEquals(PriceTier(BigDecimal("4.3"), Money.parse("140000")), b.pricing.m2Tiers.single())
         assertEquals(Money.parse("13500.5"), b.pricing.blockUnitPrice)
+    }
+
+    /** The bootstrap's own `capacityThresholds` (whole square metres on the wire) decodes into
+     *  the same [CapacityThresholds] the capacity endpoint's fallback reads — see [SessionCapacity]. */
+    @Test fun `the bootstrap's capacity thresholds decode into the fixture's three values`() {
+        val b = json.decodeFromString(BootstrapDto.serializer(), bootstrapJson("""{"max_beam_length":4.3,"price":140000}""", "13500.5")).toDomain()
+        assertEquals(CapacityThresholds(BigDecimal("1"), BigDecimal("2"), BigDecimal("3")), b.capacity)
     }
 
     /** A price beyond Double's exact-integer range proves nothing is routed through a float. */

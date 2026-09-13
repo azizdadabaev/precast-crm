@@ -10,6 +10,7 @@ import uz.etalon.crm.core.database.EtalonDatabase
 import uz.etalon.crm.core.datastore.SessionPrefs
 import uz.etalon.crm.core.datastore.TokenStore
 import uz.etalon.crm.core.model.Bootstrap
+import uz.etalon.crm.core.model.CapacityThresholds
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Pricing
 import uz.etalon.crm.core.network.EtalonApi
@@ -31,17 +32,31 @@ interface SessionPricing {
     val pricing: StateFlow<Pricing?>
 }
 
+/**
+ * The factory's capacity thresholds, narrowed out the same way [SessionPricing] is — so
+ * `CapacityRepository` can fall back to them (R3: the response's own `thresholds` win; this is
+ * the fallback for a server old enough to omit them) without depending on the whole session.
+ * Null before the first `bootstrap()` lands, in which case the caller falls back further, to
+ * `CapacityThresholds.DEFAULT`.
+ */
+interface SessionCapacity {
+    val capacityThresholds: StateFlow<CapacityThresholds?>
+}
+
 @Singleton
 class SessionRepository @Inject constructor(
     private val api: EtalonApi, private val tokens: TokenStore, private val prefs: SessionPrefs, private val db: EtalonDatabase,
     private val orders: OrdersRepository, private val outboxScheduler: OutboxScheduler,
-) : SessionPricing {
+) : SessionPricing, SessionCapacity {
     private val _me = MutableStateFlow<Me?>(null)
     val me: StateFlow<Me?> = _me.asStateFlow()
     val isLoggedIn: Flow<Boolean> = tokens.isLoggedIn
 
     private val _pricing = MutableStateFlow<Pricing?>(null)
     override val pricing: StateFlow<Pricing?> = _pricing.asStateFlow()
+
+    private val _capacityThresholds = MutableStateFlow<CapacityThresholds?>(null)
+    override val capacityThresholds: StateFlow<CapacityThresholds?> = _capacityThresholds.asStateFlow()
 
     /** The last authenticated user, surviving process death; see SessionPrefs.lastMe. */
     val lastMe: Flow<Me?> = prefs.lastMe
@@ -77,7 +92,9 @@ class SessionRepository @Inject constructor(
     /** Cold start. A 401 here clears the token (AuthInterceptor) and the caller shows the PIN screen. */
     suspend fun bootstrap(): Result<Bootstrap> =
         runCatchingCancellable {
-            api.bootstrap().toDomain().also { _me.value = it.me; _pricing.value = it.pricing; prefs.setLastMe(it.me) }
+            api.bootstrap().toDomain().also {
+                _me.value = it.me; _pricing.value = it.pricing; _capacityThresholds.value = it.capacity; prefs.setLastMe(it.me)
+            }
         }
 
     suspend fun changePin(currentPin: String, newPin: String): Result<Unit> = runCatchingCancellable {
@@ -99,9 +116,12 @@ class SessionRepository @Inject constructor(
      *  _pricing goes the way _me does, and for the reason the caches do: it is the PREVIOUS
      *  session's catalogue, and the calculator prices every row against whatever is in it
      *  (`CalculatorViewModel.init`). The next operator to sign in on this device must not quote
-     *  from it in the window before their own bootstrap lands. */
+     *  from it in the window before their own bootstrap lands. _capacityThresholds follows the
+     *  same reasoning: it is the fallback `CapacityRepository` reads when a response omits its
+     *  own thresholds, and the next operator's bootstrap has not landed yet either. */
     suspend fun signOut() {
-        tokens.clear(); _me.value = null; _pricing.value = null; prefs.setLastMe(null); orders.clearCache()
+        tokens.clear(); _me.value = null; _pricing.value = null; _capacityThresholds.value = null
+        prefs.setLastMe(null); orders.clearCache()
         db.clearOrderCache()
     }
 

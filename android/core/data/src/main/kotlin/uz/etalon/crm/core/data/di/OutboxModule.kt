@@ -13,6 +13,7 @@ import uz.etalon.crm.core.data.OrdersRepository
 import uz.etalon.crm.core.data.OutboxGateway
 import uz.etalon.crm.core.data.OutboxRepository
 import uz.etalon.crm.core.data.PermissionGate
+import uz.etalon.crm.core.data.SessionCapacity
 import uz.etalon.crm.core.data.SessionCurrentUser
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.data.SessionRepository
@@ -35,6 +36,9 @@ abstract class OutboxModule {
 
     /** `:feature:calculator`'s narrow view of the session — see [SessionPricing]. */
     @Binds @Singleton abstract fun sessionPricing(impl: SessionRepository): SessionPricing
+
+    /** `CapacityRepository`'s narrow view of the session — see [SessionCapacity]. */
+    @Binds @Singleton abstract fun sessionCapacity(impl: SessionRepository): SessionCapacity
 
     companion object {
         @Provides @Singleton @Named("outboxDir")

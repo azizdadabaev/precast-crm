@@ -1,4 +1,6 @@
 <paths>
     <!-- Only the generated quote PNGs are exposed, and only for the life of the share. -->
     <cache-path name="quotes" path="quotes/" />
+    <!-- The downloaded Excel backup (R4), exposed only for the life of the share sheet. -->
+    <cache-path name="exports" path="exports/" />
 </paths>

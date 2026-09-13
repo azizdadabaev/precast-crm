@@ -50,6 +50,10 @@ val OrderStatus.owesNothing: Boolean get() = this == OrderStatus.CANCELED
 
 enum class PaymentFilter { DEBT, PAID }
 
+/** The Orders tab's Рўйхат/Жадвал switch (R11), persisted by `:core:datastore`'s `OrdersPrefs`
+ *  and restored on open; default [LIST]. */
+enum class OrdersView { LIST, CALENDAR }
+
 /** GET /api/orders' `facets` — status/payment counts and total area for the current `q`/`day`
  *  filter, independent of `status`/`payment`/`page` so the list's chips can show every option's
  *  count while one is selected. */

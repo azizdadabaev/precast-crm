@@ -3,6 +3,7 @@ package uz.etalon.crm.core.network
 import kotlinx.serialization.json.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.http.*
 import uz.etalon.crm.core.network.dto.*
 
@@ -26,6 +27,26 @@ interface EtalonApi {
         @Query("payment") payment: String? = null, @Query("sort") sort: String = "asc",
     ): OrdersPageDto
     @GET("/api/orders/{id}") suspend fun order(@Path("id") id: String): OrderDetailDto
+
+    /**
+     * `GET /api/orders/capacity?from=YYYY-MM-DD&to=YYYY-MM-DD` — the calendar's day-load
+     * aggregates for the visible six-week grid (design §4.3, R10). CANCELED orders are already
+     * excluded server-side; days with no orders are simply omitted, not sent as zeros.
+     */
+    @GET("/api/orders/capacity")
+    suspend fun capacity(@Query("from") from: String, @Query("to") to: String): CapacityDto
+
+    /**
+     * `GET /api/orders/export` — the owner's Excel backup (`order.exportBackup`), streamed rather
+     * than buffered: the workbook can cover every order the factory has ever placed. `@Streaming`
+     * stops Retrofit from reading the whole body into memory before this even returns; the caller
+     * ([uz.etalon.crm.core.data.ExportRepository]) copies it straight to a cache file. Never
+     * queued (R4): the route builds a fresh snapshot on every call, and a queued retry from a
+     * dropped connection would only re-download what a second tap gets just as well.
+     */
+    @Streaming
+    @GET("/api/orders/export")
+    suspend fun exportBackup(): ResponseBody
 
     // ── Camera uploads. Every one of these routes is withIdempotency-wrapped on
     // the server, which is exactly why they are the operations the outbox may

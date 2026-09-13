@@ -8,6 +8,9 @@ dependencies {
     // `implementation`, or a consumer resolving that type off its own classpath is left guessing.
     api(project(":core:calc"))
     implementation(libs.kotlinx.serialization.json); implementation(libs.kotlinx.coroutines.android)
+    // ExportRepository streams EtalonApi.exportBackup()'s ResponseBody straight to a cache file —
+    // an okhttp type this module's public surface names, so it needs it at compile time too.
+    implementation(libs.okhttp)
     // Room runtime comes transitively via :core:database's `api(libs.room.runtime)` — needed to
     // compile against EtalonDatabase (extends RoomDatabase) for SessionRepository's db.wipe().
     testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core); testImplementation(libs.room.testing)

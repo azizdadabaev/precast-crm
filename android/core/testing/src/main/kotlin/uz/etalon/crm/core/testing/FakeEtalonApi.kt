@@ -3,6 +3,7 @@ package uz.etalon.crm.core.testing
 import kotlinx.serialization.json.JsonObject
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.*
 
@@ -36,6 +37,8 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun unregisterDevice(token: String): DeletedDto = unused("unregisterDevice")
     override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int, payment: String?, sort: String): OrdersPageDto = unused("orders")
     override suspend fun order(id: String): OrderDetailDto = unused("order")
+    override suspend fun capacity(from: String, to: String): CapacityDto = unused("capacity")
+    override suspend fun exportBackup(): ResponseBody = unused("exportBackup")
 
     override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = unused("loadTruck")
     override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): GalleryPhotoDto = unused("addLoadedPhoto")
