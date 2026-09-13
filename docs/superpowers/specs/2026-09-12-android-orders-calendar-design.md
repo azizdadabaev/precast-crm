@@ -89,6 +89,8 @@ Tap → `GET /api/orders/export` (streams `orders-backup-<stamp>.xlsx`, `Content
 
 In the place-order sheet (`PlaceOrderSheet`, «Етказиб бериш санаси»), the date row opens the SAME calendar grid in a white `ModalBottomSheet` (read-only tiers, no day sheet, one tap picks and closes). The picked date's tier tag is drawn beside the field value («20 сен 2026 · ўртача»). Past days are not selectable (as the current picker). The Material `DatePickerDialog` there is retired; the Orders list's fallback picker (§3) stays.
 
+**R17 (2026-09-13): the date grid never blocks placing an order.** The load figures are a planning aid. When the capacity call fails or has not answered, the in-range future days stay tappable as plain dates (no figures, no bar, no tag afterwards), and an error banner with retry above the grid says the load figures are unavailable. Opening the grid re-fetches its month (a cached month may be a whole session stale); ‹ › use the cache. Offline placement and queueing therefore work exactly as before the grid existed.
+
 ## 8. Failure and edge rules
 
 - Capacity fetch fails: banner + retry; the grid keeps the last good month if cached, else empty cells (no bars, no zeros written into cells).
