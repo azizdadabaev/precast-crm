@@ -25,7 +25,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.R
 import uz.etalon.crm.core.designsystem.components.EtalonIconButton
@@ -220,6 +222,37 @@ private fun WeekdayRow() = Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(CEL
     }
 }
 
+/**
+ * Whether every m² figure the grid is about to draw fits its column **with** «м²» beside it —
+ * §8's yield, decided once for the whole grid rather than once per cell.
+ *
+ * Per cell it was cheaper and wrong: how much text fits is a function of the width, the font scale
+ * AND the digits the day happens to carry, so at 360 dp × 1,3 «96 м²» kept its unit in the column
+ * beside a «525» that had lost it — one table printing two different units, which reads as a
+ * rendering fault rather than as a narrow column. The grid measures the widest figure it holds and
+ * every cell obeys the answer; when the unit goes, the legend's own «≤300 м²» carries the scale.
+ *
+ * Measured rather than guessed: a blanket «drop it under 44 dp» would strip the unit off the
+ * roomy 411 dp phone the moment the type grew a half point.
+ */
+@Composable
+private fun unitFitsGrid(data: CapacityMonth?, first: LocalDate, rows: Int, available: Dp): Boolean {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(data, first, rows, available, density) {
+        // Nothing to draw yet: an unloaded grid has no figures, and the next pass — the one that
+        // has them — is the one that decides.
+        if (data == null) return@remember true
+        val limit = with(density) { available.roundToPx() }
+        (0 until rows * GRID_COLS)
+            .map { data.day(first.plusDays(it.toLong())).totalArea }
+            .filter { it.signum() > 0 }
+            .map { formatArea(it) }
+            .distinct()
+            .all { measurer.measure(it, style = EtalonType.calendarArea, maxLines = 1, softWrap = false).size.width <= limit }
+    }
+}
+
 @Composable
 private fun Grid(
     month: YearMonth,
@@ -242,6 +275,7 @@ private fun Grid(
     // subcomposition here rather than forty-two `BoxWithConstraints` inside the cells.
     BoxWithConstraints(Modifier.fillMaxWidth().testTag(GRID_TEST_TAG)) {
         val cellWidth = (maxWidth - CELL_GAP * (GRID_COLS - 1)) / GRID_COLS
+        val showUnit = unitFitsGrid(data, first, rows, cellWidth - CELL_PAD_H * 2)
         val threshold = with(LocalDensity.current) { SWIPE_MIN.toPx() }
         Column(
             Modifier
@@ -298,7 +332,7 @@ private fun Grid(
                             // be tapped as one. Жадвал keeps the stricter rule — there a tap opens
                             // a day sheet that would have nothing in it.
                             enabled = (data != null || selectableWithoutData) && !dimmed,
-                            cellWidth = cellWidth,
+                            showUnit = showUnit,
                             onClick = { onSelect(date) },
                             modifier = Modifier.weight(1f),
                         )

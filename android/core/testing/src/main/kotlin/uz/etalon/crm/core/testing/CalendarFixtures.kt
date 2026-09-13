@@ -17,9 +17,13 @@ import java.time.YearMonth
  * acceptance days below are the ones the owner checks against the web
  * (`ORDERS_TAB_BUILD_BRIEF.md` §4, design §9).
  *
- * September 2026 starts on a Tuesday, so the six-week grid runs 31 Aug → 11 Oct: one leading
- * adjacent day and eleven trailing ones, which is exactly the shape the owner's web screenshot
- * shows.
+ * September 2026 starts on a Tuesday, so the **request** range runs 31 Aug → 11 Oct — six weeks,
+ * Monday-first, exactly what the web asks the same endpoint for (R10) and what [september]'s
+ * `range` carries. The **card** draws only the five rows the month needs (R16, 31 Aug → 4 Oct):
+ * one leading adjacent day and four trailing ones, which is the shape every calendar baseline
+ * shows. A fixture that holds the wider range and a card that draws the narrower one is not a
+ * contradiction — the extra days are fetched so that paging never shows a hole, and simply not
+ * drawn.
  */
 object CalendarFixtures {
     val MONTH: YearMonth = YearMonth.of(2026, 9)
@@ -35,6 +39,14 @@ object CalendarFixtures {
 
     /** The «recoloured» run of design §9: the same payload under a tighter factory. */
     val TIGHT_THRESHOLDS = CapacityThresholds(BigDecimal(200), BigDecimal(300), BigDecimal(400))
+
+    /**
+     * A factory ten times this one's size, which is the LEGEND's worst case rather than the grid's:
+     * «≤1 000 м² · ≤2 000 · ≤3 000 · >3 000» is wide enough to wrap onto a second line on a narrow
+     * phone at large text, where the default 300/450/600 fits one. The card reserves that second
+     * line before any month has arrived, and these numbers are what proves it.
+     */
+    val WIDE_THRESHOLDS = CapacityThresholds(BigDecimal(1000), BigDecimal(2000), BigDecimal(3000))
 
     /**
      * The web's September, day by day: `day of month` to `orders` to `m²`.
@@ -67,6 +79,9 @@ object CalendarFixtures {
 
     /** The same days under [TIGHT_THRESHOLDS] — every cell one tier warmer. */
     val septemberTight: CapacityMonth = month(TIGHT_THRESHOLDS)
+
+    /** The same days under [WIDE_THRESHOLDS] — every cell Available, and a four-digit legend. */
+    val septemberWide: CapacityMonth = month(WIDE_THRESHOLDS)
 
     private fun month(t: CapacityThresholds) = CapacityMonth(
         month = MONTH,

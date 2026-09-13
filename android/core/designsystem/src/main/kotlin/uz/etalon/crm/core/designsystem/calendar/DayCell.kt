@@ -22,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -30,7 +29,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -94,8 +92,11 @@ private const val AREA_PLACES = 2
  * @param heavy the top threshold the bar is a fraction of. Zero or less draws no bar rather than
  *   dividing by it.
  * @param enabled false for a dimmed day and for every cell of a grid with no capacity behind it.
- * @param cellWidth what the column actually measured, which the grid works out once from its own
- *   constraints. It is what decides whether «м²» is drawn at all — see [areaLine].
+ * @param showUnit whether «м²» is drawn beside the figure. Decided **once for the whole grid**
+ *   (`unitFitsGrid`), never per cell: at 360 dp × 1,3 «525 м²» does not fit a 40 dp column while
+ *   «96 м²» does, and letting each cell answer for itself printed «525» next to «96 м²» in the
+ *   same week — two different units in one table, which reads as a bug rather than as a narrow
+ *   column. When it is false the legend's own «м²» carries the scale for the grid.
  */
 @Composable
 internal fun DayCell(
@@ -106,7 +107,7 @@ internal fun DayCell(
     isSelected: Boolean,
     heavy: BigDecimal,
     enabled: Boolean,
-    cellWidth: Dp,
+    showUnit: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -137,6 +138,8 @@ internal fun DayCell(
             R.string.ds_calendar_day_cd,
             formatDate(day.date),
             formatCountBare(day.totalOrders),
+            // The spoken sentence always names the unit, whatever the column had room to print:
+            // a screen reader is not short of width, and «685» alone answers nothing.
             formatArea(day.totalArea),
         )
     } else {
@@ -193,12 +196,12 @@ internal fun DayCell(
             Spacer(Modifier.weight(1f))
             if (loaded != null) {
                 Text(
-                    areaLine(day.totalArea, cellWidth - CELL_PAD_H * 2),
+                    if (showUnit) formatArea(day.totalArea) else formatDecimal(day.totalArea, AREA_PLACES),
                     style = EtalonType.calendarArea,
                     color = if (isSelected) EtalonColors.onDark else loaded.color(),
                     maxLines = 1,
                     // Never an ellipsis inside a 40 dp cell: «685 …» costs more meaning than the
-                    // unit does, and [areaLine] has already dropped the unit if it was the thing
+                    // unit does, and the grid has already dropped the unit if it was the thing
                     // that did not fit.
                     overflow = TextOverflow.Clip,
                 )
@@ -211,33 +214,6 @@ internal fun DayCell(
                 )
             }
         }
-    }
-}
-
-/**
- * The m² line, with its unit only if the unit fits (§8: «the m² line is the one that yields», and
- * the unit is what yields first). At 360 dp and font scale 1,3 a cell is about 40 dp wide and
- * «525 м²» renders past its own padding — the old answer clipped, and a «м» cut down the middle
- * reads as a rendering fault rather than as a narrow column. Measured rather than guessed, because
- * how much text fits is a function of the width, the font scale AND the digits the day happens to
- * carry: «96 м²» still fits where «525 м²» does not, and a blanket rule would drop the unit off
- * cells that had room for it.
- *
- * [available] is the cell's width minus its own horizontal padding.
- */
-@Composable
-private fun areaLine(totalArea: BigDecimal, available: Dp): String {
-    val withUnit = formatArea(totalArea)
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    return remember(withUnit, available, density) {
-        val width = measurer.measure(
-            withUnit,
-            style = EtalonType.calendarArea,
-            maxLines = 1,
-            softWrap = false,
-        ).size.width
-        if (width <= with(density) { available.roundToPx() }) withUnit else formatDecimal(totalArea, AREA_PLACES)
     }
 }
 

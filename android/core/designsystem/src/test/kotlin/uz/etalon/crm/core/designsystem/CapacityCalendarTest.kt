@@ -115,6 +115,66 @@ class CapacityCalendarTest {
     }
 
     /**
+     * The first session of an install at a big factory (Task 5 minor M2). Before any month has
+     * arrived the card draws its legend invisibly, at `CapacityThresholds.DEFAULT`, purely to hold
+     * the height the real one will take — and with four-digit thresholds the real one took two
+     * lines where the placeholder had taken one, so the card grew a line at the very moment the
+     * planner's finger was on it. The reservation is measured from the widest thresholds the
+     * legend could ever be given, which depends on the width and the font scale and not on figures
+     * that have not arrived, so the height is settled before the fetch is.
+     *
+     * Run at font scale 1,3 on the 360 dp phone: the one geometry where four bands cannot share a
+     * line at all.
+     */
+    @Test @Config(qualifiers = "w360dp-h800dp", fontScale = 1.3f)
+    fun `a four-digit legend does not grow the card when the month lands`() {
+        var capacity by mutableStateOf<Resource<CapacityMonth>>(Resource.Loading(null))
+        rule.setContent {
+            EtalonTheme {
+                Column(Modifier.fillMaxWidth()) {
+                    CapacityCalendarCard(
+                        month = CalendarFixtures.MONTH,
+                        capacity = capacity,
+                        selected = CalendarFixtures.SELECTED,
+                        today = CalendarFixtures.TODAY,
+                        onPrev = {}, onNext = {}, onSelect = {},
+                        modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin).testTag(CARD),
+                    )
+                }
+            }
+        }
+        val inFlight = rule.onNodeWithTag(CARD).getUnclippedBoundsInRoot().height
+        capacity = Resource.Success(CalendarFixtures.septemberWide)
+        rule.waitForIdle()
+        assertEquals(inFlight, rule.onNodeWithTag(CARD).getUnclippedBoundsInRoot().height)
+    }
+
+    /** And the same card under the server's usual 300/450/600 is the very same height: the
+     *  reservation is the legend's worst case, so the thresholds cannot change the card's size. */
+    @Test @Config(qualifiers = "w360dp-h800dp", fontScale = 1.3f)
+    fun `the thresholds do not change the card's height`() {
+        var month by mutableStateOf(CalendarFixtures.september)
+        rule.setContent {
+            EtalonTheme {
+                Column(Modifier.fillMaxWidth()) {
+                    CapacityCalendarCard(
+                        month = CalendarFixtures.MONTH,
+                        capacity = Resource.Success(month),
+                        selected = CalendarFixtures.SELECTED,
+                        today = CalendarFixtures.TODAY,
+                        onPrev = {}, onNext = {}, onSelect = {},
+                        modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin).testTag(CARD),
+                    )
+                }
+            }
+        }
+        val narrow = rule.onNodeWithTag(CARD).getUnclippedBoundsInRoot().height
+        month = CalendarFixtures.septemberWide
+        rule.waitForIdle()
+        assertEquals(narrow, rule.onNodeWithTag(CARD).getUnclippedBoundsInRoot().height)
+    }
+
+    /**
      * R7 with the calendar paged away from the selection. 30 September is the selected day and
      * October is the cursor month, so the date shows up in October's grid as a leading day of the
      * month before — dimmed and inert. It must not be drawn as the chosen day: the planner has

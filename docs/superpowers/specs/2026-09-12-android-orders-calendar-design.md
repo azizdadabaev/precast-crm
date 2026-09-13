@@ -98,6 +98,7 @@ In the place-order sheet (`PlaceOrderSheet`, «Етказиб бериш сан�
 - Day with orders but `totalArea = 0` (beams-only): cell shows the count, no bar, `surface` ground; the sheet shows «0 м²» and the orders.
 - `totalArea` ≥ 1 000 m² in a cell: `formatArea` groups («1 216 м²»); the cell width at 360 dp holds five digits + unit at 9.5 sp — verify at font 1.3 (ellipsis never; drop the unit first).
 - Font scale 1.3: cells stay h 56; the day number and count may share a line only if both fit, else the count moves under the number (the m² line is the one that yields).
+- **The unit yields per GRID, not per cell** (ruling, 2026-09-14): the grid measures the widest figure it is about to draw and every cell obeys that one answer, so a week can never print «525» beside «96 м²». When the unit goes, the legend's own «≤300 м²» carries the scale. The legend reserves its second line from the widest thresholds it could ever be given, so a four-digit factory's first load does not grow the card (frames: `calendar_w360_font13`, `calendar_wide_thresholds_light`).
 - Adjacent-month tap: no-op (not a month switch — the web does not switch either).
 
 ## 9. Acceptance (the plan's tests)

@@ -91,6 +91,18 @@ class CalendarScreenshotTest {
     }
 
     /**
+     * The legend's own worst case, at the phone's: 1 000 / 2 000 / 3 000 on the narrow screen at
+     * font scale 1,3, where four four-digit bands cannot share a line. Laid beside
+     * `calendar_w360_font13` — the same card under the default 300/450/600 — the two are exactly
+     * the same height: the second legend line is reserved before any month has arrived, so the
+     * first load of a big factory no longer grows the card under the planner's finger.
+     */
+    @Test @Config(qualifiers = "w360dp-h800dp", fontScale = 1.3f)
+    fun calendarWideThresholds() {
+        shoot("calendar_wide_thresholds_light") { Card(CalendarFixtures.septemberWide) }
+    }
+
+    /**
      * §7's calculator picker: read-only with a floor of 12 September. Every day before it is
      * dimmed and inert exactly as an adjacent month's day is, and nothing is selected — the
      * picker opens on the month, not on a choice.
