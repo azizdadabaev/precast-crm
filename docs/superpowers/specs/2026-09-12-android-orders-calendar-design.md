@@ -51,7 +51,7 @@ White card, radius `xl` (16), hairline, `cardMargin` sides.
 - Ground by tier: empty → `surface` + hairline, no bar; Available (≤ low) → `greenBg`; Moderate (≤ moderate) → `warningBg`; Heavy (≤ heavy) → `heavyBg`; Overbooked (> heavy) → `redBg`. Text/bar: `green` / `warning` / `heavy` / `red`.
 - Adjacent-month days: 35 % alpha, not tappable, still coloured (the web colours them).
 - Today: 1 dp `indigo` ring. Selected: `navy` fill, `onDark` text, bar track `navy2`.
-- Touch: the whole cell is the target (≥ 48 dp — the cell is 56 tall; width ≥ 48 at 360 dp).
+- Touch: the whole cell is the target. Height 56 dp; width follows the column — seven columns inside the card's margins give ~40 dp at 360 dp and ~48 at 411 dp. **Documented exception to the 48-dp rule** (ruling R15, 2026-09-13): a month grid cannot yield 48-dp-wide cells on a 360-dp phone without dropping the card's padding; Material's own date picker uses 40-dp cells for the same reason. The 56-dp height keeps the target's area above 48 × 40; a test pins 56 × ≥ 40.
 
 **New colour tokens** (the only additions to `EtalonColors`; the hex lint allows them there): `warning = #F0A868`, `warningBg = #FDF1E6`, `heavy = #C2622D`, `heavyBg = #F8E6DC`. Available and Overbooked reuse `green/greenBg` and `red/redBg`. Named after the brief's tiers so a future designer maps them without a table.
 
