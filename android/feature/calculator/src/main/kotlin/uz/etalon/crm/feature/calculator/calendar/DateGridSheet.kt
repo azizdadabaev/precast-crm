@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import uz.etalon.crm.core.designsystem.calendar.CapacityCalendarCard
+import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -69,9 +70,18 @@ private val BLOCK_GAP = EtalonSpace.md
  * `minSelectable` as well so the floor is stated rather than implied. They are drawn exactly as
  * an adjacent month's days are: dimmed and inert.
  *
+ * **Ruling R17: this grid never blocks a placement.** A month that failed to load (or has not
+ * arrived yet) still draws its dates and still takes a tap — `selectableWithoutData` — because
+ * this is the ONLY way to name a delivery date, and `PlaceOrderSchema` requires one: a grid that
+ * went inert offline would leave the operator unable to place the order AND unable to queue it,
+ * which is exactly the site with no signal the queue exists for. A failed month says so in a
+ * banner over the card, with the retry design §8 asks for; the day picked without figures simply
+ * carries no tier tag (`tierOfDate` answers null rather than inventing «мавжуд»).
+ *
  * @param selected the date already picked, so re-opening the grid lands on it rather than on
  *   nothing.
- * @param today the caller's clock — never read here, so the frame photographs the same every day.
+ * @param today «Бугун» and the floor under the month. Taken from the caller rather than read from
+ *   the system clock here, so the frame photographs the same every day.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +92,7 @@ fun DateGridSheet(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onPick: (LocalDate) -> Unit,
+    onRetry: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(
@@ -104,6 +115,12 @@ fun DateGridSheet(
                 style = EtalonType.sectionTitle,
                 color = EtalonColors.ink,
             )
+            // §8: a banner and a retry over a grid that still works. The server's own message is
+            // not shown — it names an endpoint the seller cannot act on, where this says which
+            // part of the sheet is missing and leaves the dates below it tappable.
+            if (grid.capacity is Resource.Error) {
+                ErrorBanner(stringResource(R.string.calc_place_date_grid_error), onRetry = onRetry)
+            }
             CapacityCalendarCard(
                 month = grid.cursor,
                 capacity = grid.capacity,
@@ -114,6 +131,7 @@ fun DateGridSheet(
                 onSelect = onPick,
                 readOnly = true,
                 minSelectable = today,
+                selectableWithoutData = true,
             )
             SecondaryButton(text = stringResource(R.string.calc_place_cancel), onClick = onDismiss)
         }

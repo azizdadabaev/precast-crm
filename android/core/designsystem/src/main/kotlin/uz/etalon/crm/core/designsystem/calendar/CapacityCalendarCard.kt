@@ -94,6 +94,11 @@ private val WEEKDAYS = listOf(
  *   pass [minSelectable] — read-only with no floor of its own cannot select before [today].
  * @param minSelectable the earliest tappable day. Earlier days are drawn exactly as an adjacent
  *   month's are: dimmed and inert.
+ * @param selectableWithoutData **ruling R17** — the calculator's picker (§7) stays usable with no
+ *   figures behind it. A day is a day whether or not the factory's load for it arrived, and the
+ *   place-order sheet has no other way to name a delivery date: a grid that went inert offline
+ *   would leave the operator unable to place OR queue the order. In Жадвал it stays false — there
+ *   a tap opens a day sheet that would have nothing to show.
  */
 @Composable
 fun CapacityCalendarCard(
@@ -106,6 +111,7 @@ fun CapacityCalendarCard(
     onSelect: (LocalDate) -> Unit,
     readOnly: Boolean = false,
     minSelectable: LocalDate? = null,
+    selectableWithoutData: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val data = capacity?.dataOrNull
@@ -133,7 +139,10 @@ fun CapacityCalendarCard(
         // R16: the same row count either way, so the in-flight card is exactly as tall as the
         // loaded one — how many weeks September has is known before a single figure arrives.
         val rows = gridRows(month)
-        if (loading) {
+        // R17: a picker that must stay usable draws its dates straight away rather than a
+        // skeleton — a skeleton has no days to tap, and an in-flight month would be one more
+        // moment in which no delivery date can be named.
+        if (loading && !selectableWithoutData) {
             CalendarSkeleton(rows)
         } else {
             Grid(
@@ -144,6 +153,7 @@ fun CapacityCalendarCard(
                 // A read-only picker with no floor of its own still cannot schedule into the past.
                 floor = minSelectable ?: today.takeIf { readOnly },
                 rows = rows,
+                selectableWithoutData = selectableWithoutData,
                 onSelect = onSelect,
                 onPrev = onPrev,
                 onNext = onNext,
@@ -218,6 +228,7 @@ private fun Grid(
     today: LocalDate,
     floor: LocalDate?,
     rows: Int,
+    selectableWithoutData: Boolean,
     onSelect: (LocalDate) -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit,
@@ -283,7 +294,10 @@ private fun Grid(
                             // one navy would tell the planner they had picked a day they had not.
                             isSelected = date == selected && inMonth,
                             heavy = data?.thresholds?.heavy ?: BigDecimal.ZERO,
-                            enabled = data != null && !dimmed,
+                            // R17: without figures a cell is still a DATE, and the picker lets it
+                            // be tapped as one. Жадвал keeps the stricter rule — there a tap opens
+                            // a day sheet that would have nothing in it.
+                            enabled = (data != null || selectableWithoutData) && !dimmed,
                             cellWidth = cellWidth,
                             onClick = { onSelect(date) },
                             modifier = Modifier.weight(1f),

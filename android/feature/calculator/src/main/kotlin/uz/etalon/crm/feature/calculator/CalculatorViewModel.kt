@@ -166,22 +166,23 @@ fun interface QueuePlaceOrderUseCase {
 /**
  * Test seam over [CapacityRepository] — the month behind the delivery-date grid (design §7), the
  * same shape `OrdersListViewModel` wraps it in for Жадвал.
- *
- * `observe` only: the picker has no pull-to-refresh, so nothing in this feature ever forces a
- * fetch of a month the repository already holds.
  */
 interface CapacitySource {
     fun observe(month: YearMonth): Flow<Resource<CapacityMonth>>
+    suspend fun refresh(month: YearMonth): Result<Unit>
 }
 
 class RepositoryCapacitySource @Inject constructor(private val repo: CapacityRepository) : CapacitySource {
     override fun observe(month: YearMonth) = repo.observe(month)
+    override suspend fun refresh(month: YearMonth) = repo.refresh(month)
 }
 
 /** The default: a calculator built without a capacity source (every test that never opens the
- *  date grid) costs no fetch, and the grid it would open stays on its skeleton. */
+ *  date grid) costs no fetch, and the grid it would open draws bare dates — which R17 says are
+ *  still pickable. */
 internal object NoCapacity : CapacitySource {
     override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flowOf(Resource.Loading(null))
+    override suspend fun refresh(month: YearMonth) = Result.success(Unit)
 }
 
 /**
@@ -772,12 +773,37 @@ open class CalculatorViewModel(
      * picked — or on this month when nothing is picked yet. The picked date itself stays where it
      * has always lived, in the sheet ([PlaceOrderSheet]); this ViewModel owns only the month being
      * looked at and the load behind it.
+     *
+     * Every opening REFRESHES that month. The figures decide which day the customer is promised,
+     * and a session-cached month is stale the moment another operator places an order into it —
+     * so the one moment the grid is looked at is the one moment worth paying a fetch for. Paging
+     * ‹ › inside the open grid does not: see [showDateGrid].
      */
-    fun openDateGrid(initial: LocalDate?) = showDateGrid(YearMonth.from(initial ?: LocalDate.now(TASHKENT)))
+    fun openDateGrid(initial: LocalDate?) =
+        showDateGrid(YearMonth.from(initial ?: LocalDate.now(TASHKENT)), refresh = true)
 
-    /** ‹ / › inside the grid. A no-op while it is closed, so a stale callback cannot re-open it. */
-    fun dateGridPrev() { _state.value.dateGrid?.let { showDateGrid(it.cursor.minusMonths(1)) } }
-    fun dateGridNext() { _state.value.dateGrid?.let { showDateGrid(it.cursor.plusMonths(1)) } }
+    /**
+     * ‹ / › inside the grid. A no-op while it is closed, so a stale callback cannot re-open it.
+     *
+     * ‹ stops at the current month: nothing before today can be delivered on (`minSelectable`
+     * greys every such day anyway), and a picker that pages back into last year is a picker the
+     * operator has to page out of again.
+     */
+    fun dateGridPrev() {
+        val g = _state.value.dateGrid ?: return
+        val prev = g.cursor.minusMonths(1)
+        if (prev < YearMonth.now(TASHKENT)) return
+        showDateGrid(prev, refresh = false)
+    }
+
+    fun dateGridNext() {
+        _state.value.dateGrid?.let { showDateGrid(it.cursor.plusMonths(1), refresh = false) }
+    }
+
+    /** The banner's «Қайта уриниш» after a failed month (design §8). */
+    fun retryDateGrid() {
+        _state.value.dateGrid?.let { showDateGrid(it.cursor, refresh = true) }
+    }
 
     fun closeDateGrid() {
         capacityJob?.cancel()
@@ -786,23 +812,30 @@ open class CalculatorViewModel(
     }
 
     /**
-     * Shows [cursor] and, unless it is already in hand, starts collecting it.
+     * Shows [cursor], re-fetching it first when [refresh] is set, and collects the month behind it.
      *
-     * A month already in [CalculatorUiState.capacityMonths] is NOT asked for again: the grid is
-     * open for a moment, the factory's load does not move inside it, and paging ‹ › back and
-     * forth would otherwise re-collect the repository's flow on every step. That cache is also
-     * what keeps the tier tag beside the date field alive after the grid has closed — the sheet
-     * reads the picked date's month out of it (`tierOfDate`).
+     * Without [refresh] a month already in [CalculatorUiState.capacityMonths] is not asked for
+     * again: paging ‹ › back and forth would otherwise re-collect the repository's flow on every
+     * step, and the factory's load does not move between two taps. That cache is also what keeps
+     * the tier tag beside the date field alive after the grid has closed — the sheet reads the
+     * picked date's month out of it (`tierOfDate`).
+     *
+     * A cached month is shown while the refresh is in flight rather than a skeleton: the figures
+     * that are already in hand are the ones the operator was last told, and blanking them for the
+     * length of a round trip would be worse than showing them a second longer.
      */
-    private fun showDateGrid(cursor: YearMonth) {
+    private fun showDateGrid(cursor: YearMonth, refresh: Boolean) {
         capacityJob?.cancel()
         capacityJob = null
         val cached = _state.value.capacityMonths[cursor]
         _state.update {
             it.copy(dateGrid = DateGridState(cursor, cached?.let { m -> Resource.Success(m) } ?: Resource.Loading(null)))
         }
-        if (cached != null) return
+        if (cached != null && !refresh) return
         capacityJob = viewModelScope.launch {
+            // The repository's own flow reads its cache once, so a forced fetch only reaches the
+            // screen if it happens BEFORE the collection starts.
+            if (refresh) capacity.refresh(cursor)
             capacity.observe(cursor).collect { r ->
                 _state.update { s ->
                     s.copy(

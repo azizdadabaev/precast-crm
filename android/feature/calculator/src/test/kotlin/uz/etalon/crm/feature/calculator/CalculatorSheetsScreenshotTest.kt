@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -37,6 +38,7 @@ import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.CapacityMonth
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.Pricing
@@ -89,9 +91,20 @@ private val TODAY = CalendarFixtures.TODAY
 /** The date row's own value, and the content description of the day cell that carries it. */
 private val SCHEDULED_TEXT = "20 сен 2026"
 
-/** The grid's title, and the tier the fixture's 20 September earns. */
+/** «Бугун» as the row and the cell both write it — the fixture's 12 September, 685 м² over a
+ *  600 м² ceiling, which is the one day in reach that earns the longest tag. */
+private val TODAY_TEXT = "12 сен 2026"
+
+/** A bare date in the same month, for the two frames with no figures behind them. */
+private const val EIGHTEENTH_TEXT = "18 сен 2026"
+
+/** The grid's title, its failure banner and its retry, and the two tiers the frames show. */
 private const val GRID_TITLE = "Етказиб бериш кунини танланг"
+private const val GRID_ERROR = "Кун сиғими маълумоти олинмади"
+private const val RETRY = "Қайта уриниш"
+private const val OFFLINE = "Интернет алоқаси йўқ"
 private const val AVAILABLE_TAG = "мавжуд"
+private const val OVERBOOKED_TAG = "тўлиб кетган"
 
 /** «Навбатга қўйиш», the offline half of the action pair. */
 private const val QUEUE = "Навбатга қўйиш"
@@ -102,11 +115,17 @@ private class SheetsInertSessionPricing : SessionPricing {
 
 /** The shared September behind the date grid — one month for every module (`CalendarFixtures`),
  *  so this picker and Жадвал photograph the same figures. Any other month is left in flight: the
- *  frames never page, and a month invented here would be a second fixture. */
-private class FixtureCapacity : CapacitySource {
+ *  frames never page, and a month invented here would be a second fixture.
+ *
+ *  [outcome] is what the month arrives as, so the same fixture photographs R17's two failure
+ *  states: a month still in flight, and one that never came. */
+private class FixtureCapacity(
+    private val outcome: Resource<CapacityMonth> = Resource.Success(CalendarFixtures.september),
+) : CapacitySource {
     override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flowOf(
-        if (month == CalendarFixtures.MONTH) Resource.Success(CalendarFixtures.september) else Resource.Loading(null),
+        if (month == CalendarFixtures.MONTH) outcome else Resource.Loading(null),
     )
+    override suspend fun refresh(month: YearMonth) = Result.success(Unit)
 }
 
 /**
@@ -159,11 +178,11 @@ class CalculatorSheetsScreenshotTest {
 
     /** The sheet edits the three money fields THROUGH the ViewModel, so it needs one; these frames
      *  photograph a state that is already typed, so nothing here is ever called. */
-    private fun vm() = CalculatorViewModel(
+    private fun vm(capacity: CapacitySource = FixtureCapacity()) = CalculatorViewModel(
         session = SheetsInertSessionPricing(),
         permissions = PermissionGate { true },
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
-        capacity = FixtureCapacity(),
+        capacity = capacity,
     )
 
     /**
@@ -171,12 +190,16 @@ class CalculatorSheetsScreenshotTest {
      * the sheet's own actions change on the ViewModel — the open date grid and the months it has
      * loaded. Everything else on screen is the static quote these frames are about.
      */
-    private fun liveSheet(s: CalculatorUiState, vm: CalculatorViewModel) = screen {
+    private fun liveSheet(
+        s: CalculatorUiState,
+        vm: CalculatorViewModel,
+        initialScheduledAt: LocalDate = SCHEDULED,
+    ) = screen {
         val live by vm.state.collectAsState()
         PlaceOrderSheet(
             state = s.copy(dateGrid = live.dateGrid, capacityMonths = live.capacityMonths),
             vm = vm, onDismiss = {}, onPlace = { _, _ -> }, onQueue = { _, _ -> },
-            initialScheduledAt = SCHEDULED, today = TODAY,
+            initialScheduledAt = initialScheduledAt, today = TODAY,
         )
     }
 
@@ -249,6 +272,56 @@ class CalculatorSheetsScreenshotTest {
             formatArea(CalendarFixtures.september.totalArea)
         rule.onNodeWithText(summary).assertExists()
         captureScreenRoboImage("screenshots/place_order_date_grid_light.png")
+    }
+
+    /**
+     * **R17 at the screen.** The month never came: a banner with «Қайта уриниш» over a grid that
+     * still works. Every in-range day is a bare date and every one of them is still tappable —
+     * this is the ONLY way to name a delivery date, and without one the order can be neither
+     * placed nor queued, which offline is the one thing that has to keep working.
+     */
+    @Test fun placeOrderDateGridErrorLight() {
+        liveSheet(placeableState(), vm(FixtureCapacity(Resource.Error(null, AppError.Network(OFFLINE)))))
+        rule.onNodeWithText(SCHEDULED_TEXT).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(GRID_ERROR).assertExists()
+        rule.onNodeWithText(RETRY).assertExists()
+        captureScreenRoboImage("screenshots/place_order_date_grid_error_light.png")
+
+        // And the date is still pickable, with no tier invented for it.
+        rule.onNodeWithContentDescription(EIGHTEENTH_TEXT).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(GRID_ERROR).assertDoesNotExist()
+        rule.onNodeWithText(EIGHTEENTH_TEXT).assertExists()
+        rule.onNodeWithText(AVAILABLE_TAG).assertDoesNotExist()
+    }
+
+    /** The same rule while the month is still in flight: dates, not a skeleton — a skeleton has
+     *  nothing to tap, and an in-flight month must not be one more moment without a date. */
+    @Test fun placeOrderDateGridLoadingLight() {
+        liveSheet(placeableState(), vm(FixtureCapacity(Resource.Loading(null))))
+        rule.onNodeWithText(SCHEDULED_TEXT).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(GRID_TITLE).assertExists()
+        rule.onNodeWithContentDescription(EIGHTEENTH_TEXT).assertHasClickAction()
+        captureScreenRoboImage("screenshots/place_order_date_grid_loading_light.png")
+    }
+
+    /**
+     * The date row at font scale 1,3 carrying the LONGEST tag there is — «тўлиб кетган», the
+     * fixture's own 12 September (685 м² over a 600 м² ceiling), which is also «Бугун» and so the
+     * earliest day the picker offers. The date is the half that ellipsises if the row runs out:
+     * a tag clipped down the middle would be unreadable, where «12 сен 20…» is not.
+     */
+    @Test @Config(sdk = [36], qualifiers = "w411dp-h891dp", fontScale = 1.3f)
+    fun placeOrderFont13() {
+        liveSheet(placeableState(), vm(), initialScheduledAt = TODAY)
+        rule.onNodeWithText(TODAY_TEXT).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription(TODAY_TEXT, substring = true).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(OVERBOOKED_TAG).assertExists()
+        captureScreenRoboImage("screenshots/place_order_font13.png")
     }
 
     /**

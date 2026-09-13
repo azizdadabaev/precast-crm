@@ -132,6 +132,8 @@
     <string name="calc_place_cancel">Бекор қилиш</string>
     <!-- The capacity grid the date row opens (design §7) -->
     <string name="calc_place_date_grid_title">Етказиб бериш кунини танланг</string>
+    <!-- R17: the load failed, the dates below still work -->
+    <string name="calc_place_date_grid_error">Кун сиғими маълумоти олинмади</string>
     <string name="calc_place_notes">Изоҳ</string>
     <string name="calc_place_notes_counter">%1$d/%2$d</string>
     <!-- D10's three relocated money fields and the rows they add to the roll-up. The discount is

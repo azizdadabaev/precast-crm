@@ -8,12 +8,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
@@ -212,6 +215,58 @@ class CapacityCalendarTest {
         }
         rule.onNodeWithContentDescription("18 сен 2026").assertExists() // exact, not a substring
         rule.onNodeWithContentDescription("буюртма", substring = true).assertDoesNotExist()
+    }
+
+    /**
+     * **R17.** A failed month leaves Жадвал's grid inert — a tap there opens a day sheet that
+     * would have nothing in it — but the calculator's picker (`selectableWithoutData`) must stay
+     * usable: it is the only way to name a delivery date, and `PlaceOrderSchema` requires one, so
+     * an inert grid offline would leave the operator unable to place the order AND unable to
+     * queue it.
+     */
+    @Test fun `R17 a failed month is still pickable in the picker and not in Жадвал`() {
+        var picked: LocalDate? = null
+        rule.setContent {
+            EtalonTheme {
+                Column(Modifier.fillMaxWidth()) {
+                    // The picker: read-only, floored at today, pickable without figures.
+                    CapacityCalendarCard(
+                        month = CalendarFixtures.MONTH,
+                        capacity = Resource.Error(null, AppError.Network("Интернет алоқаси йўқ")),
+                        selected = null,
+                        today = CalendarFixtures.TODAY,
+                        onPrev = {}, onNext = {}, onSelect = { picked = it },
+                        readOnly = true,
+                        minSelectable = CalendarFixtures.TODAY,
+                        selectableWithoutData = true,
+                        modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin).testTag(CARD),
+                    )
+                }
+            }
+        }
+        val day = rule.onNodeWithContentDescription("18 сен 2026")
+        day.assertHasClickAction()
+        day.performClick()
+        assertEquals(LocalDate.of(2026, 9, 18), picked)
+        // The floor still holds: a day before today is not offered even with no figures.
+        rule.onNodeWithContentDescription("2 сен 2026").assertIsNotEnabled()
+    }
+
+    /** The other half of R17: Жадвал's own card keeps the stricter rule. */
+    @Test fun `R17 Жадвал's grid stays inert when the month failed`() {
+        rule.setContent {
+            EtalonTheme {
+                CapacityCalendarCard(
+                    month = CalendarFixtures.MONTH,
+                    capacity = Resource.Error(null, AppError.Network("Интернет алоқаси йўқ")),
+                    selected = null,
+                    today = CalendarFixtures.TODAY,
+                    onPrev = {}, onNext = {}, onSelect = {},
+                    modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
+                )
+            }
+        }
+        rule.onNodeWithContentDescription("18 сен 2026").assertIsNotEnabled()
     }
 
     /** The other half: with the month behind it, the same kind of cell reads as all three lines. */

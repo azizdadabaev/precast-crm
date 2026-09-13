@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -20,6 +19,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -165,7 +165,9 @@ fun PlaceOrderSheet(
     onPlace: (scheduledAt: String, notes: String) -> Unit,
     onQueue: (scheduledAt: String, notes: String) -> Unit,
     initialScheduledAt: LocalDate? = null,
-    today: LocalDate = LocalDate.now(TASHKENT),
+    // Remembered, not read on every pass: the grid's «Бугун» ring and its floor must not move
+    // under the operator's finger because a recomposition happened to land after midnight.
+    today: LocalDate = remember { LocalDate.now(TASHKENT) },
 ) {
     // rememberSaveable: the sheet survives a rotation or a process death with the date and the
     // note the operator already typed, the same way the quote behind it survives. The three money
@@ -325,9 +327,15 @@ fun PlaceOrderSheet(
             onPrev = vm::dateGridPrev,
             onNext = vm::dateGridNext,
             onPick = { day -> scheduledEpochDay = day.toEpochDay(); vm.closeDateGrid() },
+            onRetry = vm::retryDateGrid,
             onDismiss = vm::closeDateGrid,
         )
     }
+
+    // The grid belongs to this sheet, not to the quote: dismissing the place-order sheet with the
+    // picker still open would otherwise leave `dateGrid` set on the ViewModel, and the next
+    // «Буюртма бериш» would open onto a calendar nobody asked for.
+    DisposableEffect(Unit) { onDispose { vm.closeDateGrid() } }
 }
 
 /** Who the order is for. Read-only: the client bar on the screen behind is where this is edited,
@@ -374,16 +382,24 @@ private fun DateRow(value: String?, tier: CapacityTier?, onClick: () -> Unit) = 
         ),
     verticalAlignment = Alignment.CenterVertically,
 ) {
-    Text(
-        value ?: stringResource(R.string.calc_place_pick_date),
-        style = FormFieldValue,
-        color = if (value != null) EtalonColors.ink else EtalonColors.ink3,
-        maxLines = 1,
-    )
-    if (value != null && tier != null) {
-        TierTag(tier, modifier = Modifier.padding(start = ROW_GAP))
+    // The date and its tag are ONE value, so they share the row's free width and the chevron keeps
+    // its place at the end. `fill = false` is what keeps the tag against the date rather than
+    // against the chevron; the tag is measured first, so at font scale 1,3 it is the date that
+    // ellipsises — «тўлиб кетган» clipped down the middle would be unreadable, and the date is
+    // still legible at «20 сен 20…».
+    Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            value ?: stringResource(R.string.calc_place_pick_date),
+            style = FormFieldValue,
+            color = if (value != null) EtalonColors.ink else EtalonColors.ink3,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (value != null && tier != null) {
+            TierTag(tier, modifier = Modifier.padding(start = ROW_GAP))
+        }
     }
-    Spacer(Modifier.weight(1f))
     EtalonIcon(EtalonIcons.ChevronDown, null, size = CHEVRON, tint = EtalonColors.ink3)
 }
 
