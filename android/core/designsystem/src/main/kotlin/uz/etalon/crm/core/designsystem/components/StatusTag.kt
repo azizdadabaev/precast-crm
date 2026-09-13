@@ -115,16 +115,37 @@ fun PaymentStateTag(state: PaymentState, surface: TagSurface = TagSurface.ROW_ON
 fun PaymentStatusTag(status: PaymentStatus, surface: TagSurface = TagSurface.ROW_ON_LIGHT, modifier: Modifier = Modifier) =
     Tag(paymentStatusFamily(status), stringResource(paymentStatusLabel(status)), surface, modifier)
 
+/**
+ * A truck's own progress (R6) — the overload that replaces `ShipmentStatusChip`.
+ *
+ * @param short the row-sized wording the shipments list is drawn with («Юкланди», «Йўлда»,
+ *   «Етказилди»), exactly as [StatusTag]`(OrderStatus)` carries the prototype's short forms. The
+ *   default keeps the full server words, which is what the order detail's shipment rows print.
+ */
 @Composable
-fun ShipmentStatusTag(status: ShipmentStatus, surface: TagSurface = TagSurface.ROW_ON_LIGHT, modifier: Modifier = Modifier) =
-    Tag(shipmentStatusFamily(status), stringResource(shipmentStatusLabel(status)), surface, modifier)
+fun StatusTag(
+    status: ShipmentStatus,
+    surface: TagSurface = TagSurface.ROW_ON_LIGHT,
+    short: Boolean = false,
+    modifier: Modifier = Modifier,
+) = Tag(
+    shipmentStatusFamily(status),
+    stringResource(if (short) shipmentStatusShortLabel(status) else shipmentStatusLabel(status)),
+    surface,
+    modifier,
+)
 
 @Composable
 fun DiscrepancyStatusTag(status: DiscrepancyStatus, surface: TagSurface = TagSurface.ROW_ON_LIGHT, modifier: Modifier = Modifier) =
     Tag(discrepancyStatusFamily(status), stringResource(discrepancyStatusLabel(status)), surface, modifier)
 
+/**
+ * A driver's own active flag (R6) — the overload that replaces `DriverStatusChip`. A Boolean
+ * rather than an enum because that is exactly what [uz.etalon.crm.core.model.Driver.active] is,
+ * and inventing a two-value enum to carry it would only add a translation step.
+ */
 @Composable
-fun DriverStatusTag(active: Boolean, surface: TagSurface = TagSurface.ROW_ON_LIGHT, modifier: Modifier = Modifier) =
+fun StatusTag(active: Boolean, surface: TagSurface = TagSurface.ROW_ON_LIGHT, modifier: Modifier = Modifier) =
     Tag(driverActiveFamily(active), stringResource(driverActiveLabel(active)), surface, modifier)
 
 /** Order-level paid / partial / unpaid. CLAUDE.md §7 pins the meanings and this restyle keeps

@@ -37,6 +37,9 @@
 
     <string name="record_notes_label">Изоҳ</string>
     <string name="record_receipts_label">Чеклар</string>
+    <!-- The viewfinder's title while a receipt is being photographed: it IS the record screen at
+         that moment, so it says which photo is wanted. -->
+    <string name="record_receipt_capture_title">Чек расми</string>
     <string name="record_receipt_hint">Чек расми тўлов қайд этилгандан кейин юборилади.</string>
     <string name="remove_receipt_title">Чекни олиб ташлаш</string>
     <string name="remove_receipt_message">Бу расм тўловга бириктирилмайди.</string>

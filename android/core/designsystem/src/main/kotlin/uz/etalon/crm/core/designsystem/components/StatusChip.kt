@@ -86,6 +86,17 @@ fun shipmentStatusLabel(s: ShipmentStatus): Int = when (s) {
     ShipmentStatus.UNKNOWN -> R.string.status_unknown
 }
 
+/** Row-sized wording for the shipments list (design §5.2), the way [orderStatusShortLabel] is for
+ *  the orders list: the truck's own progress read as an event — «Юкланди», «Йўлда», «Етказилди» —
+ *  rather than the server's participles, which do not fit a row tag beside a date and a driver.
+ *  PENDING and UNKNOWN are already one word and keep the full label. */
+fun shipmentStatusShortLabel(s: ShipmentStatus): Int = when (s) {
+    ShipmentStatus.LOADED -> R.string.ds_status_shipment_loaded
+    ShipmentStatus.DISPATCHED -> R.string.ds_status_shipment_dispatched
+    ShipmentStatus.DELIVERED -> R.string.ds_status_shipment_delivered
+    else -> shipmentStatusLabel(s)
+}
+
 /** A driver's own active/inactive flag — a plain Boolean, not an enum, since that is exactly
  *  what [uz.etalon.crm.core.model.Driver.active] is. */
 fun driverActiveTone(active: Boolean): ChipTone = if (active) ChipTone.SUCCESS else ChipTone.NEUTRAL
@@ -176,9 +187,9 @@ fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) =
 @Composable fun PaymentChip(state: PaymentState, modifier: Modifier = Modifier) =
     PaymentStateTag(state, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun ShipmentStatusChip(status: ShipmentStatus, modifier: Modifier = Modifier) =
-    ShipmentStatusTag(status, TagSurface.ROW_ON_LIGHT, modifier)
+    StatusTag(status, TagSurface.ROW_ON_LIGHT, modifier = modifier)
 @Composable fun DriverStatusChip(active: Boolean, modifier: Modifier = Modifier) =
-    DriverStatusTag(active, TagSurface.ROW_ON_LIGHT, modifier)
+    StatusTag(active, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun PaymentStatusChip(status: PaymentStatus, modifier: Modifier = Modifier) =
     PaymentStatusTag(status, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun DiscrepancyStatusChip(status: DiscrepancyStatus, modifier: Modifier = Modifier) =

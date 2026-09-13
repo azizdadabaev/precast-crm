@@ -9,12 +9,15 @@ import uz.etalon.crm.core.designsystem.components.TagFamily
 import uz.etalon.crm.core.designsystem.components.TagSurface
 import uz.etalon.crm.core.designsystem.components.discrepancyStatusFamily
 import uz.etalon.crm.core.designsystem.components.driverActiveFamily
+import uz.etalon.crm.core.designsystem.components.driverActiveLabel
 import uz.etalon.crm.core.designsystem.components.family
 import uz.etalon.crm.core.designsystem.components.orderStatusLabel
 import uz.etalon.crm.core.designsystem.components.orderStatusShortLabel
 import uz.etalon.crm.core.designsystem.components.paymentStateFamily
 import uz.etalon.crm.core.designsystem.components.paymentStatusFamily
 import uz.etalon.crm.core.designsystem.components.shipmentStatusFamily
+import uz.etalon.crm.core.designsystem.components.shipmentStatusLabel
+import uz.etalon.crm.core.designsystem.components.shipmentStatusShortLabel
 import uz.etalon.crm.core.designsystem.components.tagColors
 import uz.etalon.crm.core.designsystem.components.discrepancyStatusLabel
 import uz.etalon.crm.core.designsystem.components.discrepancyStatusTone
@@ -172,6 +175,42 @@ class StatusChipMappingTest {
         assertEquals(R.string.status_unknown, orderStatusLabel(OrderStatus.UNKNOWN))
         // The family is unchanged: a draft is still the quiet neutral tag, not a new colour.
         assertEquals(TagFamily.NEUTRAL, OrderStatus.DRAFT.family())
+    }
+
+    /**
+     * R6's shipment overload. The four live states must be four distinguishable tags — ЮКЛАНГАН
+     * and ЖЎНАТИЛГАН sharing one fill is the exact bug the families were introduced to fix — and
+     * UNKNOWN, which is not a state the business has, sits with PENDING in the neutral one.
+     */
+    @Test fun `a shipment's four live states are four distinguishable families`() {
+        assertEquals(TagFamily.NEUTRAL, shipmentStatusFamily(ShipmentStatus.PENDING))
+        assertEquals(TagFamily.LAVENDER, shipmentStatusFamily(ShipmentStatus.LOADED))
+        assertEquals(TagFamily.INDIGO, shipmentStatusFamily(ShipmentStatus.DISPATCHED))
+        assertEquals(TagFamily.GREEN, shipmentStatusFamily(ShipmentStatus.DELIVERED))
+        assertEquals(TagFamily.NEUTRAL, shipmentStatusFamily(ShipmentStatus.UNKNOWN))
+        val live = ShipmentStatus.entries.filter { it != ShipmentStatus.UNKNOWN }
+        assertEquals(live.size, live.map(::shipmentStatusFamily).toSet().size)
+    }
+
+    /** The row wording the shipments list is drawn with, against the full words the order detail
+     *  keeps. Three states shorten; the two one-word ones fall back, the way the order table does. */
+    @Test fun `only the three moving shipment states have a row form`() {
+        assertEquals(R.string.ds_status_shipment_loaded, shipmentStatusShortLabel(ShipmentStatus.LOADED))
+        assertEquals(R.string.ds_status_shipment_dispatched, shipmentStatusShortLabel(ShipmentStatus.DISPATCHED))
+        assertEquals(R.string.ds_status_shipment_delivered, shipmentStatusShortLabel(ShipmentStatus.DELIVERED))
+        listOf(ShipmentStatus.PENDING, ShipmentStatus.UNKNOWN).forEach {
+            assertEquals(shipmentStatusLabel(it), shipmentStatusShortLabel(it), "$it should fall back")
+        }
+        // The row form is a different string from the order status it borrows its word from, so
+        // shortening an order tag can never silently reword a truck.
+        assertNotEquals(R.string.status_loaded, shipmentStatusShortLabel(ShipmentStatus.LOADED))
+        assertNotEquals(R.string.ds_status_dispatched_short, shipmentStatusShortLabel(ShipmentStatus.DISPATCHED))
+    }
+
+    /** The driver overload carries the two words the Drivers list is scanned by. */
+    @Test fun `a driver reads Фаол or Нофаол, never a status word`() {
+        assertEquals(R.string.driver_status_active, driverActiveLabel(true))
+        assertEquals(R.string.driver_status_inactive, driverActiveLabel(false))
     }
 
     /** The six chips are shims now; the tone tables they used to read are still the ones the

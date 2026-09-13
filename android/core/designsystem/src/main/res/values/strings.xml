@@ -15,6 +15,15 @@
     <string name="ds_status_placed_short">Қабул</string>
     <string name="ds_status_in_production_short">Ишлаб чиқ.</string>
     <string name="ds_status_dispatched_short">Йўлда</string>
+    <!-- A truck's own progress on the shipments list (R6). Its own strings rather than the order
+         statuses' participles above: a shipment row reads as an event that happened to this
+         truck. PENDING borrows «Кутилмоқда» from payment_pending and UNKNOWN «Номаълум» from
+         status_unknown — one word each, and a second copy of a word is a second thing to keep in
+         step. «Йўлда» is deliberately NOT ds_status_dispatched_short: the same word today, but
+         the order's short form and the truck's state answer different questions. -->
+    <string name="ds_status_shipment_loaded">Юкланди</string>
+    <string name="ds_status_shipment_dispatched">Йўлда</string>
+    <string name="ds_status_shipment_delivered">Етказилди</string>
     <string name="payment_paid">Тўланган</string>
     <string name="payment_partial">Қисман</string>
     <string name="payment_pending">Кутилмоқда</string>

@@ -112,6 +112,7 @@ fun RecordPaymentRoute(
             imagePrep = vm.imagePrep,
             onPhoto = { vm.addReceipt(it); capturing = false },
             onCancel = { capturing = false },
+            title = stringResource(R.string.record_receipt_capture_title),
         )
         return
     }

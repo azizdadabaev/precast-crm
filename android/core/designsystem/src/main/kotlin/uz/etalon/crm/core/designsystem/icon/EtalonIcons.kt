@@ -45,6 +45,9 @@ object EtalonIcons {
     val GripHorizontal = R.drawable.ic_lu_grip_horizontal
     val House = R.drawable.ic_lu_house
     val Images = R.drawable.ic_lu_images
+    /** The delivery location's pin (§5.2). [Navigation]'s arrow is the *go there* action; this is
+     *  the place itself — a saved coordinate on the order. */
+    val MapPin = R.drawable.ic_lu_map_pin
     val MessageCircle = R.drawable.ic_lu_message_circle
     val Minus = R.drawable.ic_lu_minus
     val Navigation = R.drawable.ic_lu_navigation
@@ -52,6 +55,9 @@ object EtalonIcons {
     val Pencil = R.drawable.ic_lu_pencil
     val Phone = R.drawable.ic_lu_phone
     val Plus = R.drawable.ic_lu_plus
+    /** «Қайта олиш» — retake the photo, reload a failed list. The two arrows turning clockwise,
+     *  not [ArrowUp]: this repeats the step, it does not undo it. */
+    val RefreshCw = R.drawable.ic_lu_refresh_cw
     val Save = R.drawable.ic_lu_save
     val Search = R.drawable.ic_lu_search
     val Send = R.drawable.ic_lu_send
@@ -77,9 +83,11 @@ object EtalonIcons {
         "ellipsis" to Ellipsis,
         "ellipsis-vertical" to EllipsisVertical, "factory" to Factory, "file-text" to FileText,
         "grip-horizontal" to GripHorizontal,
-        "house" to House, "images" to Images, "message-circle" to MessageCircle, "minus" to Minus,
+        "house" to House, "images" to Images, "map-pin" to MapPin,
+        "message-circle" to MessageCircle, "minus" to Minus,
         "navigation" to Navigation, "package" to Package, "pencil" to Pencil, "phone" to Phone,
-        "plus" to Plus, "save" to Save, "search" to Search, "send" to Send, "share-2" to Share,
+        "plus" to Plus, "refresh-cw" to RefreshCw, "save" to Save, "search" to Search,
+        "send" to Send, "share-2" to Share,
         "sliders-horizontal" to SlidersHorizontal, "trash" to Trash, "trending-up" to TrendingUp,
         "user" to User, "users" to Users, "wallet" to Wallet, "x" to X,
     )

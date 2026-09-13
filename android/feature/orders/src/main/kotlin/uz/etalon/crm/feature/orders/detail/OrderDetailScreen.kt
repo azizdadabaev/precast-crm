@@ -71,7 +71,6 @@ import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.ProgressCard
 import uz.etalon.crm.core.designsystem.components.RoomTile
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
-import uz.etalon.crm.core.designsystem.components.ShipmentStatusTag
 import uz.etalon.crm.core.designsystem.components.StatusTag
 import uz.etalon.crm.core.designsystem.components.StepTimeline
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
@@ -969,7 +968,7 @@ private fun ShipmentsCard(o: OrderDetail, pending: List<PendingUpload>, onOpen: 
                         Text(stringResource(R.string.orders_upload_sending), style = EtalonType.meta, color = EtalonColors.indigo)
                 }
             }
-            ShipmentStatusTag(sh.status)
+            StatusTag(sh.status)
         }
     }
 }

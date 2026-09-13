@@ -48,7 +48,10 @@ fun DeliveryProofRoute(
 
     // Camera first: until a photo exists the viewfinder IS the screen.
     if (s.photo == null) {
-        PhotoCapture(imagePrep = vm.imagePrep, onPhoto = vm::onPhoto, onCancel = onCancel)
+        PhotoCapture(
+            imagePrep = vm.imagePrep, onPhoto = vm::onPhoto, onCancel = onCancel,
+            title = stringResource(R.string.delivery_proof_title),
+        )
         return
     }
 

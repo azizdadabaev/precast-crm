@@ -1,7 +1,13 @@
 <resources>
-    <string name="capture_take">Расм олиш</string>
+    <!-- The shutter carries no visible label — it is a disc. This is what TalkBack reads. -->
+    <string name="capture_shutter">Суратга олиш</string>
     <string name="capture_from_gallery">Галереядан танлаш</string>
+    <string name="capture_grant_permission">Рухсат бериш</string>
     <string name="capture_no_camera">Камера мавжуд эмас. Галереядан танланг.</string>
+    <!-- Denied once, but the system will still show the dialog: the «Рухсат бериш» button under
+         this notice re-asks. capture_permission_denied below is the other half of the pair —
+         «don't ask again», where only Settings can undo it and no button is offered. -->
+    <string name="capture_permission_needed">Камерага рухсат керак. Рухсат беринг ёки галереядан танланг.</string>
     <string name="capture_permission_denied">Камерага рухсат берилмаган. Созламалардан рухсат беринг ёки галереядан танланг.</string>
     <string name="capture_failed">Расмни ўқиб бўлмади. Қайта уриниб кўринг.</string>
 </resources>

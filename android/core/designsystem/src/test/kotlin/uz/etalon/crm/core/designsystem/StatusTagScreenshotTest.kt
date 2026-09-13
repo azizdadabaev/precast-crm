@@ -33,11 +33,13 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PaymentStatus
+import uz.etalon.crm.core.model.ShipmentStatus
 
 /**
  * The whole status vocabulary in one sheet: every [OrderStatus], the three short row forms the
- * prototype uses, and both payment triads — the order-level one and a single recorded payment's
- * own — drawn on each of the three §2 grounds. This image is the reviewer's entire check on
+ * prototype uses, both payment triads — the order-level one and a single recorded payment's own —
+ * and R6's two logistics overloads (a truck's progress in both its vocabularies, a driver's active
+ * flag), drawn on each of the three §2 grounds. This image is the reviewer's entire check on
  * design §5.1: two statuses the business treats differently must not arrive at the same
  * fill/text pair on the same ground, and no tag's word may clip. Compare the row tags with
  * `2b-orders.png` and the panel tag with `2b-order-detail.png`. The navy block carries the
@@ -92,6 +94,18 @@ private fun Block(
     }
     FlowRow(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp), Arrangement.spacedBy(6.dp)) {
         PaymentStatus.entries.forEach { PaymentStatusTag(it, surface) }
+    }
+    // R6's two new overloads. The shipment row is drawn twice — the full words the order detail
+    // prints, then the row forms the shipments list uses — because the reviewer's question about
+    // this pair is whether ЮКЛАНГАН and ЖЎНАТИЛГАН still arrive at two different tags in EITHER
+    // vocabulary. The driver's pair closes the sheet: two values, one green, one neutral.
+    FlowRow(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp), Arrangement.spacedBy(6.dp)) {
+        ShipmentStatus.entries.forEach { StatusTag(it, surface) }
+    }
+    FlowRow(Modifier.fillMaxWidth(), Arrangement.spacedBy(6.dp), Arrangement.spacedBy(6.dp)) {
+        ShipmentStatus.entries.forEach { StatusTag(it, surface, short = true) }
+        StatusTag(active = true, surface = surface)
+        StatusTag(active = false, surface = surface)
     }
     footer()
 }

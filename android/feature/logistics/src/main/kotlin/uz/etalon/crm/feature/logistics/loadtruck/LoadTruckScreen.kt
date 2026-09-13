@@ -40,7 +40,10 @@ fun LoadTruckRoute(
 
     // Camera first: until a photo exists the viewfinder IS the screen.
     if (s.photo == null) {
-        PhotoCapture(imagePrep = vm.imagePrep, onPhoto = vm::onPhoto, onCancel = onCancel)
+        PhotoCapture(
+            imagePrep = vm.imagePrep, onPhoto = vm::onPhoto, onCancel = onCancel,
+            title = stringResource(if (extraPhoto) R.string.add_photo_title else R.string.load_truck_title),
+        )
         return
     }
 
