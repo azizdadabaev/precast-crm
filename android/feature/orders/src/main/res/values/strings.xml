@@ -39,6 +39,12 @@
     <!-- «Сиғим бўш — 600 м²»: the free capacity is the server's heavy threshold, so an operator
          reading an empty day knows how much it can still take. -->
     <string name="orders_day_sheet_empty">Бу кунга буюртма йўқ. Сиғим бўш — %1$s</string>
+    <!-- R18: the same day with no month behind it. The ceiling is the server's number and there
+         is none, so the sentence stops after what the orders call actually proved. -->
+    <string name="orders_day_sheet_empty_plain">Бу кунга буюртма йўқ.</string>
+    <!-- R18: the hero where the load is not known — an em dash, not «0,00 м²», which would state
+         an empty day as a fact. -->
+    <string name="orders_day_sheet_no_load">—</string>
 
     <!-- ── Order detail, spec §3.3 / `2b-order-detail.png` ──────────────────── -->
     <string name="detail_caption">Буюртма</string>

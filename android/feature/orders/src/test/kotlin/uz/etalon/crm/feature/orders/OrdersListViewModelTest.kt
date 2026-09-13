@@ -36,7 +36,7 @@ class OrdersListViewModelTest {
         q: String? = null, status: OrderStatus? = null, payment: PaymentFilter? = null, day: LocalDate? = null, page: Int = 1,
     ) = OrdersFilter(q = q, status = status, payment = payment, day = day, page = page, sort = "desc", pageSize = 50)
 
-    private fun order(n: String, price: Money = Money.parse("1")) = OrderSummary("id-$n", n, OrderStatus.PLACED, PaymentState.AWAITING_PAYMENT, price, Money.ZERO, BigDecimal.ONE, 1, 1, Instant.EPOCH, Instant.EPOCH, ClientRef("c", "A", "998901112233", null))
+    private fun order(n: String, price: Money = Money.parse("1"), blocks: Int = 1) = OrderSummary("id-$n", n, OrderStatus.PLACED, PaymentState.AWAITING_PAYMENT, price, Money.ZERO, BigDecimal.ONE, blocks, 1, Instant.EPOCH, Instant.EPOCH, ClientRef("c", "A", "998901112233", null))
 
     /** What the day sheet asks for: the shared filters plus the day, oldest first (R6, §4.5). */
     private fun dayPage(
@@ -64,6 +64,18 @@ class OrdersListViewModelTest {
             fetches++
             cache[month] = payload(month)
             return Result.success(Unit)
+        }
+    }
+
+    /** The offline planner: every month comes back as a failure with nothing behind it, and
+     *  nothing is ever cached — so `refresh` cannot succeed either. */
+    private class FailingCapacity : CapacitySource {
+        var refreshes = 0
+        override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> =
+            flow { emit(Resource.Error(null, AppError.Network("Интернет алоқаси йўқ"))) }
+        override suspend fun refresh(month: YearMonth): Result<Unit> {
+            refreshes++
+            return Result.failure(IllegalStateException("offline"))
         }
     }
 
@@ -377,9 +389,107 @@ class OrdersListViewModelTest {
         val sheet = vm.state.value.daySheet
         assertNotNull(sheet)
         assertEquals(d, sheet!!.day)
-        // The next month's grid has no bucket for a day of the month before, so the sheet's
-        // capacity zero-fills — the orders are real, the load is honestly unknown-as-zero.
         assertEquals(d, sheet.capacity.date)
+        // R18: the grid now loaded is the NEXT month's and does not cover this day, so the sheet
+        // keeps the orders and says «—» about the load rather than zero-filling it.
+        assertFalse(sheet.hasLoad)
+    }
+
+    /**
+     * **Ruling R18, the offline planner.** The month's fetch failed, so nothing at all is known
+     * about the day's load — and a sheet reading «0,00 м² · мавжуд · Сиғим бўш — 600 м²» (the
+     * client's own `CapacityThresholds.DEFAULT`) would be the app inventing the factory's capacity
+     * out of a failed request.
+     */
+    @Test fun `R18 a month that failed to load leaves the day sheet with no load`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = FailingCapacity()); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+
+        assertTrue(vm.state.value.capacity is Resource.Error)
+        assertFalse(vm.state.value.daySheet!!.hasLoad)
+    }
+
+    /** The same while the month is still in flight: not-yet is not zero either. */
+    @Test fun `R18 a month still in flight leaves the day sheet with no load`() = runTest {
+        // The default capacity source never answers — `Resource.Loading(null)` forever.
+        val vm = OrdersListViewModel(FakeSource()); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+
+        assertFalse(vm.state.value.daySheet!!.hasLoad)
+    }
+
+    /** And the other half: a day the loaded grid DOES cover carries its load. */
+    @Test fun `R18 a day inside the loaded grid has its load`() = runTest {
+        val d = YearMonth.now(TASHKENT).atDay(12)
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity { capacityMonth(it, mapOf(d to "350")) })
+        advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); vm.selectDay(d); advanceUntilIdle()
+
+        val sheet = vm.state.value.daySheet!!
+        assertTrue(sheet.hasLoad)
+        assertEquals(CapacityTier.MODERATE, sheet.tier)
+    }
+
+    /**
+     * **I1.** The money line is always Σ of the rows the sheet loaded. With a filter on, the count
+     * and the ғишт beside it must therefore come from those same rows: the server's day says «5
+     * буюртма · 3 631 ғишт» about every order scheduled for it, and printing that over the total
+     * of the two «Қабул» ones is two different days in one line.
+     */
+    @Test fun `I1 with a filter on, the count and the blocks describe the rows the money adds up`() = runTest {
+        val src = FakeSource()
+        val d = YearMonth.now(TASHKENT).atDay(12)
+        val serverDay = CapacityDay(d, BigDecimal("685"), 5, 3631)
+        val vm = OrdersListViewModel(
+            src,
+            capacitySource = FakeCapacity { CapacityMonth(it, gridRange(it), mapOf(d to serverDay), CapacityThresholds.DEFAULT) },
+        )
+        advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); vm.selectDay(d); advanceUntilIdle()
+
+        // Unfiltered, the server's own day wins — it counts orders past the page the sheet loaded.
+        src.emit(dayPage(d), Resource.Success(listOf(order("1", Money.parse("10"), blocks = 100))))
+        advanceUntilIdle()
+        vm.state.value.daySheet!!.let {
+            assertEquals(5, it.orderCount)
+            assertEquals(3631, it.blockCount)
+        }
+
+        vm.setStatus(OrderStatus.PLACED); advanceUntilIdle()
+        src.emit(
+            dayPage(d, status = OrderStatus.PLACED),
+            Resource.Success(listOf(order("1", Money.parse("10"), blocks = 100), order("2", Money.parse("7"), blocks = 40))),
+        )
+        advanceUntilIdle()
+
+        val sheet = vm.state.value.daySheet!!
+        assertEquals(2, sheet.orderCount)
+        assertEquals(140, sheet.blockCount)
+        assertEquals(Money.parse("17"), sheet.moneyTotal)
+        // The hero is still the day's own capacity: it is labelled as the day's load, not as the
+        // filtered rows' area.
+        assertEquals(0, BigDecimal("685").compareTo(sheet.capacity.totalArea))
+    }
+
+    /** §9: the switch is a view, not a second screen — Рўйхат's filters and the shared day come
+     *  back exactly as they were left (R1). */
+    @Test fun `LIST to CALENDAR and back keeps the query, the chips and the day`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity()); advanceUntilIdle()
+        val d = YearMonth.now(TASHKENT).atDay(9)
+        vm.setQuery("Азиз"); vm.setStatus(OrderStatus.PLACED); vm.setPayment(PaymentFilter.DEBT); vm.setDay(d)
+        advanceUntilIdle()
+
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertEquals(d, vm.state.value.day)
+        assertNotNull(vm.state.value.daySheet)
+
+        vm.setView(OrdersView.LIST); advanceUntilIdle()
+        val s = vm.state.value
+        assertEquals(OrdersView.LIST, s.view)
+        assertEquals("Азиз", s.query)
+        assertEquals(OrderStatus.PLACED, s.status)
+        assertEquals(PaymentFilter.DEBT, s.payment)
+        assertEquals(d, s.day)
     }
 
     @Test fun `the day sheet sums the day's orders into one money total`() = runTest {

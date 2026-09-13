@@ -98,6 +98,19 @@ internal class MemoryOrdersViewStore(initial: OrdersView = OrdersView.LIST) : Or
  * month, its tier, and the day's own orders — the SAME filtered list call Рўйхат makes (R6), so
  * the two views can never disagree about which orders fall on the day.
  *
+ * @param hasLoad **ruling R18** — whether the factory's load for this day is actually KNOWN.
+ *   False whenever the month behind the day has not landed (offline, in flight, failed) or the day
+ *   lies outside the loaded grid (R14: the planner paged away and the sheet followed). While it is
+ *   false, [capacity], [tier] and [heavy] carry nothing the server said and **must not be drawn**:
+ *   the sheet answers «—» instead. The old behaviour read
+ *   `CapacityThresholds.DEFAULT` off the client and told an offline planner «0,00 м² · мавжуд ·
+ *   Сиғим бўш — 600 м²» about a day the app had never been told anything about.
+ * @param orderCount the «N буюртма» of the right-hand column, and [blockCount] the «N ғишт»
+ *   beside it. Not always [CapacityDay.totalOrders]: with any of `q`/`status`/`payment` on, the
+ *   money line below them is Σ of the FILTERED rows, so the count has to come from the same set or
+ *   the sheet reads «5 буюртма» over the total of the two that matched. Unfiltered, and only with
+ *   [hasLoad], they are the server's own day — which counts orders beyond the page the sheet
+ *   loaded.
  * @param heavy the server's top threshold, which the sheet's bar is drawn as a fraction of.
  * @param moneyTotal Σ of the loaded orders' `totalPrice`; [Money], never a float.
  */
@@ -107,7 +120,10 @@ data class DaySheetState(
     val tier: CapacityTier,
     val heavy: BigDecimal,
     val orders: Resource<List<OrderSummary>>,
+    val orderCount: Int,
+    val blockCount: Int,
     val moneyTotal: Money,
+    val hasLoad: Boolean,
 )
 
 data class OrdersListUiState(
@@ -260,23 +276,34 @@ open class OrdersListViewModel(
         val d = f?.day
         if (d == null) null else {
             val month = cap?.dataOrNull
+            // R18: the load is the SERVER's figure or it is nothing. `CapacityMonth.range` is the
+            // grid the fetch actually covered, so a day the planner kept while paging two months
+            // away (R14) is as unknown as a day whose month never arrived.
+            val hasLoad = month != null && d in month.range
             val thresholds = month?.thresholds ?: CapacityThresholds.DEFAULT
             val bucket = month?.day(d) ?: CapacityDay(d, BigDecimal.ZERO, 0, 0)
             val rows = orders?.dataOrNull.orEmpty()
+            // I1: the right-hand column has to describe ONE set. The money line is always Σ of the
+            // loaded rows, so with a filter on — or with no month behind the day at all — the
+            // count and the ғишт come from those same rows.
+            val ownRows = !hasLoad || f.q != null || f.status != null || f.payment != null
             DaySheetState(
                 day = d,
                 capacity = bucket,
                 tier = tierFor(bucket.totalArea, thresholds),
                 heavy = thresholds.heavy,
                 orders = orders ?: Resource.Loading(null),
+                orderCount = if (ownRows) rows.size else bucket.totalOrders,
+                blockCount = if (ownRows) rows.sumOf { it.totalBlocks } else bucket.totalBlocks,
                 moneyTotal = rows.fold(Money.ZERO) { acc, o -> acc + o.totalPrice },
+                hasLoad = hasLoad,
             )
         }
     }
 
     private data class MonthKey(val month: YearMonth, val tick: Int)
     private data class Filters(val q: String, val status: OrderStatus?, val payment: PaymentFilter?, val day: LocalDate?)
-    private data class Busy(val refreshing: Boolean, val calendarRefreshing: Boolean, val loadingMore: Boolean)
+    private data class Busy(val refreshing: Boolean, val calendarRefreshing: Boolean, val calendarRefreshFailed: Boolean, val loadingMore: Boolean)
     private data class Counts(val facets: OrderFacets?, val total: Int?)
     private data class Calendar(val view: OrdersView, val month: YearMonth, val capacity: Resource<CapacityMonth>?, val daySheet: DaySheetState?)
     private data class Export(val exporting: Boolean, val file: File?, val failed: Boolean)

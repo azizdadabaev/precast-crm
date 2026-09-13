@@ -91,7 +91,10 @@ class OrdersListScreenTest {
             tier = tierFor(day.totalArea, t),
             heavy = t.heavy,
             orders = Resource.Success(rows),
+            orderCount = day.totalOrders,
+            blockCount = day.totalBlocks,
             moneyTotal = rows.fold(Money.ZERO) { acc, o -> acc + o.totalPrice },
+            hasLoad = true,
         )
     }
 

@@ -52,6 +52,13 @@ private val BAR_ROWS_GAP = 10.dp
 private val SKELETON_ROW_H = 56.dp
 private const val SKELETON_ROWS = 3
 
+/** The hairline between «N буюртма · N ғишт» and the money under it — they are one block. */
+private val HERO_MONEY_GAP = 2.dp
+
+/** [SkeletonRow]'s own share of `EtalonSpace.rowGap`, so the blocks sit exactly where the
+ *  [OrderRow]s that replace them will. */
+private val SKELETON_ROW_GAP = 3.dp
+
 /** The m² figure itself: two places, as every other area in this CRM (`formatArea` minus its
  *  unit, which the hero sets in a different style). */
 private const val AREA_PLACES = 2
@@ -67,6 +74,11 @@ private const val AREA_PLACES = 2
  *
  * Nothing here reads the clock: the title comes from [DaySheetState.day], so a baseline recorded
  * in March is the baseline recorded in September.
+ *
+ * **Ruling R18: nothing about the factory's load is drawn unless the server said it.** With
+ * [DaySheetState.hasLoad] false — the month never arrived, or the selected day is outside the grid
+ * that did (R14) — the hero is «—», there is no tier tag, no bar and no «Сиғим бўш — …», and the
+ * right-hand column falls back to the one thing the screen does know: the orders it loaded.
  *
  * @param onOpenOrder the row tap — the order detail, the same destination Рўйхат's rows have.
  * @param onRetry what the failure banner offers: the screen's own `refreshCalendar`, which re-asks
@@ -86,13 +98,17 @@ fun DaySheet(
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = SHEET_INSET)) {
         Hero(state)
-        Spacer(Modifier.height(HERO_BAR_GAP))
-        LoadBar(
-            fraction = loadFraction(state.capacity.totalArea, state.heavy),
-            color = state.tier.color(),
-            track = EtalonColors.navy2,
-            height = BAR_H,
-        )
+        // R18: a bar is a fraction of a ceiling, and with no month behind the day there is neither
+        // a load nor a ceiling to draw one against.
+        if (state.hasLoad) {
+            Spacer(Modifier.height(HERO_BAR_GAP))
+            LoadBar(
+                fraction = loadFraction(state.capacity.totalArea, state.heavy),
+                color = state.tier.color(),
+                track = EtalonColors.navy2,
+                height = BAR_H,
+            )
+        }
     }
     Spacer(Modifier.height(BAR_ROWS_GAP))
     Orders(state, onOpenOrder, onRetry)
@@ -105,35 +121,46 @@ private fun Hero(state: DaySheetState) = Row(
     verticalAlignment = Alignment.Bottom,
 ) {
     Row(verticalAlignment = Alignment.Bottom) {
-        Text(
-            formatDecimal(state.capacity.totalArea, AREA_PLACES),
-            style = EtalonType.amountLg,
-            color = EtalonColors.onDark,
-            maxLines = 1,
-        )
-        Spacer(Modifier.width(HERO_UNIT_GAP))
-        Text(
-            stringResource(R.string.orders_unit_m2),
-            style = EtalonType.label,
-            color = EtalonColors.onDarkMuted,
-            modifier = Modifier.padding(bottom = HERO_UNIT_GAP),
-        )
-        Spacer(Modifier.width(HERO_TAG_GAP))
-        TierTag(state.tier, onDark = true, modifier = Modifier.padding(bottom = HERO_UNIT_GAP))
+        if (state.hasLoad) {
+            Text(
+                formatDecimal(state.capacity.totalArea, AREA_PLACES),
+                style = EtalonType.amountLg,
+                color = EtalonColors.onDark,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(HERO_UNIT_GAP))
+            Text(
+                stringResource(R.string.orders_unit_m2),
+                style = EtalonType.label,
+                color = EtalonColors.onDarkMuted,
+                modifier = Modifier.padding(bottom = HERO_UNIT_GAP),
+            )
+            Spacer(Modifier.width(HERO_TAG_GAP))
+            TierTag(state.tier, onDark = true, modifier = Modifier.padding(bottom = HERO_UNIT_GAP))
+        } else {
+            // R18: the month behind this day has not landed, so there is no figure, no unit and no
+            // tier — a dash, which says «not known» where a «0,00 м² · мавжуд» said «empty day».
+            Text(
+                stringResource(R.string.orders_day_sheet_no_load),
+                style = EtalonType.amountLg,
+                color = EtalonColors.onDarkMuted,
+                maxLines = 1,
+            )
+        }
     }
     Column(horizontalAlignment = Alignment.End) {
         Text(
             stringResource(
                 R.string.orders_day_sheet_summary,
-                formatCountBare(state.capacity.totalOrders),
-                formatCountBare(state.capacity.totalBlocks),
+                formatCountBare(state.orderCount),
+                formatCountBare(state.blockCount),
             ),
             style = EtalonType.meta,
             color = EtalonColors.onDarkMuted,
             maxLines = 1,
             textAlign = TextAlign.End,
         )
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(HERO_MONEY_GAP))
         // Σ of the loaded orders' totalPrice (R6) — bare digits per D8, as every other amount
         // in a navy sheet is.
         MoneyText(state.moneyTotal, style = EtalonType.rowAmount, color = EtalonColors.onDark)
@@ -159,7 +186,10 @@ private fun Orders(state: DaySheetState, onOpenOrder: (String) -> Unit, onRetry:
         )
         rows == null -> repeat(SKELETON_ROWS) { SkeletonRow() }
         rows.isEmpty() -> Text(
-            stringResource(R.string.orders_day_sheet_empty, formatArea(state.heavy)),
+            // R18: «Сиғим бўш — 600 м²» is the SERVER's ceiling. Without the month behind the day
+            // the sheet knows only that the list call came back with nothing on it.
+            if (state.hasLoad) stringResource(R.string.orders_day_sheet_empty, formatArea(state.heavy))
+            else stringResource(R.string.orders_day_sheet_empty_plain),
             style = EtalonType.body,
             color = EtalonColors.onDarkMuted,
             modifier = Modifier.padding(horizontal = SHEET_INSET, vertical = EtalonSpace.sm),
@@ -194,6 +224,6 @@ private fun Orders(state: DaySheetState, onOpenOrder: (String) -> Unit, onRetry:
  *  [OrderRow] occupies, so the sheet does not resize once they land. */
 @Composable
 private fun SkeletonRow() = Box(
-    Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.rowPadH, vertical = 3.dp)
+    Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.rowPadH, vertical = SKELETON_ROW_GAP)
         .height(SKELETON_ROW_H).clip(EtalonShapes.lg).background(EtalonColors.navy2),
 )

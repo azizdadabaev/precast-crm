@@ -90,6 +90,7 @@ class DaySheetScreenshotTest {
         day: LocalDate,
         capacity: CapacityDay,
         rows: Resource<List<OrderSummary>>,
+        hasLoad: Boolean = true,
     ): DaySheetState {
         val t = CalendarFixtures.THRESHOLDS
         val loaded = rows.dataOrNull.orEmpty()
@@ -99,7 +100,10 @@ class DaySheetScreenshotTest {
             tier = tierFor(capacity.totalArea, t),
             heavy = t.heavy,
             orders = rows,
+            orderCount = capacity.totalOrders,
+            blockCount = capacity.totalBlocks,
             moneyTotal = loaded.fold(Money.ZERO) { acc, o -> acc + o.totalPrice },
+            hasLoad = hasLoad,
         )
     }
 

@@ -13,6 +13,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.ClientRef
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderFacets
@@ -66,6 +67,7 @@ class OrdersListScreenshotTest {
         total: String,
         paid: String,
         scheduled: String,
+        blocks: Int = 0,
     ) = OrderSummary(
         id = id,
         orderNumber = number,
@@ -82,7 +84,7 @@ class OrdersListScreenshotTest {
         totalPrice = Money.parse(total),
         confirmedPaid = Money.parse(paid),
         totalArea = BigDecimal(area),
-        totalBlocks = 0,
+        totalBlocks = blocks,
         totalBeams = 0,
         scheduledAt = Instant.parse(scheduled),
         placedAt = Instant.parse(scheduled),
@@ -177,7 +179,12 @@ class OrdersListScreenshotTest {
         hasCache = true,
     )
 
-    private fun daySheet(): DaySheetState {
+    /**
+     * @param hasLoad R18. False is the offline sheet: the month's figures never arrived, so the
+     *   hero is «—» and the right-hand column counts the rows the ORDERS call did return — exactly
+     *   what `OrdersListViewModel.daySheetFlow` builds in that case.
+     */
+    private fun daySheet(hasLoad: Boolean = true): DaySheetState {
         val t = CalendarFixtures.THRESHOLDS
         val day = CalendarFixtures.day(12)
         return DaySheetState(
@@ -186,18 +193,39 @@ class OrdersListScreenshotTest {
             tier = tierFor(day.totalArea, t),
             heavy = t.heavy,
             orders = Resource.Success(dayOrders),
+            orderCount = if (hasLoad) day.totalOrders else dayOrders.size,
+            blockCount = if (hasLoad) day.totalBlocks else dayOrders.sumOf { it.totalBlocks },
             moneyTotal = dayOrders.fold(Money.ZERO) { acc, o -> acc + o.totalPrice },
+            hasLoad = hasLoad,
         )
     }
 
-    /** 210,00 + 168,50 + 142,00 + 96,50 + 68,00 = 685,00 м² — the 12 September cell's own figure,
-     *  split five ways, so the grid and the sheet under it agree. */
+    /**
+     * **R18.** The same day, with the month behind it never delivered: the failure banner over a
+     * grid of bare dates (no figures, no tiers, no legend), and under it a day sheet that states
+     * «—» instead of inventing «0,00 м² · мавжуд · Сиғим бўш — 600 м²» — while the day's own
+     * orders, which came from a call that DID answer, are still listed.
+     */
+    private fun calendarOffline() = calendar().copy(
+        capacity = Resource.Error(null, AppError.Network("Интернет алоқаси йўқ")),
+        daySheet = daySheet(hasLoad = false),
+    )
+
+    /**
+     * 210,00 + 168,50 + 142,00 + 96,50 + 68,00 = 685,00 м² — the 12 September cell's own figure,
+     * split five ways, so the grid and the sheet under it agree.
+     *
+     * The blocks split the same way: they come to the fixture month's own 3 631 ғишт for the day
+     * (`CalendarFixtures`' 5,3 blocks to the m²), which is what makes the offline frame — where the
+     * sheet counts the loaded ROWS because there is no month behind them (R18) — read the same
+     * «3 631 ғишт» as the loaded one.
+     */
     private val dayOrders = listOf(
-        row("d1", "2026-09-0021", "Tashkent Tower LLC", OrderStatus.IN_PRODUCTION, "210.00", "35700000.00", "35700000.00", "2026-09-12T06:00:00Z"),
-        row("d2", "2026-09-0022", "Fergana Dom", OrderStatus.PLACED, "168.50", "28645000.00", "10000000.00", "2026-09-12T06:00:00Z"),
-        row("d3", "2026-09-0023", "Yusupov & Sons", OrderStatus.LOADED, "142.00", "24140000.00", "0.00", "2026-09-12T06:00:00Z"),
-        row("d4", "2026-09-0024", "Navoi Build", OrderStatus.DISPATCHED, "96.50", "16405000.00", "16405000.00", "2026-09-12T06:00:00Z"),
-        row("d5", "2026-09-0025", "Karimov LLC", OrderStatus.DELIVERED, "68.00", "11560000.00", "5000000.00", "2026-09-12T06:00:00Z"),
+        row("d1", "2026-09-0021", "Tashkent Tower LLC", OrderStatus.IN_PRODUCTION, "210.00", "35700000.00", "35700000.00", "2026-09-12T06:00:00Z", blocks = 1113),
+        row("d2", "2026-09-0022", "Fergana Dom", OrderStatus.PLACED, "168.50", "28645000.00", "10000000.00", "2026-09-12T06:00:00Z", blocks = 893),
+        row("d3", "2026-09-0023", "Yusupov & Sons", OrderStatus.LOADED, "142.00", "24140000.00", "0.00", "2026-09-12T06:00:00Z", blocks = 753),
+        row("d4", "2026-09-0024", "Navoi Build", OrderStatus.DISPATCHED, "96.50", "16405000.00", "16405000.00", "2026-09-12T06:00:00Z", blocks = 512),
+        row("d5", "2026-09-0025", "Karimov LLC", OrderStatus.DELIVERED, "68.00", "11560000.00", "5000000.00", "2026-09-12T06:00:00Z", blocks = 360),
     )
 
     private fun shoot(name: String, state: OrdersListUiState) {
@@ -228,4 +256,6 @@ class OrdersListScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp") fun calendarLight() = shoot("orders_calendar_light", calendar())
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f)
     fun calendarLargeFont() = shoot("orders_calendar_font13", calendar())
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun calendarOfflineLight() = shoot("orders_calendar_offline_light", calendarOffline())
 }
