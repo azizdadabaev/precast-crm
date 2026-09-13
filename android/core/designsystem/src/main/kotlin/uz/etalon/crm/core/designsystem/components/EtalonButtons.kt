@@ -270,6 +270,13 @@ private val BADGE_INSET = 5.dp
  * anchored to that — anchoring it to the hit area would push it into the clear air around a
  * button smaller than 48 dp.
  *
+ * **The click lives on the outer box, not on the painted pill.** It used to hang off the pill,
+ * which made every icon button in the app a [size]-dp target — 40 dp, eight short of D7 — while
+ * the 48 dp box around it did nothing but reserve space. `IconButtonTouchTargetTest` holds the
+ * bounds of the clickable node itself to ≥ 48 dp so the slot and the target cannot part again.
+ * The outer box is clipped to [shape] for the ripple's sake only: nothing is painted on it, so a
+ * button at rest looks exactly as it did.
+ *
  * @param enabled false greys the glyph **and** takes the click away. Both halves matter: a
  *   [CountStepper] at its bound used to paint an ink3 minus that TalkBack still announced as a
  *   live button, so the one user who could not see the tint was the one told it worked.
@@ -285,39 +292,46 @@ fun EtalonIconButton(
     onDark: Boolean = false, badge: Boolean = false, size: Dp = 40.dp,
     shape: Shape = EtalonShapes.pill, tint: Color? = null, enabled: Boolean = true,
     pressedFill: Color? = null,
-) = Box(modifier.size(EtalonSpace.minTouch), contentAlignment = Alignment.Center) {
+) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    Box(Modifier.size(size)) {
-        Box(
-            Modifier
-                .fillMaxSize().clip(shape)
-                .background(
-                    when {
-                        pressedFill != null && pressed && enabled -> pressedFill
-                        onDark -> EtalonColors.navy2
-                        else -> EtalonColors.surface
-                    },
-                )
-                .then(if (onDark) Modifier else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, shape))
-                .clickable(
-                    enabled = enabled, role = Role.Button, indication = etalonRipple(onDark),
-                    interactionSource = interaction, onClick = onClick,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            val fg = when {
-                !enabled -> if (onDark) EtalonColors.onDark.copy(alpha = 0.38f) else EtalonColors.ink3
-                tint != null -> tint
-                onDark -> EtalonColors.onDark
-                else -> EtalonColors.ink
+    Box(
+        modifier
+            .size(EtalonSpace.minTouch)
+            .clip(shape)
+            .clickable(
+                enabled = enabled, role = Role.Button, indication = etalonRipple(onDark),
+                interactionSource = interaction, onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(size)) {
+            Box(
+                Modifier
+                    .fillMaxSize().clip(shape)
+                    .background(
+                        when {
+                            pressedFill != null && pressed && enabled -> pressedFill
+                            onDark -> EtalonColors.navy2
+                            else -> EtalonColors.surface
+                        },
+                    )
+                    .then(if (onDark) Modifier else Modifier.border(EtalonSpace.hairline, EtalonColors.surfaceBorder, shape)),
+                contentAlignment = Alignment.Center,
+            ) {
+                val fg = when {
+                    !enabled -> if (onDark) EtalonColors.onDark.copy(alpha = 0.38f) else EtalonColors.ink3
+                    tint != null -> tint
+                    onDark -> EtalonColors.onDark
+                    else -> EtalonColors.ink
+                }
+                EtalonIcon(icon, contentDescription, size = 18.dp, tint = fg)
             }
-            EtalonIcon(icon, contentDescription, size = 18.dp, tint = fg)
+            if (badge) Box(
+                Modifier.align(Alignment.TopEnd).offset(x = -BADGE_INSET, y = BADGE_INSET)
+                    .size(10.dp).clip(EtalonShapes.pill).background(EtalonColors.onDark)
+                    .padding(1.5.dp).clip(EtalonShapes.pill).background(EtalonColors.red),
+            )
         }
-        if (badge) Box(
-            Modifier.align(Alignment.TopEnd).offset(x = -BADGE_INSET, y = BADGE_INSET)
-                .size(10.dp).clip(EtalonShapes.pill).background(EtalonColors.onDark)
-                .padding(1.5.dp).clip(EtalonShapes.pill).background(EtalonColors.red),
-        )
     }
 }
