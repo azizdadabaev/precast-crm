@@ -40,7 +40,7 @@ White card, radius `xl` (16), hairline, `cardMargin` sides.
 
 - Month header row: ‹ (48 dp slot) · «Сентябрь 2026» `titleSm` centred, under it «N буюртма · X м²» `meta` (N and X summed over the visible month's days, CANCELED excluded because the endpoint excludes them) · ›.
 - Weekday row: «Ду Се Чо Па Жу Ша Як» `labelSm` `ink3`, Monday first.
-- 7-column grid, 5 or 6 rows: every visible day incl. the leading/trailing days of the adjacent months.
+- 7-column grid of only the rows the month needs (**owner ruling R16, 2026-09-13: five rows are enough**) — never a row made entirely of next-month days; a month that genuinely spans six Monday-first weeks (August 2026, May 2027) keeps its sixth row so no day is dropped. Leading days of the previous month and the trailing days that complete the last drawn row stay, greyed. The fetch range remains the web's 42 days.
 - Legend row: four pills (10×3 dp swatch + label `captionLight`): «≤300 м²», «≤450», «≤600», «>600 тўлиб кетган» — the numbers are the SERVER's thresholds, formatted with `formatArea`-style grouping, never literals.
 
 ### 4.2 Day cell (h 56, radius `md` 10, 2 dp gap)
