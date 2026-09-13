@@ -1,17 +1,24 @@
-package uz.etalon.crm.feature.orders.detail
+package uz.etalon.crm.core.designsystem.components
 
 import androidx.annotation.StringRes
-import uz.etalon.crm.core.designsystem.components.StepState
+import uz.etalon.crm.core.designsystem.R
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.ui.format.formatDate
-import uz.etalon.crm.feature.orders.R
 
 /** One column of the «Етказиш» card. [labelRes] rather than a string so this stays pure Kotlin
  *  the tests exercise without an Android context — the screen resolves it. */
 data class StepSpec(@StringRes val labelRes: Int, val caption: String?, val state: StepState)
 
 private const val CHECK = "✓"
+
+/** The whole-order load event. Its twin in `:feature:orders`' own `EventLabels` names the same
+ *  wire type for the event FEED; this copy is the one [timelineFor] reads, and the two cannot be
+ *  shared because each is `internal` to its own module. */
+private const val ORDER_LOADED = "ORDER_LOADED"
+
+/** A split order's per-truck delivery — the last of them dates step three when nothing else does. */
+private const val SHIPMENT_DELIVERED = "SHIPMENT_DELIVERED"
 
 /**
  * The «Етказиш» card's three columns: «Буюртма» → «Юкланди» → «Етказилди».
@@ -37,6 +44,10 @@ private const val CHECK = "✓"
  * check is not a failure: a split order that was never stamped at the order level genuinely has no
  * single instant for «Юкланди», and a date invented from the nearest event would be a claim about
  * a lorry nobody made.
+ *
+ * Ruling R13 moved it here from `:feature:orders`, beside the [StepTimeline] it feeds: the Dispatch
+ * screen in `:feature:logistics` draws these same three columns over its form, and one feature
+ * module may not reach into another to do it.
  */
 fun timelineFor(o: OrderDetail): List<StepSpec> {
     val s = o.summary.status
@@ -59,7 +70,7 @@ fun timelineFor(o: OrderDetail): List<StepSpec> {
         ?: o.shipments.mapNotNull { it.deliveredAt }.maxOrNull()
         ?: o.events.filter { it.type == SHIPMENT_DELIVERED }.maxOfOrNull { it.createdAt }
     val dates = listOf(o.summary.placedAt, loadedAt, deliveredAt)
-    val labels = listOf(R.string.step_placed, R.string.step_loaded, R.string.step_delivered)
+    val labels = listOf(R.string.ds_step_placed, R.string.ds_step_loaded, R.string.ds_step_delivered)
     return labels.mapIndexed { i, label ->
         val state = when {
             rank < 0 -> StepState.UPCOMING

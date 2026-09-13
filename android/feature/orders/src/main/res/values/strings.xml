@@ -63,9 +63,8 @@
     <string name="detail_paid_amount">Тўланган %1$s</string>
     <string name="detail_remaining_amount">Қолди %1$s</string>
     <string name="detail_delivery">Етказиш</string>
-    <string name="step_placed">Буюртма</string>
-    <string name="step_loaded">Юкланди</string>
-    <string name="step_delivered">Етказилди</string>
+    <!-- The three step labels moved to :core:designsystem with `timelineFor` (ruling R13) —
+         ds_step_placed / ds_step_loaded / ds_step_delivered, same words. -->
     <string name="detail_date">Сана</string>
     <string name="detail_driver">Ҳайдовчи</string>
     <string name="detail_no_driver">—</string>

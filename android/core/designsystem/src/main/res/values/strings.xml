@@ -24,6 +24,12 @@
     <string name="ds_status_shipment_loaded">Юкланди</string>
     <string name="ds_status_shipment_dispatched">Йўлда</string>
     <string name="ds_status_shipment_delivered">Етказилди</string>
+    <!-- StepTimeline's three columns (ruling R13) — moved from :feature:orders with `timelineFor`
+         so the Dispatch screen draws the same timeline the order detail does. The wording is
+         unchanged from the detail's, so its baselines do not move. -->
+    <string name="ds_step_placed">Буюртма</string>
+    <string name="ds_step_loaded">Юкланди</string>
+    <string name="ds_step_delivered">Етказилди</string>
     <string name="payment_paid">Тўланган</string>
     <string name="payment_partial">Қисман</string>
     <string name="payment_pending">Кутилмоқда</string>

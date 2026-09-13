@@ -78,6 +78,7 @@ import uz.etalon.crm.core.designsystem.components.StickyActionBar
 import uz.etalon.crm.core.designsystem.components.StickyActionBarDefaults
 import uz.etalon.crm.core.designsystem.components.TagSurface
 import uz.etalon.crm.core.designsystem.components.TimelineStep
+import uz.etalon.crm.core.designsystem.components.timelineFor
 import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.icon.EtalonIcon
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons

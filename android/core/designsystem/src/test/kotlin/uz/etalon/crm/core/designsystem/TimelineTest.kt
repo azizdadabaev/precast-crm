@@ -1,9 +1,10 @@
-package uz.etalon.crm.feature.orders
+package uz.etalon.crm.core.designsystem
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uz.etalon.crm.core.designsystem.components.StepState
+import uz.etalon.crm.core.designsystem.components.timelineFor
 import uz.etalon.crm.core.model.ClientRef
 import uz.etalon.crm.core.model.DispatchInfo
 import uz.etalon.crm.core.model.Money
@@ -14,7 +15,6 @@ import uz.etalon.crm.core.model.OrderSummary
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
-import uz.etalon.crm.feature.orders.detail.timelineFor
 import java.math.BigDecimal
 import java.time.Instant
 
