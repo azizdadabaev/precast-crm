@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -14,15 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,12 +45,14 @@ import uz.etalon.crm.core.designsystem.components.FormFieldValue
 import uz.etalon.crm.core.designsystem.components.NoticeBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
+import uz.etalon.crm.core.designsystem.components.TierTag
 import uz.etalon.crm.core.designsystem.icon.EtalonIcon
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
+import uz.etalon.crm.core.model.CapacityTier
 import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatCount
@@ -65,17 +62,15 @@ import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatPercent
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.core.ui.regions.composeAddress
+import uz.etalon.crm.feature.calculator.calendar.DateGridSheet
+import uz.etalon.crm.feature.calculator.calendar.tierOfDate
 import java.math.BigDecimal
-import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 
 /** `PlaceOrderSchema.notes` is `z.string().max(2000)` — the field is capped here so an over-long
  *  note is impossible to type rather than rejected after the customer has waited for a round trip. */
 internal const val PLACE_NOTES_MAX = 2000
-
-/** Milliseconds in a day — `DatePickerState` speaks UTC epoch millis, `LocalDate` speaks days.
- *  The same conversion `RecordPaymentScreen` does for `paidOn`. */
-private const val MILLIS_PER_DAY = 86_400_000L
 
 // ── The sheet's own sizes ─────────────────────────────────────────
 
@@ -170,6 +165,7 @@ fun PlaceOrderSheet(
     onPlace: (scheduledAt: String, notes: String) -> Unit,
     onQueue: (scheduledAt: String, notes: String) -> Unit,
     initialScheduledAt: LocalDate? = null,
+    today: LocalDate = LocalDate.now(TASHKENT),
 ) {
     // rememberSaveable: the sheet survives a rotation or a process death with the date and the
     // note the operator already typed, the same way the quote behind it survives. The three money
@@ -181,8 +177,10 @@ fun PlaceOrderSheet(
     // frame nobody touched.
     var scheduledEpochDay by rememberSaveable { mutableStateOf(initialScheduledAt?.toEpochDay()) }
     var notes by rememberSaveable { mutableStateOf("") }
-    var showDatePicker by remember { mutableStateOf(false) }
     val scheduledAt = scheduledEpochDay?.let(LocalDate::ofEpochDay)
+    // How loaded the picked day already is (§7). Known only once that day's month has been
+    // through the grid — which it has, since the only way to pick a day is to tap one there.
+    val scheduledTier = scheduledAt?.let { tierOfDate(state.capacityMonths[YearMonth.from(it)], it) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -213,7 +211,8 @@ fun PlaceOrderSheet(
                 FormField(stringResource(R.string.calc_place_scheduled_at)) {
                     DateRow(
                         value = scheduledAt?.let { formatDate(it.atStartOfDay(TASHKENT).toInstant()) },
-                        onClick = { showDatePicker = true },
+                        tier = scheduledTier,
+                        onClick = { vm.openDateGrid(scheduledAt) },
                     )
                 }
 
@@ -316,76 +315,18 @@ fun PlaceOrderSheet(
         }
     }
 
-    if (showDatePicker) {
-        // Bounded to today onward: a delivery date in the past is not a schedule, it is a typo,
-        // and the capacity calendar would file the order behind days already run.
-        val today = remember { LocalDate.now(TASHKENT) }
-        val bounds = remember(today) {
-            object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
-                    !LocalDate.ofEpochDay(utcTimeMillis.floorDiv(MILLIS_PER_DAY)).isBefore(today)
-            }
-        }
-        val pickerState = rememberDatePickerState(
-            initialSelectedDateMillis = scheduledEpochDay?.times(MILLIS_PER_DAY),
-            selectableDates = bounds,
+    // §7: the capacity grid, read-only, in place of the Material date picker this sheet used to
+    // open. The picked day stays sheet-local — the grid only reports which one was tapped.
+    state.dateGrid?.let { grid ->
+        DateGridSheet(
+            grid = grid,
+            selected = scheduledAt,
+            today = today,
+            onPrev = vm::dateGridPrev,
+            onNext = vm::dateGridNext,
+            onPick = { day -> scheduledEpochDay = day.toEpochDay(); vm.closeDateGrid() },
+            onDismiss = vm::closeDateGrid,
         )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    pickerState.selectedDateMillis?.let { scheduledEpochDay = it.floorDiv(MILLIS_PER_DAY) }
-                    showDatePicker = false
-                }) {
-                    Text(
-                        stringResource(R.string.calc_place_date_done),
-                        style = EtalonType.sectionTitle,
-                        color = EtalonColors.indigo,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text(
-                        stringResource(R.string.calc_place_cancel),
-                        style = EtalonType.sectionTitle,
-                        color = EtalonColors.ink2,
-                    )
-                }
-            },
-            colors = DatePickerDefaults.colors(containerColor = EtalonColors.surface),
-        ) {
-            DatePicker(
-                state = pickerState,
-                // Both slots are given, as the orders list's day picker gives them: M3's own
-                // defaults are the ENGLISH «Select date» / «Selected date», and this UI is Uzbek.
-                title = {
-                    Text(
-                        stringResource(R.string.calc_place_scheduled_at),
-                        style = EtalonType.sectionTitle, color = EtalonColors.ink2,
-                        modifier = Modifier.padding(start = EtalonSpace.xl, top = EtalonSpace.lg),
-                    )
-                },
-                headline = {
-                    val picked = pickerState.selectedDateMillis
-                        ?.let { formatDate(Instant.ofEpochMilli(it)) }
-                    Text(
-                        picked ?: stringResource(R.string.calc_place_pick_date),
-                        style = EtalonType.headline,
-                        color = if (picked != null) EtalonColors.ink else EtalonColors.ink3,
-                        modifier = Modifier.padding(start = EtalonSpace.xl, bottom = EtalonSpace.md),
-                    )
-                },
-                showModeToggle = false,
-                // The same token colours the orders list's day picker carries — M3's defaults
-                // would paint the selection in the Material primary this app never uses.
-                colors = DatePickerDefaults.colors(
-                    containerColor = EtalonColors.surface,
-                    selectedDayContainerColor = EtalonColors.indigo,
-                    todayDateBorderColor = EtalonColors.indigo,
-                ),
-            )
-        }
     }
 }
 
@@ -416,11 +357,14 @@ private fun ClientTile(state: CalculatorUiState) = Column(
     )
 }
 
-/** The date field's value line: what was picked, or the prompt, with the chevron that says a
- *  picker opens. No default date — `scheduledAt` is required server-side and a silent "today"
- *  would be a real production commitment nobody chose. */
+/** The date field's value line: what was picked — with how loaded that day already is (§7) — or
+ *  the prompt, and the chevron that says a picker opens. No default date — `scheduledAt` is
+ *  required server-side and a silent "today" would be a real production commitment nobody chose.
+ *
+ *  [tier] is null until the day's month has been loaded, and the row simply shows the date then:
+ *  a tier is the server's own arithmetic, and there is nothing honest to print in its place. */
 @Composable
-private fun DateRow(value: String?, onClick: () -> Unit) = Row(
+private fun DateRow(value: String?, tier: CapacityTier?, onClick: () -> Unit) = Row(
     Modifier.fillMaxWidth()
         .heightIn(min = EtalonSpace.minTouch)
         .clickable(
@@ -435,8 +379,11 @@ private fun DateRow(value: String?, onClick: () -> Unit) = Row(
         style = FormFieldValue,
         color = if (value != null) EtalonColors.ink else EtalonColors.ink3,
         maxLines = 1,
-        modifier = Modifier.weight(1f),
     )
+    if (value != null && tier != null) {
+        TierTag(tier, modifier = Modifier.padding(start = ROW_GAP))
+    }
+    Spacer(Modifier.weight(1f))
     EtalonIcon(EtalonIcons.ChevronDown, null, size = CHEVRON, tint = EtalonColors.ink3)
 }
 

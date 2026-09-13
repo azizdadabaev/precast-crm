@@ -34,15 +34,22 @@ import uz.etalon.crm.core.calc.roundDownToGrid
 import uz.etalon.crm.core.calc.roundUpToGrid
 import uz.etalon.crm.core.calc.toPriceConfig
 import uz.etalon.crm.core.data.CalculatorRepository
+import uz.etalon.crm.core.data.CapacityRepository
 import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.data.mapper.normalizePhone
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
+import uz.etalon.crm.core.model.CapacityMonth
+import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.core.ui.regions.ParsedAddress
 import uz.etalon.crm.core.ui.regions.composeAddress
 import uz.etalon.crm.core.ui.regions.parseAddress
+import uz.etalon.crm.feature.calculator.calendar.DateGridState
+import java.time.LocalDate
+import java.time.YearMonth
 import java.util.UUID
 import javax.inject.Inject
 
@@ -157,6 +164,27 @@ fun interface QueuePlaceOrderUseCase {
 }
 
 /**
+ * Test seam over [CapacityRepository] — the month behind the delivery-date grid (design §7), the
+ * same shape `OrdersListViewModel` wraps it in for Жадвал.
+ *
+ * `observe` only: the picker has no pull-to-refresh, so nothing in this feature ever forces a
+ * fetch of a month the repository already holds.
+ */
+interface CapacitySource {
+    fun observe(month: YearMonth): Flow<Resource<CapacityMonth>>
+}
+
+class RepositoryCapacitySource @Inject constructor(private val repo: CapacityRepository) : CapacitySource {
+    override fun observe(month: YearMonth) = repo.observe(month)
+}
+
+/** The default: a calculator built without a capacity source (every test that never opens the
+ *  date grid) costs no fetch, and the grid it would open stays on its skeleton. */
+internal object NoCapacity : CapacitySource {
+    override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flowOf(Resource.Loading(null))
+}
+
+/**
  * Rooms, the text typed into their cells, live pricing and totals for a quote — the state and behaviour
  * behind the calculator screen, with no Compose in it: the screen (a later task) is built on top
  * of this and must be able to drive it from plain JUnit.
@@ -187,6 +215,7 @@ open class CalculatorViewModel(
     private val saveDraftUseCase: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.failure(IllegalStateException("no draft to save")) },
     private val placeOrderUseCase: PlaceOrderUseCase = PlaceOrderUseCase { _, _ -> Result.failure(IllegalStateException("no order to place")) },
     private val queuePlaceOrderUseCase: QueuePlaceOrderUseCase = QueuePlaceOrderUseCase { _, _ -> Result.failure(IllegalStateException("no order to queue")) },
+    private val capacity: CapacitySource = NoCapacity,
     private val saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
@@ -732,6 +761,61 @@ open class CalculatorViewModel(
     /** The route has navigated to the placed order — see [CalculatorUiState.placedOrderId]. */
     fun consumePlacedOrder() = _state.update { it.copy(placedOrderId = null) }
 
+    // ── The delivery-date grid (design §7) ──────────────────────────
+
+    /** The month currently being collected, cancelled the moment the grid moves or closes — a
+     *  month the operator has paged past must not land on the card after they have left it. */
+    private var capacityJob: Job? = null
+
+    /**
+     * Opens the capacity grid on the month of [initial] — the date the operator has already
+     * picked — or on this month when nothing is picked yet. The picked date itself stays where it
+     * has always lived, in the sheet ([PlaceOrderSheet]); this ViewModel owns only the month being
+     * looked at and the load behind it.
+     */
+    fun openDateGrid(initial: LocalDate?) = showDateGrid(YearMonth.from(initial ?: LocalDate.now(TASHKENT)))
+
+    /** ‹ / › inside the grid. A no-op while it is closed, so a stale callback cannot re-open it. */
+    fun dateGridPrev() { _state.value.dateGrid?.let { showDateGrid(it.cursor.minusMonths(1)) } }
+    fun dateGridNext() { _state.value.dateGrid?.let { showDateGrid(it.cursor.plusMonths(1)) } }
+
+    fun closeDateGrid() {
+        capacityJob?.cancel()
+        capacityJob = null
+        _state.update { it.copy(dateGrid = null) }
+    }
+
+    /**
+     * Shows [cursor] and, unless it is already in hand, starts collecting it.
+     *
+     * A month already in [CalculatorUiState.capacityMonths] is NOT asked for again: the grid is
+     * open for a moment, the factory's load does not move inside it, and paging ‹ › back and
+     * forth would otherwise re-collect the repository's flow on every step. That cache is also
+     * what keeps the tier tag beside the date field alive after the grid has closed — the sheet
+     * reads the picked date's month out of it (`tierOfDate`).
+     */
+    private fun showDateGrid(cursor: YearMonth) {
+        capacityJob?.cancel()
+        capacityJob = null
+        val cached = _state.value.capacityMonths[cursor]
+        _state.update {
+            it.copy(dateGrid = DateGridState(cursor, cached?.let { m -> Resource.Success(m) } ?: Resource.Loading(null)))
+        }
+        if (cached != null) return
+        capacityJob = viewModelScope.launch {
+            capacity.observe(cursor).collect { r ->
+                _state.update { s ->
+                    s.copy(
+                        // Only while the grid is still showing this month: a late emission for a
+                        // month the operator has paged away from is data, not a view change.
+                        dateGrid = s.dateGrid?.let { g -> if (g.cursor == cursor) g.copy(capacity = r) else g },
+                        capacityMonths = r.dataOrNull?.let { m -> s.capacityMonths + (cursor to m) } ?: s.capacityMonths,
+                    )
+                }
+            }
+        }
+    }
+
     /** Why this quote may not be placed, in Uzbek — or null when it may. Mirrors
      *  `CalculatorRepository.toRequest`'s refusals so the screen never offers an action the
      *  repository would only refuse a layer later. */
@@ -958,6 +1042,7 @@ class HiltCalculatorViewModel @Inject constructor(
     permissions: PermissionGate,
     clients: ClientsRepository,
     repository: CalculatorRepository,
+    capacitySource: RepositoryCapacitySource,
     saved: SavedStateHandle,
 ) : CalculatorViewModel(
     session = session,
@@ -969,5 +1054,6 @@ class HiltCalculatorViewModel @Inject constructor(
     saveDraftUseCase = SaveDraftUseCase { draft, key -> repository.saveDraft(draft, key) },
     placeOrderUseCase = PlaceOrderUseCase { input, key -> repository.placeOrder(input, key) },
     queuePlaceOrderUseCase = QueuePlaceOrderUseCase { input, key -> repository.queuePlaceOrder(input, key) },
+    capacity = capacitySource,
     saved = saved,
 )

@@ -129,8 +129,9 @@
     <string name="calc_place_title">Буюртмани расмийлаштириш</string>
     <string name="calc_place_scheduled_at">Етказиб бериш санаси</string>
     <string name="calc_place_pick_date">Сана танланг</string>
-    <string name="calc_place_date_done">Тайёр</string>
     <string name="calc_place_cancel">Бекор қилиш</string>
+    <!-- The capacity grid the date row opens (design §7) -->
+    <string name="calc_place_date_grid_title">Етказиб бериш кунини танланг</string>
     <string name="calc_place_notes">Изоҳ</string>
     <string name="calc_place_notes_counter">%1$d/%2$d</string>
     <!-- D10's three relocated money fields and the rows they add to the roll-up. The discount is

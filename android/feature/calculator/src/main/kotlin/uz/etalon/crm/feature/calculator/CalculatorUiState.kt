@@ -7,9 +7,12 @@ import uz.etalon.crm.core.calc.ProjectTotals
 import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.calc.computeOrderTotals
 import uz.etalon.crm.core.calc.projectTotals
+import uz.etalon.crm.core.model.CapacityMonth
 import uz.etalon.crm.core.ui.regions.ParsedAddress
+import uz.etalon.crm.feature.calculator.calendar.DateGridState
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.YearMonth
 
 /** The width/length bump step, in metres — see `CalculatorViewModel.bumpWidth`. */
 enum class Grid(val step: Double) { CM10(0.1), CM5(0.05) }
@@ -172,6 +175,14 @@ data class CalculatorUiState(
     /** Set once, after a successful ONLINE placement, for the route to navigate with — cleared by
      *  `CalculatorViewModel.consumePlacedOrder` so a recomposition cannot navigate twice. */
     val placedOrderId: String? = null,
+
+    // ── The delivery-date grid — see `calendar/DateGridSheet.kt` ────
+    /** The capacity grid while it is open (design §7), null while it is not. */
+    val dateGrid: DateGridState? = null,
+    /** Every capacity month this session has loaded, keyed by month. It outlives [dateGrid] on
+     *  purpose: the tier tag beside the picked date is read out of it (`tierOfDate`) long after
+     *  the grid has closed, and paging ‹ › back to a month already here costs no second fetch. */
+    val capacityMonths: Map<YearMonth, CapacityMonth> = emptyMap(),
 ) {
     val totalWeightKg: Double get() = totals.monolithArea * KG_PER_M2
 

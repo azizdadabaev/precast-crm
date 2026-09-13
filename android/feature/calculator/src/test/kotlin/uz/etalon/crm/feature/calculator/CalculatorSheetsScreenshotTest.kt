@@ -3,17 +3,22 @@ package uz.etalon.crm.feature.calculator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import com.github.takahirom.roborazzi.captureScreenRoboImage
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -32,13 +37,19 @@ import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.CapacityMonth
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.testing.CalendarFixtures
 import uz.etalon.crm.core.testing.FakeEtalonApi
+import uz.etalon.crm.core.ui.format.formatArea
+import uz.etalon.crm.core.ui.format.formatCountBare
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.regions.ParsedAddress
 import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.YearMonth
 
 /** §7's first fixture — «Зал» 5,2 × 7,1, whose beam length puts the engine in the 180 000 bracket. */
 private const val AUTO_PRICE = 180_000.0
@@ -66,14 +77,36 @@ private const val HALF_TOTAL = 15_370_049L
 private fun uzs(whole: Long): String = formatMoney(Money(BigDecimal.valueOf(whole)))
 
 /** A fixed day, never `LocalDate.now()`: a baseline that re-dates itself every morning fails
- *  `verifyRoborazziDebug` on a frame nobody has touched. */
+ *  `verifyRoborazziDebug` on a frame nobody has touched. A delivery day the factory has nothing
+ *  on yet, in the shared September — «мавжуд» beside the field, which is the answer the seller
+ *  is asking for. */
 private val SCHEDULED = LocalDate.of(2026, 9, 20)
+
+/** «Бугун» in the grid, and the floor under it — the same 12 September every calendar baseline
+ *  in the app is recorded against ([CalendarFixtures.TODAY]). */
+private val TODAY = CalendarFixtures.TODAY
+
+/** The date row's own value, and the content description of the day cell that carries it. */
+private val SCHEDULED_TEXT = "20 сен 2026"
+
+/** The grid's title, and the tier the fixture's 20 September earns. */
+private const val GRID_TITLE = "Етказиб бериш кунини танланг"
+private const val AVAILABLE_TAG = "мавжуд"
 
 /** «Навбатга қўйиш», the offline half of the action pair. */
 private const val QUEUE = "Навбатга қўйиш"
 
 private class SheetsInertSessionPricing : SessionPricing {
     override val pricing: StateFlow<Pricing?> = MutableStateFlow(null)
+}
+
+/** The shared September behind the date grid — one month for every module (`CalendarFixtures`),
+ *  so this picker and Жадвал photograph the same figures. Any other month is left in flight: the
+ *  frames never page, and a month invented here would be a second fixture. */
+private class FixtureCapacity : CapacitySource {
+    override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flowOf(
+        if (month == CalendarFixtures.MONTH) Resource.Success(CalendarFixtures.september) else Resource.Loading(null),
+    )
 }
 
 /**
@@ -130,7 +163,22 @@ class CalculatorSheetsScreenshotTest {
         session = SheetsInertSessionPricing(),
         permissions = PermissionGate { true },
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
+        capacity = FixtureCapacity(),
     )
+
+    /**
+     * The place-order sheet as the app itself mounts it: the fixture quote, plus the two fields
+     * the sheet's own actions change on the ViewModel — the open date grid and the months it has
+     * loaded. Everything else on screen is the static quote these frames are about.
+     */
+    private fun liveSheet(s: CalculatorUiState, vm: CalculatorViewModel) = screen {
+        val live by vm.state.collectAsState()
+        PlaceOrderSheet(
+            state = s.copy(dateGrid = live.dateGrid, capacityMonths = live.capacityMonths),
+            vm = vm, onDismiss = {}, onPlace = { _, _ -> }, onQueue = { _, _ -> },
+            initialScheduledAt = SCHEDULED, today = TODAY,
+        )
+    }
 
     private fun screen(content: @androidx.compose.runtime.Composable () -> Unit) {
         rule.setContent {
@@ -159,20 +207,48 @@ class CalculatorSheetsScreenshotTest {
         captureScreenRoboImage("screenshots/rate_confirm_light.png")
     }
 
-    /** «Буюртмани расмийлаштириш» with everything filled in: the client, a date, D10's 5 % discount
-     *  and 300 000 delivery, and the roll-up they produce. */
+    /**
+     * «Буюртмани расмийлаштириш» with everything filled in: the client, a date, D10's 5 % discount
+     * and 300 000 delivery, and the roll-up they produce.
+     *
+     * The date is re-picked THROUGH the grid rather than merely seeded, because that is the only
+     * way the app itself produces the tier tag §7 puts beside the field: the row opens the grid,
+     * the day is tapped, the grid closes and the month it loaded stays in hand. The frame moved
+     * from its phase-2 baseline by exactly that tag.
+     */
     @Test fun placeOrderLight() {
-        val s = placeableState()
-        screen {
-            PlaceOrderSheet(
-                state = s, vm = vm(), onDismiss = {}, onPlace = { _, _ -> }, onQueue = { _, _ -> },
-                initialScheduledAt = SCHEDULED,
-            )
-        }
+        liveSheet(placeableState(), vm())
+        rule.onNodeWithText(SCHEDULED_TEXT).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription(SCHEDULED_TEXT).performClick()
+        rule.waitForIdle()
+        // Picked, the grid gone, and the day's load named beside the date.
+        rule.onNodeWithText(GRID_TITLE).assertDoesNotExist()
+        rule.onNodeWithText(AVAILABLE_TAG).assertExists()
         // The two relocated figures are on the sheet, and the roll-up is the engine's.
         rule.onNodeWithText("Чегирма 5%").assertExists()
         rule.onNodeWithText("Етказиш").assertExists()
         captureScreenRoboImage("screenshots/place_order_light.png")
+    }
+
+    /**
+     * §7: the date row opens the SAME capacity grid Жадвал draws, read-only, over the place-order
+     * sheet — the shared September, «Бугун» on the 12th, the picked 20th navy, and every day
+     * before today faded to 35 % and inert. One tap picks a day and closes it; «Бекор қилиш»
+     * leaves the date alone.
+     */
+    @Test fun placeOrderDateGridLight() {
+        liveSheet(placeableState(), vm())
+        rule.onNodeWithText(SCHEDULED_TEXT).performClick()
+        rule.waitForIdle()
+        rule.onNodeWithText(GRID_TITLE).assertExists()
+        // The month's own summary, straight off the fixture: 66 буюртма · 4 552 м². Built with
+        // the app's own formatters — the group separator is U+202F, which cannot be typed here.
+        assertEquals("the fixture's September", 66, CalendarFixtures.september.totalOrders)
+        val summary = "${formatCountBare(CalendarFixtures.september.totalOrders)} буюртма · " +
+            formatArea(CalendarFixtures.september.totalArea)
+        rule.onNodeWithText(summary).assertExists()
+        captureScreenRoboImage("screenshots/place_order_date_grid_light.png")
     }
 
     /**

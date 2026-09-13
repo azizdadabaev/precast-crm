@@ -4,8 +4,10 @@ import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -33,11 +35,18 @@ import uz.etalon.crm.core.data.ClientsRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.SessionPricing
 import uz.etalon.crm.core.network.ApiException
+import uz.etalon.crm.core.model.CapacityMonth
+import uz.etalon.crm.core.model.CapacityThresholds
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PriceTier
 import uz.etalon.crm.core.model.Pricing
+import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.model.gridRange
 import uz.etalon.crm.core.testing.FakeEtalonApi
+import uz.etalon.crm.core.ui.format.TASHKENT
 import java.math.BigDecimal
+import java.time.LocalDate
+import java.time.YearMonth
 
 /** A [SessionPricing] that already holds a value — no bootstrap round trip to fake. */
 private class FakeSessionPricing(pricing: Pricing?) : SessionPricing {
@@ -83,6 +92,7 @@ class CalculatorViewModelTest {
         saveDraft: SaveDraftUseCase = SaveDraftUseCase { _, _ -> Result.success("proj-1") },
         placeOrder: PlaceOrderUseCase = PlaceOrderUseCase { _, _ -> Result.success("order-1") },
         queuePlaceOrder: QueuePlaceOrderUseCase = QueuePlaceOrderUseCase { _, key -> Result.success(key) },
+        capacity: CapacitySource = NoCapacity,
         saved: SavedStateHandle = SavedStateHandle(),
     ) = CalculatorViewModel(
         session = FakeSessionPricing(defaultAndroidPricing()),
@@ -90,6 +100,7 @@ class CalculatorViewModelTest {
         clients = ClientsRepository(object : FakeEtalonApi() {}, PermissionGate { true }),
         observeDraft = observeDraft, persistDraft = persistDraft, clearDraftUseCase = clearDraft, saveDraftUseCase = saveDraft,
         placeOrderUseCase = placeOrder, queuePlaceOrderUseCase = queuePlaceOrder,
+        capacity = capacity,
         saved = saved,
     )
 
@@ -1170,4 +1181,107 @@ class CalculatorViewModelTest {
         assertNotEquals(keys[0], keys[1])
     }
 
+    // ── The delivery-date grid (design §7) ──────────────────────────
+
+    /** Stands in for `CapacityRepository`, its per-month cache included: [fetches] counts what
+     *  would be a network call, so a month the picker comes back to must not raise it. */
+    private class FakeCapacity : CapacitySource {
+        var fetches = 0
+        private val cache = mutableMapOf<YearMonth, CapacityMonth>()
+        override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flow {
+            cache[month]?.let { emit(Resource.Success(it)); return@flow }
+            emit(Resource.Loading(null))
+            fetches++
+            emit(Resource.Success(monthOf(month).also { cache[month] = it }))
+        }
+        private fun monthOf(m: YearMonth) =
+            CapacityMonth(m, gridRange(m), emptyMap(), CapacityThresholds.DEFAULT)
+    }
+
+    /** The grid opens on the month of the day already promised — not on today's, which would make
+     *  the operator page back to the date they can see in the field. */
+    @Test fun `openDateGrid opens on the picked date's month`() = runTest {
+        val v = vm(capacity = FakeCapacity())
+        advanceUntilIdle()
+
+        v.openDateGrid(LocalDate.of(2026, 12, 20))
+        advanceUntilIdle()
+
+        assertEquals(YearMonth.of(2026, 12), v.state.value.dateGrid?.cursor)
+    }
+
+    /** Nothing picked yet: the month being lived in. */
+    @Test fun `openDateGrid with no date opens on this month`() = runTest {
+        val v = vm(capacity = FakeCapacity())
+        advanceUntilIdle()
+
+        v.openDateGrid(null)
+        advanceUntilIdle()
+
+        assertEquals(YearMonth.now(TASHKENT), v.state.value.dateGrid?.cursor)
+    }
+
+    /** The month arrives through the seam and lands both on the grid and in the session's own
+     *  cache — the second is what keeps the tier tag beside the field after the grid has closed. */
+    @Test fun `the month is observed through the source and kept`() = runTest {
+        val cap = FakeCapacity()
+        val v = vm(capacity = cap)
+        advanceUntilIdle()
+
+        val month = YearMonth.of(2026, 9)
+        v.openDateGrid(month.atDay(20))
+        advanceUntilIdle()
+
+        assertEquals(1, cap.fetches)
+        assertEquals(month, v.state.value.dateGrid?.capacity?.dataOrNull?.month)
+        v.closeDateGrid()
+        assertNull(v.state.value.dateGrid)
+        // Closed, and the month is still in hand.
+        assertEquals(month, v.state.value.capacityMonths[month]?.month)
+    }
+
+    /** ‹ › move the cursor and fetch each new month once; coming back to one already in hand
+     *  costs nothing. */
+    @Test fun `paging fetches a month once`() = runTest {
+        val cap = FakeCapacity()
+        val v = vm(capacity = cap)
+        advanceUntilIdle()
+
+        val september = YearMonth.of(2026, 9)
+        v.openDateGrid(september.atDay(20)); advanceUntilIdle()
+        v.dateGridNext(); advanceUntilIdle()
+        assertEquals(YearMonth.of(2026, 10), v.state.value.dateGrid?.cursor)
+        v.dateGridPrev(); advanceUntilIdle()
+        assertEquals(september, v.state.value.dateGrid?.cursor)
+
+        assertEquals(2, cap.fetches, "two months, two fetches")
+        // And September is on the card again, straight from the cache.
+        assertEquals(september, v.state.value.dateGrid?.capacity?.dataOrNull?.month)
+    }
+
+    /** Re-opening the picker on a month this session has already loaded asks for nothing. */
+    @Test fun `re-opening the same month does not refetch`() = runTest {
+        val cap = FakeCapacity()
+        val v = vm(capacity = cap)
+        advanceUntilIdle()
+
+        val day = LocalDate.of(2026, 9, 20)
+        v.openDateGrid(day); advanceUntilIdle()
+        v.closeDateGrid()
+        v.openDateGrid(day); advanceUntilIdle()
+
+        assertEquals(1, cap.fetches)
+        assertEquals(YearMonth.from(day), v.state.value.dateGrid?.capacity?.dataOrNull?.month)
+    }
+
+    /** ‹ › while the grid is closed are dead — a callback from a sheet that has gone must not
+     *  bring it back. */
+    @Test fun `paging a closed grid does nothing`() = runTest {
+        val v = vm(capacity = FakeCapacity())
+        advanceUntilIdle()
+
+        v.dateGridNext(); v.dateGridPrev(); advanceUntilIdle()
+
+        assertNull(v.state.value.dateGrid)
+    }
 }
