@@ -121,6 +121,13 @@ class FormattersTest {
         assertEquals("31 дек 2025", formatDate(LocalDate.of(2025, 12, 31)))
     }
 
+    /** The orders list's day-filter chip (design §3): «12 сен», no year. */
+    @Test fun `a filter chip's day drops the year`() {
+        assertEquals("12 сен", formatShortDate(LocalDate.of(2026, 9, 12)))
+        assertEquals("1 янв", formatShortDate(LocalDate.of(2027, 1, 1)))
+        assertEquals("31 дек", formatShortDate(LocalDate.of(2025, 12, 31)))
+    }
+
     /** Monday first, the whole week, against the real 2026 calendar — an off-by-one in the ISO
      *  index would only ever show up as the wrong Uzbek word under a date nobody double-checks. */
     @Test fun `the weekday table is indexed Monday-first`() {

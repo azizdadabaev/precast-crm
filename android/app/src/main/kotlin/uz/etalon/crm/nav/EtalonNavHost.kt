@@ -175,6 +175,10 @@ fun SignedInShell(
                             // quoted and placed. Without calculator.use that tab does not exist, so
                             // the button is not drawn at all rather than drawn and dead.
                             onNewOrder = if (me.can(PERM_CALCULATOR_USE)) ({ switchTab(backStack, Calculator) }) else null,
+                            // Жадвал's export button. Drawn only for the operator the server
+                            // would actually let build the workbook (R4) — the slot is simply
+                            // empty for everyone else.
+                            canExport = me.can(PERM_ORDER_EXPORT_BACKUP),
                         )
                     }
                     entry<OrderDetail> { k ->

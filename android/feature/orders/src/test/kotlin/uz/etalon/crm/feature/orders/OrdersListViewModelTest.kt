@@ -323,6 +323,28 @@ class OrdersListViewModelTest {
         assertNull(vm.state.value.daySheet)
     }
 
+    /**
+     * R14: paging the grid away from the selected day does not close its sheet. The planner picked
+     * the day; the month they are *looking* at is a different question, and the sheet — with the
+     * day's own orders in it — is the answer they asked for. The grid stops drawing the selection
+     * (R7) and the chip in Рўйхат is what still names it.
+     */
+    @Test fun `the day sheet survives paging to another month`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity()); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        val d = YearMonth.now(TASHKENT).atDay(12)
+        vm.selectDay(d); advanceUntilIdle()
+        assertEquals(d, vm.state.value.daySheet!!.day)
+
+        vm.nextMonth(); advanceUntilIdle()
+        val sheet = vm.state.value.daySheet
+        assertNotNull(sheet)
+        assertEquals(d, sheet!!.day)
+        // The next month's grid has no bucket for a day of the month before, so the sheet's
+        // capacity zero-fills — the orders are real, the load is honestly unknown-as-zero.
+        assertEquals(d, sheet.capacity.date)
+    }
+
     @Test fun `the day sheet sums the day's orders into one money total`() = runTest {
         val src = FakeSource()
         val vm = OrdersListViewModel(src, capacitySource = FakeCapacity()); advanceUntilIdle()
@@ -394,23 +416,23 @@ class OrdersListViewModelTest {
         gate.complete(Result.success(file)); advanceUntilIdle()
         assertFalse(vm.state.value.exporting)
         assertEquals(file, vm.state.value.exportFile)
-        assertNull(vm.state.value.exportError)
+        assertFalse(vm.state.value.exportFailed)
 
         vm.consumeExport(); advanceUntilIdle()
         assertNull(vm.state.value.exportFile)
     }
 
-    @Test fun `a failed export says so in Uzbek and can be dismissed`() = runTest {
+    @Test fun `a failed export raises a flag the screen can dismiss`() = runTest {
         val vm = OrdersListViewModel(FakeSource(), exports = { Result.failure(java.io.IOException("boom")) })
         advanceUntilIdle()
         vm.exportBackup(); advanceUntilIdle()
 
         assertFalse(vm.state.value.exporting)
         assertNull(vm.state.value.exportFile)
-        assertEquals("Экспорт қилиб бўлмади", vm.state.value.exportError)
+        assertTrue(vm.state.value.exportFailed)
 
         vm.dismissExportError(); advanceUntilIdle()
-        assertNull(vm.state.value.exportError)
+        assertFalse(vm.state.value.exportFailed)
     }
 
     @Test fun `canExport comes from the route`() = runTest {

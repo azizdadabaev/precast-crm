@@ -37,10 +37,6 @@ import javax.inject.Inject
 /** Rows fetched per page; the list appends a page at a time as the user scrolls. */
 private const val PAGE_SIZE = 50
 
-/** The only user-facing string the ViewModel owns: the export failure has no screen state of its
- *  own to hang a string resource off — the banner just prints what the ViewModel put here. */
-internal const val EXPORT_FAILED_MESSAGE = "Экспорт қилиб бўлмади"
-
 /** Test seam over OrdersRepository. */
 interface OrdersSource {
     fun list(filter: OrdersFilter): Flow<Resource<List<OrderSummary>>>
@@ -136,7 +132,9 @@ data class OrdersListUiState(
     val exporting: Boolean = false,
     /** The downloaded workbook, for the screen to hand the share sheet; cleared by `consumeExport`. */
     val exportFile: File? = null,
-    val exportError: String? = null,
+    /** The export failed. A flag, not a message: the wording is `orders_export_failed` in the
+     *  module's own strings, where every other user-facing sentence in this feature lives. */
+    val exportFailed: Boolean = false,
     /** From the route (`order.exportBackup`) — without it the header draws no export button. */
     val canExport: Boolean = false,
 )
@@ -168,7 +166,7 @@ open class OrdersListViewModel(
     private val capacityTick = MutableStateFlow(0)
     private val exporting = MutableStateFlow(false)
     private val exportFile = MutableStateFlow<File?>(null)
-    private val exportError = MutableStateFlow<String?>(null)
+    private val exportFailed = MutableStateFlow(false)
 
     /** Set by [setView] or by the restore in `init`, whichever runs first — a persisted view must
      *  not land on top of a switch the user has already flipped while the read was in flight. */
@@ -269,7 +267,7 @@ open class OrdersListViewModel(
     private data class Busy(val refreshing: Boolean, val loadingMore: Boolean)
     private data class Counts(val facets: OrderFacets?, val total: Int?)
     private data class Calendar(val view: OrdersView, val month: YearMonth, val capacity: Resource<CapacityMonth>?, val daySheet: DaySheetState?)
-    private data class Export(val exporting: Boolean, val file: File?, val error: String?)
+    private data class Export(val exporting: Boolean, val file: File?, val failed: Boolean)
     private data class Screen(val pages: Int, val calendar: Calendar, val export: Export)
 
     val state: StateFlow<OrdersListUiState> = combine(
@@ -279,7 +277,7 @@ open class OrdersListViewModel(
         combine(
             pages,
             combine(view, cursorMonth, capacityFlow, daySheetFlow) { v, m, c, s -> Calendar(v, m, c, s) },
-            combine(exporting, exportFile, exportError) { busy, file, err -> Export(busy, file, err) },
+            combine(exporting, exportFile, exportFailed) { busy, file, failed -> Export(busy, file, failed) },
         ) { n, calendar, export -> Screen(n, calendar, export) },
         combine(refreshing, loadingMore) { r, m -> Busy(r, m) },
     ) { f, r, counts, screen, busy ->
@@ -300,7 +298,7 @@ open class OrdersListViewModel(
             daySheet = screen.calendar.daySheet,
             exporting = screen.export.exporting,
             exportFile = screen.export.file,
-            exportError = screen.export.error,
+            exportFailed = screen.export.failed,
             canExport = canExport,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, OrdersListUiState(canExport = canExport))
@@ -354,18 +352,18 @@ open class OrdersListViewModel(
     fun exportBackup() {
         if (exporting.value) return
         exporting.value = true
-        exportError.value = null
+        exportFailed.value = false
         viewModelScope.launch {
             exports.downloadBackup()
                 .onSuccess { exportFile.value = it }
-                .onFailure { exportError.value = EXPORT_FAILED_MESSAGE }
+                .onFailure { exportFailed.value = true }
             exporting.value = false
         }
     }
 
     /** Called once the screen has handed the file to the share sheet. */
     fun consumeExport() { exportFile.value = null }
-    fun dismissExportError() { exportError.value = null }
+    fun dismissExportError() { exportFailed.value = false }
 
     /** Pull-to-refresh: re-fetches every page currently on screen, oldest first. */
     fun refresh() {

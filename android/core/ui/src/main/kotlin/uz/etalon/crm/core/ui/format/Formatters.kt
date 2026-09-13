@@ -139,6 +139,14 @@ fun formatScheduleDate(t: Instant, now: Instant = Instant.now()): String {
 fun formatDate(d: LocalDate): String = "${d.dayOfMonth} ${UZ_MONTHS_SHORT[d.monthValue - 1]} ${d.year}"
 
 /**
+ * The same day without its year: «12 сен». The orders list's day-filter chip (design §3) sits
+ * under the status chips on a screen that is already showing that month's orders, so the year
+ * would be four characters of nothing — and the chip is one pill on a row that has other pills to
+ * fit beside it. [formatDate] stays the form for anything read out of context.
+ */
+fun formatShortDate(d: LocalDate): String = "${d.dayOfMonth} ${UZ_MONTHS_SHORT[d.monthValue - 1]}"
+
+/**
  * The weekday alone: «Чоршанба». The day sheet's title is «9 сен 2026 · Чоршанба» (design §4.5),
  * and [formatLongDate]'s «Сешанба, 9 сентябрь» is the wrong shape for it — the weekday trails the
  * date there instead of leading it, and the month is spelled out.

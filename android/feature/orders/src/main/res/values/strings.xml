@@ -18,6 +18,18 @@
     <string name="orders_day_pick">Танлаш</string>
     <string name="orders_day_clear">Тозалаш</string>
 
+    <!-- ── The Рўйхат / Жадвал switch and what rides with it (design §2–§3, §5) ── -->
+    <string name="orders_view_list">Рўйхат</string>
+    <string name="orders_view_calendar">Жадвал</string>
+    <!-- The calendar's subtitle replaces «N буюртма · X м²»: the grid is about days, not about the
+         filtered list, and each cell states its own count and area. -->
+    <string name="orders_subtitle_calendar">Жойлаштириш жадвали · кун сиғими м²</string>
+    <string name="orders_export_cd">Excel захираси</string>
+    <string name="orders_export_failed">Экспорт қилиб бўлмади</string>
+    <!-- The dismissible day chip: the label is the date, so the whole sentence has to say what a
+         tap does — the × alone reads as nothing at all. -->
+    <string name="orders_day_chip_cd">%1$s кун фильтрини олиб ташлаш</string>
+
     <!-- ── Жадвал: the navy day sheet under the grid (design §4.5) ─────────────── -->
     <!-- The unit beside the hero figure. It is its own string because the sheet sets the number
          at 30/800 and the unit at 12/600 — `formatArea`'s single «685 м²» cannot be styled in

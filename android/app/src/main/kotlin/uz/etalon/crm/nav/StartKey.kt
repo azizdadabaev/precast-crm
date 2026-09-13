@@ -11,6 +11,9 @@ internal const val PERM_PAYMENT_RECORD = "payment.record"
 internal const val PERM_DISCREPANCY_VIEW = "discrepancy.view"
 internal const val PERM_CLIENT_VIEW = "client.view"
 internal const val PERM_CALCULATOR_USE = "calculator.use"
+/** The Excel backup behind the Жадвал header's download button (design §5, R4) — the same
+ *  permission `src/app/api/orders/export/route.ts` checks before it builds the workbook. */
+internal const val PERM_ORDER_EXPORT_BACKUP = "order.exportBackup"
 
 /** The key a nav-pill cell opens. Every cell has a screen (§4). */
 internal fun Destination.key(): Key = when (this) {
