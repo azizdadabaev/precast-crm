@@ -1,24 +1,46 @@
 package uz.etalon.crm.feature.logistics.shipments
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
+import kotlinx.coroutines.delay
 import uz.etalon.crm.core.designsystem.components.CountStepper
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
-import uz.etalon.crm.core.designsystem.components.PrimaryButton
-import uz.etalon.crm.core.designsystem.components.SecondaryButton
+import uz.etalon.crm.core.designsystem.components.LoadListCard
+import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
+import uz.etalon.crm.core.designsystem.theme.EtalonColors
+import uz.etalon.crm.core.designsystem.theme.EtalonSpace
+import uz.etalon.crm.core.ui.format.formatCountBare
+import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.feature.capture.PhotoCapture
+import uz.etalon.crm.feature.logistics.LogisticsHeader
+import uz.etalon.crm.feature.logistics.MarkLoadedButton
+import uz.etalon.crm.feature.logistics.PhotoReviewCard
 import uz.etalon.crm.feature.logistics.R
+import uz.etalon.crm.feature.logistics.RESULT_DWELL_MS
+import uz.etalon.crm.feature.logistics.ResultTileGrid
 
 /**
  * `imagePrep` is not a parameter here: as in every logistics screen (see
@@ -26,7 +48,6 @@ import uz.etalon.crm.feature.logistics.R
  * takes it in rather than injecting it itself so `:feature:capture` stays Hilt-free, and this
  * route gets it from [HiltShipmentLoadViewModel]'s own Hilt-injected `imagePrep` property.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShipmentLoadRoute(
     orderId: String,
@@ -38,7 +59,13 @@ fun ShipmentLoadRoute(
     ),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
-    LaunchedEffect(s.done) { if (s.done) onDone() }
+    // Ruling R5: the counts that were queued are shown, not flashed, before the route pops.
+    LaunchedEffect(s.done) {
+        if (s.done) {
+            delay(RESULT_DWELL_MS)
+            onDone()
+        }
+    }
 
     // Camera first, exactly like the single-photo screen: until a photo exists the viewfinder IS the screen.
     if (s.photo == null) {
@@ -49,44 +76,101 @@ fun ShipmentLoadRoute(
         return
     }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text(stringResource(R.string.shipment_load_title)) }) },
-        bottomBar = {
-            // The bar clears the shell's floating nav pill itself, in every navigation mode.
+    ShipmentLoadScreen(
+        s = s,
+        onBack = onCancel,
+        onRetake = vm::retake,
+        onSetBeam = vm::setBeam,
+        onSetBlocks = vm::setBlocks,
+        onSubmit = vm::submit,
+    )
+}
+
+/**
+ * §5.2's row for the shipment-load screen — the load-truck screen with the list made countable
+ * (ruling R7): the same «Юклаш рўйхати» card, but every row is a [CountStepper] bound to what this
+ * truck may still take. The allowance is the ceiling the server would enforce anyway, so a stepper
+ * that stops is a 422 that never happens.
+ */
+@Composable
+fun ShipmentLoadScreen(
+    s: ShipmentLoadUiState,
+    onBack: () -> Unit,
+    onRetake: () -> Unit,
+    onSetBeam: (String, Int) -> Unit,
+    onSetBlocks: (Int) -> Unit,
+    onSubmit: () -> Unit,
+) {
+    var barHeightPx by remember { mutableIntStateOf(0) }
+    val barHeight = with(LocalDensity.current) { barHeightPx.toDp() }
+    val photo = s.photo
+    val settling = s.submitting || s.done
+
+    Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding()) {
+        Column(Modifier.fillMaxSize()) {
+            LogisticsHeader(
+                title = stringResource(R.string.shipment_load_title),
+                meta = s.order?.let { "${formatOrderNo(it.summary.orderNumber)} · ${it.summary.client.name}" },
+                onBack = onBack,
+            )
+            Column(
+                Modifier.fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = EtalonSpace.cardMargin)
+                    .padding(top = EtalonSpace.sm, bottom = maxOf(barHeight, LocalNavPillInset.current)),
+                verticalArrangement = Arrangement.spacedBy(EtalonSpace.md),
+            ) {
+                s.error?.let { ErrorBanner(it) }
+                LoadListCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(EtalonSpace.sm)) {
+                        // Sorted by the length itself, not by the key's text: «10.00» sorts before
+                        // «4.00» as a string, and a loader reading the list against the beams in
+                        // front of him must find them in the order the yard stacks them.
+                        s.allowance.beams.entries.sortedBy { it.key.toDoubleOrNull() ?: 0.0 }
+                            .forEach { (lengthKey, max) ->
+                                CountStepper(
+                                    label = stringResource(R.string.beam_length_label, lengthKey.replace('.', ',')),
+                                    value = s.beams[lengthKey] ?: 0,
+                                    onChange = { onSetBeam(lengthKey, it) },
+                                    max = max,
+                                )
+                            }
+                    }
+                    HorizontalDivider(
+                        Modifier.fillMaxWidth().padding(vertical = EtalonSpace.sm),
+                        thickness = EtalonSpace.hairline,
+                        color = EtalonColors.surfaceBorder,
+                    )
+                    CountStepper(
+                        label = stringResource(R.string.blocks_label),
+                        value = s.blocks,
+                        onChange = onSetBlocks,
+                        max = s.allowance.blocks,
+                    )
+                }
+                if (photo != null) PhotoReviewCard(photo, onRetake)
+            }
+        }
+
+        Box(Modifier.align(Alignment.BottomCenter).onSizeChanged { barHeightPx = it.height }) {
             StickyActionBar {
-                SecondaryButton(stringResource(R.string.action_retake), onClick = vm::retake, modifier = Modifier.weight(1f))
-                PrimaryButton(
-                    text = stringResource(R.string.action_mark_loaded), onClick = vm::submit,
-                    loading = s.submitting, modifier = Modifier.weight(1f),
-                )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EtalonSpace.md)) {
+                    // Ruling R5: what this truck is taking, as it goes into the queue.
+                    if (settling) {
+                        ResultTileGrid(
+                            listOf(
+                                stringResource(R.string.logistics_tile_beams) to
+                                    formatCountBare(s.beams.values.sum()),
+                                stringResource(R.string.logistics_tile_blocks) to formatCountBare(s.blocks),
+                                stringResource(R.string.logistics_tile_photo) to "1",
+                                stringResource(R.string.logistics_tile_state) to
+                                    stringResource(R.string.logistics_tile_queued),
+                            ),
+                        )
+                    }
+                    MarkLoadedButton(loading = s.submitting, onClick = onSubmit)
+                }
             }
-        },
-    ) { pad ->
-        Column(
-            Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (s.error != null) ErrorBanner(s.error!!)
-            AsyncImage(
-                model = s.photo!!.file, contentDescription = null, contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth().height(180.dp),
-            )
-            s.allowance.beams.entries.sortedBy { it.key.toDoubleOrNull() ?: 0.0 }.forEach { (lengthKey, max) ->
-                CountStepper(
-                    label = stringResource(R.string.beam_length_label, lengthKey.replace('.', ',')),
-                    value = s.beams[lengthKey] ?: 0,
-                    onChange = { vm.setBeam(lengthKey, it) },
-                    max = max,
-                )
-            }
-            CountStepper(
-                label = stringResource(R.string.blocks_label), value = s.blocks,
-                onChange = vm::setBlocks, max = s.allowance.blocks,
-            )
-            Text(
-                stringResource(R.string.upload_queued_hint), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

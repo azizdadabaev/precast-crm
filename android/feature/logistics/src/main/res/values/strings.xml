@@ -2,7 +2,22 @@
     <string name="load_truck_title">Юк машинасига юклаш</string>
     <string name="add_photo_title">Расм қўшиш</string>
     <string name="action_retake">Қайта олиш</string>
+    <!-- The long form the phase-2 review found ellipsizing on the button at font scale 1,3. It
+         stays as the wording elsewhere; the button carries the short «Юкланди» (ruling R12). -->
     <string name="action_mark_loaded">Юкланди деб белгилаш</string>
+    <string name="logistics_action_loaded">Юкланди</string>
+    <string name="logistics_action_confirm">Тасдиқлаш</string>
+    <string name="logistics_photo_taken">Олинган расм</string>
+    <string name="logistics_note_label">Изоҳ</string>
+    <!-- Ruling R5's result tiles: what went into the outbox, in four figures. -->
+    <string name="logistics_tile_beams">Балка</string>
+    <string name="logistics_tile_blocks">Ғишт</string>
+    <string name="logistics_tile_photo">Расм</string>
+    <string name="logistics_tile_state">Ҳолат</string>
+    <string name="logistics_tile_queued">Навбатда</string>
+    <string name="logistics_tile_expected">Кутилган</string>
+    <string name="logistics_tile_shortfall">Камомад</string>
+    <string name="logistics_tile_over">Ортиқча</string>
     <string name="action_attach">Бириктириш</string>
     <string name="upload_queued_hint">Расм навбатга қўйилади ва интернет пайдо бўлганда юборилади.</string>
     <string name="logistics_upload_sending">Юборилмоқда…</string>

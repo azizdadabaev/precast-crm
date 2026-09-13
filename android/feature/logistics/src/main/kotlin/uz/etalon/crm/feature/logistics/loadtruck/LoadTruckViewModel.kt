@@ -12,12 +12,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.LogisticsRepository
+import uz.etalon.crm.core.data.OrdersRepository
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.image.ImagePrep
 import uz.etalon.crm.core.image.PreparedImage
+import uz.etalon.crm.core.model.OrderDetail
 
 data class LoadTruckUiState(
     val photo: PreparedImage? = null,
+    /** The order this photo belongs to, for the header's «№ · client» and ruling R7's
+     *  «Юклаш рўйхати». Null until the detail resolves — the camera comes up first. */
+    val order: OrderDetail? = null,
     val submitting: Boolean = false,
     val error: String? = null,
     val done: Boolean = false,
@@ -36,6 +41,10 @@ open class LoadTruckViewModel(
 
     fun onPhoto(p: PreparedImage) = _state.update { it.copy(photo = p, error = null) }
     fun retake() = _state.update { it.copy(photo = null, error = null) }
+
+    /** The order keeps refreshing behind this screen while the camera is up, exactly as
+     *  ShipmentLoadViewModel's allowance does; the load list and the header meta follow it. */
+    fun applyOrder(o: OrderDetail) = _state.update { it.copy(order = o) }
 
     fun submit() {
         val photo = _state.value.photo
@@ -57,6 +66,7 @@ open class LoadTruckViewModel(
 @HiltViewModel(assistedFactory = HiltLoadTruckViewModel.Factory::class)
 class HiltLoadTruckViewModel @AssistedInject constructor(
     repo: LogisticsRepository,
+    private val orders: OrdersRepository,
     val imagePrep: ImagePrep,
     @Assisted("orderId") orderId: String,
     @Assisted("extra") extraPhoto: Boolean,
@@ -66,6 +76,15 @@ class HiltLoadTruckViewModel @AssistedInject constructor(
         if (extraPhoto) repo.addLoadedPhoto(id, photo) else repo.loadTruck(id, photo)
     },
 ) {
+    init {
+        // Ruling R7's load list, and the header's «№ · client». The order is already cached from
+        // the detail this route was opened from, so it resolves near-instantly; collecting rather
+        // than reading once also keeps the list right if the rooms change while the camera is up.
+        viewModelScope.launch {
+            orders.detail(orderId).collect { r -> r.dataOrNull?.let { applyOrder(it) } }
+        }
+    }
+
     @AssistedFactory
     interface Factory {
         fun create(@Assisted("orderId") orderId: String, @Assisted("extra") extraPhoto: Boolean): HiltLoadTruckViewModel

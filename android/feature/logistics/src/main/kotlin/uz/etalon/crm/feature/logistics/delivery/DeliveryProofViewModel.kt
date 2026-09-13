@@ -18,6 +18,7 @@ import uz.etalon.crm.core.image.ImagePrep
 import uz.etalon.crm.core.image.PreparedImage
 import uz.etalon.crm.core.model.DeliveryCash
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.OrderDetail
 
 data class DeliveryProofUiState(
     val photo: PreparedImage? = null,
@@ -26,6 +27,9 @@ data class DeliveryProofUiState(
     val note: String = "",
     val driverReturned: Boolean = false,
     val expected: Money = Money.ZERO,
+    /** The order being delivered, for the header's «№ · client» and the gate's meta line. Null
+     *  until the detail resolves — the camera comes up first. */
+    val order: OrderDetail? = null,
     val submitting: Boolean = false,
     val error: String? = null,
     val done: Boolean = false,
@@ -91,6 +95,9 @@ open class DeliveryProofViewModel(
      *  like ShipmentLoadViewModel's allowance. */
     fun applyExpected(e: Money) = _state.update { it.copy(expected = e) }
 
+    /** The order behind the expected collection, kept for the header and the gate's meta line. */
+    fun applyOrder(o: OrderDetail) = _state.update { it.copy(order = o) }
+
     fun submit() {
         val s = _state.value
         val photo = s.photo
@@ -136,7 +143,10 @@ class HiltDeliveryProofViewModel @AssistedInject constructor(
         // resolves near-instantly; it also keeps tracking a concurrent dispatch update.
         viewModelScope.launch {
             orders.detail(orderId).collect { r ->
-                r.dataOrNull?.let { applyExpected(it.dispatch?.expectedCollection ?: Money.ZERO) }
+                r.dataOrNull?.let {
+                    applyOrder(it)
+                    applyExpected(it.dispatch?.expectedCollection ?: Money.ZERO)
+                }
             }
         }
     }

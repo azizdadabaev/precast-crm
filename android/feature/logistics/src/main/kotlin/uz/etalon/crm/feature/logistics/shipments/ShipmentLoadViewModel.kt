@@ -18,9 +18,13 @@ import uz.etalon.crm.core.data.OutboxRepository
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.image.ImagePrep
 import uz.etalon.crm.core.image.PreparedImage
+import uz.etalon.crm.core.model.OrderDetail
 
 data class ShipmentLoadUiState(
     val photo: PreparedImage? = null,
+    /** The order this truck belongs to, for the header's «№ · client». Null until the detail
+     *  resolves — the camera comes up first. */
+    val order: OrderDetail? = null,
     val beams: Map<String, Int> = emptyMap(),
     val blocks: Int = 0,
     val allowance: Allowance = Allowance(emptyMap(), 0),
@@ -44,6 +48,9 @@ open class ShipmentLoadViewModel(
 
     fun onPhoto(p: PreparedImage) = _state.update { it.copy(photo = p, error = null) }
     fun retake() = _state.update { it.copy(photo = null, error = null) }
+
+    /** The order behind the allowance, kept for the header's «№ · client». */
+    fun applyOrder(o: OrderDetail) = _state.update { it.copy(order = o) }
 
     /** Recomputes as the order detail keeps refreshing behind this screen (e.g. another truck's
      *  load lands while this one is being counted); existing counts are re-clamped so a shrunk
@@ -107,7 +114,10 @@ class HiltShipmentLoadViewModel @AssistedInject constructor(
         viewModelScope.launch {
             combine(orders.detail(orderId), outbox.observeForOrder(orderId)) { r, queued -> r to queued }
                 .collect { (r, queued) ->
-                    r.dataOrNull?.let { applyAllowance(allowanceFor(it, excludingShipmentId = shipmentId, queued = queued)) }
+                    r.dataOrNull?.let {
+                        applyOrder(it)
+                        applyAllowance(allowanceFor(it, excludingShipmentId = shipmentId, queued = queued))
+                    }
                 }
         }
     }
