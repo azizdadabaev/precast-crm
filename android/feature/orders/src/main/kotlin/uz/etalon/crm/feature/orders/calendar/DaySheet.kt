@@ -69,11 +69,15 @@ private const val AREA_PLACES = 2
  * in March is the baseline recorded in September.
  *
  * @param onOpenOrder the row tap — the order detail, the same destination Рўйхат's rows have.
+ * @param onRetry what the failure banner offers: the screen's own `refreshCalendar`, which re-asks
+ *   for the month AND for the open day's orders. Null leaves the banner as a statement — which is
+ *   all a preview or a screenshot can honestly offer.
  */
 @Composable
 fun DaySheet(
     state: DaySheetState,
     onOpenOrder: (String) -> Unit,
+    onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) = NavySheet(
     title = "${formatDate(state.day)} · ${formatWeekday(state.day)}",
@@ -91,7 +95,7 @@ fun DaySheet(
         )
     }
     Spacer(Modifier.height(BAR_ROWS_GAP))
-    Orders(state, onOpenOrder)
+    Orders(state, onOpenOrder, onRetry)
 }
 
 @Composable
@@ -143,13 +147,14 @@ private fun Hero(state: DaySheetState) = Row(
  * «Бу кунга буюртма йўқ», which would state as fact the one thing the app does not know.
  */
 @Composable
-private fun Orders(state: DaySheetState, onOpenOrder: (String) -> Unit) {
+private fun Orders(state: DaySheetState, onOpenOrder: (String) -> Unit, onRetry: (() -> Unit)?) {
     val ctx = LocalContext.current
     val res = state.orders
     val rows = res.dataOrNull
     when {
         rows == null && res is Resource.Error -> ErrorBanner(
             res.error.message,
+            onRetry = onRetry,
             modifier = Modifier.padding(horizontal = SHEET_INSET),
         )
         rows == null -> repeat(SKELETON_ROWS) { SkeletonRow() }
@@ -161,7 +166,7 @@ private fun Orders(state: DaySheetState, onOpenOrder: (String) -> Unit) {
         )
         else -> {
             if (res is Resource.Error) {
-                ErrorBanner(res.error.message, modifier = Modifier.padding(horizontal = SHEET_INSET))
+                ErrorBanner(res.error.message, onRetry = onRetry, modifier = Modifier.padding(horizontal = SHEET_INSET))
                 Spacer(Modifier.height(EtalonSpace.sm))
             }
             rows.forEach { o ->

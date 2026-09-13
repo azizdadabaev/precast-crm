@@ -57,6 +57,16 @@ class CalendarScreenshotTest {
         shoot("calendar_w360_light") { Card(CalendarFixtures.september) }
     }
 
+    /**
+     * The worst case the CRM ships into: the narrowest phone at the largest text the app honours.
+     * §8's yield is what this frame is for — a 40 dp cell at font scale 1,3 has no room for
+     * «525 м²», so the unit goes and the digits stay whole. Nothing may be cut mid-glyph.
+     */
+    @Test @Config(qualifiers = "w360dp-h800dp", fontScale = 1.3f)
+    fun calendarNarrowLargeFont() {
+        shoot("calendar_w360_font13") { Card(CalendarFixtures.september) }
+    }
+
     /** The first load of a month (§4.3): the grid's geometry in `page` blocks, no text. */
     @Test fun calendarSkeleton() {
         shoot("calendar_skeleton_light") {

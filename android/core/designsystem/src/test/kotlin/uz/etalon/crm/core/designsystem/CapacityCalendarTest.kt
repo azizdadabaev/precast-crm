@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -26,6 +28,7 @@ import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.calendar.CapacityCalendarCard
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.CapacityMonth
 import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.testing.CalendarFixtures
 import java.time.LocalDate
@@ -36,8 +39,10 @@ private const val CARD = "capacity-card"
 private const val TWELFTH = "12 сен 2026"
 
 /**
- * The two things about this card that a screenshot cannot prove: that selecting a day does not
- * move it, and that a day cell is big enough to hit on the narrowest phone the CRM supports.
+ * What a screenshot of this card cannot prove: that selecting a day does not move it, that a month
+ * still in flight is the same height as a loaded one, that a selection the planner has paged away
+ * from is not redrawn in the neighbouring month, and that a day cell is big enough to hit on the
+ * narrowest phone the CRM supports.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -71,6 +76,79 @@ class CapacityCalendarTest {
         selected = CalendarFixtures.SELECTED
         rule.waitForIdle()
         assertEquals(before, rule.onNodeWithTag(CARD).getUnclippedBoundsInRoot())
+    }
+
+    /**
+     * Paging to a month that is not cached yet must not change the card's height. The grid is the
+     * same 42 cells either way, but the summary line under the title and the legend under the grid
+     * are the server's own figures — and drawing them only once the month lands took ~26 dp out of
+     * the card for as long as the fetch ran, lifting the grid under the planner's finger and
+     * dropping it back. Both rows now hold their place while the month is in flight.
+     */
+    @Test fun `a month still in flight is the same height as a loaded one`() {
+        var capacity by mutableStateOf<Resource<CapacityMonth>>(Resource.Success(CalendarFixtures.september))
+        rule.setContent {
+            EtalonTheme {
+                Column(Modifier.fillMaxWidth()) {
+                    CapacityCalendarCard(
+                        month = CalendarFixtures.MONTH,
+                        capacity = capacity,
+                        selected = CalendarFixtures.SELECTED,
+                        today = CalendarFixtures.TODAY,
+                        onPrev = {}, onNext = {}, onSelect = {},
+                        modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin).testTag(CARD),
+                    )
+                }
+            }
+        }
+        val loaded = rule.onNodeWithTag(CARD).getUnclippedBoundsInRoot().height
+        // The next month, not yet fetched: the skeleton stands in for the grid.
+        capacity = Resource.Loading(null)
+        rule.waitForIdle()
+        assertEquals(loaded, rule.onNodeWithTag(CARD).getUnclippedBoundsInRoot().height)
+    }
+
+    /**
+     * R7 with the calendar paged away from the selection. 30 September is the selected day and
+     * October is the cursor month, so the date shows up in October's grid as a leading day of the
+     * month before — dimmed and inert. It must not be drawn as the chosen day: the planner has
+     * paged away from their selection (the chip in Рўйхат is what still carries it), and a navy
+     * cell in a greyed row would say they had picked a day in a month they are not looking at.
+     *
+     * The `selected` semantic is the same thing the navy fill says, which is why it is asserted
+     * here: a screen reader cannot see the fill, and a test cannot see it either.
+     */
+    @Test fun `a selection outside the cursor month is not drawn`() {
+        rule.setContent {
+            EtalonTheme {
+                CapacityCalendarCard(
+                    month = CalendarFixtures.MONTH.plusMonths(1),
+                    capacity = Resource.Success(CalendarFixtures.september),
+                    selected = LocalDate.of(2026, 9, 30),
+                    today = CalendarFixtures.TODAY,
+                    onPrev = {}, onNext = {}, onSelect = {},
+                    modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
+                )
+            }
+        }
+        rule.onNodeWithContentDescription("30 сен 2026", substring = true).assertIsNotSelected()
+    }
+
+    /** The other half of the rule: inside the cursor month the very same date IS drawn selected. */
+    @Test fun `a selection inside the cursor month is drawn`() {
+        rule.setContent {
+            EtalonTheme {
+                CapacityCalendarCard(
+                    month = CalendarFixtures.MONTH,
+                    capacity = Resource.Success(CalendarFixtures.september),
+                    selected = CalendarFixtures.SELECTED,
+                    today = CalendarFixtures.TODAY,
+                    onPrev = {}, onNext = {}, onSelect = {},
+                    modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
+                )
+            }
+        }
+        rule.onNodeWithContentDescription(TWELFTH, substring = true).assertIsSelected()
     }
 
     /**
