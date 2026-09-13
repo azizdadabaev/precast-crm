@@ -4,6 +4,7 @@ dependencies {
     implementation(project(":core:designsystem")); implementation(project(":core:model")); implementation(project(":core:ui")); implementation(project(":core:data")); implementation(project(":core:datastore"))
     implementation(libs.androidx.lifecycle.viewmodel.compose); implementation(libs.hilt.navigation.compose); implementation(libs.compose.material.icons)
     implementation(libs.coil.compose); implementation(libs.coil.network.okhttp)
+    testImplementation(project(":core:testing"))
     testImplementation(libs.roborazzi); testImplementation(libs.roborazzi.compose)
     testImplementation(libs.robolectric); testImplementation(libs.androidx.test.core)
     testImplementation(platform(libs.compose.bom)); testImplementation(libs.compose.ui.test.junit4)

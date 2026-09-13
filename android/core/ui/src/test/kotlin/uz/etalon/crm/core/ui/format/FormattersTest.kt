@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.Money
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.LocalDate
 import java.time.YearMonth
 
 class FormattersTest {
@@ -112,6 +113,23 @@ class FormattersTest {
         assertEquals("Чоршанба, 9 сентябрь", formatLongDate(Instant.parse("2026-09-08T19:30:00Z"))) // 00:30 on Wed 9 Sep 2026 in Tashkent — the capture's «Сешанба» is the designer's fiction; the real calendar wins
     }
     @Test fun monthYearHeader() { assertEquals("Сентябрь 2026", formatMonthYear(YearMonth.of(2026, 9))) }
+
+    /** The day sheet's title (design §4.5): «9 сен 2026 · Чоршанба». */
+    @Test fun `a calendar day prints the short month and always the year`() {
+        assertEquals("9 сен 2026", formatDate(LocalDate.of(2026, 9, 9)))
+        assertEquals("1 янв 2027", formatDate(LocalDate.of(2027, 1, 1)))
+        assertEquals("31 дек 2025", formatDate(LocalDate.of(2025, 12, 31)))
+    }
+
+    /** Monday first, the whole week, against the real 2026 calendar — an off-by-one in the ISO
+     *  index would only ever show up as the wrong Uzbek word under a date nobody double-checks. */
+    @Test fun `the weekday table is indexed Monday-first`() {
+        val week = (7..13).map { formatWeekday(LocalDate.of(2026, 9, it)) } // Mon 7 Sep .. Sun 13 Sep 2026
+        assertEquals(
+            listOf("Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба", "Якшанба"),
+            week,
+        )
+    }
     @Test fun orderNoDropsTheYearAndUsesANonBreakingHyphen() {
         assertEquals("№ 09\u20110003", formatOrderNo("2026-09-0003"))
         assertEquals("№ X17", formatOrderNo("X17"))

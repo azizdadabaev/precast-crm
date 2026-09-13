@@ -67,6 +67,30 @@
     <string name="ds_tier_moderate">ўртача</string>
     <string name="ds_tier_heavy">юқори</string>
     <string name="ds_tier_overbooked">тўлиб кетган</string>
+    <!-- CapacityCalendarCard (design §4.1–4.2). It lives in the design system rather than in
+         :feature:orders because the calculator's delivery-date picker draws the same grid (§7),
+         and one calendar may not speak two vocabularies. Weekdays are the two-letter heads of
+         Душанба…Якшанба, Monday first. -->
+    <string name="ds_calendar_weekday_mo">Ду</string>
+    <string name="ds_calendar_weekday_tu">Се</string>
+    <string name="ds_calendar_weekday_we">Чо</string>
+    <string name="ds_calendar_weekday_th">Па</string>
+    <string name="ds_calendar_weekday_fr">Жу</string>
+    <string name="ds_calendar_weekday_sa">Ша</string>
+    <string name="ds_calendar_weekday_su">Як</string>
+    <!-- Under the month title: «112 буюртма · 7 480 м²» — the cursor month's own days only. -->
+    <string name="ds_calendar_month_summary">%1$s буюртма · %2$s</string>
+    <!-- The legend's four bands. The numbers are always the server's thresholds, never literals:
+         the factory's capacity is a business setting. Only the first band carries the unit — the
+         row would read as four separate sentences if all four repeated it. -->
+    <string name="ds_calendar_legend_le">≤%1$s</string>
+    <string name="ds_calendar_legend_gt">&gt;%1$s тўлиб кетган</string>
+    <string name="ds_calendar_prev">Олдинги ой</string>
+    <string name="ds_calendar_next">Кейинги ой</string>
+    <string name="ds_calendar_today_cd">Бугун</string>
+    <!-- A day cell reads out as «12 сен 2026, 5 буюртма, 685 м²» — the cell's three lines in the
+         order the eye takes them, because the glyphs themselves are too small to be read aloud. -->
+    <string name="ds_calendar_day_cd">%1$s, %2$s буюртма, %3$s</string>
     <!-- «маълумот», not «расм»: the outbox carries a queued PLACE_ORDER row as well as photos
          since Phase 2b, and that row is an ORDER. The count was right; the noun was not. -->
     <plurals name="outbox_pending">

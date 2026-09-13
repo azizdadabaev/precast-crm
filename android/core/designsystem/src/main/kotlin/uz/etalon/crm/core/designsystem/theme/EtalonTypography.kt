@@ -60,6 +60,21 @@ object EtalonType {
      *  compete with the number above it. */
     val captionLight = Base.copy(fontSize = 10.sp, fontWeight = FontWeight.W400)
 
+    /**
+     * The capacity calendar's day cell, top right: that day's order count (design §4.2 — the «5»
+     * on 12 сентябрь). Two steps under [caption], because it shares a 56 dp cell with the day
+     * number and the m² line and must never be mistaken for either — it is the smallest figure the
+     * app draws, a footnote to the load line under it.
+     */
+    val calendarCount = Base.copy(fontSize = 9.sp, fontWeight = FontWeight.W700)
+
+    /**
+     * The same cell's middle line: that day's load, «204 м²» (design §4.2). Half a point above
+     * [calendarCount] and a weight below it — this is the line a planner reads first, and it is
+     * set in the tier's own colour rather than in ink.
+     */
+    val calendarArea = Base.copy(fontSize = 9.5.sp, fontWeight = FontWeight.W600)
+
     // ── Shim. Thirty files still name these; phases 2–5 move them onto the scale above and the
     // last task of phase 5 deletes the five lines. Re-pointing them here is what makes Manrope
     // and JetBrains Mono unreferenced, so Task 12 can delete the seven old font files. ─────────

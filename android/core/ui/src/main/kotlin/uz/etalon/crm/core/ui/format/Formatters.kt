@@ -6,6 +6,7 @@ import uz.etalon.crm.core.ui.regions.findViloyatByName
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Instant
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 
@@ -127,6 +128,22 @@ fun formatScheduleDate(t: Instant, now: Instant = Instant.now()): String {
     val dayMonth = "${day.dayOfMonth} ${UZ_MONTHS_SHORT[day.monthValue - 1]}"
     return if (day.year == today.year) dayMonth else "$dayMonth ${day.year}"
 }
+
+/**
+ * The same date written from a calendar day rather than an instant: «12 сен 2026». The capacity
+ * calendar works in [java.time.LocalDate] throughout — a day bucket is a local day in Tashkent and
+ * never an instant — so routing it through [Instant] and back would only be a chance to land on
+ * the wrong side of midnight. The year is always carried: the day sheet's title is read out of
+ * context of any list that already states the year.
+ */
+fun formatDate(d: LocalDate): String = "${d.dayOfMonth} ${UZ_MONTHS_SHORT[d.monthValue - 1]} ${d.year}"
+
+/**
+ * The weekday alone: «Чоршанба». The day sheet's title is «9 сен 2026 · Чоршанба» (design §4.5),
+ * and [formatLongDate]'s «Сешанба, 9 сентябрь» is the wrong shape for it — the weekday trails the
+ * date there instead of leading it, and the month is spelled out.
+ */
+fun formatWeekday(d: LocalDate): String = UZ_WEEKDAYS[d.dayOfWeek.value - 1]
 
 /** Home's subtitle: «Сешанба, 9 сентябрь». */
 fun formatLongDate(t: Instant): String {

@@ -12,6 +12,9 @@ dependencies {
     // Component baselines live beside the components (see core/designsystem/screenshots/), so the
     // reviewer can reject one part without opening a screen. JUnit 4 via the vintage engine, the
     // same shape :feature:payments uses.
+    // The calendar's September fixture — one month, shared with :feature:orders (and later the
+    // calculator), so two modules cannot photograph two different Septembers.
+    testImplementation(project(":core:testing"))
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.robolectric)

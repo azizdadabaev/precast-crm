@@ -18,6 +18,16 @@
     <string name="orders_day_pick">Танлаш</string>
     <string name="orders_day_clear">Тозалаш</string>
 
+    <!-- ── Жадвал: the navy day sheet under the grid (design §4.5) ─────────────── -->
+    <!-- The unit beside the hero figure. It is its own string because the sheet sets the number
+         at 30/800 and the unit at 12/600 — `formatArea`'s single «685 м²» cannot be styled in
+         two runs. -->
+    <string name="orders_unit_m2">м²</string>
+    <string name="orders_day_sheet_summary">%1$s буюртма · %2$s ғишт</string>
+    <!-- «Сиғим бўш — 600 м²»: the free capacity is the server's heavy threshold, so an operator
+         reading an empty day knows how much it can still take. -->
+    <string name="orders_day_sheet_empty">Бу кунга буюртма йўқ. Сиғим бўш — %1$s</string>
+
     <!-- ── Order detail, spec §3.3 / `2b-order-detail.png` ──────────────────── -->
     <string name="detail_caption">Буюртма</string>
     <string name="detail_area">Майдон</string>
