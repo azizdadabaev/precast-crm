@@ -428,6 +428,18 @@ private fun CalendarView(
                     )
                 }
             }
+            // M6: the figures below are the last good ones and the pull that tried to replace them
+            // failed. Mutually exclusive with the banner above — that one is for a month with
+            // nothing behind it, this one for a month that has figures and could not freshen them.
+            if (s.calendarRefreshFailed) {
+                item {
+                    ErrorBanner(
+                        stringResource(R.string.orders_calendar_refresh_failed),
+                        onRetry = onRefreshCalendar,
+                        modifier = Modifier.padding(bottom = EtalonSpace.rowGap),
+                    )
+                }
+            }
             item {
                 CapacityCalendarCard(
                     month = s.cursorMonth,

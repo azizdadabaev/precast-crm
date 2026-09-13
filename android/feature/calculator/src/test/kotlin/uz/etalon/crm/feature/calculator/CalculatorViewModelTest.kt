@@ -1331,6 +1331,59 @@ class CalculatorViewModelTest {
         assertEquals(YearMonth.from(day), v.state.value.dateGrid?.capacity?.dataOrNull?.month)
     }
 
+    /**
+     * **M6.** Re-opening a month whose re-fetch fails keeps the cached figures on the card — they
+     * are the last thing the server did say — and raises the flag the sheet's «Янгилаб бўлмади»
+     * banner draws off. Before this the failure was discarded and the seller promised a delivery
+     * day off figures they had no way of knowing were stale.
+     */
+    @Test fun `a failed refresh over a cached month keeps the figures and says they are stale`() = runTest {
+        var offline = false
+        val cap = object : CapacitySource {
+            var fetches = 0
+            private val cache = mutableMapOf<YearMonth, CapacityMonth>()
+            override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flow {
+                cache[month]?.let { emit(Resource.Success(it)); return@flow }
+                fetches++
+                emit(Resource.Success(CapacityMonth(month, gridRange(month), emptyMap(), CapacityThresholds.DEFAULT).also { cache[month] = it }))
+            }
+            override suspend fun refresh(month: YearMonth): Result<Unit> =
+                if (offline) Result.failure(IllegalStateException("offline")) else Result.success(Unit)
+        }
+        val v = vm(capacity = cap)
+        advanceUntilIdle()
+
+        val day = YearMonth.now(TASHKENT).plusMonths(1).atDay(20)
+        v.openDateGrid(day); advanceUntilIdle()
+        v.closeDateGrid()
+
+        offline = true
+        v.openDateGrid(day); advanceUntilIdle()
+
+        val grid = v.state.value.dateGrid
+        assertNotNull(grid)
+        assertTrue(grid?.refreshFailed == true)
+        assertEquals(YearMonth.from(day), grid?.capacity?.dataOrNull?.month, "the cached month stays on the card")
+    }
+
+    /**
+     * **M6, the other half.** With nothing cached a failed refresh IS the answer: the grid shows it
+     * and stops, rather than following it with an `observe` that pays a second round trip to be
+     * told the same thing. R17 still holds — the dates under the banner stay tappable.
+     */
+    @Test fun `a failed refresh over an uncached month costs one round trip`() = runTest {
+        val cap = FakeCapacity(fails = true)
+        val v = vm(capacity = cap)
+        advanceUntilIdle()
+
+        v.openDateGrid(null); advanceUntilIdle()
+
+        assertEquals(1, cap.refreshes)
+        assertEquals(0, cap.fetches, "observe would only rediscover the same failure")
+        assertTrue(v.state.value.dateGrid?.capacity is Resource.Error)
+        assertFalse(v.state.value.dateGrid?.refreshFailed == true, "no second banner over an empty card")
+    }
+
     /** The banner's retry asks again for the month on the card. */
     @Test fun `retryDateGrid refreshes the cursor month`() = runTest {
         val cap = FakeCapacity(fails = true)

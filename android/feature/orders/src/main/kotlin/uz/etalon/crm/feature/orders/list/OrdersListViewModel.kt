@@ -138,11 +138,22 @@ data class OrdersListUiState(
      * Жадвал's own pull-to-refresh state. [isRefreshing] is the LIST's — it is true whenever the
      * orders resource has no cache yet, which on the calendar means the spinner turned for a page
      * of rows the planner is not looking at while the month behind the grid loaded in silence.
-     * This one follows the capacity: [refreshCalendar] while it runs, and a month re-fetched over
-     * figures already on screen. A month with nothing cached at all is the card's own skeleton to
-     * announce — a spinner on top of it would say the same thing twice.
+     * This one is [refreshCalendar]'s and nothing else's: a month arriving for the first time is
+     * the card's own skeleton to announce, and a spinner on top of it would say the same thing
+     * twice.
      */
     val isCalendarRefreshing: Boolean = false,
+    /**
+     * **M6** — a pull-to-refresh that failed over a month already on screen. The cached figures
+     * stay exactly where they are (they are the last thing the server did say) and the screen puts
+     * «Янгилаб бўлмади» with a retry above them; without this the pull simply stopped and the
+     * planner was left reading stale numbers as if they were fresh. A flag, not a message, for the
+     * same reason [exportFailed] is one.
+     *
+     * Never set for a month with nothing cached: there the card is already showing the failure the
+     * capacity resource itself carries, and two banners would say it twice.
+     */
+    val calendarRefreshFailed: Boolean = false,
     val loadingMore: Boolean = false,
     val hasMore: Boolean = false,
     val error: String? = null,
@@ -182,6 +193,8 @@ open class OrdersListViewModel(
     /** Жадвал's own pull-to-refresh, kept apart from [refreshing] — see
      *  [OrdersListUiState.isCalendarRefreshing]. */
     private val calendarRefreshing = MutableStateFlow(false)
+    /** See [OrdersListUiState.calendarRefreshFailed]. */
+    private val calendarRefreshFailed = MutableStateFlow(false)
     private val loadingMore = MutableStateFlow(false)
 
     private val view = MutableStateFlow(OrdersView.LIST)
@@ -318,17 +331,15 @@ open class OrdersListViewModel(
             combine(view, cursorMonth, capacityFlow, daySheetFlow) { v, m, c, s -> Calendar(v, m, c, s) },
             combine(exporting, exportFile, exportFailed) { busy, file, failed -> Export(busy, file, failed) },
         ) { n, calendar, export -> Screen(n, calendar, export) },
-        combine(refreshing, calendarRefreshing, loadingMore) { r, c, m -> Busy(r, c, m) },
+        combine(refreshing, calendarRefreshing, calendarRefreshFailed, loadingMore) { r, c, cf, m -> Busy(r, c, cf, m) },
     ) { f, r, counts, screen, busy ->
         val rows = r.dataOrNull.orEmpty()
         OrdersListUiState(
             query = f.q, status = f.status, payment = f.payment, day = f.day,
             groups = groupByMonth(rows), facets = counts.facets,
             isRefreshing = busy.refreshing || (r is Resource.Loading && r.cached == null),
-            isCalendarRefreshing = busy.calendarRefreshing ||
-                // A month re-fetched over figures already on screen. Without a cache the card is
-                // on its skeleton, which says «loading» better than a spinner over it would.
-                (screen.calendar.capacity.let { it is Resource.Loading && it.cached != null }),
+            isCalendarRefreshing = busy.calendarRefreshing,
+            calendarRefreshFailed = busy.calendarRefreshFailed,
             loadingMore = busy.loadingMore,
             // Before the first page lands there is no total, and the only signal left is "the last
             // page came back full". Never `facets.total` — see [filteredTotal].
@@ -373,18 +384,29 @@ open class OrdersListViewModel(
 
     /** ‹ / ›. The selection is kept even when it leaves the shown month (R7) — the chip in Рўйхат
      *  still carries it; the grid simply does not draw it. */
-    fun prevMonth() { cursorMonth.value = cursorMonth.value.minusMonths(1) }
-    fun nextMonth() { cursorMonth.value = cursorMonth.value.plusMonths(1) }
+    fun prevMonth() { cursorMonth.value = cursorMonth.value.minusMonths(1); calendarRefreshFailed.value = false }
+    fun nextMonth() { cursorMonth.value = cursorMonth.value.plusMonths(1); calendarRefreshFailed.value = false }
 
     /** Tapping a day cell, or the chip's × with null — the SAME [day] Рўйхат filters by. */
     fun selectDay(d: LocalDate?) { setDay(d) }
 
-    /** Pull-to-refresh in Жадвал: the month grid, and the open day's orders with it. */
+    /**
+     * Pull-to-refresh in Жадвал: the month grid, and the open day's orders with it.
+     *
+     * **M6** — the forced fetch's answer is not discarded. Over a month whose figures are already
+     * on screen a failure raises [OrdersListUiState.calendarRefreshFailed] and leaves those figures
+     * where they are; over a month with nothing cached the failure is left to `observe`, which
+     * reports it as the capacity resource's own [Resource.Error] — the card and its banner already
+     * say it, and re-collecting the flow would only pay a second round trip to hear it again.
+     */
     fun refreshCalendar() {
         viewModelScope.launch {
             calendarRefreshing.value = true
-            capacitySource.refresh(cursorMonth.value)
-            capacityTick.value += 1
+            calendarRefreshFailed.value = false
+            val cached = capacityFlow.value?.dataOrNull != null
+            val failed = capacitySource.refresh(cursorMonth.value).isFailure
+            if (!failed || cached) capacityTick.value += 1
+            calendarRefreshFailed.value = failed && cached
             dayFilter.value?.let { source.refreshList(it) }
             calendarRefreshing.value = false
         }

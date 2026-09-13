@@ -20,6 +20,10 @@ import javax.inject.Singleton
  * Never queued (R4): unlike the outbox's photo uploads this call is not idempotent — the route
  * builds a fresh snapshot every time — and a retry from a stale queue would only re-download what
  * a second tap gets just as well.
+ *
+ * **`cache/exports` holds exactly one workbook**: the directory is emptied before each write, so
+ * the snapshot the owner just asked for is the only one on the phone. The file the share sheet was
+ * handed last time has already been read by whatever opened it.
  */
 @Singleton
 class ExportRepository @Inject constructor(
@@ -30,6 +34,11 @@ class ExportRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             val body = api.exportBackup()
             val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+            // Every earlier workbook goes first, exactly as the quote PNG's own share path does
+            // (`QuoteImage.writeQuoteFile`). A backup holds every client, order and payment the
+            // factory has ever had, and nothing else in the app ever deletes one: without this the
+            // directory grew by a full snapshot per tap until Android reclaimed the cache.
+            dir.listFiles()?.forEach { it.delete() }
             val file = File(dir, "orders-backup-${STAMP_FORMAT.format(LocalDateTime.now())}.xlsx")
             try {
                 body.byteStream().use { input -> file.outputStream().use { output -> input.copyTo(output) } }

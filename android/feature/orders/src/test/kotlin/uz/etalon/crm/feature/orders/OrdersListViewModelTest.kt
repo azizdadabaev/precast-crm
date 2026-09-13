@@ -323,6 +323,56 @@ class OrdersListViewModelTest {
         vm.refreshCalendar(); advanceUntilIdle()
         assertEquals(2, cap.fetches)
         assertTrue(vm.state.value.capacity is Resource.Success)
+        assertFalse(vm.state.value.calendarRefreshFailed)
+    }
+
+    /**
+     * **M6.** A pull that failed over a month already on screen says so and keeps the figures: the
+     * planner's alternative was a spinner that stopped and stale numbers reading as fresh ones.
+     */
+    @Test fun `a failed pull over a cached month raises the banner and keeps the figures`() = runTest {
+        var fails = false
+        val cap = object : CapacitySource {
+            var refreshes = 0
+            private val cache = mutableMapOf<YearMonth, CapacityMonth>()
+            override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flow {
+                emit(Resource.Success(cache.getOrPut(month) { capacityMonth(month) }))
+            }
+            override suspend fun refresh(month: YearMonth): Result<Unit> {
+                refreshes++
+                return if (fails) Result.failure(IllegalStateException("offline")) else Result.success(Unit)
+            }
+        }
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+
+        fails = true
+        vm.refreshCalendar(); advanceUntilIdle()
+        assertTrue(vm.state.value.calendarRefreshFailed)
+        assertTrue(vm.state.value.capacity is Resource.Success, "the cached month stays on screen")
+        assertFalse(vm.state.value.isCalendarRefreshing)
+
+        // And it clears the moment the next pull succeeds.
+        fails = false
+        vm.refreshCalendar(); advanceUntilIdle()
+        assertFalse(vm.state.value.calendarRefreshFailed)
+    }
+
+    /**
+     * **M6, the other half.** With nothing on screen the failure is `observe`'s to report — the
+     * card is already showing it — so the pull does NOT re-collect the month and pay a second
+     * round trip to be told the same thing.
+     */
+    @Test fun `a failed pull over an uncached month costs one round trip and no second banner`() = runTest {
+        val cap = FailingCapacity()
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertTrue(vm.state.value.capacity is Resource.Error)
+
+        vm.refreshCalendar(); advanceUntilIdle()
+        assertEquals(1, cap.refreshes)
+        assertFalse(vm.state.value.calendarRefreshFailed, "the capacity's own Error already says it")
+        assertTrue(vm.state.value.capacity is Resource.Error)
     }
 
     /**

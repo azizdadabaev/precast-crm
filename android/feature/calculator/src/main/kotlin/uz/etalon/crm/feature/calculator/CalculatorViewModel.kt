@@ -858,7 +858,21 @@ open class CalculatorViewModel(
         capacityJob = viewModelScope.launch {
             // The repository's own flow reads its cache once, so a forced fetch only reaches the
             // screen if it happens BEFORE the collection starts.
-            if (refresh) capacity.refresh(cursor)
+            //
+            // **M6** — and its answer is not thrown away. A month with figures already on the card
+            // keeps them, with «Янгилаб бўлмади» over them; a month with nothing behind it stops
+            // here, because `observe` would only pay a second round trip to discover the same
+            // failure. Either way R17 holds: every date under the banner is still tappable.
+            if (refresh) {
+                val failure = capacity.refresh(cursor).exceptionOrNull()
+                if (failure != null) {
+                    if (cached == null) {
+                        updateGrid(cursor) { it.copy(capacity = Resource.Error(null, failure.toAppError())) }
+                        return@launch
+                    }
+                    updateGrid(cursor) { it.copy(refreshFailed = true) }
+                }
+            }
             capacity.observe(cursor).collect { r ->
                 _state.update { s ->
                     s.copy(
@@ -870,6 +884,12 @@ open class CalculatorViewModel(
                 }
             }
         }
+    }
+
+    /** Edits the open grid only while it is still showing [cursor] — the same guard the collection
+     *  above applies to a late emission. */
+    private fun updateGrid(cursor: YearMonth, block: (DateGridState) -> DateGridState) {
+        _state.update { s -> s.copy(dateGrid = s.dateGrid?.let { g -> if (g.cursor == cursor) block(g) else g }) }
     }
 
     /** Why this quote may not be placed, in Uzbek — or null when it may. Mirrors

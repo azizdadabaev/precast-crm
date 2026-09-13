@@ -32,8 +32,17 @@ import java.time.YearMonth
  *
  *  [capacity] is never null (the card's own parameter allows it, meaning «never asked»; this
  *  picker asks the moment it opens): an unloaded month arrives as `Resource.Loading(null)`, which
- *  is what puts the card on its skeleton instead of a grid of blank dates. */
-data class DateGridState(val cursor: YearMonth, val capacity: Resource<CapacityMonth>)
+ *  is what puts the card on its skeleton instead of a grid of blank dates.
+ *
+ *  [refreshFailed] is **M6**: the month on the card is a cached one and the re-fetch that opening
+ *  the grid always makes could not replace it. The figures are honest — they are simply the ones
+ *  the last fetch got — so they stay, with a banner saying so. It is only ever set alongside
+ *  [capacity] data; a month with nothing behind it carries [Resource.Error] instead. */
+data class DateGridState(
+    val cursor: YearMonth,
+    val capacity: Resource<CapacityMonth>,
+    val refreshFailed: Boolean = false,
+)
 
 /**
  * The load tier of one day, for the tag beside «Етказиб бериш санаси» (design §7) — null when
@@ -120,6 +129,10 @@ fun DateGridSheet(
             // part of the sheet is missing and leaves the dates below it tappable.
             if (grid.capacity is Resource.Error) {
                 ErrorBanner(stringResource(R.string.calc_place_date_grid_error), onRetry = onRetry)
+            } else if (grid.refreshFailed) {
+                // M6: the figures below ARE the factory's, just not from this minute. The seller
+                // is told which, and the same «Қайта уриниш» asks again.
+                ErrorBanner(stringResource(R.string.calc_place_date_grid_stale), onRetry = onRetry)
             }
             CapacityCalendarCard(
                 month = grid.cursor,

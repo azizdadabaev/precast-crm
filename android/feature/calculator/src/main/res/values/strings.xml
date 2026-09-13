@@ -134,6 +134,9 @@
     <string name="calc_place_date_grid_title">Етказиб бериш кунини танланг</string>
     <!-- R17: the load failed, the dates below still work -->
     <string name="calc_place_date_grid_error">Кун сиғими маълумоти олинмади</string>
+    <!-- M6: the month on the card is the cached one and the re-fetch failed — the figures are the
+         last good ones, not this minute's. -->
+    <string name="calc_place_date_grid_stale">Янгилаб бўлмади · сиғим эски маълумот</string>
     <string name="calc_place_notes">Изоҳ</string>
     <string name="calc_place_notes_counter">%1$d/%2$d</string>
     <!-- D10's three relocated money fields and the rows they add to the roll-up. The discount is

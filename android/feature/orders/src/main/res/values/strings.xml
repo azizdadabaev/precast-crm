@@ -26,6 +26,9 @@
     <string name="orders_subtitle_calendar">Жойлаштириш жадвали · кун сиғими м²</string>
     <string name="orders_export_cd">Excel захираси</string>
     <string name="orders_export_failed">Экспорт қилиб бўлмади</string>
+    <!-- M6: a pull-to-refresh that failed over a month already on screen. The figures stay; this
+         says they are the old ones. -->
+    <string name="orders_calendar_refresh_failed">Янгилаб бўлмади</string>
     <!-- The dismissible day chip: the label is the date, so the whole sentence has to say what a
          tap does — the × alone reads as nothing at all. -->
     <string name="orders_day_chip_cd">%1$s кун фильтрини олиб ташлаш</string>

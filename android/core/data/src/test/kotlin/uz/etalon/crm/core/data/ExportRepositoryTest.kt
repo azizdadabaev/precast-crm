@@ -65,6 +65,23 @@ class ExportRepositoryTest {
         assertEquals("fake-xlsx-bytes", file.readText())
     }
 
+    /**
+     * **I2.** The directory is emptied before each write, so two downloads leave one workbook and
+     * not two. Each snapshot carries every client, order and payment the factory has; nothing else
+     * in the app ever deletes one, and the stamp only has a minute's resolution — two taps inside
+     * the same minute used to overwrite, two taps either side of it used to pile up.
+     */
+    @Test fun `a second download replaces the first, leaving one workbook in the directory`() = runTest {
+        val repo = ExportRepository(ExportStubApi(), context)
+        val first = repo.downloadBackup().getOrThrow()
+        val second = repo.downloadBackup().getOrThrow()
+
+        val files = File(context.cacheDir, "exports").listFiles().orEmpty()
+        assertEquals("expected one workbook, found ${files.map { it.name }}", 1, files.size)
+        assertEquals(second, files.single())
+        assertTrue("the first workbook must be gone", !first.exists() || first == second)
+    }
+
     @Test fun `an api failure surfaces as Result failure, not a thrown exception`() = runTest {
         val result = ExportRepository(ExportStubApi(fail = IOException("down")), context).downloadBackup()
         assertTrue(result.isFailure)
