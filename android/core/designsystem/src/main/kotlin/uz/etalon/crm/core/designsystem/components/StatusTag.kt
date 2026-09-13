@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -64,16 +65,31 @@ internal fun tagColors(family: TagFamily, surface: TagSurface): Pair<Color, Colo
     }
 }
 
-/** §2 geometry: radius xs, 10/600 (10.5 on a panel), pad 2×7. */
+/**
+ * §2 geometry: radius xs, 10/600 (10.5 on a panel), pad 2×7. **The one place a tag's shape,
+ * padding and type live** — [TierTag] draws the capacity palette through this same body rather
+ * than restating the numbers, so a change to the tag shape reaches every tag in the app.
+ */
 @Composable
-internal fun Tag(family: TagFamily, text: String, surface: TagSurface, modifier: Modifier) {
-    val (bg, fg) = tagColors(family, surface)
+internal fun TagBody(text: String, bg: Color, fg: Color, style: TextStyle, modifier: Modifier) {
     Text(
         text = text,
-        style = if (surface == TagSurface.PANEL_ON_INDIGO) EtalonType.tagPanel else EtalonType.tag,
+        style = style,
         color = fg,
         maxLines = 1,
         modifier = modifier.clip(EtalonShapes.xs).background(bg).padding(horizontal = 7.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+internal fun Tag(family: TagFamily, text: String, surface: TagSurface, modifier: Modifier) {
+    val (bg, fg) = tagColors(family, surface)
+    TagBody(
+        text = text,
+        bg = bg,
+        fg = fg,
+        style = if (surface == TagSurface.PANEL_ON_INDIGO) EtalonType.tagPanel else EtalonType.tag,
+        modifier = modifier,
     )
 }
 

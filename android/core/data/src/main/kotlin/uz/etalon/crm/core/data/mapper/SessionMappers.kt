@@ -20,6 +20,12 @@ fun BootstrapDto.toDomain() = Bootstrap(
         extraBeamTiers = pricing.extraBeamPriceTiers.map { it.toDomain() },
         blockUnitPrice = pricing.blockUnitPrice.toMoney(),
     ),
-    capacity = CapacityThresholds(capacityThresholds.low, capacityThresholds.moderate, capacityThresholds.heavy),
+    // The bootstrap sends whole square metres; the model keeps thresholds decimal because the
+    // capacity endpoint's own thresholds and the day areas it compares them with are decimal.
+    capacity = CapacityThresholds(
+        BigDecimal(capacityThresholds.low),
+        BigDecimal(capacityThresholds.moderate),
+        BigDecimal(capacityThresholds.heavy),
+    ),
     minSupportedAppVersion = minSupportedAppVersion,
 )

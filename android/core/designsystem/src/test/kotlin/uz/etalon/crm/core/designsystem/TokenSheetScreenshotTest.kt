@@ -83,6 +83,12 @@ private val SWATCHES = listOf(
     "greenBg" to EtalonColors.greenBg,
     "red" to EtalonColors.red,
     "redBg" to EtalonColors.redBg,
+    // The capacity calendar's two middle tiers (§4.2). Available and Overbooked reuse the
+    // green/red pairs above, which is why only two tiers need tokens of their own.
+    "warning" to EtalonColors.warning,
+    "warningBg" to EtalonColors.warningBg,
+    "heavy" to EtalonColors.heavy,
+    "heavyBg" to EtalonColors.heavyBg,
     "debtOnDark" to EtalonColors.debtOnDark,
     "paidOnDark" to EtalonColors.paidOnDark,
 )
@@ -125,7 +131,7 @@ private val RADII = listOf(
  */
 private val SAMPLE = formatMoney(Money.parse("53268760.00"))
 
-// The mask drops the alpha byte. That is right for the 21 opaque tokens printed here; a
+// The mask drops the alpha byte. That is right for the 25 opaque tokens printed here; a
 // translucent one (onDarkMuted, onDarkDivider) would print as its RGB alone and is not on the sheet.
 private fun hex(c: Color): String = String.format(Locale.ROOT, "#%06X", c.toArgb() and 0xFFFFFF)
 

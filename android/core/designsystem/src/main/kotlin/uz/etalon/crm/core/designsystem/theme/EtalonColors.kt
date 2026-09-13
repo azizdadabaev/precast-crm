@@ -36,6 +36,15 @@ object EtalonColors {
     val red = Color(0xFFE5484D)
     val redBg = Color(0xFFFDECEC)
 
+    /** Capacity calendar §4.2, the «ўртача» (MODERATE) tier — figure, bar and tag text. */
+    val warning = Color(0xFFF0A868)
+    /** The «ўртача» tier's cell ground. */
+    val warningBg = Color(0xFFFDF1E6)
+    /** The «юқори» (HEAVY) tier — a burnt orange, dark enough to read as a step past [warning]. */
+    val heavy = Color(0xFFC2622D)
+    /** The «юқори» tier's cell ground. */
+    val heavyBg = Color(0xFFF8E6DC)
+
     val onDark = Color(0xFFFFFFFF)
     val onDarkMuted = Color(0xFFFFFFFF).copy(alpha = 0.72f)
     val onDarkDivider = Color(0xFFFFFFFF).copy(alpha = 0.18f)
@@ -44,11 +53,12 @@ object EtalonColors {
     val paidOnDark = Color(0xFF5CD6A6)
 
     /** Seven avatar fills, §1.1. Index is deterministic per client name — see [avatarColor].
-     *  Five of them are the palette's own colours and say so; the sand and the amber exist only
-     *  here, to break up a screen of otherwise identical indigo circles. */
+     *  Six of them are the palette's own colours and say so — the last is the capacity calendar's
+     *  [warning] amber; only the sand exists here alone, to break up a screen of otherwise
+     *  identical indigo circles. */
     val avatarPalette = listOf(
         indigo, indigoTint, indigoPanel, Color(0xFFE5BBAD),
-        green, indigoTile, Color(0xFFF0A868),
+        green, indigoTile, warning,
     )
 
     /**

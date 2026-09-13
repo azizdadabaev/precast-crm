@@ -30,7 +30,7 @@ class MainViewModelTest {
     @AfterEach fun down() = Dispatchers.resetMain()
 
     private val me = Me("u1", "Азиз", Role.SALES, setOf("order.view"), mustChangePassword = false)
-    private fun bootstrapOf(m: Me) = Bootstrap(m, Pricing(emptyList(), emptyList(), Money.ZERO), CapacityThresholds(1, 2, 3), "0.1.0")
+    private fun bootstrapOf(m: Me) = Bootstrap(m, Pricing(emptyList(), emptyList(), Money.ZERO), CapacityThresholds.DEFAULT, "0.1.0")
 
     private class FakeSession(
         loggedIn: Boolean,

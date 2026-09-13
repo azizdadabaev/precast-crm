@@ -28,12 +28,16 @@ object EtalonIcons {
     val Camera = R.drawable.ic_lu_camera
     val Check = R.drawable.ic_lu_check
     val ChevronDown = R.drawable.ic_lu_chevron_down
+    val ChevronLeft = R.drawable.ic_lu_chevron_left
     val ChevronRight = R.drawable.ic_lu_chevron_right
     val ChevronUp = R.drawable.ic_lu_chevron_up
     val CircleAlert = R.drawable.ic_lu_circle_alert
     val CloudUpload = R.drawable.ic_lu_cloud_upload
     val Copy = R.drawable.ic_lu_copy
     val Delete = R.drawable.ic_lu_delete
+    /** The calendar header's Excel backup (§5) — an arrow into a tray, not [CloudUpload]'s cloud:
+     *  the file comes DOWN from the server before the share sheet takes it anywhere. */
+    val Download = R.drawable.ic_lu_download
     val Ellipsis = R.drawable.ic_lu_ellipsis
     val EllipsisVertical = R.drawable.ic_lu_ellipsis_vertical
     val Factory = R.drawable.ic_lu_factory
@@ -67,8 +71,10 @@ object EtalonIcons {
         "arrow-down" to ArrowDown, "arrow-left" to ArrowLeft, "arrow-up" to ArrowUp,
         "arrow-up-right" to ArrowUpRight, "bell" to Bell, "box" to Box,
         "calculator" to Calculator, "camera" to Camera, "check" to Check, "chevron-down" to ChevronDown,
-        "chevron-right" to ChevronRight, "chevron-up" to ChevronUp, "circle-alert" to CircleAlert,
-        "cloud-upload" to CloudUpload, "copy" to Copy, "delete" to Delete, "ellipsis" to Ellipsis,
+        "chevron-left" to ChevronLeft, "chevron-right" to ChevronRight, "chevron-up" to ChevronUp,
+        "circle-alert" to CircleAlert,
+        "cloud-upload" to CloudUpload, "copy" to Copy, "delete" to Delete, "download" to Download,
+        "ellipsis" to Ellipsis,
         "ellipsis-vertical" to EllipsisVertical, "factory" to Factory, "file-text" to FileText,
         "grip-horizontal" to GripHorizontal,
         "house" to House, "images" to Images, "message-circle" to MessageCircle, "minus" to Minus,
