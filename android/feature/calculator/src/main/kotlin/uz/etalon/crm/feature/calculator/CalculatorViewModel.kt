@@ -811,6 +811,29 @@ open class CalculatorViewModel(
         _state.update { it.copy(dateGrid = null) }
     }
 
+    /** The prefetch below, kept apart from [capacityJob]: closing the grid must not cancel it. */
+    private var prefetchJob: Job? = null
+
+    /**
+     * Loads [month] into [CalculatorUiState.capacityMonths] **without opening the grid**, so the
+     * tier tag beside «Етказиб бериш санаси» is there the moment the place-order sheet is.
+     *
+     * The tag reads the picked date's month out of that map, and the map used to be filled only by
+     * the grid — which meant a date the sheet restored after a process death (it is
+     * `rememberSaveable`) sat with no tag at all until the operator opened the picker again and
+     * closed it. The one case that matters is the one that survives a phone the site had to
+     * restart. A month already known is not asked for again, and a failure is silent: this is a
+     * label, not the picker, and §8's banner belongs to the grid that the seller actually opened.
+     */
+    fun prefetchCapacity(month: YearMonth) {
+        if (_state.value.capacityMonths.containsKey(month) || prefetchJob?.isActive == true) return
+        prefetchJob = viewModelScope.launch {
+            capacity.observe(month).collect { r ->
+                r.dataOrNull?.let { m -> _state.update { s -> s.copy(capacityMonths = s.capacityMonths + (month to m)) } }
+            }
+        }
+    }
+
     /**
      * Shows [cursor], re-fetching it first when [refresh] is set, and collects the month behind it.
      *

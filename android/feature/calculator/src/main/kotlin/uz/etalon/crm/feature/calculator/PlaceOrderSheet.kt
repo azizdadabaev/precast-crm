@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -174,15 +175,20 @@ fun PlaceOrderSheet(
     // fields need no such treatment — they live on the ViewModel and are autosaved with the draft.
     //
     // [initialScheduledAt] is null in the app — there is deliberately NO default date (see the
-    // picker below). It is passed only by the screenshot tests: a date picked through the dialog
+    // grid below). It is passed only by the screenshot tests: a date picked on the grid
     // is today's, which would re-date the baseline every morning and fail `verifyRoborazzi` on a
     // frame nobody touched.
     var scheduledEpochDay by rememberSaveable { mutableStateOf(initialScheduledAt?.toEpochDay()) }
     var notes by rememberSaveable { mutableStateOf("") }
     val scheduledAt = scheduledEpochDay?.let(LocalDate::ofEpochDay)
-    // How loaded the picked day already is (§7). Known only once that day's month has been
-    // through the grid — which it has, since the only way to pick a day is to tap one there.
-    val scheduledTier = scheduledAt?.let { tierOfDate(state.capacityMonths[YearMonth.from(it)], it) }
+    // How loaded the picked day already is (§7).
+    val scheduledMonth = scheduledAt?.let(YearMonth::from)
+    val scheduledTier = scheduledAt?.let { tierOfDate(state.capacityMonths[scheduledMonth], it) }
+    // Usually that month is already in hand — the only way to pick a day is to tap one on the
+    // grid, which caches it. Not after a process death: the date above is `rememberSaveable` and
+    // comes back without the month behind it, and the tag would stay blank until the operator
+    // opened the picker a second time for no reason they could see.
+    LaunchedEffect(scheduledMonth) { scheduledMonth?.let(vm::prefetchCapacity) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,

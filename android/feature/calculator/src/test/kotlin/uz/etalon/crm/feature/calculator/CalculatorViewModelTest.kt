@@ -1228,6 +1228,42 @@ class CalculatorViewModelTest {
         assertEquals(month, v.state.value.dateGrid?.cursor)
     }
 
+    /**
+     * The place-order sheet's own prefetch: the month behind a date the sheet RESTORED (it is
+     * `rememberSaveable`, so it outlives a process death that took `capacityMonths` with it)
+     * arrives without the grid being opened, and the tier tag beside «Етказиб бериш санаси» is
+     * there to be drawn. Nothing about the picker changes — `dateGrid` stays null.
+     */
+    @Test fun `prefetchCapacity fills the month behind a restored date without opening the grid`() = runTest {
+        val cap = FakeCapacity()
+        val v = vm(capacity = cap)
+        advanceUntilIdle()
+
+        val month = YearMonth.now(TASHKENT).plusMonths(2)
+        v.prefetchCapacity(month)
+        advanceUntilIdle()
+
+        assertEquals(month, v.state.value.capacityMonths[month]?.month)
+        assertNotNull(tierOfDate(v.state.value.capacityMonths[month], month.atDay(20)))
+        assertNull(v.state.value.dateGrid, "a prefetch is not an opening")
+    }
+
+    /** A month already in hand is not fetched again: the usual case is a day the operator just
+     *  picked on the grid, whose month the grid cached on the way. */
+    @Test fun `prefetchCapacity does not re-fetch a month already in hand`() = runTest {
+        val cap = FakeCapacity()
+        val v = vm(capacity = cap)
+        advanceUntilIdle()
+
+        val month = YearMonth.now(TASHKENT).plusMonths(1)
+        v.openDateGrid(month.atDay(20)); advanceUntilIdle()
+        v.closeDateGrid()
+        val fetched = cap.fetches
+
+        v.prefetchCapacity(month); advanceUntilIdle()
+        assertEquals(fetched, cap.fetches)
+    }
+
     /** Nothing picked yet: the month being lived in. */
     @Test fun `openDateGrid with no date opens on this month`() = runTest {
         val v = vm(capacity = FakeCapacity())

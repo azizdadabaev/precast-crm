@@ -118,6 +118,15 @@ data class OrdersListUiState(
     val groups: List<MonthGroup> = emptyList(),
     val facets: OrderFacets? = null,
     val isRefreshing: Boolean = false,
+    /**
+     * Жадвал's own pull-to-refresh state. [isRefreshing] is the LIST's — it is true whenever the
+     * orders resource has no cache yet, which on the calendar means the spinner turned for a page
+     * of rows the planner is not looking at while the month behind the grid loaded in silence.
+     * This one follows the capacity: [refreshCalendar] while it runs, and a month re-fetched over
+     * figures already on screen. A month with nothing cached at all is the card's own skeleton to
+     * announce — a spinner on top of it would say the same thing twice.
+     */
+    val isCalendarRefreshing: Boolean = false,
     val loadingMore: Boolean = false,
     val hasMore: Boolean = false,
     val error: String? = null,
@@ -154,6 +163,9 @@ open class OrdersListViewModel(
     /** How many pages are currently on screen; page 1..pages are collected and concatenated. */
     private val pages = MutableStateFlow(1)
     private val refreshing = MutableStateFlow(false)
+    /** Жадвал's own pull-to-refresh, kept apart from [refreshing] — see
+     *  [OrdersListUiState.isCalendarRefreshing]. */
+    private val calendarRefreshing = MutableStateFlow(false)
     private val loadingMore = MutableStateFlow(false)
 
     private val view = MutableStateFlow(OrdersView.LIST)
@@ -264,7 +276,7 @@ open class OrdersListViewModel(
 
     private data class MonthKey(val month: YearMonth, val tick: Int)
     private data class Filters(val q: String, val status: OrderStatus?, val payment: PaymentFilter?, val day: LocalDate?)
-    private data class Busy(val refreshing: Boolean, val loadingMore: Boolean)
+    private data class Busy(val refreshing: Boolean, val calendarRefreshing: Boolean, val loadingMore: Boolean)
     private data class Counts(val facets: OrderFacets?, val total: Int?)
     private data class Calendar(val view: OrdersView, val month: YearMonth, val capacity: Resource<CapacityMonth>?, val daySheet: DaySheetState?)
     private data class Export(val exporting: Boolean, val file: File?, val failed: Boolean)
@@ -279,13 +291,17 @@ open class OrdersListViewModel(
             combine(view, cursorMonth, capacityFlow, daySheetFlow) { v, m, c, s -> Calendar(v, m, c, s) },
             combine(exporting, exportFile, exportFailed) { busy, file, failed -> Export(busy, file, failed) },
         ) { n, calendar, export -> Screen(n, calendar, export) },
-        combine(refreshing, loadingMore) { r, m -> Busy(r, m) },
+        combine(refreshing, calendarRefreshing, loadingMore) { r, c, m -> Busy(r, c, m) },
     ) { f, r, counts, screen, busy ->
         val rows = r.dataOrNull.orEmpty()
         OrdersListUiState(
             query = f.q, status = f.status, payment = f.payment, day = f.day,
             groups = groupByMonth(rows), facets = counts.facets,
             isRefreshing = busy.refreshing || (r is Resource.Loading && r.cached == null),
+            isCalendarRefreshing = busy.calendarRefreshing ||
+                // A month re-fetched over figures already on screen. Without a cache the card is
+                // on its skeleton, which says «loading» better than a spinner over it would.
+                (screen.calendar.capacity.let { it is Resource.Loading && it.cached != null }),
             loadingMore = busy.loadingMore,
             // Before the first page lands there is no total, and the only signal left is "the last
             // page came back full". Never `facets.total` — see [filteredTotal].
@@ -339,11 +355,11 @@ open class OrdersListViewModel(
     /** Pull-to-refresh in Жадвал: the month grid, and the open day's orders with it. */
     fun refreshCalendar() {
         viewModelScope.launch {
-            refreshing.value = true
+            calendarRefreshing.value = true
             capacitySource.refresh(cursorMonth.value)
             capacityTick.value += 1
             dayFilter.value?.let { source.refreshList(it) }
-            refreshing.value = false
+            calendarRefreshing.value = false
         }
     }
 

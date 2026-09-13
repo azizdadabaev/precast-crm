@@ -313,6 +313,43 @@ class OrdersListViewModelTest {
         assertTrue(vm.state.value.capacity is Resource.Success)
     }
 
+    /**
+     * The Жадвал spinner answers for the MONTH, not for the orders list (Task 5 minor M5). Here
+     * the list has never landed a page — `isRefreshing` is true, as Рўйхат's own spinner should
+     * be — while the grid is loaded and perfectly still. Driving the calendar's indicator from
+     * `isRefreshing` spun it on every entry into Жадвал for a page of rows nobody was looking at.
+     */
+    @Test fun `the calendar spinner ignores the orders list's own loading`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity()); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+
+        assertTrue(vm.state.value.isRefreshing)
+        assertTrue(vm.state.value.capacity is Resource.Success)
+        assertFalse(vm.state.value.isCalendarRefreshing)
+    }
+
+    /** And it does answer for a pull on the grid, for exactly as long as the fetch runs. */
+    @Test fun `pull-to-refresh in Жадвал turns the calendar's own spinner`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val cap = object : CapacitySource {
+            override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> =
+                flow { emit(Resource.Success(capacityMonth(month))) }
+            override suspend fun refresh(month: YearMonth): Result<Unit> {
+                gate.await()
+                return Result.success(Unit)
+            }
+        }
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertFalse(vm.state.value.isCalendarRefreshing)
+
+        vm.refreshCalendar(); advanceUntilIdle()
+        assertTrue(vm.state.value.isCalendarRefreshing)
+
+        gate.complete(Unit); advanceUntilIdle()
+        assertFalse(vm.state.value.isCalendarRefreshing)
+    }
+
     @Test fun `clearing the day clears the chip and the day sheet`() = runTest {
         val vm = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity()); advanceUntilIdle()
         vm.setView(OrdersView.CALENDAR); advanceUntilIdle()

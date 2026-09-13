@@ -248,6 +248,7 @@ fun OrdersListScreen(
         if (calendar) {
             CalendarView(
                 s = s, today = today, exportFailed = s.exportFailed || shareFailed,
+                onDismissExport = { onDismissExportError(); shareFailed = false },
                 onDay = onDay, onPrevMonth = onPrevMonth, onNextMonth = onNextMonth,
                 onRefreshCalendar = onRefreshCalendar, onExport = onExport, onOpen = onOpen,
             )
@@ -370,6 +371,9 @@ private fun ListView(
  *
  * @param exportFailed the download failed, or the share sheet would not open. One banner either
  *   way: what the operator can do about it — tap again — is the same.
+ * @param onDismissExport the banner's ×. The export's failure is the one banner on this screen
+ *   that outlives what caused it: the calendar under it is fine, and until Task 7 the only way to
+ *   put the sentence away was to leave Жадвал and come back.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -377,6 +381,7 @@ private fun CalendarView(
     s: OrdersListUiState,
     today: LocalDate,
     exportFailed: Boolean,
+    onDismissExport: () -> Unit,
     onDay: (LocalDate?) -> Unit,
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit,
@@ -392,7 +397,9 @@ private fun CalendarView(
     if (sheet != null) lastSheet[0] = sheet
 
     PullToRefreshBox(
-        isRefreshing = s.isRefreshing,
+        // The CALENDAR's own state, not the list's: pulling here re-fetches the month, and the
+        // indicator must answer for that and not for a page of rows nobody is looking at.
+        isRefreshing = s.isCalendarRefreshing,
         onRefresh = onRefreshCalendar,
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -406,6 +413,7 @@ private fun CalendarView(
                 item {
                     ErrorBanner(
                         stringResource(R.string.orders_export_failed), onRetry = onExport,
+                        onDismiss = onDismissExport,
                         modifier = Modifier.padding(bottom = EtalonSpace.rowGap),
                     )
                 }
