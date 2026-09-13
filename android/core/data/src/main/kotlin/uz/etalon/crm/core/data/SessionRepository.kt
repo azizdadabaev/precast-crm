@@ -1,5 +1,6 @@
 package uz.etalon.crm.core.data
 
+import dagger.Lazy
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,6 +48,11 @@ interface SessionCapacity {
 class SessionRepository @Inject constructor(
     private val api: EtalonApi, private val tokens: TokenStore, private val prefs: SessionPrefs, private val db: EtalonDatabase,
     private val orders: OrdersRepository, private val outboxScheduler: OutboxScheduler,
+    // Lazy, not a plain CapacityRepository: that class takes a SessionCapacity, which is bound to
+    // THIS class (OutboxModule.sessionCapacity), so an eager dependency here would be a Dagger
+    // provider cycle. Lazy defers resolving it until signOut() actually calls .get(), by which
+    // point this instance already exists and the cycle never has to resolve eagerly.
+    private val capacity: Lazy<CapacityRepository>,
 ) : SessionPricing, SessionCapacity {
     private val _me = MutableStateFlow<Me?>(null)
     val me: StateFlow<Me?> = _me.asStateFlow()
@@ -68,6 +74,13 @@ class SessionRepository @Inject constructor(
      * The order cache is cleared unconditionally: `signOut()` already does it, but a process
      * death between its two DAO calls would strand the previous user's rows, and the app lands
      * back here with the tokens already gone. Repeating it is idempotent and cheap.
+     *
+     * `orders.clearCache()`/`capacity.get().clearCache()` are deliberately NOT repeated here: the
+     * PIN screen this call is submitted from is only ever reached after `signOut()` has already
+     * dropped both in-memory caches (`MainViewModel`'s state machine never shows it otherwise), so
+     * there is nothing left of a previous user's session for those in-memory maps to leak. Only
+     * `db.clearOrderCache()` needs the redundant safety net above, because it can also be reached
+     * via the death-mid-signOut path that comment describes.
      *
      * The outbox is filtered by ownership instead of emptied. A queued delivery proof belongs to
      * the operator who took it: a *different* operator signing in destroys it (rows and JPEGs),
@@ -118,10 +131,13 @@ class SessionRepository @Inject constructor(
      *  (`CalculatorViewModel.init`). The next operator to sign in on this device must not quote
      *  from it in the window before their own bootstrap lands. _capacityThresholds follows the
      *  same reasoning: it is the fallback `CapacityRepository` reads when a response omits its
-     *  own thresholds, and the next operator's bootstrap has not landed yet either. */
+     *  own thresholds, and the next operator's bootstrap has not landed yet either.
+     *  capacity.get().clearCache() drops CapacityRepository's own per-month grid the same way
+     *  orders.clearCache() drops OrdersRepository's — without it a shared device's next operator
+     *  would see whatever month the previous one last opened, with no fetch to correct it. */
     suspend fun signOut() {
         tokens.clear(); _me.value = null; _pricing.value = null; _capacityThresholds.value = null
-        prefs.setLastMe(null); orders.clearCache()
+        prefs.setLastMe(null); orders.clearCache(); capacity.get().clearCache()
         db.clearOrderCache()
     }
 

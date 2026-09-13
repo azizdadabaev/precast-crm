@@ -7,9 +7,12 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.room.InvalidationTracker
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import app.cash.turbine.test
+import dagger.Lazy
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -32,10 +35,12 @@ import uz.etalon.crm.core.database.entity.OutboxState
 import uz.etalon.crm.core.datastore.InMemoryTokenStore
 import uz.etalon.crm.core.datastore.SessionPrefs
 import uz.etalon.crm.core.datastore.TokenStore
+import uz.etalon.crm.core.model.CapacityThresholds
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.*
 import uz.etalon.crm.core.testing.FakeEtalonApi
 import java.io.File
+import java.time.YearMonth
 import java.util.concurrent.Executor
 
 /** A no-op DataStore backing a real SessionPrefs without touching disk. */
@@ -51,17 +56,28 @@ private class FakeDataStore : DataStore<Preferences> {
 
 /** signOut() never calls the API; every call is unreachable and fails the test by name via
  *  [uz.etalon.crm.core.testing.FakeEtalonApi]. [loginResponse], when set, lets the sign-in-wipe
- *  test drive a real `login()` success without a second near-duplicate fake. */
+ *  test drive a real `login()` success without a second near-duplicate fake. [capacityCalls]
+ *  counts `capacity()`, the caller's own way of proving whether `CapacityRepository`'s cache
+ *  was actually dropped (a cleared cache means the next `observe()` calls the API again). */
 private class UnusedApi(
     private val gate: CompletableDeferred<Unit>? = null,
     private val page: OrdersPageDto = OrdersPageDto(emptyList(), 0, 1, 20, 0),
     private val loginResponse: LoginResponse? = null,
 ) : FakeEtalonApi() {
+    var capacityCalls = 0
+        private set
     override suspend fun orders(q: String?, status: String?, day: String?, page: Int, pageSize: Int, payment: String?, sort: String): OrdersPageDto {
         gate?.await()
         return this.page
     }
     override suspend fun login(body: LoginRequest) = loginResponse ?: error("unused")
+    override suspend fun capacity(from: String, to: String): CapacityDto { capacityCalls++; return CapacityDto() }
+}
+
+/** No bootstrap has landed for this session — the fallback `CapacityRepository` reads when a
+ *  response omits its own thresholds. */
+private object NullSessionCapacity : SessionCapacity {
+    override val capacityThresholds: StateFlow<CapacityThresholds?> = MutableStateFlow(null)
 }
 
 /** Wraps the real, Room-generated DAO to pin down the exact moment signOut()'s db.clearOrderCache() has
@@ -143,7 +159,8 @@ class SessionSignOutOrderTest {
         val apiGate = CompletableDeferred<Unit>()
         val api = UnusedApi(apiGate, OrdersPageDto(listOf(summary), 1, 1, 20, 1))
         val orders = OrdersRepository(api, realDao, Json { ignoreUnknownKeys = true }, "https://x")
-        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders, SchedulerSpy())
+        val capacity = CapacityRepository(api, NullSessionCapacity)
+        val session = SessionRepository(api, InMemoryTokenStore(), SessionPrefs(FakeDataStore()), db, orders, SchedulerSpy(), Lazy { capacity })
 
         val refreshJob = launch { orders.refreshList(OrdersFilter()) }
         runCurrent() // the refresh is now parked inside the API call
@@ -180,10 +197,10 @@ class SessionSignOutOrderTest {
 
     private fun session(
         db: EtalonDatabase, api: EtalonApi, tokens: TokenStore = InMemoryTokenStore(),
-        scheduler: OutboxScheduler = SchedulerSpy(),
+        scheduler: OutboxScheduler = SchedulerSpy(), capacity: CapacityRepository = CapacityRepository(api, NullSessionCapacity),
     ): SessionRepository {
         val orders = OrdersRepository(api, db.ordersDao(), Json { ignoreUnknownKeys = true }, "https://x")
-        return SessionRepository(api, tokens, SessionPrefs(FakeDataStore()), db, orders, scheduler)
+        return SessionRepository(api, tokens, SessionPrefs(FakeDataStore()), db, orders, scheduler, Lazy { capacity })
     }
 
     /**
@@ -246,5 +263,27 @@ class SessionSignOutOrderTest {
 
         assertNotNull("the operator's own row must survive", db.outboxDao().byId("mine"))
         assertTrue("the photo must survive sign-out", myFile.exists())
+    }
+
+    /**
+     * Fix round 1: `CapacityRepository.clearCache()` was never wired into `signOut()`, so on a
+     * shared device the next operator's calendar would show whatever month the previous one had
+     * cached, with no fetch to correct it. Proven the same way `OrdersRepository`'s cache is
+     * proven above — through the real repository, not a spy — since the only observable effect of
+     * `clearCache()` is "the next call hits the network again".
+     */
+    @Test fun `signOut clears the capacity cache, so the next observe re-fetches`() = runTest {
+        val db = realDatabase()
+        val api = UnusedApi()
+        val capacity = CapacityRepository(api, NullSessionCapacity)
+        val month = YearMonth.of(2026, 9)
+
+        capacity.observe(month).test { awaitItem(); awaitItem(); cancelAndIgnoreRemainingEvents() }
+        assertEquals(1, api.capacityCalls)
+
+        session(db, api, capacity = capacity).signOut()
+
+        capacity.observe(month).test { awaitItem(); awaitItem(); cancelAndIgnoreRemainingEvents() }
+        assertEquals("signOut() must drop the cached month so the next observe re-fetches it", 2, api.capacityCalls)
     }
 }

@@ -3,8 +3,15 @@ package uz.etalon.crm.core.data
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.test.runTest
+import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
+import okio.BufferedSource
+import okio.Source
+import okio.Timeout
+import okio.buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,9 +24,28 @@ import java.io.IOException
 
 private const val XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-private class ExportStubApi(private val body: ByteArray? = null, private val fail: Throwable? = null) : FakeEtalonApi() {
-    override suspend fun exportBackup() = fail?.let { throw it }
-        ?: (body ?: "fake-xlsx-bytes".toByteArray()).toResponseBody(XLSX_MEDIA_TYPE.toMediaType())
+/** A body whose stream dies mid-read — the route sent headers, then the connection dropped before
+ *  the workbook finished. `ExportRepository` must not leave the partial file it had started writing. */
+private fun throwingBody(): ResponseBody = object : ResponseBody() {
+    override fun contentType(): MediaType = XLSX_MEDIA_TYPE.toMediaType()
+    override fun contentLength(): Long = -1
+    override fun source(): BufferedSource = object : Source {
+        override fun read(sink: Buffer, byteCount: Long): Long = throw IOException("stream died mid-copy")
+        override fun timeout(): Timeout = Timeout.NONE
+        override fun close() {}
+    }.buffer()
+}
+
+private class ExportStubApi(
+    private val body: ByteArray? = null,
+    private val fail: Throwable? = null,
+    private val streamFails: Boolean = false,
+) : FakeEtalonApi() {
+    override suspend fun exportBackup(): ResponseBody = when {
+        fail != null -> throw fail
+        streamFails -> throwingBody()
+        else -> (body ?: "fake-xlsx-bytes".toByteArray()).toResponseBody(XLSX_MEDIA_TYPE.toMediaType())
+    }
 }
 
 /** `ExportRepository` streams `EtalonApi.exportBackup()`'s body to `cacheDir/exports/` — the
@@ -42,5 +68,12 @@ class ExportRepositoryTest {
     @Test fun `an api failure surfaces as Result failure, not a thrown exception`() = runTest {
         val result = ExportRepository(ExportStubApi(fail = IOException("down")), context).downloadBackup()
         assertTrue(result.isFailure)
+    }
+
+    @Test fun `a stream that fails partway through leaves no partial file behind`() = runTest {
+        val result = ExportRepository(ExportStubApi(streamFails = true), context).downloadBackup()
+        assertTrue(result.isFailure)
+        val leftover = File(context.cacheDir, "exports").listFiles().orEmpty()
+        assertTrue("expected no partial file, found ${leftover.map { it.name }}", leftover.isEmpty())
     }
 }

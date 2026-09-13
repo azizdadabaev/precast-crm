@@ -31,7 +31,14 @@ class ExportRepository @Inject constructor(
             val body = api.exportBackup()
             val dir = File(context.cacheDir, "exports").apply { mkdirs() }
             val file = File(dir, "orders-backup-${STAMP_FORMAT.format(LocalDateTime.now())}.xlsx")
-            body.byteStream().use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+            try {
+                body.byteStream().use { input -> file.outputStream().use { output -> input.copyTo(output) } }
+            } catch (t: Throwable) {
+                // A stream that dies partway through must not leave a truncated .xlsx behind for a
+                // later share attempt to pick up and hand the owner a corrupt workbook.
+                file.delete()
+                throw t
+            }
             file
         }
     }
