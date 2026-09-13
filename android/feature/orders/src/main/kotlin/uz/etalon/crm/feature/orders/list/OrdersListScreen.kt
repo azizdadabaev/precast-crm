@@ -101,7 +101,10 @@ private const val PREFETCH_ROWS = 4
 fun OrdersListRoute(
     onOpenOrder: (String) -> Unit,
     onNewOrder: (() -> Unit)?,
-    vm: HiltOrdersListViewModel = hiltViewModel(),
+    canExport: Boolean = false,
+    vm: HiltOrdersListViewModel = hiltViewModel<HiltOrdersListViewModel, HiltOrdersListViewModel.Factory>(
+        creationCallback = { it.create(canExport) },
+    ),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
     OrdersListScreen(

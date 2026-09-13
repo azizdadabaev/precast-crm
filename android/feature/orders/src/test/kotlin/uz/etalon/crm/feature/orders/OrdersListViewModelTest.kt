@@ -1,9 +1,12 @@
 package uz.etalon.crm.feature.orders
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.*
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -11,11 +14,16 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.data.OrdersFilter
 import uz.etalon.crm.core.model.*
+import uz.etalon.crm.core.ui.format.TASHKENT
+import uz.etalon.crm.feature.orders.list.CapacitySource
+import uz.etalon.crm.feature.orders.list.MemoryOrdersViewStore
 import uz.etalon.crm.feature.orders.list.OrdersListViewModel
 import uz.etalon.crm.feature.orders.list.OrdersSource
+import java.io.File
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class OrdersListViewModelTest {
@@ -28,7 +36,36 @@ class OrdersListViewModelTest {
         q: String? = null, status: OrderStatus? = null, payment: PaymentFilter? = null, day: LocalDate? = null, page: Int = 1,
     ) = OrdersFilter(q = q, status = status, payment = payment, day = day, page = page, sort = "desc", pageSize = 50)
 
-    private fun order(n: String) = OrderSummary("id-$n", n, OrderStatus.PLACED, PaymentState.AWAITING_PAYMENT, Money.parse("1"), Money.ZERO, BigDecimal.ONE, 1, 1, Instant.EPOCH, Instant.EPOCH, ClientRef("c", "A", "998901112233", null))
+    private fun order(n: String, price: Money = Money.parse("1")) = OrderSummary("id-$n", n, OrderStatus.PLACED, PaymentState.AWAITING_PAYMENT, price, Money.ZERO, BigDecimal.ONE, 1, 1, Instant.EPOCH, Instant.EPOCH, ClientRef("c", "A", "998901112233", null))
+
+    /** What the day sheet asks for: the shared filters plus the day, oldest first (R6, §4.5). */
+    private fun dayPage(
+        day: LocalDate, q: String? = null, status: OrderStatus? = null, payment: PaymentFilter? = null,
+    ) = OrdersFilter(q = q, status = status, payment = payment, day = day, page = 1, sort = "asc", pageSize = 50)
+
+    private fun capacityMonth(
+        m: YearMonth, areas: Map<LocalDate, String> = emptyMap(), thresholds: CapacityThresholds = CapacityThresholds.DEFAULT,
+    ) = CapacityMonth(m, gridRange(m), areas.mapValues { (d, a) -> CapacityDay(d, BigDecimal(a), 1, 0) }, thresholds)
+
+    /**
+     * Stands in for `CapacityRepository`, cache included: [fetches] counts what would be a network
+     * call, so a month the ViewModel comes back to must not raise it.
+     */
+    private class FakeCapacity(private val payload: (YearMonth) -> CapacityMonth = { CapacityMonth(it, gridRange(it), emptyMap(), CapacityThresholds.DEFAULT) }) : CapacitySource {
+        var fetches = 0
+        private val cache = mutableMapOf<YearMonth, CapacityMonth>()
+        override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flow {
+            cache[month]?.let { emit(Resource.Success(it)); return@flow }
+            emit(Resource.Loading(null))
+            fetches++
+            emit(Resource.Success(payload(month).also { cache[month] = it }))
+        }
+        override suspend fun refresh(month: YearMonth): Result<Unit> {
+            fetches++
+            cache[month] = payload(month)
+            return Result.success(Unit)
+        }
+    }
 
     private fun rows(state: uz.etalon.crm.feature.orders.list.OrdersListUiState) = state.groups.flatMap { it.rows }
 
@@ -204,5 +241,181 @@ class OrdersListViewModelTest {
         vm.setDay(d); advanceUntilIdle()
         assertEquals(page1(day = d), src.refreshed.last())
         assertEquals(d, vm.state.value.day)
+    }
+
+    // ---- Жадвал: view, cursor month, capacity, day sheet, export (phase 6, task 3) ----
+
+    @Test fun `the persisted calendar view is restored on open`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), viewStore = MemoryOrdersViewStore(OrdersView.CALENDAR))
+        advanceUntilIdle()
+        assertEquals(OrdersView.CALENDAR, vm.state.value.view)
+    }
+
+    @Test fun `switching to the calendar selects today and persists the view`() = runTest {
+        val store = MemoryOrdersViewStore()
+        val vm = OrdersListViewModel(FakeSource(), viewStore = store); advanceUntilIdle()
+        assertEquals(OrdersView.LIST, vm.state.value.view)
+        assertNull(vm.state.value.day)
+
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertEquals(OrdersView.CALENDAR, vm.state.value.view)
+        assertEquals(LocalDate.now(TASHKENT), vm.state.value.day)
+        assertEquals(YearMonth.now(TASHKENT), vm.state.value.cursorMonth)
+        assertEquals(OrdersView.CALENDAR, store.view.first())
+    }
+
+    /** §4.4: the default selection only fills an empty selection — a day the planner already
+     *  filtered by in Рўйхат survives the switch, even outside the cursor month (R7). */
+    @Test fun `entering the calendar leaves a day that is already chosen alone`() = runTest {
+        val vm = OrdersListViewModel(FakeSource()); advanceUntilIdle()
+        val chosen = LocalDate.of(2026, 3, 4)
+        vm.setDay(chosen); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertEquals(chosen, vm.state.value.day)
+    }
+
+    @Test fun `paging months moves the cursor and keeps the selected day`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity()); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        val start = vm.state.value.cursorMonth
+        val day = vm.state.value.day
+
+        vm.nextMonth(); vm.nextMonth(); vm.prevMonth(); advanceUntilIdle()
+        assertEquals(start.plusMonths(1), vm.state.value.cursorMonth)
+        assertEquals(day, vm.state.value.day) // R7: kept even though it is no longer drawn
+    }
+
+    /** A list-only session must never pay for the grid, and a month already fetched is served from
+     *  the repository's cache — paging back and forth is free. */
+    @Test fun `the grid is fetched once per month and never for a list-only session`() = runTest {
+        val cap = FakeCapacity()
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
+        assertEquals(0, cap.fetches)
+        assertNull(vm.state.value.capacity)
+
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertEquals(1, cap.fetches)
+        assertTrue(vm.state.value.capacity is Resource.Success)
+
+        vm.nextMonth(); advanceUntilIdle()
+        assertEquals(2, cap.fetches)
+        vm.prevMonth(); advanceUntilIdle()
+        assertEquals(2, cap.fetches) // the second visit is a cache hit
+    }
+
+    @Test fun `refreshCalendar forces a fetch of the cursor month`() = runTest {
+        val cap = FakeCapacity()
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertEquals(1, cap.fetches)
+        vm.refreshCalendar(); advanceUntilIdle()
+        assertEquals(2, cap.fetches)
+        assertTrue(vm.state.value.capacity is Resource.Success)
+    }
+
+    @Test fun `clearing the day clears the chip and the day sheet`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity()); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertNotNull(vm.state.value.daySheet)
+
+        vm.selectDay(null); advanceUntilIdle()
+        assertNull(vm.state.value.day)
+        assertNull(vm.state.value.daySheet)
+    }
+
+    @Test fun `the day sheet sums the day's orders into one money total`() = runTest {
+        val src = FakeSource()
+        val vm = OrdersListViewModel(src, capacitySource = FakeCapacity()); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        val d = LocalDate.of(2026, 9, 12)
+        vm.selectDay(d); advanceUntilIdle()
+
+        src.emit(dayPage(d), Resource.Success(listOf(
+            order("2026-09-0001", Money.parse("12000000")),
+            order("2026-09-0002", Money.parse("7110840")),
+            order("2026-09-0003", Money.parse("20000000")),
+        )))
+        advanceUntilIdle()
+
+        val sheet = vm.state.value.daySheet!!
+        assertEquals(d, sheet.day)
+        assertEquals(3, sheet.orders.dataOrNull!!.size)
+        assertEquals(Money.parse("39110840"), sheet.moneyTotal)
+    }
+
+    /** R6: the sheet asks with the SAME `q`/`status`/`payment` Рўйхат has on, so the two views can
+     *  never show a different set of orders for the same day. */
+    @Test fun `the day sheet asks with the shared filters`() = runTest {
+        val src = FakeSource()
+        val vm = OrdersListViewModel(src, capacitySource = FakeCapacity()); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        vm.setQuery("Азиз"); vm.setStatus(OrderStatus.PLACED); vm.setPayment(PaymentFilter.DEBT)
+        val d = LocalDate.of(2026, 9, 12)
+        vm.selectDay(d); advanceUntilIdle()
+
+        assertEquals(
+            dayPage(d, q = "Азиз", status = OrderStatus.PLACED, payment = PaymentFilter.DEBT),
+            src.refreshed.last { it.sort == "asc" },
+        )
+    }
+
+    /** R3: the tier is decided by the thresholds the SERVER sent with the month, not by the
+     *  client's defaults — 350 m² is «ўртача» at 300/450/600 and «юқори» at 200/300/400. */
+    @Test fun `the server's thresholds recolour the day`() = runTest {
+        val month = YearMonth.now(TASHKENT)
+        val d = month.atDay(12)
+
+        val default = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity { capacityMonth(it, mapOf(d to "350")) })
+        advanceUntilIdle()
+        default.setView(OrdersView.CALENDAR); default.selectDay(d); advanceUntilIdle()
+        assertEquals(CapacityTier.MODERATE, default.state.value.daySheet!!.tier)
+        assertEquals(0, BigDecimal("600").compareTo(default.state.value.daySheet!!.heavy))
+
+        val tight = CapacityThresholds(BigDecimal("200"), BigDecimal("300"), BigDecimal("400"))
+        val custom = OrdersListViewModel(FakeSource(), capacitySource = FakeCapacity { capacityMonth(it, mapOf(d to "350"), tight) })
+        advanceUntilIdle()
+        custom.setView(OrdersView.CALENDAR); custom.selectDay(d); advanceUntilIdle()
+        assertEquals(CapacityTier.HEAVY, custom.state.value.daySheet!!.tier)
+        assertEquals(0, BigDecimal("400").compareTo(custom.state.value.daySheet!!.heavy))
+        assertEquals(0, BigDecimal("350").compareTo(custom.state.value.daySheet!!.capacity.totalArea))
+    }
+
+    @Test fun `exporting the backup hands the screen a file to share, once`() = runTest {
+        val gate = CompletableDeferred<Result<File>>()
+        var calls = 0
+        val vm = OrdersListViewModel(FakeSource(), exports = { calls++; gate.await() }); advanceUntilIdle()
+
+        vm.exportBackup(); advanceUntilIdle()
+        assertTrue(vm.state.value.exporting)
+        vm.exportBackup(); advanceUntilIdle()
+        assertEquals(1, calls) // single-flight: the route is not idempotent
+
+        val file = File("orders-backup-20260912-1130.xlsx")
+        gate.complete(Result.success(file)); advanceUntilIdle()
+        assertFalse(vm.state.value.exporting)
+        assertEquals(file, vm.state.value.exportFile)
+        assertNull(vm.state.value.exportError)
+
+        vm.consumeExport(); advanceUntilIdle()
+        assertNull(vm.state.value.exportFile)
+    }
+
+    @Test fun `a failed export says so in Uzbek and can be dismissed`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), exports = { Result.failure(java.io.IOException("boom")) })
+        advanceUntilIdle()
+        vm.exportBackup(); advanceUntilIdle()
+
+        assertFalse(vm.state.value.exporting)
+        assertNull(vm.state.value.exportFile)
+        assertEquals("Экспорт қилиб бўлмади", vm.state.value.exportError)
+
+        vm.dismissExportError(); advanceUntilIdle()
+        assertNull(vm.state.value.exportError)
+    }
+
+    @Test fun `canExport comes from the route`() = runTest {
+        val vm = OrdersListViewModel(FakeSource(), canExport = true); advanceUntilIdle()
+        assertTrue(vm.state.value.canExport)
+        assertFalse(OrdersListViewModel(FakeSource()).state.value.canExport)
     }
 }

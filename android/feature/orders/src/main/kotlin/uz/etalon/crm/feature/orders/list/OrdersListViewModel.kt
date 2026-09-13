@@ -2,23 +2,44 @@ package uz.etalon.crm.feature.orders.list
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import uz.etalon.crm.core.data.CapacityRepository
+import uz.etalon.crm.core.data.ExportRepository
 import uz.etalon.crm.core.data.OrdersFilter
 import uz.etalon.crm.core.data.OrdersRepository
+import uz.etalon.crm.core.datastore.OrdersPrefs
+import uz.etalon.crm.core.model.CapacityDay
+import uz.etalon.crm.core.model.CapacityMonth
+import uz.etalon.crm.core.model.CapacityThresholds
+import uz.etalon.crm.core.model.CapacityTier
+import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderFacets
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.OrderSummary
+import uz.etalon.crm.core.model.OrdersView
 import uz.etalon.crm.core.model.PaymentFilter
 import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.model.tierFor
+import uz.etalon.crm.core.ui.format.TASHKENT
+import java.io.File
+import java.math.BigDecimal
 import java.time.LocalDate
+import java.time.YearMonth
 import javax.inject.Inject
 
 /** Rows fetched per page; the list appends a page at a time as the user scrolls. */
 private const val PAGE_SIZE = 50
+
+/** The only user-facing string the ViewModel owns: the export failure has no screen state of its
+ *  own to hang a string resource off — the banner just prints what the ViewModel put here. */
+internal const val EXPORT_FAILED_MESSAGE = "Экспорт қилиб бўлмади"
 
 /** Test seam over OrdersRepository. */
 interface OrdersSource {
@@ -35,6 +56,64 @@ class RepositoryOrdersSource @Inject constructor(private val repo: OrdersReposit
     override fun total(filter: OrdersFilter) = repo.total(filter)
 }
 
+/** Test seam over [CapacityRepository] — the Жадвал view's month grid. */
+interface CapacitySource {
+    fun observe(month: YearMonth): Flow<Resource<CapacityMonth>>
+    suspend fun refresh(month: YearMonth): Result<Unit>
+}
+class RepositoryCapacitySource @Inject constructor(private val repo: CapacityRepository) : CapacitySource {
+    override fun observe(month: YearMonth) = repo.observe(month)
+    override suspend fun refresh(month: YearMonth) = repo.refresh(month)
+}
+/** What a ViewModel built for a list-only test gets: a grid that never arrives, and so never
+ *  fetches. [OrdersListUiState.capacity] stays null until the calendar is shown in any case. */
+internal object NoCapacity : CapacitySource {
+    override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flowOf(Resource.Loading(null))
+    override suspend fun refresh(month: YearMonth) = Result.success(Unit)
+}
+
+/** Test seam over [ExportRepository] — the owner's Excel backup (§5). */
+fun interface ExportSource {
+    suspend fun downloadBackup(): Result<File>
+}
+class RepositoryExportSource @Inject constructor(private val repo: ExportRepository) : ExportSource {
+    override suspend fun downloadBackup() = repo.downloadBackup()
+}
+
+/** Test seam over [OrdersPrefs] — the persisted Рўйхат/Жадвал switch (R11). */
+interface OrdersViewStore {
+    val view: Flow<OrdersView>
+    suspend fun set(v: OrdersView)
+}
+class PrefsOrdersViewStore @Inject constructor(private val prefs: OrdersPrefs) : OrdersViewStore {
+    override val view = prefs.ordersView
+    override suspend fun set(v: OrdersView) = prefs.setOrdersView(v)
+}
+/** A store with no disk behind it, so a test that cares only about the list can build the
+ *  ViewModel from a fake [OrdersSource] alone. */
+internal class MemoryOrdersViewStore(initial: OrdersView = OrdersView.LIST) : OrdersViewStore {
+    private val state = MutableStateFlow(initial)
+    override val view: Flow<OrdersView> = state
+    override suspend fun set(v: OrdersView) { state.value = v }
+}
+
+/**
+ * The navy sheet under the grid (§4.5) for the selected day: that day's bucket from the cached
+ * month, its tier, and the day's own orders — the SAME filtered list call Рўйхат makes (R6), so
+ * the two views can never disagree about which orders fall on the day.
+ *
+ * @param heavy the server's top threshold, which the sheet's bar is drawn as a fraction of.
+ * @param moneyTotal Σ of the loaded orders' `totalPrice`; [Money], never a float.
+ */
+data class DaySheetState(
+    val day: LocalDate,
+    val capacity: CapacityDay,
+    val tier: CapacityTier,
+    val heavy: BigDecimal,
+    val orders: Resource<List<OrderSummary>>,
+    val moneyTotal: Money,
+)
+
 data class OrdersListUiState(
     val query: String = "",
     val status: OrderStatus? = null,
@@ -47,10 +126,29 @@ data class OrdersListUiState(
     val hasMore: Boolean = false,
     val error: String? = null,
     val hasCache: Boolean = false,
+    /** Рўйхат or Жадвал — one screen, one ViewModel (R1); [day] is shared by both. */
+    val view: OrdersView = OrdersView.LIST,
+    val cursorMonth: YearMonth = YearMonth.now(TASHKENT),
+    /** null until the calendar view has been shown once: a planner who never opens Жадвал never
+     *  costs a capacity fetch. */
+    val capacity: Resource<CapacityMonth>? = null,
+    val daySheet: DaySheetState? = null,
+    val exporting: Boolean = false,
+    /** The downloaded workbook, for the screen to hand the share sheet; cleared by `consumeExport`. */
+    val exportFile: File? = null,
+    val exportError: String? = null,
+    /** From the route (`order.exportBackup`) — without it the header draws no export button. */
+    val canExport: Boolean = false,
 )
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-open class OrdersListViewModel(private val source: OrdersSource) : ViewModel() {
+open class OrdersListViewModel(
+    private val source: OrdersSource,
+    private val capacitySource: CapacitySource = NoCapacity,
+    private val exports: ExportSource = ExportSource { Result.failure(UnsupportedOperationException()) },
+    private val viewStore: OrdersViewStore = MemoryOrdersViewStore(),
+    private val canExport: Boolean = false,
+) : ViewModel() {
     private val query = MutableStateFlow("")
     private val status = MutableStateFlow<OrderStatus?>(null)
     private val payment = MutableStateFlow<PaymentFilter?>(null)
@@ -59,6 +157,33 @@ open class OrdersListViewModel(private val source: OrdersSource) : ViewModel() {
     private val pages = MutableStateFlow(1)
     private val refreshing = MutableStateFlow(false)
     private val loadingMore = MutableStateFlow(false)
+
+    private val view = MutableStateFlow(OrdersView.LIST)
+    private val cursorMonth = MutableStateFlow(YearMonth.now(TASHKENT))
+    /** Latched by the first [setView] to Жадвал (or by a restored CALENDAR): before it the grid is
+     *  never observed, so a LIST-only session makes no capacity call at all. */
+    private val calendarShown = MutableStateFlow(false)
+    /** Bumped by [refreshCalendar]. `CapacityRepository.observe` is a cold flow that reads its
+     *  cache once, so a forced fetch only reaches the screen if the flow is collected again. */
+    private val capacityTick = MutableStateFlow(0)
+    private val exporting = MutableStateFlow(false)
+    private val exportFile = MutableStateFlow<File?>(null)
+    private val exportError = MutableStateFlow<String?>(null)
+
+    /** Set by [setView] or by the restore in `init`, whichever runs first — a persisted view must
+     *  not land on top of a switch the user has already flipped while the read was in flight. */
+    private var viewDecided = false
+
+    init {
+        viewModelScope.launch {
+            val restored = viewStore.view.first()
+            if (!viewDecided) {
+                viewDecided = true
+                view.value = restored
+                if (restored == OrdersView.CALENDAR) enterCalendar()
+            }
+        }
+    }
 
     /** The filter without a page — every filter change drops back to a single page. */
     private val base: StateFlow<OrdersFilter> =
@@ -90,17 +215,74 @@ open class OrdersListViewModel(private val source: OrdersSource) : ViewModel() {
     private val filteredTotal: StateFlow<Int?> =
         base.flatMapLatest { source.total(it) }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** The cursor month's grid, once the calendar has been shown. Shared (`stateIn`) because both
+     *  the grid and the day sheet read it: two independent collections of a cold repository flow
+     *  would be two fetches of the same month. */
+    private val capacityFlow: StateFlow<Resource<CapacityMonth>?> =
+        combine(calendarShown, cursorMonth, capacityTick) { shown, m, tick -> if (shown) MonthKey(m, tick) else null }
+            .distinctUntilChanged()
+            .flatMapLatest { k -> if (k == null) flowOf<Resource<CapacityMonth>?>(null) else capacitySource.observe(k.month) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * The day sheet's list call (R6): the shared `q`/`status`/`payment` exactly as Рўйхат has them,
+     * plus the selected day, oldest first (§4.5 reads the day forward). Null whenever there is no
+     * day or the calendar is not on screen — a day filter set in Рўйхат alone costs nothing extra.
+     *
+     * [PAGE_SIZE], not the filter's own default of 20, so a busy day's sheet cannot show fewer
+     * orders than Рўйхат filtered to the same day shows — which is the whole point of R6.
+     */
+    private val dayFilter: StateFlow<OrdersFilter?> = combine(base, view) { f, v ->
+        val d = f.day
+        if (v == OrdersView.CALENDAR && d != null)
+            OrdersFilter(q = f.q, status = f.status, payment = f.payment, day = d, sort = "asc", pageSize = PAGE_SIZE)
+        else null
+    }
+        .distinctUntilChanged()
+        .onEach { f -> if (f != null) viewModelScope.launch { source.refreshList(f) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val daySheetFlow: Flow<DaySheetState?> = combine(
+        dayFilter.flatMapLatest { f -> if (f == null) flowOf<Resource<List<OrderSummary>>?>(null) else source.list(f) },
+        capacityFlow,
+        dayFilter,
+    ) { orders, cap, f ->
+        val d = f?.day
+        if (d == null) null else {
+            val month = cap?.dataOrNull
+            val thresholds = month?.thresholds ?: CapacityThresholds.DEFAULT
+            val bucket = month?.day(d) ?: CapacityDay(d, BigDecimal.ZERO, 0, 0)
+            val rows = orders?.dataOrNull.orEmpty()
+            DaySheetState(
+                day = d,
+                capacity = bucket,
+                tier = tierFor(bucket.totalArea, thresholds),
+                heavy = thresholds.heavy,
+                orders = orders ?: Resource.Loading(null),
+                moneyTotal = rows.fold(Money.ZERO) { acc, o -> acc + o.totalPrice },
+            )
+        }
+    }
+
+    private data class MonthKey(val month: YearMonth, val tick: Int)
     private data class Filters(val q: String, val status: OrderStatus?, val payment: PaymentFilter?, val day: LocalDate?)
     private data class Busy(val refreshing: Boolean, val loadingMore: Boolean)
     private data class Counts(val facets: OrderFacets?, val total: Int?)
+    private data class Calendar(val view: OrdersView, val month: YearMonth, val capacity: Resource<CapacityMonth>?, val daySheet: DaySheetState?)
+    private data class Export(val exporting: Boolean, val file: File?, val error: String?)
+    private data class Screen(val pages: Int, val calendar: Calendar, val export: Export)
 
     val state: StateFlow<OrdersListUiState> = combine(
         combine(query, status, payment, day) { q, s, p, d -> Filters(q, s, p, d) },
         resource,
         combine(facetsFlow, filteredTotal) { f, t -> Counts(f, t) },
-        pages,
+        combine(
+            pages,
+            combine(view, cursorMonth, capacityFlow, daySheetFlow) { v, m, c, s -> Calendar(v, m, c, s) },
+            combine(exporting, exportFile, exportError) { busy, file, err -> Export(busy, file, err) },
+        ) { n, calendar, export -> Screen(n, calendar, export) },
         combine(refreshing, loadingMore) { r, m -> Busy(r, m) },
-    ) { f, r, counts, n, busy ->
+    ) { f, r, counts, screen, busy ->
         val rows = r.dataOrNull.orEmpty()
         OrdersListUiState(
             query = f.q, status = f.status, payment = f.payment, day = f.day,
@@ -109,16 +291,81 @@ open class OrdersListViewModel(private val source: OrdersSource) : ViewModel() {
             loadingMore = busy.loadingMore,
             // Before the first page lands there is no total, and the only signal left is "the last
             // page came back full". Never `facets.total` — see [filteredTotal].
-            hasMore = counts.total?.let { rows.size < it } ?: (rows.size >= PAGE_SIZE * n),
+            hasMore = counts.total?.let { rows.size < it } ?: (rows.size >= PAGE_SIZE * screen.pages),
             error = (r as? Resource.Error)?.error?.message,
             hasCache = r.dataOrNull != null,
+            view = screen.calendar.view,
+            cursorMonth = screen.calendar.month,
+            capacity = screen.calendar.capacity,
+            daySheet = screen.calendar.daySheet,
+            exporting = screen.export.exporting,
+            exportFile = screen.export.file,
+            exportError = screen.export.error,
+            canExport = canExport,
         )
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, OrdersListUiState())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, OrdersListUiState(canExport = canExport))
 
     fun setQuery(v: String) { query.value = v }
     fun setStatus(v: OrderStatus?) { status.value = v }
     fun setPayment(v: PaymentFilter?) { payment.value = v }
     fun setDay(v: LocalDate?) { day.value = v }
+
+    /**
+     * Рўйхат ⇄ Жадвал, persisted (R11). The first time Жадвал is shown it latches the grid on and,
+     * only then and only if nothing is selected yet, selects today (§4.4) — a day the planner
+     * already chose is never overridden, and re-entry restores that same shared [day].
+     */
+    fun setView(v: OrdersView) {
+        viewDecided = true
+        view.value = v
+        if (v == OrdersView.CALENDAR) enterCalendar()
+        viewModelScope.launch { viewStore.set(v) }
+    }
+
+    private fun enterCalendar() {
+        val first = !calendarShown.value
+        calendarShown.value = true
+        if (!first || day.value != null) return
+        val today = LocalDate.now(TASHKENT)
+        if (YearMonth.from(today) == cursorMonth.value) day.value = today
+    }
+
+    /** ‹ / ›. The selection is kept even when it leaves the shown month (R7) — the chip in Рўйхат
+     *  still carries it; the grid simply does not draw it. */
+    fun prevMonth() { cursorMonth.value = cursorMonth.value.minusMonths(1) }
+    fun nextMonth() { cursorMonth.value = cursorMonth.value.plusMonths(1) }
+
+    /** Tapping a day cell, or the chip's × with null — the SAME [day] Рўйхат filters by. */
+    fun selectDay(d: LocalDate?) { setDay(d) }
+
+    /** Pull-to-refresh in Жадвал: the month grid, and the open day's orders with it. */
+    fun refreshCalendar() {
+        viewModelScope.launch {
+            refreshing.value = true
+            capacitySource.refresh(cursorMonth.value)
+            capacityTick.value += 1
+            dayFilter.value?.let { source.refreshList(it) }
+            refreshing.value = false
+        }
+    }
+
+    /** §5. Single-flight: the route is not idempotent (the server builds a fresh workbook each
+     *  time), so a second tap while one download is in flight is dropped rather than queued. */
+    fun exportBackup() {
+        if (exporting.value) return
+        exporting.value = true
+        exportError.value = null
+        viewModelScope.launch {
+            exports.downloadBackup()
+                .onSuccess { exportFile.value = it }
+                .onFailure { exportError.value = EXPORT_FAILED_MESSAGE }
+            exporting.value = false
+        }
+    }
+
+    /** Called once the screen has handed the file to the share sheet. */
+    fun consumeExport() { exportFile.value = null }
+    fun dismissExportError() { exportError.value = null }
 
     /** Pull-to-refresh: re-fetches every page currently on screen, oldest first. */
     fun refresh() {
@@ -180,5 +427,21 @@ open class OrdersListViewModel(private val source: OrdersSource) : ViewModel() {
     }
 }
 
-@HiltViewModel
-class HiltOrdersListViewModel @Inject constructor(source: RepositoryOrdersSource) : OrdersListViewModel(source)
+/**
+ * `canExport` is assisted rather than injected: whether the export button exists is the route's
+ * call (`me.can("order.exportBackup")`), decided from the session the nav host already holds —
+ * exactly as «+ Янги» is gated there — not a permission the ViewModel re-reads for itself.
+ */
+@HiltViewModel(assistedFactory = HiltOrdersListViewModel.Factory::class)
+class HiltOrdersListViewModel @AssistedInject constructor(
+    source: RepositoryOrdersSource,
+    capacitySource: RepositoryCapacitySource,
+    exports: RepositoryExportSource,
+    viewStore: PrefsOrdersViewStore,
+    @Assisted canExport: Boolean,
+) : OrdersListViewModel(source, capacitySource, exports, viewStore, canExport) {
+    @AssistedFactory
+    interface Factory {
+        fun create(canExport: Boolean): HiltOrdersListViewModel
+    }
+}
