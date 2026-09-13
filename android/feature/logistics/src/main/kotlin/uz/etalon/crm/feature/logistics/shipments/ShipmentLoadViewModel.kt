@@ -74,6 +74,10 @@ open class ShipmentLoadViewModel(
 
     fun submit() {
         val s = _state.value
+        // Terminal, and checked before anything else — see LoadTruckViewModel.submit: the button
+        // stays on screen for ruling R5's dwell, and a second enqueue of the same photo fails on a
+        // file the outbox has already moved.
+        if (s.done) return
         if (s.photo == null) {
             _state.update { it.copy(error = "Аввал расм олинг") }
             return

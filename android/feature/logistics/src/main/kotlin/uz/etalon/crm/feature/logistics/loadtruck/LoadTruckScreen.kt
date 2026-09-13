@@ -141,14 +141,17 @@ fun LoadTruckScreen(
             StickyActionBar {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EtalonSpace.md)) {
                     if (settling) ResultTileGrid(resultCells(s, extraPhoto))
+                    // Dead once the row is queued: the bar stays on screen for the dwell, and a
+                    // second tap would hand the outbox a photo file it has already moved away.
                     if (extraPhoto) {
                         PrimaryButton(
                             text = stringResource(R.string.action_attach),
                             onClick = onSubmit,
+                            enabled = !s.done,
                             loading = s.submitting,
                         )
                     } else {
-                        MarkLoadedButton(loading = s.submitting, onClick = onSubmit)
+                        MarkLoadedButton(loading = s.submitting, enabled = !s.done, onClick = onSubmit)
                     }
                 }
             }

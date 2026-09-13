@@ -8,8 +8,7 @@
     <string name="logistics_action_loaded">Юкланди</string>
     <string name="logistics_action_confirm">Тасдиқлаш</string>
     <string name="logistics_photo_taken">Олинган расм</string>
-    <string name="logistics_note_label">Изоҳ</string>
-    <!-- Ruling R5's result tiles: what went into the outbox, in four figures. -->
+        <!-- Ruling R5's result tiles: what went into the outbox, in four figures. -->
     <string name="logistics_tile_beams">Балка</string>
     <string name="logistics_tile_blocks">Ғишт</string>
     <string name="logistics_tile_photo">Расм</string>
@@ -37,9 +36,9 @@
     <string name="loaded_summary">%1$d балка · %2$d блок</string>
     <string name="delivery_proof_title">Етказиш исботи</string>
     <string name="delivery_cash_label">Олинган нақд</string>
-    <string name="delivery_expected">Кутилган: %1$s</string>
-    <string name="delivery_shortfall">Кам: %1$s</string>
-    <string name="delivery_overcollected">Ортиқча: %1$s</string>
+    <string name="delivery_expected">Кутилган %1$s</string>
+    <string name="delivery_shortfall">Камомад %1$s</string>
+    <string name="delivery_overcollected">Ортиқча %1$s</string>
     <string name="delivery_no_cash">Нақд олинмади</string>
     <string name="delivery_no_cash_note">Сабабини ёзинг</string>
     <string name="delivery_driver_returned">Ҳайдовчи қайтди</string>

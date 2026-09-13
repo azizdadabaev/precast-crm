@@ -168,7 +168,9 @@ fun ShipmentLoadScreen(
                             ),
                         )
                     }
-                    MarkLoadedButton(loading = s.submitting, onClick = onSubmit)
+                    // Dead once the row is queued: the bar stays on screen for the dwell, and a
+                    // second tap would hand the outbox a photo file it has already moved away.
+                    MarkLoadedButton(loading = s.submitting, enabled = !s.done, onClick = onSubmit)
                 }
             }
         }

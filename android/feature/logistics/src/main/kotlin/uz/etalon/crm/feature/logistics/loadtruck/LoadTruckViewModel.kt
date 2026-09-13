@@ -47,6 +47,11 @@ open class LoadTruckViewModel(
     fun applyOrder(o: OrderDetail) = _state.update { it.copy(order = o) }
 
     fun submit() {
+        // Terminal, and checked before anything else: the screen keeps its button on screen while
+        // ruling R5's result grid is read, and a second tap there would enqueue the SAME photo
+        // twice — the second time against a file `moveIntoOutbox` has already moved, which throws
+        // and paints a red banner over a load that in fact went through.
+        if (_state.value.done) return
         val photo = _state.value.photo
         if (photo == null) {
             _state.update { it.copy(error = "Аввал расм олинг") }

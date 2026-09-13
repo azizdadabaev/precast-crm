@@ -79,12 +79,18 @@ open class DeliveryProofViewModel(
     fun retake() = _state.update { it.copy(photo = null, error = null) }
     fun setAmountDigits(digits: String) = _state.update { it.copy(amountDigits = digits, error = null) }
 
-    /** Turning "no cash collected" on clears any amount already typed, so the two facts —
-     *  collected zero vs. did not collect — can never sit contradicted in the same state.
-     *  Turning it back off clears the note the same way: a leftover reason next to
-     *  `noCashCollected = false` would be a contradictory record for nobody to explain later. */
+    /**
+     * Turning "no cash collected" on clears any amount already typed, so the two facts — collected
+     * zero vs. did not collect — can never sit contradicted in the same state.
+     *
+     * The note is deliberately NOT cleared when the switch goes back off. It is only ever *sent*
+     * under `noCashCollected` — `POST /orders/{id}/delivery-proof` writes it in that branch alone
+     * — so a leftover reason is invisible to the record either way, and wiping it meant a driver
+     * who fat-fingered the switch had to retype the sentence he had just written. The screen hides
+     * the field instead.
+     */
     fun setNoCashCollected(v: Boolean) = _state.update {
-        it.copy(noCashCollected = v, amountDigits = if (v) "" else it.amountDigits, note = if (v) it.note else "", error = null)
+        it.copy(noCashCollected = v, amountDigits = if (v) "" else it.amountDigits, error = null)
     }
 
     fun setNote(v: String) = _state.update { it.copy(note = v, error = null) }
@@ -100,12 +106,24 @@ open class DeliveryProofViewModel(
 
     fun submit() {
         val s = _state.value
+        // Terminal, and checked before anything else — see LoadTruckViewModel.submit: the button
+        // stays on screen for ruling R5's dwell, and a second enqueue of the same photo fails on a
+        // file the outbox has already moved. Here it would also raise a second cash row.
+        if (s.done) return
         val photo = s.photo
         if (photo == null) {
             _state.update { it.copy(error = "Аввал расм олинг") }
             return
         }
-        val cash = DeliveryCash(amount = s.amount, noCashCollected = s.noCashCollected, note = s.note, driverReturned = s.driverReturned)
+        val cash = DeliveryCash(
+            amount = s.amount,
+            noCashCollected = s.noCashCollected,
+            // The route persists `noCashCollectedNote` in the `noCashCollected` branch and nowhere
+            // else, so a note kept from a toggled-off switch must not ride along: the wire says
+            // exactly what the record will say.
+            note = if (s.noCashCollected) s.note else "",
+            driverReturned = s.driverReturned,
+        )
         val problem = validateDeliveryCash(cash)
         if (problem != null) {
             _state.update { it.copy(error = problem) }

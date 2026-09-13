@@ -107,6 +107,26 @@ class DeliveryProofGateTest {
         assertEquals(0, submits.size)
     }
 
+    /**
+     * The dwell. The bar is still on screen for 1,2 s after the proof is queued so ruling R5's
+     * result grid can be read — and `submit()` returns on `done` before it validates anything, so
+     * a gate opening there would take the driver's agreement on the navy panel and enqueue
+     * nothing. The button is disabled too; this pins the predicate behind it either way.
+     */
+    @Test fun `a queued proof never re-opens the gate during the result dwell`() {
+        val submits = mutableListOf<Unit>()
+        val s = state().copy(done = true)
+        assertFalse("a queued proof is not submittable again", canSubmit(s))
+        show(s) { submits += Unit }
+
+        rule.onNodeWithText(DELIVERED).performClick()
+        rule.waitForIdle()
+
+        rule.onNodeWithText(GATE_DISMISS).assertDoesNotExist()
+        // The button is `enabled = !done`, so the tap does not even reach the ViewModel.
+        assertEquals(0, submits.size)
+    }
+
     @Test fun `confirming the gate delivers once`() {
         val submits = mutableListOf<Unit>()
         show(state()) { submits += Unit }

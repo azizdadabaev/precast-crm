@@ -139,13 +139,17 @@ internal fun PhotoReviewCard(photo: PreparedImage, onRetake: () -> Unit) =
  * The load screens' primary action. Ruling R12: the pill says «Юкланди» — «Юкланди деб белгилаш»
  * ellipsized on it at font scale 1,3, and the header one line above already names the job — while
  * the full sentence stays as what a screen reader announces, so nothing is lost to the shortening.
+ *
+ * @param enabled false once the load is queued: the button is still on screen for ruling R5's
+ *   dwell, and it must stop being a button the moment there is nothing left to send.
  */
 @Composable
-internal fun MarkLoadedButton(loading: Boolean, onClick: () -> Unit) {
+internal fun MarkLoadedButton(loading: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val spoken = stringResource(R.string.action_mark_loaded)
     PrimaryButton(
         text = stringResource(R.string.logistics_action_loaded),
         onClick = onClick,
+        enabled = enabled,
         loading = loading,
         modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = spoken },
     )

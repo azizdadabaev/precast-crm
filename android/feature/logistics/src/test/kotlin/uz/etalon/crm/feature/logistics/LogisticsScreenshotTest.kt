@@ -105,6 +105,11 @@ class LogisticsScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp") fun loadTruckSubmittingLight() =
         shootLoadTruck("submitting_light", loadTruckState(submitting = true))
 
+    /** The longest title in the trio — «Юк машинасига юклаш» — at font scale 1,3: two lines are
+     *  allowed and nothing may clip, header or load list. */
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun loadTruckLargeFont() =
+        shootLoadTruck("font13", loadTruckState())
+
     // ── Shipment load: the same list, counted ───────────────────────────────────
 
     private fun shipmentLoadState() = ShipmentLoadUiState(
@@ -143,24 +148,40 @@ class LogisticsScreenshotTest {
     )
 
     @Composable
-    private fun DeliveryProof(s: DeliveryProofUiState) = ShellFrame {
+    private fun DeliveryProof(s: DeliveryProofUiState, barVisible: Boolean = true) = ShellFrame {
         DeliveryProofScreen(
             s = s, onBack = {}, onRetake = {}, onSetAmountDigits = {}, onSetNoCashCollected = {},
             onSetNote = {}, onSetDriverReturned = {}, onSubmit = {},
             // Robolectric reports the ime inset as absent whatever is focused, so the bar is
-            // pinned on rather than read from the window (ruling R13's seam).
-            barVisible = true,
+            // passed in rather than read from the window (ruling R13's seam).
+            barVisible = barVisible,
         )
     }
 
-    private fun shootDeliveryProof(name: String) {
-        val s = deliveryProofState()
-        rule.setContent { EtalonTheme { DeliveryProof(s) } }
+    private fun shootDeliveryProof(name: String, s: DeliveryProofUiState = deliveryProofState(), barVisible: Boolean = true) {
+        rule.setContent { EtalonTheme { DeliveryProof(s, barVisible) } }
         rule.onRoot().captureRoboImage("screenshots/delivery_proof_$name.png")
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun deliveryProofLight() = shootDeliveryProof("light")
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun deliveryProofLargeFont() = shootDeliveryProof("font13")
+
+    /** «Нақд олинмади» on: the amount hero recedes, and «Сабабини ёзинг» appears — the one place
+     *  the route actually keeps a note. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun deliveryProofNoCashLight() = shootDeliveryProof(
+        "no_cash_light",
+        deliveryProofState().copy(
+            amountDigits = "", noCashCollected = true, note = "Мижоз жойида йўқ эди, эртага тўлайди",
+        ),
+    )
+
+    /** Ruling R13: the keyboard is up, so the sticky bar is gone and «Изоҳ» is not fighting it for
+     *  the bottom of the screen. Robolectric never reports the ime inset, so the seam is driven. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun deliveryProofImeLight() = shootDeliveryProof(
+        "ime_light",
+        deliveryProofState().copy(noCashCollected = true, amountDigits = "", note = "Мижоз жойида йўқ эди"),
+        barVisible = false,
+    )
 
     /**
      * The navy gate over the screen that opened it — reached by tapping «Етказилди» rather than by

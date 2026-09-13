@@ -210,26 +210,27 @@ fun DeliveryProofScreen(
                     FormField(stringResource(R.string.delivery_no_cash)) {
                         TokenSwitch(s.noCashCollected, onSetNoCashCollected)
                     }
-                    FormField(stringResource(R.string.delivery_driver_returned)) {
+                    FormField(
+                        stringResource(R.string.delivery_driver_returned),
+                        divider = s.noCashCollected,
+                    ) {
                         TokenSwitch(s.driverReturned, onSetDriverReturned)
                     }
-                    // Always offered, not only under the switch: a partial collection is worth a
-                    // sentence too, and the field disappearing under the operator's thumb the
-                    // moment he turns the switch back off was how the note used to be lost.
-                    // Required — and said so — only where the validator requires it.
-                    FormField(
-                        stringResource(
-                            if (s.noCashCollected) R.string.delivery_no_cash_note else R.string.logistics_note_label,
-                        ),
-                        divider = false,
-                    ) {
-                        EtalonTextField(
-                            value = s.note,
-                            onValueChange = onSetNote,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = false,
-                            maxLines = NOTE_MAX_LINES,
-                        )
+                    // Only under «Нақд олинмади». `POST /orders/{id}/delivery-proof` writes
+                    // `noCashCollectedNote` in that branch and nowhere else, so a note offered
+                    // beside a collected amount would be text the driver typed and the record
+                    // silently dropped. The text itself survives a toggle off and on — the VM
+                    // keeps it, this only hides the field.
+                    if (s.noCashCollected) {
+                        FormField(stringResource(R.string.delivery_no_cash_note), divider = false) {
+                            EtalonTextField(
+                                value = s.note,
+                                onValueChange = onSetNote,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = false,
+                                maxLines = NOTE_MAX_LINES,
+                            )
+                        }
                     }
                 }
 
@@ -262,6 +263,10 @@ fun DeliveryProofScreen(
                         PrimaryButton(
                             text = stringResource(R.string.action_mark_delivered),
                             onClick = { if (canSubmit(s)) gateOpen = true else onSubmit() },
+                            // Dead once the proof is queued: the bar stays on screen for ruling
+                            // R5's dwell, and a second tap would raise a second cash row against
+                            // a photo file the outbox has already moved away.
+                            enabled = !s.done,
                             loading = s.submitting,
                         )
                     }
@@ -331,11 +336,15 @@ fun DeliveryProofScreen(
 internal fun canSubmit(s: DeliveryProofUiState): Boolean =
     s.photo != null &&
         !s.submitting &&
+        // `submit()` returns on a queued proof before it validates anything, so the gate must not
+        // open during ruling R5's dwell either: a navy panel the driver agrees to, that then
+        // enqueues nothing, is the worst of both.
+        !s.done &&
         validateDeliveryCash(
             DeliveryCash(
                 amount = s.amount,
                 noCashCollected = s.noCashCollected,
-                note = s.note,
+                note = if (s.noCashCollected) s.note else "",
                 driverReturned = s.driverReturned,
             ),
         ) == null

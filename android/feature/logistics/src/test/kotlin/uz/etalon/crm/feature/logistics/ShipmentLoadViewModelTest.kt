@@ -63,6 +63,27 @@ class ShipmentLoadViewModelTest {
         assertFalse(v.state.value.submitting)
     }
 
+    /**
+     * The button stays on screen for ruling R5's 1,2 s result dwell, so a second tap is a thing a
+     * driver can actually do. It must enqueue nothing: the outbox has already MOVED the photo file
+     * out of the cache, and a second load would also double-count this truck against the order.
+     */
+    @Test fun `submitting again after the load is queued does nothing`() = runTest {
+        var calls = 0
+        val v = vm { _, _, _, _, _ -> calls++; Result.success("sh1") }
+        v.onPhoto(photo)
+        v.setBeam("4.30", 2)
+        v.submit()
+        advanceUntilIdle()
+        assertTrue(v.state.value.done)
+
+        v.submit()
+        advanceUntilIdle()
+
+        assertEquals(1, calls)
+        assertNull(v.state.value.error)
+    }
+
     @Test fun `a failure keeps the photo and the counts so the operator can retry`() = runTest {
         val v = vm { _, _, _, _, _ -> Result.failure(IllegalStateException("сервер хатоси")) }
         v.onPhoto(photo)

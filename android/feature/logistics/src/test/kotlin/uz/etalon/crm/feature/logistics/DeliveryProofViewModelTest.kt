@@ -200,4 +200,64 @@ class DeliveryProofViewModelTest {
         assertEquals(photo, vm.state.value.photo)
         assertNotNull(vm.state.value.error)
     }
+
+    /**
+     * The button stays on screen for ruling R5's 1,2 s result dwell, so a second tap is a thing a
+     * driver can actually do. It must enqueue nothing: the outbox has already MOVED the photo file
+     * out of the cache, and a second proof would raise a second cash row against the same delivery.
+     */
+    @Test fun `submitting again after the proof is queued does nothing`() = runTest {
+        var calls = 0
+        val vm = DeliveryProofViewModel("o1", Money.ZERO, submit = { _, _ -> calls++; Result.success("ob") })
+        vm.onPhoto(photo)
+        vm.submit()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.done)
+
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(1, calls)
+        assertNull(vm.state.value.error)
+    }
+
+    /**
+     * `POST /orders/{id}/delivery-proof` writes `noCashCollectedNote` in the `noCashCollected`
+     * branch and nowhere else. So the note is kept in state across a toggle — a driver who
+     * fat-fingers the switch must not have to retype his sentence — but it is only ever SENT
+     * under the switch, and the screen only ever SHOWS the field there.
+     */
+    @Test fun `the reason survives toggling the switch but is only sent under it`() = runTest {
+        var sent: DeliveryCash? = null
+        val vm = DeliveryProofViewModel("o1", Money.ZERO, submit = { _, cash -> sent = cash; Result.success("ob") })
+        vm.onPhoto(photo)
+        vm.setNoCashCollected(true)
+        vm.setNote("мижоз жойида йўқ эди")
+        vm.setNoCashCollected(false)
+
+        assertEquals("мижоз жойида йўқ эди", vm.state.value.note)
+
+        vm.setAmountDigits("1000000")
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals("", sent?.note)
+        assertFalse(sent!!.noCashCollected)
+    }
+
+    /** And back on, the reason is still there and does go out. */
+    @Test fun `toggling back on keeps the reason and sends it`() = runTest {
+        var sent: DeliveryCash? = null
+        val vm = DeliveryProofViewModel("o1", Money.ZERO, submit = { _, cash -> sent = cash; Result.success("ob") })
+        vm.onPhoto(photo)
+        vm.setNoCashCollected(true)
+        vm.setNote("мижоз жойида йўқ эди")
+        vm.setNoCashCollected(false)
+        vm.setNoCashCollected(true)
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals("мижоз жойида йўқ эди", sent?.note)
+        assertTrue(sent!!.noCashCollected)
+    }
 }

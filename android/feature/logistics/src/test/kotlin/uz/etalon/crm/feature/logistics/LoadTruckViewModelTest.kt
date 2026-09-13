@@ -50,6 +50,27 @@ class LoadTruckViewModelTest {
         assertNotNull(vm.state.value.error)
     }
 
+    /**
+     * The button stays on screen for ruling R5's 1,2 s result dwell, so a second tap is a thing a
+     * driver can actually do. It must enqueue nothing: the outbox has already MOVED the photo file
+     * out of the cache, so a second `loadTruck` would fail on a path that is gone and paint a red
+     * banner over a load that in fact went through.
+     */
+    @Test fun `submitting again after the load is queued does nothing`() = runTest {
+        var calls = 0
+        val vm = LoadTruckViewModel("o1", LoadTruckUseCase { _, _ -> calls++; Result.success("ob1") })
+        vm.onPhoto(photo)
+        vm.submit()
+        advanceUntilIdle()
+        assertTrue(vm.state.value.done)
+
+        vm.submit()
+        advanceUntilIdle()
+
+        assertEquals(1, calls)
+        assertNull(vm.state.value.error)
+    }
+
     @Test fun `retaking clears the previous photo`() = runTest {
         val vm = LoadTruckViewModel("o1", LoadTruckUseCase { _, _ -> Result.success("ob1") })
         vm.onPhoto(photo)

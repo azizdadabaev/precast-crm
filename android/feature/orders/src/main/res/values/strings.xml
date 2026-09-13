@@ -76,10 +76,6 @@
     <string name="detail_payments_confirmed_of">Тасдиқланган: %1$s / %2$s</string>
     <string name="action_load">Юклаш</string>
 
-    <!-- ── The load list: what a loader reads at the truck (spec §5.1a) ─────── -->
-    <!-- One beam length. The figure arrives already rounded to two decimals with a point, exactly
-         as the web keys its own list; the screen swaps the point for the house decimal comma. -->
-
     <!-- The cancellation notice. «Сабаб кўрсатилмаган» is honest about an order that was canceled
          before the reason field existed, rather than leaving the line blank. -->
     <string name="detail_canceled_title">Бекор қилинди · %1$s</string>
