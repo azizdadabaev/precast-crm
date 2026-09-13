@@ -77,12 +77,8 @@
     <string name="action_load">Юклаш</string>
 
     <!-- ── The load list: what a loader reads at the truck (spec §5.1a) ─────── -->
-    <string name="detail_load_list">Юклаш рўйхати</string>
     <!-- One beam length. The figure arrives already rounded to two decimals with a point, exactly
          as the web keys its own list; the screen swaps the point for the house decimal comma. -->
-    <string name="detail_load_row">%1$s м</string>
-    <string name="detail_blocks_total">Ғишт · жами</string>
-    <string name="detail_weight">Оғирлик ~%1$s</string>
 
     <!-- The cancellation notice. «Сабаб кўрсатилмаган» is honest about an order that was canceled
          before the reason field existed, rather than leaving the line blank. -->

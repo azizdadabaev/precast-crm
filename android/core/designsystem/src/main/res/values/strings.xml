@@ -53,6 +53,13 @@
     <string name="photo_n">Расм %1$d</string>
     <string name="photo_pending">Юборилмоқда</string>
     <string name="stepper_max">Кўпи билан %1$d</string>
+    <!-- LoadListCard «Юклаш рўйхати» (ruling R11) — moved from :feature:orders so the order
+         detail, the load-truck screen and the shipment-load screen draw one load list. The
+         wording is unchanged from the detail's, so its baselines do not move. -->
+    <string name="ds_load_list_title">Юклаш рўйхати</string>
+    <string name="ds_load_list_row">%1$s м</string>
+    <string name="ds_load_list_blocks">Ғишт · жами</string>
+    <string name="ds_load_list_weight">Оғирлик ~%1$s</string>
     <!-- RegionField / RegionPickerSheet — moved from :feature:clients in Task 7 so the
          calculator's client bar can share the same picker. -->
     <string name="ds_region_unset">Танланмаган</string>

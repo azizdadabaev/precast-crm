@@ -61,6 +61,7 @@ import uz.etalon.crm.core.designsystem.components.DetailPanel
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.EtalonTextField
 import uz.etalon.crm.core.designsystem.components.Lightbox
+import uz.etalon.crm.core.designsystem.components.LoadListCard
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.OutboxBanner
 import uz.etalon.crm.core.designsystem.components.PanelTotal
@@ -97,14 +98,12 @@ import uz.etalon.crm.core.model.totalBlocks
 import uz.etalon.crm.core.model.weightKg
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
-import uz.etalon.crm.core.ui.format.formatCount
 import uz.etalon.crm.core.ui.format.formatDate
 import uz.etalon.crm.core.ui.format.formatDateTime
 import uz.etalon.crm.core.ui.format.formatDecimal
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.core.ui.format.formatPercent
-import uz.etalon.crm.core.ui.format.formatWeightKg
 import uz.etalon.crm.feature.orders.R
 import java.math.RoundingMode
 import kotlin.math.roundToInt
@@ -286,7 +285,9 @@ fun OrderDetailScreen(
                 // the phone could not replace the web page at the truck. Always drawn — on a
                 // canceled order collapsed, because what was quoted is still worth reading but
                 // nothing is going on a lorry.
-                if (o.rooms.isNotEmpty()) item { LoadListCard(o, collapsible = canceled) }
+                if (o.rooms.isNotEmpty()) {
+                    item { LoadListCard(o.loadList, o.totalBlocks, o.weightKg, collapsible = canceled) }
+                }
                 // A canceled order has no balance to make progress against and no live price to
                 // break down (`OrderStatus.owesNothing`): a «45 % тўланган» bar or a «Жами» on a
                 // sale that never happened is a claim about money that is not owed. The payments
@@ -516,80 +517,6 @@ private fun CanceledNotice(o: OrderDetail) = Column(
         color = EtalonColors.red,
         modifier = Modifier.padding(top = EtalonSpace.xs),
     )
-}
-
-/**
- * What goes on the truck: every beam length with the number of beams of it, the block total, and
- * the weight the lorry has to carry. Spec §5.1a's «Юклаш рўйхати» — the section the owner named as
- * the reason a loader still had to open the web page in the yard.
- *
- * Derived exactly as the web's `beamGroups` (`OrderDetail.loadList`), first-appearance order and
- * all, so the two lists can be read side by side row for row. The key arrives as «3.80»; the point
- * becomes the house decimal comma here and the figure is never rounded a second time.
- *
- * @param collapsible a canceled order: the list is history rather than a job, so it opens shut
- *   behind a chevron instead of taking a screenful above the payments that were actually taken.
- *   The state is `rememberSaveable` — a loader who opened the list and then turned the phone to
- *   read a long row must not find it folded shut again.
- */
-@Composable
-private fun LoadListCard(o: OrderDetail, collapsible: Boolean) {
-    var expanded by rememberSaveable(collapsible) { mutableStateOf(!collapsible) }
-    WhiteCard(
-        title = stringResource(R.string.detail_load_list),
-        onClick = if (collapsible) ({ expanded = !expanded }) else null,
-        trailing = if (collapsible) {
-            {
-                EtalonIcon(
-                    if (expanded) EtalonIcons.ChevronUp else EtalonIcons.ChevronDown,
-                    null,
-                    tint = EtalonColors.ink3,
-                )
-            }
-        } else {
-            null
-        },
-    ) {
-        if (!expanded) return@WhiteCard
-        o.loadList.forEach { line ->
-            LoadRow(
-                stringResource(R.string.detail_load_row, line.lengthKey.replace('.', ',')),
-                formatCount(line.beams),
-            )
-        }
-        HorizontalDivider(
-            Modifier.padding(vertical = EtalonSpace.sm),
-            thickness = EtalonSpace.hairline,
-            color = EtalonColors.surfaceBorder,
-        )
-        LoadRow(stringResource(R.string.detail_blocks_total), formatCount(o.totalBlocks))
-        Text(
-            stringResource(R.string.detail_weight, formatWeightKg(o.weightKg)),
-            style = EtalonType.meta,
-            color = EtalonColors.ink2,
-            modifier = Modifier.padding(top = EtalonSpace.sm),
-        )
-    }
-}
-
-/** One «3,80 м … 14 та» line. Both halves are the card's own weight: a loader counting beams at
- *  the truck reads the length as hard as the count. */
-@Composable
-private fun LoadRow(label: String, amount: String) = Row(
-    Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs),
-    Arrangement.SpaceBetween,
-    Alignment.CenterVertically,
-) {
-    Text(
-        label,
-        style = EtalonType.label,
-        color = EtalonColors.ink,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f),
-    )
-    Spacer(Modifier.width(EtalonSpace.sm))
-    Text(amount, style = EtalonType.rowAmount, color = EtalonColors.ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 /** How many «Тарих» rows are drawn before «Барчаси (N)». Spec §5.1a: the section is a *collapsed*
