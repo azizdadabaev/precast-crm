@@ -49,12 +49,14 @@ fun ErrorBanner(
         SecondaryButton(stringResource(R.string.action_retry), onRetry, compact = true)
     }
     if (onDismiss != null) {
-        Spacer(Modifier.width(4.dp))
-        // The retry pill's own 36 dp height, so the two sit as a pair rather than as a button and
-        // an afterthought; the 48 dp interactive slot around it is [EtalonIconButton]'s own.
-        EtalonIconButton(EtalonIcons.X, stringResource(R.string.action_close), onDismiss, size = DISMISS)
+        Spacer(Modifier.width(DISMISS_GAP))
+        // [EtalonIconButton]'s own default, not the retry pill's 36 dp: the × is the only way out
+        // of a banner that outlives its cause, and shrinking it to match the pill beside it made
+        // the smallest tap target on the phone out of the control that cannot be reached any other
+        // way. The 48 dp slot the icon button reserves is what the layout actually spends.
+        EtalonIconButton(EtalonIcons.X, stringResource(R.string.action_close), onDismiss)
     }
 }
 
-/** The × matches the compact retry pill beside it (`H_TONAL_COMPACT`). */
-private val DISMISS = 36.dp
+/** Retry to ×: they are one cluster, closer to each other than either is to the sentence. */
+private val DISMISS_GAP = 4.dp

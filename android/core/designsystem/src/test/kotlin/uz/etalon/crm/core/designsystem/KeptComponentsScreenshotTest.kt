@@ -71,6 +71,34 @@ class KeptComponentsScreenshotTest {
         rule.setContent { EtalonTheme { KeptSheet() } }
         rule.onRoot().captureRoboImage("screenshots/ds_kept_light.png")
     }
+
+    /**
+     * [ErrorBanner]'s dismissible variant, which [KeptSheet] does not carry: the export failure in
+     * Жадвал is the one banner in the app that outlives its cause, and the × is the only way to put
+     * it away. Photographed beside the plain retry-only banner so the pair can be compared, at the
+     * phone the tab is really used on and — the second frame — at 360 dp × 1,3, where «Экспорт
+     * қилиб бўлмади» plus «Қайта уриниш» plus the × have the least room they will ever have.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp")
+    fun errorBannerDismissLight() = shootBanners("ds_error_banner_dismiss_light")
+
+    @Test @Config(qualifiers = "w360dp-h800dp", fontScale = 1.3f)
+    fun errorBannerDismissNarrow() = shootBanners("ds_error_banner_dismiss_w360_font13")
+
+    private fun shootBanners(name: String) {
+        rule.setContent { EtalonTheme { BannerSheet() } }
+        rule.onRoot().captureRoboImage("screenshots/$name.png")
+    }
+}
+
+@Composable
+private fun BannerSheet() = Column(
+    Modifier.fillMaxWidth().background(EtalonColors.page).padding(EtalonSpace.cardMargin),
+    verticalArrangement = Arrangement.spacedBy(10.dp),
+) {
+    ErrorBanner("Экспорт қилиб бўлмади", onRetry = {}, onDismiss = {})
+    ErrorBanner("Янгилаб бўлмади", onRetry = {})
+    ErrorBanner("Интернет алоқаси йўқ")
 }
 
 @Composable

@@ -72,6 +72,13 @@ private val WIDEST_THRESHOLD = BigDecimal(9999)
  * figures that are not: where the worst case fits one line (the roomy phone) nothing is reserved
  * and no frame gains a millimetre; where it cannot (360 dp × 1,3) two lines are held from the
  * start, and the real legend settles into them.
+ *
+ * **The reservation covers one line or two, and no more.** [reservedHeight] answers with `line` or
+ * `line * 2`, because those are the cases the phones this app runs on produce. A third line —
+ * narrower than 360 dp, or a font scale past 1,3, with four-digit bands — would wrap into height
+ * the card had not held, which is exactly the first-load hop this reservation exists to prevent.
+ * If either of those becomes a real target, the arithmetic has to count rows rather than choose
+ * between two.
  */
 @Composable
 fun CalendarLegend(thresholds: CapacityThresholds, modifier: Modifier = Modifier) =

@@ -166,6 +166,11 @@ fun interface QueuePlaceOrderUseCase {
 /**
  * Test seam over [CapacityRepository] — the month behind the delivery-date grid (design §7), the
  * same shape `OrdersListViewModel` wraps it in for Жадвал.
+ *
+ * **M5 (reviewed, left as is):** `uz.etalon.crm.feature.orders.list.CapacitySource` is this
+ * interface word for word, and stays a separate declaration — the two features are siblings that
+ * do not see each other, and a test seam over a repository has no business living in `:core:data`
+ * beside the repository it exists to stand in for. See that KDoc for the full argument.
  */
 interface CapacitySource {
     fun observe(month: YearMonth): Flow<Resource<CapacityMonth>>
@@ -811,8 +816,16 @@ open class CalculatorViewModel(
         _state.update { it.copy(dateGrid = null) }
     }
 
-    /** The prefetch below, kept apart from [capacityJob]: closing the grid must not cancel it. */
-    private var prefetchJob: Job? = null
+    /**
+     * The months [prefetchCapacity] currently has in flight, kept apart from [capacityJob]:
+     * closing the grid must not cancel a prefetch.
+     *
+     * A **set**, not a single job handle: one shared `prefetchJob?.isActive` guard meant that
+     * while month A was in flight a request for month B was dropped on the floor and never
+     * retried — the sheet that asked for B (an operator scrolling back to a restored date) simply
+     * never got its tier tag. Keyed by month, each one is guarded against itself alone.
+     */
+    private val prefetching = mutableSetOf<YearMonth>()
 
     /**
      * Loads [month] into [CalculatorUiState.capacityMonths] **without opening the grid**, so the
@@ -826,10 +839,14 @@ open class CalculatorViewModel(
      * label, not the picker, and §8's banner belongs to the grid that the seller actually opened.
      */
     fun prefetchCapacity(month: YearMonth) {
-        if (_state.value.capacityMonths.containsKey(month) || prefetchJob?.isActive == true) return
-        prefetchJob = viewModelScope.launch {
-            capacity.observe(month).collect { r ->
-                r.dataOrNull?.let { m -> _state.update { s -> s.copy(capacityMonths = s.capacityMonths + (month to m)) } }
+        if (_state.value.capacityMonths.containsKey(month) || !prefetching.add(month)) return
+        viewModelScope.launch {
+            try {
+                capacity.observe(month).collect { r ->
+                    r.dataOrNull?.let { m -> _state.update { s -> s.copy(capacityMonths = s.capacityMonths + (month to m)) } }
+                }
+            } finally {
+                prefetching.remove(month)
             }
         }
     }

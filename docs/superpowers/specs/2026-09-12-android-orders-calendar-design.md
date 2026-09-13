@@ -76,6 +76,7 @@ White card, radius `xl` (16), hairline, `cardMargin` sides.
 - Then the day's orders: `GET /api/orders?day=YYYY-MM-DD` (the existing list call with the shared filters `query`/`status`/`payment` ALSO applied, so the sheet and Рўйхат agree), rendered as the phase-2 `OrderRow` (navy variant) — tap → order detail. Paginate only if the API pages (a day rarely exceeds 50).
 - Empty: «Бу кунга буюртма йўқ. Сиғим бўш — 600 м²» (`heavy` from the server).
 - The sheet clears the nav pill (`navPillContentPadding`).
+- **R18 (2026-09-14): the sheet never states a load the server has not sent.** While the month behind the selected day has not landed — offline, in flight, failed — or the day lies outside the loaded grid (R14, the planner paged away), the hero is «—» with no tier tag and no bar, the empty line drops «Сиғим бўш — …», and the right-hand column counts the rows the ORDERS call returned. `CapacityThresholds.DEFAULT` is a fallback for a server that omits thresholds (R3), never something the sheet may print: «0,00 м² · мавжуд · Сиғим бўш — 600 м²» over a failed fetch is the app inventing the factory's capacity. The count and the ғишт also come from the loaded rows whenever `query`/`status`/`payment` is set, so they describe the same set as the money line beside them; the hero stays the day's own capacity, which is what it is labelled as.
 
 ## 5. Export (calendar header)
 
@@ -94,6 +95,7 @@ In the place-order sheet (`PlaceOrderSheet`, «Етказиб бериш сан�
 ## 8. Failure and edge rules
 
 - Capacity fetch fails: banner + retry; the grid keeps the last good month if cached, else empty cells (no bars, no zeros written into cells).
+- **R18 (2026-09-14) extends that to the day sheet**: the cells' rule is the sheet's rule. No month behind the day (or a day outside the loaded grid) means «—» for the hero, no tag, no bar, no «Сиғим бўш — …» — see §4.5. And a refresh that fails **over figures already on screen** says so rather than stopping in silence: «Янгилаб бўлмади» with a retry above the cached month in Жадвал, «Янгилаб бўлмади · сиғим эски маълумот» in the calculator's picker. Over a month with nothing cached the failure is the capacity resource's own `Error` and is reported once, not twice — and it costs one round trip, never a failed `refresh` followed by an `observe` that rediscovers it.
 - Threshold change on the server: the next fetch recolours everything; nothing is cached across sessions.
 - Day with orders but `totalArea = 0` (beams-only): cell shows the count, no bar, `surface` ground; the sheet shows «0 м²» and the orders.
 - `totalArea` ≥ 1 000 m² in a cell: `formatArea` groups («1 216 м²»); the cell width at 360 dp holds five digits + unit at 9.5 sp — verify at font 1.3 (ellipsis never; drop the unit first).

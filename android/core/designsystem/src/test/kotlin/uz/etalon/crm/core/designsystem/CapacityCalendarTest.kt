@@ -371,4 +371,32 @@ class CapacityCalendarTest {
         assertEquals(56.dp, cell.height)
         assertTrue("cell width was ${cell.width}", cell.width >= 40.dp)
     }
+
+    /**
+     * **M1.** The grid starts where the LOADED month says its range starts, not where the card
+     * would have recomputed it. In production the two are the same day — `CapacityRepository` asks
+     * the endpoint with exactly `gridRange(month)` and stores that range on the answer — and that
+     * is the point of the field: one of the two has to be the source of the dates, and it is the
+     * data the fetch came back with rather than a second guess beside it.
+     *
+     * Proven by handing the card a September whose range starts a week early: the first cell is
+     * 24 August, the day the month it was given claims to begin on.
+     */
+    @Test fun `the grid draws the range the loaded month carries`() {
+        val shifted = CalendarFixtures.september.let { it.copy(range = it.range.start.minusWeeks(1)..it.range.endInclusive) }
+        rule.setContent {
+            EtalonTheme {
+                CapacityCalendarCard(
+                    month = CalendarFixtures.MONTH,
+                    capacity = Resource.Success(shifted),
+                    selected = null,
+                    today = CalendarFixtures.TODAY,
+                    onPrev = {}, onNext = {}, onSelect = {},
+                    modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
+                )
+            }
+        }
+        rule.onNodeWithContentDescription("24 авг 2026", substring = true).assertExists()
+        rule.onNodeWithContentDescription("31 авг 2026", substring = true).assertExists()
+    }
 }

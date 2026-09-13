@@ -52,7 +52,17 @@ class RepositoryOrdersSource @Inject constructor(private val repo: OrdersReposit
     override fun total(filter: OrdersFilter) = repo.total(filter)
 }
 
-/** Test seam over [CapacityRepository] — the Жадвал view's month grid. */
+/**
+ * Test seam over [CapacityRepository] — the Жадвал view's month grid.
+ *
+ * **M5 (reviewed, left as is):** `uz.etalon.crm.feature.calculator.CapacitySource` is this
+ * interface again, word for word, for the delivery-date picker (design §7). They are deliberately
+ * two: `:feature:orders` and `:feature:calculator` are siblings that do not see each other, and
+ * the only shared home would be `:core:data` — where a *test seam* over a repository does not
+ * belong, since the repository is right there. Two four-line duplicates cost less than pulling the
+ * two features' fakes onto one type. If a third feature ever needs the month, that is the moment to
+ * reconsider.
+ */
 interface CapacitySource {
     fun observe(month: YearMonth): Flow<Resource<CapacityMonth>>
     suspend fun refresh(month: YearMonth): Result<Unit>

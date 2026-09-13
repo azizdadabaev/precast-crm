@@ -1248,6 +1248,39 @@ class CalculatorViewModelTest {
         assertNull(v.state.value.dateGrid, "a prefetch is not an opening")
     }
 
+    /**
+     * Two prefetches, one in flight: the second must not be swallowed. The guard used to be a
+     * single shared `prefetchJob?.isActive`, so an operator whose sheet asked for month A and then
+     * for month B got a tier tag for A and nothing at all for B — the B request was dropped and
+     * nothing ever asked again.
+     */
+    @Test fun `a prefetch in flight does not swallow another month's`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val first = YearMonth.now(TASHKENT).plusMonths(1)
+        val cap = object : CapacitySource {
+            val asked = mutableListOf<YearMonth>()
+            override fun observe(month: YearMonth): Flow<Resource<CapacityMonth>> = flow {
+                asked += month
+                if (month == first) gate.await() // A is still in flight while B is asked for
+                emit(Resource.Success(CapacityMonth(month, gridRange(month), emptyMap(), CapacityThresholds.DEFAULT)))
+            }
+            override suspend fun refresh(month: YearMonth) = Result.success(Unit)
+        }
+        val v = vm(capacity = cap)
+        advanceUntilIdle()
+
+        val second = first.plusMonths(1)
+        v.prefetchCapacity(first); advanceUntilIdle()
+        v.prefetchCapacity(second); advanceUntilIdle()
+
+        assertEquals(listOf(first, second), cap.asked)
+        assertNotNull(v.state.value.capacityMonths[second], "month B landed while A was in flight")
+        assertNull(v.state.value.capacityMonths[first])
+
+        gate.complete(Unit); advanceUntilIdle()
+        assertNotNull(v.state.value.capacityMonths[first])
+    }
+
     /** A month already in hand is not fetched again: the usual case is a day the operator just
      *  picked on the grid, whose month the grid cached on the way. */
     @Test fun `prefetchCapacity does not re-fetch a month already in hand`() = runTest {

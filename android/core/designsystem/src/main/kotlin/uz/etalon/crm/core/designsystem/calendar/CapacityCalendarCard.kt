@@ -266,7 +266,12 @@ private fun Grid(
     onPrev: () -> Unit,
     onNext: () -> Unit,
 ) {
-    val first = gridRange(month).start
+    // **M1** — the loaded month's own `range` is the grid the fetch actually covered, so the card
+    // draws the days it was given rather than a second, independently recomputed guess at them.
+    // The two agree today (`CapacityRepository` asks with exactly `gridRange`), which is the point:
+    // one of them has to be the source, and it is the data. `gridRange` is the fallback for the
+    // passes that have no month yet — the skeleton, the failed month, the picker before its fetch.
+    val first = (data?.range ?: gridRange(month)).start
     val prev by rememberUpdatedState(onPrev)
     val next by rememberUpdatedState(onNext)
 
