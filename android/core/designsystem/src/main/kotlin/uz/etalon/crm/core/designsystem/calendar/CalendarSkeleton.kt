@@ -15,18 +15,21 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 
 /**
  * The first load of a month (design §4.3): the grid's exact geometry in `page`-coloured blocks,
- * no text. Six rows, always, for the same reason the real grid draws six — the card must not
- * change height when the figures arrive.
+ * no text.
  *
- * Deliberately not animated. A shimmer on 42 blocks is 42 more things redrawing every frame on
- * the phones this CRM actually runs on, and the fetch it covers is usually under 300 ms.
+ * Deliberately not animated. A shimmer on forty-odd blocks is forty more things redrawing every
+ * frame on the phones this CRM actually runs on, and the fetch it covers is usually under 300 ms.
+ *
+ * @param rows the month's own row count (`gridRows`, R16), handed down rather than assumed: how
+ *   many weeks September spans is known before a single figure arrives, and the card must not
+ *   change height when they do.
  */
 @Composable
-internal fun CalendarSkeleton(modifier: Modifier = Modifier) = Column(
+internal fun CalendarSkeleton(rows: Int, modifier: Modifier = Modifier) = Column(
     modifier.fillMaxWidth(),
     verticalArrangement = Arrangement.spacedBy(CELL_GAP),
 ) {
-    repeat(GRID_ROWS) {
+    repeat(rows) {
         Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(CELL_GAP)) {
             repeat(GRID_COLS) {
                 Box(

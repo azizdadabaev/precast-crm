@@ -75,10 +75,16 @@ class OrdersListScreenTest {
         client = ClientRef("c-$id", "Tashkent Tower LLC", "998901112233", null),
     )
 
+    /**
+     * A busy day — six orders. The count is load-bearing: R16 took a whole week off the card, and
+     * with a short sheet the calendar view now fits a 891 dp phone outright, so there would be
+     * nothing for the vertical-swipe test to scroll and it would pass by doing nothing. Six rows
+     * put the foot of the sheet below the fold, which is the state the swipe trio is about.
+     */
     private fun sheet(): DaySheetState {
         val t = CalendarFixtures.THRESHOLDS
         val day = CalendarFixtures.day(12)
-        val rows = listOf(order("1", "210.00", "35700000.00"), order("2", "475.00", "80750000.00"))
+        val rows = (1..6).map { order("$it", "112.00", "19040000.00") }
         return DaySheetState(
             day = CalendarFixtures.SELECTED,
             capacity = day,
@@ -172,7 +178,11 @@ class OrdersListScreenTest {
         val after = rule.onNodeWithTag(GRID_TEST_TAG).getUnclippedBoundsInRoot().top
         val scrolled = after < before
         val paged = spy.next + spy.prev > 0
-        assertTrue("the drag both scrolled the page and paged the month", !(scrolled && paged))
+        // The gesture has to have DONE something, or a drag that fell through the floor would pass
+        // this test by doing neither. The vertical component is twice the horizontal, so the list
+        // is the one that should claim it.
+        assertTrue("the drag did nothing at all: $before -> $after", scrolled)
+        assertTrue("the drag both scrolled the page and paged the month", !paged)
     }
 
     // ── The rest of the tab ──────────────────────────────────────────────────────────────────

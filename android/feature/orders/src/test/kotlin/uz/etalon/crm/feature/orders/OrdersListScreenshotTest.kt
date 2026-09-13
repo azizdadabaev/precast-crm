@@ -138,8 +138,28 @@ class OrdersListScreenshotTest {
      *  replace stay on screen (they are the last thing the server did say). */
     private fun failed() = loaded().copy(error = "Интернет алоқаси йўқ")
 
-    /** Рўйхат with the day filter on: the dismissible «12 сен ×» under the status chips (§3). */
-    private fun dayFiltered() = loaded().copy(day = CalendarFixtures.SELECTED)
+    /**
+     * Рўйхат with the day filter on, as the tab really is when it is: the ONE order scheduled for
+     * 12 September, the facets re-counted to that day («1 буюртма · 62,8 м²», every other chip at
+     * zero), and the dismissible «12 сен ×» under the status chips (§3). The chip over the
+     * unfiltered eight rows would have been a picture of a state the app cannot be in — this is
+     * the shape `orders-day-chip-emulator.png` shows against the dev server.
+     */
+    private fun dayFiltered() = OrdersListUiState(
+        day = CalendarFixtures.SELECTED,
+        groups = groupByMonth(
+            listOf(
+                row("d14", "2026-09-0014", "Karimov LLC", OrderStatus.DELIVERED, "62.83", "11784840.00", "11784840.00", "2026-09-12T06:00:00Z"),
+            ),
+        ),
+        // The server's own figure for the day, which is rounded a place shorter than the row's own
+        // area — «62,8 м²» over «62,83 м²», exactly as the live tab reads.
+        facets = OrderFacets(
+            byStatus = mapOf(OrderStatus.DELIVERED to 1),
+            debt = 0, paid = 1, total = 1, totalArea = BigDecimal("62.8"),
+        ),
+        hasCache = true,
+    )
 
     /**
      * Жадвал as a planner opens it on the acceptance's own month: September 2026 with 12 September

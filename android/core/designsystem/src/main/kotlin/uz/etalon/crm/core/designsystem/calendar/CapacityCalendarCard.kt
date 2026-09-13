@@ -37,8 +37,10 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.CapacityDay
 import uz.etalon.crm.core.model.CapacityMonth
 import uz.etalon.crm.core.model.CapacityThresholds
+import uz.etalon.crm.core.model.DAYS_PER_WEEK
 import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.model.gridRange
+import uz.etalon.crm.core.model.gridRows
 import uz.etalon.crm.core.model.tierFor
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatCountBare
@@ -47,9 +49,8 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
 
-/** Six weeks, seven days — `gridRange` hands back 42 dates, and the card never changes height. */
-internal const val GRID_ROWS = 6
-internal const val GRID_COLS = 7
+/** Seven columns, Monday first. How many ROWS is the month's own business — `gridRows`, R16. */
+internal const val GRID_COLS = DAYS_PER_WEEK
 
 /** The grid alone, for the screen-level swipe tests: a vertical drag over it must scroll the
  *  page and a horizontal one must page the month, and only a running screen can tell them apart. */
@@ -70,8 +71,9 @@ private val WEEKDAYS = listOf(
 
 /**
  * The capacity calendar's month card (design §4.1–4.2): ‹ «Сентябрь 2026» › over its
- * «N буюртма · X м²» line, the Monday-first weekday heads, six rows of [DayCell] and the tier
- * legend. It lives in the design system rather than in `:feature:orders` because the calculator's
+ * «N буюртма · X м²» line, the Monday-first weekday heads, as many rows of [DayCell] as the month
+ * needs (`gridRows` — R16: never a week made entirely of next-month days) and the tier legend. It
+ * lives in the design system rather than in `:feature:orders` because the calculator's
  * delivery-date picker (§7) draws the very same grid — ruling R12.
  *
  * The card owns no margins: a screen places it with `EtalonSpace.cardMargin` through [modifier],
@@ -128,8 +130,11 @@ fun CapacityCalendarCard(
         Spacer(Modifier.height(HEADER_GAP))
         WeekdayRow()
         Spacer(Modifier.height(WEEKDAY_GAP))
+        // R16: the same row count either way, so the in-flight card is exactly as tall as the
+        // loaded one — how many weeks September has is known before a single figure arrives.
+        val rows = gridRows(month)
         if (loading) {
-            CalendarSkeleton()
+            CalendarSkeleton(rows)
         } else {
             Grid(
                 month = month,
@@ -138,6 +143,7 @@ fun CapacityCalendarCard(
                 today = today,
                 // A read-only picker with no floor of its own still cannot schedule into the past.
                 floor = minSelectable ?: today.takeIf { readOnly },
+                rows = rows,
                 onSelect = onSelect,
                 onPrev = onPrev,
                 onNext = onNext,
@@ -211,6 +217,7 @@ private fun Grid(
     selected: LocalDate?,
     today: LocalDate,
     floor: LocalDate?,
+    rows: Int,
     onSelect: (LocalDate) -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit,
@@ -251,7 +258,7 @@ private fun Grid(
                 },
             verticalArrangement = Arrangement.spacedBy(CELL_GAP),
         ) {
-            repeat(GRID_ROWS) { r ->
+            repeat(rows) { r ->
                 Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(CELL_GAP)) {
                     repeat(GRID_COLS) { c ->
                         val date = first.plusDays((r * GRID_COLS + c).toLong())

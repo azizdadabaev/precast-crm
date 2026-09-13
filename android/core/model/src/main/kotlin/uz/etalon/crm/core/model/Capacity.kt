@@ -80,3 +80,22 @@ fun gridRange(month: YearMonth): ClosedRange<LocalDate> {
     val start = first.minusDays((first.dayOfWeek.value - 1).toLong())
     return start..start.plusDays(41)
 }
+
+/**
+ * How many weeks the card actually draws — **owner ruling R16 (2026-09-13): five rows are enough.**
+ * [gridRange] still asks the server for all 42 days (the web's range, R10), but a sixth row made
+ * entirely of the NEXT month's days is a week of the planner's screen spent on dates they are not
+ * looking at. September 2026 needs five; August 2026 genuinely spans six Monday-first weeks and
+ * keeps all six, so no day of the month is ever dropped; February 2027 starts on a Monday with 28
+ * days and needs four.
+ *
+ * The leading days of the previous month and whatever trailing days complete the LAST drawn row
+ * stay where they are, greyed — the row has to be seven cells wide either way.
+ */
+fun gridRows(month: YearMonth): Int {
+    val leading = month.atDay(1).dayOfWeek.value - 1 // ISO Monday = 1, so Monday-first index
+    return (leading + month.lengthOfMonth() + DAYS_PER_WEEK - 1) / DAYS_PER_WEEK
+}
+
+/** Monday-first, seven columns — the one number both [gridRange] and [gridRows] count in. */
+const val DAYS_PER_WEEK = 7

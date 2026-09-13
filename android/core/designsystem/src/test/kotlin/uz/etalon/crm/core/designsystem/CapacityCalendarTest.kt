@@ -28,10 +28,13 @@ import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.calendar.CapacityCalendarCard
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.CapacityMonth
 import uz.etalon.crm.core.model.Resource
+import uz.etalon.crm.core.model.gridRows
 import uz.etalon.crm.core.testing.CalendarFixtures
 import java.time.LocalDate
+import java.time.YearMonth
 
 private const val CARD = "capacity-card"
 
@@ -149,6 +152,84 @@ class CapacityCalendarTest {
             }
         }
         rule.onNodeWithContentDescription(TWELFTH, substring = true).assertIsSelected()
+    }
+
+    /**
+     * **Owner ruling R16.** The grid draws the weeks the month needs and not one more: a sixth row
+     * made entirely of the next month's days is a week of the planner's screen spent on dates they
+     * are not looking at. September 2026 starts on a Tuesday with 30 days (1 + 30 = 31 cells →
+     * five rows); August 2026 starts on a Saturday with 31 (5 + 31 = 36 → six, and it keeps all
+     * six or the 31st is dropped); February 2027 starts on a Monday with 28 (0 + 28 = 28 → four).
+     *
+     * The arithmetic is asserted directly AND through the drawn grid, because the whole point of
+     * the ruling is what the card measures: the four-row February is two rows — 116 dp — shorter
+     * than the six-row August.
+     */
+    @Test fun `the grid draws only the rows the month needs`() {
+        assertEquals(5, gridRows(YearMonth.of(2026, 9)))
+        assertEquals(6, gridRows(YearMonth.of(2026, 8)))
+        assertEquals(4, gridRows(YearMonth.of(2027, 2)))
+    }
+
+    /** The last cell of the last drawn row, and nothing past it: September's grid ends on 4 October
+     *  (the Sunday that completes the 30th's week) and never reaches 5 October at all. */
+    @Test fun `september stops at the row its last day sits in`() {
+        rule.setContent {
+            EtalonTheme {
+                CapacityCalendarCard(
+                    month = CalendarFixtures.MONTH,
+                    capacity = Resource.Success(CalendarFixtures.september),
+                    selected = null,
+                    today = CalendarFixtures.TODAY,
+                    onPrev = {}, onNext = {}, onSelect = {},
+                    modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
+                )
+            }
+        }
+        rule.onNodeWithContentDescription("30 сен 2026", substring = true).assertExists()
+        rule.onNodeWithContentDescription("4 окт 2026", substring = true).assertExists()
+        rule.onNodeWithContentDescription("5 окт 2026", substring = true).assertDoesNotExist()
+        rule.onNodeWithContentDescription("11 окт 2026", substring = true).assertDoesNotExist()
+    }
+
+    /**
+     * §8, and the honest description I1 asked for: a grid whose capacity failed to load knows the
+     * dates and nothing else. «18 сен 2026, 0 буюртма, 0 м²» would state as fact the one thing it
+     * does not know, so the cell says the date and stops. A loaded cell keeps all three parts.
+     */
+    @Test fun `a cell with no capacity behind it announces the date alone`() {
+        rule.setContent {
+            EtalonTheme {
+                CapacityCalendarCard(
+                    month = CalendarFixtures.MONTH,
+                    capacity = Resource.Error(null, AppError.Network("Интернет алоқаси йўқ")),
+                    selected = null,
+                    today = CalendarFixtures.TODAY,
+                    onPrev = {}, onNext = {}, onSelect = {},
+                    modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
+                )
+            }
+        }
+        rule.onNodeWithContentDescription("18 сен 2026").assertExists() // exact, not a substring
+        rule.onNodeWithContentDescription("буюртма", substring = true).assertDoesNotExist()
+    }
+
+    /** The other half: with the month behind it, the same kind of cell reads as all three lines. */
+    @Test fun `a loaded cell announces its count and its load`() {
+        rule.setContent {
+            EtalonTheme {
+                CapacityCalendarCard(
+                    month = CalendarFixtures.MONTH,
+                    capacity = Resource.Success(CalendarFixtures.september),
+                    selected = null,
+                    today = CalendarFixtures.TODAY,
+                    onPrev = {}, onNext = {}, onSelect = {},
+                    modifier = Modifier.padding(horizontal = EtalonSpace.cardMargin),
+                )
+            }
+        }
+        // 12 September: 5 orders, 685 м² — the acceptance's own day.
+        rule.onNodeWithContentDescription("$TWELFTH, 5 буюртма, 685 м²", substring = true).assertExists()
     }
 
     /**
