@@ -7,7 +7,6 @@ dependencies {
     implementation(project(":core:data"))
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
-    implementation(libs.compose.material.icons)
     // Tests only: ApiException is how a real 409 reaches toAppError, and the edit sheet has to
     // translate one of them (the phone-already-taken unique violation) into Uzbek itself.
     testImplementation(project(":core:network"))
