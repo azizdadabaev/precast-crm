@@ -141,10 +141,10 @@ data class CalculatorUiState(
     /** A failed lookup, shown as a retryable banner. Never blocks typing — only a real answer
      *  (hit or miss) clears it. */
     val clientLookupError: String? = null,
-    /** Whether the full client FORM is showing rather than the one-line row. Open while the phone
-     *  or the name is still missing, closed the moment both are on file, and toggled by hand with
-     *  the chevron — see `CalculatorViewModel.updateClientState` and `toggleClientForm`. */
-    val clientFormOpen: Boolean = true,
+    /** Whether the full client FORM is showing rather than the one-line row. Closed until the
+     *  chevron opens it, and closed again by itself the moment a phone and a name are both on
+     *  file — see `CalculatorViewModel.updateClientState` and `toggleClientForm`. */
+    val clientFormOpen: Boolean = false,
 
     // ── draft persistence and «Лойиҳани сақлаш» ─────────────────────
     /** Null until the first successful save; from then on a second save updates this project

@@ -154,9 +154,14 @@ class ClientRowStateTest {
 
     // ── the client form opening and closing: an edge, not a level ───────────────
 
-    @Test fun `a blank quote opens on the form, and a complete client closes it`() = runTest {
+    /** Collapsed by default (owner ruling 2026-09-14): a blank quote shows the one-line row, the
+     *  chevron opens the form, and a complete client closes it again. */
+    @Test fun `a blank quote starts on the closed row, the chevron opens it, a complete client closes it`() = runTest {
         val v = vm { emptyPage() }
-        assertTrue(v.state.value.clientFormOpen, "there is nothing to show on one line yet")
+        assertFalse(v.state.value.clientFormOpen, "collapsed until the operator asks for it")
+
+        v.toggleClientForm()
+        assertTrue(v.state.value.clientFormOpen)
 
         v.setClientName("Навоий Build")
         v.setClientPhoneDigits("901112233")
@@ -165,9 +170,9 @@ class ClientRowStateTest {
         assertFalse(v.state.value.clientFormOpen, "a phone and a name fit on the one-line row")
     }
 
-    /** The other half of the same rule: a quote whose phone or name has been emptied has nothing
-     *  to show on one line, so the form comes back. */
-    @Test fun `blanking the name reopens the form`() = runTest {
+    /** No falling edge: blanking the name after the form closed leaves the row closed — the
+     *  operator opens it by hand when they mean to correct it. */
+    @Test fun `blanking the name does not reopen the form by itself`() = runTest {
         val v = vm { hitPage() }
         v.setClientPhoneDigits("901112233")
         advanceUntilIdle()
@@ -175,7 +180,7 @@ class ClientRowStateTest {
 
         v.setClientName("")
 
-        assertTrue(v.state.value.clientFormOpen)
+        assertFalse(v.state.value.clientFormOpen)
     }
 
     @Test fun `the form closes once a phone and a name are both present — phone first`() = runTest {
@@ -188,6 +193,7 @@ class ClientRowStateTest {
 
     @Test fun `the form closes once a phone and a name are both present — name first`() = runTest {
         val v = vm { emptyPage() }
+        v.toggleClientForm()
         v.setClientName("Навоий Build")
         assertTrue(v.state.value.clientFormOpen, "no phone yet")
         v.setClientPhoneDigits("901112233")
@@ -195,13 +201,15 @@ class ClientRowStateTest {
         assertFalse(v.state.value.clientFormOpen, "a miss still leaves the typed name in place")
     }
 
-    @Test fun `neither a phone alone nor a name alone closes the form`() = runTest {
+    @Test fun `neither a phone alone nor a name alone closes an opened form`() = runTest {
         val phoneOnly = vm { emptyPage() }
+        phoneOnly.toggleClientForm()
         phoneOnly.setClientPhoneDigits("901112233")
         advanceUntilIdle()
         assertTrue(phoneOnly.state.value.clientFormOpen)
 
         val nameOnly = vm { emptyPage() }
+        nameOnly.toggleClientForm()
         nameOnly.setClientName("Навоий Build")
         assertTrue(nameOnly.state.value.clientFormOpen)
     }

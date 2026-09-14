@@ -453,11 +453,12 @@ class CalculatorScreenshotTest {
         )
     }
 
-    /** The same screen as it opens for a new quote: no client yet, so the form is expanded under
-     *  the row (R9), and one blank card is already there to type into (R8). */
+    /** A new quote with the client card opened by its chevron: no client yet, so the form shows
+     *  under the row (collapsed by default since 2026-09-14), and one blank card is already there
+     *  to type into (R8). */
     @Test @Config(qualifiers = "w411dp-h891dp")
     fun calculatorClientFormLight() {
-        screen(viewModel())
+        screen(viewModel().also { it.toggleClientForm() })
         rule.onNodeWithText("Мижоз танланмаган").assertExists()
         rule.onRoot().captureRoboImage("screenshots/calculator_client_form_light.png")
     }
@@ -499,9 +500,6 @@ class CalculatorScreenshotTest {
     fun nextWalksFromWidthToLengthToTheNextRoom() {
         val vm = viewModel()
         screen(vm)
-        // The client form's own three fields would sit before the rooms' in composition order.
-        vm.toggleClientForm()
-        rule.waitForIdle()
         fillLastRoom("Зал", "5,2", "7,1")
         addRoom()
         fillLastRoom("Хона 2", "4,0", "6,0")

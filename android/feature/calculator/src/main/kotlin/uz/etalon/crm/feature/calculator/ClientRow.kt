@@ -179,14 +179,14 @@ fun ClientForm(state: CalculatorUiState, vm: CalculatorViewModel, modifier: Modi
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(FORM_GAP)) {
         state.clientLookupError?.let { ErrorBanner(it, onRetry = vm::retryClientLookup) }
         FormCard {
-            FormField(stringResource(R.string.calc_client_name_req)) {
+            FormField(stringResource(R.string.calc_client_name_req), compact = true) {
                 EtalonTextField(
                     value = state.clientName,
                     onValueChange = vm::setClientName,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            FormField(stringResource(R.string.calc_client_phone_req)) {
+            FormField(stringResource(R.string.calc_client_phone_req), compact = true) {
                 EtalonTextField(
                     value = state.clientPhoneDigits,
                     // ASCII digits, not `Char.isDigit()`: Kotlin's is Unicode-aware and would let
@@ -207,17 +207,17 @@ fun ClientForm(state: CalculatorUiState, vm: CalculatorViewModel, modifier: Modi
             // weighted box around each — the field fills whatever it is given.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(FORM_GAP)) {
                 Box(Modifier.weight(1f)) {
-                    RegionField(stringResource(R.string.calc_client_viloyat), state.clientAddress.viloyat) {
+                    RegionField(stringResource(R.string.calc_client_viloyat), state.clientAddress.viloyat, compact = true) {
                         picking = ClientRegionPick.VILOYAT
                     }
                 }
                 Box(Modifier.weight(1f)) {
-                    RegionField(stringResource(R.string.calc_client_tuman), state.clientAddress.tuman) {
+                    RegionField(stringResource(R.string.calc_client_tuman), state.clientAddress.tuman, compact = true) {
                         picking = ClientRegionPick.TUMAN
                     }
                 }
             }
-            FormField(stringResource(R.string.calc_client_address), divider = false) {
+            FormField(stringResource(R.string.calc_client_address), divider = false, compact = true) {
                 EtalonTextField(
                     value = state.clientAddress.street,
                     onValueChange = vm::setClientStreet,

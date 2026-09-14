@@ -583,7 +583,7 @@ open class CalculatorViewModel(
                 orderTotals = computeOrderTotals(emptyList(), 0.0, 0.0, 0.0, 0.0),
                 schedule = emptyList(), error = null,
                 clientPhoneDigits = "", clientName = "", clientAddress = ParsedAddress("", "", ""),
-                matchedClientId = null, clientLookupError = null, clientFormOpen = true,
+                matchedClientId = null, clientLookupError = null, clientFormOpen = false,
                 projectId = null, saveMessage = null, toast = null, saving = false,
                 // Same reasoning as `saving`: a stale placement's completion discards itself, so
                 // nothing else would ever put the spinner down.
@@ -956,7 +956,7 @@ open class CalculatorViewModel(
                     // the «5,2» that was typed before the process died.
                     drafts = rows.associate { it.id to draftOf(it) },
                     clientPhoneDigits = digits, clientName = draft.clientName, clientAddress = address,
-                    clientFormOpen = !(digits.length == CLIENT_PHONE_DIGITS && draft.clientName.isNotBlank()),
+                    clientFormOpen = false,
                     discountMode = if (draft.discountAmount > 0.0) DiscountMode.AMOUNT else DiscountMode.PERCENT,
                     discountPercent = draft.discountPercent, discountAmount = draft.discountAmount,
                     deliveryCost = draft.deliveryCost, otherCost = draft.otherCost,
@@ -1040,8 +1040,8 @@ open class CalculatorViewModel(
      * name, the address) while the phone stays complete never re-crosses the edge, so the form
      * cannot snap shut again under the operator's fingers.
      *
-     * The falling edge is the same rule read the other way: a quote whose phone or name has been
-     * blanked has nothing to show on one line, so the form comes back open.
+     * There is no falling edge: blanking a phone or a name leaves the row closed — the operator
+     * opens it with the chevron when they mean to (owner ruling 2026-09-14: collapsed by default).
      */
     private fun updateClientState(transform: (CalculatorUiState) -> CalculatorUiState) {
         _state.update { s ->
@@ -1049,7 +1049,6 @@ open class CalculatorViewModel(
             val next = transform(s)
             when {
                 !wasReady && clientReady(next) -> next.copy(clientFormOpen = false)
-                wasReady && !clientReady(next) -> next.copy(clientFormOpen = true)
                 else -> next
             }
         }

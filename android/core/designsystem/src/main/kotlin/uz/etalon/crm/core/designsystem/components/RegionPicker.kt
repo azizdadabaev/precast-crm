@@ -53,7 +53,8 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
  * Task 7 so the calculator's client bar can share the same picker.
  */
 @Composable
-fun RegionField(label: String, value: String, onOpen: () -> Unit) = FormField(label, divider = false) {
+fun RegionField(label: String, value: String, compact: Boolean = false, onOpen: () -> Unit) =
+    FormField(label, divider = false, compact = compact) {
     Row(
         Modifier.fillMaxWidth()
             .minimumInteractiveComponentSize()

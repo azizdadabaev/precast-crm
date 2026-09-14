@@ -53,15 +53,19 @@ fun FormCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
  *   does a field standing on its own outside a [FormCard]. The divider cannot hide itself: the
  *   card's 6 dp of bottom padding leaves a trailing hairline floating 6 dp above the card's edge
  *   rather than covering it.
+ * @param compact halves the air (6 dp above and below, 2 dp under the label) for a form that
+ *   sits inside a taller flow and must not push the real work off the screen — the calculator's
+ *   client card. The slot itself keeps its 48 dp, so two stacked targets stay 12 dp apart.
  */
 @Composable
 fun FormField(
     label: String,
     modifier: Modifier = Modifier,
     divider: Boolean = true,
+    compact: Boolean = false,
     content: @Composable () -> Unit,
 ) = Column(modifier.fillMaxWidth()) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = if (compact) 6.dp else 10.dp)) {
         Text(
             label,
             style = EtalonType.labelSm,
@@ -69,7 +73,7 @@ fun FormField(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(if (compact) 2.dp else 4.dp))
         content()
     }
     if (divider) HorizontalDivider(color = EtalonColors.surfaceBorder, thickness = EtalonSpace.hairline)
