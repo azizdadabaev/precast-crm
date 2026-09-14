@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -169,10 +170,14 @@ fun NumericKeypadSheet(
         shape = EtalonShapes.sheetTop,
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp),
+            // The gesture bar's inset, not the sheet's own 24 dp alone: at the delivery-proof
+            // sheet's height the confirm pill came to rest UNDER the system's home pill on the
+            // AVD, so the one tap this whole sheet exists for was the one a thumb could not land.
+            // Every other restyled sheet in the app closes its bottom edge the same way.
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp).navigationBarsPadding().padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            SectionLabel(title)
+            Text(title, style = EtalonType.sectionTitle, color = EtalonColors.ink)
             NumericKeypad(
                 value = value, suffix = suffix, allowDecimal = allowDecimal,
                 confirmLabel = stringResource(R.string.action_confirm),

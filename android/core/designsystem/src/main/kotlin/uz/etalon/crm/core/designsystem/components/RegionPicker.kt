@@ -105,7 +105,7 @@ fun RegionPickerSheet(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            SectionLabel(title)
+            Text(title, style = EtalonType.sectionTitle, color = EtalonColors.ink)
             SearchField(
                 value = query,
                 onValueChange = { query = it },

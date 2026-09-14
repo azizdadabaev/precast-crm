@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import uz.etalon.crm.core.designsystem.R
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonType
@@ -116,7 +117,7 @@ fun PaymentStatusTag(status: PaymentStatus, surface: TagSurface = TagSurface.ROW
     Tag(paymentStatusFamily(status), stringResource(paymentStatusLabel(status)), surface, modifier)
 
 /**
- * A truck's own progress (R6) — the overload that replaces `ShipmentStatusChip`.
+ * A truck's own progress (R6) — the overload that replaced the shipments list's old chip.
  *
  * @param short the row-sized wording the shipments list is drawn with («Юкланди», «Йўлда»,
  *   «Етказилди»), exactly as [StatusTag]`(OrderStatus)` carries the prototype's short forms. The
@@ -140,7 +141,7 @@ fun DiscrepancyStatusTag(status: DiscrepancyStatus, surface: TagSurface = TagSur
     Tag(discrepancyStatusFamily(status), stringResource(discrepancyStatusLabel(status)), surface, modifier)
 
 /**
- * A driver's own active flag (R6) — the overload that replaces `DriverStatusChip`. A Boolean
+ * A driver's own active flag (R6) — the overload that replaced the drivers list's old chip. A Boolean
  * rather than an enum because that is exactly what [uz.etalon.crm.core.model.Driver.active] is,
  * and inventing a two-value enum to carry it would only add a translation step.
  */
@@ -158,7 +159,9 @@ internal fun paymentStateFamily(state: PaymentState) = when (state) {
 
 /** A single recorded payment's confirm/reject state. PENDING_CONFIRMATION is deliberately the
  *  lavender family, not the neutral one — a payment sitting in the owner's confirm queue is work
- *  waiting to be done, not an order that simply has not been paid. See [paymentStatusTone]. */
+ *  waiting to be done, not an order that simply has not been paid. Do not "fix" the two pendings
+ *  into agreement — they answer different questions, and the web renders this one amber for the
+ *  same reason. */
 internal fun paymentStatusFamily(status: PaymentStatus) = when (status) {
     PaymentStatus.CONFIRMED -> TagFamily.GREEN
     PaymentStatus.PENDING_CONFIRMATION -> TagFamily.LAVENDER
@@ -190,3 +193,79 @@ internal fun discrepancyStatusFamily(status: DiscrepancyStatus) = when (status) 
 }
 
 internal fun driverActiveFamily(active: Boolean) = if (active) TagFamily.GREEN else TagFamily.NEUTRAL
+
+// ── The label tables. A family says what colour a status is drawn in; these say what it reads.
+// They moved here unchanged when phase 5 deleted `StatusChip.kt`, whose six chip composables and
+// whose whole `ChipTone` vocabulary the tags above had replaced — the words themselves were never
+// part of that shim and are still the app's only source of a status word. ──────────────────────
+
+fun orderStatusLabel(s: OrderStatus): Int = when (s) {
+    OrderStatus.PLACED -> R.string.status_placed
+    OrderStatus.IN_PRODUCTION -> R.string.status_in_production
+    OrderStatus.LOADED -> R.string.status_loaded
+    OrderStatus.DISPATCHED -> R.string.status_dispatched
+    OrderStatus.DELIVERED -> R.string.status_delivered
+    OrderStatus.CANCELED -> R.string.status_canceled
+    // A draft is not an unknown state. Phase 3's clients and payments screens list unplaced
+    // calculations beside real orders, and «Номаълум» there reads as data the app failed to load.
+    OrderStatus.DRAFT -> R.string.ds_status_draft
+    OrderStatus.UNKNOWN -> R.string.status_unknown
+}
+
+/** Row-sized wording from the prototype (`2b-orders.png`); falls back to the full label where the
+ *  prototype has no short form. The full words stay in use on panels and detail screens. */
+fun orderStatusShortLabel(s: OrderStatus): Int = when (s) {
+    OrderStatus.PLACED -> R.string.ds_status_placed_short
+    OrderStatus.IN_PRODUCTION -> R.string.ds_status_in_production_short
+    OrderStatus.DISPATCHED -> R.string.ds_status_dispatched_short
+    else -> orderStatusLabel(s)
+}
+
+fun paymentStateLabel(p: PaymentState): Int = when (p) {
+    PaymentState.FULLY_PAID -> R.string.payment_paid
+    PaymentState.PARTIALLY_PAID -> R.string.payment_partial
+    PaymentState.AWAITING_PAYMENT, PaymentState.UNKNOWN -> R.string.payment_pending
+}
+
+/** A truck's own PENDING/LOADED/DISPATCHED/DELIVERED progress (`ShipmentLine.status`), distinct
+ *  from the order-level [OrderStatus] above but sharing its words. */
+fun shipmentStatusLabel(s: ShipmentStatus): Int = when (s) {
+    ShipmentStatus.PENDING -> R.string.payment_pending // same word, "Кутилмоқда" — no separate string
+    ShipmentStatus.LOADED -> R.string.status_loaded
+    ShipmentStatus.DISPATCHED -> R.string.status_dispatched
+    ShipmentStatus.DELIVERED -> R.string.status_delivered
+    ShipmentStatus.UNKNOWN -> R.string.status_unknown
+}
+
+/** Row-sized wording for the shipments list (design §5.2), the way [orderStatusShortLabel] is for
+ *  the orders list: the truck's own progress read as an event — «Юкланди», «Йўлда», «Етказилди» —
+ *  rather than the server's participles, which do not fit a row tag beside a date and a driver.
+ *  PENDING and UNKNOWN are already one word and keep the full label. */
+fun shipmentStatusShortLabel(s: ShipmentStatus): Int = when (s) {
+    ShipmentStatus.LOADED -> R.string.ds_status_shipment_loaded
+    ShipmentStatus.DISPATCHED -> R.string.ds_status_shipment_dispatched
+    ShipmentStatus.DELIVERED -> R.string.ds_status_shipment_delivered
+    else -> shipmentStatusLabel(s)
+}
+
+/** A driver's own active/inactive flag — a plain Boolean, not an enum, since that is exactly
+ *  what [uz.etalon.crm.core.model.Driver.active] is. */
+fun driverActiveLabel(active: Boolean): Int =
+    if (active) R.string.driver_status_active else R.string.driver_status_inactive
+
+fun paymentStatusLabel(s: PaymentStatus): Int = when (s) {
+    PaymentStatus.CONFIRMED -> R.string.payment_confirmed
+    PaymentStatus.PENDING_CONFIRMATION -> R.string.payment_pending // same word, "Кутилмоқда" — no separate string
+    PaymentStatus.REJECTED -> R.string.payment_rejected
+    PaymentStatus.UNKNOWN -> R.string.status_unknown
+}
+
+/** Mirrors DISCREPANCY_STATUS_META in discrepancies/page.tsx. */
+fun discrepancyStatusLabel(s: DiscrepancyStatus): Int = when (s) {
+    DiscrepancyStatus.OPEN -> R.string.discrepancy_open
+    DiscrepancyStatus.RESOLVED_RECOVERED -> R.string.discrepancy_recovered
+    DiscrepancyStatus.RESOLVED_DISCOUNT -> R.string.discrepancy_discount
+    DiscrepancyStatus.RESOLVED_WRITEOFF -> R.string.discrepancy_writeoff
+    DiscrepancyStatus.DISPUTED -> R.string.discrepancy_disputed
+    DiscrepancyStatus.UNKNOWN -> R.string.status_unknown
+}

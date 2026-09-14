@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -21,7 +20,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.components.BrandMark
-import uz.etalon.crm.core.designsystem.components.ChipTone
 import uz.etalon.crm.core.designsystem.components.CountStepper
 import uz.etalon.crm.core.designsystem.components.CustodyChain
 import uz.etalon.crm.core.designsystem.components.EmptyState
@@ -34,10 +32,7 @@ import uz.etalon.crm.core.designsystem.components.PhotoStrip
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.RegionField
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
-import uz.etalon.crm.core.designsystem.components.SectionLabel
-import uz.etalon.crm.core.designsystem.components.StatusStripeCard
 import uz.etalon.crm.core.designsystem.components.StickyActionBar
-import uz.etalon.crm.core.designsystem.components.toneColor
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
@@ -110,16 +105,11 @@ private fun KeptSheet() = Column(
     // stands first on Home: a reviewer checks the gradient, the 14/800 wordmark and the tagline's
     // ink2 before anything else on the page.
     BrandMark()
-    SectionLabel("Кутилаётган тўловлар")
     EmptyState("Буюртма йўқ.")
     ErrorBanner("Тармоққа уланиб бўлмади", onRetry = {})
     NoticeBanner("Сизда тасдиқлаш ҳуқуқи йўқ")
     OutboxBanner(pending = 2, failedMessage = null, onRetry = {}, onCancel = {})
     OutboxBanner(pending = 0, failedMessage = "Сервер расмни қабул қилмади", onRetry = {}, onCancel = {})
-    StatusStripeCard(stripe = toneColor(ChipTone.SUCCESS)) {
-        Text("StatusStripeCard", style = EtalonType.rowTitle, color = EtalonColors.ink)
-        Text("оқ xl карта, ҳошия, 3 dp чизиқ", style = EtalonType.meta, color = EtalonColors.ink3)
-    }
     CountStepper("Тўсин", value = 12, onChange = {}, max = 20)
     CountStepper("Ғишт", value = 0, onChange = {}, max = 0)
     CustodyChain(CHAIN)

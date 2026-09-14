@@ -74,15 +74,6 @@ object EtalonType {
      * set in the tier's own colour rather than in ink.
      */
     val calendarArea = Base.copy(fontSize = 9.5.sp, fontWeight = FontWeight.W600)
-
-    // ── Shim. Thirty files still name these; phases 2–5 move them onto the scale above and the
-    // last task of phase 5 deletes the five lines. Re-pointing them here is what makes Manrope
-    // and JetBrains Mono unreferenced, so Task 12 can delete the seven old font files. ─────────
-    @Deprecated("Use EtalonType.body", ReplaceWith("body")) val mono = body
-    @Deprecated("Use EtalonType.label", ReplaceWith("label")) val monoLabel = label
-    @Deprecated("Use EtalonType.body", ReplaceWith("body")) val monoBody = body
-    @Deprecated("Use EtalonType.headline", ReplaceWith("headline")) val monoTitle = headline
-    @Deprecated("Use EtalonType.amountLg", ReplaceWith("amountLg")) val monoDisplay = amountLg
 }
 
 /** M3 slots, so a Material component we have not replaced yet is at least on the right face. */
