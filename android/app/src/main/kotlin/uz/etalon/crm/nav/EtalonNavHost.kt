@@ -9,12 +9,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavBackStack
@@ -24,6 +26,8 @@ import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.launch
 import uz.etalon.crm.core.designsystem.components.BottomNav
 import uz.etalon.crm.core.designsystem.components.BottomNavItem
 import uz.etalon.crm.core.designsystem.components.BottomNavScrim
@@ -32,6 +36,8 @@ import uz.etalon.crm.core.designsystem.components.navPillInsetOf
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.model.Me
+import uz.etalon.crm.core.model.OrdersView
+import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.feature.auth.ChangePinRoute
 import uz.etalon.crm.feature.auth.LoginRoute
 import uz.etalon.crm.feature.calculator.CalculatorRoute
@@ -47,6 +53,8 @@ import uz.etalon.crm.feature.logistics.shipments.ShipmentLoadRoute
 import uz.etalon.crm.feature.logistics.shipments.ShipmentsRoute
 import uz.etalon.crm.feature.orders.detail.OrderDetailRoute
 import uz.etalon.crm.feature.orders.list.OrdersListRoute
+import uz.etalon.crm.feature.orders.list.OrdersOpenDayStore
+import uz.etalon.crm.feature.orders.list.PrefsOrdersViewStore
 import uz.etalon.crm.feature.payments.discrepancies.DiscrepanciesRoute
 import uz.etalon.crm.feature.payments.queue.ConfirmQueueRoute
 import uz.etalon.crm.feature.payments.record.RecordPaymentRoute
@@ -55,6 +63,30 @@ import uz.etalon.crm.shell.AccountViewModel
 import uz.etalon.crm.shell.Destination
 import uz.etalon.crm.shell.NoAccessScreen
 import uz.etalon.crm.shell.destinationsFor
+import java.time.LocalDate
+import javax.inject.Inject
+
+/**
+ * The shell's one door into the DI graph, for design §4's two hand-offs into the Orders tab.
+ *
+ * The repo's idiom is to reach the graph through a Hilt ViewModel rather than stand up an
+ * `@EntryPoint` (see `DeliveryProofRoute`'s note), and `SignedInShell` already does exactly this
+ * for `AccountViewModel`. Both stores are `:feature:orders`' own: the view store is the persisted
+ * Рўйхат/Жадвал switch, and the open-day store is ruling R6's one-shot.
+ */
+@HiltViewModel
+class HandoffViewModel @Inject constructor(
+    private val viewStore: PrefsOrdersViewStore,
+    private val openDayStore: OrdersOpenDayStore,
+) : ViewModel() {
+    /** «Бугунги етказишлар» → the calendar on today's day sheet. Today in Tashkent, not on the
+     *  phone: the factory's day is what the grid is drawn in. */
+    fun openCalendarOnToday() = openDayStore.set(LocalDate.now(TASHKENT))
+
+    /** «Барчаси →» → the orders tab in its Рўйхат view. Suspends until the preference is written,
+     *  so the ViewModel that reads it on start cannot read the previous value. */
+    suspend fun showOrdersList() = viewStore.set(OrdersView.LIST)
+}
 
 private fun Destination.icon(): Int = when (this) {
     Destination.HOME -> EtalonIcons.House
@@ -138,6 +170,8 @@ fun SignedInShell(
     onSignOut: () -> Unit,
     onPinChanged: () -> Unit,
 ) {
+    val handoff: HandoffViewModel = hiltViewModel()
+    val scope = rememberCoroutineScope()
     val destinations = destinationsFor(me)
     val current = backStack.lastOrNull()
     val selected = destinations.indexOf(current?.let(::tabFor))
@@ -181,11 +215,24 @@ fun SignedInShell(
                             onOpenOrder = { backStack.add(OrderDetail(it)) },
                             onOpenOrders = { switchTab(backStack, Orders) },
                             onOpenAccount = { showAccount = true },
-                            // Task 4 wires the two dashboard hand-offs of design §4 — the clients
-                            // tab, and the orders calendar opened on today's day sheet. Until it
-                            // does, the two cards are drawn and inert rather than absent.
-                            onOpenClients = { },
-                            onOpenCalendarToday = { },
+                            // Design §4's three dashboard hand-offs. Two of them speak to the
+                            // Orders tab through a store before switching to it, because the tab
+                            // has no route arguments: the ViewModel reads both on start.
+                            onOpenClients = { switchTab(backStack, Clients) },
+                            onOpenCalendarToday = {
+                                handoff.openCalendarOnToday()
+                                switchTab(backStack, Orders)
+                            },
+                            // The persisted view is a DataStore write, and the Orders ViewModel
+                            // reads it in its own `init` — so the switch waits for the write
+                            // rather than racing it. The calendar hand-off above needs no such
+                            // care: its store is in memory and its write has already landed.
+                            onOpenOrdersList = {
+                                scope.launch {
+                                    handoff.showOrdersList()
+                                    switchTab(backStack, Orders)
+                                }
+                            },
                             // Where a rejected queued order reopens (ruling I3). Gated exactly as
                             // the orders list's «+ Янги» is: without calculator.use that tab does
                             // not exist, so the sheet does not offer the action at all.

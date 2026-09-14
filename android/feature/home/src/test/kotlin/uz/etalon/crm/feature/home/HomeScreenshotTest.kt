@@ -2,13 +2,18 @@ package uz.etalon.crm.feature.home
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,12 +31,16 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.MonthBooked
 import uz.etalon.crm.core.model.MonthOrders
 import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PeriodMoney
+import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.model.TodayDelivery
+import uz.etalon.crm.core.model.TopCustomer
 import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.model.TrendPolarity
+import uz.etalon.crm.core.ui.format.formatOrderNo
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -40,12 +49,21 @@ import java.time.Instant
 private val SHELL_NAV_PILL_INSET = 84.dp
 
 /**
- * Design §2's dashboard, top half: the app-bar chrome over today's date, the navy receivables
- * hero, the financial rail and the operational 2×2 — drawn with the data the server actually
- * sends, so the reviewer can lay the frame beside the web dashboard and compare figure for figure.
+ * The index of «Сўнгги буюртмалар» in a loaded `HomeScreen`'s list — the app bar, the hero, the
+ * rail's section, the grid's section, then §2.5, §2.6 and §2.7. Scrolling the list to its last item
+ * is what puts the bottom half in the frame; a `performScrollToNode` on the donut would not move at
+ * all, because the donut's header already peeks into the unscrolled viewport.
+ */
+private const val LAST_ITEM = 6
+
+/**
+ * Design §2's dashboard — drawn with the data the server actually sends, so the reviewer can lay a
+ * frame beside the web dashboard and compare figure for figure.
  *
- * §2.5–§2.7 (the payment donut, the top clients and the recent orders) are not built yet and are
- * therefore not in these frames.
+ * One screen is two frames, because one 891 dp viewport does not hold it: `home_light` is the top
+ * (app-bar chrome over today's date, the receivables hero, the financial rail, the operational 2×2)
+ * and `home_bottom_light` is the same state scrolled to the end (§2.5's payment donut, §2.6's top
+ * clients, §2.7's latest orders).
  *
  * **The nav pill is not in these frames, and neither is its band.** `HomeScreen` is stateless and
  * knows nothing about the shell that draws the pill over it; the clearance it keeps for the pill
@@ -143,11 +161,61 @@ class HomeScreenshotTest {
             beamMeters = BigDecimal("512.4"), area = BigDecimal("318.60"), orderCount = 11,
         ),
         currentMonthKey = "2026-09",
+        topCustomers = topCustomers,
+    )
+
+    /** §2.6, already ranked as the ViewModel hands them over: five rows whose figures fall away
+     *  steeply, so the indigo bars are visibly five different lengths, and one name long enough to
+     *  prove the ellipsis rather than assume it. */
+    private val topCustomers = listOf(
+        TopCustomer("c1", "Tashkent Tower LLC", Money.parse("214800000.00"), 38),
+        TopCustomer("c2", "BuildPro Group", Money.parse("168300000.00"), 29),
+        TopCustomer("c3", "Самарқанд Қурилиш Инвест Холдинг", Money.parse("96400000.00"), 17),
+        TopCustomer("c4", "Yusupov & Sons", Money.parse("51900000.00"), 12),
+        TopCustomer("c5", "Navoi Build", Money.parse("12700000.00"), 4),
+    )
+
+    /** §2.7's four rows: a paid one, a part-paid one, one still awaiting, and one with no address
+     *  at all — the elision §2.7 asks for, photographed rather than assumed. */
+    private val recent = listOf(
+        RecentOrder(
+            orderId = "o1", orderNumber = "2026-09-0004", clientName = "Tashkent Tower LLC",
+            clientPhone = "998901112233", clientAddress = "Тошкент, Юнусобод, Амир Темур 12",
+            status = OrderStatus.IN_PRODUCTION, scheduledAt = Instant.parse("2026-09-08T06:00:00Z"),
+            totalPrice = Money.parse("18420000.00"), remaining = Money.parse("18420000.00"),
+            totalArea = BigDecimal("108.20"), paymentState = PaymentState.AWAITING_PAYMENT,
+        ),
+        RecentOrder(
+            orderId = "o2", orderNumber = "2026-09-0003", clientName = "Yusupov & Sons",
+            clientPhone = "998901112244", clientAddress = "Бухоро, Эски шаҳар",
+            status = OrderStatus.DISPATCHED, scheduledAt = Instant.parse("2026-09-07T06:00:00Z"),
+            totalPrice = Money.parse("13350000.00"), remaining = Money.parse("7350000.00"),
+            totalArea = BigDecimal("78.70"), paymentState = PaymentState.PARTIALLY_PAID,
+        ),
+        RecentOrder(
+            orderId = "o3", orderNumber = "2026-09-0002", clientName = "BuildPro Group",
+            clientPhone = "998901112255", clientAddress = null,
+            status = OrderStatus.DELIVERED, scheduledAt = Instant.parse("2026-09-06T06:00:00Z"),
+            totalPrice = Money.parse("7340840.00"), remaining = Money.ZERO,
+            totalArea = BigDecimal("42.60"), paymentState = PaymentState.FULLY_PAID,
+        ),
+        RecentOrder(
+            orderId = "o4", orderNumber = "2026-09-0001", clientName = "Navoi Build",
+            clientPhone = "998901112266", clientAddress = "Навоий, Шимолий",
+            status = OrderStatus.PLACED, scheduledAt = Instant.parse("2026-09-05T06:00:00Z"),
+            totalPrice = Money.parse("3003520.00"), remaining = Money.parse("3003520.00"),
+            totalArea = BigDecimal("18.00"), paymentState = PaymentState.AWAITING_PAYMENT,
+        ),
     )
 
     private fun loaded() = HomeUiState(
-        loading = false, error = null, today = today, pendingUploads = 2,
+        loading = false, error = null, today = today, recent = recent, pendingUploads = 2,
         permissionsResolved = true, hasDashboardAccess = true, dash = dashboard(),
+    )
+
+    /** §3's first load: nothing has arrived yet, so the screen is the skeleton under real chrome. */
+    private fun firstLoad() = HomeUiState(
+        loading = true, error = null, permissionsResolved = true, hasDashboardAccess = true, dash = null,
     )
 
     /**
@@ -176,6 +244,7 @@ class HomeScreenshotTest {
             openDiscrepancyTotal = Money.ZERO,
             loadedThisMonth = null,
             currentMonthKey = "2026-09",
+            topCustomers = emptyList(),
         ),
     )
 
@@ -201,7 +270,7 @@ class HomeScreenshotTest {
                 HomeScreen(
                     s = state, me = owner, now = now, onRefresh = {},
                     onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                    onOpenClients = {}, onOpenCalendarToday = {},
+                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
                 )
             }
         }
@@ -224,7 +293,7 @@ class HomeScreenshotTest {
                     HomeScreen(
                         s = rejectedState(), me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {},
+                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
                     )
                     OutboxSheet(
                         pending = rejectedState().pendingUploads,
@@ -262,7 +331,7 @@ class HomeScreenshotTest {
                         s = loaded().copy(pendingUploads = 0, rejectedOrders = many),
                         me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {},
+                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
                     )
                     OutboxSheet(pending = 0, rejected = many, onDiscard = {}, onDismiss = {}, onReopen = {})
                 }
@@ -287,7 +356,7 @@ class HomeScreenshotTest {
                     HomeScreen(
                         s = rejectedState(), me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {},
+                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
                     )
                     OutboxSheet(
                         pending = 0,
@@ -307,11 +376,79 @@ class HomeScreenshotTest {
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun light() = shoot("home_light", loaded())
 
+    /**
+     * §2.5–§2.7, which are below the fold of `home_light`: the payment donut with its legend, the
+     * five top clients with their bars, and the four latest orders.
+     *
+     * The list is scrolled by its own tag rather than by `hasScrollAction()` — the financial rail
+     * is a scrollable too, and a frame that silently photographed the wrong one would look right.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun bottomLight() {
+        rule.setContent {
+            EtalonTheme {
+                HomeScreen(
+                    s = loaded(), me = owner, now = now, onRefresh = {},
+                    onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
+                )
+            }
+        }
+        rule.onNodeWithTag(HOME_LIST_TAG).performScrollToIndex(LAST_ITEM)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage("screenshots/home_bottom_light.png")
+    }
+
+    /** §3's first load, mirroring `DashboardSkeleton.tsx`: the hero block, two kickers, the rail,
+     *  the 2×2 and the three bottom cards — the same blocks in the same order as the screen they
+     *  stand in for, under the real app bar. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun skeletonLight() {
+        shoot("home_skeleton_light", firstLoad())
+        // Not a figure in sight: a skeleton that leaked a zero would read as a loaded month.
+        rule.onNodeWithText("Тўлов ҳолати").assertDoesNotExist()
+        rule.onNodeWithText("Бу саҳифага рухсат йўқ — фақат ADMIN ва OWNER кира олади.").assertDoesNotExist()
+    }
+
+    /** §2.7's two hand-offs, which are the only taps on this half of the screen: the order number
+     *  opens that order, and «Барчаси →» opens the list. Asserted rather than left to the frame —
+     *  a link drawn indigo and wired to nothing photographs exactly like a working one. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun recentRowTapsReachTheirDestinations() {
+        val opened = mutableListOf<String>()
+        val listOpened = mutableListOf<Unit>()
+        rule.setContent {
+            EtalonTheme {
+                HomeScreen(
+                    s = loaded(), me = owner, now = now, onRefresh = {},
+                    onOpenOrder = { opened += it }, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = { listOpened += Unit },
+                )
+            }
+        }
+        rule.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText("Сўнгги буюртмалар"))
+        rule.waitForIdle()
+
+        // «№ 09‑0003» — the second row's, so a tap that always reported the first would fail here.
+        rule.onNodeWithText(formatOrderNo("2026-09-0003")).performClick()
+        assertEquals(listOf("o2"), opened)
+        assertEquals(emptyList<Unit>(), listOpened)
+
+        rule.onNodeWithText("Барчаси →").performClick()
+        assertEquals(listOf(Unit), listOpened)
+        // The header's action is not the row's: it opened no order.
+        assertEquals(listOf("o2"), opened)
+    }
+
     /** §6's empty month, and the assertion that it does not read as a month that traded nothing:
      *  the loaded card says so in words instead of printing a zero. */
     @Test @Config(qualifiers = "w411dp-h891dp") fun emptyMonthLight() {
         shoot("home_empty_month_light", emptyMonth())
         rule.onNodeWithText("Бу ой юк йўқ").assertExists()
+        // §2.6 and §2.7's own empty states are below this frame's fold, so they are asserted rather
+        // than photographed: each is a sentence, not a zero, for the same reason the loaded card
+        // above says so in words.
+        rule.onNodeWithTag(HOME_LIST_TAG).performScrollToIndex(LAST_ITEM)
+        rule.waitForIdle()
+        rule.onNodeWithText("Ҳали тушум йўқ").assertExists()
+        rule.onNodeWithText("Ҳали буюртма йўқ").assertExists()
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun noAccessLight() {

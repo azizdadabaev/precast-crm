@@ -32,6 +32,7 @@ import java.io.File
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 
 /** Rows fetched per page; the list appends a page at a time as the user scrolls. */
@@ -101,6 +102,40 @@ internal class MemoryOrdersViewStore(initial: OrdersView = OrdersView.LIST) : Or
     private val state = MutableStateFlow(initial)
     override val view: Flow<OrdersView> = state
     override suspend fun set(v: OrdersView) { state.value = v }
+}
+
+/**
+ * Ruling R6 — the dashboard's «Бугунги етказишлар» hand-off (design §4): a day the Бош tab wants
+ * the calendar opened on, handed over **once**.
+ *
+ * A one-shot rather than a route argument or a second persisted preference, because it is an
+ * instruction and not a setting: the operator taps the card, lands on the day sheet, and the next
+ * time they open the Orders tab by any other route they get the view they left it in. [take]
+ * therefore clears — a day that survived would re-open the sheet on every visit for the rest of
+ * the session.
+ *
+ * Not a `fun interface`: [set] and [take] are two halves of the same handover and neither is
+ * useful alone, so neither may be a lambda on its own.
+ */
+interface OrdersOpenDayStore {
+    /** Reads the pending day and clears it. Null when there is none — the ordinary case. */
+    fun take(): LocalDate?
+    fun set(d: LocalDate)
+}
+
+/**
+ * The only implementation: the handover lives no longer than the process, which is longer than the
+ * handover itself needs. Bound `@Singleton` in `OrdersModule` so the writer (the shell) and the
+ * reader (this ViewModel) hold the same one, and directly constructible so a test needs no graph.
+ *
+ * `AtomicReference.getAndSet` rather than a read-then-null: the writer is the main thread and the
+ * reader is a coroutine on it, but "read it, then clear it" is two statements and one-shots that
+ * fire twice are the classic bug of this shape.
+ */
+class MemoryOrdersOpenDayStore @Inject constructor() : OrdersOpenDayStore {
+    private val pending = AtomicReference<LocalDate?>(null)
+    override fun take(): LocalDate? = pending.getAndSet(null)
+    override fun set(d: LocalDate) { pending.set(d) }
 }
 
 /**
@@ -192,6 +227,7 @@ open class OrdersListViewModel(
     private val exports: ExportSource = ExportSource { Result.failure(UnsupportedOperationException()) },
     private val viewStore: OrdersViewStore = MemoryOrdersViewStore(),
     private val canExport: Boolean = false,
+    private val openDayStore: OrdersOpenDayStore = MemoryOrdersOpenDayStore(),
 ) : ViewModel() {
     private val query = MutableStateFlow("")
     private val status = MutableStateFlow<OrderStatus?>(null)
@@ -230,6 +266,15 @@ open class OrdersListViewModel(
                 viewDecided = true
                 view.value = restored
                 if (restored == OrdersView.CALENDAR) enterCalendar()
+            }
+            // Ruling R9 — AFTER the restore, so a day handed over by the dashboard wins over
+            // whichever view the planner last left this tab in. [setView] persists CALENDAR the
+            // way the switch itself would (design §4 asks for exactly that), and [selectDay] then
+            // overrides the today `enterCalendar` would have chosen. The store clears on read, so
+            // the next visit to this tab restores the view like any other.
+            openDayStore.take()?.let { d ->
+                setView(OrdersView.CALENDAR)
+                selectDay(d)
             }
         }
     }
@@ -511,8 +556,9 @@ class HiltOrdersListViewModel @AssistedInject constructor(
     capacitySource: RepositoryCapacitySource,
     exports: RepositoryExportSource,
     viewStore: PrefsOrdersViewStore,
+    openDayStore: OrdersOpenDayStore,
     @Assisted canExport: Boolean,
-) : OrdersListViewModel(source, capacitySource, exports, viewStore, canExport) {
+) : OrdersListViewModel(source, capacitySource, exports, viewStore, canExport, openDayStore) {
     @AssistedFactory
     interface Factory {
         fun create(canExport: Boolean): HiltOrdersListViewModel

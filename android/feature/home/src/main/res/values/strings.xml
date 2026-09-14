@@ -41,6 +41,29 @@
          measured zero. -->
     <string name="home_loaded_none">Бу ой юк йўқ</string>
 
+    <!-- §2.5 the payment donut. The legend rows borrow the hero's own «Тўланган» / «Қисман» /
+         «Кутилмоқда»; the centre reads «90%» over this caption, which is lower-case because it is
+         the second half of one sentence and not a label of its own (`PaymentDonut.tsx:76`).
+         Counts only — the payload carries no per-state sums, and an approximated one would be a
+         figure nobody sent. -->
+    <string name="home_payment_state">Тўлов ҳолати</string>
+    <string name="home_paid_pct_caption">тўланган</string>
+    <!-- A card header's right-hand count, and the line under a top client's name. -->
+    <string name="home_orders_count">%1$s та буюртма</string>
+
+    <!-- §2.6 the top clients. Ruling R4: «Тушган пул · Collected» is shortened to its Uzbek half
+         as a column header on a 390 dp phone. -->
+    <string name="home_top_clients">Энг тўрти мижозлар</string>
+    <string name="home_top_clients_unit">Тушган пул</string>
+    <!-- Nobody has paid anything yet — a different fact from «0 UZS», which reads as a measured
+         zero. -->
+    <string name="home_top_empty">Ҳали тушум йўқ</string>
+
+    <!-- §2.7 the four latest orders. The arrow is part of the action's own wording, as on the web. -->
+    <string name="home_recent">Сўнгги буюртмалар</string>
+    <string name="home_recent_all">Барчаси →</string>
+    <string name="home_recent_empty">Ҳали буюртма йўқ</string>
+
     <!-- §2.8, the web's own line (`src/app/dashboard/page.tsx`): the operator holds neither
          dashboard.viewBasic nor dashboard.view, so the whole payload is refused server-side.
          Not an error — there is nothing to retry. -->

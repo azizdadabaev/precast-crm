@@ -31,6 +31,7 @@ import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.TodayDelivery
+import uz.etalon.crm.core.model.TopCustomer
 import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.model.TrendPolarity
@@ -265,15 +266,30 @@ class HomeViewModelTest {
         assertEquals(2, vm.state.value.todayDone)
     }
 
-    /** A refresh that fails leaves the figures that were on screen exactly where they were, under
-     *  the banner that says they are stale. Blanking them is the alternative, and it turns a lost
-     *  connection into a month that looks like it had no orders in it. */
+    /**
+     * A refresh that fails leaves the figures that were on screen exactly where they were, under
+     * the banner that says they are stale. Blanking them is the alternative, and it turns a lost
+     * connection into a month that looks like it had no orders in it.
+     *
+     * This is also the ticker's safety net (§3, ruling R7): the auto-refresh fires every 60 s on a
+     * phone that is regularly out of coverage on a building site, so the ordinary case of a failed
+     * refresh is one nobody asked for — and it must cost the operator nothing. The whole payload is
+     * asserted, the bottom half included, so a future "clear it and show the banner" cannot slip in
+     * for one card.
+     */
     @Test fun `a failed refresh keeps the last payload`() = runTest {
         var fail = false
         val vm = viewModel(
             home = {
                 if (fail) Result.failure(IOException("no net"))
-                else Result.success(summary(receivables = Money.parse("9000000"), receivableOrders = 7))
+                else Result.success(
+                    summary(
+                        receivables = Money.parse("9000000"), receivableOrders = 7,
+                        paidOrders = 317, partialOrders = 13, awaitingOrders = 23,
+                        recent = listOf(recentOrder("r1")),
+                        topCustomers = listOf(customer("c1", "5000000")),
+                    ),
+                )
             },
         )
         advanceUntilIdle()
@@ -286,6 +302,73 @@ class HomeViewModelTest {
         assertEquals(Money.parse("9000000"), vm.state.value.dash?.receivables, "the last good payload stands")
         assertEquals(7, vm.state.value.dash?.receivableOrders)
         assertEquals(1, vm.state.value.today.size)
+        // §2.5–§2.7 stand too: a stale donut is worth more than an empty one.
+        assertEquals(317, vm.state.value.dash?.paidOrders)
+        assertEquals(listOf("r1"), vm.state.value.recent.map { it.orderId })
+        assertEquals(listOf("c1"), vm.state.value.dash?.topCustomers?.map { it.id })
+    }
+
+    // ── §2.5–§2.7, the bottom half's own inputs ───────────────────────────────────────
+
+    /** §2.6: five rows, biggest payer first — whatever order the array arrived in. A sixth client
+     *  is off the card, and the one who is cut is the smallest, not the last. */
+    @Test fun `the top clients are the five biggest payers, ranked`() = runTest {
+        val s = summary(
+            topCustomers = listOf(
+                customer("c1", "3000000"),
+                customer("c2", "9000000"),
+                customer("c3", "1000000"),
+                customer("c4", "7000000"),
+                customer("c5", "5000000"),
+                customer("c6", "11000000"),
+            ),
+        )
+        val vm = viewModel(home = { Result.success(s) })
+        advanceUntilIdle()
+        val top = vm.state.value.dash!!.topCustomers
+
+        assertEquals(5, top.size)
+        assertEquals(listOf("c6", "c2", "c4", "c5", "c1"), top.map { it.id })
+        assertEquals(Money.parse("11000000"), top.first().totalCollected)
+    }
+
+    /** Ties keep the server's own order between them — a stable sort, so two clients who have paid
+     *  exactly the same do not swap places between two identical payloads. */
+    @Test fun `clients who have paid the same keep the server's order`() {
+        val ranked = topCustomers(
+            listOf(customer("a", "5000000"), customer("b", "5000000"), customer("c", "9000000")),
+        )
+        assertEquals(listOf("c", "a", "b"), ranked.map { it.id })
+    }
+
+    /** An account where nobody has paid yet has no rows at all — the card says «Ҳали тушум йўқ»
+     *  rather than listing five zeros. */
+    @Test fun `no top clients at all is an empty list, not a row of zeros`() = runTest {
+        val vm = viewModel(home = { Result.success(summary(topCustomers = emptyList())) })
+        advanceUntilIdle()
+        assertEquals(emptyList<TopCustomer>(), vm.state.value.dash!!.topCustomers)
+    }
+
+    /** §2.7 draws four rows. The server sends more than that (the web's own card shows five on a
+     *  desktop), so the cut is this client's and the four kept are the newest — the head of an
+     *  array the server already sorted newest-first. */
+    @Test fun `the recent card keeps the four latest orders`() = runTest {
+        val s = summary(recent = (1..7).map { recentOrder("r$it") })
+        val vm = viewModel(home = { Result.success(s) })
+        advanceUntilIdle()
+        assertEquals(listOf("r1", "r2", "r3", "r4"), vm.state.value.recent.map { it.orderId })
+    }
+
+    /** §2.5's ring is drawn from three counts and nothing else; they reach the state unchanged,
+     *  and the header's «N та буюртма» is their sum. */
+    @Test fun `the donut's three counts reach the state unchanged`() = runTest {
+        val vm = viewModel(home = { Result.success(summary(paidOrders = 317, partialOrders = 13, awaitingOrders = 23)) })
+        advanceUntilIdle()
+        val d = vm.state.value.dash!!
+        assertEquals(317, d.paidOrders)
+        assertEquals(13, d.partialOrders)
+        assertEquals(23, d.awaitingOrders)
+        assertEquals(353, d.paidOrders + d.partialOrders + d.awaitingOrders)
     }
 
     // ── §2.3's one computed figure ────────────────────────────────────────────────────
@@ -518,6 +601,7 @@ class HomeViewModelTest {
         ordersByMonth: List<MonthOrders> = emptyList(),
         currentMonthKey: String = "2026-09",
         loadedThisMonth: LoadedVolume? = null,
+        topCustomers: List<TopCustomer> = emptyList(),
     ) = HomeSummary(
         today = today, todayArea = todayArea,
         openDiscrepancies = openDiscrepancies, openDiscrepancyTotal = openDiscrepancyTotal,
@@ -535,6 +619,9 @@ class HomeViewModelTest {
         ordersByMonth = ordersByMonth,
         currentMonthKey = currentMonthKey,
         loadedThisMonth = loadedThisMonth,
-        topCustomers = emptyList(),
+        topCustomers = topCustomers,
     )
+
+    private fun customer(id: String, collected: String, orders: Int = 1) =
+        TopCustomer(id = id, name = "Мижоз $id", totalCollected = Money.parse(collected), orderCount = orders)
 }

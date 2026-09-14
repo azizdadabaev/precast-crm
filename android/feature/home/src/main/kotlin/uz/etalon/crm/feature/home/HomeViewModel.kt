@@ -29,6 +29,7 @@ import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.TodayDelivery
+import uz.etalon.crm.core.model.TopCustomer
 import java.math.BigDecimal
 import java.math.RoundingMode
 import javax.inject.Inject
@@ -39,6 +40,13 @@ internal const val PERM_DASHBOARD_VIEW = "dashboard.view"
 /** How many months a rail sparkline draws (design §2.3). The series are cut to this here rather
  *  than in composition, so the screen is handed exactly what it renders. */
 private const val SPARKLINE_MONTHS = 8
+
+/** §2.6: the card lists the five biggest payers, ranked here rather than trusted from the wire —
+ *  the web sorts the same array before it draws it. */
+private const val TOP_CUSTOMERS = 5
+
+/** §2.7: how many of the server's `recentOrders` the card draws. */
+private const val RECENT_ROWS = 4
 
 /**
  * Every figure the dashboard's top half renders (design §2.2–§2.4), modelled apart from
@@ -75,7 +83,20 @@ data class HomeDashboard(
     val loadedThisMonth: LoadedVolume?,
     /** `"2026-09"`, the month the whole screen is about; the loaded card names it. */
     val currentMonthKey: String,
+    // §2.6 — the five biggest payers, already ranked and already cut to five.
+    val topCustomers: List<TopCustomer>,
 )
+
+/**
+ * §2.6's ranking: the biggest payers first, cut to [TOP_CUSTOMERS].
+ *
+ * Sorted here rather than drawn in the order the array happened to arrive — `RegionRanking`'s
+ * array says in so many words that it is already ranked and this one does not, and a card whose
+ * bars run the wrong way reads as a rendering bug. `sortedByDescending` is stable, so two clients
+ * who have paid exactly the same keep the server's order between them.
+ */
+internal fun topCustomers(all: List<TopCustomer>, limit: Int = TOP_CUSTOMERS): List<TopCustomer> =
+    all.sortedByDescending { it.totalCollected }.take(limit)
 
 /**
  * §2.3's AOV series: each month's bookings divided by that month's order count, in whole UZS.
@@ -106,8 +127,9 @@ data class HomeUiState(
     val loading: Boolean = true,
     val error: String? = null,
     val today: List<TodayDelivery> = emptyList(),
-    /** The «Сўнгги буюртмалар» card: the most recently scheduled orders, newest first. Empty
-     *  without dashboard access, for the same reason [today] is. */
+    /** The «Сўнгги буюртмалар» card: the most recently scheduled orders, newest first, already cut
+     *  to the [RECENT_ROWS] the card draws. Empty without dashboard access, for the same reason
+     *  [today] is. */
     val recent: List<RecentOrder> = emptyList(),
     /** The signed-in operator's own queue — [uz.etalon.crm.core.data.OutboxRepository.observePendingCount]
      *  is already owner-scoped, so this is never another operator's work. */
@@ -259,7 +281,7 @@ open class HomeViewModel(
                     _state.update {
                         it.copy(
                             loading = false, error = null,
-                            today = s.today, recent = s.recent,
+                            today = s.today, recent = s.recent.take(RECENT_ROWS),
                             dash = HomeDashboard(
                                 receivables = s.receivables, receivableOrders = s.receivableOrders,
                                 paidOrders = s.paidOrders, partialOrders = s.partialOrders,
@@ -275,6 +297,7 @@ open class HomeViewModel(
                                 openDiscrepancyTotal = s.openDiscrepancyTotal,
                                 loadedThisMonth = s.loadedThisMonth,
                                 currentMonthKey = s.currentMonthKey,
+                                topCustomers = topCustomers(s.topCustomers),
                             ),
                         )
                     }

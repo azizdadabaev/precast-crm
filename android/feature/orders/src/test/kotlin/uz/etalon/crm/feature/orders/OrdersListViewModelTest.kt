@@ -16,6 +16,7 @@ import uz.etalon.crm.core.data.OrdersFilter
 import uz.etalon.crm.core.model.*
 import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.feature.orders.list.CapacitySource
+import uz.etalon.crm.feature.orders.list.MemoryOrdersOpenDayStore
 import uz.etalon.crm.feature.orders.list.MemoryOrdersViewStore
 import uz.etalon.crm.feature.orders.list.OrdersListViewModel
 import uz.etalon.crm.feature.orders.list.OrdersSource
@@ -274,6 +275,53 @@ class OrdersListViewModelTest {
         assertEquals(LocalDate.now(TASHKENT), vm.state.value.day)
         assertEquals(YearMonth.now(TASHKENT), vm.state.value.cursorMonth)
         assertEquals(OrdersView.CALENDAR, store.view.first())
+    }
+
+    // ---- R6/R9: the dashboard's «Бугунги етказишлар» hand-off ----
+
+    /**
+     * Ruling R9. The Бош tab writes a day and switches tab; this ViewModel consumes it AFTER the
+     * persisted view is restored, so the hand-off wins over whatever view the planner last left
+     * the tab in — here deliberately Рўйхат, which is what the restore would otherwise have shown.
+     *
+     * And exactly once: a store that kept the day would re-open the day sheet every time the
+     * operator came back to this tab for the rest of the session. The second ViewModel below is
+     * the same handover replayed, and it must find nothing.
+     */
+    @Test fun `a day handed over by the dashboard opens the calendar on it, once`() = runTest {
+        val handover = MemoryOrdersOpenDayStore()
+        val day = LocalDate.of(2026, 3, 4)
+        handover.set(day)
+
+        val viewStore = MemoryOrdersViewStore(OrdersView.LIST)
+        val first = OrdersListViewModel(
+            FakeSource(), capacitySource = FakeCapacity(), viewStore = viewStore, openDayStore = handover,
+        )
+        advanceUntilIdle()
+        assertEquals(OrdersView.CALENDAR, first.state.value.view)
+        assertEquals(day, first.state.value.day)
+        // §4 asks for the persisted switch to follow, so the tab stays in Жадвал after the visit.
+        assertEquals(OrdersView.CALENDAR, viewStore.view.first())
+
+        val second = OrdersListViewModel(
+            FakeSource(), capacitySource = FakeCapacity(), viewStore = MemoryOrdersViewStore(OrdersView.LIST),
+            openDayStore = handover,
+        )
+        advanceUntilIdle()
+        assertEquals(OrdersView.LIST, second.state.value.view, "the one-shot was spent on the first visit")
+        assertNull(second.state.value.day)
+    }
+
+    /** The ordinary case: nothing was handed over, so the persisted view alone decides and the
+     *  store costs the tab nothing. */
+    @Test fun `with no day handed over the persisted view still decides`() = runTest {
+        val vm = OrdersListViewModel(
+            FakeSource(), viewStore = MemoryOrdersViewStore(OrdersView.LIST),
+            openDayStore = MemoryOrdersOpenDayStore(),
+        )
+        advanceUntilIdle()
+        assertEquals(OrdersView.LIST, vm.state.value.view)
+        assertNull(vm.state.value.day)
     }
 
     /** §4.4: the default selection only fills an empty selection — a day the planner already

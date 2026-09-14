@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -16,39 +17,54 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import uz.etalon.crm.core.designsystem.components.Avatar
 import uz.etalon.crm.core.designsystem.components.BarSparkline
 import uz.etalon.crm.core.designsystem.components.DeltaBadge
+import uz.etalon.crm.core.designsystem.components.Donut
 import uz.etalon.crm.core.designsystem.components.MoneyHeroText
+import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.PaymentStateTag
 import uz.etalon.crm.core.designsystem.components.SegmentBar
 import uz.etalon.crm.core.designsystem.components.StackedBar
 import uz.etalon.crm.core.designsystem.components.Tag
+import uz.etalon.crm.core.designsystem.components.donutPercent
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.LoadedVolume
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.RecentOrder
+import uz.etalon.crm.core.model.TopCustomer
 import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.core.ui.format.UZ_MONTHS_SHORT
+import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatCountBare
 import uz.etalon.crm.core.ui.format.formatDecimal
 import uz.etalon.crm.core.ui.format.formatMoney
+import uz.etalon.crm.core.ui.format.formatOrderNo
+import uz.etalon.crm.core.ui.format.formatPercent
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
 
 /** Design §2.3: a rail card is 228 dp wide, so the third one peeks past the right edge and the
@@ -81,6 +97,41 @@ private val KickerStyle = EtalonType.labelSm.copy(letterSpacing = 0.08.em)
  * the brief adds the English for.
  */
 private const val RAIL_LINES = 2
+
+/** The rail's three cards and the grid's two-by-two, named so the skeleton can lay out the same
+ *  shape without restating the numbers. */
+private const val RAIL_CARDS = 3
+private const val GRID_ROWS = 2
+private const val GRID_COLUMNS = 2
+
+/** §2.5–§2.7: the donut, the top clients and the latest orders. */
+private const val BOTTOM_CARDS = 3
+
+/** §2.5's legend bullet — small enough to read as a key to the ring rather than as a control. */
+private val LEGEND_DOT = 8.dp
+
+/** §2.6 / §2.7 row furniture: the 32 dp circle (smaller than a list row's 36, because these rows
+ *  sit inside a card that already has its own margins) and the 4 dp progress rail under a name. */
+private val ROW_AVATAR = 32.dp
+private val SHARE_BAR_HEIGHT = 4.dp
+
+/** Enough places for a bar to be visibly shorter than the one above it at 390 dp: at three
+ *  decimals one pixel of a 200 dp bar is still 0,005 of the whole. */
+private const val SHARE_SCALE = 3
+
+/** The « · » the meta lines are joined by, the same separator [formatAddressLine] uses inside an
+ *  address. */
+private const val SEPARATOR = " · "
+
+/** §3's skeleton blocks, mirroring `DashboardSkeleton.tsx` at phone scale: its 340 hero, its 14 dp
+ *  section kickers, its 160 KPI tiles and its 380 bottom widgets, re-proportioned for a 390 dp
+ *  column rather than a 1320 px page. */
+private val SKELETON_HERO = 190.dp
+private val SKELETON_KICKER = 12.dp
+private val SKELETON_KICKER_WIDTH = 140.dp
+private val SKELETON_RAIL = 168.dp
+private val SKELETON_TILE = 118.dp
+private val SKELETON_CARD = 164.dp
 
 @Composable
 internal fun SectionKicker(text: String, modifier: Modifier = Modifier) = Text(
@@ -513,3 +564,354 @@ internal fun NoAccessCard(modifier: Modifier = Modifier) = Column(
 ) {
     Text(stringResource(R.string.home_no_access_dashboard), style = EtalonType.body, color = EtalonColors.ink2)
 }
+
+// ── §2.5–§2.7 the three white cards under the grid ───────────────────────────────────────────
+
+/**
+ * The shape §2.5, §2.6 and §2.7 share: a white `xl` card whose header carries a title on the left
+ * and, on the right, either a quiet figure or an action.
+ *
+ * The right-hand slot is a `@Composable` rather than a string because two of the three cards put a
+ * label there and the third puts a button: the wording, the colour and the hit target are the
+ * caller's, and the frame is this.
+ */
+@Composable
+private fun DashCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
+) = Column(
+    modifier.fillMaxWidth().padding(horizontal = EtalonSpace.cardMargin)
+        .clip(EtalonShapes.xl).background(EtalonColors.surface)
+        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
+        .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
+) {
+    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        Text(
+            title,
+            style = EtalonType.sectionTitle,
+            color = EtalonColors.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        trailing()
+    }
+    Spacer(Modifier.height(EtalonSpace.md))
+    content()
+}
+
+// ── §2.5 the payment donut ───────────────────────────────────────────────────────────────────
+
+/**
+ * How this month's orders stand, as one ring: green for the paid ones, `warning` for the part-paid
+ * ones and the `lavenderBg` track for those still awaiting payment.
+ *
+ * The legend states a **count** and nothing else. The payload carries no per-state sums (owner
+ * ruling: hidden, not approximated), and a money column derived from the counts would be a figure
+ * nobody sent.
+ *
+ * The ring is wrapped in a [Box] because [Donut] takes no modifier of its own — its size is its own
+ * parameter, and where it sits is the caller's business.
+ */
+@Composable
+internal fun PaymentDonutCard(d: HomeDashboard, modifier: Modifier = Modifier) {
+    val total = d.paidOrders + d.partialOrders + d.awaitingOrders
+    DashCard(
+        title = stringResource(R.string.home_payment_state),
+        modifier = modifier,
+        trailing = {
+            Text(
+                stringResource(R.string.home_orders_count, formatCountBare(total)),
+                style = EtalonType.labelSm,
+                color = EtalonColors.ink3,
+                maxLines = 1,
+            )
+        },
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Box {
+                Donut(paid = d.paidOrders, partial = d.partialOrders, awaiting = d.awaitingOrders) {
+                    DonutCentre(donutPercent(d.paidOrders, total))
+                }
+            }
+            Column(
+                Modifier.weight(1f).padding(start = EtalonSpace.lg),
+                verticalArrangement = Arrangement.spacedBy(EtalonSpace.sm),
+            ) {
+                LegendRow(R.string.home_paid, d.paidOrders, EtalonColors.green)
+                LegendRow(R.string.home_partial, d.partialOrders, EtalonColors.warning)
+                LegendRow(R.string.home_awaiting, d.awaitingOrders, EtalonColors.lavenderBg)
+            }
+        }
+    }
+}
+
+/** «90%» over «тўланган», in the middle of the ring (`PaymentDonut.tsx:76`). */
+@Composable
+private fun DonutCentre(percent: Int) = Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Text(
+        formatPercent(BigDecimal(percent), decimals = 0),
+        style = EtalonType.titleSm,
+        color = EtalonColors.ink,
+        maxLines = 1,
+    )
+    Text(
+        stringResource(R.string.home_paid_pct_caption),
+        style = EtalonType.caption,
+        color = EtalonColors.ink3,
+        maxLines = 1,
+    )
+}
+
+/** A dot in the arc's own colour, the state's word, and the count right-aligned in the same figures
+ *  the rest of the screen is set in. */
+@Composable
+private fun LegendRow(@StringRes label: Int, count: Int, colour: Color) = Row(
+    Modifier.fillMaxWidth(),
+    verticalAlignment = Alignment.CenterVertically,
+) {
+    Box(Modifier.size(LEGEND_DOT).clip(EtalonShapes.pill).background(colour))
+    Text(
+        stringResource(label),
+        style = EtalonType.labelSm,
+        color = EtalonColors.ink2,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f).padding(start = EtalonSpace.sm),
+    )
+    Text(formatCountBare(count), style = EtalonType.rowAmount, color = EtalonColors.ink, maxLines = 1)
+}
+
+// ── §2.6 the top clients ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The five biggest payers, each with a bar showing what they have paid against the top one's
+ * figure — so the card reads as a ranking without the eye having to compare five nine-digit
+ * numbers.
+ *
+ * The ranking and the cut to five are the ViewModel's ([topCustomers]); this draws what it is
+ * handed.
+ */
+@Composable
+internal fun TopClientsCard(d: HomeDashboard, modifier: Modifier = Modifier) {
+    val rows = d.topCustomers
+    // The denominator is the top row's own figure, so the first bar is always full — unless every
+    // row is zero, in which case no bar is drawn at all rather than five full ones.
+    val top = rows.firstOrNull()?.totalCollected?.amount ?: BigDecimal.ZERO
+    DashCard(
+        title = stringResource(R.string.home_top_clients),
+        modifier = modifier,
+        trailing = {
+            Text(
+                stringResource(R.string.home_top_clients_unit),
+                style = EtalonType.labelSm,
+                color = EtalonColors.ink3,
+                maxLines = 1,
+            )
+        },
+    ) {
+        if (rows.isEmpty()) {
+            Text(stringResource(R.string.home_top_empty), style = EtalonType.body, color = EtalonColors.ink3)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(EtalonSpace.md)) {
+                rows.forEach { c -> TopClientRow(c, top) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopClientRow(c: TopCustomer, top: BigDecimal) = Row(
+    Modifier.fillMaxWidth().heightIn(min = EtalonSpace.minTouch),
+    verticalAlignment = Alignment.CenterVertically,
+) {
+    Avatar(c.name, size = ROW_AVATAR)
+    Column(Modifier.weight(1f).padding(horizontal = EtalonSpace.rowGap)) {
+        Text(
+            c.name,
+            style = EtalonType.rowTitle,
+            color = EtalonColors.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(EtalonSpace.xs))
+        ShareBar(share(c.totalCollected.amount, top))
+        Spacer(Modifier.height(EtalonSpace.xs))
+        Text(
+            stringResource(R.string.home_orders_count, formatCountBare(c.orderCount)),
+            style = EtalonType.caption,
+            color = EtalonColors.ink3,
+            maxLines = 1,
+        )
+    }
+    MoneyText(c.totalCollected)
+}
+
+/**
+ * A client's share of the top client's figure, 0..1.
+ *
+ * `BigDecimal`, not a `Double` ratio of two `Money` amounts: the figures here are nine digits and
+ * the division is the only arithmetic this card does. A top of zero means nobody has paid
+ * anything, and every bar is then empty rather than every bar being full.
+ */
+private fun share(value: BigDecimal, top: BigDecimal): Float =
+    if (top.signum() <= 0) 0f
+    else value.divide(top, SHARE_SCALE, RoundingMode.HALF_UP).toFloat().coerceIn(0f, 1f)
+
+@Composable
+private fun ShareBar(fraction: Float) = Box(
+    Modifier.fillMaxWidth().height(SHARE_BAR_HEIGHT).clip(EtalonShapes.pill).background(EtalonColors.lavenderBg),
+) {
+    if (fraction > 0f) {
+        Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(EtalonShapes.pill).background(EtalonColors.indigo))
+    }
+}
+
+// ── §2.7 the latest orders ───────────────────────────────────────────────────────────────────
+
+/**
+ * The four newest orders, and the door to the whole list.
+ *
+ * Only the «№» is a target inside a row — §2.7 makes the order number the link and leaves the rest
+ * of the line as text — so it carries [minimumInteractiveComponentSize], which holds D7's 48 dp hit
+ * area under a run of 11 sp type. «Барчаси →» does the same.
+ *
+ * @param showEmpty [HomeUiState.showRecentEmpty] — «Ҳали буюртма йўқ» is a claim about the server
+ *   and may only be made once a permitted fetch has settled. While it is false and the list is
+ *   empty the card simply draws no rows.
+ */
+@Composable
+internal fun RecentOrdersCard(
+    recent: List<RecentOrder>,
+    showEmpty: Boolean,
+    onOpenOrder: (String) -> Unit,
+    onOpenOrdersList: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val all = stringResource(R.string.home_recent_all)
+    DashCard(
+        title = stringResource(R.string.home_recent),
+        modifier = modifier,
+        trailing = {
+            Text(
+                all,
+                style = EtalonType.label,
+                color = EtalonColors.indigo,
+                maxLines = 1,
+                modifier = Modifier
+                    .clip(EtalonShapes.sm)
+                    .clickable(role = Role.Button, onClickLabel = all, onClick = onOpenOrdersList)
+                    .minimumInteractiveComponentSize()
+                    .padding(start = EtalonSpace.sm),
+            )
+        },
+    ) {
+        if (recent.isEmpty()) {
+            if (showEmpty) {
+                Text(stringResource(R.string.home_recent_empty), style = EtalonType.body, color = EtalonColors.ink3)
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(EtalonSpace.md)) {
+                recent.forEach { o -> RecentOrderRow(o, onOpenOrder) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentOrderRow(o: RecentOrder, onOpenOrder: (String) -> Unit) = Row(
+    Modifier.fillMaxWidth().heightIn(min = EtalonSpace.minTouch),
+    verticalAlignment = Alignment.CenterVertically,
+) {
+    Avatar(o.clientName, size = ROW_AVATAR)
+    Column(Modifier.weight(1f).padding(horizontal = EtalonSpace.rowGap)) {
+        Text(
+            o.clientName,
+            style = EtalonType.rowTitle,
+            color = EtalonColors.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val orderNo = formatOrderNo(o.orderNumber)
+            Text(
+                orderNo,
+                style = EtalonType.meta,
+                color = EtalonColors.indigo,
+                maxLines = 1,
+                modifier = Modifier
+                    .clip(EtalonShapes.xs)
+                    .clickable(role = Role.Button, onClickLabel = orderNo) { onOpenOrder(o.orderId) }
+                    .minimumInteractiveComponentSize(),
+            )
+            // An address the client does not have is left out entirely: «№ 09‑0003 · 78,7 м² · »
+            // reads as a row with something missing rather than a row with nothing to add.
+            val rest = listOfNotNull(formatArea(o.totalArea), formatAddressLine(o.clientAddress))
+            Text(
+                rest.joinToString(SEPARATOR, prefix = SEPARATOR),
+                style = EtalonType.meta,
+                color = EtalonColors.ink3,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+    Column(horizontalAlignment = Alignment.End) {
+        MoneyText(o.totalPrice)
+        Spacer(Modifier.height(EtalonSpace.xs))
+        PaymentStateTag(o.paymentState)
+    }
+}
+
+// ── §3 the first-load skeleton ───────────────────────────────────────────────────────────────
+
+/**
+ * What the screen shows before its first payload arrives, mirroring `DashboardSkeleton.tsx`'s
+ * blocks: the hero, a kicker over the financial rail, another over the operational grid, and the
+ * three bottom cards — the same blocks in the same order as the screen they stand in for, so
+ * nothing jumps when the figures land. (The web's header block is the app bar here, which is real
+ * chrome and is drawn for real.)
+ *
+ * FIRST load only. A refresh that fails keeps the last payload under the error banner (§3);
+ * blanking a screen of real figures back to grey blocks is exactly what that rule forbids.
+ *
+ * The web's blocks pulse and these do not: an animation that never settles is a screenshot test
+ * that never settles, and the screen it covers is on view for well under a second.
+ */
+@Composable
+internal fun DashboardSkeleton(modifier: Modifier = Modifier) = Column(
+    modifier.fillMaxWidth().padding(horizontal = EtalonSpace.cardMargin),
+    verticalArrangement = Arrangement.spacedBy(EtalonSpace.md),
+) {
+    SkeletonBlock(SKELETON_HERO, EtalonShapes.sheet)
+    // A kicker, then the rail: three cards of which the third peeks, as the real rail does.
+    SkeletonBlock(SKELETON_KICKER, EtalonShapes.xs, width = SKELETON_KICKER_WIDTH)
+    Row(horizontalArrangement = Arrangement.spacedBy(EtalonSpace.md)) {
+        repeat(RAIL_CARDS) { SkeletonBlock(SKELETON_RAIL, EtalonShapes.xl, width = RAIL_CARD_WIDTH) }
+    }
+    // A kicker, then the 2×2.
+    SkeletonBlock(SKELETON_KICKER, EtalonShapes.xs, width = SKELETON_KICKER_WIDTH)
+    repeat(GRID_ROWS) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(GRID_GAP)) {
+            repeat(GRID_COLUMNS) { SkeletonBlock(SKELETON_TILE, EtalonShapes.xl, Modifier.weight(1f)) }
+        }
+    }
+    // §2.5–§2.7.
+    repeat(BOTTOM_CARDS) { SkeletonBlock(SKELETON_CARD, EtalonShapes.xl) }
+}
+
+@Composable
+private fun SkeletonBlock(
+    height: Dp,
+    shape: Shape,
+    modifier: Modifier = Modifier,
+    width: Dp? = null,
+) = Box(
+    modifier
+        .then(if (width == null) Modifier.fillMaxWidth() else Modifier.width(width))
+        .height(height)
+        .clip(shape)
+        .background(EtalonColors.surfaceBorder),
+)
