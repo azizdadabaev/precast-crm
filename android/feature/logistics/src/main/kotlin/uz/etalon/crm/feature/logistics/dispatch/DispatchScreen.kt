@@ -81,7 +81,8 @@ fun DispatchRoute(
     val s by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(s.done) { if (s.done) onDone() }
     DispatchScreen(
-        s = s, shipmentNumber = null, isShipment = shipmentId != null, onCancel = onCancel,
+        s = s, shipmentNumber = shipmentNumberOf(s.order, shipmentId),
+        isShipment = shipmentId != null, onCancel = onCancel,
         onSetDriverId = vm::setDriverId, onSetTruck = vm::setTruck,
         onSetWillCollectCash = vm::setWillCollectCash, onSetAmountDigits = vm::setAmountDigits,
         onSubmit = vm::submit, onRetryDrivers = vm::refreshDrivers,
@@ -97,11 +98,12 @@ fun DispatchRoute(
  * The timeline is [timelineFor], the order detail's own builder — moved to the design system by
  * ruling R13 so both screens draw one timeline rather than two that can drift.
  *
- * @param shipmentNumber the truck's own «Жўнатма N» for the header and the gate, where the route
- *   knows it. The nav key carries only the shipment's id, so today it is always null and the two
- *   lines name the order alone; the parameter is here because the gate's meta is the one place a
- *   split order's operator needs to see WHICH lorry is leaving, and the screen must be ready to
- *   say it the moment the key carries the number.
+ * @param shipmentNumber the truck's own «Жўнатма N» for the header and the gate. The nav key
+ *   carries only the shipment's id, so the route resolves the number from the order the ViewModel
+ *   loads ([shipmentNumberOf]) — the gate's meta is the one place a split order's operator sees
+ *   WHICH lorry is leaving, exactly as the deliver gate on the shipments list names it. Null for a
+ *   whole-order dispatch and while the detail is still resolving: both lines then name the order
+ *   alone rather than a truck number that might be wrong.
  * @param barVisible whether the sticky bar is drawn at all (ruling R13). It steps aside for the
  *   keyboard — «Машина рақами» is typed at the bottom of the form, and a bottom-aligned bar would
  *   otherwise land on top of it. Defaulted from the window and passed in only by the tests —
@@ -306,6 +308,16 @@ fun DispatchScreen(
  */
 internal fun canSubmit(s: DispatchUiState, isShipment: Boolean): Boolean =
     !s.isOffline && (isShipment || !s.amount.isZero) && !s.submitting && !s.done
+
+/**
+ * The truck's own «Жўнатма N», read off the order the ViewModel already loads. The nav key carries
+ * only the shipment's id, and an operator dispatching one lorry out of several must see WHICH one
+ * is leaving — the deliver gate one screen back names it, so this one cannot stay silent about it.
+ * Null for a whole-order dispatch, and while the detail is still resolving (or if the id is not in
+ * it): the header and the gate then name the order alone rather than a number that might be wrong.
+ */
+internal fun shipmentNumberOf(order: OrderDetail?, shipmentId: String?): Int? =
+    shipmentId?.let { id -> order?.shipments?.firstOrNull { it.id == id }?.number }
 
 /** «Жўнатма 2 · № 09−0021», or the order alone where the route does not know the truck's number. */
 @Composable
