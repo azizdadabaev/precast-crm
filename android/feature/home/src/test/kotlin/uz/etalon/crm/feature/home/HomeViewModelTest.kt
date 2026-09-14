@@ -95,6 +95,8 @@ class HomeViewModelTest {
         advanceUntilIdle()
         assertTrue(vm.state.value.hasDashboardAccess)
         assertNotNull(vm.state.value.dash)
+        // Granted access must never read as withheld — the flag the no-access card keys on.
+        assertFalse(vm.state.value.showNoAccessState)
     }
 
     @Test fun `refresh is a no-op without dashboard access`() = runTest {
