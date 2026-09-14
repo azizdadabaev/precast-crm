@@ -21,7 +21,9 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
  * lie at 6 dp, and the caption beside the bar already says the count is zero. When every share is
  * zero what is left is the bare track, which is the empty state §6 asks for.
  *
- * @param shares each state's count with the colour it is drawn in, left to right. Counts, not
+ * @param shares EVERY state's count with the colour it is drawn in, left to right — including a
+ *   share drawn in the track's own colour (§2.4's awaiting), which is invisible but still holds
+ *   its width: leave one out and the others silently grow to fill the bar. Counts, not
  *   percentages — the widths are taken as weights, so the caller passes what it already has.
  */
 @Composable

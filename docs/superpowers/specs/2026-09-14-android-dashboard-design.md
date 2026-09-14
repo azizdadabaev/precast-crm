@@ -33,10 +33,10 @@ sheet already lists that day's orders (owner may reverse: R-list below).
    (`outstandingReceivables.orderCount`, `redBg`/`red` on dark → the existing `debtOnDark`
    treatment), amount `amountLg` 30/800 in mono + small «UZS», helper line the web's own
    «Ой бўйича бўлинмайди · бугунги қолдиқ» (`FinancialKPIs.tsx:272`), then a three-cell strip
-   (navy2, radius `md`): Тўланган (green) · Қисман (`warning`) · Кутилмоқда (red) with the counts
+   (navy2, radius `lg` 12): Тўланган (green) · Қисман (`warning`) · Кутилмоқда (red) with the counts
    from `ordersByPaymentState.paid / partial / awaiting`.
 3. **Financial rail** — section kicker «МОЛИЯВИЙ ҲОЛАТ · ЖОРИЙ ОЙ»; a horizontal `LazyRow`,
-   16 dp edge inset, cards 228 dp wide, radius `lg` 16, white, hairline border:
+   16 dp edge inset, cards 228 dp wide, radius `xl` 16, white, hairline border:
    - «Буюртма қилинган · Booked» — `bookedThisMonth.total`, delta badge from `.trend`, sparkline
      = last 8 of `bookedByMonth[].booked`, lines «N та буюртма · ушбу ой» and
      «Бошланғичдан: X UZS · M та» (`bookedAllTime`).
@@ -53,7 +53,7 @@ sheet already lists that day's orders (owner may reverse: R-list below).
    sign flashing — the phase-1 `TrendDirection` rule stands). `trend == null` → no badge.
    Sparkline: 8 bars, height ∝ value / max of the 8, the last bar `indigo`, the others `lavender`;
    all-zero series draws 8 floor stubs (2 dp) so the card does not jump.
-4. **Operational grid** — kicker «ОПЕРАЦИОН ҲОЛАТ»; 2×2, gap 10 dp, cards radius `lg`, white:
+4. **Operational grid** — kicker «ОПЕРАЦИОН ҲОЛАТ»; 2×2, gap 10 dp, cards radius `xl` 16, white:
    - «Фаол мижозлар» — `activeCustomers.count` 24/700; stacked bar green / `warning` / track
      (`lavenderBg`) in the proportions paid : partial : awaiting of `ordersByPaymentState`;
      caption «P тўланган · Q қисман · R кутилмоқда». Tap → Clients tab.
@@ -122,7 +122,7 @@ sheet already lists that day's orders (owner may reverse: R-list below).
 (sparkline, top-client bars), `green`/`greenBg`, `red`/`redBg`, `warning`/`warningBg` (partial —
 the prototype's `#F0A868` maps here), `lavenderBg` (donut track, bar track — the prototype's
 `#E2E0EC`), `ink`/`ink2`/`ink3`, `surface`/`surfaceBorder`, `page`. Radii `sheet` 22 / `lg` 16 /
-`md` 12. Type: `amountLg` 30/800 (hero amount), `kpi` 24/700 (grid figures) and `headline` 22/800 (rail values), `labelSm`
+`sheet` 22 / `xl` 16 / `lg` 12 (the repo's real names — the brief's "lg 16 / md 12" are the prototype's). Type: `amountLg` 30/800 (hero amount), `kpi` 24/700 (grid figures) and `headline` 22/800 (rail values), `labelSm`
 kickers, mono for every figure. Targets ≥ 48 dp on every tappable card/row.
 
 ## 6. Failure and edge rules
