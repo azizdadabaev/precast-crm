@@ -562,12 +562,19 @@ private fun LoadedFigures(loaded: LoadedVolume) {
         overflow = TextOverflow.Ellipsis,
     )
     Spacer(Modifier.height(EtalonSpace.xs))
+    // The web's own branch (`OperationalKPIs.tsx:173`): a month whose row exists but counts
+    // nothing says so in words. «0 та буюртма · 0 та балка» would read as a measured zero — the
+    // same reason [R.string.home_loaded_none] stands in for a month with no row at all.
     GridCaption(
-        stringResource(
-            R.string.home_loaded_caption,
-            formatCountBare(loaded.orderCount),
-            formatCountBare(loaded.beamCount),
-        ),
+        if (loaded.orderCount == 0) {
+            stringResource(R.string.home_loaded_none)
+        } else {
+            stringResource(
+                R.string.home_loaded_caption,
+                formatCountBare(loaded.orderCount),
+                formatCountBare(loaded.beamCount),
+            )
+        },
     )
 }
 

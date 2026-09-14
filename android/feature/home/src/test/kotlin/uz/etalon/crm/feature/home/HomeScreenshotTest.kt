@@ -536,6 +536,39 @@ class HomeScreenshotTest {
         rule.onNodeWithText("Маълумот йўқ").assertExists()
     }
 
+    /**
+     * The parity walk's one finding (Task 6): a month whose loaded row EXISTS but counts nothing.
+     * The server sends such a row for every month in the window, so this — not a missing row — is
+     * what an unloaded month actually looks like on the wire. The web says «Бу ойда юклаш йўқ»
+     * there (`OperationalKPIs.tsx:173`); the phone must not print «0 та буюртма · 0 та балка»,
+     * which claims a month that was measured and traded nothing.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun aLoadedRowOfZerosSaysNothingWasLoaded() {
+        val zeroRow = loaded().let {
+            it.copy(
+                dash = it.dash!!.copy(
+                    loadedThisMonth = LoadedVolume(
+                        monthKey = "2026-09", blocks = 0, beamCount = 0,
+                        beamMeters = BigDecimal.ZERO, area = BigDecimal.ZERO, orderCount = 0,
+                    ),
+                ),
+            )
+        }
+        rule.setContent {
+            EtalonTheme {
+                HomeScreen(
+                    s = zeroRow, me = owner, now = now, onRefresh = {},
+                    onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
+                )
+            }
+        }
+        rule.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText("Юкланган ҳажм · сен"))
+        rule.waitForIdle()
+        rule.onNodeWithText("Бу ой юк йўқ").assertExists()
+        rule.onNodeWithText("0 та буюртма · 0 та балка").assertDoesNotExist()
+    }
+
     @Test @Config(qualifiers = "w411dp-h891dp") fun noAccessLight() {
         shoot("home_no_access_light", noAccess())
         rule.onNodeWithText("Бу саҳифага рухсат йўқ — фақат ADMIN ва OWNER кира олади.").assertExists()
