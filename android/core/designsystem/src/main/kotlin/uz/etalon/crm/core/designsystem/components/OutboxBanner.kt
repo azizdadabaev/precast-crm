@@ -28,7 +28,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
  * [ErrorBanner]'s `redBg`/`red` with the two compact buttons.
  */
 @Composable
-fun OutboxBanner(pending: Int, failedMessage: String?, onRetry: () -> Unit, onCancel: () -> Unit) {
+fun OutboxBanner(pending: Int, failedMessage: String?, onRetry: () -> Unit, onCancel: () -> Unit, enabled: Boolean = true) {
     if (pending == 0 && failedMessage == null) return
     val failed = failedMessage != null
     Row(
@@ -45,9 +45,9 @@ fun OutboxBanner(pending: Int, failedMessage: String?, onRetry: () -> Unit, onCa
         )
         if (failed) {
             Spacer(Modifier.width(8.dp))
-            SecondaryButton(stringResource(R.string.action_retry), onRetry, compact = true)
+            SecondaryButton(stringResource(R.string.action_retry), onRetry, compact = true, enabled = enabled)
             Spacer(Modifier.width(6.dp))
-            SecondaryButton(stringResource(R.string.ds_action_cancel), onCancel, compact = true)
+            SecondaryButton(stringResource(R.string.ds_action_cancel), onCancel, compact = true, enabled = enabled)
         }
     }
 }

@@ -160,6 +160,9 @@ fun ShipmentsScreen(
                         failedMessage = orderFailed?.let { it.error ?: stringResource(R.string.logistics_upload_failed) },
                         onRetry = { orderFailed?.let { onRetryUpload(it.id) } },
                         onCancel = { orderFailed?.let { onCancelUpload(it.id) } },
+                        // A retry or cancel while another request is in flight would be dropped
+                        // silently by runAction — disabled says so instead.
+                        enabled = !s.busy,
                     )
                 }
             }

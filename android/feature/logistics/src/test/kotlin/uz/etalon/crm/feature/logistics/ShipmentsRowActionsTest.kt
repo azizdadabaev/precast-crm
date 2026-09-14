@@ -26,7 +26,9 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.OrderSummary
+import uz.etalon.crm.core.model.OutboxKind
 import uz.etalon.crm.core.model.PaymentState
+import uz.etalon.crm.core.model.PendingUpload
 import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
@@ -43,6 +45,9 @@ private const val DISPATCH_ROW = "Жўнатиш"
 
 /** The long-press question. Its presence IS "the sheet is open". */
 private const val DELETE_SHEET = "Жўнатмани ўчириш"
+
+/** The outbox banner's retry pill — the design system's own `action_retry`. */
+private const val RETRY = "Қайта уриниш"
 
 private val NOW: Instant = Instant.parse("2026-09-04T00:00:00Z")
 
@@ -93,6 +98,24 @@ class ShipmentsRowActionsTest {
         rule.waitForIdle()
 
         rule.onNode(hasText(DISPATCH_ROW) and hasClickAction()).assertIsNotEnabled()
+    }
+
+    /** The order-level banner's «Қайта»/«Бекор» go down the same `runAction` as the rows, so they
+     *  must go grey with them — a retry tapped during an add would otherwise vanish in silence. */
+    @Test fun `a request in flight disables the outbox banner's retry and cancel too`() {
+        var busy by mutableStateOf(false)
+        val failed = PendingUpload(
+            id = "u1", kind = OutboxKind.LOAD_TRUCK, orderId = "o1", shipmentId = null,
+            failed = true, attempts = 2, error = "Сервер рад этди",
+        )
+        rule.setContent { EtalonTheme { Screen(state(busy = busy).copy(pendingUploads = listOf(failed))) } }
+
+        rule.onNode(hasText(RETRY) and hasClickAction()).assertIsEnabled()
+
+        busy = true
+        rule.waitForIdle()
+
+        rule.onNode(hasText(RETRY) and hasClickAction()).assertIsNotEnabled()
     }
 
     @Test fun `long-pressing a truck nothing has been put on offers to delete it`() {
