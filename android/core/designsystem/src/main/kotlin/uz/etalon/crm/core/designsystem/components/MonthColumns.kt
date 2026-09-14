@@ -49,10 +49,36 @@ private val ColumnsHeight = 60.dp
 private val ColumnGap = EtalonSpace.xs
 private val BarGap = 2.dp
 
-/** The floor a zero month keeps, as [BarSparkline]'s own stub: a bar with no height reads as
- *  missing data rather than as a month with no orders in it. */
+/**
+ * How the unselected Collected bar is tinted (ruling R13).
+ *
+ * `greenBg` — the token a chip's ground is drawn in — is a pale mint that all but disappears on a
+ * white card at ten device-independent pixels of width, and Collected is almost always the shorter
+ * bar of the pair. The same `green` at 45 % reads as the muted half of the same colour rather than
+ * as a different one, and the selected month keeps the full `green` so the picked column still
+ * stands out.
+ */
+private const val CollectedAlpha = 0.45f
+
+/**
+ * The floor a zero month keeps, as [BarSparkline]'s own stub: a bar with no height reads as
+ * missing data rather than as a month with no orders in it. Drawn in the TRACK colour, not the
+ * series colour — a zero is the absence of a figure, and drawing it in the series' own green would
+ * claim the month collected something.
+ */
 private val ColumnStub = 2.dp
 private val StubFraction = ColumnStub / ColumnsHeight
+
+/**
+ * The floor a NON-ZERO month keeps (ruling R13).
+ *
+ * A month that collected half a percent of the best month's figure is 0,3 dp tall against a 60 dp
+ * band — invisible, and indistinguishable from a month that collected nothing at all. Three device-
+ * independent pixels is the smallest mark that still reads as a bar, so a real but small month is
+ * drawn short rather than drawn away.
+ */
+private val MinBar = 3.dp
+private val MinBarFraction = MinBar / ColumnsHeight
 
 /** The mark under the month containing today. A dot rather than a bolder label: the label has to
  *  stay the same width in every column or the twelve stop lining up. */
@@ -60,6 +86,11 @@ private val CurrentDot = 3.dp
 
 /** Tag of the i-th column, so a test can tap one month rather than photograph the row. */
 fun monthColumnTag(index: Int) = "month_column_$index"
+
+/** Tag of one bar inside the i-th column, so a test can measure a bar rather than photograph the
+ *  row — the two floors of ruling R13 are heights, and a frame cannot assert a height. */
+fun monthBarTag(index: Int, collected: Boolean) =
+    "month_bar_${if (collected) "collected" else "booked"}_$index"
 
 /**
  * True on the column the operator has picked — the one drawn in the accent pair. A semantics
@@ -79,6 +110,13 @@ private var SemanticsPropertyReceiver.monthColumnSelected by MonthColumnSelected
  * month can be compared with each other and not only with their own row: collected is almost
  * always the shorter of the pair, and scaling each series to its own maximum would draw a month
  * that collected a tenth of what it sold as two bars of equal height.
+ *
+ * That shared denominator is what makes a small Collected figure tiny, so two rules protect it
+ * (ruling R13): a real figure is never drawn shorter than [MinBar], and the unselected Collected
+ * bar is tinted [CollectedAlpha] of `green` rather than the near-white `greenBg`. A month with
+ * nothing in it is the one thing drawn smaller and paler than that — [ColumnStub] in the track
+ * colour — so "small" and "none" never look alike. A legend beside this chart should key Booked to
+ * `indigo` and Collected to `green`, the two selected-state colours.
  *
  * The whole column is the target, not the bar: [onSelect] fires with the column's index, and a
  * column is at least [EtalonSpace.minTouch] tall however short its bars are.
@@ -170,8 +208,16 @@ private fun RowScope.MonthColumn(
         horizontalArrangement = Arrangement.spacedBy(BarGap),
         verticalAlignment = Alignment.Bottom,
     ) {
-        Bar(bookedFraction, if (isSelected) EtalonColors.indigo else EtalonColors.lavender)
-        Bar(collectedFraction, if (isSelected) EtalonColors.green else EtalonColors.greenBg)
+        Bar(
+            fraction = bookedFraction,
+            colour = if (isSelected) EtalonColors.indigo else EtalonColors.lavender,
+            tag = monthBarTag(index, collected = false),
+        )
+        Bar(
+            fraction = collectedFraction,
+            colour = if (isSelected) EtalonColors.green else EtalonColors.green.copy(alpha = CollectedAlpha),
+            tag = monthBarTag(index, collected = true),
+        )
     }
     Spacer(Modifier.height(EtalonSpace.xs))
     Text(
@@ -200,16 +246,30 @@ private fun ColumnScope.CurrentMark(isCurrent: Boolean) {
     )
 }
 
+/**
+ * One bar of a month's pair.
+ *
+ * Two floors, and they mean different things (ruling R13). A month with a REAL figure is drawn at
+ * least [MinBar] tall in its own colour, so a small month is short rather than absent. A month with
+ * NOTHING in it keeps the thinner [ColumnStub] in the track colour: the mark says "this column
+ * exists and its figure is zero", which is a different statement from "this month collected a
+ * little".
+ *
+ * NaN is checked first — `coerceIn` passes it straight through and `fillMaxHeight(NaN)` throws
+ * inside `roundToInt`, so a month with no denominator would otherwise take the screen down with it.
+ * It reads as a zero, because a fraction that is not a number is not a figure either.
+ */
 @Composable
-private fun RowScope.Bar(fraction: Float, colour: Color) = Box(
-    Modifier
-        .weight(1f)
-        // NaN first: `coerceIn` passes it straight through and `fillMaxHeight(NaN)` throws inside
-        // `roundToInt` — a month with no denominator would take the screen down with it.
-        .fillMaxHeight(
-            if (fraction.isFinite()) fraction.coerceIn(0f, 1f).coerceAtLeast(StubFraction)
-            else StubFraction,
-        )
-        .clip(BarShape)
-        .background(colour),
-)
+private fun RowScope.Bar(fraction: Float, colour: Color, tag: String) {
+    val real = fraction.isFinite() && fraction > 0f
+    Box(
+        Modifier
+            .weight(1f)
+            .fillMaxHeight(
+                if (real) fraction.coerceIn(0f, 1f).coerceAtLeast(MinBarFraction) else StubFraction,
+            )
+            .testTag(tag)
+            .clip(BarShape)
+            .background(if (real) colour else EtalonColors.lavenderBg),
+    )
+}

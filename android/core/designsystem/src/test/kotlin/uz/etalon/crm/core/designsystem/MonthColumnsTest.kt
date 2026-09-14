@@ -7,11 +7,14 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,6 +23,7 @@ import org.robolectric.annotation.Config
 import uz.etalon.crm.core.designsystem.components.MONTH_COLUMNS
 import uz.etalon.crm.core.designsystem.components.MonthColumnSelected
 import uz.etalon.crm.core.designsystem.components.MonthColumns
+import uz.etalon.crm.core.designsystem.components.monthBarTag
 import uz.etalon.crm.core.designsystem.components.monthColumnTag
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Money
@@ -115,6 +119,31 @@ class MonthColumnsTest {
                 .assertHeightIsAtLeast(1.dp)
         }
     }
+
+    /**
+     * Ruling R13, the defect this chart shipped with: under one shared denominator a real but
+     * small month rounded away to nothing and looked exactly like a month that traded nothing.
+     *
+     * A figure worth half a percent of the best month is 0,3 dp against the 60 dp band; it must
+     * still be drawn at least 3 dp tall. A genuine zero keeps the thinner 2 dp stub — so the two
+     * are distinguishable, which is the whole point, and the small month is the taller of them.
+     */
+    @Test fun `a real but tiny month is drawn at least three dp, taller than a zero month's stub`() {
+        // Month 0 collected 0,5 % of month 11's figure; month 1 collected nothing at all.
+        val tinyYear = listOf("1000000", "0") + List(MONTH_COLUMNS - 3) { "0" } + listOf("200000000")
+        show(booked = List(MONTH_COLUMNS) { "0" }, collected = tinyYear)
+
+        val tiny = collectedBarHeight(0)
+        val zero = collectedBarHeight(1)
+
+        assertTrue("a 0,5 % month must keep the 3 dp floor, not round away — was $tiny", tiny >= 3.dp)
+        assertTrue("a month with nothing in it must be shorter than one with a little", zero < tiny)
+        assertTrue("…and must still be drawn, as a stub — was $zero", zero >= 1.dp)
+    }
+
+    private fun collectedBarHeight(index: Int) =
+        rule.onNodeWithTag(monthBarTag(index, collected = true), useUnmergedTree = true)
+            .getUnclippedBoundsInRoot().height
 
     /** D7's floor: a column is a target a finger can hit, whatever its bars do. */
     @Test fun `every column is at least a 48 dp target`() {

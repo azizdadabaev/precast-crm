@@ -409,8 +409,9 @@ internal fun MonthlyChartCard(
         horizontalArrangement = Arrangement.spacedBy(EtalonSpace.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // The key is drawn in the SELECTED pair, not the unselected one: those are the two colours
-        // the eye is reading off the chart.
+        // Ruling R13: the key is drawn in the SELECTED pair — `indigo` and `green` — because the
+        // unselected bars are the same two hues muted, and a legend in the muted pair would key
+        // the chart to colours nothing on it is actually drawn in at full strength.
         LegendKey(stringResource(R.string.home_legend_booked), EtalonColors.indigo)
         LegendKey(stringResource(R.string.home_legend_collected), EtalonColors.green)
     }
