@@ -10,14 +10,12 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -47,9 +45,6 @@ private fun KpiAccent.bg(): Color = when (this) {
     KpiAccent.GREEN -> EtalonColors.greenBg
     KpiAccent.INDIGO -> EtalonColors.lavenderBg
 }
-
-/** §2: 4 dp on top, 2 dp at the foot — the sparkline bar is not a plain rounded rectangle. */
-private val BarShape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp)
 
 /**
  * §2 KpiCard — w210 × auto, white, `xl`, pad 14×16, as the Home hero row on `2b-home.png`.
@@ -169,21 +164,10 @@ private fun KpiCardFrame(
     }
     if (bars.isNotEmpty()) {
         Spacer(Modifier.height(12.dp))
-        // `fillMaxHeight(fraction)` inside a fixed-height row is what gives the bars their
-        // proportions without a custom layout, and Alignment.Bottom is what makes them grow up.
-        Row(Modifier.fillMaxWidth().height(44.dp), Arrangement.spacedBy(5.dp), Alignment.Bottom) {
-            bars.forEachIndexed { i, h ->
-                Box(
-                    Modifier.weight(1f)
-                        // A zero-height bar is invisible and reads as missing data rather than a
-                        // quiet month, so every bar keeps a 4 dp floor. NaN is checked first:
-                        // `coerceIn` passes it straight through, and `fillMaxHeight(NaN)` throws
-                        // inside `roundToInt` — a month with no denominator would crash the screen.
-                        .fillMaxHeight(if (h.isFinite()) h.coerceIn(0f, 1f).coerceAtLeast(0.09f) else 0.09f)
-                        .clip(BarShape)
-                        .background(if (i == currentBar) EtalonColors.indigo else EtalonColors.lavender),
-                )
-            }
-        }
+        // The same drawing the dashboard rail's `BarSparkline` uses — one copy of the track, the
+        // gap and the bar shape for the whole app. This card differs only in what it is handed
+        // (heights, already computed) and in its floor, which is [KPI_BAR_FLOOR]'s 9 % rather than
+        // §2.3's 2 dp stub.
+        SparklineBars(fractions = bars, accentIndex = currentBar, floorFraction = KPI_BAR_FLOOR)
     }
 }
