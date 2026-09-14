@@ -17,13 +17,25 @@
     <string name="logistics_tile_expected">Кутилган</string>
     <string name="logistics_tile_shortfall">Камомад</string>
     <string name="logistics_tile_over">Ортиқча</string>
+    <string name="logistics_tile_loaded">Юкланган</string>
+    <string name="logistics_tile_truck">Машина</string>
+    <!-- The driver, wherever this module names one: the dispatch form's field, and both gates'
+         first tile. -->
+    <string name="logistics_driver_label">Ҳайдовчи</string>
     <string name="action_attach">Бириктириш</string>
     <string name="upload_queued_hint">Расм навбатга қўйилади ва интернет пайдо бўлганда юборилади.</string>
     <string name="logistics_upload_sending">Юборилмоқда…</string>
     <string name="logistics_upload_failed">Расм юборилмади</string>
     <string name="logistics_upload_failed_short">Юборилмади</string>
+    <string name="logistics_upload_retry">Қайта</string>
+    <string name="logistics_upload_cancel">Бекор</string>
     <string name="shipments_title">Жўнатмалар</string>
+    <!-- The navy sheet's own header, under the screen title. It names what the sheet holds, not
+         what the screen is about — the same relation «Рўйхат» has to «Тафовутлар» one module over. -->
+    <string name="shipments_list_title">Рўйхат</string>
     <string name="shipments_empty">Жўнатма йўқ.</string>
+    <!-- The long-press question on a truck nothing has been put on yet. -->
+    <string name="shipment_delete_title">Жўнатмани ўчириш</string>
     <string name="logistics_shipment_n">Жўнатма %1$d</string>
     <string name="action_add_shipment">Жўнатма қўшиш</string>
     <string name="action_load_shipment">Юклаш</string>
@@ -58,6 +70,11 @@
     <string name="dispatch_truck">Машина рақами</string>
     <string name="dispatch_will_collect_cash">Ҳайдовчи нақд йиғади</string>
     <string name="dispatch_expected">Кутилган сумма</string>
+    <!-- The white card over the form: where sending this lorry puts the order. -->
+    <string name="dispatch_progress">Жараён</string>
+    <!-- Under the sum on the whole-order route only. The server's schema requires it and the
+         Dispatch row is unique per order, so a zero cannot be walked back from the phone. -->
+    <string name="dispatch_amount_required">Мажбурий</string>
     <string name="action_dispatch">Жўнатиш</string>
     <string name="offline_action_blocked">Интернет йўқ — бу амал онлайн бажарилади</string>
     <string name="location_title">Етказиш жойи</string>

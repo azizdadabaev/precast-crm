@@ -13,10 +13,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.etalon.crm.core.data.DriversRepository
 import uz.etalon.crm.core.data.LogisticsRepository
+import uz.etalon.crm.core.data.OrdersRepository
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.Driver
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.OrderDetail
 
 /** Same wording DriversViewModel, DeliveryLocationViewModel and ShipmentsViewModel use. */
 private const val OFFLINE_MESSAGE = "Интернет йўқ — бу амал онлайн бажарилади"
@@ -30,6 +32,10 @@ data class DispatchUiState(
     val submitting: Boolean = false,
     val error: String? = null,
     val done: Boolean = false,
+    /** The order being dispatched — the header's «№ · client», the three-step timeline over the
+     *  form, and the gate's meta line. Null until the detail resolves; the form is usable either
+     *  way, exactly as `DeliveryProofUiState.order` is. */
+    val order: OrderDetail? = null,
     /** The raw outcome of the last active-driver fetch, kept whole — not collapsed into a message
      *  string or a network-only boolean — exactly like ShipmentsUiState keeps its `Resource.Error`
      *  whole so both a display message and a retry-affordance survive for *any* failure (a 403, a
@@ -94,6 +100,10 @@ open class DispatchViewModel(
     fun setWillCollectCash(v: Boolean) = _state.update { it.copy(willCollectCash = v, amountDigits = if (v) it.amountDigits else "", error = null) }
     fun setAmountDigits(v: String) = _state.update { it.copy(amountDigits = v, error = null) }
 
+    /** The order this dispatch belongs to, kept for the header, the timeline card and the gate's
+     *  meta line — the same seam the three camera-first ViewModels gained in Task 2. */
+    fun applyOrder(o: OrderDetail) = _state.update { it.copy(order = o) }
+
     fun submit() {
         val s = _state.value
         if (s.submitting) return
@@ -132,6 +142,7 @@ open class DispatchViewModel(
 class HiltDispatchViewModel @AssistedInject constructor(
     drivers: DriversRepository,
     logistics: LogisticsRepository,
+    private val orders: OrdersRepository,
     @Assisted("orderId") orderId: String,
     @Assisted("shipmentId") shipmentId: String?,
 ) : DispatchViewModel(
@@ -144,6 +155,15 @@ class HiltDispatchViewModel @AssistedInject constructor(
         logistics.dispatchShipment(orderId, requireNotNull(shipmentId), driverId, truck, driverWillCollectCash, cashToCollect)
     },
 ) {
+    init {
+        // The order is already cached from the screen the operator just came from, so this
+        // resolves near-instantly; it also keeps tracking a concurrent load or delivery. Exactly
+        // how `HiltDeliveryProofViewModel` reaches the same detail.
+        viewModelScope.launch {
+            orders.detail(orderId).collect { r -> r.dataOrNull?.let(::applyOrder) }
+        }
+    }
+
     @AssistedFactory
     interface Factory {
         fun create(@Assisted("orderId") orderId: String, @Assisted("shipmentId") shipmentId: String?): HiltDispatchViewModel

@@ -2,6 +2,9 @@ package uz.etalon.crm.feature.logistics
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -20,17 +23,22 @@ import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.image.PreparedImage
 import uz.etalon.crm.core.model.ClientRef
+import uz.etalon.crm.core.model.Driver
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.OrderSummary
+import uz.etalon.crm.core.model.OutboxKind
 import uz.etalon.crm.core.model.PaymentState
+import uz.etalon.crm.core.model.PendingUpload
 import uz.etalon.crm.core.model.Resource
 import uz.etalon.crm.core.model.RoomLine
 import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.feature.logistics.delivery.DeliveryProofScreen
 import uz.etalon.crm.feature.logistics.delivery.DeliveryProofUiState
+import uz.etalon.crm.feature.logistics.dispatch.DispatchScreen
+import uz.etalon.crm.feature.logistics.dispatch.DispatchUiState
 import uz.etalon.crm.feature.logistics.loadtruck.LoadTruckScreen
 import uz.etalon.crm.feature.logistics.loadtruck.LoadTruckUiState
 import uz.etalon.crm.feature.logistics.shipments.Allowance
@@ -49,6 +57,36 @@ private val SHELL_NAV_PILL_INSET = 84.dp
 /** The gate's confirm, and the delivery screen's own sticky button. «Етказилди» is the button;
  *  «Тасдиқлаш» exists only on the navy panel, so its presence IS "the gate is open". */
 private const val DELIVERED = "Етказилди"
+
+/** `action_dispatch`, and — the same word — `dispatch_title` one header above it. */
+private const val DISPATCH = "Жўнатиш"
+
+/**
+ * Taps the BUTTON carrying [label], not the heading or the status tag that happens to say the same
+ * word. «Етказилди» is both the shipments list's deliver offer and a finished lorry's own tag, and
+ * «Жўнатиш» is both the dispatch screen's title and the action on its bar — `onNodeWithText` finds
+ * two nodes for each and fails. The merged tree folds a button's label into its own clickable node,
+ * so "has this text AND a click action" is exactly one node; a heading and a tag have neither.
+ */
+private fun ComposeContentTestRule.clickButton(label: String) =
+    onNode(hasText(label) and hasClickAction()).performClick()
+
+/** The clock the shipment rows' «3 сен» metas are written against. */
+private val NOW: Instant = Instant.parse("2026-09-04T00:00:00Z")
+
+/** When the loaded trucks in the fixture went on. */
+private val LOADED_AT: Instant = Instant.parse("2026-09-03T05:00:00Z")
+
+/** The dispatch form's picker, filled — the one row that is selected and one that is not. */
+private val DRIVERS = listOf(
+    driver("d1", "Дилшод Раҳимов", "998901112233"),
+    driver("d2", "Аброр Юсупов", "998901112244"),
+)
+
+private fun driver(id: String, name: String, phone: String) = Driver(
+    id = id, name = name, phone = phone, notes = null, active = true,
+    activeDispatchCount = 0, discrepancyCount30d = 0, lastDispatchAt = null,
+)
 
 /** The band the shell reserves for the floating nav pill, around a screen the shell would host. */
 @Composable
@@ -198,36 +236,119 @@ class LogisticsScreenshotTest {
         captureScreenRoboImage("screenshots/delivery_proof_gate_light.png")
     }
 
-    // ── Shipments list: one truck in each of the four states ────────────────────
+    // ── Shipments: the trucks of one order, each offering its own next step ─────
 
-    private fun shipment(id: String, number: Int, status: ShipmentStatus, driverName: String? = null, truckIdentifier: String? = null) = ShipmentLine(
+    private fun shipment(
+        id: String, number: Int, status: ShipmentStatus,
+        driverName: String? = null, truckIdentifier: String? = null, loadedAt: Instant? = null,
+    ) = ShipmentLine(
         id = id, number = number, status = status,
         loadedBeams = if (status == ShipmentStatus.PENDING) emptyMap() else mapOf("6.00" to 3, "4.00" to 1),
         loadedBlocks = if (status == ShipmentStatus.PENDING) null else 15,
         loadedPhotoUrl = null, driverName = driverName, truckIdentifier = truckIdentifier,
+        loadedAt = loadedAt,
     )
 
-    /** Task 3 owns this screen's restyle; its fixture is kept exactly as phase 1b left it —
-     *  roomless — so `shipments_list_*` does not move under a task that is not rebuilding it. */
+    /** One truck in each state the screen can draw, so the frame pins all four trailing offers at
+     *  once — «Юклаш», «Жўнатиш», «Етказилди», and the finished lorry that offers nothing. Truck 2
+     *  carries a REJECTED load (see [shipmentsState]): its own offer is withdrawn and the way out
+     *  sits under the row. */
     private fun shipmentsOrder() = order().copy(
         rooms = emptyList(),
         shipments = listOf(
             shipment("s1", 1, ShipmentStatus.PENDING),
-            shipment("s2", 2, ShipmentStatus.LOADED, driverName = "Дилшод Раҳимов"),
-            shipment("s3", 3, ShipmentStatus.DISPATCHED, driverName = "Дилшод Раҳимов", truckIdentifier = "01 A 123 BC"),
-            shipment("s4", 4, ShipmentStatus.DELIVERED, driverName = "Аброр Юсупов", truckIdentifier = "01 B 456 DE"),
+            shipment("s2", 2, ShipmentStatus.PENDING),
+            shipment("s3", 3, ShipmentStatus.LOADED, driverName = "Дилшод Раҳимов", loadedAt = LOADED_AT),
+            shipment("s4", 4, ShipmentStatus.DISPATCHED, driverName = "Дилшод Раҳимов", truckIdentifier = "01 A 123 BC", loadedAt = LOADED_AT),
+            shipment("s5", 5, ShipmentStatus.DELIVERED, driverName = "Аброр Юсупов", truckIdentifier = "01 B 456 DE", loadedAt = LOADED_AT),
         ),
     )
 
-    private fun shootShipmentsList(name: String, dark: Boolean) {
-        val s = ShipmentsUiState(resource = Resource.Success(shipmentsOrder()))
-        rule.setContent { EtalonTheme(darkTheme = dark) { ShellFrame { ShipmentsScreen(s, {}, {}, {}, {}, {}, {}, {}) } } }
-        rule.onRoot().captureRoboImage("screenshots/shipments_list_$name.png")
+    /** Two queued rows, one of each kind the screen draws differently: truck 2's own load, which
+     *  the server has REFUSED and which therefore speaks from its row with the reason and the way
+     *  out; and an order-level photo still on its way, which has no row and so speaks from the
+     *  banner at the top. */
+    private fun shipmentsState() = ShipmentsUiState(
+        resource = Resource.Success(shipmentsOrder()),
+        pendingUploads = listOf(
+            PendingUpload(
+                id = "u1", kind = OutboxKind.LOAD_SHIPMENT, orderId = "o1", shipmentId = "s2",
+                failed = true, attempts = 3, error = "Жўнатма аллақачон юкланган",
+            ),
+            PendingUpload(
+                id = "u2", kind = OutboxKind.ADD_LOADED_PHOTO, orderId = "o1", shipmentId = null,
+                failed = false, attempts = 1, error = null,
+            ),
+        ),
+    )
+
+    @Composable
+    private fun Shipments(s: ShipmentsUiState) = ShellFrame {
+        ShipmentsScreen(
+            s = s, now = NOW, onLoadShipment = {}, onDispatch = {}, onBack = {}, onAdd = {},
+            onDelete = {}, onDeliver = {}, onRefresh = {},
+        )
     }
 
-    @Test @Config(qualifiers = "w411dp-h891dp") fun shipmentsListLight() = shootShipmentsList("light", false)
-    @Test @Config(qualifiers = "w411dp-h891dp") fun shipmentsListDark() = shootShipmentsList("dark", true)
-    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun shipmentsListLargeFont() = shootShipmentsList("font13", false)
+    private fun shootShipments(name: String) {
+        rule.setContent { EtalonTheme { Shipments(shipmentsState()) } }
+        rule.onRoot().captureRoboImage("screenshots/shipments_$name.png")
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp") fun shipmentsLight() = shootShipments("light")
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun shipmentsLargeFont() = shootShipments("font13")
+
+    /** The navy question in front of signing for a lorry — reached by tapping «Етказилди» on the
+     *  DISPATCHED row rather than by a flag, because the gate is that button's own state. Its tiles
+     *  carry who was driving and what went on. */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun shipmentsDeliverGateLight() {
+        rule.setContent { EtalonTheme { Shipments(shipmentsState()) } }
+        rule.clickButton(DELIVERED)
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/shipments_deliver_gate_light.png")
+    }
+
+    // ── Dispatch: the order's progress over the form that sends a lorry ─────────
+
+    private fun dispatchState() = DispatchUiState(
+        drivers = DRIVERS,
+        driverId = "d1",
+        truck = "01 A 123 BC",
+        amountDigits = "12000000",
+        willCollectCash = true,
+        order = order(),
+    )
+
+    @Composable
+    private fun Dispatch(s: DispatchUiState) = ShellFrame {
+        DispatchScreen(
+            s = s, isShipment = true, onCancel = {}, onSetDriverId = {}, onSetTruck = {},
+            onSetWillCollectCash = {}, onSetAmountDigits = {}, onSubmit = {}, onRetryDrivers = {},
+            shipmentNumber = 2,
+            // Robolectric reports the ime inset as absent whatever is focused, so the bar is
+            // passed in rather than read from the window (ruling R13's seam).
+            barVisible = true,
+        )
+    }
+
+    private fun shootDispatch(name: String) {
+        rule.setContent { EtalonTheme { Dispatch(dispatchState()) } }
+        rule.onRoot().captureRoboImage("screenshots/dispatch_$name.png")
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp") fun dispatchLight() = shootDispatch("light")
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun dispatchLargeFont() = shootDispatch("font13")
+
+    /** The gate the sticky «Жўнатиш» opens: the cash the driver will collect as the hero, and the
+     *  driver and lorry he is taking as the two tiles. */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun dispatchGateLight() {
+        rule.setContent { EtalonTheme { Dispatch(dispatchState()) } }
+        rule.clickButton(DISPATCH)
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/dispatch_gate_light.png")
+    }
 
     /**
      * The order behind all four screens: two beam lengths across three rooms, so «Юклаш рўйхати»
