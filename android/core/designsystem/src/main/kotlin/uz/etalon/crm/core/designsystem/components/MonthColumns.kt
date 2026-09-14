@@ -102,6 +102,14 @@ val MonthColumnSelected = SemanticsPropertyKey<Boolean>("MonthColumnSelected")
 private var SemanticsPropertyReceiver.monthColumnSelected by MonthColumnSelected
 
 /**
+ * True on the column holding the month that contains today — the one marked by a dot under its
+ * label. The mark is three device-independent pixels of ink, so a test that wanted to know whether
+ * it landed on the right month would otherwise have to read a bitmap.
+ */
+val MonthColumnCurrent = SemanticsPropertyKey<Boolean>("MonthColumnCurrent")
+private var SemanticsPropertyReceiver.monthColumnCurrent by MonthColumnCurrent
+
+/**
  * §2.3b's month picker: twelve months side by side, each a pair of bars — what was BOOKED that
  * month and what was COLLECTED in it — with the picked month in the accent pair and the month
  * containing today marked under its label.
@@ -118,16 +126,24 @@ private var SemanticsPropertyReceiver.monthColumnSelected by MonthColumnSelected
  * colour — so "small" and "none" never look alike. A legend beside this chart should key Booked to
  * `indigo` and Collected to `green`, the two selected-state colours.
  *
- * The whole column is the target, not the bar: [onSelect] fires with the column's index, and a
+ * The whole column is the target, not the bar: [onSelect] fires with the month's index, and a
  * column is at least [EtalonSpace.minTouch] tall however short its bars are.
  *
+ * **There is one index space, and it is the caller's.** A payload shorter than a year is drawn in
+ * twelve columns all the same, left-padded with empty ones so the card never changes shape — but
+ * [selected], [current] and [onSelect] all speak in the PAYLOAD's indices, never in the drawn
+ * column's. The padding offset is applied here, once, and undone before [onSelect] fires; a tap on
+ * a padding column reports nothing at all, because there is no month under it. (Getting this wrong
+ * put the accent pair, the today-dot and the tap on three different months as soon as a payload
+ * arrived short.)
+ *
  * @param booked per month, oldest first. Longer series are cut to their last [MONTH_COLUMNS];
- *   shorter ones are left-padded with zero months, so the chart is always twelve wide.
- * @param collected the same twelve months, index-aligned with [booked].
- * @param labels what goes under each column — the short Uzbek month names. Padded on the left the
- *   same way when short, so a label never slides under the wrong month.
- * @param selected index of the picked month, into the padded twelve.
- * @param current index of the month containing today, into the same twelve. `-1` marks none.
+ *   shorter ones are left-padded with empty columns, so the chart is always twelve wide.
+ * @param collected the same months, index-aligned with [booked].
+ * @param labels what goes under each column — the short Uzbek month names, index-aligned with
+ *   [booked] and padded on the left the same way, so a label never slides under the wrong month.
+ * @param selected index of the picked month **into [booked]**.
+ * @param current index of the month containing today, into [booked]. Out of range marks none.
  */
 @Composable
 fun MonthColumns(
@@ -143,6 +159,11 @@ fun MonthColumns(
     val collectedWindow = window(collected)
     val labelWindow = List(MONTH_COLUMNS - labels.takeLast(MONTH_COLUMNS).size) { "" } +
         labels.takeLast(MONTH_COLUMNS)
+    // How many empty columns stand before the first real month — the one offset between the
+    // caller's index space and the drawn one. Taken off the longest series so that a payload whose
+    // arrays disagree in length pads by the least, rather than hiding months off the left edge.
+    val pad = MONTH_COLUMNS - maxOf(booked.size, collected.size, labels.size)
+        .coerceIn(0, MONTH_COLUMNS)
     // One denominator over both series — see the KDoc.
     val max = (bookedWindow + collectedWindow).maxOrNull() ?: Money.ZERO
 
@@ -152,13 +173,18 @@ fun MonthColumns(
         verticalAlignment = Alignment.Bottom,
     ) {
         repeat(MONTH_COLUMNS) { i ->
+            // The month this column draws, in the CALLER's index space. Negative on a padding
+            // column, which has no month behind it and is therefore marked by nothing and reports
+            // nothing.
+            val month = i - pad
             MonthColumn(
-                index = i,
+                column = i,
+                month = month,
                 label = labelWindow[i],
                 bookedFraction = fraction(bookedWindow[i], max),
                 collectedFraction = fraction(collectedWindow[i], max),
-                isSelected = i == selected,
-                isCurrent = i == current,
+                isSelected = month >= 0 && month == selected,
+                isCurrent = month >= 0 && month == current,
                 onSelect = onSelect,
             )
         }
@@ -185,9 +211,20 @@ private fun fraction(value: Money, max: Money): Float =
 /** Four places: one pixel of a 60 dp bar is well inside 0,0001 of the whole. */
 private const val FRACTION_SCALE = 4
 
+/**
+ * One drawn column.
+ *
+ * @param column where it sits, 0 until [MONTH_COLUMNS] — what it is tagged by, because a chart
+ *   always has twelve columns and a test that counts them counts these.
+ * @param month which month of the caller's series it draws, or negative when it is one of the
+ *   padding columns a short payload leaves on the left. A padding column is not a control: it
+ *   carries no click, so it cannot report a month that does not exist and TalkBack is not offered
+ *   a button with no name.
+ */
 @Composable
 private fun RowScope.MonthColumn(
-    index: Int,
+    column: Int,
+    month: Int,
     label: String,
     bookedFraction: Float,
     collectedFraction: Float,
@@ -198,9 +235,15 @@ private fun RowScope.MonthColumn(
     Modifier
         .weight(1f)
         .heightIn(min = EtalonSpace.minTouch)
-        .clickable(role = Role.Button, onClickLabel = label) { onSelect(index) }
-        .testTag(monthColumnTag(index))
-        .semantics { monthColumnSelected = isSelected },
+        .then(
+            if (month < 0) Modifier
+            else Modifier.clickable(role = Role.Button, onClickLabel = label) { onSelect(month) },
+        )
+        .testTag(monthColumnTag(column))
+        .semantics {
+            monthColumnSelected = isSelected
+            monthColumnCurrent = isCurrent
+        },
     horizontalAlignment = Alignment.CenterHorizontally,
 ) {
     Row(
@@ -211,12 +254,12 @@ private fun RowScope.MonthColumn(
         Bar(
             fraction = bookedFraction,
             colour = if (isSelected) EtalonColors.indigo else EtalonColors.lavender,
-            tag = monthBarTag(index, collected = false),
+            tag = monthBarTag(column, collected = false),
         )
         Bar(
             fraction = collectedFraction,
             colour = if (isSelected) EtalonColors.green else EtalonColors.green.copy(alpha = CollectedAlpha),
-            tag = monthBarTag(index, collected = true),
+            tag = monthBarTag(column, collected = true),
         )
     }
     Spacer(Modifier.height(EtalonSpace.xs))

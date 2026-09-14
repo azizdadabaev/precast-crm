@@ -139,6 +139,17 @@ private inline fun <T, R> List<T>.window(from: Int, toInclusive: Int, pick: (T) 
  * For the current month this returns the server's own `bookedThisMonth` / `collectedThisMonth` /
  * `averageOrderValue` figures, because the server derived them from the same rows with the same
  * two functions. That equality is the parity guard and is asserted against a recorded payload.
+ *
+ * **The trends are recomputed here, and the payload's own `trend` fields are deliberately never
+ * rendered.** The server derives its trend from a database aggregate of the previous *calendar*
+ * month (`dashboard-data.ts:487-499`), which can only ever answer "this month vs last month"; a
+ * month picker needs "the selected month vs the one before it", which only the series can answer.
+ * `FinancialKPIs.tsx:121-124` substitutes exactly the same way — it ignores the precomputed trends
+ * and calls `buildTrend` on the series for every month including the current one — so recomputing
+ * is what matches the web, which is the acceptance criterion. The two agree on the current month
+ * whenever the previous calendar month is inside the window, which is every month the phone can
+ * select; `PeriodMoney.trend` and [Aov.trend] stay on the model for exactly that comparison, and
+ * the parity guard makes it.
  */
 fun monthScope(s: HomeSummary, idx: Int): MonthScope {
     val lastIdx = maxOf(s.bookedByMonth.size - 1, 0)

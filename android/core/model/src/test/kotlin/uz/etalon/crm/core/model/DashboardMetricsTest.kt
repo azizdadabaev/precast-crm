@@ -15,6 +15,15 @@ import java.math.BigDecimal
  * the function's four branches and are asserted against the recorded payload as well
  * (`DashboardMappersTest`, the parity guard).
  */
+/**
+ * The three trends the server would have sent for [DashboardMetricsTest]'s own fixture, written
+ * out rather than computed — a guard that derived the expected value with the code under test
+ * would pass however wrong that code became.
+ */
+private val SERVER_BOOKED_TREND = Trend(BigDecimal("9"), TrendDirection.UP, TrendPolarity.POSITIVE)
+private val SERVER_COLLECTED_TREND = Trend(BigDecimal("9"), TrendDirection.UP, TrendPolarity.POSITIVE)
+private val SERVER_AOV_TREND = Trend(BigDecimal("0"), TrendDirection.FLAT, TrendPolarity.POSITIVE)
+
 class DashboardMetricsTest {
 
     // ── jsRound ────────────────────────────────────────────────────────────────────────────
@@ -134,6 +143,36 @@ class DashboardMetricsTest {
         assertEquals(true, scope.isCurrent)
     }
 
+    /**
+     * The half of the parity guard the recorded payload cannot make: on THIS fixture the month
+     * before the current one traded, so the server's three trends are non-null and the port has to
+     * arrive at the same three.
+     *
+     * It matters because the two do not compute the same way. The server derives its trend from a
+     * database aggregate of the previous *calendar* month (`dashboard-data.ts:487-499`); the port
+     * reads `series[idx − 1]`, because a month picker needs "the selected month vs the one before
+     * it" and only the series can answer that. `FinancialKPIs.tsx:121-124` substitutes exactly the
+     * same way, which is why the phone matching the series is the phone matching the web — and for
+     * the current month the two sources are the same month, so the answers must agree to the
+     * percent. The payload's own `trend` fields are therefore decoded and never rendered; this is
+     * the test that keeps that decision honest.
+     */
+    @Test fun `the current month's three trends are the server's own`() {
+        val s = summary()
+        val scope = monthScope(s, s.currentMonthIdx)
+
+        assertEquals(SERVER_BOOKED_TREND, s.booked.trend, "the fixture must carry a non-null server trend")
+        assertEquals(s.booked.trend, scope.booked.trend, "booked: 120 M against 110 M → ↑ 9 %")
+        assertEquals(s.collected.trend, scope.collected.trend, "collected: 12 M against 11 M → ↑ 9 %")
+        assertEquals(s.aov.trend, scope.aov.trend, "aov: 10 M against 10 M → flat, and flat is not null")
+
+        // Spelled out, so the guard says what it is guarding rather than comparing two unknowns.
+        assertEquals(BigDecimal("9"), scope.booked.trend!!.deltaPct)
+        assertEquals(TrendDirection.UP, scope.booked.trend!!.direction)
+        assertEquals(TrendDirection.FLAT, scope.aov.trend!!.direction)
+        assertEquals(TrendPolarity.POSITIVE, scope.collected.trend!!.polarity)
+    }
+
     @Test fun `an earlier month reads that month's own figures, not this month's`() {
         val s = summary()
         val august = monthScope(s, 7)
@@ -237,14 +276,19 @@ class DashboardMetricsTest {
             receivables = money("1"), receivableOrders = 1, receivablesTrend = null,
             paidOrders = 0, partialOrders = 0, awaitingOrders = 0,
             recent = emptyList(),
-            // What the server computed for the current month — the figures the parity guard
-            // compares the series-derived ones against.
-            booked = PeriodMoney(money("120000000"), 12, null),
+            // What the server computed for the current month — the figures AND the trends the
+            // parity guard compares the series-derived ones against. Unlike the recorded payload,
+            // this month's predecessor TRADED, so all three trends are non-null and the guard's
+            // trend branch is a real comparison rather than two absences meeting:
+            //   booked    120 000 000 vs 110 000 000 → +9,09 % → 9 ↑
+            //   collected  12 000 000 vs  11 000 000 → +9,09 % → 9 ↑
+            //   aov        10 000 000 vs  10 000 000 →  0 %    → flat
+            booked = PeriodMoney(money("120000000"), 12, SERVER_BOOKED_TREND),
             bookedAllTime = AllTimeMoney(money("780000000"), 78),
-            collected = PeriodMoney(money("12000000"), 12, null),
+            collected = PeriodMoney(money("12000000"), 12, SERVER_COLLECTED_TREND),
             collectedAllTime = AllTimeMoney(money("78000000"), 78),
             collectedByMonth = collected,
-            aov = Aov(thisMonth = money("10000000"), allTime = money("10000000"), trend = null),
+            aov = Aov(thisMonth = money("10000000"), allTime = money("10000000"), trend = SERVER_AOV_TREND),
             activeCustomers = 0,
             bookedByMonth = booked, ordersByMonth = orders,
             monthKeys = keys,

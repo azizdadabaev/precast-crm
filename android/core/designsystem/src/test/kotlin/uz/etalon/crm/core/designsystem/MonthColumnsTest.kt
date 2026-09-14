@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -21,6 +24,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import uz.etalon.crm.core.designsystem.components.MONTH_COLUMNS
+import uz.etalon.crm.core.designsystem.components.MonthColumnCurrent
 import uz.etalon.crm.core.designsystem.components.MonthColumnSelected
 import uz.etalon.crm.core.designsystem.components.MonthColumns
 import uz.etalon.crm.core.designsystem.components.monthBarTag
@@ -46,6 +50,7 @@ class MonthColumnsTest {
     private fun show(
         booked: List<String> = List(MONTH_COLUMNS) { "${it + 1}0000000" },
         collected: List<String> = List(MONTH_COLUMNS) { "${it + 1}000000" },
+        monthLabels: List<String> = labels,
         selected: Int = 11,
         current: Int = 11,
         onSelect: (Int) -> Unit = {},
@@ -55,7 +60,7 @@ class MonthColumnsTest {
                 MonthColumns(
                     booked = money(booked),
                     collected = money(collected),
-                    labels = labels,
+                    labels = monthLabels,
                     selected = selected,
                     current = current,
                     onSelect = onSelect,
@@ -74,10 +79,80 @@ class MonthColumnsTest {
     /** A payload shorter than a year pads on the LEFT rather than drawing fewer columns: the card
      *  under the rail must not change height because the business is eight months old. */
     @Test fun `a short series still draws twelve columns`() {
-        show(booked = listOf("4000000", "9000000", "2000000"), collected = listOf("1000000", "2000000", "3000000"))
+        show(
+            booked = listOf("4000000", "9000000", "2000000"),
+            collected = listOf("1000000", "2000000", "3000000"),
+            monthLabels = labels.takeLast(3),
+            selected = 2,
+            current = 2,
+        )
         repeat(MONTH_COLUMNS) { i ->
             rule.onNodeWithTag(monthColumnTag(i), useUnmergedTree = true).assertIsDisplayed()
         }
+    }
+
+    /**
+     * The index space is the PAYLOAD's, not the drawn column's.
+     *
+     * Nine months are drawn in twelve columns, so three empty ones stand on the left and payload
+     * month `k` is column `k + 3`. The accent pair, the today-dot and the tap must all follow the
+     * payload's numbering: before this was fixed the highlight and the dot sat three columns left
+     * of the months they belonged to, and tapping a column selected a different month than the one
+     * whose bars were under the finger — three different answers to "which month is this".
+     */
+    @Test fun `with a short series the marks and the taps land on the payload's own months`() {
+        val picked = mutableListOf<Int>()
+        val nine = labels.takeLast(9)                       // апр … дек
+        show(
+            booked = List(9) { "${it + 1}0000000" },
+            collected = List(9) { "${it + 1}000000" },
+            monthLabels = nine,
+            selected = 6,                                   // октябрь — the 7th of the nine
+            current = 8,                                    // декабрь — the last
+            onSelect = { picked += it },
+        )
+        val pad = MONTH_COLUMNS - 9
+
+        // The marks sit on the labels they belong to, not three columns to the left.
+        rule.onNode(
+            SemanticsMatcher.expectValue(MonthColumnSelected, true) and hasAnyDescendant(hasText(nine[6])),
+            useUnmergedTree = true,
+        ).assertExists()
+        rule.onNode(
+            SemanticsMatcher.expectValue(MonthColumnCurrent, true) and hasAnyDescendant(hasText(nine[8])),
+            useUnmergedTree = true,
+        ).assertExists()
+        // …and on nothing else.
+        rule.onNodeWithTag(monthColumnTag(pad + 6), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnSelected, true))
+        rule.onNodeWithTag(monthColumnTag(6), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnSelected, false))
+        rule.onNodeWithTag(monthColumnTag(pad + 8), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnCurrent, true))
+        rule.onNodeWithTag(monthColumnTag(8), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnCurrent, false))
+
+        // Tapping the k-th month's column reports k, whatever column it was drawn in.
+        rule.onNodeWithTag(monthColumnTag(pad + 0)).performClick()
+        rule.onNodeWithTag(monthColumnTag(pad + 5)).performClick()
+        assertEquals(listOf(0, 5), picked)
+    }
+
+    /** A padding column has no month behind it, so it is not a control at all — it can neither
+     *  report a month that does not exist nor offer TalkBack a button with no name. */
+    @Test fun `a padding column is not tappable`() {
+        val picked = mutableListOf<Int>()
+        show(
+            booked = List(9) { "${it + 1}0000000" },
+            collected = List(9) { "${it + 1}000000" },
+            monthLabels = labels.takeLast(9),
+            selected = 8, current = 8,
+            onSelect = { picked += it },
+        )
+        repeat(MONTH_COLUMNS - 9) { i ->
+            rule.onNodeWithTag(monthColumnTag(i), useUnmergedTree = true).assertHasNoClickAction()
+        }
+        assertEquals(emptyList<Int>(), picked)
     }
 
     @Test fun `tapping a column reports that column's own index`() {

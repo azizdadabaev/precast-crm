@@ -8,6 +8,7 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.model.TrendPolarity
+import uz.etalon.crm.core.model.buildTrend
 import uz.etalon.crm.core.model.monthScope
 import uz.etalon.crm.core.network.EtalonJson
 import uz.etalon.crm.core.network.dto.CollectedThisMonthDto
@@ -311,6 +312,33 @@ class DashboardMappersTest {
         assertEquals(s.aov.thisMonth, scope.aov.thisMonth, "averageOrderValue.thisMonth vs booked ÷ orders")
         assertEquals(s.loadedThisMonth, scope.loaded, "the same loaded row, found by the same key")
         assertEquals("2026-09", scope.monthKey)
+
+        // The trends too — and on this payload all three are NULL for a reason the port reproduces
+        // rather than copies: August 2026 booked nothing and collected nothing, so `previous <= 0`
+        // and there is no basis to compare against. Asserting both sides makes the match a fact
+        // rather than two absences meeting; the non-null case is `DashboardMetricsTest`'s, on a
+        // summary whose previous month traded (this recording has no such month).
+        assertEquals(s.booked.trend, scope.booked.trend, "booked: both null — August 2026 booked 0")
+        assertEquals(s.collected.trend, scope.collected.trend, "collected: both null — August 2026 collected 0")
+        assertEquals(s.aov.trend, scope.aov.trend, "aov: both null — August 2026 had no average")
+        assertNull(scope.booked.trend, "the port must reach null by `previous <= 0`, not by accident")
+        assertEquals(Money.ZERO, s.bookedByMonth[10].booked, "…and that is why: the previous month is zero")
+        assertEquals(Money.ZERO, s.collectedByMonth[10].collected)
+
+        // Every trend the port CAN build on this payload is the one `buildTrend` builds from the
+        // series — including the months either side of the current one.
+        (1..s.bookedByMonth.lastIndex).forEach { i ->
+            assertEquals(
+                buildTrend(s.bookedByMonth[i].booked, s.bookedByMonth[i - 1].booked, TrendPolarity.POSITIVE),
+                monthScope(s, i).booked.trend,
+                "month $i's booked trend is buildTrend(series[$i], series[${i - 1}])",
+            )
+            assertEquals(
+                buildTrend(s.collectedByMonth[i].collected, s.collectedByMonth[i - 1].collected, TrendPolarity.POSITIVE),
+                monthScope(s, i).collected.trend,
+                "month $i's collected trend is buildTrend(series[$i], series[${i - 1}])",
+            )
+        }
 
         // And the figures themselves, spelled out, so the guard says what it is guarding.
         assertEquals(Money.parse("205709989"), scope.booked.total)
