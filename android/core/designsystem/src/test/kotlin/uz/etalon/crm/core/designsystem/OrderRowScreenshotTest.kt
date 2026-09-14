@@ -165,7 +165,7 @@ private fun RowSheet() = Column(
         trailing = { SegmentedControl(SEGMENTS, selectedIndex = 0, onSelect = {}) },
         fillsToBottom = false,
     ) {
-        MonthHeader("Сентябрь 2026", Money.parse("49483340.00"))
+        MonthHeader("Сентябр 2026", Money.parse("49483340.00"))
         Rows(onDark = true)
     }
 
@@ -176,7 +176,7 @@ private fun RowSheet() = Column(
             .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
             .padding(horizontal = 8.dp, vertical = 10.dp),
     ) {
-        MonthHeader("Сентябрь 2026", Money.parse("49483340.00"), onDark = false)
+        MonthHeader("Сентябр 2026", Money.parse("49483340.00"), onDark = false)
         Rows(onDark = false)
     }
 }

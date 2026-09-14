@@ -14,7 +14,14 @@ import java.time.ZoneId
  *  Device ICU is deliberately not used — the server does the same. */
 val TASHKENT: ZoneId = ZoneId.of("Asia/Tashkent")
 val UZ_MONTHS_SHORT = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
-val UZ_MONTHS_FULL = listOf("январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
+/**
+ * The web's own twelve (`month-orders.ts`'s `MONTH_NAMES_UZ`), lower-cased here because
+ * [formatLongDate] sets a month name mid-sentence and [formatMonthYear] upper-cases the first
+ * letter itself. These are the UZBEK Cyrillic forms, not the Russian ones: «сентябр», never
+ * «сентябрь». The two differ by one soft sign in six of the twelve months, which is exactly the
+ * kind of difference nobody notices in review and every native reader notices on the phone.
+ */
+val UZ_MONTHS_FULL = listOf("январ", "феврал", "март", "апрел", "май", "июн", "июл", "август", "сентябр", "октябр", "ноябр", "декабр")
 /** Monday first, matching java.time's DayOfWeek ordinal. */
 val UZ_WEEKDAYS = listOf("Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба", "Якшанба")
 
@@ -148,18 +155,18 @@ fun formatShortDate(d: LocalDate): String = "${d.dayOfMonth} ${UZ_MONTHS_SHORT[d
 
 /**
  * The weekday alone: «Чоршанба». The day sheet's title is «9 сен 2026 · Чоршанба» (design §4.5),
- * and [formatLongDate]'s «Сешанба, 9 сентябрь» is the wrong shape for it — the weekday trails the
+ * and [formatLongDate]'s «Сешанба, 9 сентябр» is the wrong shape for it — the weekday trails the
  * date there instead of leading it, and the month is spelled out.
  */
 fun formatWeekday(d: LocalDate): String = UZ_WEEKDAYS[d.dayOfWeek.value - 1]
 
-/** Home's subtitle: «Сешанба, 9 сентябрь». */
+/** Home's subtitle: «Сешанба, 9 сентябр». */
 fun formatLongDate(t: Instant): String {
     val z = t.atZone(TASHKENT)
     return "${UZ_WEEKDAYS[z.dayOfWeek.value - 1]}, ${z.dayOfMonth} ${UZ_MONTHS_FULL[z.monthValue - 1]}"
 }
 
-/** A month group header on the orders list: «Сентябрь 2026». */
+/** A month group header on the orders list: «Сентябр 2026». */
 fun formatMonthYear(ym: YearMonth): String =
     UZ_MONTHS_FULL[ym.monthValue - 1].replaceFirstChar { it.uppercase() } + " " + ym.year
 

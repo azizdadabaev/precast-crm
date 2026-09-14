@@ -184,7 +184,6 @@ class DashboardMetricsTest {
         assertEquals(money("10000000"), august.aov.thisMonth)
         assertEquals("2026-08", august.monthKey)
         assertEquals(false, august.isCurrent)
-        assertEquals("Авг", august.label, "the server's own label for that month")
     }
 
     /** Every delta compares the SELECTED month with the one before it — not this month with last. */

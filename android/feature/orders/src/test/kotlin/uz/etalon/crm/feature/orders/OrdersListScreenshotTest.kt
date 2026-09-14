@@ -39,7 +39,7 @@ private val NAV_PILL_BAND = 84.dp
  * `2b-orders.png` reproduced row for row, so the reviewer can lay the two images side by side:
  * «Буюртмалар» over its count-and-area line with the «+ Янги» pill, the search field and its filter
  * square, the chips with their facet counts, and the navy sheet — «Рўйхат», the
- * Барчаси/Қарз/Тўланган switch, «Сентябрь 2026 … 49 483 340» and the rows beneath it.
+ * Барчаси/Қарз/Тўланган switch, «Сентябр 2026 … 49 483 340» and the rows beneath it.
  *
  * Nothing here reads the clock: every `scheduledAt` is a fixed instant and the month groups are
  * built by the production [groupByMonth], so a baseline recorded in March is the one recorded in
@@ -93,7 +93,7 @@ class OrdersListScreenshotTest {
 
     /** Newest first (ruling R5), which is the order the server's `sort=desc` returns. The canceled
      *  row is not in `2b-orders.png` — live data has them, and it is the row that proves two rules
-     *  at once: it carries no «қолди …»/«тўланган» line, and «Сентябрь 2026» still sums to the
+     *  at once: it carries no «қолди …»/«тўланган» line, and «Сентябр 2026» still sums to the
      *  capture's 49 483 340 with it on screen. */
     private val rows = listOf(
         row("o6", "2026-09-0006", "Navoi Build", OrderStatus.CANCELED, "24.03", "4773400.00", "0.00", "2026-09-21T06:00:00Z"),

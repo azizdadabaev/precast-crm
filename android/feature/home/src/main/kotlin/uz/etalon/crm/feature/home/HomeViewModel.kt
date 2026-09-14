@@ -82,7 +82,7 @@ data class HomeDashboard(
     val openDiscrepancies: Int,
     val openDiscrepancyTotal: Money,
     /** The SELECTED month's `loadedVolumeByMonth` row, found by its key. Absent when that month
-     *  loaded nothing — the card then reads «Бу ой юк йўқ» rather than a zeroed figure. */
+     *  loaded nothing — the card then reads «Бу ойда юклаш йўқ» rather than a zeroed figure. */
     val loadedThisMonth: LoadedVolume?,
     /** `"2026-09"` — the month the rail and the loaded tile are about, which is the month the
      *  operator picked in the chart and not necessarily the current one. */

@@ -107,8 +107,8 @@ class MonthColumnsTest {
             booked = List(9) { "${it + 1}0000000" },
             collected = List(9) { "${it + 1}000000" },
             monthLabels = nine,
-            selected = 6,                                   // октябрь — the 7th of the nine
-            current = 8,                                    // декабрь — the last
+            selected = 6,                                   // октябр — the 7th of the nine
+            current = 8,                                    // декабр — the last
             onSelect = { picked += it },
         )
         val pad = MONTH_COLUMNS - 9

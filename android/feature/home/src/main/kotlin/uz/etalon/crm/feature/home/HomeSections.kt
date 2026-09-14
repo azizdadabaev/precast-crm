@@ -646,7 +646,7 @@ private fun Chip(text: String, bg: Color, fg: Color) = Tag(text = text, fg = fg,
  * then leaves it empty — the card falls back to the month [now] is in, which is the same month by
  * definition and is the only other thing on this screen that knows what today is. It never
  * guesses a figure: a payload with no month key also has no loaded row, so the card under this
- * label reads «Бу ой юк йўқ».
+ * label reads «Бу ойда юклаш йўқ».
  *
  * The fallback reads [TASHKENT], never the device's own zone: the business's month is the factory's
  * month, and a phone whose clock is set to another country would otherwise name the previous month
@@ -655,7 +655,7 @@ private fun Chip(text: String, bg: Color, fg: Color) = Tag(text = text, fg = fg,
 internal fun shortMonth(monthKey: String, now: Instant): String =
     UZ_MONTHS_SHORT[(monthOf(monthKey) ?: now.atZone(TASHKENT).monthValue) - 1]
 
-/** «сентябрь» from «2026-09» — the same rule as [shortMonth], in the long form the financial
+/** «сентябр» from «2026-09» — the same rule as [shortMonth], in the long form the financial
  *  kicker sets a month name in («МОЛИЯВИЙ ҲОЛАТ · АВГУСТ ОЙИ»). */
 internal fun fullMonth(monthKey: String, now: Instant): String =
     UZ_MONTHS_FULL[(monthOf(monthKey) ?: now.atZone(TASHKENT).monthValue) - 1]
@@ -961,7 +961,8 @@ private fun RegionRow(r: RegionOrders, top: Int) = Row(
             maxLines = 1,
         )
         Spacer(Modifier.height(EtalonSpace.xs))
-        // Booked, not collected — the same «UZS» suffix the rest of the screen gives a sum.
+        // Booked, not collected — and written the way every other sum in a row on this screen is
+        // (D8): grouped digits, no unit. «UZS» belongs to a hero figure; [formatMoney] emits none.
         Text(
             formatMoney(r.booked),
             style = EtalonType.caption,

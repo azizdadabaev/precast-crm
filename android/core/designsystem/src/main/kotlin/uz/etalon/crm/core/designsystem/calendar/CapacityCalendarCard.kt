@@ -72,7 +72,7 @@ private val WEEKDAYS = listOf(
 )
 
 /**
- * The capacity calendar's month card (design §4.1–4.2): ‹ «Сентябрь 2026» › over its
+ * The capacity calendar's month card (design §4.1–4.2): ‹ «Сентябр 2026» › over its
  * «N буюртма · X м²» line, the Monday-first weekday heads, as many rows of [DayCell] as the month
  * needs (`gridRows` — R16: never a week made entirely of next-month days) and the tier legend. It
  * lives in the design system rather than in `:feature:orders` because the calculator's

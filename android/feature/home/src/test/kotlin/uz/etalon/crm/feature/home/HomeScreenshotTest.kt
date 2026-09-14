@@ -47,6 +47,7 @@ import uz.etalon.crm.core.model.monthScope
 import uz.etalon.crm.core.ui.format.formatOrderNo
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.YearMonth
 
 /** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
  *  inset: the pill's 84 dp band alone, so this frame carries the clearance a real phone shows. */
@@ -61,10 +62,11 @@ private val SHELL_NAV_PILL_INSET = 84.dp
  */
 private const val LAST_ITEM = 8
 
-/** The index of August in the fixture's twelve months — the month `home_month_selected_light`
- *  picks, chosen because it is neither the current month nor the first of the window, so both the
- *  scoping and the trend-against-its-own-predecessor are visible in one frame. */
-private const val AUGUST = 7
+/** The index of August 2026 in the fixture's twelve months (2025-10 … 2026-09) — the month
+ *  `home_month_selected_light` picks, chosen because it is neither the current month nor the first
+ *  of the window, so both the scoping and the trend-against-its-own-predecessor are visible in one
+ *  frame. */
+private const val AUGUST = 10
 
 /**
  * Design §2's dashboard — drawn with the data the server actually sends, so the reviewer can lay a
@@ -87,7 +89,7 @@ private const val AUGUST = 7
 class HomeScreenshotTest {
     @get:Rule val rule = createComposeRule()
 
-    /** Wednesday 9 September 2026 in Tashkent (UTC+5) — «Чоршанба, 9 сентябрь». */
+    /** Wednesday 9 September 2026 in Tashkent (UTC+5) — «Чоршанба, 9 сентябр». */
     private val now = Instant.parse("2026-09-08T19:30:00Z")
 
     private val owner = Me("u1", "Азиз Раҳимов", Role.OWNER, setOf("dashboard.view", "order.view"), false)
@@ -121,25 +123,35 @@ class HomeScreenshotTest {
         ),
     )
 
+    /**
+     * The twelve `YYYY-MM` keys the chart's columns are labelled from, and the keys every
+     * per-month row below is built with — one list, so a column can never be labelled with a month
+     * its figures do not belong to.
+     *
+     * The window ENDS at the fixture's own [now] (2026-09), because that is the window the server
+     * sends: `monthWindow(now, 12)` is backward-only — nothing is ever placed in a future month —
+     * and `currentMonthIdx` is therefore its last index. A window of Jan–Dec 2026 under a
+     * «9 сентябр» date line marked December as "this month", which is a frame that contradicts
+     * itself.
+     */
+    private val monthKeys = (0..11).map { YearMonth.of(2026, 9).minusMonths((11 - it).toLong()).toString() }
+
     /** Twelve months of bookings and their order counts, the current one the highest — the shape
      *  the rail's three sparklines and the AOV division are drawn from. */
     private val bookedByMonth = listOf(
         "104000000", "121000000", "96000000", "142000000", "133000000", "158000000",
         "147000000", "176000000", "168000000", "191000000", "208000000", "184200000",
-    ).mapIndexed { i, v -> MonthBooked("2026-%02d".format(i + 1), Money.parse(v)) }
+    ).mapIndexed { i, v -> MonthBooked(monthKeys[i], Money.parse(v)) }
 
     private val ordersByMonth = listOf(9, 11, 8, 13, 12, 15, 13, 16, 14, 17, 18, 12)
-        .mapIndexed { i, n -> MonthOrders("2026-%02d".format(i + 1), n) }
+        .mapIndexed { i, n -> MonthOrders(monthKeys[i], n) }
 
     private val collectedRows = listOf(
         "5400000", "6100000", "4800000", "7200000", "6600000", "8100000",
         "7400000", "9200000", "8700000", "10400000", "11900000", "13500000",
-    ).mapIndexed { i, v -> MonthCollected("2026-%02d".format(i + 1), Money.parse(v), paymentCount = i + 3) }
+    ).mapIndexed { i, v -> MonthCollected(monthKeys[i], Money.parse(v), paymentCount = i + 3) }
 
     private val collectedByMonth = collectedRows.map { it.collected.amount }
-
-    /** The twelve `YYYY-MM` keys the chart's columns are labelled from. */
-    private val monthKeys = (1..12).map { "2026-%02d".format(it) }
 
     /** §2.6b: two provinces and «Бошқа», ranked as the server ranks them — enough for three
      *  visibly different bars and one label long enough to prove the ellipsis. */
@@ -287,7 +299,7 @@ class HomeScreenshotTest {
     /**
      * §6's empty month, which is a different picture from a screen that has not loaded: every
      * figure is a real zero, no card carries a delta badge (there is nothing to compare to), the
-     * sparklines fall back to their stubs and the loaded card says «Бу ой юк йўқ» rather than
+     * sparklines fall back to their stubs and the loaded card says «Бу ойда юклаш йўқ» rather than
      * «0 блок».
      */
     private fun emptyMonth() = HomeUiState(
@@ -524,7 +536,7 @@ class HomeScreenshotTest {
      *  the loaded card says so in words instead of printing a zero. */
     @Test @Config(qualifiers = "w411dp-h891dp") fun emptyMonthLight() {
         shoot("home_empty_month_light", emptyMonth())
-        rule.onNodeWithText("Бу ой юк йўқ").assertExists()
+        rule.onNodeWithText("Бу ойда юклаш йўқ").assertExists()
         // §2.6 and §2.7's own empty states are below this frame's fold, so they are asserted rather
         // than photographed: each is a sentence, not a zero, for the same reason the loaded card
         // above says so in words.
@@ -565,7 +577,7 @@ class HomeScreenshotTest {
         }
         rule.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText("Юкланган ҳажм · сен"))
         rule.waitForIdle()
-        rule.onNodeWithText("Бу ой юк йўқ").assertExists()
+        rule.onNodeWithText("Бу ойда юклаш йўқ").assertExists()
         rule.onNodeWithText("0 та буюртма · 0 та балка").assertDoesNotExist()
     }
 
@@ -577,7 +589,7 @@ class HomeScreenshotTest {
     /**
      * §2.3b with August picked in the chart: the kicker reads «МОЛИЯВИЙ ҲОЛАТ · АВГУСТ ОЙИ», the
      * rail's first lines «N та буюртма · авг ойи» / «N та тўлов · авг ойи», the loaded tile
-     * «Юкланган ҳажм · авг», and the chart's own sub-line «авг ойи · 16 та буюртма». The
+     * «Юкланган ҳажм · авг», and the chart's own sub-line «авг ойи · 18 та буюртма». The
      * receivables hero above them is unchanged, with its «Ой бўйича бўлинмайди» line intact.
      *
      * The state is built by the real port ([monthSelected] → `dashboard(summary(), AUGUST)`), so
@@ -586,7 +598,7 @@ class HomeScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp") fun monthSelectedLight() {
         shoot("home_month_selected_light", monthSelected())
         rule.onNodeWithText("МОЛИЯВИЙ ҲОЛАТ · АВГУСТ ОЙИ").assertExists()
-        rule.onNodeWithText("16 та буюртма · авг ойи").assertExists()
+        rule.onNodeWithText("18 та буюртма · авг ойи").assertExists()
         // The hero does not follow the picker — it is a balance, not a month's total.
         rule.onNodeWithText("Ой бўйича бўлинмайди · бугунги қолдиқ").assertExists()
     }

@@ -54,8 +54,9 @@
     <string name="home_loaded_beams">%1$s м балка</string>
     <string name="home_loaded_caption">%1$s та буюртма · %2$s та балка</string>
     <!-- Nothing was loaded this month — a different fact from «0 блок», which would read as a
-         measured zero. -->
-    <string name="home_loaded_none">Бу ой юк йўқ</string>
+         measured zero. The web's own wording, verbatim (`OperationalKPIs.tsx:173`): staff read the
+         same sentence on the desk and on the phone. -->
+    <string name="home_loaded_none">Бу ойда юклаш йўқ</string>
 
     <!-- §2.5 the payment donut. The legend rows borrow the hero's own «Тўланган» / «Қисман» /
          «Кутилмоқда»; the centre reads «90%» over this caption, which is lower-case because it is

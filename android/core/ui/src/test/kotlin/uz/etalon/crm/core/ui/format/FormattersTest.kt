@@ -110,9 +110,27 @@ class FormattersTest {
     }
 
     @Test fun longDateIsWeekdayDayMonthInUzbekCyrillic() {
-        assertEquals("Чоршанба, 9 сентябрь", formatLongDate(Instant.parse("2026-09-08T19:30:00Z"))) // 00:30 on Wed 9 Sep 2026 in Tashkent — the capture's «Сешанба» is the designer's fiction; the real calendar wins
+        assertEquals("Чоршанба, 9 сентябр", formatLongDate(Instant.parse("2026-09-08T19:30:00Z"))) // 00:30 on Wed 9 Sep 2026 in Tashkent — the capture's «Сешанба» is the designer's fiction; the real calendar wins
     }
-    @Test fun monthYearHeader() { assertEquals("Сентябрь 2026", formatMonthYear(YearMonth.of(2026, 9))) }
+    @Test fun monthYearHeader() { assertEquals("Сентябр 2026", formatMonthYear(YearMonth.of(2026, 9))) }
+
+    /**
+     * R14: the twelve are the web's own (`month-orders.ts`), which are UZBEK and not Russian.
+     * Pinned name by name, because the difference is a single soft sign in six of them and a
+     * Russian form would otherwise reappear the next time this table is edited.
+     */
+    @Test fun `the full month names are the web's Uzbek forms, never the Russian ones`() {
+        assertEquals(
+            listOf(
+                "Январ", "Феврал", "Март", "Апрел", "Май", "Июн",
+                "Июл", "Август", "Сентябр", "Октябр", "Ноябр", "Декабр",
+            ),
+            (1..12).map { formatMonthYear(YearMonth.of(2026, it)).substringBefore(' ') },
+        )
+        // The one the reviewer named: September, with no trailing soft sign.
+        assertEquals("Сентябр 2026", formatMonthYear(YearMonth.of(2026, 9)))
+        assertEquals("сентябр", UZ_MONTHS_FULL[8])
+    }
 
     /** The day sheet's title (design §4.5): «9 сен 2026 · Чоршанба». */
     @Test fun `a calendar day prints the short month and always the year`() {

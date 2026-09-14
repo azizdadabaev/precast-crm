@@ -62,7 +62,7 @@ object EtalonType {
 
     /**
      * The capacity calendar's day cell, top right: that day's order count (design §4.2 — the «5»
-     * on 12 сентябрь). Two steps under [caption], because it shares a 56 dp cell with the day
+     * on 12 сентябр). Two steps under [caption], because it shares a 56 dp cell with the day
      * number and the m² line and must never be mistaken for either — it is the smallest figure the
      * app draws, a footnote to the load line under it.
      */

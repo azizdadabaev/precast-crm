@@ -60,7 +60,7 @@ class StatusTagScreenshotTest {
                 ) {
                     Block("ROW_ON_LIGHT", TagSurface.ROW_ON_LIGHT, EtalonColors.surface, EtalonColors.ink2)
                     Block("ROW_ON_NAVY", TagSurface.ROW_ON_NAVY, EtalonColors.navy, EtalonColors.onDarkMuted) {
-                        MonthHeader("Сентябрь 2026", Money.parse("49483340.00"))
+                        MonthHeader("Сентябр 2026", Money.parse("49483340.00"))
                     }
                     Block("PANEL_ON_INDIGO", TagSurface.PANEL_ON_INDIGO, EtalonColors.indigoPanel, EtalonColors.onDarkMuted)
                 }

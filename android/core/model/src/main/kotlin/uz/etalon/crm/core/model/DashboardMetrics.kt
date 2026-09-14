@@ -82,12 +82,11 @@ fun buildTrend(current: Money, previous: Money, polarity: TrendPolarity): Trend?
  * twelve — the phone's half of `FinancialKPIs.tsx` and `dashboard/page.tsx:86-97`.
  *
  * @property idx the month this scope is about, already clamped into the series.
- * @property monthKey `YYYY-MM` — `monthKeys[idx]`, empty when the server sent no keys.
- * @property label the server's OWN short label for the month (`bookedByMonth[idx].month`, the
- *   web's `monthLabel`). The phone derives the Uzbek month names it prints from [monthKey]
- *   instead, through the app's own formatter, so that casing and the Tashkent fallback are the
- *   same rules every other date on the screen follows; this is the server's word, kept for
- *   parity checks.
+ * @property monthKey `YYYY-MM` — `monthKeys[idx]`, empty when the server sent no keys. It is the
+ *   ONLY month identity this scope carries: the screen derives every month name it prints from it
+ *   through the app's own formatter, so that casing and the Tashkent fallback are the same rules
+ *   every other date follows. The server's own `bookedByMonth[idx].month` label is deliberately
+ *   not carried — nothing rendered it, and a second month identity is a second thing to disagree.
  * @property isCurrent whether [idx] is the month containing today — what decides «ушбу ой» against
  *   «{ой} ойи», and the only thing the current month is special about.
  * @property bookedSeries the months ENDING at [idx] — at most [SPARKLINE_MONTHS], fewer when the
@@ -99,7 +98,6 @@ fun buildTrend(current: Money, previous: Money, polarity: TrendPolarity): Trend?
 data class MonthScope(
     val idx: Int,
     val monthKey: String,
-    val label: String,
     val isCurrent: Boolean,
     val booked: PeriodMoney,
     val collected: PeriodMoney,
@@ -182,7 +180,6 @@ fun monthScope(s: HomeSummary, idx: Int): MonthScope {
     return MonthScope(
         idx = i,
         monthKey = monthKey,
-        label = s.bookedByMonth.getOrNull(i)?.month ?: "",
         isCurrent = i == currentIdx,
         booked = PeriodMoney(booked, orderCount, buildTrend(booked, prevBooked, TrendPolarity.POSITIVE)),
         collected = PeriodMoney(collected, paymentCount, buildTrend(collected, prevCollected, TrendPolarity.POSITIVE)),
