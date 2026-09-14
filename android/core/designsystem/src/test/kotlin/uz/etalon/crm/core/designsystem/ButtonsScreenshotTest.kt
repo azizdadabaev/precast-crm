@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
@@ -34,6 +35,9 @@ import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+
+/** `contentDescription` on the one icon button `buttonsPressedLight` holds down. */
+private const val ICON_BUTTON = "Билдиришномалар"
 
 /**
  * §2's buttons in one sheet, every state the spec names: the primary enabled, disabled and
@@ -73,7 +77,20 @@ class ButtonsScreenshotTest {
             .forEachIndexed { pointer, label ->
                 rule.onAllNodesWithText(label)[0].performTouchInput { down(pointer, center) }
             }
+        // The icon button's press is a ripple rather than a fill, and D7 made its target 48 dp
+        // while the drawn pill stayed 40 — so what the ripple covers is the only thing that says
+        // whether the extra 8 dp is really live. Held with the sixth pointer, like the five above.
+        rule.onNodeWithContentDescription(ICON_BUTTON).performTouchInput { down(5, center) }
         rule.onRoot().captureRoboImage("screenshots/ds_buttons_pressed_light.png")
+    }
+
+    /** D7's floor, in numbers rather than in a picture: the 40 dp pill the design draws sits in a
+     *  48 dp target, and it is the target a thumb has to hit. */
+    @Test fun theIconButtonKeepsTheFortyEightDpTarget() {
+        rule.setContent { EtalonTheme { EtalonIconButton(EtalonIcons.Bell, ICON_BUTTON, onClick = {}) } }
+        val node = rule.onNodeWithContentDescription(ICON_BUTTON).fetchSemanticsNode()
+        assertEquals(48f, node.size.width / rule.density.density, 0.5f)
+        assertEquals(48f, node.size.height / rule.density.density, 0.5f)
     }
 
     /**
@@ -131,7 +148,9 @@ private fun ButtonSheet() {
         DangerButton("Ўчириш", onClick = {}, enabled = false)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             EtalonIconButton(EtalonIcons.Bell, null, onClick = {}, badge = true)
-            EtalonIconButton(EtalonIcons.Bell, null, onClick = {})
+            // The one icon button here that carries a description: it is how `buttonsPressedLight`
+            // finds it to hold it down. Semantics only — nothing about it is drawn.
+            EtalonIconButton(EtalonIcons.Bell, ICON_BUTTON, onClick = {})
             EtalonIconButton(EtalonIcons.SlidersHorizontal, null, onClick = {}, shape = EtalonShapes.md, size = 36.dp)
             EtalonIconButton(EtalonIcons.Phone, null, onClick = {}, shape = EtalonShapes.md, badge = true, size = 36.dp)
         }

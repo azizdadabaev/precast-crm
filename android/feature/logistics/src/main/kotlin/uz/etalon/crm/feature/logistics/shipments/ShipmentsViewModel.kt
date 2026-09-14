@@ -72,20 +72,13 @@ data class ShipmentsUiState(
      * idempotency key, so the server takes it and then refuses it ("Shipment is already LOADED").
      * Deleting the truck is blocked for the same reason: it would strand the queued photo.
      *
-     * Both an unsent and a rejected row block, but they must not read the same. A row the server
-     * has already refused is not going anywhere on its own, and labelling it «Юборилмоқда…» told
-     * the operator to keep waiting for something that had already stopped.
+     * Only the *queued* half is asked here. A row the server has already refused blocks too, but
+     * it must not read the same — «Юборилмоқда…» over a load that had already stopped told the
+     * operator to keep waiting — so the screen picks that row out of [pendingUploads] itself, and
+     * shows the reason with it. One split, in the one place that draws both halves.
      */
-    fun hasUnsentLoad(shipmentId: String): Boolean = hasQueuedLoad(shipmentId) || hasFailedLoad(shipmentId)
     fun hasQueuedLoad(shipmentId: String): Boolean =
         pendingUploads.any { it.shipmentId == shipmentId && !it.failed }
-    fun hasFailedLoad(shipmentId: String): Boolean =
-        pendingUploads.any { it.shipmentId == shipmentId && it.failed }
-
-    /** The row the outbox banner acts on. Retry and cancel used to live only on the order-detail
-     *  screen, so an operator who reached a truck from here had no way out of a rejected load. */
-    val firstFailedUpload: PendingUpload? get() = pendingUploads.firstOrNull { it.failed }
-    val unfinishedUploads: Int get() = pendingUploads.count { !it.failed }
 }
 
 @HiltViewModel(assistedFactory = ShipmentsViewModel.Factory::class)

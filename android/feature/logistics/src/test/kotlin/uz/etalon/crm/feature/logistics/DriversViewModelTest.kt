@@ -134,4 +134,32 @@ class DriversViewModelTest {
         assertEquals(0, setActiveCalls)
         assertNotNull(vm.state.value.error)
     }
+
+    /**
+     * The create sheet holds the only copy of what the operator typed, and it closes on this
+     * counter alone. A refusal — the server's or the ViewModel's own — must therefore leave the
+     * counter where it was, or the sheet closes over the reason and the form is gone.
+     */
+    @Test fun `only a driver actually created bumps the success counter`() = runTest {
+        var fail = true
+        val vm = DriversViewModel(
+            list = DriversListUseCase { Result.success(emptyList()) },
+            create = DriverCreateUseCase { _, _, _ ->
+                if (fail) Result.failure(IOException("тармоқ узилди")) else Result.success(driver("d1", "x", true))
+            },
+            setActive = DriverSetActiveUseCase { _, _ -> Result.success(driver("d1", "x", true)) },
+        )
+        advanceUntilIdle()
+        assertEquals(0, vm.state.value.createdCount)
+
+        vm.create("Ҳайдовчи", "998901112233", null)
+        advanceUntilIdle()
+        assertEquals(0, vm.state.value.createdCount, "a refused create must not read as a save")
+        assertNotNull(vm.state.value.error)
+
+        fail = false
+        vm.create("Ҳайдовчи", "998901112233", null)
+        advanceUntilIdle()
+        assertEquals(1, vm.state.value.createdCount)
+    }
 }

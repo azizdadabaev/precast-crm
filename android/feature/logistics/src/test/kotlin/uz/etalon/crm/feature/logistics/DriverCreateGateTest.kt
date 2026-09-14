@@ -9,11 +9,13 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -38,22 +40,24 @@ private const val SAVE = "Сақлаш"
  *  makes itself, before any request is started. */
 private const val REFUSAL = "Исмни киритинг"
 
+/** Typed into the sheet's «Исм» field, to prove a refusal does not throw the form away. */
+private const val TYPED_NAME = "Ботир Ҳакимов"
+
 /**
  * The create sheet's dismissal, which is state this screen owns rather than the ViewModel: the
  * sheet holds while a request is in flight so its own «Сақлаш» can carry the spinner, and closes
- * when that request settles.
+ * once a driver has been created.
  *
- * The distinction the three cases pin is the one the whole mechanism turns on. `DriversViewModel`
- * runs its self-checks — blank name, a phone that is not nine digits, no network — BEFORE it ever
- * sets `loading`, so a refusal it makes itself never flips `submitting`, the `LaunchedEffect`'s key
- * never changes, and the sheet must stay up with the reason inside it. Only a refusal from the
- * server (or a success) turns `loading` on and off again, and only that may take the sheet away.
- * Get the key or the guard wrong and the sheet either never closes after a save, or closes over the
- * reason a save was refused — which is exactly the bug this screen used to have, when it dismissed
- * unconditionally on the tap and wrote «Исмни киритинг» to a list banner nobody could see.
+ * The distinction the cases pin is the one the whole mechanism turns on: **only a driver actually
+ * created** closes the sheet. `DriversUiState.createdCount` is that signal, and the effect keys on
+ * it. Every refusal keeps the sheet up — the ones `DriversViewModel` makes itself (blank name, a
+ * phone that is not nine digits, no network), which never set `loading` at all, and the ones the
+ * server makes, which set it and clear it exactly as a success does. Keying the effect on `loading`
+ * falling instead is the bug the last of these tests guards: the sheet closed over the reason and
+ * threw away the name, phone and note the operator had typed.
  *
  * Driven by screen-level state, never by a network: [onCreate] here stands in for the ViewModel and
- * writes the same two fields it would.
+ * writes the same fields it would.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -66,7 +70,7 @@ class DriverCreateGateTest {
         var error by mutableStateOf<String?>(null)
         rule.setContent {
             EtalonTheme {
-                Screen(loading, error, onCreate = { error = REFUSAL })
+                Screen(loading, error = error, onCreate = { error = REFUSAL })
             }
         }
 
@@ -74,18 +78,19 @@ class DriverCreateGateTest {
         rule.onNodeWithText(SAVE).performClick()
         rule.waitForIdle()
 
-        // `loading` never moved, so the effect never ran: the sheet is still up.
+        // No request was ever started and nothing was created, so the effect never ran: sheet up.
         rule.onNodeWithText(SAVE).assertIsDisplayed()
         // Twice — once in the sheet's own banner, which is the whole point of the change, and once
         // in the list's banner behind it, which is where it used to be alone and unread.
         rule.onAllNodesWithText(REFUSAL).assertCountEquals(2)
     }
 
-    @Test fun `a request that settles closes the sheet`() {
+    @Test fun `a driver actually created closes the sheet`() {
         var loading by mutableStateOf(false)
+        var created by mutableStateOf(0)
         rule.setContent {
             EtalonTheme {
-                Screen(loading, error = null, onCreate = { loading = true })
+                Screen(loading, created, error = null, onCreate = { loading = true })
             }
         }
 
@@ -94,10 +99,43 @@ class DriverCreateGateTest {
         rule.waitForIdle()
         rule.onNodeWithText(SAVE).assertIsDisplayed()
 
+        // What the ViewModel writes on success, in the order it writes it.
+        created = 1
         loading = false
         rule.waitForIdle()
 
         rule.onNodeWithText(SAVE).assertDoesNotExist()
+    }
+
+    /**
+     * The carry from Task 4's review. A create the SERVER refuses — a connection dropped
+     * mid-request above all — settles `loading` exactly the way a success does, so a sheet keyed on
+     * that flag falling closed over the reason and took the typed name, phone and note with it. The
+     * operator's only way to read why was to type all three again.
+     */
+    @Test fun `a server refusal keeps the sheet up with what was typed still in it`() {
+        var loading by mutableStateOf(false)
+        var error by mutableStateOf<String?>(null)
+        rule.setContent {
+            EtalonTheme {
+                Screen(loading, created = 0, error = error, onCreate = { loading = true })
+            }
+        }
+
+        openSheet()
+        // The first editable field in the sheet is «Исм»; it carries no placeholder, so the set-text
+        // action is what identifies it.
+        rule.onAllNodes(hasSetTextAction())[0].performTextInput(TYPED_NAME)
+        rule.onNodeWithText(SAVE).performClick()
+        rule.waitForIdle()
+
+        // The request settles with no driver created: `loading` falls, `createdCount` does not move.
+        loading = false
+        error = "Сервер жавоб бермади"
+        rule.waitForIdle()
+
+        rule.onNodeWithText(SAVE).assertIsDisplayed()
+        rule.onNodeWithText(TYPED_NAME).assertIsDisplayed()
     }
 
     /** The spinner is the reason the sheet holds at all: `PrimaryButton` is `enabled && !loading`,
@@ -164,8 +202,8 @@ class DriverCreateGateTest {
     }
 
     @Composable
-    private fun Screen(loading: Boolean, error: String?, onCreate: () -> Unit) = DriversScreen(
-        s = state(loading, error),
+    private fun Screen(loading: Boolean, created: Int = 0, error: String?, onCreate: () -> Unit) = DriversScreen(
+        s = state(loading, error, created),
         canManage = true,
         onBack = {},
         onRefresh = {},
@@ -174,7 +212,7 @@ class DriverCreateGateTest {
         onSetActive = { _, _ -> },
     )
 
-    private fun state(loading: Boolean = false, error: String? = null) = DriversUiState(
+    private fun state(loading: Boolean = false, error: String? = null, created: Int = 0) = DriversUiState(
         drivers = listOf(
             Driver(
                 id = "d1", name = "Дилшод Раҳимов", phone = "998901112233", notes = null,
@@ -183,5 +221,6 @@ class DriverCreateGateTest {
         ),
         loading = loading,
         error = error,
+        createdCount = created,
     )
 }

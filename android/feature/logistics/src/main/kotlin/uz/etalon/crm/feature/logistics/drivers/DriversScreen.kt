@@ -227,6 +227,7 @@ fun DriversScreen(
     if (showAdd) {
         AddDriverSheet(
             submitting = s.loading,
+            created = s.createdCount,
             error = s.error,
             onDismiss = { showAdd = false },
             onCreate = onCreate,
@@ -255,7 +256,7 @@ private fun DriversCard(
 
 /**
  * One driver as a light list row: the avatar, the name, and under it the active tag beside
- * [driverMeta]'s phone and workload.
+ * the phone with [driverWorkload] after it.
  *
  * The dial stays a target of its own — unlike the clients list, where a tappable phone inside a
  * tappable row would be two targets a thumb cannot tell apart. Nothing else on this row clicks, and
@@ -289,11 +290,26 @@ private fun DriverRow(d: Driver, canManage: Boolean, actionsEnabled: Boolean, on
                 StatusTag(d.active)
             }
             Spacer(Modifier.height(ROW_TITLE_GAP))
-            Text(
-                driverMeta(d),
-                style = EtalonType.meta, color = EtalonColors.ink3,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
+            // Two texts rather than one joined string, so the ellipsis can only ever fall on the
+            // workload. The number is what this screen is opened for when a lorry is late, and a
+            // «+998 90 111 22…» is a number nobody can dial; the counts beside it are context and
+            // may be cut. Same glyphs, same order, same « · » — only what survives a short row
+            // changes.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    formatPhone(d.phone),
+                    style = EtalonType.meta, color = EtalonColors.ink3,
+                    maxLines = 1,
+                )
+                val workload = driverWorkload(d)
+                if (workload.isNotEmpty()) {
+                    Text(
+                        " · $workload",
+                        style = EtalonType.meta, color = EtalonColors.ink3,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
         Spacer(Modifier.width(EtalonSpace.xs))
         EtalonIconButton(
@@ -315,13 +331,13 @@ private fun DriverRow(d: Driver, canManage: Boolean, actionsEnabled: Boolean, on
 }
 
 /**
- * «+998 90 111 22 33 · 2 та фаол жўнатма · 30 кунда 1 та тафовут» — the number first, because that
- * is what the row is looked up for, then only the counts the server actually reports. A driver with
- * nothing on the road and nothing against him shows the phone alone rather than two zeroes.
+ * What follows the number on the meta line: «2 та фаол жўнатма · 30 кунда 1 та тафовут», and only
+ * the counts the server actually reports. A driver with nothing on the road and nothing against
+ * him shows the phone alone rather than two zeroes — so this is empty and the row prints no
+ * separator either.
  */
 @Composable
-private fun driverMeta(d: Driver): String = listOfNotNull(
-    formatPhone(d.phone).ifBlank { null },
+private fun driverWorkload(d: Driver): String = listOfNotNull(
     stringResource(R.string.driver_active_dispatches, d.activeDispatchCount).takeIf { d.activeDispatchCount > 0 },
     stringResource(R.string.driver_discrepancies_30d, d.discrepancyCount30d).takeIf { d.discrepancyCount30d > 0 },
 ).joinToString(" · ")
@@ -342,20 +358,22 @@ private fun dial(ctx: Context, phone: String) {
  * Adding a driver: §2's form sheet, the same white [FormCard] the client edit sheet carries.
  *
  * The sheet holds while the create is in flight so its own «Сақлаш» can carry the spinner, and
- * closes the moment the request settles either way — a server refusal is the list's banner to
- * report, exactly as it was before. A refusal the ViewModel makes ITSELF (a blank name, eight
- * digits, no network) never starts a request at all, so [submitting] never turns on, the sheet
- * stays up and [error] says why right above the field that caused it. That banner is the whole
- * reason the sheet no longer closes on the tap: the same message used to be written to the list
- * hidden behind it.
+ * closes only when a driver has actually been created. Every refusal keeps it up with [error]
+ * above the field that caused it: the ones the ViewModel makes ITSELF (a blank name, eight digits,
+ * no network) never start a request at all, and a refusal from the server — a connection lost
+ * mid-request above all — used to close the sheet and take the typed name, phone and note with it,
+ * so the operator had to type the lot again to read why it failed.
  *
- * @param onDone what to do when the create has settled — dismissal, distinct from [onDismiss]'s
+ * @param created [DriversUiState.createdCount] — the success signal. The effect keys on a CHANGE
+ *   of it rather than on [submitting] falling, which is what tells a refusal apart from a save.
+ * @param onDone what to do once a driver has been created — dismissal, distinct from [onDismiss]'s
  *   "the operator swiped it away".
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddDriverSheet(
     submitting: Boolean,
+    created: Int,
     error: String?,
     onDismiss: () -> Unit,
     onCreate: (name: String, phone: String, notes: String?) -> Unit,
@@ -365,10 +383,11 @@ private fun AddDriverSheet(
     var phoneDigits by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var submitted by remember { mutableStateOf(false) }
-    // Keyed on `submitting` alone: a self-refusal leaves it false, so this never re-runs and the
-    // sheet stays where the operator can read the reason.
-    LaunchedEffect(submitting) {
-        if (submitted && !submitting) {
+    // Keyed on the success counter, so no refusal of any kind can reach it: this sheet holds the
+    // only copy of what the operator typed. It runs once on composition too, with `submitted`
+    // still false — which is exactly why the guard is on `submitted` and not on the key.
+    LaunchedEffect(created) {
+        if (submitted) {
             submitted = false
             onDone()
         }

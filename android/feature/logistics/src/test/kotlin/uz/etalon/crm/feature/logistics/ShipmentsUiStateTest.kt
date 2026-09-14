@@ -1,8 +1,6 @@
 package uz.etalon.crm.feature.logistics
 
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.*
@@ -111,43 +109,20 @@ class ShipmentsUiStateTest {
     @Test fun `with an empty outbox no truck is marked`() {
         val s = ShipmentsUiState(Resource.Success(detail(OrderStatus.PLACED)))
         assertFalse(s.hasQueuedLoad("s1"))
-        assertFalse(s.hasFailedLoad("s1"))
-        assertFalse(s.hasUnsentLoad("s1"))
     }
 
     /**
      * The two stories a single screen used to tell at once: the action bar read «Юборилмади» while
      * the truck's own button, keyed off the mere presence of a row, still read «Юборилмоқда…». A
-     * rejected load is not on its way anywhere, so it must not claim to be — but it still blocks,
-     * because the way out is the banner's retry or cancel, not a second copy of the same load.
+     * rejected load is not on its way anywhere, so it must not claim to be — which is why this
+     * asks only whether a load is still *queued*, and the screen names the rejected row itself.
      */
-    @Test fun `a rejected load is distinguished from one still on its way`() {
+    @Test fun `a rejected load does not count as one still on its way`() {
         val s = ShipmentsUiState(
             Resource.Success(detail(OrderStatus.PLACED)),
             pendingUploads = listOf(upload("s1", failed = true), upload("s2")),
         )
-        assertTrue(s.hasFailedLoad("s1"))
-        assertFalse(s.hasQueuedLoad("s1"))
-        assertTrue(s.hasUnsentLoad("s1"), "a rejected row still blocks a second load")
-
+        assertFalse(s.hasQueuedLoad("s1"), "a rejected row is not «Юборилмоқда…»")
         assertTrue(s.hasQueuedLoad("s2"))
-        assertFalse(s.hasFailedLoad("s2"))
-        assertTrue(s.hasUnsentLoad("s2"))
-    }
-
-    /** What the banner acts on, and what it counts: only rows still on their way are "sending". */
-    @Test fun `the banner picks the rejected row and counts only the unfinished ones`() {
-        val s = ShipmentsUiState(
-            Resource.Success(detail(OrderStatus.PLACED)),
-            pendingUploads = listOf(upload("s2"), upload("s1", failed = true), upload("s3")),
-        )
-        assertEquals("q-s1", s.firstFailedUpload?.id)
-        assertEquals(2, s.unfinishedUploads)
-    }
-
-    @Test fun `with nothing rejected the banner has no row to act on`() {
-        val s = ShipmentsUiState(Resource.Success(detail(OrderStatus.PLACED)), pendingUploads = listOf(upload("s1")))
-        assertNull(s.firstFailedUpload)
-        assertEquals(1, s.unfinishedUploads)
     }
 }

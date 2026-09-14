@@ -26,6 +26,12 @@ data class DriversUiState(
      *  derived from its real type — exactly how ShipmentsUiState derives its own offline signal
      *  from the kept `Resource.Error`, rather than from a fact-losing boolean. */
     val lastRefreshError: AppError? = null,
+    /** Bumped once per driver actually created. The create sheet closes on a CHANGE of this and on
+     *  nothing else: keyed on [loading] falling instead, a server refusal — a lost connection
+     *  mid-request above all — took the sheet away and the typed name, phone and note with it,
+     *  leaving the operator to type them again to read why. A counter rather than a flag because
+     *  two creates in a row are two closes, and a flag would have to be cleared by the screen. */
+    val createdCount: Int = 0,
 ) {
     /** Never true alongside [error]: an empty list next to an error banner reads as "no drivers"
      *  when the truth is "couldn't check" — the same rule ShipmentsUiState follows. */
@@ -99,7 +105,10 @@ open class DriversViewModel(
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             createDriver(name.trim(), phone, notes?.trim()?.ifEmpty { null }).fold(
-                onSuccess = { refresh() },
+                onSuccess = {
+                    _state.update { it.copy(createdCount = it.createdCount + 1) }
+                    refresh()
+                },
                 onFailure = { t -> _state.update { it.copy(loading = false, error = t.toAppError().message) } },
             )
         }
