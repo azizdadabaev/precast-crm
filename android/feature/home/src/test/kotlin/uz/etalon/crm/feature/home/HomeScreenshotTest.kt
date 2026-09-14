@@ -1,6 +1,10 @@
 package uz.etalon.crm.feature.home
 
-import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -10,7 +14,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
-import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Assert.assertEquals
@@ -22,6 +25,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
+import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.AllTimeMoney
 import uz.etalon.crm.core.model.Aov
@@ -49,9 +53,16 @@ import java.math.BigDecimal
 import java.time.Instant
 import java.time.YearMonth
 
-/** What `SignedInShell` provides into [LocalNavPillInset] at Robolectric's 0 dp system navigation
- *  inset: the pill's 84 dp band alone, so this frame carries the clearance a real phone shows. */
-private val SHELL_NAV_PILL_INSET = 84.dp
+/**
+ * The page the outbox sheet is opened over: the app's own ground colour and nothing else, so the
+ * scrim has something to darken and the frame holds only the sheet. Deliberately NOT `HomeScreen`
+ * — see [HomeScreenshotTest.outboxRejectedLight].
+ */
+@Composable
+private fun OutboxPage(sheet: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().background(EtalonColors.page))
+    sheet()
+}
 
 /**
  * The index of «Сўнгги буюртмалар» in a loaded `HomeScreen`'s list — the app bar, the hero, the
@@ -374,21 +385,19 @@ class HomeScreenshotTest {
     /**
      * D10 / R6: the bell's sheet, with one upload still queued and one order the server refused
      * outright. A whole-screen capture rather than `onRoot()` — the sheet is a `ModalBottomSheet`
-     * in a window of its own, and the scrim over Home is part of what the frame has to show.
+     * in a window of its own, and the scrim it paints is part of what the frame has to show.
      *
-     * [LocalNavPillInset] is provided the way `SignedInShell` provides it (Robolectric reports no
-     * system navigation bar, so the shell's band is its whole 84 dp), matching every other feature
-     * module's screenshot test.
+     * The page under the scrim is BLANK, not `HomeScreen` ([OutboxPage], the pattern
+     * `PickerSheetsScreenshotTest` already uses). These three frames are about the sheet; drawing
+     * the dashboard behind a 32 %-opaque scrim added nothing legible and made every one of them
+     * move whenever a figure on Home's first screen changed — a re-record with no finding in it,
+     * three times per phase. The sheet reads [LocalNavPillInset] nowhere (it clears the system bar
+     * with `navigationBarsPadding`), so nothing about its own pixels depends on the shell.
      */
     @Test @Config(qualifiers = "w411dp-h891dp") fun outboxRejectedLight() {
         rule.setContent {
             EtalonTheme {
-                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
-                    HomeScreen(
-                        s = rejectedState(), me = owner, now = now, onRefresh = {},
-                        onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
-                    )
+                OutboxPage {
                     OutboxSheet(
                         pending = rejectedState().pendingUploads,
                         rejected = rejectedState().rejectedOrders,
@@ -420,13 +429,7 @@ class HomeScreenshotTest {
         }
         rule.setContent {
             EtalonTheme {
-                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
-                    HomeScreen(
-                        s = loaded().copy(pendingUploads = 0, rejectedOrders = many),
-                        me = owner, now = now, onRefresh = {},
-                        onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
-                    )
+                OutboxPage {
                     OutboxSheet(pending = 0, rejected = many, onDiscard = {}, onDismiss = {}, onReopen = {})
                 }
             }
@@ -446,12 +449,7 @@ class HomeScreenshotTest {
     @Test @Config(qualifiers = "w411dp-h891dp") fun outboxDiscardConfirmLight() {
         rule.setContent {
             EtalonTheme {
-                CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET) {
-                    HomeScreen(
-                        s = rejectedState(), me = owner, now = now, onRefresh = {},
-                        onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
-                    )
+                OutboxPage {
                     OutboxSheet(
                         pending = 0,
                         rejected = rejectedState().rejectedOrders,
