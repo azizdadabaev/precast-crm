@@ -1,0 +1,126 @@
+package uz.etalon.crm.core.designsystem
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import uz.etalon.crm.core.designsystem.components.MONTH_COLUMNS
+import uz.etalon.crm.core.designsystem.components.MonthColumnSelected
+import uz.etalon.crm.core.designsystem.components.MonthColumns
+import uz.etalon.crm.core.designsystem.components.monthColumnTag
+import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.Money
+import java.math.BigDecimal
+
+/**
+ * Design §2.3b: the twelve-month chart is also the month picker, so what it reports on a tap and
+ * which column it marks as picked are behaviour, not decoration. The colours themselves are
+ * `ds_month_columns_light`'s business; this file asserts the structure and the wiring.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36], qualifiers = "w411dp-h891dp")
+class MonthColumnsTest {
+    @get:Rule val rule = createComposeRule()
+
+    private val labels = listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+
+    private fun money(values: List<String>) = values.map { Money(BigDecimal(it)) }
+
+    private fun show(
+        booked: List<String> = List(MONTH_COLUMNS) { "${it + 1}0000000" },
+        collected: List<String> = List(MONTH_COLUMNS) { "${it + 1}000000" },
+        selected: Int = 11,
+        current: Int = 11,
+        onSelect: (Int) -> Unit = {},
+    ) = rule.setContent {
+        EtalonTheme {
+            Box(Modifier.width(330.dp)) {
+                MonthColumns(
+                    booked = money(booked),
+                    collected = money(collected),
+                    labels = labels,
+                    selected = selected,
+                    current = current,
+                    onSelect = onSelect,
+                )
+            }
+        }
+    }
+
+    @Test fun `the chart is twelve columns wide`() {
+        show()
+        repeat(MONTH_COLUMNS) { i ->
+            rule.onNodeWithTag(monthColumnTag(i), useUnmergedTree = true).assertIsDisplayed()
+        }
+    }
+
+    /** A payload shorter than a year pads on the LEFT rather than drawing fewer columns: the card
+     *  under the rail must not change height because the business is eight months old. */
+    @Test fun `a short series still draws twelve columns`() {
+        show(booked = listOf("4000000", "9000000", "2000000"), collected = listOf("1000000", "2000000", "3000000"))
+        repeat(MONTH_COLUMNS) { i ->
+            rule.onNodeWithTag(monthColumnTag(i), useUnmergedTree = true).assertIsDisplayed()
+        }
+    }
+
+    @Test fun `tapping a column reports that column's own index`() {
+        val picked = mutableListOf<Int>()
+        show(onSelect = { picked += it })
+
+        // The fourth column, not the first: a handler that always reported index 0 fails here.
+        rule.onNodeWithTag(monthColumnTag(3)).performClick()
+        assertEquals(listOf(3), picked)
+
+        rule.onNodeWithTag(monthColumnTag(11)).performClick()
+        assertEquals(listOf(3, 11), picked)
+    }
+
+    /** Exactly one column is the picked one, and it is the one the caller named — the accent pair
+     *  is what the rail above the chart is scoped to. */
+    @Test fun `one column and only one reports itself selected`() {
+        show(selected = 7)
+
+        val selected = rule.onAllNodes(
+            SemanticsMatcher.expectValue(MonthColumnSelected, true),
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes()
+        assertEquals(1, selected.size)
+
+        rule.onNodeWithTag(monthColumnTag(7), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnSelected, true))
+        rule.onNodeWithTag(monthColumnTag(6), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnSelected, false))
+    }
+
+    /** A year with no trade at all still draws twelve columns of stubs: a chart that collapsed to
+     *  nothing reads as a rendering failure rather than as a quiet year. */
+    @Test fun `an all-zero year draws stubs, not an empty band`() {
+        show(booked = List(MONTH_COLUMNS) { "0" }, collected = List(MONTH_COLUMNS) { "0" })
+        repeat(MONTH_COLUMNS) { i ->
+            rule.onNodeWithTag(monthColumnTag(i), useUnmergedTree = true)
+                .assertIsDisplayed()
+                .assertHeightIsAtLeast(1.dp)
+        }
+    }
+
+    /** D7's floor: a column is a target a finger can hit, whatever its bars do. */
+    @Test fun `every column is at least a 48 dp target`() {
+        show(booked = List(MONTH_COLUMNS) { "0" }, collected = List(MONTH_COLUMNS) { "0" })
+        repeat(MONTH_COLUMNS) { i ->
+            rule.onNodeWithTag(monthColumnTag(i), useUnmergedTree = true).assertHeightIsAtLeast(48.dp)
+        }
+    }
+}

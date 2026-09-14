@@ -22,8 +22,13 @@ import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-/** §2: 4 dp on top, 2 dp at the foot — a sparkline bar is not a plain rounded rectangle. */
-private val BarShape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp)
+/**
+ * §2: 4 dp on top, 2 dp at the foot — a sparkline bar is not a plain rounded rectangle.
+ *
+ * Shared with [MonthColumns], which draws the same bar in a narrower column: the shape of a bar in
+ * this app lives here and is not restated.
+ */
+internal val BarShape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 2.dp, bottomEnd = 2.dp)
 
 /** The track every sparkline in the app is drawn in, and the gap between two of its bars. */
 private val SparklineHeight = 44.dp

@@ -23,23 +23,18 @@ import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.HomeSummary
 import uz.etalon.crm.core.model.LoadedVolume
 import uz.etalon.crm.core.model.Money
-import uz.etalon.crm.core.model.MonthBooked
-import uz.etalon.crm.core.model.MonthOrders
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.RecentOrder
+import uz.etalon.crm.core.model.RegionOrders
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.TopCustomer
+import uz.etalon.crm.core.model.monthScope
 import java.math.BigDecimal
-import java.math.RoundingMode
 import javax.inject.Inject
 
 internal const val PERM_DASHBOARD_VIEW_BASIC = "dashboard.viewBasic"
 internal const val PERM_DASHBOARD_VIEW = "dashboard.view"
-
-/** How many months a rail sparkline draws (design §2.3). The series are cut to this here rather
- *  than in composition, so the screen is handed exactly what it renders. */
-private const val SPARKLINE_MONTHS = 8
 
 /** §2.6: the card lists the five biggest payers, ranked here rather than trusted from the wire —
  *  the web sorts the same array before it draws it. */
@@ -49,22 +44,30 @@ private const val TOP_CUSTOMERS = 5
 private const val RECENT_ROWS = 4
 
 /**
- * Every figure the dashboard's top half renders (design §2.2–§2.4), modelled apart from
+ * Every figure the dashboard renders (design §2.2–§2.7 and §2b), modelled apart from
  * [HomeUiState] so "not yet fetched or not permitted" (`null`) can never be confused with a
  * genuine zero — the defect the Task 7 brief calls out by name.
  *
  * The three series are already windowed and already `BigDecimal`: sparkline geometry is the one
  * place a figure stops being money, and doing that division in composition would redo it on every
  * recomposition of a screen that scrolls.
+ *
+ * §2.3b: the rail's own figures come from [uz.etalon.crm.core.model.monthScope] for the month the
+ * operator picked in the chart, not from the server's `bookedThisMonth` fields — for the current
+ * month the two are the same numbers, and for any other month only the series can answer. What
+ * does NOT follow the picker is written down beside each field: the receivables hero, the all-time
+ * lines, the donut, the top clients, the recent orders and the region ranking.
  */
 data class HomeDashboard(
-    // §2.2 — the receivables hero.
+    // §2.2 — the receivables hero. A point-in-time balance: it never follows the month picker.
     val receivables: Money,
     val receivableOrders: Int,
     val paidOrders: Int,
     val partialOrders: Int,
     val awaitingOrders: Int,
-    // §2.3 — the financial rail. Each card: this month, its trend, its all-time line, its series.
+    // §2.3 / §2.3b — the financial rail, scoped to the SELECTED month. Each card: that month's
+    // figure, its trend against the month before it, its all-time line (which does not move), and
+    // the eight months ending at the selection.
     val booked: PeriodMoney,
     val bookedAllTime: AllTimeMoney,
     val bookedSeries: List<BigDecimal>,
@@ -78,13 +81,37 @@ data class HomeDashboard(
     val todayArea: BigDecimal,
     val openDiscrepancies: Int,
     val openDiscrepancyTotal: Money,
-    /** Absent when the server's `loadedVolumeByMonth` carries no row for [currentMonthKey] — the
-     *  card then reads «Бу ой юк йўқ» rather than a zeroed figure. */
+    /** The SELECTED month's `loadedVolumeByMonth` row, found by its key. Absent when that month
+     *  loaded nothing — the card then reads «Бу ой юк йўқ» rather than a zeroed figure. */
     val loadedThisMonth: LoadedVolume?,
-    /** `"2026-09"`, the month the whole screen is about; the loaded card names it. */
-    val currentMonthKey: String,
-    // §2.6 — the five biggest payers, already ranked and already cut to five.
+    /** `"2026-09"` — the month the rail and the loaded tile are about, which is the month the
+     *  operator picked in the chart and not necessarily the current one. */
+    val monthKey: String,
+    /** Whether [monthKey] is the month containing today: what decides «ушбу ой» from «{ой} ойи»
+     *  in every scoped line, and the only thing the current month is special about. */
+    val isCurrentMonth: Boolean,
+    /** The selected month's own order count — what the chart's sub-line names when a past month
+     *  is picked. (The rail reads the same figure through [booked]`.count`.) */
+    val monthOrders: Int,
+    // §2.6 — the five biggest payers, already ranked and already cut to five. All-time: they do
+    // not follow the picker either.
     val topCustomers: List<TopCustomer>,
+    // §2.3b — the twelve-month chart that IS the picker.
+    /** Twelve months of bookings, oldest first, index-aligned with [chartCollected] and
+     *  [chartMonthKeys]. */
+    val chartBooked: List<Money>,
+    val chartCollected: List<Money>,
+    /** `YYYY-MM` per column. The screen turns these into the short Uzbek names under the columns —
+     *  month names are the UI's business and the server's own labels are not always month names
+     *  (a test fixture's are its keys). */
+    val chartMonthKeys: List<String>,
+    val selectedMonthIdx: Int,
+    val currentMonthIdx: Int,
+    /** Σ `ordersByMonth` — «N та буюртма · сўнгги 12 ой» while the current month is selected. */
+    val yearOrders: Int,
+    // §2.6b — the province league table. All-time by construction: the aggregation has no time
+    // axis at all, so the month picker cannot reach it and the card's own sub-line says so.
+    val ordersByRegion: List<RegionOrders>,
 )
 
 /**
@@ -99,29 +126,46 @@ internal fun topCustomers(all: List<TopCustomer>, limit: Int = TOP_CUSTOMERS): L
     all.sortedByDescending { it.totalCollected }.take(limit)
 
 /**
- * §2.3's AOV series: each month's bookings divided by that month's order count, in whole UZS.
+ * The [HomeDashboard] a payload and a month selection make together (design §2.3b).
  *
- * The brief's own formula (`bookedByMonth[i].booked ÷ ordersByMonth[i].count`), taken in
- * [BigDecimal] with [RoundingMode.HALF_UP] to match the web's `Math.round` — never a `Double`,
- * and never a rounding the server would not have done. A month with no orders has no average at
- * all, so it contributes **zero** rather than a division by zero or a carried-forward value.
- *
- * The two arrays are paired by month key rather than by index: they arrive the same length and in
- * the same order today, but an index pairing that silently slips by one would divide September's
- * bookings by August's count and nothing on screen would look wrong.
+ * Pure, so the selection can be re-applied to a fresh payload after a refresh without a second
+ * network read, and so both halves — "what the server sent" and "which month is picked" — are
+ * visible in one place. [monthScope] is the web's own arithmetic, ported; everything that does NOT
+ * follow the picker is copied straight off [s].
  */
-internal fun aovSeries(
-    booked: List<MonthBooked>,
-    orders: List<MonthOrders>,
-    months: Int = SPARKLINE_MONTHS,
-): List<BigDecimal> {
-    val countOf = orders.associate { it.month to it.count }
-    return booked.takeLast(months).map { m ->
-        val count = countOf[m.month] ?: 0
-        if (count <= 0) BigDecimal.ZERO
-        else m.booked.amount.divide(BigDecimal(count), 0, RoundingMode.HALF_UP)
-    }
+internal fun dashboard(s: HomeSummary, selectedIdx: Int): HomeDashboard {
+    val scope = monthScope(s, selectedIdx)
+    return HomeDashboard(
+        receivables = s.receivables, receivableOrders = s.receivableOrders,
+        paidOrders = s.paidOrders, partialOrders = s.partialOrders, awaitingOrders = s.awaitingOrders,
+        booked = scope.booked, bookedAllTime = s.bookedAllTime,
+        bookedSeries = scope.bookedSeries.map { it.amount },
+        collected = scope.collected, collectedAllTime = s.collectedAllTime,
+        collectedSeries = scope.collectedSeries.map { it.amount },
+        aov = scope.aov, aovSeries = scope.aovSeries.map { it.amount },
+        activeCustomers = s.activeCustomers,
+        todayArea = s.todayArea,
+        openDiscrepancies = s.openDiscrepancies,
+        openDiscrepancyTotal = s.openDiscrepancyTotal,
+        loadedThisMonth = scope.loaded,
+        monthKey = scope.monthKey,
+        isCurrentMonth = scope.isCurrent,
+        monthOrders = scope.booked.count,
+        topCustomers = topCustomers(s.topCustomers),
+        chartBooked = s.bookedByMonth.map { it.booked },
+        chartCollected = s.collectedByMonth.map { it.collected },
+        chartMonthKeys = s.monthKeys,
+        selectedMonthIdx = scope.idx,
+        currentMonthIdx = clampToSeries(s, s.currentMonthIdx),
+        yearOrders = s.ordersByMonth.sumOf { it.count },
+        ordersByRegion = s.ordersByRegion,
+    )
 }
+
+/** An index into the month series, clamped the way `dashboard/page.tsx:84-86` clamps it — a
+ *  selection that survived a refresh which shortened the window must not index past its end. */
+internal fun clampToSeries(s: HomeSummary, idx: Int): Int =
+    idx.coerceIn(0, maxOf(s.bookedByMonth.size - 1, 0))
 
 data class HomeUiState(
     val loading: Boolean = true,
@@ -217,6 +261,19 @@ open class HomeViewModel(
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
+    /** The payload the screen is currently drawn from, kept so a month can be re-picked without
+     *  asking the server again — the whole twelve-month series is already in hand. */
+    private var summary: HomeSummary? = null
+
+    /**
+     * Which month the rail is scoped to, or `null` for "follow the current month".
+     *
+     * `null` rather than an eagerly-resolved index, for the reason `dashboard/page.tsx` keeps the
+     * same distinction: a refresh that adds a month must move an operator who never picked one
+     * onto the new current month, and must leave an operator who picked August on August.
+     */
+    private var selectedMonthIdx: Int? = null
+
     init {
         viewModelScope.launch {
             val access = permissions(PERM_DASHBOARD_VIEW_BASIC) || permissions(PERM_DASHBOARD_VIEW)
@@ -266,6 +323,24 @@ open class HomeViewModel(
         _state.update { it.copy(reopenError = null) }
     }
 
+    /**
+     * §2.3b: the operator tapped a column of the twelve-month chart.
+     *
+     * Tapping the month that is already picked returns to the current one, so the chart is its own
+     * way back and no extra control is needed. The index is clamped into the series first, which
+     * makes "tap the selected one again" mean the same thing however the tap arrived.
+     *
+     * Nothing is fetched: the payload already carries all twelve months, and the figures are
+     * recomputed from it by the same arithmetic the server used for the current month.
+     */
+    fun selectMonth(idx: Int) {
+        val s = summary ?: return
+        val wanted = clampToSeries(s, idx)
+        val showing = selectedMonthIdx ?: clampToSeries(s, s.currentMonthIdx)
+        selectedMonthIdx = if (wanted == showing) null else wanted
+        _state.update { it.copy(dash = dashboard(s, selectedMonthIdx ?: s.currentMonthIdx)) }
+    }
+
     /** Pull-to-refresh and the error banner's retry. A no-op without dashboard access: there is
      *  nothing server-side this operator may ask for, and asking anyway would only turn a silent
      *  empty state into a 403 the operator cannot act on. */
@@ -278,27 +353,16 @@ open class HomeViewModel(
         viewModelScope.launch {
             home().fold(
                 onSuccess = { s ->
+                    summary = s
+                    // A month the operator picked survives the refresh, re-clamped against the
+                    // window that just arrived; one they never picked follows the current month.
+                    val idx = selectedMonthIdx?.let { clampToSeries(s, it) }
+                    selectedMonthIdx = idx
                     _state.update {
                         it.copy(
                             loading = false, error = null,
                             today = s.today, recent = s.recent.take(RECENT_ROWS),
-                            dash = HomeDashboard(
-                                receivables = s.receivables, receivableOrders = s.receivableOrders,
-                                paidOrders = s.paidOrders, partialOrders = s.partialOrders,
-                                awaitingOrders = s.awaitingOrders,
-                                booked = s.booked, bookedAllTime = s.bookedAllTime,
-                                bookedSeries = s.bookedByMonth.takeLast(SPARKLINE_MONTHS).map { it.booked.amount },
-                                collected = s.collected, collectedAllTime = s.collectedAllTime,
-                                collectedSeries = s.collectedByMonth.takeLast(SPARKLINE_MONTHS).map { it.collected.amount },
-                                aov = s.aov, aovSeries = aovSeries(s.bookedByMonth, s.ordersByMonth),
-                                activeCustomers = s.activeCustomers,
-                                todayArea = s.todayArea,
-                                openDiscrepancies = s.openDiscrepancies,
-                                openDiscrepancyTotal = s.openDiscrepancyTotal,
-                                loadedThisMonth = s.loadedThisMonth,
-                                currentMonthKey = s.currentMonthKey,
-                                topCustomers = topCustomers(s.topCustomers),
-                            ),
+                            dash = dashboard(s, idx ?: s.currentMonthIdx),
                         )
                     }
                 },
@@ -308,6 +372,11 @@ open class HomeViewModel(
                     // raced the server) answers exactly like never having had it: silence, not a
                     // red banner — see the class doc.
                     if (e is AppError.Forbidden) {
+                        // The payload is gone with the permission, and so is the month picked in
+                        // it: `selectMonth` has nothing to recompute from and says so by doing
+                        // nothing.
+                        summary = null
+                        selectedMonthIdx = null
                         _state.update {
                             it.copy(
                                 loading = false, error = null, hasDashboardAccess = false,

@@ -40,6 +40,7 @@ import uz.etalon.crm.core.designsystem.components.DeltaBadge
 import uz.etalon.crm.core.designsystem.components.Donut
 import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.MoneyText
+import uz.etalon.crm.core.designsystem.components.MonthColumns
 import uz.etalon.crm.core.designsystem.components.PaymentStateTag
 import uz.etalon.crm.core.designsystem.components.SegmentBar
 import uz.etalon.crm.core.designsystem.components.StackedBar
@@ -52,9 +53,11 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.LoadedVolume
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.RecentOrder
+import uz.etalon.crm.core.model.RegionOrders
 import uz.etalon.crm.core.model.TopCustomer
 import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.ui.format.TASHKENT
+import uz.etalon.crm.core.ui.format.UZ_MONTHS_FULL
 import uz.etalon.crm.core.ui.format.UZ_MONTHS_SHORT
 import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
@@ -104,8 +107,8 @@ private const val RAIL_CARDS = 3
 private const val GRID_ROWS = 2
 private const val GRID_COLUMNS = 2
 
-/** §2.5–§2.7: the donut, the top clients and the latest orders. */
-private const val BOTTOM_CARDS = 3
+/** §2.5–§2.7 plus §2.6b: the donut, the top clients, the province ranking and the latest orders. */
+private const val BOTTOM_CARDS = 4
 
 /** §2.5's legend bullet — small enough to read as a key to the ring rather than as a control. */
 private val LEGEND_DOT = 8.dp
@@ -132,6 +135,9 @@ private val SKELETON_KICKER_WIDTH = 140.dp
 private val SKELETON_RAIL = 168.dp
 private val SKELETON_TILE = 118.dp
 private val SKELETON_CARD = 164.dp
+
+/** §2.3b's chart block — a kicker, a sub-line, twelve columns and a legend. */
+private val SKELETON_CHART = 150.dp
 
 @Composable
 internal fun SectionKicker(text: String, modifier: Modifier = Modifier) = Text(
@@ -234,18 +240,24 @@ private fun HeroCell(@StringRes label: Int, count: Int, colour: Color, modifier:
  * last card's right edge both get it without the spacing between them changing.
  */
 @Composable
-internal fun FinancialRail(d: HomeDashboard, modifier: Modifier = Modifier) = LazyRow(
+internal fun FinancialRail(d: HomeDashboard, now: Instant, modifier: Modifier = Modifier) = LazyRow(
     modifier.fillMaxWidth(),
     contentPadding = PaddingValues(horizontal = EtalonSpace.cardMargin),
     horizontalArrangement = Arrangement.spacedBy(EtalonSpace.md),
 ) {
+    // §2.3b's `scopeLabel`: «ушбу ой» while the current month is picked, «{ой} ойи» otherwise.
+    val month = shortMonth(d.monthKey, now)
     item {
         RailCard(
             label = stringResource(R.string.home_booked),
             value = d.booked.total,
             trend = d.booked.trend,
             series = d.bookedSeries,
-            line1 = stringResource(R.string.home_this_month_orders, formatCountBare(d.booked.count)),
+            line1 = if (d.isCurrentMonth) {
+                stringResource(R.string.home_this_month_orders, formatCountBare(d.booked.count))
+            } else {
+                stringResource(R.string.home_scope_month_orders, formatCountBare(d.booked.count), month)
+            },
             line2 = stringResource(
                 R.string.home_all_time,
                 formatMoney(d.bookedAllTime.total),
@@ -259,7 +271,11 @@ internal fun FinancialRail(d: HomeDashboard, modifier: Modifier = Modifier) = La
             value = d.collected.total,
             trend = d.collected.trend,
             series = d.collectedSeries,
-            line1 = stringResource(R.string.home_this_month_payments, formatCountBare(d.collected.count)),
+            line1 = if (d.isCurrentMonth) {
+                stringResource(R.string.home_this_month_payments, formatCountBare(d.collected.count))
+            } else {
+                stringResource(R.string.home_scope_month_payments, formatCountBare(d.collected.count), month)
+            },
             line2 = stringResource(
                 R.string.home_all_time,
                 formatMoney(d.collectedAllTime.total),
@@ -328,6 +344,90 @@ private fun CaptionLine(text: String, colour: Color) = Text(
     maxLines = RAIL_LINES,
     overflow = TextOverflow.Ellipsis,
 )
+
+// ── §2.3b the twelve-month chart, which is the month picker ──────────────────────────────────
+
+/**
+ * The year in twelve pairs of bars — what was sold each month and what came in — and the control
+ * that scopes the rail above it.
+ *
+ * Tapping a column selects that month: the rail's three cards, their sparklines and the
+ * «Юкланган ҳажм» tile all re-read the series at that index, and the kicker and captions name the
+ * month instead of saying «ушбу ой». Tapping the selected column again returns to the current
+ * month, so the chart is its own way back. The receivables hero does NOT move — it is a
+ * point-in-time balance and there is no historical snapshot of it to show.
+ *
+ * The sub-line is the web's own (`HeroChart.tsx:169-182`): the whole year's order count while the
+ * current month is picked, that one month's count otherwise.
+ */
+@Composable
+internal fun MonthlyChartCard(
+    d: HomeDashboard,
+    onSelectMonth: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) = Column(
+    modifier.fillMaxWidth().padding(horizontal = EtalonSpace.cardMargin)
+        .clip(EtalonShapes.xl).background(EtalonColors.surface)
+        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
+        .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
+) {
+    Text(
+        stringResource(R.string.home_kicker_months),
+        style = KickerStyle,
+        color = EtalonColors.ink2,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+    Spacer(Modifier.height(EtalonSpace.xs))
+    Text(
+        if (d.isCurrentMonth) {
+            stringResource(R.string.home_months_sub_current, formatCountBare(d.yearOrders))
+        } else {
+            stringResource(
+                R.string.home_months_sub_selected,
+                columnLabel(d.monthKey),
+                formatCountBare(d.monthOrders),
+            )
+        },
+        style = EtalonType.labelSm,
+        color = EtalonColors.ink3,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+    )
+    Spacer(Modifier.height(EtalonSpace.md))
+    MonthColumns(
+        booked = d.chartBooked,
+        collected = d.chartCollected,
+        labels = d.chartMonthKeys.map { columnLabel(it) },
+        selected = d.selectedMonthIdx,
+        current = d.currentMonthIdx,
+        onSelect = onSelectMonth,
+    )
+    Spacer(Modifier.height(EtalonSpace.md))
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(EtalonSpace.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // The key is drawn in the SELECTED pair, not the unselected one: those are the two colours
+        // the eye is reading off the chart.
+        LegendKey(stringResource(R.string.home_legend_booked), EtalonColors.indigo)
+        LegendKey(stringResource(R.string.home_legend_collected), EtalonColors.green)
+    }
+}
+
+@Composable
+private fun LegendKey(text: String, colour: Color) = Row(verticalAlignment = Alignment.CenterVertically) {
+    Box(Modifier.size(LEGEND_DOT).clip(EtalonShapes.pill).background(colour))
+    Text(
+        text,
+        style = EtalonType.labelSm,
+        color = EtalonColors.ink2,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(start = EtalonSpace.xs),
+    )
+}
 
 // ── §2.4 the operational grid ────────────────────────────────────────────────────────────────
 
@@ -426,7 +526,9 @@ private fun DiscrepanciesCard(d: HomeDashboard, modifier: Modifier) {
 @Composable
 private fun LoadedVolumeCard(d: HomeDashboard, now: Instant, modifier: Modifier) {
     val loaded = d.loadedThisMonth
-    GridCard(stringResource(R.string.home_loaded, shortMonth(d.currentMonthKey, now)), modifier) {
+    // §2.3b: this tile follows the month picker too — the loaded row is looked up by the selected
+    // month's key, so the card names that month and not always the current one.
+    GridCard(stringResource(R.string.home_loaded, shortMonth(d.monthKey, now)), modifier) {
         if (loaded == null) {
             // §6's empty month. The figures are not zeroed — nothing was loaded, which is a
             // different fact from "0 blocks were loaded" and reads differently under the bar.
@@ -542,11 +644,25 @@ private fun Chip(text: String, bg: Color, fg: Color) = Tag(text = text, fg = fg,
  * month, and a phone whose clock is set to another country would otherwise name the previous month
  * for the first hours of a new one — the same rule every other date in this app follows.
  */
-internal fun shortMonth(monthKey: String, now: Instant): String {
-    val fromKey = monthKey.substringAfter('-', "").toIntOrNull()?.takeIf { it in 1..UZ_MONTHS_SHORT.size }
-    val month = fromKey ?: now.atZone(TASHKENT).monthValue
-    return UZ_MONTHS_SHORT[month - 1]
-}
+internal fun shortMonth(monthKey: String, now: Instant): String =
+    UZ_MONTHS_SHORT[(monthOf(monthKey) ?: now.atZone(TASHKENT).monthValue) - 1]
+
+/** «сентябрь» from «2026-09» — the same rule as [shortMonth], in the long form the financial
+ *  kicker sets a month name in («МОЛИЯВИЙ ҲОЛАТ · АВГУСТ ОЙИ»). */
+internal fun fullMonth(monthKey: String, now: Instant): String =
+    UZ_MONTHS_FULL[(monthOf(monthKey) ?: now.atZone(TASHKENT).monthValue) - 1]
+
+/** 1..12 out of a `YYYY-MM` key, or null when there is no month in it to read. */
+private fun monthOf(monthKey: String): Int? =
+    monthKey.substringAfter('-', "").toIntOrNull()?.takeIf { it in 1..UZ_MONTHS_SHORT.size }
+
+/**
+ * The label under a chart column. Unlike [shortMonth] this does NOT fall back to today's month:
+ * twelve columns falling back would all read «сен», which is a chart that lies about its own axis.
+ * A key it cannot read leaves the column unlabelled instead.
+ */
+internal fun columnLabel(monthKey: String): String =
+    monthOf(monthKey)?.let { UZ_MONTHS_SHORT[it - 1] } ?: ""
 
 // ── §2.8 the withheld permission ─────────────────────────────────────────────────────────────
 
@@ -769,6 +885,84 @@ private fun ShareBar(fraction: Float) = Box(
     }
 }
 
+// ── §2.6b the province ranking ───────────────────────────────────────────────────────────────
+
+/**
+ * Which viloyats the orders come from, ranked by ORDERS PLACED — not by clients and not by cash.
+ *
+ * All-time whichever month the chart above has picked: the server's aggregation has no time axis,
+ * so there is no month-scoped version of this table to show and the sub-line says as much rather
+ * than letting the card be read as the selected month's.
+ *
+ * The rows arrive ranked (unlike §2.6's, which the ViewModel sorts) and are drawn in that order;
+ * the bar is each province's share of the top one's order count, so the first bar is always full.
+ * The sub-line sits under the title rather than beside it, as it does on the web: at 390 dp it is
+ * longer than the half of a header row that would be left for it.
+ */
+@Composable
+internal fun RegionRankingCard(d: HomeDashboard, modifier: Modifier = Modifier) {
+    val rows = d.ordersByRegion
+    val top = rows.maxOfOrNull { it.orderCount } ?: 0
+    DashCard(title = stringResource(R.string.home_regions), modifier = modifier) {
+        Text(
+            stringResource(R.string.home_regions_sub, formatCountBare(rows.sumOf { it.orderCount })),
+            style = EtalonType.labelSm,
+            color = EtalonColors.ink3,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(EtalonSpace.md))
+        if (rows.isEmpty()) {
+            Text(stringResource(R.string.home_regions_empty), style = EtalonType.body, color = EtalonColors.ink3)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(EtalonSpace.md)) {
+                rows.forEach { r -> RegionRow(r, top) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RegionRow(r: RegionOrders, top: Int) = Row(
+    Modifier.fillMaxWidth().heightIn(min = EtalonSpace.minTouch),
+    verticalAlignment = Alignment.CenterVertically,
+) {
+    Column(Modifier.weight(1f).padding(end = EtalonSpace.rowGap)) {
+        Text(
+            r.regionUz,
+            style = EtalonType.rowTitle,
+            color = EtalonColors.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(EtalonSpace.xs))
+        ShareBar(share(BigDecimal(r.orderCount), BigDecimal(top)))
+        Spacer(Modifier.height(EtalonSpace.xs))
+        Text(
+            stringResource(R.string.home_regions_clients, formatCountBare(r.clientCount)),
+            style = EtalonType.caption,
+            color = EtalonColors.ink3,
+            maxLines = 1,
+        )
+    }
+    Column(horizontalAlignment = Alignment.End) {
+        Text(
+            stringResource(R.string.home_regions_orders, formatCountBare(r.orderCount)),
+            style = EtalonType.rowAmount,
+            color = EtalonColors.ink,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(EtalonSpace.xs))
+        // Booked, not collected — the same «UZS» suffix the rest of the screen gives a sum.
+        Text(
+            formatMoney(r.booked),
+            style = EtalonType.caption,
+            color = EtalonColors.ink3,
+            maxLines = 1,
+        )
+    }
+}
+
 // ── §2.7 the latest orders ───────────────────────────────────────────────────────────────────
 
 /**
@@ -891,6 +1085,8 @@ internal fun DashboardSkeleton(modifier: Modifier = Modifier) = Column(
     Row(horizontalArrangement = Arrangement.spacedBy(EtalonSpace.md)) {
         repeat(RAIL_CARDS) { SkeletonBlock(SKELETON_RAIL, EtalonShapes.xl, width = RAIL_CARD_WIDTH) }
     }
+    // §2.3b's chart card, which sits between the rail and the grid.
+    SkeletonBlock(SKELETON_CHART, EtalonShapes.xl)
     // A kicker, then the 2×2.
     SkeletonBlock(SKELETON_KICKER, EtalonShapes.xs, width = SKELETON_KICKER_WIDTH)
     repeat(GRID_ROWS) {

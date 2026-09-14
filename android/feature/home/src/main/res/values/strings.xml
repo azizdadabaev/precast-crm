@@ -21,6 +21,22 @@
     <string name="home_all_time">Бошланғичдан: %1$s UZS · %2$s та</string>
     <string name="home_all_time_aov">Бошланғичдан: %1$s UZS</string>
     <string name="home_aov_formula">Ҳисоб: буюртма қилинган ÷ буюртмалар сони</string>
+    <!-- §2.3b: the same three cards once a month other than the current one is picked in the
+         chart. «%1$s» is the month's own Uzbek name — full and upper-cased in the kicker, short
+         and lower-case in a caption, as the rest of the screen sets month names. -->
+    <string name="home_kicker_financial_month">МОЛИЯВИЙ ҲОЛАТ · %1$s ОЙИ</string>
+    <string name="home_scope_month_orders">%1$s та буюртма · %2$s ойи</string>
+    <string name="home_scope_month_payments">%1$s та тўлов · %2$s ойи</string>
+
+    <!-- §2.3b the twelve-month chart, which is also the month picker: tapping a column scopes the
+         rail above it to that month, and tapping it again comes back to the current one. The
+         sub-line is the web's own (`HeroChart.tsx:169-182`) — the year's orders while the current
+         month is picked, that month's own count otherwise. -->
+    <string name="home_kicker_months">ОЙЛАР БЎЙИЧА</string>
+    <string name="home_months_sub_current">%1$s та буюртма · сўнгги 12 ой</string>
+    <string name="home_months_sub_selected">%1$s ойи · %2$s та буюртма</string>
+    <string name="home_legend_booked">Буюртма қилинган</string>
+    <string name="home_legend_collected">Тушган пул</string>
 
     <!-- §2.4 the operational grid. -->
     <string name="home_kicker_ops">ОПЕРАЦИОН ҲОЛАТ</string>
@@ -58,6 +74,17 @@
     <!-- Nobody has paid anything yet — a different fact from «0 UZS», which reads as a measured
          zero. -->
     <string name="home_top_empty">Ҳали тушум йўқ</string>
+
+    <!-- §2.6b the province league table, ranked by orders placed. All-time whichever month the
+         chart has picked — the aggregation has no time axis, and the sub-line says so rather than
+         letting the card be read as this month's. -->
+    <string name="home_regions">Ҳудудлар бўйича буюртмалар</string>
+    <string name="home_regions_sub">Вилоят бўйича · барча вақт · %1$s та буюртма</string>
+    <string name="home_regions_clients">%1$s та мижоз</string>
+    <!-- The row's own order count, right-aligned over the province's booked sum. The noun is left
+         out because the card's title and its sub-line have both already said «буюртма». -->
+    <string name="home_regions_orders">%1$s та</string>
+    <string name="home_regions_empty">Маълумот йўқ</string>
 
     <!-- §2.7 the four latest orders. The arrow is part of the action's own wording, as on the web. -->
     <string name="home_recent">Сўнгги буюртмалар</string>

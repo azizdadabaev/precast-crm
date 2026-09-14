@@ -30,6 +30,7 @@ import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.RecentOrder
+import uz.etalon.crm.core.model.RegionOrders
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.TopCustomer
 import uz.etalon.crm.core.model.Trend
@@ -168,11 +169,8 @@ class HomeViewModelTest {
      * independent of the mapper-level guarantee `DashboardMappersTest` gives the DTO decode.
      */
     @Test fun `the dashboard carries the summary's fields, not a same-typed neighbour`() = runTest {
-        val bookedTrend = Trend(BigDecimal("8"), TrendDirection.UP, TrendPolarity.POSITIVE)
-        val collectedTrend = Trend(BigDecimal("12"), TrendDirection.DOWN, TrendPolarity.POSITIVE)
-        val aovTrend = Trend(BigDecimal("3"), TrendDirection.FLAT, TrendPolarity.POSITIVE)
         val loaded = LoadedVolume(
-            monthKey = "2026-09", blocks = 1180, beamCount = 96,
+            monthKey = MONTHS.last(), blocks = 1180, beamCount = 96,
             beamMeters = BigDecimal("512.4"), area = BigDecimal("318.60"), orderCount = 11,
         )
         val s = summary(
@@ -183,16 +181,23 @@ class HomeViewModelTest {
             receivables = Money.parse("9000000"),
             receivableOrders = 7,
             paidOrders = 317, partialOrders = 13, awaitingOrders = 23,
-            booked = PeriodMoney(Money.parse("120000000"), 12, bookedTrend),
+            // §2.3b: the rail reads the SERIES, not these scalars — so the series carries the
+            // current month's figures and the month before it, and the scalars below are what the
+            // server independently computed for the same month (the parity the port promises).
+            booked = PeriodMoney(Money.parse("120000000"), 12, null),
+            bookedByMonth = months("100000000", "120000000"),
+            ordersByMonth = monthCounts(10, 12),
             bookedAllTime = AllTimeMoney(Money.parse("980000000"), 512),
             collectedThisMonth = Money.parse("13500000"),
             collectedCount = 9,
-            collectedTrend = collectedTrend,
+            collectedByMonth = monthsCollected("15000000" to 6, "13500000" to 9),
             collectedAllTime = AllTimeMoney(Money.parse("870000000"), 431),
-            aov = Aov(Money.parse("10000000"), Money.parse("1914062"), aovTrend),
+            aov = Aov(Money.parse("10000000"), Money.parse("1914062"), null),
             activeCustomers = 42,
             loadedThisMonth = loaded,
-            currentMonthKey = "2026-09",
+            ordersByRegion = listOf(
+                RegionOrders("Andijon viloyati", "Андижон вилояти", orderCount = 3, clientCount = 1, booked = Money.parse("43274240")),
+            ),
         )
         val vm = viewModel(home = { Result.success(s) })
         advanceUntilIdle()
@@ -206,17 +211,22 @@ class HomeViewModelTest {
 
         assertEquals(Money.parse("120000000"), d.booked.total)
         assertEquals(12, d.booked.count)
-        assertEquals(bookedTrend, d.booked.trend)
+        assertEquals(s.booked.total, d.booked.total, "the parity the series-scoped rail promises")
         assertEquals(Money.parse("980000000"), d.bookedAllTime.total)
         assertEquals(512, d.bookedAllTime.count)
         assertEquals(Money.parse("13500000"), d.collected.total)
         assertEquals(9, d.collected.count)
-        assertEquals(collectedTrend, d.collected.trend)
         assertEquals(Money.parse("870000000"), d.collectedAllTime.total)
         assertEquals(431, d.collectedAllTime.count)
         assertEquals(Money.parse("10000000"), d.aov.thisMonth)
         assertEquals(Money.parse("1914062"), d.aov.allTime)
-        assertEquals(aovTrend, d.aov.trend)
+
+        // The trends are computed against the month BEFORE the selected one, not taken from the
+        // payload's own pair: 100 → 120 million is +20 %, 15 → 13,5 million is −10 %, and the
+        // average order value stood still (10 000 000 either month).
+        assertEquals(Trend(BigDecimal("20"), TrendDirection.UP, TrendPolarity.POSITIVE), d.booked.trend)
+        assertEquals(Trend(BigDecimal("-10"), TrendDirection.DOWN, TrendPolarity.POSITIVE), d.collected.trend)
+        assertEquals(Trend(BigDecimal("0"), TrendDirection.FLAT, TrendPolarity.POSITIVE), d.aov.trend)
 
         assertEquals(42, d.activeCustomers)
         assertEquals(2, vm.state.value.today.size)
@@ -224,7 +234,19 @@ class HomeViewModelTest {
         assertEquals(3, d.openDiscrepancies)
         assertEquals(Money.parse("500000"), d.openDiscrepancyTotal)
         assertEquals(loaded, d.loadedThisMonth)
-        assertEquals("2026-09", d.currentMonthKey)
+        assertEquals(MONTHS.last(), d.monthKey)
+        assertTrue(d.isCurrentMonth)
+
+        // §2.3b / §2.6b's own fields.
+        assertEquals(12, d.chartBooked.size)
+        assertEquals(12, d.chartCollected.size)
+        assertEquals(MONTHS, d.chartMonthKeys)
+        assertEquals(11, d.selectedMonthIdx)
+        assertEquals(11, d.currentMonthIdx)
+        assertEquals(22, d.yearOrders, "Σ ordersByMonth — 10 + 12, the rest empty")
+        assertEquals(1, d.ordersByRegion.size)
+        assertEquals("Андижон вилояти", d.ordersByRegion.single().regionUz)
+        assertEquals(Money.parse("43274240"), d.ordersByRegion.single().booked)
     }
 
     /** The recent orders reach the state whole for §2.7's card, and the two money series arrive
@@ -371,67 +393,158 @@ class HomeViewModelTest {
         assertEquals(353, d.paidOrders + d.partialOrders + d.awaitingOrders)
     }
 
-    // ── §2.3's one computed figure ────────────────────────────────────────────────────
+    // ── §2.3b the month picker ────────────────────────────────────────────────────────
 
-    /** The brief's own formula, and the rounding the web does with `Math.round`: 5 ÷ 2 is 2,5,
-     *  which HALF_UP carries up to 3. A `BigDecimal` throws on a non-terminating division rather
-     *  than rounding silently, so the scale and mode are not decoration. */
-    @Test fun `the aov series divides in whole UZS, half up`() {
-        val series = aovSeries(
-            booked = listOf(MonthBooked("2026-08", Money.parse("5")), MonthBooked("2026-09", Money.parse("10000000"))),
-            orders = listOf(MonthOrders("2026-08", 2), MonthOrders("2026-09", 3)),
-        )
-        assertEquals(listOf(BigDecimal("3"), BigDecimal("3333333")), series)
+    /** The twelve-month series and the region rows reach the state whole — they are what the
+     *  chart draws and what it picks a month out of. */
+    @Test fun `the chart's twelve months and the region rows reach the state whole`() = runTest {
+        val vm = viewModel(home = { Result.success(pickerSummary()) })
+        advanceUntilIdle()
+        val d = vm.state.value.dash!!
+
+        assertEquals(12, d.chartBooked.size)
+        assertEquals(12, d.chartCollected.size)
+        assertEquals(MONTHS, d.chartMonthKeys)
+        assertEquals(Money.parse("120000000"), d.chartBooked.last())
+        assertEquals(Money.parse("13500000"), d.chartCollected.last())
+        assertEquals(22, d.yearOrders)
+        assertEquals(listOf("Андижон вилояти"), d.ordersByRegion.map { it.regionUz })
     }
 
-    /** A month with no orders has no average at all. Zero is what the brief asks for and what the
-     *  sparkline draws as a stub — the alternatives are a crash and a carried-forward figure that
-     *  reads as a month that traded. */
-    @Test fun `a month with no orders contributes a zero to the aov series`() {
-        val series = aovSeries(
-            booked = listOf(MonthBooked("2026-09", Money.parse("4000000"))),
-            orders = listOf(MonthOrders("2026-09", 0)),
-        )
-        assertEquals(listOf(BigDecimal.ZERO), series)
+    /**
+     * Picking August re-scopes everything §2.3b says re-scopes — the three rail cards, their
+     * sparkline windows and the «Юкланган ҳажм» tile — and nothing else. No second fetch: the
+     * payload already carries all twelve months.
+     */
+    @Test fun `selecting a month re-scopes the rail and the loaded volume`() = runTest {
+        var calls = 0
+        val vm = viewModel(home = { calls++; Result.success(pickerSummary()) })
+        advanceUntilIdle()
+        assertEquals(1, calls)
 
-        // …and so does a month the orders array does not carry at all.
-        assertEquals(
-            listOf(BigDecimal.ZERO),
-            aovSeries(booked = listOf(MonthBooked("2026-09", Money.parse("4000000"))), orders = emptyList()),
-        )
+        vm.selectMonth(AUGUST)
+        advanceUntilIdle()
+        val d = vm.state.value.dash!!
+
+        assertEquals(1, calls, "the whole year was already in hand — no second fetch")
+        assertEquals(AUGUST, d.selectedMonthIdx)
+        assertFalse(d.isCurrentMonth)
+        assertEquals("2026-08", d.monthKey)
+        assertEquals(Money.parse("100000000"), d.booked.total)
+        assertEquals(10, d.booked.count)
+        assertEquals(Money.parse("15000000"), d.collected.total)
+        assertEquals(6, d.collected.count, "August's own payment count off collectedByMonth")
+        assertEquals(Money.parse("10000000"), d.aov.thisMonth)
+        // The window ends at the month picked, so the last bar is the figure printed above it.
+        assertEquals(BigDecimal("100000000"), d.bookedSeries.last())
+        assertEquals(AUGUST_LOADED, d.loadedThisMonth)
     }
 
-    /** A three-month-old account has three points, not eight: the window is the sparkline's own
-     *  business (it left-pads), and padding here would put three zero months in front of a figure
-     *  the account never had. */
-    @Test fun `an account younger than the window yields one point per month it has`() {
-        val series = aovSeries(
-            booked = (1..3).map { MonthBooked("2026-0$it", Money.parse("${it}000000")) },
-            orders = (1..3).map { MonthOrders("2026-0$it", it) },
-        )
-        assertEquals(3, series.size)
-        assertEquals(listOf(BigDecimal("1000000"), BigDecimal("1000000"), BigDecimal("1000000")), series)
+    /** The receivables hero is a point-in-time balance and the all-time lines are all-time:
+     *  neither moves when a month is picked, which is the rule §2.3b states in as many words. */
+    @Test fun `picking a month leaves the hero and the all-time lines alone`() = runTest {
+        val vm = viewModel(home = { Result.success(pickerSummary()) })
+        advanceUntilIdle()
+        val before = vm.state.value.dash!!
+
+        vm.selectMonth(AUGUST)
+        advanceUntilIdle()
+        val after = vm.state.value.dash!!
+
+        assertEquals(before.receivables, after.receivables)
+        assertEquals(before.receivableOrders, after.receivableOrders)
+        assertEquals(before.bookedAllTime, after.bookedAllTime)
+        assertEquals(before.collectedAllTime, after.collectedAllTime)
+        assertEquals(before.aov.allTime, after.aov.allTime)
+        assertEquals(before.paidOrders, after.paidOrders)
+        assertEquals(before.topCustomers, after.topCustomers)
+        assertEquals(before.ordersByRegion, after.ordersByRegion)
     }
 
-    /** Twelve months in, eight out — the last eight, ending with this month. */
-    @Test fun `the aov series keeps the last eight months`() {
-        val series = aovSeries(
-            booked = (1..12).map { MonthBooked("2026-%02d".format(it), Money.parse("${it}000000")) },
-            orders = (1..12).map { MonthOrders("2026-%02d".format(it), 1) },
-        )
-        assertEquals(8, series.size)
-        assertEquals(BigDecimal("5000000"), series.first())
-        assertEquals(BigDecimal("12000000"), series.last())
+    /** Tapping the picked column again comes back to the current month — the chart is its own way
+     *  back, which is why there is no separate «жорий ой» control. */
+    @Test fun `tapping the selected month again returns to the current one`() = runTest {
+        val vm = viewModel(home = { Result.success(pickerSummary()) })
+        advanceUntilIdle()
+
+        vm.selectMonth(AUGUST)
+        advanceUntilIdle()
+        assertFalse(vm.state.value.dash!!.isCurrentMonth)
+
+        vm.selectMonth(AUGUST)
+        advanceUntilIdle()
+        val d = vm.state.value.dash!!
+        assertTrue(d.isCurrentMonth)
+        assertEquals(11, d.selectedMonthIdx)
+        assertEquals(Money.parse("120000000"), d.booked.total)
     }
 
-    /** The pairing is by month key, not by index: an orders array that arrives a month shorter
-     *  than the bookings one must not divide September's bookings by August's count. */
-    @Test fun `each month is divided by its own count, not by its neighbour's`() {
-        val series = aovSeries(
-            booked = listOf(MonthBooked("2026-08", Money.parse("8000000")), MonthBooked("2026-09", Money.parse("9000000"))),
-            orders = listOf(MonthOrders("2026-09", 3)),
+    /** And tapping the CURRENT month while it is the one showing is a no-op, not a jump to
+     *  something else. */
+    @Test fun `tapping the current month while it is showing changes nothing`() = runTest {
+        val vm = viewModel(home = { Result.success(pickerSummary()) })
+        advanceUntilIdle()
+        val before = vm.state.value.dash!!
+
+        vm.selectMonth(11)
+        advanceUntilIdle()
+        assertEquals(before, vm.state.value.dash)
+    }
+
+    /** A refresh — pull-to-refresh, or the 60 s ticker — must not throw the operator back to this
+     *  month while they are reading August. */
+    @Test fun `a refresh keeps the month the operator picked`() = runTest {
+        val vm = viewModel(home = { Result.success(pickerSummary()) })
+        advanceUntilIdle()
+        vm.selectMonth(AUGUST)
+        advanceUntilIdle()
+
+        vm.refresh()
+        advanceUntilIdle()
+        val d = vm.state.value.dash!!
+        assertEquals(AUGUST, d.selectedMonthIdx)
+        assertEquals("2026-08", d.monthKey)
+        assertEquals(Money.parse("100000000"), d.booked.total)
+    }
+
+    /** …and a refresh that comes back with a SHORTER window re-clamps it rather than indexing
+     *  past the end of the series. */
+    @Test fun `a refresh with a shorter window clamps the selection into it`() = runTest {
+        var short = false
+        val vm = viewModel(
+            home = {
+                Result.success(
+                    if (short) pickerSummary().let { s ->
+                        s.copy(
+                            bookedByMonth = s.bookedByMonth.take(3),
+                            ordersByMonth = s.ordersByMonth.take(3),
+                            collectedByMonth = s.collectedByMonth.take(3),
+                            monthKeys = s.monthKeys.take(3),
+                            currentMonthIdx = 2,
+                        )
+                    } else pickerSummary(),
+                )
+            },
         )
-        assertEquals(listOf(BigDecimal.ZERO, BigDecimal("3000000")), series)
+        advanceUntilIdle()
+        vm.selectMonth(AUGUST)
+        advanceUntilIdle()
+
+        short = true
+        vm.refresh()
+        advanceUntilIdle()
+        assertEquals(2, vm.state.value.dash!!.selectedMonthIdx, "clamped to the new last month")
+        assertEquals("2025-12", vm.state.value.dash!!.monthKey)
+    }
+
+    /** Nothing to recompute from, nothing to recompute: a tap that arrives before the first
+     *  payload (or after a permission is withdrawn) is dropped, not crashed on. */
+    @Test fun `selecting a month before any payload has arrived does nothing`() = runTest {
+        val vm = viewModel(permissions = { false })
+        advanceUntilIdle()
+        vm.selectMonth(3)
+        advanceUntilIdle()
+        assertNull(vm.state.value.dash)
     }
 
     /** «Ҳали буюртма йўқ» is a claim about the server, not about the screen: it may only be made
@@ -602,6 +715,13 @@ class HomeViewModelTest {
         currentMonthKey: String = "2026-09",
         loadedThisMonth: LoadedVolume? = null,
         topCustomers: List<TopCustomer> = emptyList(),
+        ordersByRegion: List<RegionOrders> = emptyList(),
+        /** The fixtures label their months with the `YYYY-MM` keys themselves, so the key array
+         *  and the series are the same twelve strings — which is what the real payload means by
+         *  "index-aligned". */
+        monthKeys: List<String> = bookedByMonth.map { it.month },
+        /** The order basis's last index, which is where the server puts the current month. */
+        currentMonthIdx: Int = bookedByMonth.size - 1,
     ) = HomeSummary(
         today = today, todayArea = todayArea,
         openDiscrepancies = openDiscrepancies, openDiscrepancyTotal = openDiscrepancyTotal,
@@ -617,11 +737,70 @@ class HomeViewModelTest {
         activeCustomers = activeCustomers,
         bookedByMonth = bookedByMonth,
         ordersByMonth = ordersByMonth,
+        monthKeys = monthKeys,
+        currentMonthIdx = currentMonthIdx,
         currentMonthKey = currentMonthKey,
+        // One parameter feeds both: a fixture that names this month's loaded row also puts it in
+        // the series the selected month is looked up in.
+        loadedVolumeByMonth = listOfNotNull(loadedThisMonth),
         loadedThisMonth = loadedThisMonth,
         topCustomers = topCustomers,
+        ordersByRegion = ordersByRegion,
     )
 
     private fun customer(id: String, collected: String, orders: Int = 1) =
         TopCustomer(id = id, name = "Мижоз $id", totalCollected = Money.parse(collected), orderCount = orders)
+
+    /** The month `selectMonth` picks in the tests above: neither the current one nor the first of
+     *  the window, so a scope that silently fell back to either fails. */
+    private val AUGUST = 10
+
+    private val AUGUST_LOADED = LoadedVolume(
+        monthKey = "2026-08", blocks = 940, beamCount = 74,
+        beamMeters = BigDecimal("401.2"), area = BigDecimal("254.10"), orderCount = 8,
+    )
+
+    /**
+     * A payload with a whole year in it: the last two months carry figures, the ten before them
+     * are empty, and both months have a loaded row — so picking August changes every scoped figure
+     * to a value September does not share.
+     */
+    private fun pickerSummary() = summary(
+        receivables = Money.parse("9000000"), receivableOrders = 7,
+        paidOrders = 317, partialOrders = 13, awaitingOrders = 23,
+        booked = PeriodMoney(Money.parse("120000000"), 12, null),
+        bookedByMonth = months("100000000", "120000000"),
+        ordersByMonth = monthCounts(10, 12),
+        bookedAllTime = AllTimeMoney(Money.parse("980000000"), 512),
+        collectedThisMonth = Money.parse("13500000"), collectedCount = 9,
+        collectedByMonth = monthsCollected("15000000" to 6, "13500000" to 9),
+        collectedAllTime = AllTimeMoney(Money.parse("870000000"), 431),
+        aov = Aov(Money.parse("10000000"), Money.parse("1914062"), null),
+        topCustomers = listOf(customer("c1", "5000000")),
+        ordersByRegion = listOf(
+            RegionOrders("Andijon viloyati", "Андижон вилояти", orderCount = 3, clientCount = 1, booked = Money.parse("43274240")),
+        ),
+    ).let { s -> s.copy(loadedVolumeByMonth = listOf(AUGUST_LOADED)) }
+
+    /** Twelve `YYYY-MM` keys ending in the current month, the shape the payload's window has. */
+    private val MONTHS = (10..12).map { "2025-$it" } + (1..9).map { "2026-%02d".format(it) }
+
+    /** A twelve-month series whose LAST months are the values given (oldest of them first) and
+     *  whose earlier months are empty — so a figure read off the wrong month is a zero, which is
+     *  visible, rather than a plausible neighbour. */
+    private fun months(vararg tail: String) = MONTHS.mapIndexed { i, key ->
+        val fromEnd = MONTHS.size - i
+        MonthBooked(key, tail.getOrNull(tail.size - fromEnd)?.let { Money.parse(it) } ?: Money.ZERO)
+    }
+
+    private fun monthCounts(vararg tail: Int) = MONTHS.mapIndexed { i, key ->
+        val fromEnd = MONTHS.size - i
+        MonthOrders(key, tail.getOrNull(tail.size - fromEnd) ?: 0)
+    }
+
+    private fun monthsCollected(vararg tail: Pair<String, Int>) = MONTHS.mapIndexed { i, key ->
+        val fromEnd = MONTHS.size - i
+        val row = tail.getOrNull(tail.size - fromEnd)
+        MonthCollected(key, row?.first?.let { Money.parse(it) } ?: Money.ZERO, row?.second ?: 0)
+    }
 }

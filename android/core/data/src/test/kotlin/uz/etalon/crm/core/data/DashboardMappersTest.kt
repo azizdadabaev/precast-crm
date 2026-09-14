@@ -8,6 +8,7 @@ import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.model.TrendPolarity
+import uz.etalon.crm.core.model.monthScope
 import uz.etalon.crm.core.network.EtalonJson
 import uz.etalon.crm.core.network.dto.CollectedThisMonthDto
 import uz.etalon.crm.core.network.dto.DashboardDto
@@ -232,5 +233,103 @@ class DashboardMappersTest {
         assertEquals("205709989", s.booked.total.amount.toPlainString())
         assertEquals("245288843", s.bookedAllTime.total.amount.toPlainString())
         assertEquals("101502872", s.receivables.amount.toPlainString())
+    }
+
+    /** Task 5 / design §2.6b: the province league table, all-time and already ranked by the
+     *  server — the card draws it in the order it arrives, so the order is asserted too. */
+    @Test fun `the recorded payload's region ranking decodes in the server's own order`() {
+        val s = fixtureDto().toDomain()
+
+        assertEquals(2, s.ordersByRegion.size)
+        val first = s.ordersByRegion.first()
+        assertEquals("Andijon viloyati", first.region)
+        assertEquals("Андижон вилояти", first.regionUz)
+        assertEquals(3, first.orderCount)
+        assertEquals(1, first.clientCount)
+        assertEquals(Money.parse("43274240"), first.booked)
+        assertEquals("43274240", first.booked.amount.toPlainString(), "money, never a Double")
+
+        val other = s.ordersByRegion.last()
+        assertEquals("Other", other.region)
+        assertEquals("Бошқа", other.regionUz)
+        assertEquals(20, other.orderCount)
+        assertEquals(6, other.clientCount)
+        assertEquals(Money.parse("202014603"), other.booked)
+    }
+
+    /** Task 5: `collectedByMonth[].paymentCount` — dropped silently until now, and the figure the
+     *  Collected card prints as «N та тўлов» for any month but the current one. */
+    @Test fun `each month of collectedByMonth carries its own payment count`() {
+        val s = fixtureDto().toDomain()
+
+        assertEquals(12, s.collectedByMonth.size)
+        assertEquals(8, s.collectedByMonth.last().paymentCount, "September, the fixture's current month")
+        assertEquals(Money.parse("23492500"), s.collectedByMonth.last().collected)
+        // June: the only other month in the fixture with any cash in it.
+        assertEquals(2, s.collectedByMonth[8].paymentCount)
+        assertEquals(Money.parse("9700000"), s.collectedByMonth[8].collected)
+        assertEquals(0, s.collectedByMonth[9].paymentCount, "July collected nothing")
+    }
+
+    @Test fun `the month keys and the current index decode, so a month means a month`() {
+        val s = fixtureDto().toDomain()
+
+        assertEquals(12, s.monthKeys.size)
+        assertEquals("2025-10", s.monthKeys.first())
+        assertEquals("2026-09", s.monthKeys.last())
+        assertEquals(11, s.currentMonthIdx)
+        assertEquals("2026-09", s.currentMonthKey)
+        // The loaded series is its own axis and is NOT the same length as the month window — it
+        // reaches three months past the last order month. Found by key, never by index.
+        assertEquals(15, s.loadedVolumeByMonth.size)
+        assertEquals("2025-10", s.loadedVolumeByMonth.first().monthKey)
+        assertEquals("2026-12", s.loadedVolumeByMonth.last().monthKey)
+        assertEquals(
+            s.loadedThisMonth,
+            s.loadedVolumeByMonth.find { it.monthKey == "2026-09" },
+            "loadedThisMonth is the row for the current key, not the last row",
+        )
+    }
+
+    /**
+     * **The parity guard.** For the CURRENT month, the figures the phone derives from the twelve-
+     * month series with the ported `dashboard-metrics.ts` arithmetic must be the very numbers the
+     * server already computed and sent in `bookedThisMonth` / `collectedThisMonth` /
+     * `averageOrderValue` — on the recorded payload, not on a hand-written one.
+     *
+     * If this fails, the month picker is showing one set of numbers for September and the rail
+     * another for the same September, which is the one defect §2.3b cannot ship with.
+     */
+    @Test fun `the current month scoped off the series equals what the server sent for it`() {
+        val s = fixtureDto().toDomain()
+        val scope = monthScope(s, s.currentMonthIdx)
+
+        assertEquals(s.booked.total, scope.booked.total, "bookedThisMonth.total vs bookedByMonth[current]")
+        assertEquals(s.booked.count, scope.booked.count, "orderCount vs ordersByMonth[current]")
+        assertEquals(s.collected.total, scope.collected.total)
+        assertEquals(s.collected.count, scope.collected.count, "paymentCount vs collectedByMonth[current]")
+        assertEquals(s.aov.thisMonth, scope.aov.thisMonth, "averageOrderValue.thisMonth vs booked ÷ orders")
+        assertEquals(s.loadedThisMonth, scope.loaded, "the same loaded row, found by the same key")
+        assertEquals("2026-09", scope.monthKey)
+
+        // And the figures themselves, spelled out, so the guard says what it is guarding.
+        assertEquals(Money.parse("205709989"), scope.booked.total)
+        assertEquals(19, scope.booked.count)
+        assertEquals(Money.parse("23492500"), scope.collected.total)
+        assertEquals(8, scope.collected.count)
+        assertEquals(Money.parse("10826842"), scope.aov.thisMonth)
+    }
+
+    /** August 2026 in the fixture booked nothing at all, so a September picked off the series has
+     *  no previous-month basis — exactly the `previous <= 0 → null` branch, and exactly what the
+     *  server itself sent (`bookedThisMonth.trend` is null in the payload). */
+    @Test fun `a month whose predecessor booked nothing gets no badge, as the server sent none`() {
+        val s = fixtureDto().toDomain()
+        val scope = monthScope(s, s.currentMonthIdx)
+
+        assertNull(s.booked.trend, "the server sent no trend")
+        assertNull(scope.booked.trend, "and neither does the port")
+        // July (idx 9) against June (idx 8): 29 000 000 against 10 578 854 → +174 %.
+        assertEquals(BigDecimal("174"), monthScope(s, 9).booked.trend?.deltaPct)
     }
 }

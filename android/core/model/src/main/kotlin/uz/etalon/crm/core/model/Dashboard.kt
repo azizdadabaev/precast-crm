@@ -32,7 +32,12 @@ data class RecentOrder(
     val paymentState: PaymentState,
 )
 
-data class MonthCollected(val month: String, val collected: Money)
+/** One month of `collectedByMonth`. [paymentCount] is how many confirmed payments made up
+ *  [collected] that month — the figure the rail's Collected card prints as «N та тўлов» once a
+ *  month other than the current one is selected (`FinancialKPIs.tsx:118`). It defaults to zero so
+ *  a server older than this client's contract still decodes; the current month's own count also
+ *  arrives on `collectedThisMonth`, and the two agree (see `MonthScopeParity`). */
+data class MonthCollected(val month: String, val collected: Money, val paymentCount: Int = 0)
 data class MonthBooked(val month: String, val booked: Money)
 data class MonthOrders(val month: String, val count: Int)
 
@@ -104,12 +109,30 @@ data class LoadedVolume(
 data class TopCustomer(val id: String, val name: String, val totalCollected: Money, val orderCount: Int)
 
 /**
+ * One row of `ordersByRegion` (`RegionRanking.tsx`) — a province league table ranked by ORDERS
+ * PLACED, not by clients and not by cash.
+ *
+ * [region] is the canonical Latin viloyat name (or `"Other"`) and is the stable key; [regionUz] is
+ * the Cyrillic label the operator reads (or «Бошқа»). [booked] is Σ `Order.totalPrice` for the
+ * province — money SOLD there, never cash received. The aggregation has no time axis at all, so
+ * these rows are all-time and do not follow the dashboard's month picker; the card says so.
+ */
+data class RegionOrders(
+    val region: String,
+    val regionUz: String,
+    val orderCount: Int,
+    val clientCount: Int,
+    val booked: Money,
+)
+
+/**
  * The subset of `GET /api/dashboard`'s `DashboardPayload` the Бош tab renders (design 6a): the
  * «Бугун» column and every `dashboard.viewBasic`/`dashboard.view` metric — the receivables hero,
  * the financial rail (booked/collected/AOV), the operational grid, the payment donut, top
- * customers and the recent-orders card. Not modelled: the 12-month `HeroChart`, the delivery-date
- * basis, `ordersByRegion`, `weekCapacity` and `cashOnTheRoad` — none of them render on the phone
- * yet (spec §8), so modelling them here would be dead code.
+ * customers and the recent-orders card, plus (spec §2b) the 12-month chart with its month picker
+ * and the region ranking. Not modelled: the delivery-date basis, `weekCapacity` and
+ * `cashOnTheRoad` — none of them render on the phone yet (spec §8), so modelling them here would
+ * be dead code.
  *
  * Every money-shaped field on the server's dashboard route is a bare JSON number
  * (`Math.round(...)` in `dashboard-data.ts`), unlike every other endpoint in this project,
@@ -145,11 +168,23 @@ data class HomeSummary(
     /** Twelve months oldest-first, index-aligned with [ordersByMonth] and [collectedByMonth]. */
     val bookedByMonth: List<MonthBooked>,
     val ordersByMonth: List<MonthOrders>,
-    /** `YYYY-MM` of the current calendar month — the key [loadedThisMonth] is looked up by. */
+    /** `YYYY-MM` per month, index-aligned with [bookedByMonth]/[ordersByMonth]/[collectedByMonth].
+     *  The month picker's index means a month only through this array. */
+    val monthKeys: List<String>,
+    /** Index of the month containing today, into [monthKeys]. The last index on the order basis,
+     *  which is the only basis the phone reads. */
+    val currentMonthIdx: Int,
+    /** `YYYY-MM` of the current calendar month — `monthKeys[currentMonthIdx]`, and the key
+     *  [loadedThisMonth] is looked up by. */
     val currentMonthKey: String,
+    /** Every month that loaded anything, keyed by its own `YYYY-MM`. Bucketed on the loading date,
+     *  which is its own axis — so a month is found here by KEY, never by the series index. */
+    val loadedVolumeByMonth: List<LoadedVolume>,
     /** The `loadedVolumeByMonth` row for [currentMonthKey], or `null` when that month loaded
      *  nothing — never a zeroed [LoadedVolume], the same "absent vs. genuine zero" rule the rest
      *  of this type already follows for permission-withheld tiles. */
     val loadedThisMonth: LoadedVolume?,
     val topCustomers: List<TopCustomer>,
+    /** All-time, already ranked by the server — the card draws them in the order they arrive. */
+    val ordersByRegion: List<RegionOrders>,
 )

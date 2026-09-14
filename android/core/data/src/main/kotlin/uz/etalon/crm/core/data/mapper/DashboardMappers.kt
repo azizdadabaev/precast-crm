@@ -12,6 +12,7 @@ import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.RecentOrder
+import uz.etalon.crm.core.model.RegionOrders
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.TopCustomer
 import uz.etalon.crm.core.model.Trend
@@ -20,6 +21,7 @@ import uz.etalon.crm.core.model.TrendPolarity
 import uz.etalon.crm.core.network.dto.DashboardDto
 import uz.etalon.crm.core.network.dto.LoadedVolumeDto
 import uz.etalon.crm.core.network.dto.RecentOrderDto
+import uz.etalon.crm.core.network.dto.RegionOrdersDto
 import uz.etalon.crm.core.network.dto.TodayDeliveryOrderDto
 import uz.etalon.crm.core.network.dto.TopCustomerDto
 import uz.etalon.crm.core.network.dto.TrendDto
@@ -53,6 +55,11 @@ fun LoadedVolumeDto.toDomain() = LoadedVolume(
 
 fun TopCustomerDto.toDomain() = TopCustomer(
     id = id, name = name, totalCollected = Money(totalCollected), orderCount = orderCount,
+)
+
+fun RegionOrdersDto.toDomain() = RegionOrders(
+    region = region, regionUz = regionUz,
+    orderCount = orderCount, clientCount = clientCount, booked = Money(booked),
 )
 
 /**
@@ -96,7 +103,7 @@ fun DashboardDto.toDomain(): HomeSummary {
             total = Money(collectedAllTime?.total ?: BigDecimal.ZERO),
             count = collectedAllTime?.paymentCount ?: 0,
         ),
-        collectedByMonth = collectedByMonth.map { MonthCollected(it.month, Money(it.collected)) },
+        collectedByMonth = collectedByMonth.map { MonthCollected(it.month, Money(it.collected), it.paymentCount) },
         aov = Aov(
             thisMonth = Money(averageOrderValue?.thisMonth ?: BigDecimal.ZERO),
             allTime = Money(averageOrderValue?.allTime ?: BigDecimal.ZERO),
@@ -105,8 +112,12 @@ fun DashboardDto.toDomain(): HomeSummary {
         activeCustomers = activeCustomers?.count ?: 0,
         bookedByMonth = bookedByMonth.map { MonthBooked(it.month, Money(it.booked)) },
         ordersByMonth = ordersByMonth.map { MonthOrders(it.month, it.count) },
+        monthKeys = monthKeys,
+        currentMonthIdx = currentMonthIdx,
         currentMonthKey = currentMonthKey,
+        loadedVolumeByMonth = loadedVolumeByMonth.map { it.toDomain() },
         loadedThisMonth = loadedVolumeByMonth.find { it.monthKey == currentMonthKey }?.toDomain(),
         topCustomers = topCustomers.map { it.toDomain() },
+        ordersByRegion = ordersByRegion.map { it.toDomain() },
     )
 }

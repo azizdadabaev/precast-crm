@@ -25,21 +25,25 @@ import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.AllTimeMoney
 import uz.etalon.crm.core.model.Aov
+import uz.etalon.crm.core.model.HomeSummary
 import uz.etalon.crm.core.model.LoadedVolume
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.MonthBooked
+import uz.etalon.crm.core.model.MonthCollected
 import uz.etalon.crm.core.model.MonthOrders
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.RecentOrder
+import uz.etalon.crm.core.model.RegionOrders
 import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.TopCustomer
 import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.model.TrendPolarity
+import uz.etalon.crm.core.model.monthScope
 import uz.etalon.crm.core.ui.format.formatOrderNo
 import java.math.BigDecimal
 import java.time.Instant
@@ -50,11 +54,17 @@ private val SHELL_NAV_PILL_INSET = 84.dp
 
 /**
  * The index of «Сўнгги буюртмалар» in a loaded `HomeScreen`'s list — the app bar, the hero, the
- * rail's section, the grid's section, then §2.5, §2.6 and §2.7. Scrolling the list to its last item
- * is what puts the bottom half in the frame; a `performScrollToNode` on the donut would not move at
- * all, because the donut's header already peeks into the unscrolled viewport.
+ * rail's section, §2.3b's chart, the grid's section, then §2.5, §2.6, §2.6b and §2.7. Scrolling the
+ * list to its last item is what puts the bottom half in the frame; a `performScrollToNode` on the
+ * donut would not move at all, because the donut's header already peeks into the unscrolled
+ * viewport.
  */
-private const val LAST_ITEM = 6
+private const val LAST_ITEM = 8
+
+/** The index of August in the fixture's twelve months — the month `home_month_selected_light`
+ *  picks, chosen because it is neither the current month nor the first of the window, so both the
+ *  scoping and the trend-against-its-own-predecessor are visible in one frame. */
+private const val AUGUST = 7
 
 /**
  * Design §2's dashboard — drawn with the data the server actually sends, so the reviewer can lay a
@@ -121,10 +131,24 @@ class HomeScreenshotTest {
     private val ordersByMonth = listOf(9, 11, 8, 13, 12, 15, 13, 16, 14, 17, 18, 12)
         .mapIndexed { i, n -> MonthOrders("2026-%02d".format(i + 1), n) }
 
-    private val collectedByMonth = listOf(
+    private val collectedRows = listOf(
         "5400000", "6100000", "4800000", "7200000", "6600000", "8100000",
         "7400000", "9200000", "8700000", "10400000", "11900000", "13500000",
-    ).map { Money.parse(it).amount }
+    ).mapIndexed { i, v -> MonthCollected("2026-%02d".format(i + 1), Money.parse(v), paymentCount = i + 3) }
+
+    private val collectedByMonth = collectedRows.map { it.collected.amount }
+
+    /** The twelve `YYYY-MM` keys the chart's columns are labelled from. */
+    private val monthKeys = (1..12).map { "2026-%02d".format(it) }
+
+    /** §2.6b: two provinces and «Бошқа», ranked as the server ranks them — enough for three
+     *  visibly different bars and one label long enough to prove the ellipsis. */
+    private val regions = listOf(
+        RegionOrders("Tashkent viloyati", "Тошкент вилояти", orderCount = 27, clientCount = 12, booked = Money.parse("512400000.00")),
+        RegionOrders("Samarqand viloyati", "Самарқанд вилояти", orderCount = 14, clientCount = 6, booked = Money.parse("268900000.00")),
+        RegionOrders("Qashqadaryo viloyati", "Қашқадарё вилояти", orderCount = 9, clientCount = 4, booked = Money.parse("134200000.00")),
+        RegionOrders("Other", "Бошқа", orderCount = 5, clientCount = 3, booked = Money.parse("41800000.00")),
+    )
 
     private fun dashboard() = HomeDashboard(
         receivables = Money.parse("53268760.00"),
@@ -150,8 +174,8 @@ class HomeScreenshotTest {
             thisMonth = Money.parse("15350000.00"), allTime = Money.parse("2507812.00"),
             trend = Trend(BigDecimal("4"), TrendDirection.UP, TrendPolarity.POSITIVE),
         ),
-        // The real division, not a hand-written series: the frame shows what the screen computes.
-        aovSeries = aovSeries(bookedByMonth, ordersByMonth),
+        // The real division, not a hand-written series: the frame shows what the port computes.
+        aovSeries = monthScope(summary(), 11).aovSeries.map { it.amount },
         activeCustomers = 42,
         todayArea = BigDecimal("247.50"), // 108,2 + 78,7 + 42,6 + 18,0 — the sum of `today`
         openDiscrepancies = 1,
@@ -160,8 +184,50 @@ class HomeScreenshotTest {
             monthKey = "2026-09", blocks = 1180, beamCount = 96,
             beamMeters = BigDecimal("512.4"), area = BigDecimal("318.60"), orderCount = 11,
         ),
-        currentMonthKey = "2026-09",
+        monthKey = "2026-09",
+        isCurrentMonth = true,
+        monthOrders = 12,
         topCustomers = topCustomers,
+        chartBooked = bookedByMonth.map { it.booked },
+        chartCollected = collectedRows.map { it.collected },
+        chartMonthKeys = monthKeys,
+        selectedMonthIdx = 11,
+        currentMonthIdx = 11,
+        yearOrders = ordersByMonth.sumOf { it.count },
+        ordersByRegion = regions,
+    )
+
+    /**
+     * The same twelve months as a payload, so the August frame is drawn by the REAL
+     * [uz.etalon.crm.core.model.monthScope] port rather than by a hand-written dashboard: the
+     * figures, the trends and the sparkline windows in `home_month_selected_light` are what the
+     * arithmetic actually produces for that month.
+     */
+    private fun summary() = HomeSummary(
+        today = today, todayArea = BigDecimal("247.50"),
+        openDiscrepancies = 1, openDiscrepancyTotal = Money.parse("120000.00"),
+        receivables = Money.parse("53268760.00"), receivableOrders = 6, receivablesTrend = null,
+        paidOrders = 317, partialOrders = 13, awaitingOrders = 23,
+        recent = recent,
+        booked = PeriodMoney(Money.parse("184200000.00"), 12, null),
+        bookedAllTime = AllTimeMoney(Money.parse("1284000000.00"), 512),
+        collected = PeriodMoney(Money.parse("13500000.00"), 14, null),
+        collectedAllTime = AllTimeMoney(Money.parse("1176400000.00"), 431),
+        collectedByMonth = collectedRows,
+        aov = Aov(Money.parse("15350000.00"), Money.parse("2507812.00"), null),
+        activeCustomers = 42,
+        bookedByMonth = bookedByMonth, ordersByMonth = ordersByMonth,
+        monthKeys = monthKeys, currentMonthIdx = 11, currentMonthKey = "2026-09",
+        loadedVolumeByMonth = listOf(
+            LoadedVolume("2026-08", 940, 74, BigDecimal("401.2"), BigDecimal("254.10"), 8),
+            LoadedVolume(
+                monthKey = "2026-09", blocks = 1180, beamCount = 96,
+                beamMeters = BigDecimal("512.4"), area = BigDecimal("318.60"), orderCount = 11,
+            ),
+        ),
+        loadedThisMonth = null,
+        topCustomers = topCustomers,
+        ordersByRegion = regions,
     )
 
     /** §2.6, already ranked as the ViewModel hands them over: five rows whose figures fall away
@@ -243,10 +309,26 @@ class HomeScreenshotTest {
             openDiscrepancies = 0,
             openDiscrepancyTotal = Money.ZERO,
             loadedThisMonth = null,
-            currentMonthKey = "2026-09",
+            monthKey = "2026-09",
+            isCurrentMonth = true,
+            monthOrders = 0,
             topCustomers = emptyList(),
+            chartBooked = List(12) { Money.ZERO },
+            chartCollected = List(12) { Money.ZERO },
+            chartMonthKeys = monthKeys,
+            selectedMonthIdx = 11,
+            currentMonthIdx = 11,
+            yearOrders = 0,
+            ordersByRegion = emptyList(),
         ),
     )
+
+    /**
+     * §2.3b with an earlier month picked: every scoped line names August and the figures are
+     * August's, computed by the port. The receivables hero above them does not move — it is a
+     * point-in-time balance and says so.
+     */
+    private fun monthSelected() = loaded().copy(dash = dashboard(summary(), AUGUST))
 
     /** One upload still queued and one order the server refused: what the bell badges, and what
      *  the sheet has to explain. The message is the server's own Uzbek half, as the outbox stored
@@ -270,7 +352,7 @@ class HomeScreenshotTest {
                 HomeScreen(
                     s = state, me = owner, now = now, onRefresh = {},
                     onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
+                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
                 )
             }
         }
@@ -293,7 +375,7 @@ class HomeScreenshotTest {
                     HomeScreen(
                         s = rejectedState(), me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
+                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
                     )
                     OutboxSheet(
                         pending = rejectedState().pendingUploads,
@@ -331,7 +413,7 @@ class HomeScreenshotTest {
                         s = loaded().copy(pendingUploads = 0, rejectedOrders = many),
                         me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
+                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
                     )
                     OutboxSheet(pending = 0, rejected = many, onDiscard = {}, onDismiss = {}, onReopen = {})
                 }
@@ -356,7 +438,7 @@ class HomeScreenshotTest {
                     HomeScreen(
                         s = rejectedState(), me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
+                        onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
                     )
                     OutboxSheet(
                         pending = 0,
@@ -389,7 +471,7 @@ class HomeScreenshotTest {
                 HomeScreen(
                     s = loaded(), me = owner, now = now, onRefresh = {},
                     onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {},
+                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
                 )
             }
         }
@@ -420,6 +502,7 @@ class HomeScreenshotTest {
                     s = loaded(), me = owner, now = now, onRefresh = {},
                     onOpenOrder = { opened += it }, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
                     onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = { listOpened += Unit },
+                    onSelectMonth = {},
                 )
             }
         }
@@ -449,6 +532,8 @@ class HomeScreenshotTest {
         rule.waitForIdle()
         rule.onNodeWithText("Ҳали тушум йўқ").assertExists()
         rule.onNodeWithText("Ҳали буюртма йўқ").assertExists()
+        // §2.6b's own empty state, for the same reason: a province table with no rows says so.
+        rule.onNodeWithText("Маълумот йўқ").assertExists()
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun noAccessLight() {
@@ -456,7 +541,62 @@ class HomeScreenshotTest {
         rule.onNodeWithText("Бу саҳифага рухсат йўқ — фақат ADMIN ва OWNER кира олади.").assertExists()
     }
 
+    /**
+     * §2.3b with August picked in the chart: the kicker reads «МОЛИЯВИЙ ҲОЛАТ · АВГУСТ ОЙИ», the
+     * rail's first lines «N та буюртма · авг ойи» / «N та тўлов · авг ойи», the loaded tile
+     * «Юкланган ҳажм · авг», and the chart's own sub-line «авг ойи · 16 та буюртма». The
+     * receivables hero above them is unchanged, with its «Ой бўйича бўлинмайди» line intact.
+     *
+     * The state is built by the real port ([monthSelected] → `dashboard(summary(), AUGUST)`), so
+     * every figure in this frame is one the arithmetic produced rather than one typed in.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun monthSelectedLight() {
+        shoot("home_month_selected_light", monthSelected())
+        rule.onNodeWithText("МОЛИЯВИЙ ҲОЛАТ · АВГУСТ ОЙИ").assertExists()
+        rule.onNodeWithText("16 та буюртма · авг ойи").assertExists()
+        // The hero does not follow the picker — it is a balance, not a month's total.
+        rule.onNodeWithText("Ой бўйича бўлинмайди · бугунги қолдиқ").assertExists()
+    }
+
+    /** §2.6b, which is below the fold of both other frames: four provinces, each with its client
+     *  count, its share bar and its booked sum, in the server's own ranking. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun regionsLight() {
+        rule.setContent {
+            EtalonTheme {
+                HomeScreen(
+                    s = loaded(), me = owner, now = now, onRefresh = {},
+                    onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
+                )
+            }
+        }
+        rule.onNodeWithTag(HOME_LIST_TAG).performScrollToNode(hasText("Ҳудудлар бўйича буюртмалар"))
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage("screenshots/home_regions_light.png")
+    }
+
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun largeFont() = shoot("home_font13", loaded())
+
+    /**
+     * The bottom half at font scale 1.3 — the one frame Task 4 left unphotographed and the one
+     * Task 5's two new cards make worth having: the donut's centre, the top-client rows, the
+     * region rows and the recent rows all hold long Cyrillic names at 13 sp without clipping, and
+     * the names that cannot fit ellipsize rather than being cut mid-glyph.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun bottomLargeFont() {
+        rule.setContent {
+            EtalonTheme {
+                HomeScreen(
+                    s = loaded(), me = owner, now = now, onRefresh = {},
+                    onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    onOpenClients = {}, onOpenCalendarToday = {}, onOpenOrdersList = {}, onSelectMonth = {},
+                )
+            }
+        }
+        rule.onNodeWithTag(HOME_LIST_TAG).performScrollToIndex(LAST_ITEM)
+        rule.waitForIdle()
+        rule.onRoot().captureRoboImage("screenshots/home_bottom_font13.png")
+    }
 
     /** The narrowest phone the app supports: the grid's two columns and the hero's three cells all
      *  come out of one 360 dp width. */

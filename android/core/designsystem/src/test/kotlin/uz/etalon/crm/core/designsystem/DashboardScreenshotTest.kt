@@ -25,6 +25,7 @@ import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.designsystem.components.BarSparkline
 import uz.etalon.crm.core.designsystem.components.DeltaBadge
 import uz.etalon.crm.core.designsystem.components.Donut
+import uz.etalon.crm.core.designsystem.components.MonthColumns
 import uz.etalon.crm.core.designsystem.components.SegmentBar
 import uz.etalon.crm.core.designsystem.components.StackedBar
 import uz.etalon.crm.core.designsystem.components.donutPercent
@@ -33,6 +34,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.designsystem.theme.EtalonType
+import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.model.TrendDirection
 import uz.etalon.crm.core.model.TrendPolarity
@@ -46,6 +48,21 @@ private val GRID_TILE = 164.dp
 
 /** Eight months of bookings, the last one this month's — the shape §2.3's rail draws. */
 private val BOOKED = listOf("41", "58", "36", "77", "52", "95", "68", "112").map { BigDecimal(it) }
+
+/** A year of real trade: bookings that rise and fall, and collections that trail them — which is
+ *  what makes the pair of bars in one column worth drawing side by side. */
+private val MONTH_BOOKED = listOf(
+    "41000000", "58000000", "36000000", "77000000", "52000000", "95000000",
+    "68000000", "112000000", "84000000", "99000000", "61000000", "128000000",
+).map { Money(BigDecimal(it)) }
+
+private val MONTH_COLLECTED = listOf(
+    "22000000", "49000000", "31000000", "44000000", "50000000", "62000000",
+    "58000000", "71000000", "80000000", "46000000", "55000000", "39000000",
+).map { Money(BigDecimal(it)) }
+
+private val MONTH_LABELS =
+    listOf("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
 
 private fun trend(direction: TrendDirection, polarity: TrendPolarity, pct: String) =
     Trend(BigDecimal(pct), direction, polarity)
@@ -82,6 +99,14 @@ class DashboardScreenshotTest {
     @Test fun segmentAndStackedBarsLight() {
         rule.setContent { EtalonTheme { Sheet { Bars() } } }
         rule.onRoot().captureRoboImage("screenshots/ds_segment_stacked_light.png")
+    }
+
+    /** §2.3b's chart, in the two states that decide whether it is right: a real year with a past
+     *  month picked (so the accent pair is not simply the last column), and a year with no trade
+     *  in it at all. */
+    @Test fun monthColumnsLight() {
+        rule.setContent { EtalonTheme { Sheet { Months() } } }
+        rule.onRoot().captureRoboImage("screenshots/ds_month_columns_light.png")
     }
 }
 
@@ -138,6 +163,37 @@ private fun DonutTile(paid: Int, partial: Int, awaiting: Int) =
         }
     }
 
+/**
+ * §2.3b's twelve-month picker. The selected column is month 9 (index 8) and the current one is
+ * month 12, so the frame shows the two marks apart from each other — a chart that simply accented
+ * its last column would look right if they were the same.
+ */
+@Composable
+private fun Months() {
+    Caption("MonthColumns · 12 ой · танланган 9-ой, жорий 12-ой")
+    WideCard {
+        MonthColumns(
+            booked = MONTH_BOOKED,
+            collected = MONTH_COLLECTED,
+            labels = MONTH_LABELS,
+            selected = 8,
+            current = 11,
+            onSelect = {},
+        )
+    }
+    Caption("MonthColumns · буюртмасиз йил")
+    WideCard {
+        MonthColumns(
+            booked = List(12) { Money.ZERO },
+            collected = List(12) { Money.ZERO },
+            labels = MONTH_LABELS,
+            selected = 11,
+            current = 11,
+            onSelect = {},
+        )
+    }
+}
+
 @Composable
 private fun Bars() {
     Caption("SegmentBar · 4 / 7")
@@ -170,6 +226,15 @@ private fun Sheet(content: @Composable () -> Unit) = Column(
 @Composable
 private fun Card(content: @Composable () -> Unit) = Column(
     Modifier.width(RAIL_CARD).background(EtalonColors.surface, EtalonShapes.xl)
+        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
+        .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
+) { content() }
+
+/** The chart card's white ground — full width, because §2.3b's card spans the column rather than
+ *  sitting in the rail. */
+@Composable
+private fun WideCard(content: @Composable () -> Unit) = Column(
+    Modifier.fillMaxWidth().background(EtalonColors.surface, EtalonShapes.xl)
         .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
         .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
 ) { content() }

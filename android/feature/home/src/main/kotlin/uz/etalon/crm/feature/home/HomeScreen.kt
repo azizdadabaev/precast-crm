@@ -99,6 +99,7 @@ fun HomeRoute(
         onOpenOutbox = { showOutbox = true },
         onOpenClients = onOpenClients, onOpenCalendarToday = onOpenCalendarToday,
         onOpenOrdersList = onOpenOrdersList,
+        onSelectMonth = vm::selectMonth,
     )
     // §3's 60 s auto-refresh. `repeatOnLifecycle(RESUMED)` rather than a bare `LaunchedEffect`,
     // because a `LaunchedEffect` survives the screen going to the background: Home stays composed
@@ -140,7 +141,8 @@ fun HomeRoute(
 
 /**
  * The dashboard (design §2), top to bottom: the app-bar chrome over today's date, the navy
- * receivables hero, the financial rail for the current month, and the operational 2×2.
+ * receivables hero, the financial rail for the selected month, the twelve-month chart that selects
+ * it, the operational 2×2, and the four cards under them.
  *
  * [now] is a parameter rather than an `Instant.now()` inside, so the date line is deterministic
  * under test.
@@ -166,6 +168,10 @@ fun HomeScreen(
     onOpenClients: () -> Unit,
     onOpenCalendarToday: () -> Unit,
     onOpenOrdersList: () -> Unit,
+    /** §2.3b: a column of the twelve-month chart was tapped. The index is into the payload's own
+     *  month series; the ViewModel clamps it and decides what tapping the picked month again
+     *  means. */
+    onSelectMonth: (Int) -> Unit,
 ) {
     PullToRefreshBox(
         // Only a REFRESH spins: the first load has the skeleton, and a spinner over it read as two
@@ -204,8 +210,19 @@ fun HomeScreen(
             s.dash?.let { d ->
                 item { ReceivablesHero(d) }
                 item {
-                    Section(stringResource(R.string.home_kicker_financial)) { FinancialRail(d) }
+                    // §2.3b: the kicker names the month the rail is scoped to — the current one
+                    // until the operator picks another in the chart below.
+                    val kicker = if (d.isCurrentMonth) {
+                        stringResource(R.string.home_kicker_financial)
+                    } else {
+                        stringResource(
+                            R.string.home_kicker_financial_month,
+                            fullMonth(d.monthKey, now).uppercase(),
+                        )
+                    }
+                    Section(kicker) { FinancialRail(d, now) }
                 }
+                item { MonthlyChartCard(d, onSelectMonth) }
                 item {
                     Section(stringResource(R.string.home_kicker_ops)) {
                         OperationalGrid(s, d, now, onOpenClients, onOpenCalendarToday)
@@ -213,6 +230,7 @@ fun HomeScreen(
                 }
                 item { PaymentDonutCard(d) }
                 item { TopClientsCard(d) }
+                item { RegionRankingCard(d) }
                 item {
                     RecentOrdersCard(
                         recent = s.recent,

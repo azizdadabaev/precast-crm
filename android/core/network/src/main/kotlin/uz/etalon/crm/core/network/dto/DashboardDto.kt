@@ -14,10 +14,10 @@ import java.math.BigDecimal
  * whether it was quoted, so it works for both a request's bare number and this response's.
  *
  * Only the fields the Бош tab's design 6a renders are modelled (Task 1 of Phase 7 widened this
- * from the phase-1 four). `DashboardPayload` still carries more than that — the 12-month
- * `HeroChart`, the delivery-date basis, `ordersByRegion`, `weekCapacity`, `cashOnTheRoad` — none
- * of which render on the phone yet (spec §8); `ignoreUnknownKeys = true` on the shared `Json`
- * lets the rest pass through unread.
+ * from the phase-1 four; Task 5 added the region ranking and the per-month payment counts the
+ * month picker needs). `DashboardPayload` still carries more than that — the delivery-date basis,
+ * `weekCapacity`, `cashOnTheRoad`, the daily series — none of which render on the phone yet
+ * (spec §8); `ignoreUnknownKeys = true` on the shared `Json` lets the rest pass through unread.
  */
 @Serializable
 data class TodayDeliveryOrderDto(
@@ -63,7 +63,14 @@ data class TodayDeliveryOrderDto(
     val paymentCount: Int = 0,
     val trend: TrendDto? = null,
 )
-@Serializable data class MonthCollectedDto(val month: String, @Serializable(with = BigDecimalSerializer::class) val collected: BigDecimal)
+/** `paymentCount` is how many confirmed payments made up that month's `collected`; the rail's
+ *  Collected card prints it once a month other than the current one is selected (design §2.3b).
+ *  Defaulted so a payload that predates it still decodes. */
+@Serializable data class MonthCollectedDto(
+    val month: String,
+    @Serializable(with = BigDecimalSerializer::class) val collected: BigDecimal,
+    val paymentCount: Int = 0,
+)
 @Serializable data class MonthBookedDto(val month: String, @Serializable(with = BigDecimalSerializer::class) val booked: BigDecimal)
 @Serializable data class MonthOrdersDto(val month: String, val count: Int)
 
@@ -97,6 +104,18 @@ data class TodayDeliveryOrderDto(
     @Serializable(with = BigDecimalSerializer::class) val beamMeters: BigDecimal = BigDecimal.ZERO,
     @Serializable(with = BigDecimalSerializer::class) val area: BigDecimal = BigDecimal.ZERO,
     val orderCount: Int = 0,
+)
+
+/** One row of `ordersByRegion` — the province league table (design §2.6b). `region` is the stable
+ *  Latin key (or `"Other"`); `regionUz` is the Cyrillic label, `booked` the province's Σ
+ *  `totalPrice`. Every field defaults: this array is a Task 5 addition and an older payload
+ *  simply has none. */
+@Serializable data class RegionOrdersDto(
+    val region: String = "",
+    val regionUz: String = "",
+    val orderCount: Int = 0,
+    val clientCount: Int = 0,
+    @Serializable(with = BigDecimalSerializer::class) val booked: BigDecimal = BigDecimal.ZERO,
 )
 
 @Serializable data class TopCustomerDto(
@@ -158,4 +177,6 @@ data class DashboardDto(
     val currentMonthIdx: Int = 0,
     val loadedVolumeByMonth: List<LoadedVolumeDto> = emptyList(),
     val topCustomers: List<TopCustomerDto> = emptyList(),
+    /** Task 5 / design §2.6b — all-time and already ranked by the server. */
+    val ordersByRegion: List<RegionOrdersDto> = emptyList(),
 )
