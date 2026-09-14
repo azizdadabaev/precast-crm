@@ -1,12 +1,17 @@
 package uz.etalon.crm.core.data
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.data.mapper.toDomain
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.TrendDirection
+import uz.etalon.crm.core.model.TrendPolarity
+import uz.etalon.crm.core.network.EtalonJson
 import uz.etalon.crm.core.network.dto.CollectedThisMonthDto
 import uz.etalon.crm.core.network.dto.DashboardDto
+import uz.etalon.crm.core.network.dto.LoadedVolumeDto
 import uz.etalon.crm.core.network.dto.OpenDiscrepanciesDto
 import uz.etalon.crm.core.network.dto.OrdersByPaymentStateDto
 import uz.etalon.crm.core.network.dto.OutstandingReceivablesDto
@@ -73,7 +78,7 @@ class DashboardMappersTest {
     @Test fun `each of the server's three trend directions maps to its own`() {
         fun trend(delta: String, direction: String) =
             dto.copy(collectedThisMonth = CollectedThisMonthDto(total = BigDecimal("100"), trend = TrendDto(BigDecimal(delta), direction)))
-                .toDomain().collectedTrend!!
+                .toDomain().collected.trend!!
 
         val up = trend("8.2", "up")
         assertEquals(TrendDirection.UP, up.direction)
@@ -92,6 +97,140 @@ class DashboardMappersTest {
      *  it reads as FLAT does rather than being guessed into a rise or a fall. */
     @Test fun `an unrecognised direction is UNKNOWN, not up`() {
         val odd = dto.copy(collectedThisMonth = CollectedThisMonthDto(total = BigDecimal("100"), trend = TrendDto(BigDecimal("3.0"), "sideways")))
-        assertEquals(TrendDirection.UNKNOWN, odd.toDomain().collectedTrend!!.direction)
+        assertEquals(TrendDirection.UNKNOWN, odd.toDomain().collected.trend!!.direction)
+    }
+
+    /**
+     * Unlike [TrendDirection], an unrecognised `polarity` does NOT read as a neutral "no claim" —
+     * every trend badge needs a colour. It defaults to [TrendPolarity.POSITIVE], the web's own
+     * default for every trend it does not special-case as receivables (`buildTrend`'s callers all
+     * pass `'positive'` except `outstandingReceivables`). Defaulting POSITIVE is the safer wrong
+     * answer: it never tints an ordinary booked/collected rise red for no reason.
+     */
+    @Test fun `an unrecognised polarity defaults to POSITIVE, the web's own default`() {
+        val odd = dto.copy(
+            outstandingReceivables = OutstandingReceivablesDto(
+                total = BigDecimal("222000"), orderCount = 22,
+                trend = TrendDto(BigDecimal("3.0"), "up", "sideways"),
+            ),
+        )
+        assertEquals(TrendPolarity.POSITIVE, odd.toDomain().receivablesTrend!!.polarity)
+    }
+
+    // ── loadedThisMonth: keyed by monthKeys[currentMonthIdx], not by array position ──────────
+
+    @Test fun `loadedVolumeByMonth missing the current month leaves loadedThisMonth null`() {
+        val withoutCurrent = dto.copy(
+            monthKeys = listOf("2026-08", "2026-09"),
+            currentMonthIdx = 1,
+            loadedVolumeByMonth = listOf(
+                LoadedVolumeDto(monthKey = "2026-08", blocks = 10, beamCount = 2, beamMeters = BigDecimal("5.0"), area = BigDecimal("3.0"), orderCount = 1),
+            ),
+        )
+        assertEquals("2026-09", withoutCurrent.toDomain().currentMonthKey)
+        assertNull(withoutCurrent.toDomain().loadedThisMonth)
+    }
+
+    @Test fun `loadedVolumeByMonth carrying the current month is found by its key`() {
+        val withCurrent = dto.copy(
+            monthKeys = listOf("2026-08", "2026-09"),
+            currentMonthIdx = 1,
+            loadedVolumeByMonth = listOf(
+                LoadedVolumeDto(monthKey = "2026-08", blocks = 10, beamCount = 2, beamMeters = BigDecimal("5.0"), area = BigDecimal("3.0"), orderCount = 1),
+                LoadedVolumeDto(monthKey = "2026-09", blocks = 99, beamCount = 7, beamMeters = BigDecimal("12.4"), area = BigDecimal("8.7"), orderCount = 4),
+            ),
+        )
+        val loaded = withCurrent.toDomain().loadedThisMonth
+        assertEquals(99, loaded?.blocks)
+        assertEquals(4, loaded?.orderCount)
+    }
+
+    // ── recentOrders: a null address survives the mapper as null, not a placeholder ──────────
+
+    @Test fun `a recent order with a null address decodes with a null address, not a placeholder`() {
+        val withNullAddress = dto.copy(recentOrders = listOf(
+            RecentOrderDto(
+                id = "r1", orderNumber = "B-1", clientName = "C", status = "PLACED",
+                scheduledAt = "2026-09-08T00:00:00Z", totalPrice = BigDecimal("500000"),
+                clientPhone = "998900000000", clientAddress = null,
+                totalArea = BigDecimal("12.5"), paymentState = "AWAITING_PAYMENT",
+            ),
+        ))
+        val recent = withNullAddress.toDomain().recent.single()
+        assertNull(recent.clientAddress)
+        assertEquals("998900000000", recent.clientPhone)
+        assertEquals(BigDecimal("12.5"), recent.totalArea)
+        assertEquals(PaymentState.AWAITING_PAYMENT, recent.paymentState)
+    }
+
+    // ── the recorded fixture: every field the design 6a screen renders decodes off a real payload ──
+
+    /**
+     * Recorded from the LOCAL dev server's `GET /api/dashboard` (seeded owner, 2026-09-14) —
+     * `android/core/data/src/test/resources/dashboard-response.json`. All client names, phones and
+     * addresses in it come from `precast-crm/prisma/seed.ts`'s hard-coded demo rows, already
+     * public in this repository; nothing was scrubbed because nothing in it is real.
+     */
+    private fun fixtureDto(): DashboardDto {
+        val text = requireNotNull(
+            object {}.javaClass.getResourceAsStream("/dashboard-response.json"),
+        ) { "missing test resource dashboard-response.json" }.readBytes().toString(Charsets.UTF_8)
+        return EtalonJson.create().decodeFromString(DashboardDto.serializer(), text)
+    }
+
+    @Test fun `the recorded payload decodes every field the design 6a screen renders`() {
+        val s = fixtureDto().toDomain()
+
+        // Money never Double: every money-shaped figure lands as Money, backed by BigDecimal.
+        assertEquals(Money.parse("205709989"), s.booked.total)
+        assertEquals(19, s.booked.count)
+        assertNull(s.booked.trend, "the fixture's bookedThisMonth.trend is null")
+        assertEquals(Money.parse("245288843"), s.bookedAllTime.total)
+        assertEquals(23, s.bookedAllTime.count)
+
+        assertEquals(Money.parse("23492500"), s.collected.total)
+        assertEquals(8, s.collected.count)
+        assertEquals(Money.parse("33192500"), s.collectedAllTime.total)
+        assertEquals(10, s.collectedAllTime.count)
+
+        assertEquals(Money.parse("10826842"), s.aov.thisMonth)
+        assertEquals(Money.parse("10664732"), s.aov.allTime)
+
+        assertEquals(Money.parse("101502872"), s.receivables)
+        assertEquals(14, s.receivableOrders)
+        // The fixture's one populated trend: receivables, polarity NEGATIVE — a rise is bad.
+        assertEquals(BigDecimal("250"), s.receivablesTrend?.deltaPct)
+        assertEquals(TrendDirection.UP, s.receivablesTrend?.direction)
+        assertEquals(TrendPolarity.NEGATIVE, s.receivablesTrend?.polarity)
+
+        assertEquals(7, s.activeCustomers)
+        assertEquals(12, s.bookedByMonth.size)
+        assertEquals(12, s.ordersByMonth.size)
+        assertEquals("2026-09", s.currentMonthKey)
+
+        // The fixture's current month (2026-09) is present in loadedVolumeByMonth.
+        assertEquals(6338, s.loadedThisMonth?.blocks)
+        assertEquals(306, s.loadedThisMonth?.beamCount)
+        assertEquals(BigDecimal("1392.4"), s.loadedThisMonth?.beamMeters)
+        assertEquals(BigDecimal("822.7"), s.loadedThisMonth?.area)
+        assertEquals(12, s.loadedThisMonth?.orderCount)
+
+        assertEquals(5, s.topCustomers.size)
+        assertEquals("Karimov LLC", s.topCustomers.first().name)
+        assertEquals(Money.parse("32385940"), s.topCustomers.first().totalCollected)
+
+        assertEquals(6, s.recent.size)
+        val first = s.recent.first()
+        assertEquals("998935554466", first.clientPhone)
+        assertEquals("Samarkand · Registan", first.clientAddress)
+        assertEquals(BigDecimal("82"), first.totalArea)
+        assertEquals(PaymentState.PARTIALLY_PAID, first.paymentState)
+
+        // Never Double: a value that round-tripped through Double.toString() would carry
+        // exponent notation ("E8") or a trailing float artefact rather than the exact plain
+        // digits the server sent. `toPlainString()` on every money figure above stays exact.
+        assertEquals("205709989", s.booked.total.amount.toPlainString())
+        assertEquals("245288843", s.bookedAllTime.total.amount.toPlainString())
+        assertEquals("101502872", s.receivables.amount.toPlainString())
     }
 }

@@ -204,7 +204,7 @@ open class HomeViewModel(
                                 todayCount = s.today.size, todayArea = s.todayArea,
                                 openDiscrepancies = s.openDiscrepancies, openDiscrepancyTotal = s.openDiscrepancyTotal,
                                 receivables = s.receivables, receivableOrders = s.receivableOrders,
-                                collectedThisMonth = s.collectedThisMonth, collectedTrend = s.collectedTrend,
+                                collectedThisMonth = s.collected.total, collectedTrend = s.collected.trend,
                                 collectedByMonth = s.collectedByMonth.map { it.collected },
                             ),
                         )

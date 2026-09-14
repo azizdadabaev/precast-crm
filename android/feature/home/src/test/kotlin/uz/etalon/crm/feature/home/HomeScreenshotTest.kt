@@ -22,11 +22,13 @@ import uz.etalon.crm.core.designsystem.theme.EtalonTheme
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.model.TrendDirection
+import uz.etalon.crm.core.model.TrendPolarity
 import java.math.BigDecimal
 import java.time.Instant
 
@@ -90,26 +92,34 @@ class HomeScreenshotTest {
     private val recent = listOf(
         RecentOrder(
             orderId = "o5", orderNumber = "2026-09-0005", clientName = "Fergana Dom",
+            clientPhone = "998901112233", clientAddress = "Фарғона, Марказ",
             status = OrderStatus.PLACED, scheduledAt = Instant.parse("2026-09-04T06:00:00Z"),
             totalPrice = Money.parse("6210000.00"), remaining = Money.parse("6210000.00"),
+            totalArea = BigDecimal("36.50"), paymentState = PaymentState.AWAITING_PAYMENT,
         ),
         RecentOrder(
             orderId = "o1", orderNumber = "2026-09-0004", clientName = "Tashkent Tower LLC",
+            clientPhone = "998901234567", clientAddress = "Тошкент, Юнусобод",
             status = OrderStatus.IN_PRODUCTION, scheduledAt = Instant.parse("2026-09-02T06:00:00Z"),
             totalPrice = Money.parse("18420000.00"), remaining = Money.parse("18420000.00"),
+            totalArea = BigDecimal("108.20"), paymentState = PaymentState.PARTIALLY_PAID,
         ),
         // The recent card's own CANCELED branch — the card draws only its first four rows, so the
         // canceled one has to be inside them to reach the baseline. It takes the slot Yusupov &
         // Sons held, which the today sheet above still shows.
         RecentOrder(
             orderId = "o4", orderNumber = "2026-09-0001", clientName = "Navoi Build",
+            clientPhone = "998930011223", clientAddress = "Навоий, Шимолий",
             status = OrderStatus.CANCELED, scheduledAt = Instant.parse("2026-09-01T06:00:00Z"),
             totalPrice = Money.parse("3003520.00"), remaining = Money.parse("3003520.00"),
+            totalArea = BigDecimal("18.00"), paymentState = PaymentState.AWAITING_PAYMENT,
         ),
         RecentOrder(
             orderId = "o6", orderNumber = "2026-08-0001", clientName = "Karimov LLC",
+            clientPhone = "998935554466", clientAddress = "Самарқанд, Регистон",
             status = OrderStatus.DELIVERED, scheduledAt = Instant.parse("2026-08-28T06:00:00Z"),
             totalPrice = Money.parse("4162500.00"), remaining = Money.ZERO,
+            totalArea = BigDecimal("26.90"), paymentState = PaymentState.FULLY_PAID,
         ),
     )
 
@@ -127,7 +137,7 @@ class HomeScreenshotTest {
         receivables = Money.parse("53268760.00"),
         receivableOrders = 6,
         collectedThisMonth = Money.parse("13500000.00"),
-        collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UP),
+        collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UP, TrendPolarity.POSITIVE),
         collectedByMonth = collectedByMonth,
     )
 
@@ -274,7 +284,7 @@ class HomeScreenshotTest {
      */
     @Test @Config(qualifiers = "w411dp-h891dp") fun anUnchangedMonthClaimsNothing() {
         val flat = loaded().copy(
-            tiles = tiles().copy(collectedTrend = Trend(BigDecimal.ZERO, TrendDirection.FLAT)),
+            tiles = tiles().copy(collectedTrend = Trend(BigDecimal.ZERO, TrendDirection.FLAT, TrendPolarity.POSITIVE)),
         )
         shoot("home_trend_flat_light", flat)
         rule.onNodeWithText("ўтган ойга нисбатан ўзгаришсиз").assertExists()
@@ -286,7 +296,7 @@ class HomeScreenshotTest {
      *  rather than a raw word or a guessed arrow. */
     @Test @Config(qualifiers = "w411dp-h891dp") fun anUnknownDirectionReadsAsUnchanged() {
         val unknown = loaded().copy(
-            tiles = tiles().copy(collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UNKNOWN)),
+            tiles = tiles().copy(collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UNKNOWN, TrendPolarity.POSITIVE)),
         )
         rule.setContent {
             EtalonTheme {

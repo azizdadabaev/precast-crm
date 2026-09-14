@@ -1,0 +1,860 @@
+{
+  "bookedThisMonth": {
+    "total": 205709989,
+    "orderCount": 19,
+    "periodStart": "2026-09-01",
+    "periodEnd": "2026-09-30",
+    "trend": null
+  },
+  "bookedAllTime": {
+    "total": 245288843,
+    "orderCount": 23
+  },
+  "collectedThisMonth": {
+    "total": 23492500,
+    "paymentCount": 8,
+    "periodStart": "2026-09-01",
+    "periodEnd": "2026-09-30",
+    "trend": null
+  },
+  "collectedAllTime": {
+    "total": 33192500,
+    "paymentCount": 10
+  },
+  "averageOrderValue": {
+    "thisMonth": 10826842,
+    "allTime": 10664732,
+    "trend": null
+  },
+  "outstandingReceivables": {
+    "total": 101502872,
+    "orderCount": 14,
+    "trend": {
+      "deltaPct": 250,
+      "direction": "up",
+      "polarity": "negative"
+    }
+  },
+  "activeCustomers": {
+    "count": 7
+  },
+  "ordersByPaymentState": {
+    "paid": 8,
+    "partial": 14,
+    "awaiting": 1
+  },
+  "todayDeliveries": {
+    "count": 3,
+    "totalArea": 202,
+    "date": "2026-09-14",
+    "orders": [
+      {
+        "id": "cmtpi7bf40039ytlmjy7pmlsm",
+        "orderNumber": "2026-09-0015",
+        "clientName": "Karimov LLC",
+        "totalArea": 98.7,
+        "status": "DELIVERED",
+        "clientAddress": "Samarkand · Registan",
+        "totalPrice": 16928000,
+        "remaining": 0
+      },
+      {
+        "id": "cmtpi7bdk000sytlmj7kct9q2",
+        "orderNumber": "2026-09-0004",
+        "clientName": "Stroy-Master",
+        "totalArea": 37.5,
+        "status": "DISPATCHED",
+        "clientAddress": "Tashkent · Chilanzar",
+        "totalPrice": 6973080,
+        "remaining": 4881156
+      },
+      {
+        "id": "cmtpi7bdq0010ytlms0kcqi0u",
+        "orderNumber": "2026-09-0005",
+        "clientName": "Navoi Build",
+        "totalArea": 65.8,
+        "status": "DELIVERED",
+        "clientAddress": "Navoi · Center",
+        "totalPrice": 12298960,
+        "remaining": 8609272
+      }
+    ]
+  },
+  "openDiscrepancies": {
+    "count": 0,
+    "totalAmount": 0
+  },
+  "cashOnTheRoad": {
+    "total": 0,
+    "dispatchCount": 0,
+    "drivers": []
+  },
+  "ordersByRegion": [
+    {
+      "region": "Andijon viloyati",
+      "regionUz": "Андижон вилояти",
+      "orderCount": 3,
+      "clientCount": 1,
+      "booked": 43274240
+    },
+    {
+      "region": "Other",
+      "regionUz": "Бошқа",
+      "orderCount": 20,
+      "clientCount": 6,
+      "booked": 202014603
+    }
+  ],
+  "topCustomers": [
+    {
+      "id": "cmq1z9k2j000b6qd2pgd5uv2a",
+      "name": "Karimov LLC",
+      "totalCollected": 32385940,
+      "orderCount": 4
+    },
+    {
+      "id": "cmq1z9k2n000e6qd2gznuka67",
+      "name": "Stroy-Master",
+      "totalCollected": 25180932,
+      "orderCount": 3
+    },
+    {
+      "id": "cmq1z9k2l000d6qd2xlf1drwa",
+      "name": "Yusupov & Sons",
+      "totalCollected": 23207148,
+      "orderCount": 4
+    },
+    {
+      "id": "cmq1z9k2q000g6qd2b7dsv2k5",
+      "name": "Andijon Stroy",
+      "totalCollected": 19433990,
+      "orderCount": 3
+    },
+    {
+      "id": "cmq1z9k2o000f6qd20ygzipx9",
+      "name": "Navoi Build",
+      "totalCollected": 18852912,
+      "orderCount": 3
+    }
+  ],
+  "weekCapacity": {
+    "utilizationPct": 11,
+    "days": [
+      {
+        "date": "2026-09-14",
+        "bookedM2": 202,
+        "capacityM2": 600
+      },
+      {
+        "date": "2026-09-15",
+        "bookedM2": 0,
+        "capacityM2": 600
+      },
+      {
+        "date": "2026-09-16",
+        "bookedM2": 57.6,
+        "capacityM2": 600
+      },
+      {
+        "date": "2026-09-17",
+        "bookedM2": 0,
+        "capacityM2": 600
+      },
+      {
+        "date": "2026-09-18",
+        "bookedM2": 45.4,
+        "capacityM2": 600
+      },
+      {
+        "date": "2026-09-19",
+        "bookedM2": 0,
+        "capacityM2": 600
+      },
+      {
+        "date": "2026-09-20",
+        "bookedM2": 162.1,
+        "capacityM2": 600
+      }
+    ]
+  },
+  "bookedByMonth": [
+    {
+      "month": "Окт",
+      "booked": 0
+    },
+    {
+      "month": "Ноя",
+      "booked": 0
+    },
+    {
+      "month": "Дек",
+      "booked": 0
+    },
+    {
+      "month": "Янв",
+      "booked": 0
+    },
+    {
+      "month": "Фев",
+      "booked": 0
+    },
+    {
+      "month": "Мар",
+      "booked": 0
+    },
+    {
+      "month": "Апр",
+      "booked": 0
+    },
+    {
+      "month": "Май",
+      "booked": 0
+    },
+    {
+      "month": "Июн",
+      "booked": 10578854
+    },
+    {
+      "month": "Июл",
+      "booked": 29000000
+    },
+    {
+      "month": "Авг",
+      "booked": 0
+    },
+    {
+      "month": "Сен",
+      "booked": 205709989
+    }
+  ],
+  "collectedByMonth": [
+    {
+      "month": "Окт",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Ноя",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Дек",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Янв",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Фев",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Мар",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Апр",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Май",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Июн",
+      "collected": 9700000,
+      "paymentCount": 2
+    },
+    {
+      "month": "Июл",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Авг",
+      "collected": 0,
+      "paymentCount": 0
+    },
+    {
+      "month": "Сен",
+      "collected": 23492500,
+      "paymentCount": 8
+    }
+  ],
+  "ordersByMonth": [
+    {
+      "month": "Окт",
+      "count": 0
+    },
+    {
+      "month": "Ноя",
+      "count": 0
+    },
+    {
+      "month": "Дек",
+      "count": 0
+    },
+    {
+      "month": "Янв",
+      "count": 0
+    },
+    {
+      "month": "Фев",
+      "count": 0
+    },
+    {
+      "month": "Мар",
+      "count": 0
+    },
+    {
+      "month": "Апр",
+      "count": 0
+    },
+    {
+      "month": "Май",
+      "count": 0
+    },
+    {
+      "month": "Июн",
+      "count": 3
+    },
+    {
+      "month": "Июл",
+      "count": 1
+    },
+    {
+      "month": "Авг",
+      "count": 0
+    },
+    {
+      "month": "Сен",
+      "count": 19
+    }
+  ],
+  "monthKeys": [
+    "2025-10",
+    "2025-11",
+    "2025-12",
+    "2026-01",
+    "2026-02",
+    "2026-03",
+    "2026-04",
+    "2026-05",
+    "2026-06",
+    "2026-07",
+    "2026-08",
+    "2026-09"
+  ],
+  "currentMonthIdx": 11,
+  "deliveryBasis": {
+    "monthKeys": [
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
+      "2026-11",
+      "2026-12"
+    ],
+    "bookedByMonth": [
+      {
+        "month": "Янв",
+        "booked": 0
+      },
+      {
+        "month": "Фев",
+        "booked": 0
+      },
+      {
+        "month": "Мар",
+        "booked": 0
+      },
+      {
+        "month": "Апр",
+        "booked": 0
+      },
+      {
+        "month": "Май",
+        "booked": 0
+      },
+      {
+        "month": "Июн",
+        "booked": 10578854
+      },
+      {
+        "month": "Июл",
+        "booked": 29000000
+      },
+      {
+        "month": "Авг",
+        "booked": 24853340
+      },
+      {
+        "month": "Сен",
+        "booked": 180856649
+      },
+      {
+        "month": "Окт",
+        "booked": 0
+      },
+      {
+        "month": "Ноя",
+        "booked": 0
+      },
+      {
+        "month": "Дек",
+        "booked": 0
+      }
+    ],
+    "collectedByMonth": [
+      {
+        "month": "Янв",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Фев",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Мар",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Апр",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Май",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Июн",
+        "collected": 9700000,
+        "paymentCount": 2
+      },
+      {
+        "month": "Июл",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Авг",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Сен",
+        "collected": 23492500,
+        "paymentCount": 8
+      },
+      {
+        "month": "Окт",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Ноя",
+        "collected": 0,
+        "paymentCount": 0
+      },
+      {
+        "month": "Дек",
+        "collected": 0,
+        "paymentCount": 0
+      }
+    ],
+    "ordersByMonth": [
+      {
+        "month": "Янв",
+        "count": 0
+      },
+      {
+        "month": "Фев",
+        "count": 0
+      },
+      {
+        "month": "Мар",
+        "count": 0
+      },
+      {
+        "month": "Апр",
+        "count": 0
+      },
+      {
+        "month": "Май",
+        "count": 0
+      },
+      {
+        "month": "Июн",
+        "count": 3
+      },
+      {
+        "month": "Июл",
+        "count": 1
+      },
+      {
+        "month": "Авг",
+        "count": 3
+      },
+      {
+        "month": "Сен",
+        "count": 16
+      },
+      {
+        "month": "Окт",
+        "count": 0
+      },
+      {
+        "month": "Ноя",
+        "count": 0
+      },
+      {
+        "month": "Дек",
+        "count": 0
+      }
+    ],
+    "dailyByDay": [
+      {
+        "date": 1780513200000,
+        "monthKey": "2026-06",
+        "orderCount": 1,
+        "booked": 2779354
+      },
+      {
+        "date": 1780599600000,
+        "monthKey": "2026-06",
+        "orderCount": 1,
+        "booked": 4947920
+      },
+      {
+        "date": 1780686000000,
+        "monthKey": "2026-06",
+        "orderCount": 1,
+        "booked": 2851580
+      },
+      {
+        "date": 1785092400000,
+        "monthKey": "2026-07",
+        "orderCount": 1,
+        "booked": 29000000
+      },
+      {
+        "date": 1787770800000,
+        "monthKey": "2026-08",
+        "orderCount": 1,
+        "booked": 4162500
+      },
+      {
+        "date": 1787943600000,
+        "monthKey": "2026-08",
+        "orderCount": 1,
+        "booked": 7340840
+      },
+      {
+        "date": 1788030000000,
+        "monthKey": "2026-08",
+        "orderCount": 1,
+        "booked": 13350000
+      },
+      {
+        "date": 1788462000000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 21860940
+      },
+      {
+        "date": 1788548400000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 2489400
+      },
+      {
+        "date": 1788634800000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 14738600
+      },
+      {
+        "date": 1788721200000,
+        "monthKey": "2026-09",
+        "orderCount": 2,
+        "booked": 14870780
+      },
+      {
+        "date": 1788807600000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 10746480
+      },
+      {
+        "date": 1788894000000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 18272040
+      },
+      {
+        "date": 1789066800000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 3003520
+      },
+      {
+        "date": 1789153200000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 11784840
+      },
+      {
+        "date": 1789326000000,
+        "monthKey": "2026-09",
+        "orderCount": 3,
+        "booked": 36200040
+      },
+      {
+        "date": 1789498800000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 10776100
+      },
+      {
+        "date": 1789671600000,
+        "monthKey": "2026-09",
+        "orderCount": 1,
+        "booked": 7029940
+      },
+      {
+        "date": 1789844400000,
+        "monthKey": "2026-09",
+        "orderCount": 2,
+        "booked": 29083969
+      }
+    ],
+    "currentMonthIdx": 8
+  },
+  "loadedVolumeByMonth": [
+    {
+      "monthKey": "2025-10",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2025-11",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2025-12",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-01",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-02",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-03",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-04",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-05",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-06",
+      "blocks": 519,
+      "beamCount": 28,
+      "beamMeters": 108.9,
+      "area": 64.4,
+      "orderCount": 3
+    },
+    {
+      "monthKey": "2026-07",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-08",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-09",
+      "blocks": 6338,
+      "beamCount": 306,
+      "beamMeters": 1392.4,
+      "area": 822.7,
+      "orderCount": 12
+    },
+    {
+      "monthKey": "2026-10",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-11",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    },
+    {
+      "monthKey": "2026-12",
+      "blocks": 0,
+      "beamCount": 0,
+      "beamMeters": 0,
+      "area": 0,
+      "orderCount": 0
+    }
+  ],
+  "recentOrders": [
+    {
+      "id": "cmtxsqq9z003qkbecqfugkbg6",
+      "orderNumber": "2026-09-0021",
+      "clientName": "Karimov LLC",
+      "clientPhone": "998935554466",
+      "clientAddress": "Samarkand · Registan",
+      "primaryProductLabel": "31 та балка · 656 та блок",
+      "totalArea": 82,
+      "totalPrice": 15370049,
+      "paymentState": "PARTIALLY_PAID",
+      "status": "DELIVERED",
+      "scheduledAt": "2026-09-19T19:00:00.000Z",
+      "remaining": 9970049
+    },
+    {
+      "id": "cmtpi7bdq0010ytlms0kcqi0u",
+      "orderNumber": "2026-09-0005",
+      "clientName": "Navoi Build",
+      "clientPhone": "998930011223",
+      "clientAddress": "Navoi · Center",
+      "primaryProductLabel": "23 та балка · 528 та блок",
+      "totalArea": 65.8,
+      "totalPrice": 12298960,
+      "paymentState": "PARTIALLY_PAID",
+      "status": "DELIVERED",
+      "scheduledAt": "2026-09-14T07:00:00.000Z",
+      "remaining": 8609272
+    },
+    {
+      "id": "cmtpi7bdk000sytlmj7kct9q2",
+      "orderNumber": "2026-09-0004",
+      "clientName": "Stroy-Master",
+      "clientPhone": "998997778899",
+      "clientAddress": "Tashkent · Chilanzar",
+      "primaryProductLabel": "13 та балка · 300 та блок",
+      "totalArea": 37.5,
+      "totalPrice": 6973080,
+      "paymentState": "PARTIALLY_PAID",
+      "status": "DISPATCHED",
+      "scheduledAt": "2026-09-14T07:00:00.000Z",
+      "remaining": 4881156
+    },
+    {
+      "id": "cmtpi7bd9000cytlmvb9k5m0t",
+      "orderNumber": "2026-09-0002",
+      "clientName": "BuildPro Group",
+      "clientPhone": "998771234567",
+      "clientAddress": "Tashkent · Mirzo-Ulugbek",
+      "primaryProductLabel": "19 та балка · 333 та блок",
+      "totalArea": 42.6,
+      "totalPrice": 7340840,
+      "paymentState": "PARTIALLY_PAID",
+      "status": "DELIVERED",
+      "scheduledAt": "2026-08-29T04:00:00.000Z",
+      "remaining": 7090840
+    },
+    {
+      "id": "cmtpi7bcy0004ytlmxjqcm41z",
+      "orderNumber": "2026-09-0001",
+      "clientName": "Karimov LLC",
+      "clientPhone": "998935554466",
+      "clientAddress": "Samarkand · Registan",
+      "primaryProductLabel": "10 та балка · 220 та блок",
+      "totalArea": 26.9,
+      "totalPrice": 4162500,
+      "paymentState": "FULLY_PAID",
+      "status": "DISPATCHED",
+      "scheduledAt": "2026-08-27T04:00:00.000Z",
+      "remaining": 0
+    },
+    {
+      "id": "cmtpi7bfi003xytlmjrqhc1cl",
+      "orderNumber": "2026-09-0018",
+      "clientName": "Stroy-Master",
+      "clientPhone": "998997778899",
+      "clientAddress": "Tashkent · Chilanzar",
+      "primaryProductLabel": "32 та балка · 633 та блок",
+      "totalArea": 80.1,
+      "totalPrice": 13713920,
+      "paymentState": "PARTIALLY_PAID",
+      "status": "DELIVERED",
+      "scheduledAt": "2026-09-20T04:00:00.000Z",
+      "remaining": 1371392
+    }
+  ]
+}

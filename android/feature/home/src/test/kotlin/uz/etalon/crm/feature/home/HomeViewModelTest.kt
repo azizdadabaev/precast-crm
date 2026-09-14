@@ -18,14 +18,19 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.data.RejectedOrder
+import uz.etalon.crm.core.model.AllTimeMoney
+import uz.etalon.crm.core.model.Aov
 import uz.etalon.crm.core.model.HomeSummary
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.MonthCollected
 import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.model.PaymentState
+import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.Trend
 import uz.etalon.crm.core.model.TrendDirection
+import uz.etalon.crm.core.model.TrendPolarity
 import uz.etalon.crm.core.network.ApiException
 import java.io.IOException
 import java.math.BigDecimal
@@ -183,7 +188,7 @@ class HomeViewModelTest {
         val s = summary(
             recent = listOf(recentOrder("r1"), recentOrder("r2")),
             collectedThisMonth = Money.parse("13500000"),
-            collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UP),
+            collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UP, TrendPolarity.POSITIVE),
             collectedByMonth = (1..12).map { MonthCollected("2026-%02d".format(it), Money.parse("${it}000000")) },
         )
         val vm = viewModel(home = { Result.success(s) })
@@ -333,9 +338,12 @@ class HomeViewModelTest {
     )
 
     private fun recentOrder(id: String) = RecentOrder(
-        orderId = id, orderNumber = "ORD-$id", clientName = "Навоий Build", status = OrderStatus.PLACED,
+        orderId = id, orderNumber = "ORD-$id", clientName = "Навоий Build",
+        clientPhone = "998900000000", clientAddress = "Навоий кўча 1",
+        status = OrderStatus.PLACED,
         scheduledAt = java.time.Instant.parse("2026-09-04T06:00:00Z"),
         totalPrice = Money.parse("1000000"), remaining = Money.parse("1000000"),
+        totalArea = BigDecimal("10.000"), paymentState = PaymentState.AWAITING_PAYMENT,
     )
 
     private fun summary(
@@ -355,8 +363,20 @@ class HomeViewModelTest {
     ) = HomeSummary(
         today = today, todayArea = todayArea,
         openDiscrepancies = openDiscrepancies, openDiscrepancyTotal = openDiscrepancyTotal,
-        receivables = receivables, receivableOrders = receivableOrders,
+        receivables = receivables, receivableOrders = receivableOrders, receivablesTrend = null,
         paidOrders = paidOrders, partialOrders = partialOrders, awaitingOrders = awaitingOrders,
-        recent = recent, collectedThisMonth = collectedThisMonth, collectedTrend = collectedTrend, collectedByMonth = collectedByMonth,
+        recent = recent,
+        booked = PeriodMoney(total = Money.ZERO, count = 0, trend = null),
+        bookedAllTime = AllTimeMoney(total = Money.ZERO, count = 0),
+        collected = PeriodMoney(total = collectedThisMonth, count = 0, trend = collectedTrend),
+        collectedAllTime = AllTimeMoney(total = Money.ZERO, count = 0),
+        collectedByMonth = collectedByMonth,
+        aov = Aov(thisMonth = Money.ZERO, allTime = Money.ZERO, trend = null),
+        activeCustomers = 0,
+        bookedByMonth = emptyList(),
+        ordersByMonth = emptyList(),
+        currentMonthKey = "2026-09",
+        loadedThisMonth = null,
+        topCustomers = emptyList(),
     )
 }
