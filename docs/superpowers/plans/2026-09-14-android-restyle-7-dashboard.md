@@ -101,12 +101,32 @@ fun trendColors(trend: Trend): Pair<Color, Color>  // (fg, bg) per polarity × d
 - [ ] Frames: `home_light` re-recorded scrolled to the bottom half? — NO: one screen frame per state is enough; add `home_bottom_light` captured after `performScrollToIndex(last)`.
 - [ ] Commit `Feat(home) · payment donut, top clients, recent orders; calendar and list hand-offs; auto-refresh`.
 
-### Task 5: Web-parity walk + captures
+### Task 5: Monthly chart + month picker; region ranking (owner additions, spec §2b)
 
-- [ ] With the local dev server and the seeded owner: open the web dashboard (current month, order basis) and the phone side by side; a table in the report of every figure (hero, three rail cards + their two lines, four grid tiles, donut %, top 5 sums, four recent orders) phone vs web — all equal or the difference explained by a phone-side bug fixed in this task. Taps: Фаол мижозлар → Clients; Бугунги етказишлар → Жадвал on today with the day sheet; № → detail; Барчаси → Рўйхат.
-- [ ] Captures `captures/dashboard-*.png` (top, bottom, no-access as the seeded driver, three-button nav once). Commit only if code changed: `Fix(home) · dashboard parity walk`.
+**Files:** `core/network/.../dto/DashboardDto.kt` (+ `ordersByRegion`, `collectedByMonth[].paymentCount`), `core/data/.../mapper/DashboardMappers.kt`, `core/model/.../Dashboard.kt` (+ `RegionOrders`, `MonthCollected.paymentCount`, `HomeSummary.ordersByRegion`), `core/model/.../DashboardMetrics.kt` (new: `buildTrend`, `averageOrderValue`, `monthScope(summary, idx)`), tests; `core/designsystem/.../components/MonthColumns.kt` (new: the 12-column two-bar chart with a selected index and `onSelect`), `DashboardScreenshotTest.kt` (+ `ds_month_columns_light`); `feature/home/.../HomeViewModel.kt` (`selectedMonthIdx`, `selectMonth(idx)`, the rail/grid figures derived through `monthScope`), `HomeSections.kt` (the chart card between rail and grid; the region card after Top clients; kicker/scope labels), `strings.xml`, `HomeScreenshotTest.kt`, `HomeViewModelTest.kt`.
 
-### Task 6: Close — orphans, lint, standard command
+**Interfaces — produces:**
+```kotlin
+data class RegionOrders(val region: String, val regionUz: String, val orderCount: Int, val clientCount: Int, val booked: Money)
+fun buildTrend(current: Money, previous: Money, polarity: TrendPolarity): Trend?    // port of dashboard-metrics.ts:272: previous <= 0 → null; deltaPct = jsRound((cur − prev) / prev × 100) where jsRound(x) = floor(x + 0.5) (JS Math.round, NOT HALF_UP — they differ on negative halves); |deltaPct| < 1 → FLAT else UP/DOWN
+fun averageOrderValue(booked: Money, orders: Int): Money                             // dashboard-metrics.ts:215: 0 when orders <= 0; jsRound(booked / orders) whole UZS
+data class MonthScope(val idx: Int, val monthKey: String, val label: String, val isCurrent: Boolean,
+    val booked: PeriodMoney, val collected: PeriodMoney, val aov: Aov,
+    val bookedSeries: List<Money>, val collectedSeries: List<Money>, val aovSeries: List<Money>,   // 8 months ending at idx
+    val loaded: LoadedVolume?)
+fun monthScope(s: HomeSummary, idx: Int): MonthScope
+@Composable fun MonthColumns(booked: List<Money>, collected: List<Money>, labels: List<String>, selected: Int, current: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier)
+```
+- [ ] Strings: `home_kicker_months` «ОЙЛАР БЎЙИЧА», `home_months_sub_current` «%1$s та буюртма · сўнгги 12 ой», `home_months_sub_selected` «%1$s ойи · %2$s та буюртма», `home_legend_booked` «Буюртма қилинган», `home_legend_collected` «Тушган пул», `home_kicker_financial_month` «МОЛИЯВИЙ ҲОЛАТ · %1$s ОЙИ», `home_scope_month_orders` «%1$s та буюртма · %2$s ойи», `home_scope_month_payments` «%1$s та тўлов · %2$s ойи», `home_regions` «Ҳудудлар бўйича буюртмалар», `home_regions_sub` «Вилоят бўйича · барча вақт · %1$s та буюртма», `home_regions_clients` «%1$s та мижоз», `home_regions_empty` «Маълумот йўқ».
+- [ ] Failing tests: `DashboardMetricsTest` — `buildTrend` against the web's fixtures in `precast-crm/src/lib/dashboard-metrics.test.ts` (flat under 1 %, up, down, null previous, zero previous); `averageOrderValue` zero orders; `monthScope` for the current month equals the server's `booked/collected/aov` fields on the recorded fixture (the parity guard), for an earlier month reads the series and its sparklines end at that month; `HomeViewModelTest` — `selectMonth` re-scopes rail + loaded volume, tapping the selected month returns to current, the hero is untouched; `MonthColumns` — 12 columns, the selected one indigo/green, `onSelect(idx)` on tap, all-zero → stubs; frames `ds_month_columns_light`, `home_month_selected_light` (an earlier month picked: kicker «… · АВГ ОЙИ», first lines «… · авг ойи»), `home_regions_light` (scrolled to the region card), `home_light` re-recorded (the chart card is now on the first screen).
+- [ ] Implement; commit `Feat(home) · month-by-month chart with a month picker that re-scopes the rail; region ranking`.
+
+### Task 6: Web-parity walk + captures
+
+- [ ] With the local dev server and the seeded owner: open the web dashboard (current month, order basis) and the phone side by side; a table in the report of every figure (hero, three rail cards + their two lines, four grid tiles, donut %, top 5 sums, four recent orders, the region rows, and the rail again with LAST month selected on both) phone vs web — all equal or the difference explained by a phone-side bug fixed in this task. Taps: Фаол мижозлар → Clients; Бугунги етказишлар → Жадвал on today with the day sheet; № → detail; Барчаси → Рўйхат; a chart column → the rail re-scopes.
+- [ ] Captures `captures/dashboard-*.png` (top, chart with a past month, bottom, no-access as the seeded driver, three-button nav once). Commit only if code changed: `Fix(home) · dashboard parity walk`.
+
+### Task 7: Close — orphans, lint, standard command
 
 - [ ] Orphaned strings/components from the rebuild removed (grep-proven; `NoLegacyApiTest` and `NoRawHexTest` green); the standard command with `--rerun-tasks`; web `npx tsc --noEmit && npx vitest run` untouched but run once (no web change expected).
 - [ ] Commit `Chore(home) · dashboard phase close`.

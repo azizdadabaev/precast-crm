@@ -151,7 +151,7 @@ kickers, mono for every figure. Targets ≥ 48 dp on every tappable card/row.
 
 ## 8. Not in this phase
 
-The 12-month HeroChart and month picker; the order/delivery date-basis toggle; RegionRanking;
+The order/delivery date-basis toggle (the HeroChart month picker and RegionRanking joined the phase — §2b);
 `/api/dashboard/monthly-revenue`; `weekCapacity` and `cashOnTheRoad` (in the payload, not shown);
 the Ҳафта period; per-state money sums. A weekly endpoint and per-state sums are additive server
 work for a later slice.
@@ -167,3 +167,41 @@ work for a later slice.
   labels keep the bilingual suffixes as the brief requires.
 - R5 The no-access text is the web's verbatim line even though `viewBasic` holders also pass —
   copy parity over precision, as the brief says «copy those strings verbatim».
+
+## 2b. Owner additions (2026-09-14, after seeing the Task 3 build)
+
+### 2.3b Monthly chart + month picker (between the financial rail and the operational grid)
+- A white `xl` card «ОЙЛАР БЎЙИЧА» with 12 month columns from `bookedByMonth` / `collectedByMonth`
+  (index-aligned with `monthKeys`): per month two bars side by side — Booked (`lavender`, the
+  selected month `indigo`) and Collected (`greenBg`, selected `green`), heights ∝ value / max over
+  the window; month initials under the bars (`UZ_MONTHS_SHORT`), the current month marked; a
+  legend row «Буюртма қилинган · Тушган пул». Tapping a column SELECTS that month
+  (`selectedMonthIdx`, default `currentMonthIdx`; tapping the selected one again returns to the
+  current month). The card's sub-line reads the web's own «N та буюртма · сўнгги 12 ой» when the
+  current month is selected, else «{ой} ойи · N та буюртма» (`HeroChart.tsx:169-182`).
+- Selection re-scopes exactly what the web re-scopes (`FinancialKPIs.tsx:100-135`,
+  `dashboard/page.tsx:86-97`): the three rail cards read the SELECTED month off the series —
+  `booked = bookedByMonth[idx].booked`, `orderCount = ordersByMonth[idx].count`,
+  `collected = collectedByMonth[idx].collected`, `paymentCount = collectedByMonth[idx].paymentCount`
+  (so the wire's `paymentCount` IS decoded now), `aov = averageOrderValue(booked, orderCount)`; each
+  trend = `buildTrend(value, previousMonthValue, POSITIVE)` ported from `dashboard-metrics.ts`
+  (`previous <= 0` → null; `deltaPct = Math.round((cur − prev) / prev × 100)` with JS semantics,
+  i.e. floor(x + 0,5); flat when |deltaPct| < 1); sparklines = the 8 months ENDING at the selected
+  one; the rail kicker becomes «МОЛИЯВИЙ ҲОЛАТ · {ОЙ} ОЙИ» and each card's first line
+  «N та буюртма · {ой} ойи» (`scopeLabel`); «Юкланган ҳажм · {ой}» follows the selected month
+  (`loadedVolumeByMonth` by `monthKeys[idx]`). The receivables hero never re-scopes (point-in-time
+  balance; we keep the helper line «Ой бўйича бўлинмайди · бугунги қолдиқ»). For the CURRENT month
+  the series-based figures equal the server's `bookedThisMonth` etc. — the parity walk (Task 6)
+  asserts that equality on the phone, and a unit test asserts it on the recorded fixture.
+- The all-time lines under the rail cards do not change with the month.
+
+### 2.6b Region ranking card «Ҳудудлар бўйича буюртмалар» (after Top clients)
+- White `xl` card; header «Ҳудудлар бўйича буюртмалар», sub-line «Вилоят бўйича · барча вақт ·
+  N та буюртма» (N = Σ `orderCount`; `RegionRanking.tsx:51-53`); rows in the payload's order
+  (already ranked by orders placed): `regionUz` (or «Бошқа»), «N та мижоз» under it, right: order
+  count («N та») and booked sum (`formatMoney`) — an indigo bar ∝ orderCount / top. Empty →
+  «Маълумот йўқ» (`RegionRanking.tsx:59`). Model: `HomeSummary.ordersByRegion: List<RegionOrders(
+  region, regionUz, orderCount, clientCount, booked: Money)>`.
+
+§8 is amended: the HeroChart's month picker and RegionRanking are IN this phase (as above); the
+date-basis toggle and the daily view stay out.
