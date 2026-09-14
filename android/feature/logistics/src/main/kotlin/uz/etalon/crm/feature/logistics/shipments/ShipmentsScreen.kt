@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.ConfirmGate
@@ -62,6 +61,8 @@ import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.core.ui.format.formatScheduleDate
 import uz.etalon.crm.feature.logistics.LogisticsHeader
 import uz.etalon.crm.feature.logistics.R
+import uz.etalon.crm.feature.logistics.ROW_TITLE_GAP
+import uz.etalon.crm.feature.logistics.TAG_GAP
 import java.time.Instant
 import uz.etalon.crm.core.designsystem.R as DesignSystemR
 
@@ -443,12 +444,6 @@ private fun metaLine(sh: ShipmentLine, now: Instant): String = listOfNotNull(
     sh.driverName,
     sh.truckIdentifier,
 ).joinToString(" · ")
-
-/** Title to the tag row under it, the same 3 dp the navy `OrderRow` and the discrepancies row use. */
-private val ROW_TITLE_GAP = 3.dp
-
-/** Tag to the meta beside it. */
-private val TAG_GAP = 6.dp
 
 /** The server's refusal is a sentence, not a word: two lines beside the two buttons. */
 private const val FAILURE_LINES = 2

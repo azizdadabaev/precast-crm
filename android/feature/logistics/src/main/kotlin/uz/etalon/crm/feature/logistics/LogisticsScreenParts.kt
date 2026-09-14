@@ -217,3 +217,11 @@ private const val HINT_LINES = 4
 /** How long ruling R5's summary stays on screen before the route pops back. Long enough to read
  *  four tiles, short enough that nobody taps back to escape it. */
 internal const val RESULT_DWELL_MS = 1_200L
+
+/** Title to the tag row under it, the same 3 dp every restyled list row uses — the navy `OrderRow`
+ *  and the discrepancies row included. Shared by this module's two list rows (the drivers roster
+ *  and the shipments list) rather than declared once in each. */
+internal val ROW_TITLE_GAP = 3.dp
+
+/** Tag to the meta beside it, in those same two rows. */
+internal val TAG_GAP = 6.dp

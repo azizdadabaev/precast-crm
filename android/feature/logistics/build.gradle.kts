@@ -12,7 +12,6 @@ dependencies {
     testImplementation(project(":core:network"))
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.hilt.navigation.compose)
-    implementation(libs.compose.material.icons)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     testImplementation(libs.roborazzi)

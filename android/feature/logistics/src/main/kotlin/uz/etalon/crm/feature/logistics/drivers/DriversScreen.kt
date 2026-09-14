@@ -72,6 +72,8 @@ import uz.etalon.crm.core.ui.format.formatCountBare
 import uz.etalon.crm.core.ui.format.formatPhone
 import uz.etalon.crm.feature.logistics.LogisticsHeader
 import uz.etalon.crm.feature.logistics.R
+import uz.etalon.crm.feature.logistics.ROW_TITLE_GAP
+import uz.etalon.crm.feature.logistics.TAG_GAP
 import uz.etalon.crm.feature.logistics.tokenSwitchColors
 import uz.etalon.crm.core.designsystem.R as DesignSystemR
 
@@ -81,12 +83,6 @@ private val ROW_INSET = 6.dp
 
 /** §2's list-row avatar, the same 36 dp [uz.etalon.crm.core.designsystem.components.OrderRow] draws. */
 private val AVATAR = 36.dp
-
-/** Title to the tag row under it, the same 3 dp every restyled list row uses. */
-private val ROW_TITLE_GAP = 3.dp
-
-/** Tag to the meta beside it. */
-private val TAG_GAP = 6.dp
 
 /** The dial circle: the row's own trailing glyph, drawn at the 36 dp every icon button in a row
  *  is, inside the 48 dp slot [EtalonIconButton] reserves. */

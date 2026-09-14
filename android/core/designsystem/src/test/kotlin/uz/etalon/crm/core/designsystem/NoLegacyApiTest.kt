@@ -38,8 +38,16 @@ class NoLegacyApiTest {
      * `LocalEtalonColors` was allowed in the file that provided it. Nothing provides it any more —
      * the allowance is kept so the rule reads the way the plan states it, and so that re-adding the
      * composition local still has exactly one legal home.
+     *
+     * Keyed on the path from the repo root, not on the bare file name: a second `EtalonTheme.kt`
+     * in any other module would otherwise inherit the exemption, and "exactly one legal home" is
+     * the whole point of the entry.
      */
-    private val allowedIn = mapOf("LocalEtalonColors" to "EtalonTheme.kt")
+    private val allowedIn = mapOf(
+        "LocalEtalonColors" to
+            "core/designsystem/src/main/kotlin/uz/etalon/crm/core/designsystem/theme/EtalonTheme.kt"
+                .replace('/', File.separatorChar),
+    )
 
     private val repoRoot: File =
         generateSequence(File(".").absoluteFile) { it.parentFile }
@@ -72,10 +80,11 @@ class NoLegacyApiTest {
             .filterNot { it.path.contains(buildDir) }
             .flatMap { file ->
                 val text = file.readText()
+                val relative = file.relativeTo(repoRoot).path
                 banned.asSequence()
-                    .filter { name -> allowedIn[name] != file.name }
+                    .filter { name -> allowedIn[name] != relative }
                     .filter { name -> text.contains(name) }
-                    .map { name -> "${file.relativeTo(repoRoot).path}: $name" }
+                    .map { name -> "$relative: $name" }
             }
             .toList()
         assertTrue(
@@ -112,6 +121,15 @@ class NoLegacyApiTest {
         }
         ignored.forEach { line ->
             assertTrue(banned.none { line.contains(it) }, "should not have been flagged: $line")
+        }
+    }
+
+    /** The exemption is a path now, and a path that no longer exists exempts nothing while still
+     *  reading as a rule. Nothing else notices: the allowed file names none of the banned words
+     *  today, so a typo in it would never fail the scan above. */
+    @Test fun `the one exempted path still names a real file`() {
+        allowedIn.values.forEach { path ->
+            assertTrue(File(repoRoot, path).isFile, "the allowance points at no file: $path")
         }
     }
 }

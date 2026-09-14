@@ -81,6 +81,25 @@ internal fun switchTab(backStack: NavBackStack<NavKey>, target: NavKey) {
     while (backStack.size > 1) backStack.removeAt(0)
 }
 
+/**
+ * Pops [key] only while it is still the screen on top — the pop for a callback that can arrive
+ * late.
+ *
+ * The three camera-first routes hold ruling R5's result grid on screen for a fixed dwell before
+ * calling `onDone`, and `NavDisplay` keeps an outgoing entry composed for the whole of its exit
+ * transition. So a driver who taps back during the dwell pops his own entry, the waiting effect
+ * then resumes inside a screen that is already leaving, and an unconditional `removeLastOrNull()`
+ * would pop a SECOND entry: he asked for the order detail and would land on the orders list, or one
+ * screen past the shipments list. Comparing identity first makes the late callback a no-op — and
+ * does the same for any future delayed pop — while an ordinary back press is unaffected, because
+ * then this key IS the top.
+ *
+ * `PopIfTopTest` drives both orders: the dwell alone, and back during the dwell.
+ */
+internal fun popIfTop(backStack: NavBackStack<NavKey>, key: NavKey) {
+    if (backStack.lastOrNull() == key) backStack.removeLastOrNull()
+}
+
 /** NavDisplay's default is the saveable-state decorator alone, which leaves every entry resolving
  *  `hiltViewModel()` against the Activity's ViewModelStore. That means one shared `OrderDetailViewModel`
  *  for every `OrderDetail(id)` — the assisted `creationCallback` runs only for the first id — and an
@@ -194,10 +213,13 @@ fun SignedInShell(
                             onRecordPayment = { backStack.add(RecordPayment(k.id)) },
                         )
                     }
+                    // The three camera-first routes pop through `popIfTop` rather than straight
+                    // through `removeLastOrNull()`: their `onDone` arrives after ruling R5's dwell,
+                    // which back can beat. See `popIfTop`.
                     entry<LoadTruck> { k ->
                         LoadTruckRoute(
                             orderId = k.orderId, extraPhoto = k.extra,
-                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                            onDone = { popIfTop(backStack, k) }, onCancel = { popIfTop(backStack, k) },
                         )
                     }
                     // Registered only for an operator who may quote — the Drivers pattern: without
@@ -236,7 +258,7 @@ fun SignedInShell(
                         entry<ShipmentLoad> { k ->
                             ShipmentLoadRoute(
                                 orderId = k.orderId, shipmentId = k.shipmentId,
-                                onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                                onDone = { popIfTop(backStack, k) }, onCancel = { popIfTop(backStack, k) },
                             )
                         }
                         entry<Dispatch> { k ->
@@ -249,7 +271,7 @@ fun SignedInShell(
                     entry<DeliveryProof> { k ->
                         DeliveryProofRoute(
                             orderId = k.orderId,
-                            onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                            onDone = { popIfTop(backStack, k) }, onCancel = { popIfTop(backStack, k) },
                         )
                     }
                     entry<DeliveryLocation> { k ->
