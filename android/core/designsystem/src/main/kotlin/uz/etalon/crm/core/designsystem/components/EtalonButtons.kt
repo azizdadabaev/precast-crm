@@ -182,6 +182,10 @@ fun SecondaryButton(
  *   geometry is pinned by `ds_buttons_light`, and a phase-6 form that needs a full-width tonal
  *   button must not have to re-add it. Do not delete it as dead code.
  * @param onDark the pill sits on navy — navy2 with lavender text instead of lavender with indigo.
+ * @param leadingIcon an [uz.etalon.crm.core.designsystem.icon.EtalonIcons] glyph before the label,
+ *   for a tonal pill whose label alone does not say what it opens — the delivery location's
+ *   «Харитада очиш», which leaves the app for a map. Null everywhere else, which is every other
+ *   tonal pill in the app: a row-end offer sits beside the thing it acts on and needs no glyph.
  *
  * On light, an *enabled* tonal pill and a *disabled* [PrimaryButton] share the lavenderBg fill and
  * differ only in the text's opacity. That is §2's palette, not an accident: do not put the two side
@@ -191,6 +195,7 @@ fun SecondaryButton(
 fun TonalButton(
     text: String, onClick: () -> Unit, modifier: Modifier = Modifier,
     enabled: Boolean = true, compact: Boolean = true, onDark: Boolean = false,
+    leadingIcon: Int? = null,
 ) = EtalonButtonBase(
     onClick = onClick, enabled = enabled,
     modifier = if (compact) modifier else modifier.fillMaxWidth(),
@@ -205,7 +210,7 @@ fun TonalButton(
     border = null, onDark = onDark,
 ) {
     val fg = if (onDark) EtalonColors.lavender else EtalonColors.indigo
-    ButtonBody(text, false, null, null, if (enabled) fg else fg.copy(alpha = 0.5f), compact)
+    ButtonBody(text, false, null, leadingIcon, if (enabled) fg else fg.copy(alpha = 0.5f), compact)
 }
 
 /** Destructive: delete a shipment, remove a photo. Not in §2 — kept because five feature files

@@ -171,21 +171,20 @@ internal fun ChipTone.family() = when (this) {
 fun Chip(tone: ChipTone, text: String, modifier: Modifier = Modifier) =
     Tag(tone.family(), text, TagSurface.ROW_ON_LIGHT, modifier)
 
-// ── The six typed chips. Call [StatusTag] and friends instead; these survive so that the
-// remaining feature files compile until their screens are redrawn in phase 5.
+// ── The typed chips. Call [StatusTag] and friends instead; these survive so that the remaining
+// feature files compile until their screens are redrawn in phase 5.
 //
-// Only ONE of the five still has a production caller — [DriverStatusChip] (`DriversScreen`),
-// waiting for Task 4. Phases 2 and 3 emptied three: [StatusChip] and [PaymentChip] (the orders
-// list and order detail now draw `StatusTag`/`PaymentStateTag`), [PaymentStatusChip] (the payments
-// queue draws `PaymentStatusTag`) and [DiscrepancyStatusChip] (the discrepancies screen draws
-// `DiscrepancyStatusTag` on navy); `ShipmentStatusChip` went with the shipments list in Task 3.
-// The rest are kept only so the last screen that calls one still compiles, and go with it. ──────
+// **None of them has a production caller any more.** Phases 2 and 3 emptied four: [StatusChip] and
+// [PaymentChip] (the orders list and order detail now draw `StatusTag`/`PaymentStateTag`),
+// [PaymentStatusChip] (the payments queue draws `PaymentStatusTag`) and [DiscrepancyStatusChip]
+// (the discrepancies screen draws `DiscrepancyStatusTag` on navy); `ShipmentStatusChip` went with
+// the shipments list in Task 3, and `DriverStatusChip` with the drivers list in Task 4 — the
+// drivers row draws `StatusTag(active)` directly. The four left go with this whole file in the
+// phase's last task; nothing may add a use of one in the meantime. ──────────────────────────────
 @Composable fun StatusChip(status: OrderStatus, modifier: Modifier = Modifier) =
     StatusTag(status, TagSurface.ROW_ON_LIGHT, modifier = modifier)
 @Composable fun PaymentChip(state: PaymentState, modifier: Modifier = Modifier) =
     PaymentStateTag(state, TagSurface.ROW_ON_LIGHT, modifier)
-@Composable fun DriverStatusChip(active: Boolean, modifier: Modifier = Modifier) =
-    StatusTag(active, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun PaymentStatusChip(status: PaymentStatus, modifier: Modifier = Modifier) =
     PaymentStatusTag(status, TagSurface.ROW_ON_LIGHT, modifier)
 @Composable fun DiscrepancyStatusChip(status: DiscrepancyStatus, modifier: Modifier = Modifier) =

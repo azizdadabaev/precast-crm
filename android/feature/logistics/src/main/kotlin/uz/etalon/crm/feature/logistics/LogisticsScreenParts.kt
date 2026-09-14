@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.SwitchColors
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -174,6 +176,33 @@ internal fun ResultTileGrid(cells: List<Pair<String, String>>) = Column(
         }
     }
 }
+
+/**
+ * §2's switch in the system's palette — the one every switch in this module wears: the dispatch
+ * form's «Ҳайдовчи нақд йиғади», the delivery proof's two, and the drivers list's active flag.
+ * One table rather than three copies of the same six tokens, so a change to the switch reaches
+ * every switch in the module.
+ *
+ * The disabled pair is the [uz.etalon.crm.core.designsystem.components.PrimaryButton]'s own
+ * disabled skin — `lavenderBg` under a white thumb — rather than M3's scheme-derived default,
+ * which is the one thing here that would not be a token. Only the drivers list disables a switch;
+ * the two form switches are always live, so nothing that exists today repaints.
+ */
+@Composable
+internal fun tokenSwitchColors(): SwitchColors = SwitchDefaults.colors(
+    checkedThumbColor = EtalonColors.onDark,
+    checkedTrackColor = EtalonColors.indigo,
+    checkedBorderColor = EtalonColors.indigo,
+    uncheckedThumbColor = EtalonColors.ink3,
+    uncheckedTrackColor = EtalonColors.page,
+    uncheckedBorderColor = EtalonColors.surfaceBorder,
+    disabledCheckedThumbColor = EtalonColors.surface,
+    disabledCheckedTrackColor = EtalonColors.lavenderBg,
+    disabledCheckedBorderColor = EtalonColors.lavenderBg,
+    disabledUncheckedThumbColor = EtalonColors.ink3,
+    disabledUncheckedTrackColor = EtalonColors.page,
+    disabledUncheckedBorderColor = EtalonColors.surfaceBorder,
+)
 
 /** The review thumbnail, the same 104 dp square [uz.etalon.crm.core.designsystem.components.PhotoStrip]
  *  draws a receipt at. */

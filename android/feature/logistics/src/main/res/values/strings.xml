@@ -56,13 +56,14 @@
     <string name="delivery_driver_returned">Ҳайдовчи қайтди</string>
     <string name="action_mark_delivered">Етказилди</string>
     <string name="drivers_title">Ҳайдовчилар</string>
+    <!-- Under the title: how many rows the current filter matched. -->
+    <string name="drivers_subtitle">%1$s ҳайдовчи</string>
     <string name="drivers_empty">Ҳайдовчи йўқ.</string>
-    <string name="drivers_active_only">Фақат фаоллар</string>
+    <!-- The list's one filter chip. It is a server-side filter, so the count above moves with it. -->
+    <string name="drivers_active_only">Фаол</string>
     <string name="driver_active_dispatches">%1$d та фаол жўнатма</string>
     <string name="driver_discrepancies_30d">30 кунда %1$d та тафовут</string>
     <string name="action_add_driver">Ҳайдовчи қўшиш</string>
-    <string name="action_deactivate_driver">Ўчириш</string>
-    <string name="action_activate_driver">Фаоллаштириш</string>
     <string name="driver_name">Исм</string>
     <string name="driver_phone">Телефон</string>
     <string name="driver_notes">Изоҳ</string>
@@ -78,17 +79,22 @@
     <string name="action_dispatch">Жўнатиш</string>
     <string name="offline_action_blocked">Интернет йўқ — бу амал онлайн бажарилади</string>
     <string name="location_title">Етказиш жойи</string>
+    <!-- The white card over the form: the pin the order actually carries. -->
+    <string name="location_pin_title">Жой</string>
+    <!-- Hands the coordinates to whatever map app the phone has (the `geo:` intent). -->
+    <string name="location_open_map">Харитада очиш</string>
     <string name="location_my_position">Менинг жойим</string>
-    <string name="location_paste_link">Харита ҳаволасини қўйинг</string>
-    <string name="location_resolve">Ҳал қилиш</string>
-    <string name="location_manual">Координаталар (кенглик, узунлик)</string>
+    <string name="location_paste_link">Харита ҳаволаси</string>
+    <string name="location_resolve">Топиш</string>
+    <string name="location_manual">Координаталар</string>
     <string name="location_manual_hint">Мисол: 41.311, 69.279 ёки 41,311 69,279</string>
-    <string name="location_label">Белги (масалан «кўк дарвоза»)</string>
+    <string name="location_apply">Қўллаш</string>
+    <string name="location_label">Белги</string>
+    <string name="location_label_hint">масалан «кўк дарвоза»</string>
     <string name="location_none">Жой белгиланмаган</string>
     <string name="location_permission_needed">Жойни аниқлаш учун рухсат керак</string>
     <string name="location_approximate_only">Жой тахминий аниқланади. Аниқроқ бўлиши учун созламалардан «Аниқ жой» рухсатини беринг ёки координатани қўлда киритинг.</string>
     <string name="location_failed">Жойни аниқлаш муваффақиятсиз тугади</string>
-    <string name="logistics_action_navigate">Навигация</string>
     <string name="action_clear_location">Тозалаш</string>
     <string name="logistics_action_save">Сақлаш</string>
 </resources>

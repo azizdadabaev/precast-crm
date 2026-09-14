@@ -39,8 +39,12 @@ import uz.etalon.crm.feature.logistics.delivery.DeliveryProofScreen
 import uz.etalon.crm.feature.logistics.delivery.DeliveryProofUiState
 import uz.etalon.crm.feature.logistics.dispatch.DispatchScreen
 import uz.etalon.crm.feature.logistics.dispatch.DispatchUiState
+import uz.etalon.crm.feature.logistics.drivers.DriversScreen
+import uz.etalon.crm.feature.logistics.drivers.DriversUiState
 import uz.etalon.crm.feature.logistics.loadtruck.LoadTruckScreen
 import uz.etalon.crm.feature.logistics.loadtruck.LoadTruckUiState
+import uz.etalon.crm.feature.logistics.location.DeliveryLocationScreen
+import uz.etalon.crm.feature.logistics.location.DeliveryLocationUiState
 import uz.etalon.crm.feature.logistics.shipments.Allowance
 import uz.etalon.crm.feature.logistics.shipments.ShipmentLoadScreen
 import uz.etalon.crm.feature.logistics.shipments.ShipmentLoadUiState
@@ -60,6 +64,10 @@ private const val DELIVERED = "Етказилди"
 
 /** `action_dispatch`, and — the same word — `dispatch_title` one header above it. */
 private const val DISPATCH = "Жўнатиш"
+
+/** `action_add_driver`: the drivers bar's own button, and — once it is open — the create sheet's
+ *  heading, which is a plain `Text` and so is never the node [clickButton] finds. */
+private const val ADD_DRIVER = "Ҳайдовчи қўшиш"
 
 /**
  * Taps the BUTTON carrying [label], not the heading or the status tag that happens to say the same
@@ -94,8 +102,9 @@ private fun ShellFrame(content: @Composable () -> Unit) =
     CompositionLocalProvider(LocalNavPillInset provides SHELL_NAV_PILL_INSET, content = content)
 
 /**
- * The camera-first trio and the shipments list, as §5.2 draws them: a header row, white cards, the
- * load list the driver counts against, and a sticky bar that carries the job's one action.
+ * The whole logistics module as §5.2 draws it — the camera-first trio, the shipments list, the
+ * dispatch form, the drivers list and the delivery location: a header row, white cards, the load
+ * list the driver counts against, and a sticky bar that carries each job's one action.
  *
  * Each screen is photographed through its own stateless composable — `LoadTruckScreen(s, …)`,
  * `ShipmentLoadScreen(s, …)`, `DeliveryProofScreen(s, …)` — rather than through a copy of its
@@ -374,6 +383,96 @@ class LogisticsScreenshotTest {
         rule.waitForIdle()
         captureScreenRoboImage("screenshots/dispatch_gate_light.png")
     }
+
+    // ── Drivers: the fleet as clients-style avatar rows ────────────────────────
+
+    /** One retired driver among four working ones, and a workload on two of them, so the frame
+     *  pins both tags, the meta line's three parts and the phone-only row at once. */
+    private fun driversState() = DriversUiState(
+        drivers = listOf(
+            driver("d1", "Дилшод Раҳимов", "998901112233").copy(activeDispatchCount = 2, discrepancyCount30d = 1),
+            driver("d2", "Аброр Юсупов", "998901112244").copy(activeDispatchCount = 1),
+            driver("d3", "Жасур Тошматов", "998901112255"),
+            driver("d4", "Каримов Шерзод Абдуллаевич", "998901112266"),
+            driver("d5", "Ботир Эргашев", "998901112277").copy(active = false),
+        ),
+        activeOnly = false,
+    )
+
+    @Composable
+    private fun Drivers(s: DriversUiState, canManage: Boolean = true) = ShellFrame {
+        DriversScreen(
+            s = s, canManage = canManage, onBack = {}, onRefresh = {},
+            onSetActiveOnly = {}, onCreate = { _, _, _ -> }, onSetActive = { _, _ -> },
+        )
+    }
+
+    private fun shootDrivers(name: String, s: DriversUiState = driversState()) {
+        rule.setContent { EtalonTheme { Drivers(s) } }
+        rule.onRoot().captureRoboImage("screenshots/drivers_$name.png")
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp") fun driversLight() = shootDrivers("light")
+
+    /** The longest name in the fixture beside a tag, a dial and a switch: at font scale 1,3 the
+     *  row must ellipsize rather than push the two controls off the card. */
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun driversLargeFont() = shootDrivers("font13")
+
+    /**
+     * The create sheet the bar opens — reached by tapping «Ҳайдовчи қўшиш» rather than composed
+     * directly, because the sheet is that button's own state. A whole-screen capture, since a
+     * `ModalBottomSheet` lives in a window of its own.
+     */
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test @Config(qualifiers = "w411dp-h891dp") fun driverCreateLight() {
+        rule.setContent { EtalonTheme { Drivers(driversState()) } }
+        rule.clickButton(ADD_DRIVER)
+        rule.waitForIdle()
+        captureScreenRoboImage("screenshots/driver_create_light.png")
+    }
+
+    // ── Delivery location: the pin card over the three ways to set one ──────────
+
+    private fun locationState() = DeliveryLocationUiState(
+        lat = 41.311081,
+        lng = 69.240562,
+        label = "Кўк дарвоза, 2-йўлак",
+        linkInput = "https://maps.app.goo.gl/aBcDeFgH",
+        orderResource = Resource.Success(order()),
+    )
+
+    @Composable
+    private fun DeliveryLocation(s: DeliveryLocationUiState, barVisible: Boolean = true) = ShellFrame {
+        DeliveryLocationScreen(
+            s = s, onBack = {}, onRefresh = {}, onUseMyLocation = {}, onLinkInputChange = {},
+            onResolveLink = {}, onManualInputChange = {}, onApplyManualInput = {},
+            onLabelChange = {}, onSave = {}, onClear = {},
+            // Robolectric reports the ime inset as absent whatever is focused, so the bar is
+            // passed in rather than read from the window (ruling R13's seam).
+            barVisible = barVisible,
+        )
+    }
+
+    private fun shootDeliveryLocation(
+        name: String,
+        s: DeliveryLocationUiState = locationState(),
+        barVisible: Boolean = true,
+    ) {
+        rule.setContent { EtalonTheme { DeliveryLocation(s, barVisible) } }
+        rule.onRoot().captureRoboImage("screenshots/delivery_location_$name.png")
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp") fun deliveryLocationLight() = shootDeliveryLocation("light")
+
+    /** No pin on the order: «Жой белгиланмаган» inside the same card, «Харитада очиш» dead beside
+     *  it, and both bar buttons refused — there is nothing to save and nothing to clear. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun deliveryLocationEmptyLight() = shootDeliveryLocation(
+        "empty_light",
+        DeliveryLocationUiState(orderResource = Resource.Success(order())),
+    )
+
+    @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun deliveryLocationLargeFont() =
+        shootDeliveryLocation("font13")
 
     /**
      * The order behind all four screens: two beam lengths across three rooms, so «Юклаш рўйхати»

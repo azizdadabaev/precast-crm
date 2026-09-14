@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +63,7 @@ import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.feature.logistics.LogisticsCard
 import uz.etalon.crm.feature.logistics.LogisticsHeader
 import uz.etalon.crm.feature.logistics.R
+import uz.etalon.crm.feature.logistics.tokenSwitchColors
 import uz.etalon.crm.core.designsystem.R as DesignSystemR
 
 /**
@@ -341,18 +341,7 @@ private fun TokenSwitch(checked: Boolean, onCheckedChange: (Boolean) -> Unit) = 
     Modifier.fillMaxWidth().heightIn(min = EtalonSpace.minTouch),
     verticalAlignment = Alignment.CenterVertically,
 ) {
-    Switch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        colors = SwitchDefaults.colors(
-            checkedThumbColor = EtalonColors.onDark,
-            checkedTrackColor = EtalonColors.indigo,
-            checkedBorderColor = EtalonColors.indigo,
-            uncheckedThumbColor = EtalonColors.ink3,
-            uncheckedTrackColor = EtalonColors.page,
-            uncheckedBorderColor = EtalonColors.surfaceBorder,
-        ),
-    )
+    Switch(checked = checked, onCheckedChange = onCheckedChange, colors = tokenSwitchColors())
 }
 
 /** §3.4's picker chevron. */
