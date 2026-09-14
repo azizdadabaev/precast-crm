@@ -132,3 +132,19 @@
 - Spec coverage: D9 entry points (R1, Task 5), §5.2 rows Dispatch (T3), Drivers (T4), LoadTruck/ShipmentLoad/DeliveryProof (T2), Shipments (T3), DeliveryLocation (T4); §5.1a Load job (R7, T2); the kept components restyled (T1: PhotoCapture; T6: keypad/region picker's last Material reads); §8 testing (frames per screen, gates tested, the lint).
 - Type consistency: `StatusTag(ShipmentStatus)`/`StatusTag(active)` (T1) used by T3/T4; `LoadListCard` (T2, extracted from the detail) used by LoadTruck and ShipmentLoad; `ConfirmTile` grids (R5) in T2; `DriverPicker` (existing) in T3; `PhoneDigitsMask` (phase 3) in T4.
 - Placeholders: none — every step names files, strings and frames; the two "decide" items (the 1.3 label, the Lightbox scrim) are rulings the executor makes and ledgers.
+
+## Execution record (phase CLOSED 2026-09-14 at bf0b0a5 — 1520 Android tests, 157 baselines)
+
+Rulings taken while running (the ledger is deleted with the workspace; these are the ones later phases need):
+- **R11** `LoadListCard` moved from the order detail into `:core:designsystem` (read-only overload + a slot overload for ShipmentLoad's steppers); `order_detail_*` frames byte-identical.
+- **R12** The load button reads «Юкланди»; the long form «Юкланди деб белгилаш» stays as the content description.
+- **R13** `timelineFor`/`StepSpec` + the step labels moved to `:core:designsystem` (`ds_step_*`).
+- **R14** DeliveryLocation has NO in-app map (the plan's 220 dp map card and the API-key note were wrong): a white pin card with coordinates + label + «Харитада очиш» → the system `geo:` intent; empty → «Жой белгиланмаган» in the same card.
+- Gate facts: DeliveryProof and ShipmentLoad hand the photo to the outbox, so their gates have no offline term; Dispatch refuses offline (its routes are not idempotent) — gate = `!isOffline && (shipmentId != null || amount > 0)`; every submit carries `!done` so the R5 dwell cannot be re-entered.
+- Shipments keeps the production nouns «Жўнатмалар»/«Жўнатма N» (not the brief's «Юклар»); shipment delete is a long press on a PENDING row only.
+- After the R5 dwell the camera-side routes (LoadTruck, ShipmentLoad, DeliveryProof, Dispatch) pop through `popIfTop(backStack, key)` — back pressed during the dwell no longer pops two entries (`PopIfTopTest`).
+- `NoLegacyApiTest` (`:core:designsystem`, wired as a Gradle test input like `NoRawHexTest`) forbids the thirteen legacy names repo-wide; `LegacyTokens.kt`, `StatusChip.kt`, `StatusStripeCard.kt`, `SectionLabel.kt` and the `EtalonType.mono*` aliases are gone.
+
+Parked with rulings (not defects of this phase): `TokenSwitch` duplicated while only its colours are shared; the viewfinder caps its title at one line; the R5 result grid has a baseline on one screen (the behaviour test covers the dwell); the driver create sheet shares `s.error` with the list refresh (needs a ViewModel split); the R5 tile caption contrast on the light page (owner judges by eye); `popIfTop` compares data-class keys structurally (a stale callback after re-opening the identical route inside the exit window is theoretical).
+
+Owner-facing (decisions, not code): the seeded DRIVER role holds only `order.view`/`dispatch.view`/`payment.record`, so a driver's phone is read-only until the owner grants `order.edit`/`dispatch.create`; a driver's Home shows no deliveries because `/api/dashboard` is permission-gated and no ungated "my deliveries today" endpoint exists; a driver's note for a PARTIAL cash collection has no server-side home (the route keeps the note only for «no cash»).
