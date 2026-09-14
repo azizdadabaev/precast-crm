@@ -39,7 +39,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import uz.etalon.crm.core.designsystem.components.Avatar
-import uz.etalon.crm.core.designsystem.components.CustodyChain
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.EtalonToast
@@ -391,11 +390,6 @@ private fun PaymentCard(
         item.rejectionReason?.let {
             Text(stringResource(R.string.queue_rejection_reason, it), style = EtalonType.meta, color = EtalonColors.red)
         }
-        // Only where the money actually changed hands. A chain of ONE stage is a single avatar
-        // standing alone under the row, repeating the name the meta line has already given — which
-        // is what every office payment in `2b-payments.png` would draw. Two or more stages is a
-        // hand-off, and that is the thing the chain exists to show.
-        if (item.custody.stages > 1) CustodyChain(item.custody)
     }
 }
 

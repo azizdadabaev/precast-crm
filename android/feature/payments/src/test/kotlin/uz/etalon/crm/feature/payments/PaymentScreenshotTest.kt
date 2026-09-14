@@ -312,8 +312,9 @@ class PaymentScreenshotTest {
         ),
     )
 
-    /** The kept lines: expected, the red shortfall, and the custody chain under them. One pending
-     *  payment, and the switch says one — the frame is about the row, not about a capped list. */
+    /** The kept lines: expected and the red shortfall (the custody chain left the rows on 2026-09-14 —
+     *  the meta line already names the recorder). One pending payment, and the switch says one — the
+     *  frame is about the row, not about a capped list. */
     @Test @Config(qualifiers = "w411dp-h891dp") fun queueShortfallLight() = shootQueue(
         "shortfall_light",
         queueState(items = listOf(shortfallItem()), counts = ONE_PENDING),
