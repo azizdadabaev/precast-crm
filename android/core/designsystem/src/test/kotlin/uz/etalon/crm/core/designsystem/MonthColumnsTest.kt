@@ -138,6 +138,51 @@ class MonthColumnsTest {
         assertEquals(listOf(0, 5), picked)
     }
 
+    /**
+     * The index space is the PAYLOAD's in the LONG direction too (finding I1): a series longer
+     * than a year is cut to its last [MONTH_COLUMNS], and the months the window drops off the
+     * left must be added back before the accent pair, the dot and a tap agree on which month a
+     * column is.
+     *
+     * Thirteen months are drawn in twelve columns, so the earliest is dropped and payload month
+     * `k` (`k >= 1`) is drawn in column `k - 1`. Before this was fixed the highlight, the dot and
+     * the tap all read column `i` as month `i` — one month left of the one actually drawn there —
+     * and a `current`/`selected` of 12 or more never marked any column at all.
+     */
+    @Test fun `with a long series the marks and the taps land on the payload's own months`() {
+        val picked = mutableListOf<Int>()
+        val thirteen = (0 until 13).map { "m$it" }
+        show(
+            booked = List(13) { "${it + 1}0000000" },
+            collected = List(13) { "${it + 1}000000" },
+            monthLabels = thirteen,
+            selected = 5,                                    // drawn in column 4
+            current = 12,                                    // the last month, drawn in column 11
+            onSelect = { picked += it },
+        )
+
+        // The marks sit on the labels they belong to, not the column with the same NUMBER.
+        rule.onNode(
+            SemanticsMatcher.expectValue(MonthColumnSelected, true) and hasAnyDescendant(hasText(thirteen[5])),
+            useUnmergedTree = true,
+        ).assertExists()
+        rule.onNode(
+            SemanticsMatcher.expectValue(MonthColumnCurrent, true) and hasAnyDescendant(hasText(thirteen[12])),
+            useUnmergedTree = true,
+        ).assertExists()
+        rule.onNodeWithTag(monthColumnTag(4), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnSelected, true))
+        rule.onNodeWithTag(monthColumnTag(5), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnSelected, false))
+        rule.onNodeWithTag(monthColumnTag(11), useUnmergedTree = true)
+            .assert(SemanticsMatcher.expectValue(MonthColumnCurrent, true))
+
+        // Tapping the k-th drawn column reports payload index k + 1, the month the window dropped.
+        rule.onNodeWithTag(monthColumnTag(0)).performClick()
+        rule.onNodeWithTag(monthColumnTag(7)).performClick()
+        assertEquals(listOf(1, 8), picked)
+    }
+
     /** A padding column has no month behind it, so it is not a control at all — it can neither
      *  report a month that does not exist nor offer TalkBack a button with no name. */
     @Test fun `a padding column is not tappable`() {

@@ -237,7 +237,8 @@ class PaymentScreenshotTest {
     )
 
     /** The one payment that came back short of what the dispatch expected — the kept lines the
-     *  capture has no row for: «Кутилган …», «Камомад …» in red, and the custody chain. */
+     *  capture has no row for: «Кутилган …» and «Камомад …» in red (the custody chain left the
+     *  rows on 2026-09-14). */
     private fun shortfallItem() = queueItem(
         id = "pay9", orderNumber = "2026-09-0028", client = "Юсупова Дилноза Акрамовна",
         amount = "7500000.00", method = PaymentMethod.CASH, recordedBy = "Жасур",

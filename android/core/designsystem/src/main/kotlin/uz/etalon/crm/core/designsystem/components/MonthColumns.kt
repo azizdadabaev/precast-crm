@@ -133,9 +133,12 @@ private var SemanticsPropertyReceiver.monthColumnCurrent by MonthColumnCurrent
  * twelve columns all the same, left-padded with empty ones so the card never changes shape — but
  * [selected], [current] and [onSelect] all speak in the PAYLOAD's indices, never in the drawn
  * column's. The padding offset is applied here, once, and undone before [onSelect] fires; a tap on
- * a padding column reports nothing at all, because there is no month under it. (Getting this wrong
- * put the accent pair, the today-dot and the tap on three different months as soon as a payload
- * arrived short.)
+ * a padding column reports nothing at all, because there is no month under it. A payload LONGER
+ * than twelve is cut to its last [MONTH_COLUMNS] the same way [window] cuts the bars, and the
+ * dropped months are added back before comparing against [selected]/[current] and before
+ * [onSelect] fires, so column `i` always reports the same month it draws. (Getting either
+ * direction wrong put the accent pair, the today-dot and the tap on three different months as
+ * soon as a payload arrived short or long.)
  *
  * @param booked per month, oldest first. Longer series are cut to their last [MONTH_COLUMNS];
  *   shorter ones are left-padded with empty columns, so the chart is always twelve wide.
@@ -159,11 +162,15 @@ fun MonthColumns(
     val collectedWindow = window(collected)
     val labelWindow = List(MONTH_COLUMNS - labels.takeLast(MONTH_COLUMNS).size) { "" } +
         labels.takeLast(MONTH_COLUMNS)
-    // How many empty columns stand before the first real month — the one offset between the
-    // caller's index space and the drawn one. Taken off the longest series so that a payload whose
-    // arrays disagree in length pads by the least, rather than hiding months off the left edge.
-    val pad = MONTH_COLUMNS - maxOf(booked.size, collected.size, labels.size)
-        .coerceIn(0, MONTH_COLUMNS)
+    // The longest of the three series decides both offsets, so a payload whose arrays disagree in
+    // length pads or drops by the least, rather than hiding months off an edge.
+    val n = maxOf(booked.size, collected.size, labels.size)
+    // How many empty columns stand before the first real month — the one offset a SHORT payload
+    // needs between the caller's index space and the drawn one.
+    val pad = maxOf(0, MONTH_COLUMNS - n)
+    // How many leading months a LONG payload's window cuts off — the offset that has to be added
+    // back on top of `pad` so column i still reports the same month it draws.
+    val drop = maxOf(0, n - MONTH_COLUMNS)
     // One denominator over both series — see the KDoc.
     val max = (bookedWindow + collectedWindow).maxOrNull() ?: Money.ZERO
 
@@ -176,7 +183,7 @@ fun MonthColumns(
             // The month this column draws, in the CALLER's index space. Negative on a padding
             // column, which has no month behind it and is therefore marked by nothing and reports
             // nothing.
-            val month = i - pad
+            val month = i - pad + drop
             MonthColumn(
                 column = i,
                 month = month,

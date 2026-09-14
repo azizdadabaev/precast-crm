@@ -208,20 +208,13 @@ data class HomeUiState(
      *  a rejection that showed no badge would sit unread behind a bell that looked idle. */
     val outboxBadge: Int get() = pendingUploads + rejectedOrders.size
 
-    /** A genuine "nothing scheduled today" — never true while loading, while an error banner
-     *  shows, or without dashboard access. That last exclusion matters: without it, a DRIVER
-     *  reading this text sees «Бугунга буюртма йўқ» when the truth is "cannot check", which may
-     *  include their own deliveries. See [showNoAccessState] for what renders instead. */
-    val showEmptyState: Boolean get() = permissionsResolved && hasDashboardAccess && today.isEmpty() && !loading && error == null
-
-    /** The withheld-permission case: a *different* fact from [showEmptyState], and the two must
-     *  never share a string. Never an error affordance — the operator cannot act on a permission
-     *  they don't hold, so a retry-capable red banner here would be noise, not help. */
+    /** The withheld-permission case. Never an error affordance — the operator cannot act on a
+     *  permission they don't hold, so a retry-capable red banner here would be noise, not help. */
     val showNoAccessState: Boolean get() = permissionsResolved && !hasDashboardAccess && !loading && error == null
 
-    /** The recent card's «Ҳали буюртма йўқ» follows the same rule as [showEmptyState]: it may only
-     *  appear once a permitted fetch has actually settled, so it never stands in for "still
-     *  loading" or for a refresh that failed. Until then the card is not drawn at all. */
+    /** The recent card's «Ҳали буюртма йўқ»: it may only appear once a permitted fetch has
+     *  actually settled, so it never stands in for "still loading" or for a refresh that failed.
+     *  Until then the card is not drawn at all. */
     val showRecentEmpty: Boolean get() = permissionsResolved && hasDashboardAccess && recent.isEmpty() && !loading && error == null
 }
 
@@ -243,10 +236,10 @@ fun interface HomeReopenRejectedOrderUseCase { suspend operator fun invoke(id: S
  * neither gets a 403 for the *whole* payload, not a trimmed one, and `ROLE_TEMPLATES.DRIVER`
  * holds neither. There is no second, ungated endpoint this slice can read today's deliveries
  * from, so for that population "everyone sees the Бугун column" means the column renders with a
- * distinct "cannot check" state — [HomeUiState.showNoAccessState] — never the "nothing scheduled"
- * text [HomeUiState.showEmptyState] uses, and never an error banner either. The operator's own
- * outbox status (a local, permission-free read) still shows regardless. This is a deliberate
- * deviation from a literal reading of the brief; see the Task 7/8 report for the evidence.
+ * distinct "cannot check" state — [HomeUiState.showNoAccessState] — never an error banner. The
+ * operator's own outbox status (a local, permission-free read) still shows regardless. This is a
+ * deliberate deviation from a literal reading of the brief; see the Task 7/8 report for the
+ * evidence.
  */
 open class HomeViewModel(
     private val home: HomeUseCase,
