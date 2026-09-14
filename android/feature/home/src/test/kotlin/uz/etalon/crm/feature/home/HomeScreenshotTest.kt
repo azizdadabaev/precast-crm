@@ -2,7 +2,6 @@ package uz.etalon.crm.feature.home
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -19,11 +18,15 @@ import org.robolectric.annotation.GraphicsMode
 import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.designsystem.components.LocalNavPillInset
 import uz.etalon.crm.core.designsystem.theme.EtalonTheme
+import uz.etalon.crm.core.model.AllTimeMoney
+import uz.etalon.crm.core.model.Aov
+import uz.etalon.crm.core.model.LoadedVolume
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.MonthBooked
+import uz.etalon.crm.core.model.MonthOrders
 import uz.etalon.crm.core.model.OrderStatus
-import uz.etalon.crm.core.model.PaymentState
-import uz.etalon.crm.core.model.RecentOrder
+import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.Role
 import uz.etalon.crm.core.model.TodayDelivery
 import uz.etalon.crm.core.model.Trend
@@ -37,10 +40,12 @@ import java.time.Instant
 private val SHELL_NAV_PILL_INSET = 84.dp
 
 /**
- * `2b-home.png` reproduced with the data the server actually sends (rulings R1 and R2), so the
- * reviewer can lay the two images side by side: brand row, «Бошқарув» over its date line, the KPI
- * row with the third card peeking, the navy «Бугунги етказиш» sheet with its count pill, and the
- * white «Сўнгги буюртмалар» card.
+ * Design §2's dashboard, top half: the app-bar chrome over today's date, the navy receivables
+ * hero, the financial rail and the operational 2×2 — drawn with the data the server actually
+ * sends, so the reviewer can lay the frame beside the web dashboard and compare figure for figure.
+ *
+ * §2.5–§2.7 (the payment donut, the top clients and the recent orders) are not built yet and are
+ * therefore not in these frames.
  *
  * **The nav pill is not in these frames, and neither is its band.** `HomeScreen` is stateless and
  * knows nothing about the shell that draws the pill over it; the clearance it keeps for the pill
@@ -66,6 +71,8 @@ class HomeScreenshotTest {
             status = OrderStatus.IN_PRODUCTION,
             totalPrice = Money.parse("18420000.00"), remaining = Money.parse("18420000.00"),
         ),
+        // Two of the four are already out of the yard, so §2.4's segment bar is neither empty nor
+        // full — the two states the bar's own arithmetic is most likely to confuse.
         TodayDelivery(
             orderId = "o2", orderNumber = "2026-09-0003", clientName = "Yusupov & Sons",
             clientAddress = "Бухоро, Эски шаҳар", area = BigDecimal("78.70"),
@@ -75,12 +82,9 @@ class HomeScreenshotTest {
         TodayDelivery(
             orderId = "o3", orderNumber = "2026-09-0002", clientName = "BuildPro Group",
             clientAddress = "Тошкент, Мирзо-Улуғбек", area = BigDecimal("42.60"),
-            status = OrderStatus.DISPATCHED,
+            status = OrderStatus.DELIVERED,
             totalPrice = Money.parse("7340840.00"), remaining = Money.parse("4340840.00"),
         ),
-        // Canceled, with its whole total still unpaid: the row must draw neither «қолди 18 000 000»
-        // nor «тўланган» (`OrderStatus.owesNothing`). Without one in the fixture that branch was
-        // written but never photographed.
         TodayDelivery(
             orderId = "o4", orderNumber = "2026-09-0001", clientName = "Navoi Build",
             clientAddress = "Навоий, Шимолий", area = BigDecimal("18.00"),
@@ -89,67 +93,90 @@ class HomeScreenshotTest {
         ),
     )
 
-    private val recent = listOf(
-        RecentOrder(
-            orderId = "o5", orderNumber = "2026-09-0005", clientName = "Fergana Dom",
-            clientPhone = "998901112233", clientAddress = "Фарғона, Марказ",
-            status = OrderStatus.PLACED, scheduledAt = Instant.parse("2026-09-04T06:00:00Z"),
-            totalPrice = Money.parse("6210000.00"), remaining = Money.parse("6210000.00"),
-            totalArea = BigDecimal("36.50"), paymentState = PaymentState.AWAITING_PAYMENT,
-        ),
-        RecentOrder(
-            orderId = "o1", orderNumber = "2026-09-0004", clientName = "Tashkent Tower LLC",
-            clientPhone = "998901234567", clientAddress = "Тошкент, Юнусобод",
-            status = OrderStatus.IN_PRODUCTION, scheduledAt = Instant.parse("2026-09-02T06:00:00Z"),
-            totalPrice = Money.parse("18420000.00"), remaining = Money.parse("18420000.00"),
-            totalArea = BigDecimal("108.20"), paymentState = PaymentState.PARTIALLY_PAID,
-        ),
-        // The recent card's own CANCELED branch — the card draws only its first four rows, so the
-        // canceled one has to be inside them to reach the baseline. It takes the slot Yusupov &
-        // Sons held, which the today sheet above still shows.
-        RecentOrder(
-            orderId = "o4", orderNumber = "2026-09-0001", clientName = "Navoi Build",
-            clientPhone = "998930011223", clientAddress = "Навоий, Шимолий",
-            status = OrderStatus.CANCELED, scheduledAt = Instant.parse("2026-09-01T06:00:00Z"),
-            totalPrice = Money.parse("3003520.00"), remaining = Money.parse("3003520.00"),
-            totalArea = BigDecimal("18.00"), paymentState = PaymentState.AWAITING_PAYMENT,
-        ),
-        RecentOrder(
-            orderId = "o6", orderNumber = "2026-08-0001", clientName = "Karimov LLC",
-            clientPhone = "998935554466", clientAddress = "Самарқанд, Регистон",
-            status = OrderStatus.DELIVERED, scheduledAt = Instant.parse("2026-08-28T06:00:00Z"),
-            totalPrice = Money.parse("4162500.00"), remaining = Money.ZERO,
-            totalArea = BigDecimal("26.90"), paymentState = PaymentState.FULLY_PAID,
-        ),
-    )
+    /** Twelve months of bookings and their order counts, the current one the highest — the shape
+     *  the rail's three sparklines and the AOV division are drawn from. */
+    private val bookedByMonth = listOf(
+        "104000000", "121000000", "96000000", "142000000", "133000000", "158000000",
+        "147000000", "176000000", "168000000", "191000000", "208000000", "184200000",
+    ).mapIndexed { i, v -> MonthBooked("2026-%02d".format(i + 1), Money.parse(v)) }
 
-    /** Twelve months, the current one the highest — the shape the sparkline's current bar needs. */
+    private val ordersByMonth = listOf(9, 11, 8, 13, 12, 15, 13, 16, 14, 17, 18, 12)
+        .mapIndexed { i, n -> MonthOrders("2026-%02d".format(i + 1), n) }
+
     private val collectedByMonth = listOf(
         "5400000", "6100000", "4800000", "7200000", "6600000", "8100000",
         "7400000", "9200000", "8700000", "10400000", "11900000", "13500000",
-    ).map(Money::parse)
+    ).map { Money.parse(it).amount }
 
-    private fun tiles() = HomeTiles(
-        todayCount = today.size,
+    private fun dashboard() = HomeDashboard(
+        receivables = Money.parse("53268760.00"),
+        receivableOrders = 6,
+        paidOrders = 317,
+        partialOrders = 13,
+        awaitingOrders = 23,
+        booked = PeriodMoney(
+            total = Money.parse("184200000.00"), count = 12,
+            trend = Trend(BigDecimal("8"), TrendDirection.UP, TrendPolarity.POSITIVE),
+        ),
+        bookedAllTime = AllTimeMoney(total = Money.parse("1284000000.00"), count = 512),
+        bookedSeries = bookedByMonth.takeLast(8).map { it.booked.amount },
+        collected = PeriodMoney(
+            total = Money.parse("13500000.00"), count = 9,
+            // A month down on the last one, so the frame carries the red colouring of a positive
+            // metric that fell as well as the green of one that rose.
+            trend = Trend(BigDecimal("12"), TrendDirection.DOWN, TrendPolarity.POSITIVE),
+        ),
+        collectedAllTime = AllTimeMoney(total = Money.parse("1176400000.00"), count = 431),
+        collectedSeries = collectedByMonth.takeLast(8),
+        aov = Aov(
+            thisMonth = Money.parse("15350000.00"), allTime = Money.parse("2507812.00"),
+            trend = Trend(BigDecimal("4"), TrendDirection.UP, TrendPolarity.POSITIVE),
+        ),
+        // The real division, not a hand-written series: the frame shows what the screen computes.
+        aovSeries = aovSeries(bookedByMonth, ordersByMonth),
+        activeCustomers = 42,
         todayArea = BigDecimal("247.50"), // 108,2 + 78,7 + 42,6 + 18,0 — the sum of `today`
         openDiscrepancies = 1,
         openDiscrepancyTotal = Money.parse("120000.00"),
-        receivables = Money.parse("53268760.00"),
-        receivableOrders = 6,
-        collectedThisMonth = Money.parse("13500000.00"),
-        collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UP, TrendPolarity.POSITIVE),
-        collectedByMonth = collectedByMonth,
+        loadedThisMonth = LoadedVolume(
+            monthKey = "2026-09", blocks = 1180, beamCount = 96,
+            beamMeters = BigDecimal("512.4"), area = BigDecimal("318.60"), orderCount = 11,
+        ),
+        currentMonthKey = "2026-09",
     )
 
     private fun loaded() = HomeUiState(
-        loading = false, error = null, today = today, recent = recent, pendingUploads = 2,
-        permissionsResolved = true, hasDashboardAccess = true, tiles = tiles(),
+        loading = false, error = null, today = today, pendingUploads = 2,
+        permissionsResolved = true, hasDashboardAccess = true, dash = dashboard(),
     )
 
-    private fun empty() = HomeUiState(
-        loading = false, error = null, today = emptyList(), recent = emptyList(), pendingUploads = 0,
+    /**
+     * §6's empty month, which is a different picture from a screen that has not loaded: every
+     * figure is a real zero, no card carries a delta badge (there is nothing to compare to), the
+     * sparklines fall back to their stubs and the loaded card says «Бу ой юк йўқ» rather than
+     * «0 блок».
+     */
+    private fun emptyMonth() = HomeUiState(
+        loading = false, error = null, today = emptyList(), pendingUploads = 0,
         permissionsResolved = true, hasDashboardAccess = true,
-        tiles = tiles().copy(todayCount = 0, todayArea = BigDecimal.ZERO),
+        dash = HomeDashboard(
+            receivables = Money.ZERO, receivableOrders = 0,
+            paidOrders = 0, partialOrders = 0, awaitingOrders = 0,
+            booked = PeriodMoney(Money.ZERO, 0, null),
+            bookedAllTime = AllTimeMoney(Money.ZERO, 0),
+            bookedSeries = List(8) { BigDecimal.ZERO },
+            collected = PeriodMoney(Money.ZERO, 0, null),
+            collectedAllTime = AllTimeMoney(Money.ZERO, 0),
+            collectedSeries = List(8) { BigDecimal.ZERO },
+            aov = Aov(Money.ZERO, Money.ZERO, null),
+            aovSeries = List(8) { BigDecimal.ZERO },
+            activeCustomers = 0,
+            todayArea = BigDecimal.ZERO,
+            openDiscrepancies = 0,
+            openDiscrepancyTotal = Money.ZERO,
+            loadedThisMonth = null,
+            currentMonthKey = "2026-09",
+        ),
     )
 
     /** One upload still queued and one order the server refused: what the bell badges, and what
@@ -162,10 +189,10 @@ class HomeScreenshotTest {
         ),
     )
 
-    /** A DRIVER: no dashboard permission at all, so the tiles are absent — not zeroed — and the
-     *  sheet says «кўриш ҳуқуқингиз йўқ» rather than «буюртма йўқ». */
+    /** A DRIVER: no dashboard permission at all, so §2.2–§2.7 are absent — not zeroed — and one
+     *  card says why. The chrome stays: the bell and the avatar are local reads. */
     private fun noAccess() = HomeUiState(
-        loading = false, error = null, permissionsResolved = true, hasDashboardAccess = false, tiles = null,
+        loading = false, error = null, permissionsResolved = true, hasDashboardAccess = false, dash = null,
     )
 
     private fun shoot(name: String, state: HomeUiState) {
@@ -174,6 +201,7 @@ class HomeScreenshotTest {
                 HomeScreen(
                     s = state, me = owner, now = now, onRefresh = {},
                     onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                    onOpenClients = {}, onOpenCalendarToday = {},
                 )
             }
         }
@@ -196,6 +224,7 @@ class HomeScreenshotTest {
                     HomeScreen(
                         s = rejectedState(), me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                        onOpenClients = {}, onOpenCalendarToday = {},
                     )
                     OutboxSheet(
                         pending = rejectedState().pendingUploads,
@@ -233,6 +262,7 @@ class HomeScreenshotTest {
                         s = loaded().copy(pendingUploads = 0, rejectedOrders = many),
                         me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                        onOpenClients = {}, onOpenCalendarToday = {},
                     )
                     OutboxSheet(pending = 0, rejected = many, onDiscard = {}, onDismiss = {}, onReopen = {})
                 }
@@ -257,6 +287,7 @@ class HomeScreenshotTest {
                     HomeScreen(
                         s = rejectedState(), me = owner, now = now, onRefresh = {},
                         onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
+                        onOpenClients = {}, onOpenCalendarToday = {},
                     )
                     OutboxSheet(
                         pending = 0,
@@ -274,47 +305,23 @@ class HomeScreenshotTest {
         captureScreenRoboImage("screenshots/home_outbox_discard_confirm_light.png")
     }
 
-    /**
-     * The third state of the trend footnote, which no frame drew: an unchanged month.
-     *
-     * FLAT makes no claim — no arrow, no percentage, and neutral ink rather than green. Folding it
-     * into "up" is the defect `TrendDirection` is three-valued to prevent: it drew «↑ 0,0 %» in
-     * green at a month that had not risen. An UNKNOWN direction reads the same way, which is the
-     * honest answer to a word this client does not know.
-     */
-    @Test @Config(qualifiers = "w411dp-h891dp") fun anUnchangedMonthClaimsNothing() {
-        val flat = loaded().copy(
-            tiles = tiles().copy(collectedTrend = Trend(BigDecimal.ZERO, TrendDirection.FLAT, TrendPolarity.POSITIVE)),
-        )
-        shoot("home_trend_flat_light", flat)
-        rule.onNodeWithText("ўтган ойга нисбатан ўзгаришсиз").assertExists()
-        rule.onNode(hasText("↑", substring = true)).assertDoesNotExist()
-        rule.onNode(hasText("↓", substring = true)).assertDoesNotExist()
-    }
-
-    /** …and a direction the server invents after this client shipped falls into the same line,
-     *  rather than a raw word or a guessed arrow. */
-    @Test @Config(qualifiers = "w411dp-h891dp") fun anUnknownDirectionReadsAsUnchanged() {
-        val unknown = loaded().copy(
-            tiles = tiles().copy(collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UNKNOWN, TrendPolarity.POSITIVE)),
-        )
-        rule.setContent {
-            EtalonTheme {
-                HomeScreen(
-                    s = unknown, me = owner, now = now, onRefresh = {},
-                    onOpenOrder = {}, onOpenOrders = {}, onOpenAccount = {}, onOpenOutbox = {},
-                )
-            }
-        }
-        rule.onNodeWithText("ўтган ойга нисбатан ўзгаришсиз").assertExists()
-        // The trend's own two claims, neither of which an unknown direction may make. («8,2» itself
-        // is not the assertion: a room's «108,2 м²» carries those digits for a different reason.)
-        rule.onNode(hasText("↑ 8,2%", substring = true)).assertDoesNotExist()
-        rule.onNode(hasText("↓ 8,2%", substring = true)).assertDoesNotExist()
-    }
-
     @Test @Config(qualifiers = "w411dp-h891dp") fun light() = shoot("home_light", loaded())
-    @Test @Config(qualifiers = "w411dp-h891dp") fun emptyLight() = shoot("home_empty_light", empty())
-    @Test @Config(qualifiers = "w411dp-h891dp") fun noAccessLight() = shoot("home_no_access_light", noAccess())
+
+    /** §6's empty month, and the assertion that it does not read as a month that traded nothing:
+     *  the loaded card says so in words instead of printing a zero. */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun emptyMonthLight() {
+        shoot("home_empty_month_light", emptyMonth())
+        rule.onNodeWithText("Бу ой юк йўқ").assertExists()
+    }
+
+    @Test @Config(qualifiers = "w411dp-h891dp") fun noAccessLight() {
+        shoot("home_no_access_light", noAccess())
+        rule.onNodeWithText("Бу саҳифага рухсат йўқ — фақат ADMIN ва OWNER кира олади.").assertExists()
+    }
+
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun largeFont() = shoot("home_font13", loaded())
+
+    /** The narrowest phone the app supports: the grid's two columns and the hero's three cells all
+     *  come out of one 360 dp width. */
+    @Test @Config(qualifiers = "w360dp-h800dp") fun narrowLight() = shoot("home_w360", loaded())
 }

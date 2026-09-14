@@ -1,27 +1,55 @@
 <resources>
-    <!-- The app bar row. The wordmark itself lives in the design system (BrandMark). -->
-    <string name="home_title">Бошқарув</string>
-    <string name="home_subtitle_suffix">барча буюртмалар бир жойда</string>
-    <string name="home_kpi_receivables">Қарздорлик</string>
-    <string name="home_kpi_receivables_note">%1$s буюртмада қолди</string>
-    <string name="home_kpi_collected">Ойлик тушум</string>
-    <string name="home_kpi_collected_up">↑ %1$s ўтган ойга нисбатан</string>
-    <string name="home_kpi_collected_down">↓ %1$s ўтган ойга нисбатан</string>
-    <!-- A month that stood still: no arrow and no percentage, because there is no movement to
-         point at. Drawn in neutral ink — an unchanged month is neither good news nor bad. -->
-    <string name="home_kpi_collected_flat">ўтган ойга нисбатан ўзгаришсиз</string>
-    <string name="home_kpi_today">Бугунги етказиш</string>
-    <string name="home_kpi_today_note">%1$s буюртма</string>
-    <string name="home_recent">Сўнгги буюртмалар</string>
-    <string name="home_recent_all">Барчаси</string>
-    <string name="home_recent_empty">Ҳали буюртма йўқ</string>
-    <string name="home_paid">тўланган</string>
-    <string name="home_debt">қолди %1$s</string>
+    <!-- §2.2 the receivables hero. «Ой бўйича бўлинмайди» is the web's own caveat: the figure is
+         what is owed right now, not a sum of this month's invoices. -->
+    <string name="home_kicker_receivables">ҚАРЗДОРЛИК · ҲОЗИРГИ ҲОЛАТ</string>
+    <string name="home_receivables_note">Ой бўйича бўлинмайди · бугунги қолдиқ</string>
+    <string name="home_orders_badge">%1$s буюртма</string>
+    <string name="home_paid">Тўланган</string>
+    <string name="home_partial">Қисман</string>
+    <string name="home_awaiting">Кутилмоқда</string>
+
+    <!-- §2.3 the financial rail. Ruling R1: the kicker names the period, because there is no
+         Ой | Ҳафта pill — the payload is monthly and a pill with one option is noise. The
+         bilingual suffixes are the web's own card titles, kept so the owner reads the same two
+         words on the phone and on the desk. -->
+    <string name="home_kicker_financial">МОЛИЯВИЙ ҲОЛАТ · ЖОРИЙ ОЙ</string>
+    <string name="home_booked">Буюртма қилинган · Booked</string>
+    <string name="home_collected">Тушган пул · Collected</string>
+    <string name="home_aov">Ўртача буюртма · AOV</string>
+    <string name="home_this_month_orders">%1$s та буюртма · ушбу ой</string>
+    <string name="home_this_month_payments">%1$s та тўлов · ушбу ой</string>
+    <string name="home_all_time">Бошланғичдан: %1$s UZS · %2$s та</string>
+    <string name="home_all_time_aov">Бошланғичдан: %1$s UZS</string>
+    <string name="home_aov_formula">Ҳисоб: буюртма қилинган ÷ буюртмалар сони</string>
+
+    <!-- §2.4 the operational grid. -->
+    <string name="home_kicker_ops">ОПЕРАЦИОН ҲОЛАТ</string>
+    <string name="home_active_clients">Фаол мижозлар</string>
+    <string name="home_active_caption">%1$s тўланган · %2$s қисман · %3$s кутилмоқда</string>
+    <string name="home_today_deliveries">Бугунги етказишлар</string>
+    <string name="home_today_planned">%1$s м² режалаштирилган</string>
+    <string name="home_discrepancies">Очиқ тафовутлар</string>
+    <string name="home_under_control">Назоратда</string>
+    <string name="home_attention">Диққат</string>
+    <string name="home_discrepancy_sum">%1$s UZS тафовут</string>
+    <!-- «%1$s» is the short Uzbek month the figures belong to: «Юкланган ҳажм · сен». -->
+    <string name="home_loaded">Юкланган ҳажм · %1$s</string>
+    <string name="home_loaded_blocks_unit">блок</string>
+    <string name="home_loaded_beams">%1$s м балка</string>
+    <string name="home_loaded_caption">%1$s та буюртма · %2$s та балка</string>
+    <!-- Nothing was loaded this month — a different fact from «0 блок», which would read as a
+         measured zero. -->
+    <string name="home_loaded_none">Бу ой юк йўқ</string>
+
+    <!-- §2.8, the web's own line (`src/app/dashboard/page.tsx`): the operator holds neither
+         dashboard.viewBasic nor dashboard.view, so the whole payload is refused server-side.
+         Not an error — there is nothing to retry. -->
+    <string name="home_no_access_dashboard">Бу саҳифага рухсат йўқ — фақат ADMIN ва OWNER кира олади.</string>
+
+    <!-- The app-bar chrome and the outbox sheet behind the bell. -->
     <string name="home_bell">Юборилмаган маълумотлар</string>
     <string name="home_account">Ҳисоб қайдномаси</string>
     <string name="home_close">Ёпиш</string>
-    <string name="home_today_empty">Бугунга буюртма йўқ</string>
-    <string name="home_today_no_access">Бугунги етказишларни кўриш ҳуқуқингиз йўқ</string>
     <!-- «маълумот», not «расм»: a queued PLACE_ORDER row counts here too, and the sheet's own
          title and its `outbox_pending` plural both already say маълумот. -->
     <string name="home_outbox_clear_data">Юборилмаган маълумот йўқ</string>

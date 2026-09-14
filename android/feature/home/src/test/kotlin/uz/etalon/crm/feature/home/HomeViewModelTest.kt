@@ -21,8 +21,11 @@ import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.model.AllTimeMoney
 import uz.etalon.crm.core.model.Aov
 import uz.etalon.crm.core.model.HomeSummary
+import uz.etalon.crm.core.model.LoadedVolume
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.MonthBooked
 import uz.etalon.crm.core.model.MonthCollected
+import uz.etalon.crm.core.model.MonthOrders
 import uz.etalon.crm.core.model.OrderStatus
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PeriodMoney
@@ -89,13 +92,13 @@ class HomeViewModelTest {
     }
 
     /** The column itself still renders — empty, not erroring — and the tiles are absent rather
-     *  than a [HomeTiles] full of zeros, which the brief calls out as the easy mistake here. */
+     *  than a [HomeDashboard] full of zeros, which the brief calls out as the easy mistake here. */
     @Test fun `without dashboard access the column is empty and the tiles are absent, not zero`() = runTest {
         val vm = viewModel(permissions = { false })
         advanceUntilIdle()
         assertTrue(vm.state.value.permissionsResolved)
         assertEquals(emptyList<TodayDelivery>(), vm.state.value.today)
-        assertNull(vm.state.value.tiles, "absent, not a HomeTiles(0, ZERO, 0, ZERO, ZERO, 0)")
+        assertNull(vm.state.value.dash, "absent, not a HomeDashboard of zeros")
         assertNull(vm.state.value.error, "no dashboard access is a fact, not a failure")
         assertFalse(vm.state.value.loading)
     }
@@ -129,7 +132,7 @@ class HomeViewModelTest {
         val vm = viewModel(permissions = { it == "dashboard.viewBasic" })
         advanceUntilIdle()
         assertTrue(vm.state.value.hasDashboardAccess)
-        assertNotNull(vm.state.value.tiles)
+        assertNotNull(vm.state.value.dash)
     }
 
     @Test fun `refresh is a no-op without dashboard access`() = runTest {
@@ -149,7 +152,7 @@ class HomeViewModelTest {
         advanceUntilIdle()
         assertNull(vm.state.value.error)
         assertFalse(vm.state.value.hasDashboardAccess)
-        assertNull(vm.state.value.tiles)
+        assertNull(vm.state.value.dash)
         assertEquals(emptyList<TodayDelivery>(), vm.state.value.today)
         assertTrue(vm.state.value.showNoAccessState, "renders the withheld-permission text, not the empty one")
         assertFalse(vm.state.value.showEmptyState)
@@ -157,10 +160,20 @@ class HomeViewModelTest {
 
     // ── field-for-field, not a same-typed neighbour ──────────────────────────────────
 
-    /** `HomeSummary` carries five `Int`s and two `Money`s; this proves the ViewModel's own
-     *  [HomeTiles] construction keeps each one in its place, independent of the mapper-level
-     *  guarantee `DashboardMappersTest` already gives the DTO decode. */
-    @Test fun `the tiles carry the summary's fields, not a same-typed neighbour`() = runTest {
+    /**
+     * `HomeSummary` carries a dozen `Int`s and as many `Money`s, and the dashboard's top half
+     * renders nearly all of them. Every figure is given a value nothing else in the fixture
+     * shares, so a field wired to a same-typed neighbour fails here rather than on the emulator —
+     * independent of the mapper-level guarantee `DashboardMappersTest` gives the DTO decode.
+     */
+    @Test fun `the dashboard carries the summary's fields, not a same-typed neighbour`() = runTest {
+        val bookedTrend = Trend(BigDecimal("8"), TrendDirection.UP, TrendPolarity.POSITIVE)
+        val collectedTrend = Trend(BigDecimal("12"), TrendDirection.DOWN, TrendPolarity.POSITIVE)
+        val aovTrend = Trend(BigDecimal("3"), TrendDirection.FLAT, TrendPolarity.POSITIVE)
+        val loaded = LoadedVolume(
+            monthKey = "2026-09", blocks = 1180, beamCount = 96,
+            beamMeters = BigDecimal("512.4"), area = BigDecimal("318.60"), orderCount = 11,
+        )
         val s = summary(
             today = listOf(delivery("o1"), delivery("o2")),
             todayArea = BigDecimal("12.5"),
@@ -168,39 +181,174 @@ class HomeViewModelTest {
             openDiscrepancyTotal = Money.parse("500000"),
             receivables = Money.parse("9000000"),
             receivableOrders = 7,
+            paidOrders = 317, partialOrders = 13, awaitingOrders = 23,
+            booked = PeriodMoney(Money.parse("120000000"), 12, bookedTrend),
+            bookedAllTime = AllTimeMoney(Money.parse("980000000"), 512),
+            collectedThisMonth = Money.parse("13500000"),
+            collectedCount = 9,
+            collectedTrend = collectedTrend,
+            collectedAllTime = AllTimeMoney(Money.parse("870000000"), 431),
+            aov = Aov(Money.parse("10000000"), Money.parse("1914062"), aovTrend),
+            activeCustomers = 42,
+            loadedThisMonth = loaded,
+            currentMonthKey = "2026-09",
         )
         val vm = viewModel(home = { Result.success(s) })
         advanceUntilIdle()
-        val tiles = vm.state.value.tiles!!
+        val d = vm.state.value.dash!!
+
+        assertEquals(Money.parse("9000000"), d.receivables)
+        assertEquals(7, d.receivableOrders)
+        assertEquals(317, d.paidOrders)
+        assertEquals(13, d.partialOrders)
+        assertEquals(23, d.awaitingOrders)
+
+        assertEquals(Money.parse("120000000"), d.booked.total)
+        assertEquals(12, d.booked.count)
+        assertEquals(bookedTrend, d.booked.trend)
+        assertEquals(Money.parse("980000000"), d.bookedAllTime.total)
+        assertEquals(512, d.bookedAllTime.count)
+        assertEquals(Money.parse("13500000"), d.collected.total)
+        assertEquals(9, d.collected.count)
+        assertEquals(collectedTrend, d.collected.trend)
+        assertEquals(Money.parse("870000000"), d.collectedAllTime.total)
+        assertEquals(431, d.collectedAllTime.count)
+        assertEquals(Money.parse("10000000"), d.aov.thisMonth)
+        assertEquals(Money.parse("1914062"), d.aov.allTime)
+        assertEquals(aovTrend, d.aov.trend)
+
+        assertEquals(42, d.activeCustomers)
         assertEquals(2, vm.state.value.today.size)
-        assertEquals(2, tiles.todayCount)
-        assertEquals(BigDecimal("12.5"), tiles.todayArea)
-        assertEquals(3, tiles.openDiscrepancies)
-        assertEquals(Money.parse("500000"), tiles.openDiscrepancyTotal)
-        assertEquals(Money.parse("9000000"), tiles.receivables)
-        assertEquals(7, tiles.receivableOrders)
+        assertEquals(BigDecimal("12.5"), d.todayArea)
+        assertEquals(3, d.openDiscrepancies)
+        assertEquals(Money.parse("500000"), d.openDiscrepancyTotal)
+        assertEquals(loaded, d.loadedThisMonth)
+        assertEquals("2026-09", d.currentMonthKey)
     }
 
-    /** The editorial Home's own two lists: the recent orders it renders in the white card, and
-     *  the twelve-month series its collected card draws as a sparkline. Both are carried whole —
-     *  the series is mapped to its amounts, not truncated here — and the trend rides along. */
-    @Test fun `the recent orders and the collected series reach the state whole`() = runTest {
+    /** The recent orders reach the state whole for §2.7's card, and the two money series arrive
+     *  as the plain numbers a sparkline is drawn from — cut to the eight months it shows. */
+    @Test fun `the recent orders and the rail series reach the state whole`() = runTest {
         val s = summary(
             recent = listOf(recentOrder("r1"), recentOrder("r2")),
-            collectedThisMonth = Money.parse("13500000"),
-            collectedTrend = Trend(BigDecimal("8.2"), TrendDirection.UP, TrendPolarity.POSITIVE),
             collectedByMonth = (1..12).map { MonthCollected("2026-%02d".format(it), Money.parse("${it}000000")) },
+            bookedByMonth = (1..12).map { MonthBooked("2026-%02d".format(it), Money.parse("${it}500000")) },
         )
         val vm = viewModel(home = { Result.success(s) })
         advanceUntilIdle()
-        val tiles = vm.state.value.tiles!!
+        val d = vm.state.value.dash!!
         assertEquals(2, vm.state.value.recent.size)
         assertEquals(listOf("r1", "r2"), vm.state.value.recent.map { it.orderId })
-        assertEquals(12, tiles.collectedByMonth.size)
-        assertEquals(Money.parse("12000000"), tiles.collectedByMonth.last())
-        assertEquals(Money.parse("13500000"), tiles.collectedThisMonth)
-        assertEquals(BigDecimal("8.2"), tiles.collectedTrend?.deltaPct)
-        assertEquals(TrendDirection.UP, tiles.collectedTrend?.direction)
+        // Eight bars, ending with the current month — the fifth month of twelve is off the left.
+        assertEquals(8, d.collectedSeries.size)
+        assertEquals(BigDecimal("5000000"), d.collectedSeries.first())
+        assertEquals(BigDecimal("12000000"), d.collectedSeries.last())
+        assertEquals(8, d.bookedSeries.size)
+        assertEquals(BigDecimal("12500000"), d.bookedSeries.last())
+    }
+
+    /** §2.4's segment bar fills with what has actually left the yard. A truck that is loaded but
+     *  still in the yard has not: only DISPATCHED and DELIVERED count. */
+    @Test fun `the segment bar counts only the deliveries that have left the yard`() = runTest {
+        val s = summary(
+            today = listOf(
+                delivery("o1", OrderStatus.PLACED),
+                delivery("o2", OrderStatus.LOADED),
+                delivery("o3", OrderStatus.DISPATCHED),
+                delivery("o4", OrderStatus.DELIVERED),
+                delivery("o5", OrderStatus.CANCELED),
+            ),
+        )
+        val vm = viewModel(home = { Result.success(s) })
+        advanceUntilIdle()
+        assertEquals(5, vm.state.value.today.size)
+        assertEquals(2, vm.state.value.todayDone)
+    }
+
+    /** A refresh that fails leaves the figures that were on screen exactly where they were, under
+     *  the banner that says they are stale. Blanking them is the alternative, and it turns a lost
+     *  connection into a month that looks like it had no orders in it. */
+    @Test fun `a failed refresh keeps the last payload`() = runTest {
+        var fail = false
+        val vm = viewModel(
+            home = {
+                if (fail) Result.failure(IOException("no net"))
+                else Result.success(summary(receivables = Money.parse("9000000"), receivableOrders = 7))
+            },
+        )
+        advanceUntilIdle()
+        assertEquals(Money.parse("9000000"), vm.state.value.dash?.receivables)
+
+        fail = true
+        vm.refresh()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.error)
+        assertEquals(Money.parse("9000000"), vm.state.value.dash?.receivables, "the last good payload stands")
+        assertEquals(7, vm.state.value.dash?.receivableOrders)
+        assertEquals(1, vm.state.value.today.size)
+    }
+
+    // ── §2.3's one computed figure ────────────────────────────────────────────────────
+
+    /** The brief's own formula, and the rounding the web does with `Math.round`: 5 ÷ 2 is 2,5,
+     *  which HALF_UP carries up to 3. A `BigDecimal` throws on a non-terminating division rather
+     *  than rounding silently, so the scale and mode are not decoration. */
+    @Test fun `the aov series divides in whole UZS, half up`() {
+        val series = aovSeries(
+            booked = listOf(MonthBooked("2026-08", Money.parse("5")), MonthBooked("2026-09", Money.parse("10000000"))),
+            orders = listOf(MonthOrders("2026-08", 2), MonthOrders("2026-09", 3)),
+        )
+        assertEquals(listOf(BigDecimal("3"), BigDecimal("3333333")), series)
+    }
+
+    /** A month with no orders has no average at all. Zero is what the brief asks for and what the
+     *  sparkline draws as a stub — the alternatives are a crash and a carried-forward figure that
+     *  reads as a month that traded. */
+    @Test fun `a month with no orders contributes a zero to the aov series`() {
+        val series = aovSeries(
+            booked = listOf(MonthBooked("2026-09", Money.parse("4000000"))),
+            orders = listOf(MonthOrders("2026-09", 0)),
+        )
+        assertEquals(listOf(BigDecimal.ZERO), series)
+
+        // …and so does a month the orders array does not carry at all.
+        assertEquals(
+            listOf(BigDecimal.ZERO),
+            aovSeries(booked = listOf(MonthBooked("2026-09", Money.parse("4000000"))), orders = emptyList()),
+        )
+    }
+
+    /** A three-month-old account has three points, not eight: the window is the sparkline's own
+     *  business (it left-pads), and padding here would put three zero months in front of a figure
+     *  the account never had. */
+    @Test fun `an account younger than the window yields one point per month it has`() {
+        val series = aovSeries(
+            booked = (1..3).map { MonthBooked("2026-0$it", Money.parse("${it}000000")) },
+            orders = (1..3).map { MonthOrders("2026-0$it", it) },
+        )
+        assertEquals(3, series.size)
+        assertEquals(listOf(BigDecimal("1000000"), BigDecimal("1000000"), BigDecimal("1000000")), series)
+    }
+
+    /** Twelve months in, eight out — the last eight, ending with this month. */
+    @Test fun `the aov series keeps the last eight months`() {
+        val series = aovSeries(
+            booked = (1..12).map { MonthBooked("2026-%02d".format(it), Money.parse("${it}000000")) },
+            orders = (1..12).map { MonthOrders("2026-%02d".format(it), 1) },
+        )
+        assertEquals(8, series.size)
+        assertEquals(BigDecimal("5000000"), series.first())
+        assertEquals(BigDecimal("12000000"), series.last())
+    }
+
+    /** The pairing is by month key, not by index: an orders array that arrives a month shorter
+     *  than the bookings one must not divide September's bookings by August's count. */
+    @Test fun `each month is divided by its own count, not by its neighbour's`() {
+        val series = aovSeries(
+            booked = listOf(MonthBooked("2026-08", Money.parse("8000000")), MonthBooked("2026-09", Money.parse("9000000"))),
+            orders = listOf(MonthOrders("2026-09", 3)),
+        )
+        assertEquals(listOf(BigDecimal.ZERO, BigDecimal("3000000")), series)
     }
 
     /** «Ҳали буюртма йўқ» is a claim about the server, not about the screen: it may only be made
@@ -332,9 +480,9 @@ class HomeViewModelTest {
         reopenRejected = HomeReopenRejectedOrderUseCase { id -> reopenRejected(id) },
     )
 
-    private fun delivery(id: String) = TodayDelivery(
+    private fun delivery(id: String, status: OrderStatus = OrderStatus.PLACED) = TodayDelivery(
         orderId = id, orderNumber = "ORD-$id", clientName = "Навоий Build", clientAddress = "Навоий кўча 1",
-        area = BigDecimal("10.000"), status = OrderStatus.PLACED, totalPrice = Money.parse("1000000"), remaining = Money.parse("1000000"),
+        area = BigDecimal("10.000"), status = status, totalPrice = Money.parse("1000000"), remaining = Money.parse("1000000"),
     )
 
     private fun recentOrder(id: String) = RecentOrder(
@@ -357,26 +505,36 @@ class HomeViewModelTest {
         partialOrders: Int = 0,
         awaitingOrders: Int = 0,
         recent: List<RecentOrder> = emptyList(),
+        booked: PeriodMoney = PeriodMoney(total = Money.ZERO, count = 0, trend = null),
+        bookedAllTime: AllTimeMoney = AllTimeMoney(total = Money.ZERO, count = 0),
         collectedThisMonth: Money = Money.ZERO,
+        collectedCount: Int = 0,
         collectedTrend: Trend? = null,
+        collectedAllTime: AllTimeMoney = AllTimeMoney(total = Money.ZERO, count = 0),
         collectedByMonth: List<MonthCollected> = emptyList(),
+        aov: Aov = Aov(thisMonth = Money.ZERO, allTime = Money.ZERO, trend = null),
+        activeCustomers: Int = 0,
+        bookedByMonth: List<MonthBooked> = emptyList(),
+        ordersByMonth: List<MonthOrders> = emptyList(),
+        currentMonthKey: String = "2026-09",
+        loadedThisMonth: LoadedVolume? = null,
     ) = HomeSummary(
         today = today, todayArea = todayArea,
         openDiscrepancies = openDiscrepancies, openDiscrepancyTotal = openDiscrepancyTotal,
         receivables = receivables, receivableOrders = receivableOrders, receivablesTrend = null,
         paidOrders = paidOrders, partialOrders = partialOrders, awaitingOrders = awaitingOrders,
         recent = recent,
-        booked = PeriodMoney(total = Money.ZERO, count = 0, trend = null),
-        bookedAllTime = AllTimeMoney(total = Money.ZERO, count = 0),
-        collected = PeriodMoney(total = collectedThisMonth, count = 0, trend = collectedTrend),
-        collectedAllTime = AllTimeMoney(total = Money.ZERO, count = 0),
+        booked = booked,
+        bookedAllTime = bookedAllTime,
+        collected = PeriodMoney(total = collectedThisMonth, count = collectedCount, trend = collectedTrend),
+        collectedAllTime = collectedAllTime,
         collectedByMonth = collectedByMonth,
-        aov = Aov(thisMonth = Money.ZERO, allTime = Money.ZERO, trend = null),
-        activeCustomers = 0,
-        bookedByMonth = emptyList(),
-        ordersByMonth = emptyList(),
-        currentMonthKey = "2026-09",
-        loadedThisMonth = null,
+        aov = aov,
+        activeCustomers = activeCustomers,
+        bookedByMonth = bookedByMonth,
+        ordersByMonth = ordersByMonth,
+        currentMonthKey = currentMonthKey,
+        loadedThisMonth = loadedThisMonth,
         topCustomers = emptyList(),
     )
 }

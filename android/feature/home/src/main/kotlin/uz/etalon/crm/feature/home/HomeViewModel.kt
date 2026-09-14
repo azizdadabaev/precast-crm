@@ -17,36 +17,90 @@ import uz.etalon.crm.core.data.OutboxRepository
 import uz.etalon.crm.core.data.PermissionGate
 import uz.etalon.crm.core.data.RejectedOrder
 import uz.etalon.crm.core.data.toAppError
+import uz.etalon.crm.core.model.AllTimeMoney
+import uz.etalon.crm.core.model.Aov
 import uz.etalon.crm.core.model.AppError
 import uz.etalon.crm.core.model.HomeSummary
+import uz.etalon.crm.core.model.LoadedVolume
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.model.MonthBooked
+import uz.etalon.crm.core.model.MonthOrders
+import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.model.PeriodMoney
 import uz.etalon.crm.core.model.RecentOrder
 import uz.etalon.crm.core.model.TodayDelivery
-import uz.etalon.crm.core.model.Trend
 import java.math.BigDecimal
+import java.math.RoundingMode
 import javax.inject.Inject
 
 internal const val PERM_DASHBOARD_VIEW_BASIC = "dashboard.viewBasic"
 internal const val PERM_DASHBOARD_VIEW = "dashboard.view"
 
-/** The operational tiles: today's deliveries, open discrepancies, receivables. Modelled apart
- *  from [HomeUiState] so "not yet fetched or not permitted" (`null`) can never be confused with
- *  a genuine zero — the defect the Task 7 brief calls out by name. */
-data class HomeTiles(
-    val todayCount: Int,
+/** How many months a rail sparkline draws (design §2.3). The series are cut to this here rather
+ *  than in composition, so the screen is handed exactly what it renders. */
+private const val SPARKLINE_MONTHS = 8
+
+/**
+ * Every figure the dashboard's top half renders (design §2.2–§2.4), modelled apart from
+ * [HomeUiState] so "not yet fetched or not permitted" (`null`) can never be confused with a
+ * genuine zero — the defect the Task 7 brief calls out by name.
+ *
+ * The three series are already windowed and already `BigDecimal`: sparkline geometry is the one
+ * place a figure stops being money, and doing that division in composition would redo it on every
+ * recomposition of a screen that scrolls.
+ */
+data class HomeDashboard(
+    // §2.2 — the receivables hero.
+    val receivables: Money,
+    val receivableOrders: Int,
+    val paidOrders: Int,
+    val partialOrders: Int,
+    val awaitingOrders: Int,
+    // §2.3 — the financial rail. Each card: this month, its trend, its all-time line, its series.
+    val booked: PeriodMoney,
+    val bookedAllTime: AllTimeMoney,
+    val bookedSeries: List<BigDecimal>,
+    val collected: PeriodMoney,
+    val collectedAllTime: AllTimeMoney,
+    val collectedSeries: List<BigDecimal>,
+    val aov: Aov,
+    val aovSeries: List<BigDecimal>,
+    // §2.4 — the operational grid.
+    val activeCustomers: Int,
     val todayArea: BigDecimal,
     val openDiscrepancies: Int,
     val openDiscrepancyTotal: Money,
-    val receivables: Money,
-    val receivableOrders: Int,
-    /** Ruling R2: the collected card is the calendar **month** the server sums, not the
-     *  prototype's «ҳафталик» — the wording follows the data, never the other way round. */
-    val collectedThisMonth: Money,
-    /** Absent when the server sends no comparison (a first month has nothing to compare to). */
-    val collectedTrend: Trend?,
-    /** Twelve months oldest-first; the card's sparkline draws the last six of them. */
-    val collectedByMonth: List<Money>,
+    /** Absent when the server's `loadedVolumeByMonth` carries no row for [currentMonthKey] — the
+     *  card then reads «Бу ой юк йўқ» rather than a zeroed figure. */
+    val loadedThisMonth: LoadedVolume?,
+    /** `"2026-09"`, the month the whole screen is about; the loaded card names it. */
+    val currentMonthKey: String,
 )
+
+/**
+ * §2.3's AOV series: each month's bookings divided by that month's order count, in whole UZS.
+ *
+ * The brief's own formula (`bookedByMonth[i].booked ÷ ordersByMonth[i].count`), taken in
+ * [BigDecimal] with [RoundingMode.HALF_UP] to match the web's `Math.round` — never a `Double`,
+ * and never a rounding the server would not have done. A month with no orders has no average at
+ * all, so it contributes **zero** rather than a division by zero or a carried-forward value.
+ *
+ * The two arrays are paired by month key rather than by index: they arrive the same length and in
+ * the same order today, but an index pairing that silently slips by one would divide September's
+ * bookings by August's count and nothing on screen would look wrong.
+ */
+internal fun aovSeries(
+    booked: List<MonthBooked>,
+    orders: List<MonthOrders>,
+    months: Int = SPARKLINE_MONTHS,
+): List<BigDecimal> {
+    val countOf = orders.associate { it.month to it.count }
+    return booked.takeLast(months).map { m ->
+        val count = countOf[m.month] ?: 0
+        if (count <= 0) BigDecimal.ZERO
+        else m.booked.amount.divide(BigDecimal(count), 0, RoundingMode.HALF_UP)
+    }
+}
 
 data class HomeUiState(
     val loading: Boolean = true,
@@ -70,13 +124,19 @@ data class HomeUiState(
     /** Why a re-open failed, in Uzbek, shown above the list. Nothing was deleted — the row is
      *  still there to try again or to dismiss. */
     val reopenError: String? = null,
-    /** "Not yet known" is not "no" — nothing about the tiles renders before this is true. */
+    /** "Not yet known" is not "no" — nothing about the dashboard renders before this is true. */
     val permissionsResolved: Boolean = false,
     val hasDashboardAccess: Boolean = false,
     /** Present only once a permitted fetch has actually succeeded; absent (not a zeroed
-     *  [HomeTiles]) whenever the operator lacks `dashboard.viewBasic`/`dashboard.view`. */
-    val tiles: HomeTiles? = null,
+     *  [HomeDashboard]) whenever the operator lacks `dashboard.viewBasic`/`dashboard.view`. */
+    val dash: HomeDashboard? = null,
 ) {
+    /** §2.4's «Бугунги етказишлар» bar: how much of today is already out of the yard. DISPATCHED
+     *  and DELIVERED both count — a truck on the road has left, whether or not it has arrived. */
+    val todayDone: Int get() = today.count {
+        it.status == OrderStatus.DISPATCHED || it.status == OrderStatus.DELIVERED
+    }
+
     /** What the bell badges: work still unsent PLUS rejections nobody has read yet. Both are the
      *  operator's own outbox and both are dismissed from the one sheet, so one dot counts them —
      *  a rejection that showed no badge would sit unread behind a bell that looked idle. */
@@ -200,12 +260,21 @@ open class HomeViewModel(
                         it.copy(
                             loading = false, error = null,
                             today = s.today, recent = s.recent,
-                            tiles = HomeTiles(
-                                todayCount = s.today.size, todayArea = s.todayArea,
-                                openDiscrepancies = s.openDiscrepancies, openDiscrepancyTotal = s.openDiscrepancyTotal,
+                            dash = HomeDashboard(
                                 receivables = s.receivables, receivableOrders = s.receivableOrders,
-                                collectedThisMonth = s.collected.total, collectedTrend = s.collected.trend,
-                                collectedByMonth = s.collectedByMonth.map { it.collected },
+                                paidOrders = s.paidOrders, partialOrders = s.partialOrders,
+                                awaitingOrders = s.awaitingOrders,
+                                booked = s.booked, bookedAllTime = s.bookedAllTime,
+                                bookedSeries = s.bookedByMonth.takeLast(SPARKLINE_MONTHS).map { it.booked.amount },
+                                collected = s.collected, collectedAllTime = s.collectedAllTime,
+                                collectedSeries = s.collectedByMonth.takeLast(SPARKLINE_MONTHS).map { it.collected.amount },
+                                aov = s.aov, aovSeries = aovSeries(s.bookedByMonth, s.ordersByMonth),
+                                activeCustomers = s.activeCustomers,
+                                todayArea = s.todayArea,
+                                openDiscrepancies = s.openDiscrepancies,
+                                openDiscrepancyTotal = s.openDiscrepancyTotal,
+                                loadedThisMonth = s.loadedThisMonth,
+                                currentMonthKey = s.currentMonthKey,
                             ),
                         )
                     }
@@ -219,7 +288,7 @@ open class HomeViewModel(
                         _state.update {
                             it.copy(
                                 loading = false, error = null, hasDashboardAccess = false,
-                                tiles = null, today = emptyList(), recent = emptyList(),
+                                dash = null, today = emptyList(), recent = emptyList(),
                             )
                         }
                     } else {

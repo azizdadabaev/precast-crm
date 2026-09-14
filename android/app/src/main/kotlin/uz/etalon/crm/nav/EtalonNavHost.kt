@@ -181,6 +181,11 @@ fun SignedInShell(
                             onOpenOrder = { backStack.add(OrderDetail(it)) },
                             onOpenOrders = { switchTab(backStack, Orders) },
                             onOpenAccount = { showAccount = true },
+                            // Task 4 wires the two dashboard hand-offs of design §4 — the clients
+                            // tab, and the orders calendar opened on today's day sheet. Until it
+                            // does, the two cards are drawn and inert rather than absent.
+                            onOpenClients = { },
+                            onOpenCalendarToday = { },
                             // Where a rejected queued order reopens (ruling I3). Gated exactly as
                             // the orders list's «+ Янги» is: without calculator.use that tab does
                             // not exist, so the sheet does not offer the action at all.
