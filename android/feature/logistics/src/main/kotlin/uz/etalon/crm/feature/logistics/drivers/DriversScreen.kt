@@ -207,12 +207,17 @@ fun DriversScreen(
             // Offered only to an operator who holds `driver.manage`. Disabled while offline because
             // POST /api/drivers is not idempotency-wrapped and so may not be queued — said before
             // the tap rather than after it.
+            //
+            // `loading` is the second term because it is ONE flag shared by the list refresh,
+            // `setActive` and `create` (see DriversViewModel). Without it, an operator who flips a
+            // driver's switch and taps «Ҳайдовчи қўшиш» before that settles opens a sheet whose
+            // «Сақлаш» is already spinning for a request the sheet never sent.
             if (canManage) {
                 StickyActionBar {
                     PrimaryButton(
                         text = stringResource(R.string.action_add_driver),
                         onClick = { showAdd = true },
-                        enabled = !s.isOffline,
+                        enabled = !s.loading && !s.isOffline,
                     )
                 }
             }

@@ -475,6 +475,15 @@ class LogisticsScreenshotTest {
         shootDeliveryLocation("font13")
 
     /**
+     * Ruling R13: «Белги» is being typed at the foot of the form, so the sticky bar is gone and the
+     * keyboard is not fighting «Тозалаш»/«Сақлаш» for the bottom of the screen. Robolectric never
+     * reports the ime inset, so the seam is driven — the same way `dispatch_ime_light` and
+     * `delivery_proof_ime_light` drive it.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun deliveryLocationImeLight() =
+        shootDeliveryLocation("ime_light", barVisible = false)
+
+    /**
      * The order behind all four screens: two beam lengths across three rooms, so «Юклаш рўйхати»
      * records both the grouping (two 6,00 m rooms summed into one row) and the first-appearance
      * order — the same shape the order detail's own fixture carries.
