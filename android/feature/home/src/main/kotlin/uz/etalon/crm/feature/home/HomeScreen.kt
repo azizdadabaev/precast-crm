@@ -168,7 +168,9 @@ fun HomeScreen(
     onOpenOrdersList: () -> Unit,
 ) {
     PullToRefreshBox(
-        isRefreshing = s.loading,
+        // Only a REFRESH spins: the first load has the skeleton, and a spinner over it read as two
+        // loading states at once.
+        isRefreshing = s.loading && s.dash != null,
         onRefresh = onRefresh,
         // The `Scaffold` that used to wrap this screen is gone with the navigation suite, and with
         // it the window insets it applied: without this the brand row is drawn under the clock and
