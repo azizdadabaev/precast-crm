@@ -140,3 +140,25 @@ fun monthScope(s: HomeSummary, idx: Int): MonthScope
 - Spec coverage: §2.1 (T3 app bar unchanged + kicker), §2.2–2.4 (T3), §2.5–2.7 (T4), §2.8 (T4), §3 data (T1, T3 AOV, T4 ticker/skeleton), §4 nav (T4), §6 edge rules (T3/T4 frames), §7 acceptance (T1–T5).
 - Type consistency: `Trend(deltaPct, direction, polarity)` (T1) consumed by `DeltaBadge` (T2) and the rail (T3); `LoadedVolume` (T1) by the grid (T3); `TopCustomer`/`RecentOrder` fields (T1) by T4; `OrdersOpenDayStore` (T4) consumed in the same task.
 - Placeholders: none — labels, fields, frames and commit messages are named; the two "decide" points (ticker test depth R7; bottom frame) are ruled in place.
+
+## Execution record (phase CLOSED 2026-09-14 at ae8e733 — 1616 Android tests, 167 baselines; web 1644 untouched)
+
+Rulings taken while running (the ledger is deleted with the workspace; these are the ones later phases need):
+- **R8** The no-access card and its verbatim web string landed with the top half (Task 3), not Task 4.
+- **R9** The calendar hand-off's one-shot `OrdersOpenDayStore` is consumed AFTER the persisted `OrdersViewStore` restore, so the day wins; `take()` clears; a padding column never has a click.
+- **R10** `home_light` is the top of the screen; `home_bottom_light` the loaded screen scrolled to the end; `home_skeleton_light` the first load (no refresh spinner over it).
+- **R11** `KpiCard` delegates its bars to `BarSparkline` (floor passed as a fraction — `ds_kpi_*` byte-identical).
+- **R12** Radii by the repo's names: `sheet` 22 hero, `xl` 16 cards, `lg` 12 hero strip (the brief's "lg 16 / md 12" were the prototype's).
+- **R13** `MonthColumns`: shared denominator kept; unselected Collected in `green` at alpha 0.45, selected full `green`; a non-zero value never below 3 dp; zero keeps the 2 dp stub in the track colour.
+- **R14** `UZ_MONTHS_FULL` uses the web's Uzbek forms (Январ … Сентябр … Декабр) — the Russian forms were a language-rule breach app-wide; 25 frames moved.
+- **R15** `home_loaded_none` = the web's «Бу ойда юклаш йўқ» verbatim.
+- The rail's current month reads from `monthScope` (the series), as `FinancialKPIs.tsx` does; the server's `bookedThisMonth`/`collectedThisMonth`/`averageOrderValue` and the payload's three trend fields are decoded but deliberately unrendered — the picker needs "selected vs previous", which only the series can answer. A fixture-backed guard asserts the current month's scope equals the server's fields (incl. trends, null for the same reason).
+- Arithmetic is the web's own, ported: `jsRound(x) = floor(x + 0.5)` (JS `Math.round`, not HALF_UP), `buildTrend` (previous ≤ 0 → null; |Δ| < 1 % → flat), `averageOrderValue`, `donutPercent` — all `BigDecimal`.
+- The 60 s auto-refresh is RESUMED-only in `HomeRoute` and was proven on the emulator (one tick in front, none with another tab in front).
+- Outbox frames capture the sheet alone so future Home changes cannot move them.
+
+Parity: 56 figures equal to the local web dashboard (current month and two past months incl. the re-scoped rail, kicker and loaded tile); 1 phone caption fixed; every hand-off landed.
+
+Parked / owner decisions: the `м²` trailing decimal (`formatArea` app-wide: «202 м²» vs the web's «202,0 м²»); the receivables past-month caveat the web shows («{Ой} ойига тегишли эмас») is not drawn on the phone; region sums carry no «UZS» suffix (as `formatMoney` elsewhere); the top-client share bar can read as an underline (the prototype draws it so); the production-dead `CustodyChain` composable after the payments-queue change (delete with its kept frame, or keep); `AreaText`/`CountText` in `MoneyText.kt` have no production caller (pre-existing).
+
+Side change in the same range (owner request 2026-09-14, commit 21b4f7b): the payments queue rows drop the recorder → confirmer avatar chain on all three tabs.
