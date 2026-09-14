@@ -264,7 +264,7 @@ fun SignedInShell(
                         entry<Dispatch> { k ->
                             DispatchRoute(
                                 orderId = k.orderId, shipmentId = k.shipmentId,
-                                onDone = { backStack.removeLastOrNull() }, onCancel = { backStack.removeLastOrNull() },
+                                onDone = { popIfTop(backStack, k) }, onCancel = { popIfTop(backStack, k) },
                             )
                         }
                     }
