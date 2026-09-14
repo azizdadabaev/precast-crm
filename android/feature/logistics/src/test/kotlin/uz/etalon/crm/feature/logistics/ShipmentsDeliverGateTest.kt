@@ -69,8 +69,16 @@ class ShipmentsDeliverGateTest {
         assertEquals(1, delivered.size)
     }
 
-    /** A call already in flight is the other refusal `runAction` makes — it returns on `busy`
-     *  before it does anything, so a gate opened there would agree to nothing. */
+    /**
+     * A call already in flight is the other refusal `runAction` makes — it returns on `busy` before
+     * it does anything, so a gate opened there would take the operator's agreement and then write
+     * nothing at all.
+     *
+     * Unlike the offline case, this one is NOT allowed to fall through to `deliverShipment`:
+     * `runAction` writes no banner on the `busy` path, so a tap that reached it would vanish in
+     * silence. The button is disabled instead — `ShipmentsRowActionsTest` pins that — and the tap
+     * therefore never leaves the screen.
+     */
     @Test fun `a busy list never opens the gate`() {
         val delivered = mutableListOf<String>()
         show(ready().copy(busy = true)) { delivered += it }
@@ -79,7 +87,7 @@ class ShipmentsDeliverGateTest {
         rule.waitForIdle()
 
         rule.onNodeWithText(GATE_DISMISS).assertDoesNotExist()
-        assertEquals(1, delivered.size)
+        assertEquals(emptyList<String>(), delivered)
     }
 
     @Test fun `a reachable list opens the gate instead of delivering`() {

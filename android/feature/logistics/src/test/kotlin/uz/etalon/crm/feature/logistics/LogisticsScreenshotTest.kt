@@ -321,24 +321,49 @@ class LogisticsScreenshotTest {
     )
 
     @Composable
-    private fun Dispatch(s: DispatchUiState) = ShellFrame {
+    private fun Dispatch(s: DispatchUiState, isShipment: Boolean = true, barVisible: Boolean = true) = ShellFrame {
         DispatchScreen(
-            s = s, isShipment = true, onCancel = {}, onSetDriverId = {}, onSetTruck = {},
+            s = s, isShipment = isShipment, onCancel = {}, onSetDriverId = {}, onSetTruck = {},
             onSetWillCollectCash = {}, onSetAmountDigits = {}, onSubmit = {}, onRetryDrivers = {},
-            shipmentNumber = 2,
+            shipmentNumber = if (isShipment) 2 else null,
             // Robolectric reports the ime inset as absent whatever is focused, so the bar is
             // passed in rather than read from the window (ruling R13's seam).
-            barVisible = true,
+            barVisible = barVisible,
         )
     }
 
-    private fun shootDispatch(name: String) {
-        rule.setContent { EtalonTheme { Dispatch(dispatchState()) } }
+    private fun shootDispatch(
+        name: String,
+        s: DispatchUiState = dispatchState(),
+        isShipment: Boolean = true,
+        barVisible: Boolean = true,
+    ) {
+        rule.setContent { EtalonTheme { Dispatch(s, isShipment, barVisible) } }
         rule.onRoot().captureRoboImage("screenshots/dispatch_$name.png")
     }
 
     @Test @Config(qualifiers = "w411dp-h891dp") fun dispatchLight() = shootDispatch("light")
     @Test @Config(qualifiers = "w411dp-h891dp", fontScale = 1.3f) fun dispatchLargeFont() = shootDispatch("font13")
+
+    /**
+     * Ruling R13: «Машина рақами» is being typed, so the sticky bar is gone and the keyboard is not
+     * fighting it for the bottom of the form. Robolectric never reports the ime inset, so the seam
+     * is driven — the same way `delivery_proof_ime_light` drives it.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun dispatchImeLight() =
+        shootDispatch("ime_light", barVisible = false)
+
+    /**
+     * The whole-order route (`shipmentId == null`): no cash switch — there is one expected
+     * collection and no per-truck choice to make about it — and the sum is always shown, with the
+     * red «Мажбурий» under a zero because the server's schema requires it and the `Dispatch` row is
+     * unique per order, so a zero cannot be walked back from the phone.
+     */
+    @Test @Config(qualifiers = "w411dp-h891dp") fun dispatchWholeOrderLight() = shootDispatch(
+        "whole_order_light",
+        dispatchState().copy(amountDigits = "", willCollectCash = false),
+        isShipment = false,
+    )
 
     /** The gate the sticky «Жўнатиш» opens: the cash the driver will collect as the hero, and the
      *  driver and lorry he is taking as the two tiles. */

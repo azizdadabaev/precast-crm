@@ -41,6 +41,29 @@ class ShipmentsUiStateTest {
         assertFalse(ShipmentsUiState(Resource.Success(detail(OrderStatus.PLACED)), busy = true).canAddShipment)
     }
 
+    /**
+     * The bar's own existence must NOT blink with a request. `canCreateShipment` is the standing
+     * fact the bar is mounted on and the list reserves clearance for; `canAddShipment` is the
+     * narrower "may it be tapped this instant" the button is disabled by. Collapsing the two made
+     * the bar unmount for the length of every add, taking its spinner with it and dropping 88 dp
+     * of the list's bottom padding, so the rows jumped down and back on every tap.
+     */
+    @Test fun `a request in flight disables the add button without unmounting the bar`() {
+        val busy = ShipmentsUiState(Resource.Success(detail(OrderStatus.PLACED)), busy = true)
+        assertTrue(busy.canCreateShipment)
+        assertFalse(busy.canAddShipment)
+    }
+
+    /** Everything that closes the door closes it for BOTH: a status that takes no more trucks, an
+     *  order not loaded yet, and no network. */
+    @Test fun `the bar is gone entirely where another truck is impossible`() {
+        assertFalse(ShipmentsUiState(Resource.Success(detail(OrderStatus.DELIVERED)), busy = true).canCreateShipment)
+        assertFalse(ShipmentsUiState(Resource.Loading(null), busy = true).canCreateShipment)
+        assertFalse(
+            ShipmentsUiState(Resource.Error(detail(OrderStatus.PLACED), AppError.Network("Интернет йўқ"))).canCreateShipment,
+        )
+    }
+
     @Test fun `add is refused with no order loaded yet`() {
         assertFalse(ShipmentsUiState(Resource.Loading(null)).canAddShipment)
     }

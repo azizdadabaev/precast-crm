@@ -46,7 +46,21 @@ data class ShipmentsUiState(
     val resourceError: String? get() = (resource as? Resource.Error)?.error?.message
     /** The only offline signal this screen has: a refresh that failed for lack of a network. */
     val isOffline: Boolean get() = (resource as? Resource.Error)?.error is AppError.Network
-    val canAddShipment: Boolean get() = !busy && !isOffline && (order?.summary?.status?.let { it in SHIPMENT_CREATE_STATUSES } ?: false)
+    /**
+     * Whether this order may take another truck AT ALL — the standing fact, with no `busy` term in
+     * it. It is what decides whether the sticky bar EXISTS, and therefore how much bottom clearance
+     * the list reserves for it.
+     *
+     * Kept apart from [canAddShipment] because the two answer different questions and the screen
+     * asks both. Mounting the bar on [canAddShipment] made the bar disappear for the length of
+     * every add, delete and deliver: the button's own spinner could never be seen, and the list's
+     * `contentPadding` dropped by the bar's 88 dp and came back, so the rows jumped twice per tap.
+     */
+    val canCreateShipment: Boolean get() = !isOffline && (order?.summary?.status?.let { it in SHIPMENT_CREATE_STATUSES } ?: false)
+
+    /** Whether the add button may be TAPPED right now — [canCreateShipment] and nothing else in
+     *  flight. The button stays on screen while it is false; it is disabled and spinning. */
+    val canAddShipment: Boolean get() = canCreateShipment && !busy
     /** Never true alongside [resourceError]: an empty list next to an error banner reads as "no
      *  trucks" when the truth is "couldn't check" — the state that fooled an operator standing
      *  at a truck with no signal. */

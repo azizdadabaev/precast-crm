@@ -41,7 +41,6 @@ import uz.etalon.crm.core.designsystem.components.ConfirmGate
 import uz.etalon.crm.core.designsystem.components.ConfirmSheet
 import uz.etalon.crm.core.designsystem.components.ConfirmTile
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
-import uz.etalon.crm.core.designsystem.components.EtalonIconButton
 import uz.etalon.crm.core.designsystem.components.NavySheet
 import uz.etalon.crm.core.designsystem.components.OutboxBanner
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
@@ -51,7 +50,6 @@ import uz.etalon.crm.core.designsystem.components.StickyActionBarDefaults
 import uz.etalon.crm.core.designsystem.components.TagSurface
 import uz.etalon.crm.core.designsystem.components.TonalButton
 import uz.etalon.crm.core.designsystem.components.navPillContentPadding
-import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
@@ -62,6 +60,7 @@ import uz.etalon.crm.core.model.ShipmentLine
 import uz.etalon.crm.core.model.ShipmentStatus
 import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.core.ui.format.formatScheduleDate
+import uz.etalon.crm.feature.logistics.LogisticsHeader
 import uz.etalon.crm.feature.logistics.R
 import java.time.Instant
 import uz.etalon.crm.core.designsystem.R as DesignSystemR
@@ -134,32 +133,13 @@ fun ShipmentsScreen(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding()) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.headerMargin, vertical = EtalonSpace.md),
-                horizontalArrangement = Arrangement.spacedBy(EtalonSpace.md),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                EtalonIconButton(
-                    icon = EtalonIcons.ArrowLeft,
-                    contentDescription = stringResource(DesignSystemR.string.ds_cd_back),
-                    onClick = onBack,
-                    shape = EtalonShapes.md,
-                )
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EtalonSpace.xs)) {
-                    Text(
-                        stringResource(R.string.shipments_title),
-                        style = EtalonType.headline, color = EtalonColors.ink,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    if (order != null) {
-                        Text(
-                            "${formatOrderNo(order.summary.orderNumber)} · ${order.summary.client.name}",
-                            style = EtalonType.meta, color = EtalonColors.ink2,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
+            // The module's shared header, the same row the camera-first trio draws: a driver moving
+            // between the load screen and this list must not find the way out somewhere else.
+            LogisticsHeader(
+                title = stringResource(R.string.shipments_title),
+                meta = order?.let { "${formatOrderNo(it.summary.orderNumber)} · ${it.summary.client.name}" },
+                onBack = onBack,
+            )
 
             val banner = Modifier.padding(horizontal = EtalonSpace.cardMargin).padding(bottom = EtalonSpace.sm)
             // The offline case IS a failed refresh, so it is the same banner with the same retry —
@@ -194,8 +174,12 @@ fun ShipmentsScreen(
                         // The sticky bar is drawn OVER this list rather than under it, so the
                         // clearance has to be spelled out: without it «Жўнатма қўшиш» covers the
                         // last truck on the order.
+                        //
+                        // `canCreateShipment`, NOT `canAddShipment`: the clearance must answer
+                        // "is there a bar" and never "may it be tapped this instant", or the rows
+                        // jump 88 dp down and back for the length of every request.
                         contentPadding = navPillContentPadding(
-                            extraBottom = if (s.canAddShipment) StickyActionBarDefaults.height else EtalonSpace.sm,
+                            extraBottom = if (s.canCreateShipment) StickyActionBarDefaults.height else EtalonSpace.sm,
                         ),
                     ) {
                         // Never beside an error banner and never while loading: an empty list there
@@ -215,6 +199,7 @@ fun ShipmentsScreen(
                             ShipmentRow(
                                 sh = sh,
                                 now = now,
+                                busy = s.busy,
                                 queuedLoad = s.hasQueuedLoad(sh.id),
                                 failedLoad = rejected != null,
                                 // The server's own reason where it gave one — «Юборилмади» alone
@@ -233,7 +218,10 @@ fun ShipmentsScreen(
             }
         }
 
-        if (s.canAddShipment) {
+        // Mounted on the standing fact, disabled on the moment-to-moment one. A bar that unmounts
+        // while its own request is in flight takes its spinner with it — the operator taps, the
+        // only feedback vanishes, and the list underneath jumps by the bar's height twice.
+        if (s.canCreateShipment) {
             Box(Modifier.align(Alignment.BottomCenter)) {
                 StickyActionBar {
                     PrimaryButton(
@@ -339,6 +327,7 @@ private fun deliverTiles(sh: ShipmentLine): (@Composable RowScope.() -> Unit)? {
 private fun ShipmentRow(
     sh: ShipmentLine,
     now: Instant,
+    busy: Boolean,
     queuedLoad: Boolean,
     failedLoad: Boolean,
     failedMessage: String?,
@@ -350,7 +339,10 @@ private fun ShipmentRow(
     onCancelUpload: () -> Unit,
 ) {
     val unsentLoad = queuedLoad || failedLoad
-    val deletable = sh.status == ShipmentStatus.PENDING && !unsentLoad
+    // `busy` disables rather than swallows: `runAction` returns early while another request is in
+    // flight and writes nothing, so a live-looking button that does nothing at all was the worst
+    // of the two — a dead control at least says so.
+    val deletable = sh.status == ShipmentStatus.PENDING && !unsentLoad && !busy
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     Column(
@@ -407,10 +399,11 @@ private fun ShipmentRow(
                 TonalButton(
                     text = stringResource(trailing.first),
                     onClick = trailing.second,
-                    // Only the load offer is withdrawn, and only while its own photo is unsent:
-                    // the deliver gate carries the offline refusal itself, and dispatching just
-                    // opens the next screen.
-                    enabled = !(sh.status == ShipmentStatus.PENDING && unsentLoad),
+                    // Offline is NOT a term here — the deliver gate carries that refusal itself,
+                    // and loading and dispatching only open the next screen. `busy` is, because
+                    // the ViewModel would drop the tap in silence; and the load offer is withdrawn
+                    // on top of that while its own photo is still unsent.
+                    enabled = !busy && !(sh.status == ShipmentStatus.PENDING && unsentLoad),
                     onDark = true,
                 )
             }
@@ -424,9 +417,11 @@ private fun ShipmentRow(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(EtalonSpace.sm))
-                TonalButton(stringResource(R.string.logistics_upload_retry), onRetryUpload, onDark = true)
+                // Both are local-only, so connectivity is not a term — but `runAction` still
+                // returns early while something else is in flight, so `busy` is.
+                TonalButton(stringResource(R.string.logistics_upload_retry), onRetryUpload, enabled = !busy, onDark = true)
                 Spacer(Modifier.width(EtalonSpace.xs))
-                TonalButton(stringResource(R.string.logistics_upload_cancel), onCancelUpload, onDark = true)
+                TonalButton(stringResource(R.string.logistics_upload_cancel), onCancelUpload, enabled = !busy, onDark = true)
             }
             queuedLoad -> Text(
                 stringResource(R.string.logistics_upload_sending),
