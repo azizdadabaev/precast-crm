@@ -34,6 +34,7 @@ import uz.etalon.crm.core.designsystem.components.DeltaBadge
 import uz.etalon.crm.core.designsystem.components.MoneyHeroText
 import uz.etalon.crm.core.designsystem.components.SegmentBar
 import uz.etalon.crm.core.designsystem.components.StackedBar
+import uz.etalon.crm.core.designsystem.components.Tag
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonSpace
@@ -41,6 +42,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.LoadedVolume
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.Trend
+import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.core.ui.format.UZ_MONTHS_SHORT
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatCountBare
@@ -48,7 +50,6 @@ import uz.etalon.crm.core.ui.format.formatDecimal
 import uz.etalon.crm.core.ui.format.formatMoney
 import java.math.BigDecimal
 import java.time.Instant
-import java.time.ZoneId
 
 /** Design §2.3: a rail card is 228 dp wide, so the third one peeks past the right edge and the
  *  row reads as "there is more here" without a scrollbar. */
@@ -65,12 +66,6 @@ private val GRID_GAP = EtalonSpace.rowGap
  * named here, once, instead of at three call sites.
  */
 private val KickerStyle = EtalonType.labelSm.copy(letterSpacing = 0.08.em)
-
-/** §2's tag geometry — radius `xs`, pad 7×2 — which `StatusTag` owns for statuses. The hero's
- *  count badge and the discrepancy chip are not statuses, so they restate the two paddings here
- *  rather than reach into the design system's internals. */
-private val TAG_PAD_H = 7.dp
-private val TAG_PAD_V = 2.dp
 
 /**
  * Every text slot on a rail card — the title and both caption lines — reserves exactly two lines,
@@ -149,17 +144,15 @@ internal fun ReceivablesHero(d: HomeDashboard, modifier: Modifier = Modifier) = 
     }
 }
 
-/** «6 буюртма» — the tag treatment `StatusTag` draws a red status in on navy: the navy2 ground
- *  and [EtalonColors.debtOnDark], never the light `redBg` chip a white card would carry. */
+/** «6 буюртма» — the design system's own tag in the pair `StatusTag` draws a red status in on
+ *  navy: the navy2 ground and [EtalonColors.debtOnDark], never the light `redBg` chip a white card
+ *  would carry. The 8 dp of air is outside the tag, so it is a margin and not padding. */
 @Composable
-private fun HeroBadge(text: String) = Text(
-    text,
-    style = EtalonType.tag,
-    color = EtalonColors.debtOnDark,
-    maxLines = 1,
-    modifier = Modifier.padding(start = EtalonSpace.sm)
-        .clip(EtalonShapes.xs).background(EtalonColors.navy2)
-        .padding(horizontal = TAG_PAD_H, vertical = TAG_PAD_V),
+private fun HeroBadge(text: String) = Tag(
+    text = text,
+    fg = EtalonColors.debtOnDark,
+    bg = EtalonColors.navy2,
+    modifier = Modifier.padding(start = EtalonSpace.sm),
 )
 
 @Composable
@@ -479,16 +472,10 @@ private fun GridCaption(text: String) = Text(
     overflow = TextOverflow.Ellipsis,
 )
 
-/** «Назоратда» / «Диққат» — the tag treatment a white card carries, in the green or red pair. */
+/** «Назоратда» / «Диққат» — the same tag a white card carries a status in, in the green or the red
+ *  pair. It is not a status: nothing in the payload says "under control", the count does. */
 @Composable
-private fun Chip(text: String, bg: Color, fg: Color) = Text(
-    text,
-    style = EtalonType.tag,
-    color = fg,
-    maxLines = 1,
-    modifier = Modifier.clip(EtalonShapes.xs).background(bg)
-        .padding(horizontal = TAG_PAD_H, vertical = TAG_PAD_V),
-)
+private fun Chip(text: String, bg: Color, fg: Color) = Tag(text = text, fg = fg, bg = bg)
 
 /**
  * «сен» from the server's own `"2026-09"`.
@@ -499,10 +486,14 @@ private fun Chip(text: String, bg: Color, fg: Color) = Text(
  * definition and is the only other thing on this screen that knows what today is. It never
  * guesses a figure: a payload with no month key also has no loaded row, so the card under this
  * label reads «Бу ой юк йўқ».
+ *
+ * The fallback reads [TASHKENT], never the device's own zone: the business's month is the factory's
+ * month, and a phone whose clock is set to another country would otherwise name the previous month
+ * for the first hours of a new one — the same rule every other date in this app follows.
  */
-private fun shortMonth(monthKey: String, now: Instant): String {
+internal fun shortMonth(monthKey: String, now: Instant): String {
     val fromKey = monthKey.substringAfter('-', "").toIntOrNull()?.takeIf { it in 1..UZ_MONTHS_SHORT.size }
-    val month = fromKey ?: now.atZone(ZoneId.systemDefault()).monthValue
+    val month = fromKey ?: now.atZone(TASHKENT).monthValue
     return UZ_MONTHS_SHORT[month - 1]
 }
 

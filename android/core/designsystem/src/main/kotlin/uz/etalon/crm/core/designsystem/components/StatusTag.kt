@@ -82,6 +82,23 @@ internal fun TagBody(text: String, bg: Color, fg: Color, style: TextStyle, modif
     )
 }
 
+/**
+ * A tag whose two colours the caller picks: §2's geometry — radius `xs`, pad 7×2, 10/600 — with a
+ * foreground and a ground no status table decides.
+ *
+ * It exists for the labels that are **not** statuses. The dashboard's hero draws «N буюртма» in the
+ * red-on-navy pair and its discrepancy card draws «Назоратда» / «Диққат» in the green or the red
+ * one; neither is an [OrderStatus], a [PaymentState] or a [ShipmentStatus], so the tables above
+ * cannot be asked. Anything that IS one of those must still go through [StatusTag] and its
+ * siblings — choosing a status colour by hand is how two screens end up drawing the same state
+ * differently.
+ *
+ * Delegates to [TagBody], which stays the one place a tag's shape, padding and type live.
+ */
+@Composable
+fun Tag(text: String, fg: Color, bg: Color, modifier: Modifier = Modifier) =
+    TagBody(text = text, bg = bg, fg = fg, style = EtalonType.tag, modifier = modifier)
+
 @Composable
 internal fun Tag(family: TagFamily, text: String, surface: TagSurface, modifier: Modifier) {
     val (bg, fg) = tagColors(family, surface)
