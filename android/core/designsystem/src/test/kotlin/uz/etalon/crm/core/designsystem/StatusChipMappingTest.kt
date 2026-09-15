@@ -51,13 +51,13 @@ class StatusChipMappingTest {
         assertEquals(R.string.status_unknown, discrepancyStatusLabel(DiscrepancyStatus.UNKNOWN))
     }
 
-    @Test fun `all seven order statuses land on the five design 5-1 families`() {
+    @Test fun `all seven order statuses land on the six design 5-1 families`() {
         assertEquals(TagFamily.NEUTRAL, OrderStatus.DRAFT.family())
         assertEquals(TagFamily.NEUTRAL, OrderStatus.PLACED.family())
         assertEquals(TagFamily.LAVENDER, OrderStatus.IN_PRODUCTION.family())
-        // Design §5.1 lets LOADED share IN_PRODUCTION's palette — both are "in the yard" — but it
+        // Spec v1.3 §2 took LOADED out of IN_PRODUCTION's lavender and gave it its own amber. It still
         // must not share DISPATCHED's, which is what the LegacyExtended shim had collapsed.
-        assertEquals(TagFamily.LAVENDER, OrderStatus.LOADED.family())
+        assertEquals(TagFamily.AMBER, OrderStatus.LOADED.family())
         assertEquals(TagFamily.INDIGO, OrderStatus.DISPATCHED.family())
         assertEquals(TagFamily.GREEN, OrderStatus.DELIVERED.family())
         assertEquals(TagFamily.RED, OrderStatus.CANCELED.family())
@@ -104,9 +104,9 @@ class StatusChipMappingTest {
         assertEquals(TagFamily.NEUTRAL, driverActiveFamily(false))
     }
 
-    /** The acceptance test the design turns on: on each ground the five families must be five
+    /** The acceptance test the design turns on: on each ground every family must be a
      *  distinguishable tags, fill and text alike. */
-    @Test fun `each surface draws the five families as five distinct fill-text pairs`() {
+    @Test fun `each surface draws every family as a distinct fill-text pair`() {
         TagSurface.entries.forEach { surface ->
             val drawn = TagFamily.entries.map { tagColors(it, surface) }
             assertEquals(TagFamily.entries.size, drawn.toSet().size, "$surface reuses a fill/text pair")

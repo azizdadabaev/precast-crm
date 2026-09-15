@@ -46,6 +46,16 @@ object EtalonColors {
     /** The «юқори» tier's cell ground. */
     val heavyBg = Color(0xFFF8E6DC)
 
+    /** ЮКЛАНГАН's amber (spec v1.3 §2), the step the restyle pulls out of IN_PRODUCTION's
+     *  lavender. The light and panel grounds reuse [warningBg] and [heavy] — the capacity
+     *  calendar got there first and they are the same two colours, so they are not restated.
+     *  This is the fill that had no token: amber legible on navy. */
+    val amberOnDark = Color(0xFFFFD28A)
+
+    /** The load list's «Ғишт» chip — a hairline and a text dark enough to read on [warningBg]. */
+    val amberBorder = Color(0xFFF5D9A8)
+    val amberDeep = Color(0xFF8A5A1B)
+
     val onDark = Color(0xFFFFFFFF)
     val onDarkMuted = Color(0xFFFFFFFF).copy(alpha = 0.72f)
     val onDarkDivider = Color(0xFFFFFFFF).copy(alpha = 0.18f)

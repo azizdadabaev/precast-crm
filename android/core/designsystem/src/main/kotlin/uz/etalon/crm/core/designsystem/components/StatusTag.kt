@@ -24,11 +24,15 @@ import uz.etalon.crm.core.model.ShipmentStatus
 enum class TagSurface { ROW_ON_NAVY, ROW_ON_LIGHT, PANEL_ON_INDIGO }
 
 /** The five semantic families every status in the app collapses into (design §5.1). */
-internal enum class TagFamily { NEUTRAL, LAVENDER, INDIGO, GREEN, RED }
+internal enum class TagFamily { NEUTRAL, LAVENDER, AMBER, INDIGO, GREEN, RED }
 
 internal fun OrderStatus.family() = when (this) {
     OrderStatus.DRAFT, OrderStatus.PLACED, OrderStatus.UNKNOWN -> TagFamily.NEUTRAL
-    OrderStatus.IN_PRODUCTION, OrderStatus.LOADED -> TagFamily.LAVENDER
+    OrderStatus.IN_PRODUCTION -> TagFamily.LAVENDER
+    // Spec v1.3 §2 gives ЮКЛАНГАН its own amber. It used to share IN_PRODUCTION's lavender on
+    // the grounds that both are "in the yard", but the two are different jobs on a phone: an
+    // order in production is waiting on the plant, a loaded one is waiting on a truck.
+    OrderStatus.LOADED -> TagFamily.AMBER
     OrderStatus.DISPATCHED -> TagFamily.INDIGO
     OrderStatus.DELIVERED -> TagFamily.GREEN
     OrderStatus.CANCELED -> TagFamily.RED
@@ -44,6 +48,7 @@ internal fun tagColors(family: TagFamily, surface: TagSurface): Pair<Color, Colo
     TagSurface.ROW_ON_NAVY -> when (family) {
         TagFamily.NEUTRAL -> EtalonColors.navy2 to EtalonColors.onDark
         TagFamily.LAVENDER -> EtalonColors.navy2 to EtalonColors.lavender
+        TagFamily.AMBER -> EtalonColors.navy2 to EtalonColors.amberOnDark
         TagFamily.INDIGO -> EtalonColors.indigo to EtalonColors.onDark
         TagFamily.GREEN -> EtalonColors.navy2 to EtalonColors.ink3
         TagFamily.RED -> EtalonColors.navy2 to EtalonColors.debtOnDark
@@ -51,6 +56,7 @@ internal fun tagColors(family: TagFamily, surface: TagSurface): Pair<Color, Colo
     TagSurface.ROW_ON_LIGHT -> when (family) {
         TagFamily.NEUTRAL -> EtalonColors.surfaceBorder to EtalonColors.ink2
         TagFamily.LAVENDER -> EtalonColors.lavenderBg to EtalonColors.indigo
+        TagFamily.AMBER -> EtalonColors.warningBg to EtalonColors.heavy
         TagFamily.INDIGO -> EtalonColors.indigo to EtalonColors.onDark
         TagFamily.GREEN -> EtalonColors.greenBg to EtalonColors.green
         TagFamily.RED -> EtalonColors.redBg to EtalonColors.red
@@ -60,6 +66,7 @@ internal fun tagColors(family: TagFamily, surface: TagSurface): Pair<Color, Colo
         // than re-derived, so the tag and the rule under it can never drift apart.
         TagFamily.NEUTRAL -> EtalonColors.onDarkDivider to EtalonColors.onDark
         TagFamily.LAVENDER -> EtalonColors.onDark to EtalonColors.indigo
+        TagFamily.AMBER -> EtalonColors.onDark to EtalonColors.heavy
         TagFamily.INDIGO -> EtalonColors.navy to EtalonColors.onDark
         TagFamily.GREEN -> EtalonColors.green to EtalonColors.onDark
         TagFamily.RED -> EtalonColors.red to EtalonColors.onDark
