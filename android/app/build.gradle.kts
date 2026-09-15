@@ -14,6 +14,10 @@ plugins {
     // alias(libs.plugins.google.services)
 }
 
+// Emulator host-loopback by default. -PetalonApiUrl=https://etalontbm.uz builds a debug
+// APK that talks to prod, for testing on a real handset.
+val debugApiUrl: String = (project.findProperty("etalonApiUrl") as String?) ?: "http://10.0.2.2:3000"
+
 android {
     namespace = "uz.etalon.crm"
     compileSdk = AndroidConfig.COMPILE_SDK
@@ -26,7 +30,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
-        debug { buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000\"") }
+        debug { buildConfigField("String", "API_BASE_URL", "\"$debugApiUrl\"") }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
