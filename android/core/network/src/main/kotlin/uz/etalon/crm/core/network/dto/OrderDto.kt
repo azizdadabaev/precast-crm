@@ -28,7 +28,21 @@ import java.math.BigDecimal
 )
 
 @Serializable data class NameDto(val id: String, val name: String)
-@Serializable data class CalculationDto(val name: String? = null, val innerWidth: String, val innerLength: String, val pattern: String, val beamLength: String, val beamCount: Int, val totalBlocks: Int, val billedArea: String, val subtotal: String)
+@Serializable data class CalculationDto(
+    val name: String? = null, val innerWidth: String, val innerLength: String,
+    val pattern: String, val patternAuto: String? = null,
+    val bearing: String? = null,
+    val beamLength: String, val beamCount: Int,
+    val blocksPerRow: Int = 0, val blockRows: Int = 0, val totalBlocks: Int,
+    val monolithLength: String? = null, val monolithArea: String? = null,
+    val billedArea: String,
+    val m2Price: String? = null, val m2PriceOverride: Boolean = false, val m2PriceReason: String? = null,
+    // 7a reads both extras halves rather than deriving them by subtraction: the server stores
+    // each one, and subtracting would fold every rounding error in the chain into the number
+    // the operator is asked to trust.
+    val m2Cost: String? = null, val patternExtraCost: String? = null, val manualExtraBeamsCost: String? = null,
+    val subtotal: String,
+)
 @Serializable data class ProjectDto(val calculations: List<CalculationDto> = emptyList())
 @Serializable data class ReceiptDto(val id: String, val imageUrl: String)
 @Serializable data class PaymentDto(val id: String, val amount: String, val method: String, val status: String, val recordedAt: String, val recordedBy: NameDto? = null, val receipts: List<ReceiptDto> = emptyList())

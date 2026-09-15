@@ -60,7 +60,26 @@ fun OrderDetailDto.toDomain(mediaBase: String, fetchedAt: Instant): OrderDetail 
         deliveryLat = deliveryLat, deliveryLng = deliveryLng, deliveryLocationUrl = deliveryLocationUrl, deliveryLocationLabel = deliveryLocationLabel,
         discountAmount = Money.parse(discountAmount), deliveryCost = Money.parse(deliveryCost), otherCost = Money.parse(otherCost),
         roomsSubtotal = Money.parse(roomsSubtotal), writeOffAmount = writeOff,
-        rooms = project.calculations.map { RoomLine(it.name, BigDecimal(it.innerWidth), BigDecimal(it.innerLength), it.pattern, BigDecimal(it.beamLength), it.beamCount, it.totalBlocks, BigDecimal(it.billedArea), Money.parse(it.subtotal)) },
+        rooms = project.calculations.map {
+            RoomLine(
+                name = it.name,
+                innerWidth = BigDecimal(it.innerWidth), innerLength = BigDecimal(it.innerLength),
+                pattern = it.pattern, patternAuto = it.patternAuto ?: it.pattern,
+                bearing = it.bearing?.let(::BigDecimal) ?: BigDecimal.ZERO,
+                beamLength = BigDecimal(it.beamLength), beamCount = it.beamCount,
+                blocksPerRow = it.blocksPerRow, blockRows = it.blockRows, totalBlocks = it.totalBlocks,
+                monolithLength = it.monolithLength?.let(::BigDecimal) ?: BigDecimal.ZERO,
+                monolithArea = it.monolithArea?.let(::BigDecimal) ?: BigDecimal.ZERO,
+                billedArea = BigDecimal(it.billedArea),
+                m2Price = it.m2Price?.let(Money::parse) ?: Money.ZERO,
+                m2PriceOverride = it.m2PriceOverride, m2PriceReason = it.m2PriceReason,
+                m2Cost = it.m2Cost?.let(Money::parse) ?: Money.ZERO,
+                // Summed here rather than in the UI so the «+ N балка» line has one definition.
+                extrasCost = (it.patternExtraCost?.let(Money::parse) ?: Money.ZERO) +
+                    (it.manualExtraBeamsCost?.let(Money::parse) ?: Money.ZERO),
+                subtotal = Money.parse(it.subtotal),
+            )
+        },
         payments = payments.map { PaymentLine(it.id, Money.parse(it.amount), PaymentMethod.from(it.method), PaymentStatus.from(it.status), it.recordedAt.toInstant(), it.recordedBy?.name, it.receipts.mapNotNull { r -> MediaUrl.absolute(mediaBase, r.imageUrl) }) },
         shipments = shipments.map {
             ShipmentLine(

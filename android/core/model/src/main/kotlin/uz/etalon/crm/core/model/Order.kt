@@ -60,8 +60,26 @@ enum class OrdersView { LIST, CALENDAR }
 data class OrderFacets(val byStatus: Map<OrderStatus, Int>, val debt: Int, val paid: Int, val total: Int, val totalArea: BigDecimal)
 
 data class RoomLine(
-    val name: String?, val innerWidth: BigDecimal, val innerLength: BigDecimal, val pattern: String,
-    val beamLength: BigDecimal, val beamCount: Int, val totalBlocks: Int, val billedArea: BigDecimal, val subtotal: Money,
+    val name: String?, val innerWidth: BigDecimal, val innerLength: BigDecimal,
+    /** The chosen pattern, and what auto-pick would have chosen — 7a prints «(авто: …)» only
+     *  when they differ, which is the operator's signal that someone overrode the layout. */
+    val pattern: String, val patternAuto: String = pattern,
+    val bearing: BigDecimal = BigDecimal.ZERO,
+    val beamLength: BigDecimal, val beamCount: Int,
+    val blocksPerRow: Int = 0, val blockRows: Int = 0, val totalBlocks: Int,
+    val monolithLength: BigDecimal = BigDecimal.ZERO,
+    /** The physical slab. This is what 7a's dimensions line and Майдон print, and what
+     *  [OrderSummary.totalArea] sums — NOT what the room is billed on. */
+    val monolithArea: BigDecimal = BigDecimal.ZERO,
+    /** What the m² charge is actually computed from (N × PITCH × beam length). Never equal to
+     *  innerWidth × innerLength, which is why 7a joins the dimensions with «·» and not «=». */
+    val billedArea: BigDecimal,
+    val m2Price: Money = Money.ZERO, val m2PriceOverride: Boolean = false, val m2PriceReason: String? = null,
+    val m2Cost: Money = Money.ZERO,
+    /** Б-Г-Б's closing beam plus any manual extra beams — the part of [subtotal] that the m²
+     *  charge does not explain, and that 7a prints on its own line so the two sum to the total. */
+    val extrasCost: Money = Money.ZERO,
+    val subtotal: Money,
 )
 data class PaymentLine(
     val id: String, val amount: Money, val method: PaymentMethod, val status: PaymentStatus,
