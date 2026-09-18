@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
@@ -99,6 +100,37 @@ fun shareImageIntent(uri: Uri, subject: String): Intent = Intent(Intent.ACTION_S
     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) // without this every messenger gets a SecurityException
 }
 
+/**
+ * A composable rendered offscreen, ready to be turned into a bitmap on demand.
+ *
+ * Exists because the order detail does two different things with one card: «Юбориш (расм)» hands
+ * it to a messenger, «Чатга юбориш» uploads it to the customer's chat. Composing the card twice
+ * would be two offscreen copies of the same thing.
+ */
+class ImageCapture internal constructor(private val layer: GraphicsLayer) {
+    suspend fun toBitmap(): ImageBitmap = layer.toImageBitmap()
+}
+
+/** Renders [content] offscreen and returns the handle that can photograph it. */
+@Composable
+fun rememberImageCapture(content: @Composable () -> Unit): ImageCapture {
+    val layer = rememberGraphicsLayer()
+    ZeroSizeCapture {
+        // The card is composed for the capture but is not on screen, so it must not be in the
+        // semantics tree either: TalkBack would otherwise read out a card nobody can see, and a
+        // node search — a test's, or an automation's — would find every figure on this screen
+        // twice.
+        Box(
+            Modifier
+                .clearAndSetSemantics {}
+                .drawWithContent { layer.record { this@drawWithContent.drawContent() } },
+        ) {
+            content()
+        }
+    }
+    return remember(layer) { ImageCapture(layer) }
+}
+
 /** What [rememberShareImage] hands its caller: the tap, whether it is still working, and the one
  *  thing that can go wrong. */
 data class ShareAction(val onClick: () -> Unit, val enabled: Boolean, val error: String?)
@@ -117,23 +149,9 @@ fun rememberShareImage(
 ): ShareAction {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val layer = rememberGraphicsLayer()
+    val capture = rememberImageCapture(content)
     var sharing by remember { mutableStateOf(false) }
     var shareError by remember { mutableStateOf<String?>(null) }
-
-    ZeroSizeCapture {
-        // The card is composed for the capture but is not on screen, so it must not be in the
-        // semantics tree either: TalkBack would otherwise read out a card nobody can see, and a
-        // node search — a test's, or an automation's — would find every figure on this screen
-        // twice.
-        Box(
-            Modifier
-                .clearAndSetSemantics {}
-                .drawWithContent { layer.record { this@drawWithContent.drawContent() } },
-        ) {
-            content()
-        }
-    }
 
     return ShareAction(
         onClick = {
@@ -145,7 +163,7 @@ fun rememberShareImage(
                 // spinning forever on the way. `finally` is what puts the spinner down — both on
                 // that failure and on the ordinary cancellation of leaving the screen.
                 try {
-                    val uri = writeSharePng(context, layer.toImageBitmap())
+                    val uri = writeSharePng(context, capture.toBitmap())
                     context.startActivity(Intent.createChooser(shareImageIntent(uri, subject), null))
                 } catch (e: CancellationException) {
                     throw e

@@ -33,7 +33,10 @@ class OrderDetailViewModelTest {
         authorId = "u7", authorName = "Оператор",
     )
 
-    private class FakeSource(var failPost: Throwable? = null) : OrderDetailSource {
+    private class FakeSource(
+        var failPost: Throwable? = null,
+        var sendToChatResult: Result<Unit> = Result.success(Unit),
+    ) : OrderDetailSource {
         val thread = MutableStateFlow<Resource<List<OrderComment>>>(Resource.Loading(null))
         val posted = mutableListOf<String>()
         /** Every `Idempotency-Key` the ViewModel handed over, in order — the thing the retry rule
@@ -59,6 +62,11 @@ class OrderDetailViewModelTest {
         override suspend fun retryUpload(id: String) = Unit
         override suspend fun cancelUpload(id: String) = Unit
         override suspend fun deleteLoadedPhoto(orderId: String, photoId: String): Result<Unit> = Result.success(Unit)
+        var sentToChat = 0
+        override suspend fun sendToChat(orderId: String): Result<Unit> {
+            sentToChat++
+            return sendToChatResult
+        }
     }
 
     /** `WhileSubscribed`: without a collector the ViewModel's own flows never run. */
@@ -250,5 +258,30 @@ class OrderDetailViewModelTest {
         vm.refresh()
         advanceUntilIdle()
         assertEquals(2, src.commentRefreshes)
+    }
+
+    /**
+     * «Чатга юбориш» reaches Chromium and then Telegram on the server, so it fails in ways the
+     * operator has to hear about — a locked inbox, a chat the business connection has lost. A
+     * send that quietly does nothing looks exactly like a send that worked.
+     */
+    @Test fun `a failed send to chat is reported rather than swallowed`() = runTest {
+        val src = FakeSource(sendToChatResult = Result.failure(IllegalStateException("boom")))
+        val vm = OrderDetailViewModel(src, "o3")
+        advanceUntilIdle()
+        vm.sendToChat()
+        advanceUntilIdle()
+        assertEquals(1, src.sentToChat)
+        assertNotNull(vm.actionError.value)
+    }
+
+    @Test fun `a successful send to chat leaves no error behind`() = runTest {
+        val src = FakeSource()
+        val vm = OrderDetailViewModel(src, "o3")
+        advanceUntilIdle()
+        vm.sendToChat()
+        advanceUntilIdle()
+        assertEquals(1, src.sentToChat)
+        assertNull(vm.actionError.value)
     }
 }

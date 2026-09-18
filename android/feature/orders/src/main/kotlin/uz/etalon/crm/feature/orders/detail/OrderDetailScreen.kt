@@ -141,6 +141,7 @@ fun OrderDetailRoute(
         onLoadTruck = onLoadTruck, onAddPhoto = onAddPhoto, onDeliveryProof = onDeliveryProof,
         onOpenShipments = onOpenShipments, onOpenLocation = onOpenLocation, onRecordPayment = onRecordPayment,
         onDeletePhoto = vm::deletePhoto, onRetryUpload = vm::retryUpload, onCancelUpload = vm::cancelUpload,
+        onSendToChat = vm::sendToChat,
         comments = comments, commentDraft = commentDraft, postingComment = postingComment, commentError = commentError,
         onCommentDraftChange = vm::setCommentDraft, onPostComment = vm::postComment,
         onRetryComments = vm::refreshComments,
@@ -206,6 +207,7 @@ fun OrderDetailScreen(
     onCommentDraftChange: (String) -> Unit = {},
     onPostComment: () -> Unit = {},
     onRetryComments: () -> Unit = {},
+    onSendToChat: () -> Unit = {},
     barVisible: Boolean = !WindowInsets.isImeVisible,
 ) {
     val o = r.dataOrNull
@@ -255,7 +257,16 @@ fun OrderDetailScreen(
     Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding().imePadding()) {
         Column(Modifier.fillMaxSize()) {
             // Outside the list, so it stays put while the cards scroll under it.
-            if (o != null) DetailTopBar(o, onBack, share?.onClick)
+            if (o != null) {
+                DetailTopBar(
+                    o = o,
+                    onBack = onBack,
+                    onShare = share?.onClick,
+                    // Only on an order already linked to a conversation: linking one is a picker
+                    // the web has and this screen does not.
+                    onSendToChat = if (me.can("inbox.access") && o.conversationId != null) onSendToChat else null,
+                )
+            }
             PullToRefreshBox(
                 isRefreshing = r is Resource.Loading && o == null,
                 onRefresh = onRefresh,
@@ -417,7 +428,12 @@ fun OrderDetailScreen(
  * project's conversation id, which GET /api/orders/{id} does not return to this app.
  */
 @Composable
-private fun DetailTopBar(o: OrderDetail, onBack: () -> Unit, onShare: (() -> Unit)?) = Column {
+private fun DetailTopBar(
+    o: OrderDetail,
+    onBack: () -> Unit,
+    onShare: (() -> Unit)?,
+    onSendToChat: (() -> Unit)?,
+) = Column {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().background(EtalonColors.page)
@@ -435,7 +451,7 @@ private fun DetailTopBar(o: OrderDetail, onBack: () -> Unit, onShare: (() -> Uni
             modifier = Modifier.weight(1f),
         )
         StatusTag(o.summary.status)
-        if (onShare != null) {
+        if (onShare != null || onSendToChat != null) {
             Box {
                 EtalonIconButton(
                     EtalonIcons.EllipsisVertical,
@@ -443,10 +459,18 @@ private fun DetailTopBar(o: OrderDetail, onBack: () -> Unit, onShare: (() -> Uni
                     { menuOpen = true },
                 )
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.detail_menu_share), style = EtalonType.body) },
-                        onClick = { menuOpen = false; onShare() },
-                    )
+                    if (onShare != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.detail_menu_share), style = EtalonType.body) },
+                            onClick = { menuOpen = false; onShare() },
+                        )
+                    }
+                    if (onSendToChat != null) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.detail_menu_send_chat), style = EtalonType.body) },
+                            onClick = { menuOpen = false; onSendToChat() },
+                        )
+                    }
                 }
             }
         }

@@ -60,6 +60,7 @@ fun OrderDetailDto.toDomain(mediaBase: String, fetchedAt: Instant): OrderDetail 
         deliveryLat = deliveryLat, deliveryLng = deliveryLng, deliveryLocationUrl = deliveryLocationUrl, deliveryLocationLabel = deliveryLocationLabel,
         discountAmount = Money.parse(discountAmount), deliveryCost = Money.parse(deliveryCost), otherCost = Money.parse(otherCost),
         roomsSubtotal = Money.parse(roomsSubtotal), writeOffAmount = writeOff,
+        conversationId = project.conversationId,
         rooms = project.calculations.map {
             RoomLine(
                 name = it.name,

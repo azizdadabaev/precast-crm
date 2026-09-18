@@ -83,6 +83,11 @@ class LogisticsRepository @Inject constructor(
     suspend fun deliverShipment(orderId: String, shipmentId: String): Result<Unit> = mutate(orderId) { api.deliverShipment(orderId, shipmentId) }
     suspend fun deleteLoadedPhoto(orderId: String, photoId: String): Result<Unit> = mutate(orderId) { api.deleteLoadedPhoto(orderId, photoId) }
 
+    /** «Чатга юбориш». The server renders the card and posts it; nothing about the order itself
+     *  changes, so unlike its neighbours here this one does not re-fetch the detail. */
+    suspend fun sendOrderToChat(orderId: String): Result<Unit> =
+        runCatchingCancellable { api.sendOrderToChat(orderId) }
+
     suspend fun dispatchShipment(
         orderId: String, shipmentId: String, driverId: String?, truckIdentifier: String?,
         driverWillCollectCash: Boolean, cashToCollect: Money?,

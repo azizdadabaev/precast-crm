@@ -207,4 +207,5 @@
     <string name="detail_photos_meta">%1$d расм</string>
     <string name="detail_photos_meta_at">%1$d расм · %2$s</string>
     <string name="detail_events_count">%1$d та ёзув</string>
+    <string name="detail_menu_send_chat">Чатга юбориш</string>
 </resources>

@@ -110,6 +110,9 @@ data class OrderDetail(
     val discountAmount: Money, val deliveryCost: Money, val otherCost: Money, val roomsSubtotal: Money,
     val writeOffAmount: Money,
     val rooms: List<RoomLine>,
+    /** The customer's Telegram conversation, when this order is linked to one and the reader
+     *  may see it. Null for everyone without inbox.access. */
+    val conversationId: String? = null,
     val payments: List<PaymentLine>,
     val shipments: List<ShipmentLine>,
     val loadedPhotos: List<LoadedPhoto>,

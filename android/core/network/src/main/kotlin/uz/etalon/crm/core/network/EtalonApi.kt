@@ -58,6 +58,14 @@ interface EtalonApi {
     // the session changes hands mid-drain. The interceptor leaves an Authorization header the
     // caller already set. Every other route omits it and gets the live token, as before.
 
+    /**
+     * «Чатга юбориш» — the server renders the order's quote card in its own headless Chromium and
+     * posts it to the customer's chat. No body and no image: rendering here would put a third
+     * drawing of the same card (Compose, the web's DOM capture, Chromium) into one conversation.
+     */
+    @POST("/api/orders/{id}/send-to-chat")
+    suspend fun sendOrderToChat(@Path("id") id: String): Unit
+
     @Multipart
     @POST("/api/orders/{id}/load")
     suspend fun loadTruck(

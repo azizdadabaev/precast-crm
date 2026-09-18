@@ -46,6 +46,7 @@ interface OrderDetailSource {
     suspend fun retryUpload(id: String)
     suspend fun cancelUpload(id: String)
     suspend fun deleteLoadedPhoto(orderId: String, photoId: String): Result<Unit>
+    suspend fun sendToChat(orderId: String): Result<Unit>
 }
 
 class RepositoryOrderDetailSource @Inject constructor(
@@ -63,6 +64,7 @@ class RepositoryOrderDetailSource @Inject constructor(
     override suspend fun retryUpload(id: String) = outbox.retry(id)
     override suspend fun cancelUpload(id: String) = outbox.cancel(id)
     override suspend fun deleteLoadedPhoto(orderId: String, photoId: String) = logistics.deleteLoadedPhoto(orderId, photoId)
+    override suspend fun sendToChat(orderId: String) = logistics.sendOrderToChat(orderId)
 }
 
 /** The list side gets away with a Hilt subclass (`HiltOrdersListViewModel`); an assisted-injected
@@ -203,6 +205,10 @@ class OrderDetailViewModel @AssistedInject constructor(
     /** Online only — the delete route carries no server-side idempotency, so it is never queued.
      *  LogisticsRepository re-fetches the order on success, which is what drops the tile. */
     fun deletePhoto(photoId: String) = runAction { source.deleteLoadedPhoto(orderId, photoId) }
+
+    /** «Чатга юбориш» — fire and report. Online only: the server has to reach Chromium and
+     *  Telegram, neither of which an outbox replay could stand in for. */
+    fun sendToChat() = runAction { source.sendToChat(orderId) }
 
     private fun runAction(call: suspend () -> Result<Unit>) {
         viewModelScope.launch {

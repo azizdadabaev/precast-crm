@@ -43,7 +43,11 @@ import java.math.BigDecimal
     val m2Cost: String? = null, val patternExtraCost: String? = null, val manualExtraBeamsCost: String? = null,
     val subtotal: String,
 )
-@Serializable data class ProjectDto(val calculations: List<CalculationDto> = emptyList())
+@Serializable data class ProjectDto(
+    val calculations: List<CalculationDto> = emptyList(),
+    // Null unless the caller has inbox.access: the order route strips it otherwise.
+    val conversationId: String? = null,
+)
 @Serializable data class ReceiptDto(val id: String, val imageUrl: String)
 @Serializable data class PaymentDto(val id: String, val amount: String, val method: String, val status: String, val recordedAt: String, val recordedBy: NameDto? = null, val receipts: List<ReceiptDto> = emptyList())
 @Serializable data class DriverDto(val id: String, val name: String)
