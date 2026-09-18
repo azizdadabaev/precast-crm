@@ -292,7 +292,12 @@ fun SignedInShell(
                     // pattern: without client.view the route does not exist, so no restored back
                     // stack or deep link can open it either.
                     if (me.can(PERM_ORDER_VIEW)) {
-                        entry<Drafts> { DraftsRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                        entry<Drafts> {
+                            DraftsRoute(
+                                onOpenOrder = { backStack.add(OrderDetail(it)) },
+                                onOpenCalculator = { switchTab(backStack, Calculator) },
+                            )
+                        }
                         entry<Gallery> { GalleryRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
                     }
                     // The list is also behind a password gate the phone cannot open; the screen

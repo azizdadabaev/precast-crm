@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +56,31 @@ class DraftsViewModel @Inject constructor(private val repo: BrowseRepository) : 
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Resource.Loading(null))
+
+    /** Emits the project once it is in the calculator's own draft, so the screen can switch tabs. */
+    private val _opened = MutableStateFlow<String?>(null)
+    val opened: StateFlow<String?> = _opened.asStateFlow()
+
+    private val _opening = MutableStateFlow<String?>(null)
+    val opening: StateFlow<String?> = _opening.asStateFlow()
+
+    private val _openError = MutableStateFlow<String?>(null)
+    val openError: StateFlow<String?> = _openError.asStateFlow()
+
+    fun openInCalculator(projectId: String) {
+        if (_opening.value != null) return
+        _opening.value = projectId
+        _openError.value = null
+        viewModelScope.launch {
+            repo.openDraftInCalculator(projectId).fold(
+                onSuccess = { _opening.value = null; _opened.value = projectId },
+                onFailure = { t -> _opening.value = null; _openError.value = t.toAppError().message },
+            )
+        }
+    }
+
+    /** Consumed by the screen the moment it has navigated, so coming back cannot switch again. */
+    fun consumeOpened() { _opened.value = null }
 
     fun setQuery(value: String) { _query.value = value }
     fun setDraftsOnly(value: Boolean) { _draftsOnly.value = value }

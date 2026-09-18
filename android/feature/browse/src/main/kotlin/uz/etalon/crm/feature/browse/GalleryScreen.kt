@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -96,20 +97,33 @@ internal fun GalleryScreen(
         if (posts.isEmpty() && state !is Resource.Loading) {
             EmptyState(stringResource(R.string.gallery_empty))
         }
+        // Three to a row, as the web's grid does. A card this narrow cannot carry the client's
+        // address and the upload date as well — at 360 dp each cell is about 105 dp — so it keeps
+        // the two things the grid is scanned by: the photo and which order it belongs to. The rest
+        // is one tap away in the order itself.
+        val rows = posts.chunked(GALLERY_COLUMNS)
         LazyColumn(
             contentPadding = navPillContentPadding(
                 start = EtalonSpace.cardMargin,
                 end = EtalonSpace.cardMargin,
                 top = EtalonSpace.xs,
             ),
-            verticalArrangement = Arrangement.spacedBy(EtalonSpace.md),
+            verticalArrangement = Arrangement.spacedBy(EtalonSpace.sm),
         ) {
-            items(posts, key = { it.key }) { post ->
-                GalleryCard(
-                    post = post,
-                    onOpenImage = { index -> viewing = post.imageUrls to index },
-                    onOpenOrder = { onOpenOrder(post.orderId) },
-                )
+            items(rows, key = { row -> row.first().key }) { row ->
+                Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(EtalonSpace.sm)) {
+                    row.forEach { post ->
+                        GalleryCard(
+                            post = post,
+                            modifier = Modifier.weight(1f),
+                            onOpenImage = { index -> viewing = post.imageUrls to index },
+                            onOpenOrder = { onOpenOrder(post.orderId) },
+                        )
+                    }
+                    // Keeps the last row's cards the width of every other row's rather than
+                    // stretching one photo across the gap.
+                    repeat(GALLERY_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
+                }
             }
         }
     }
@@ -119,51 +133,56 @@ internal fun GalleryScreen(
 }
 
 @Composable
-private fun GalleryCard(post: GalleryPost, onOpenImage: (Int) -> Unit, onOpenOrder: () -> Unit) = Column(
-    Modifier.fillMaxWidth().clip(EtalonShapes.xl).background(EtalonColors.surface)
-        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl),
+private fun GalleryCard(
+    post: GalleryPost,
+    modifier: Modifier = Modifier,
+    onOpenImage: (Int) -> Unit,
+    onOpenOrder: () -> Unit,
+) = Column(
+    modifier.clip(EtalonShapes.lg).background(EtalonColors.surface)
+        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.lg),
 ) {
-    // The first photo is the card. The rest are reachable by opening it — a grid of thumbnails
-    // here would make every card a different height and the list impossible to scan.
-    post.imageUrls.firstOrNull()?.let { url ->
-        AsyncImage(
-            model = url,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f)
-                .clickable(role = Role.Button) { onOpenImage(0) },
-        )
-    }
-    Column(Modifier.padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.rowGap)) {
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text(
-                post.orderNumber,
-                style = EtalonType.rowAmount,
-                color = EtalonColors.indigo,
-                maxLines = 1,
-                modifier = Modifier.clickable(role = Role.Button, onClick = onOpenOrder),
+    Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+        post.imageUrls.firstOrNull()?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clickable(role = Role.Button) { onOpenImage(0) },
             )
-            KindTag(post.kind)
         }
-        Spacer(Modifier.height(2.dp))
+        // A count, not a row of thumbnails: at this width the second photo would be 40 dp wide.
+        if (post.imageUrls.size > 1) {
+            Box(
+                Modifier.align(Alignment.BottomEnd).padding(EtalonSpace.xs)
+                    .clip(EtalonShapes.xs).background(EtalonColors.navy.copy(alpha = 0.72f))
+                    .padding(horizontal = 5.dp, vertical = 1.dp),
+            ) {
+                Text(
+                    post.imageUrls.size.toString(),
+                    style = EtalonType.caption,
+                    color = EtalonColors.onDark,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+    Column(Modifier.padding(horizontal = EtalonSpace.sm, vertical = EtalonSpace.xs)) {
+        Text(
+            post.orderNumber,
+            style = EtalonType.caption,
+            color = EtalonColors.indigo,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.clickable(role = Role.Button, onClick = onOpenOrder),
+        )
         Text(
             post.clientName,
-            style = EtalonType.rowTitle,
-            color = EtalonColors.ink,
+            style = EtalonType.caption,
+            color = EtalonColors.ink2,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        post.clientAddress?.takeIf { it.isNotBlank() }?.let {
-            Text(it, style = EtalonType.meta, color = EtalonColors.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text(
-                stringResource(R.string.gallery_photo_count, post.imageUrls.size),
-                style = EtalonType.caption,
-                color = EtalonColors.ink3,
-            )
-            Text(formatDate(post.uploadedAt), style = EtalonType.caption, color = EtalonColors.ink3)
-        }
     }
 }
 
@@ -178,3 +197,7 @@ private fun KindTag(kind: GalleryKind) = when (kind) {
         Tag(stringResource(R.string.gallery_kind_shipment), fg = EtalonColors.indigo, bg = EtalonColors.lavenderBg)
     GalleryKind.UNKNOWN -> Unit
 }
+
+/** Three to a row. Two would read more comfortably; three is what the owner asked to see first,
+ *  and the compact card was built to survive it. */
+private const val GALLERY_COLUMNS = 3

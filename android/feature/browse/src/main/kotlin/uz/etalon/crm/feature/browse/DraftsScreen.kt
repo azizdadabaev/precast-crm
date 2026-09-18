@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,11 +59,29 @@ import uz.etalon.crm.core.designsystem.components.navPillContentPadding
  * their row prints the order number they became instead of the «Лойиҳа» tag.
  */
 @Composable
-fun DraftsRoute(onOpenOrder: (String) -> Unit, vm: DraftsViewModel = hiltViewModel()) {
+fun DraftsRoute(
+    onOpenOrder: (String) -> Unit,
+    onOpenCalculator: () -> Unit,
+    vm: DraftsViewModel = hiltViewModel(),
+) {
     val state by vm.state.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val draftsOnly by vm.draftsOnly.collectAsStateWithLifecycle()
+    val opened by vm.opened.collectAsStateWithLifecycle()
+    val opening by vm.opening.collectAsStateWithLifecycle()
+    val openError by vm.openError.collectAsStateWithLifecycle()
+    // The draft is in the calculator's own store by the time this fires; switching tabs is all
+    // that is left, and the calculator restores it the way it restores any draft.
+    LaunchedEffect(opened) {
+        opened?.let {
+            vm.consumeOpened()
+            onOpenCalculator()
+        }
+    }
     DraftsScreen(
+        onOpenDraft = vm::openInCalculator,
+        opening = opening,
+        openError = openError,
         state = state,
         query = query,
         draftsOnly = draftsOnly,
@@ -76,6 +95,9 @@ fun DraftsRoute(onOpenOrder: (String) -> Unit, vm: DraftsViewModel = hiltViewMod
 @Composable
 internal fun DraftsScreen(
     state: Resource<List<DraftLine>>,
+    onOpenDraft: (String) -> Unit = {},
+    opening: String? = null,
+    openError: String? = null,
     query: String,
     draftsOnly: Boolean,
     onQueryChange: (String) -> Unit,
@@ -112,6 +134,7 @@ internal fun DraftsScreen(
         }
         Spacer(Modifier.height(EtalonSpace.sm))
         if (state is Resource.Error) ErrorBanner(state.error.message, onRetry = onRetry)
+        openError?.let { ErrorBanner(it) }
         if (rows.isEmpty() && state !is Resource.Loading) {
             EmptyState(
                 text = if (query.isBlank()) {
@@ -130,8 +153,14 @@ internal fun DraftsScreen(
             verticalArrangement = Arrangement.spacedBy(EtalonSpace.sm),
         ) {
             items(rows, key = { it.id }) { row ->
-                // row.id is the PROJECT; what a tap must open is the ORDER it became.
-                DraftCard(row, onClick = row.orderId?.let { id -> { onOpenOrder(id) } })
+                // An ordered project opens the order it became; one still a draft reopens in the
+                // calculator, which is the only place it can be finished.
+                DraftCard(
+                    row = row,
+                    busy = opening == row.id,
+                    onClick = row.orderId?.let { id -> { onOpenOrder(id) } }
+                        ?: { onOpenDraft(row.id) },
+                )
             }
         }
     }
@@ -143,7 +172,7 @@ internal fun DraftsScreen(
  *   one opens its order, which is a real destination.
  */
 @Composable
-private fun DraftCard(row: DraftLine, onClick: (() -> Unit)?) = Column(
+private fun DraftCard(row: DraftLine, busy: Boolean = false, onClick: (() -> Unit)?) = Column(
     Modifier.fillMaxWidth().clip(EtalonShapes.xl).background(EtalonColors.surface)
         .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
         .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)

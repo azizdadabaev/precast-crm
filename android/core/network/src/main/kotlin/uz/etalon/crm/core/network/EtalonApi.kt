@@ -6,6 +6,7 @@ import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.http.*
 import uz.etalon.crm.core.network.dto.CancelOrderRequest
+import uz.etalon.crm.core.network.dto.DraftDto
 import uz.etalon.crm.core.network.dto.DraftsPageDto
 import uz.etalon.crm.core.network.dto.GalleryPageDto
 import uz.etalon.crm.core.network.dto.InboxDto
@@ -87,6 +88,10 @@ interface EtalonApi {
         @Query("status") status: String?,
         @Query("q") query: String?,
     ): DraftsPageDto
+
+    /** One saved draft, with the room inputs the calculator needs to reopen it. */
+    @GET("/api/projects/{id}")
+    suspend fun draft(@Path("id") id: String): DraftDto
 
     @GET("/api/gallery")
     suspend fun gallery(

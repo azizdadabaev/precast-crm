@@ -6,6 +6,7 @@ import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.CancelOrderRequest
+import uz.etalon.crm.core.network.dto.DraftDto
 import uz.etalon.crm.core.network.dto.DraftsPageDto
 import uz.etalon.crm.core.network.dto.GalleryPageDto
 import uz.etalon.crm.core.network.dto.InboxDto
@@ -47,6 +48,7 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun exportBackup(): ResponseBody = unused("exportBackup")
 
     override suspend fun drafts(page: Int, pageSize: Int, status: String?, query: String?): DraftsPageDto = unused("drafts")
+    override suspend fun draft(id: String): DraftDto = unused("draft")
     override suspend fun gallery(page: Int, pageSize: Int, query: String?): GalleryPageDto = unused("gallery")
     override suspend fun inbox(): InboxDto = unused("inbox")
     override suspend fun unlockInbox(body: InboxUnlockRequest): InboxUnlockDto = unused("unlockInbox")

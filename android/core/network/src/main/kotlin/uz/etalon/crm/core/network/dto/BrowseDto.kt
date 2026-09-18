@@ -36,7 +36,25 @@ data class DraftDto(
 )
 
 @Serializable data class DraftClientDto(val id: String, val name: String, val phone: String, val address: String? = null)
-@Serializable data class DraftCalcDto(val monolithArea: String, val subtotal: String)
+/**
+ * The list needs two figures; reopening the draft in the calculator needs the INPUTS the engine
+ * was given. The route returns whole Calculation rows either way, so both live here.
+ */
+@Serializable data class DraftCalcDto(
+    val monolithArea: String,
+    val subtotal: String,
+    val name: String? = null,
+    val innerWidth: String? = null,
+    val innerLength: String? = null,
+    val bearing: String? = null,
+    val correction: String? = null,
+    val extraBeams: Int = 0,
+    val forceStartBeam: Boolean = false,
+    val patternOverride: String? = null,
+    val m2Price: String? = null,
+    val m2PriceOverride: Boolean = false,
+    val m2PriceReason: String? = null,
+)
 @Serializable data class DraftOrderDto(val id: String, val orderNumber: String)
 
 // ── «Галерея» · GET /api/gallery (order.view) ────────────────────────────────

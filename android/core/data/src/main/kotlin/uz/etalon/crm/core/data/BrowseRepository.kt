@@ -9,6 +9,11 @@ import uz.etalon.crm.core.model.GalleryPost
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.datastore.TokenStore
 import uz.etalon.crm.core.network.dto.InboxUnlockRequest
+import java.util.UUID
+import uz.etalon.crm.core.calc.Calc
+import uz.etalon.crm.core.calc.Pattern
+import uz.etalon.crm.core.calc.CalculatorDraft
+import uz.etalon.crm.core.calc.SlabRow
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.ConversationDto
 import uz.etalon.crm.core.network.dto.DraftDto
@@ -29,7 +34,27 @@ import javax.inject.Singleton
 class BrowseRepository @Inject constructor(
     private val api: EtalonApi,
     private val tokens: TokenStore,
+    private val calculator: CalculatorRepository,
 ) {
+
+    /**
+     * Reopens a saved draft in the calculator.
+     *
+     * It does not seed the calculator directly — it writes the project into the same local draft
+     * the calculator already restores itself from on open. One restore path, not two, and the
+     * screen needs no new entry point.
+     *
+     * The projectId travels with it, which is what stops a save-then-place leaving a duplicate
+     * row: `POST /api/orders` reuses that Project rather than creating a second DRAFT for the same
+     * quote.
+     *
+     * It DOES replace whatever unsaved quote was in the calculator. That is the same trade the
+     * web makes with its own Â«ÐÐ°Ð»ÑÐºÑÐ»ÑÑÐ¾ÑÐ´Ð° Ð¾ÑÐ¸ÑÂ», and the alternative — refusing to open a saved
+     * draft because of unsaved scratch — is worse.
+     */
+    suspend fun openDraftInCalculator(projectId: String): Result<Unit> = runCatchingCancellable {
+        calculator.persistDraft(api.draft(projectId).toCalculatorDraft())
+    }
 
     suspend fun drafts(page: Int, query: String?, draftsOnly: Boolean): Result<DraftsPage> =
         runCatchingCancellable {
@@ -132,3 +157,54 @@ private fun ConversationDto.toDomain() = Conversation(
 private const val PAGE_SIZE = 50
 /** The web asks for 24 and its pager appears past that; matching keeps the two paging alike. */
 private const val GALLERY_PAGE_SIZE = 24
+
+/**
+ * A saved project as the calculator's own draft.
+ *
+ * Inputs only, never results: `result = null` on every row so the engine reprices the whole quote
+ * against the CURRENT pricing config, exactly as it does for a draft read back out of Room. A
+ * project saved last month must not reopen carrying last month's rates.
+ */
+private fun DraftDto.toCalculatorDraft() = CalculatorDraft(
+    rows = calculations.mapIndexed { i, c ->
+        SlabRow(
+            // The row id is the calculator's own handle, not the server's: a restored quote is
+            // edited locally before it is saved back, and the engine keys its results by this.
+            id = UUID.randomUUID().toString(),
+            name = c.name ?: "Ð¥Ð¾Ð½Ð° ${i + 1}",
+            innerWidth = c.innerWidth?.toDoubleOrNull() ?: 0.0,
+            innerLength = c.innerLength?.toDoubleOrNull() ?: 0.0,
+            bearing = c.bearing?.toDoubleOrNull() ?: Calc.DEFAULT_BEARING,
+            correction = c.correction?.toDoubleOrNull() ?: 0.0,
+            extraBeams = c.extraBeams,
+            forceStartBeam = c.forceStartBeam,
+            patternOverride = when (c.patternOverride) {
+                "GB" -> Pattern.GB
+                "BGB" -> Pattern.BGB
+                "GBG" -> Pattern.GBG
+                // Null is the web's Â«AUTOÂ» â let the engine pick, which is also what an unknown
+                // code must fall back to rather than guessing one.
+                else -> null
+            },
+            m2PriceOverride = c.m2PriceOverride,
+            // Only meaningful when the operator overrode it; otherwise the engine's tier wins.
+            m2PriceOverrideValue = c.m2Price?.takeIf { c.m2PriceOverride }?.toDoubleOrNull(),
+            m2PriceReason = c.m2PriceReason,
+            // Inputs only, never results: the engine reprices the whole quote against the CURRENT
+            // pricing config, exactly as it does for a draft read back out of Room. A project
+            // saved last month must not reopen carrying last month's rates.
+            result = null,
+        )
+    },
+    clientPhone = client?.phone ?: tentativeClientPhone.orEmpty(),
+    clientName = client?.name ?: tentativeClientName.orEmpty(),
+    clientAddress = client?.address ?: tentativeClientAddress.orEmpty(),
+    // The draft route has no columns for these: a reopened project starts them at zero, exactly
+    // as saving it dropped them.
+    discountPercent = 0.0,
+    discountAmount = 0.0,
+    deliveryCost = 0.0,
+    otherCost = 0.0,
+    // What stops a save-then-place leaving a duplicate: POST /api/orders reuses this Project.
+    projectId = id,
+)
