@@ -18,6 +18,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN mkdir -p public
 ENV NEXT_TELEMETRY_DISABLED=1
+# The 2 GB VPS this deploys to gives V8 a default old-space below what `next build`
+# now needs: the build died with "Ineffective mark-compacts near heap limit" once the
+# app grew past roughly its current size. 3 GB is backed by the box swap rather than
+# RAM, so the build is slower but finishes.
+ENV NODE_OPTIONS=--max-old-space-size=3072
 RUN npx prisma generate
 RUN npm run build
 
