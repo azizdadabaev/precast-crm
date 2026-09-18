@@ -1,4 +1,4 @@
-package uz.etalon.crm.feature.calculator
+package uz.etalon.crm.core.designsystem.share
 
 import android.content.Context
 import android.content.Intent
@@ -20,7 +20,7 @@ import java.io.File
 import java.io.IOException
 
 /**
- * `writeQuoteFile`, `writeQuotePng` and `shareQuoteIntent` off-device — see `QuoteImage.kt`'s own
+ * `writeShareFile`, `writeSharePng` and `shareImageIntent` off-device — see `ShareImage.kt`'s own
  * KDoc for the FileProvider wiring (`app/src/main/res/xml/file_paths.xml`, mirrored here in this
  * module's own `src/test/AndroidManifest.xml` + `src/test/res/xml/file_paths.xml` — a Robolectric
  * unit test inside `:feature:calculator` never sees `:app`'s manifest, since `:app` depends on this
@@ -35,23 +35,23 @@ import java.io.IOException
  * authority/root, no matter how correctly configured. This is a real, upstream limitation of
  * running that specific library call under Robolectric on Windows — verified by walking the exact
  * provider/meta-data/XML resolution by hand (all correct) down to this one hardcoded separator —
- * not a defect in `writeQuotePng` or in this module's manifest/resource wiring, and it does not
+ * not a defect in `writeSharePng` or in this module's manifest/resource wiring, and it does not
  * reproduce on a real device or emulator, or on a Linux/macOS host.
  *
  * Everything else — the write itself, the stale-file cleanup that keeps a previous customer's
  * details out of the next share, and the IOException the share button has to catch — goes through
- * `writeQuoteFile` against a real `cacheDir` and therefore runs on EVERY host. Before that split
+ * `writeShareFile` against a real `cacheDir` and therefore runs on EVERY host. Before that split
  * this file had zero executed coverage on Windows, and there is no CI to make up for it.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36])
-class QuoteImageTest {
+class ShareImageTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
     @Test
-    fun `writeQuoteFile writes a readable PNG under cacheDir slash quotes`() = runTest {
-        val written = writeQuoteFile(context, ImageBitmap(4, 4))
+    fun `writeShareFile writes a readable PNG under cacheDir slash quotes`() = runTest {
+        val written = writeShareFile(context, ImageBitmap(4, 4))
 
         assertEquals(File(context.cacheDir, "quotes"), written.parentFile)
         val files = File(context.cacheDir, "quotes").listFiles().orEmpty()
@@ -64,9 +64,9 @@ class QuoteImageTest {
 
     /** A stale PNG carries a previous customer's name, phone and address baked into the image. */
     @Test
-    fun `writeQuoteFile clears a stale file from an earlier share before writing the new one`() = runTest {
-        val first = writeQuoteFile(context, ImageBitmap(2, 2))
-        val second = writeQuoteFile(context, ImageBitmap(2, 2))
+    fun `writeShareFile clears a stale file from an earlier share before writing the new one`() = runTest {
+        val first = writeShareFile(context, ImageBitmap(2, 2))
+        val second = writeShareFile(context, ImageBitmap(2, 2))
 
         val dir = File(context.cacheDir, "quotes")
         assertEquals(1, dir.listFiles()?.size)
@@ -77,12 +77,12 @@ class QuoteImageTest {
     /** The failure `rememberShareQuote` catches. Reproduced by taking the directory's own name with a
      *  plain file, which is what a full or read-only cache partition amounts to here. */
     @Test
-    fun `writeQuoteFile fails with an IOException when the quotes directory cannot be used`() = runTest {
+    fun `writeShareFile fails with an IOException when the quotes directory cannot be used`() = runTest {
         File(context.cacheDir, "quotes").apply { parentFile?.mkdirs() }.writeText("not a directory")
 
         var thrown: Throwable? = null
         try {
-            writeQuoteFile(context, ImageBitmap(2, 2))
+            writeShareFile(context, ImageBitmap(2, 2))
         } catch (e: Throwable) {
             thrown = e
         }
@@ -91,19 +91,19 @@ class QuoteImageTest {
     }
 
     @Test
-    fun `writeQuotePng returns a content URI with the app's fileprovider authority`() = runTest {
+    fun `writeSharePng returns a content URI with the app's fileprovider authority`() = runTest {
         assumeTrue(File.separatorChar == '/')
 
-        val uri = writeQuotePng(context, ImageBitmap(2, 2))
+        val uri = writeSharePng(context, ImageBitmap(2, 2))
 
         assertEquals("content", uri.scheme)
         assertEquals("${context.packageName}.fileprovider", uri.authority)
     }
 
     @Test
-    fun `shareQuoteIntent carries the read grant, the png mime type and the stream extra`() {
+    fun `shareImageIntent carries the read grant, the png mime type and the stream extra`() {
         val uri = Uri.parse("content://uz.etalon.crm.fileprovider/quotes/abc.png")
-        val intent = shareQuoteIntent(uri, "Ҳисоб-китоб")
+        val intent = shareImageIntent(uri, "Ҳисоб-китоб")
 
         assertEquals(Intent.ACTION_SEND, intent.action)
         assertEquals("image/png", intent.type)

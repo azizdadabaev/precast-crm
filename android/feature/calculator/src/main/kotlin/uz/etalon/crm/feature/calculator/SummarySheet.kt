@@ -50,6 +50,7 @@ import uz.etalon.crm.core.designsystem.components.DarkButton
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.InverseButton
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
+import uz.etalon.crm.core.designsystem.share.rememberShareImage
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonType
@@ -367,42 +368,13 @@ internal data class ShareQuote(val onClick: () -> Unit, val enabled: Boolean, va
  */
 @Composable
 internal fun rememberShareQuote(state: CalculatorUiState): ShareQuote {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val layer = rememberGraphicsLayer()
-    var sharing by remember { mutableStateOf(false) }
-    var shareError by remember { mutableStateOf<String?>(null) }
-    val subject = stringResource(R.string.calc_quote_share_subject)
-    val failure = stringResource(R.string.calc_share_failed)
-
-    ZeroSizeCapture {
-        Box(Modifier.drawWithContent { layer.record { this@drawWithContent.drawContent() } }) {
-            QuoteCard(state)
-        }
-    }
-
-    return ShareQuote(
-        onClick = {
-            sharing = true
-            shareError = null
-            scope.launch {
-                // A full cache partition is enough to make writeQuotePng throw, and this launch
-                // has no parent to catch it: uncaught, it takes the process down and leaves the
-                // button spinning forever on the way. `finally` is what puts the spinner down —
-                // both on that failure and on the ordinary cancellation of leaving the screen.
-                try {
-                    val uri = writeQuotePng(context, layer.toImageBitmap())
-                    context.startActivity(Intent.createChooser(shareQuoteIntent(uri, subject), null))
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    shareError = failure
-                } finally {
-                    sharing = false
-                }
-            }
-        },
-        enabled = state.rows.any { it.result != null } && !sharing,
-        error = shareError,
-    )
+    // The capture, the file and the intent moved to core/designsystem when the order detail needed
+    // the same thing; what stays here is the only calculator-specific part — which card, and when
+    // there is enough of a calculation to be worth sending.
+    val share = rememberShareImage(
+        subject = stringResource(R.string.calc_quote_share_subject),
+        failureText = stringResource(R.string.calc_share_failed),
+        enabled = state.rows.any { it.result != null },
+    ) { QuoteCard(state) }
+    return ShareQuote(onClick = share.onClick, enabled = share.enabled, error = share.error)
 }
