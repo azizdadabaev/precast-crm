@@ -170,7 +170,9 @@ fun DetailPanel(
     statusTag: (@Composable () -> Unit)? = null,
     clientName: String,
     addressLine: String?,
-    tiles: @Composable FlowRowScope.() -> Unit,
+    // Null, not an empty lambda: the order detail's rooms moved out to their own card in 7a, and
+    // an empty FlowRow would still cost its two spacers — 26 dp of dead panel above the divider.
+    tiles: (@Composable FlowRowScope.() -> Unit)? = null,
     totals: @Composable RowScope.() -> Unit,
     onBack: () -> Unit,
     dateLabel: String,
@@ -227,14 +229,16 @@ fun DetailPanel(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        FlowRow(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            maxItemsInEachRow = 2,
-            content = tiles,
-        )
+        if (tiles != null) {
+            Spacer(Modifier.height(12.dp))
+            FlowRow(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = 2,
+                content = tiles,
+            )
+        }
         Spacer(Modifier.height(14.dp))
         HorizontalDivider(color = EtalonColors.onDarkDivider, thickness = EtalonSpace.hairline)
         Spacer(Modifier.height(12.dp))

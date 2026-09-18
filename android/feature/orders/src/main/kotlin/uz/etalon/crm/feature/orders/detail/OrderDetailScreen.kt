@@ -70,7 +70,6 @@ import uz.etalon.crm.core.designsystem.components.PhotoRef
 import uz.etalon.crm.core.designsystem.components.PhotoStrip
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.ProgressCard
-import uz.etalon.crm.core.designsystem.components.RoomTile
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StatusTag
 import uz.etalon.crm.core.designsystem.components.StepTimeline
@@ -101,7 +100,6 @@ import uz.etalon.crm.core.ui.format.formatAddressLine
 import uz.etalon.crm.core.ui.format.formatArea
 import uz.etalon.crm.core.ui.format.formatDate
 import uz.etalon.crm.core.ui.format.formatDateTime
-import uz.etalon.crm.core.ui.format.formatDecimal
 import uz.etalon.crm.core.ui.format.formatMoney
 import uz.etalon.crm.core.ui.format.formatOrderNo
 import uz.etalon.crm.core.ui.format.formatPercent
@@ -289,6 +287,10 @@ fun OrderDetailScreen(
                 if (o.rooms.isNotEmpty()) {
                     item { LoadListCard(o.loadList, o.totalBlocks, o.weightKg, collapsible = canceled) }
                 }
+                // §3.3: the priced breakdown sits directly under the load list — what goes on
+                // the lorry, then what it costs. Drawn on a canceled order too: the quote is
+                // still the record of what was agreed.
+                if (o.rooms.isNotEmpty()) item { RoomsCard(o.rooms) }
                 // A canceled order has no balance to make progress against and no live price to
                 // break down (`OrderStatus.owesNothing`): a «45 % тўланган» bar or a «Жами» on a
                 // sale that never happened is a claim about money that is not owed. The payments
@@ -370,9 +372,11 @@ fun OrderDetailScreen(
     }
 }
 
-/** The hero. R7: no «Хона қўшиш» tile and no ↗ on a room — there is no order editing on mobile,
- *  so a tile is a figure, not a door. An odd room count keeps the capture's two-column geometry by
- *  leaving the empty half empty rather than stretching the last tile across it. */
+/** The hero. 7a moved the rooms out to their own «Ҳисоб-китоб» card, so the panel carries no room
+ *  tiles at all: a tile read «36,89 м² / Garage · 5 × 7», which states a price-bearing figure and a
+ *  pair of dimensions with no relationship between them, and the owner rejected it. Drawing them
+ *  here as well as on the card would also print the same room twice on one screen, in two different
+ *  areas — the tile used billedArea, the card uses monolithArea. */
 @Composable
 private fun Panel(o: OrderDetail, onBack: () -> Unit, onCall: () -> Unit) = DetailPanel(
     caption = stringResource(R.string.detail_caption),
@@ -383,21 +387,6 @@ private fun Panel(o: OrderDetail, onBack: () -> Unit, onCall: () -> Unit) = Deta
     statusTag = { StatusTag(o.summary.status, TagSurface.PANEL_ON_INDIGO) },
     clientName = o.summary.client.name,
     addressLine = formatAddressLine(o.summary.client.address),
-    tiles = {
-        o.rooms.forEachIndexed { i, rm ->
-            RoomTile(
-                areaText = formatArea(rm.billedArea),
-                caption = stringResource(
-                    R.string.detail_room_dims,
-                    rm.name ?: stringResource(R.string.room_n, i + 1),
-                    formatDecimal(rm.innerWidth, 1),
-                    formatDecimal(rm.innerLength, 1),
-                ),
-                modifier = Modifier.weight(1f),
-            )
-        }
-        if (o.rooms.size % 2 == 1) Spacer(Modifier.weight(1f))
-    },
     totals = {
         PanelTotal(stringResource(R.string.detail_area), formatArea(o.summary.totalArea), modifier = Modifier.weight(1f))
         PanelTotal(stringResource(R.string.detail_total), formatMoney(o.summary.totalPrice), modifier = Modifier.weight(1f))
@@ -462,7 +451,7 @@ private fun PaymentProgress(o: OrderDetail) {
  *   of named lines closed by «Жами» and would only repeat itself in a header.
  */
 @Composable
-private fun WhiteCard(
+internal fun WhiteCard(
     title: String?,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,

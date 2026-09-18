@@ -57,7 +57,6 @@
     <!-- The «Қолди» figure of a canceled order: an EM DASH (U+2014), not a number. A canceled
          order owes nothing, so a sum here would be a false claim — see OrderStatus.owesNothing. -->
     <string name="detail_no_balance">—</string>
-    <string name="detail_room_dims">%1$s · %2$s × %3$s</string>
     <string name="detail_payment_state">Тўлов ҳолати</string>
     <string name="detail_percent_paid">%1$d%% тўланган</string>
     <string name="detail_paid_amount">Тўланган %1$s</string>
@@ -154,4 +153,33 @@
     <string name="orders_upload_failed">Расм юборилмади</string>
     <string name="orders_upload_sending">Юборилмоқда…</string>
     <string name="orders_upload_failed_short">Юборилмади</string>
+
+    <!-- ── §3.3 «Ҳисоб-китоб»: the rooms card (design 7a) ───────────────────── -->
+    <string name="detail_rooms">Ҳисоб-китоб</string>
+    <string name="detail_rooms_hint">%1$d хона · босиб очинг</string>
+    <!-- The rate was typed by hand for this room instead of taken from the beam-length tier. -->
+    <string name="detail_room_rate_manual">нарх қўлда</string>
+    <!-- The dimensions line. The separator is a MIDDLE DOT, never «=»: the area is billed on
+         whole tiles at N × PITCH, so it is not the product of the two figures beside it, and an
+         equals sign would state something arithmetically false on a priced screen. -->
+    <string name="detail_room_dims_line">%1$s × %2$s м · %3$s</string>
+    <string name="detail_room_counts">%1$d балка · %2$d ғишт</string>
+    <string name="detail_room_pattern">Шаблон</string>
+    <string name="detail_room_pattern_auto">(авто: %1$s)</string>
+    <string name="detail_pattern_gb">Г-Б</string>
+    <string name="detail_pattern_bgb">Б-Г-Б</string>
+    <string name="detail_pattern_gbg">Г-Б-Г</string>
+    <string name="detail_room_blocks_per_row">Ғишт / қатор</string>
+    <string name="detail_room_blocks_rows">%1$d × %2$d қатор</string>
+    <string name="detail_room_monolith">Монолит Б</string>
+    <string name="detail_room_m2price">М² нархи</string>
+    <string name="detail_room_subtotal">Сумма</string>
+    <string name="detail_beam_caption">балка %1$s м</string>
+    <string name="detail_beam_sub">эни %1$s м · таяниш %2$s см × 2</string>
+    <!-- The m² charge shown as its own arithmetic, so the subtotal can be checked by eye. This
+         one IS an equals sign: unlike the dimensions line, these three figures do multiply out.
+         billedArea is the billing basis, not the physical slab. -->
+    <string name="detail_room_price_line">%1$s × %2$s = %3$s</string>
+    <string name="detail_room_price_extras">+ %1$s балка</string>
+    <string name="detail_rooms_footer">%1$d Ғ · %2$d Б · %3$s м · %4$s</string>
 </resources>

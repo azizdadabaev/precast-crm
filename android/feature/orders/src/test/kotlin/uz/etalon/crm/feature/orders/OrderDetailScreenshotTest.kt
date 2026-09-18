@@ -559,6 +559,10 @@ class OrderDetailScreenshotTest {
     fun theStickyBarIsNotDrawnWhileTheKeyboardIsUp() {
         show(order(), imeVisible = true)
         rule.onNode(hasText("Тўлов қайд қилиш")).assertDoesNotExist()
+        // 7a put «Ҳисоб-китоб» between the hero and «Етказиш», so the timeline no longer starts
+        // on screen. Scroll it into view before counting — the bar is an overlay outside the
+        // list, so what it does is unaffected by where the list sits.
+        list().performScrollToNode(hasText("Етказилди"))
         // «Етказилди» is the «Етказиш» card's third timeline column as well as the bar's secondary
         // button, so the ONE left is the timeline's and the bar's is the one that went.
         rule.onAllNodes(hasText("Етказилди")).assertCountEquals(1)
@@ -569,6 +573,7 @@ class OrderDetailScreenshotTest {
     fun theStickyBarReturnsWhenTheKeyboardCloses() {
         show(order())
         rule.onNode(hasText("Тўлов қайд қилиш")).assertIsDisplayed()
+        list().performScrollToNode(hasText("Етказилди"))
         rule.onAllNodes(hasText("Етказилди")).assertCountEquals(2)
     }
 
