@@ -137,6 +137,7 @@ fun OrderDetailRoute(
     val commentDraft by vm.commentDraft.collectAsStateWithLifecycle()
     val postingComment by vm.postingComment.collectAsStateWithLifecycle()
     val commentError by vm.commentError.collectAsStateWithLifecycle()
+    val cancel by vm.cancel.collectAsStateWithLifecycle()
     OrderDetailScreen(
         r = r, me = me, pending = pending, actionError = actionError,
         onBack = onBack, onRefresh = vm::refresh,
@@ -144,6 +145,12 @@ fun OrderDetailRoute(
         onOpenShipments = onOpenShipments, onOpenLocation = onOpenLocation, onRecordPayment = onRecordPayment,
         onDeletePhoto = vm::deletePhoto, onRetryUpload = vm::retryUpload, onCancelUpload = vm::cancelUpload,
         onSendToChat = vm::sendToChat,
+        cancel = cancel,
+        onOpenCancel = vm::openCancel,
+        onCancelPasswordChange = vm::setCancelPassword,
+        onCancelReasonChange = vm::setCancelReason,
+        onConfirmCancel = vm::confirmCancel,
+        onDismissCancel = vm::dismissCancel,
         comments = comments, commentDraft = commentDraft, postingComment = postingComment, commentError = commentError,
         onCommentDraftChange = vm::setCommentDraft, onPostComment = vm::postComment,
         onRetryComments = vm::refreshComments,
@@ -206,6 +213,12 @@ fun OrderDetailScreen(
     onPostComment: () -> Unit = {},
     onRetryComments: () -> Unit = {},
     onSendToChat: () -> Unit = {},
+    cancel: CancelSheetState? = null,
+    onOpenCancel: () -> Unit = {},
+    onCancelPasswordChange: (String) -> Unit = {},
+    onCancelReasonChange: (String) -> Unit = {},
+    onConfirmCancel: () -> Unit = {},
+    onDismissCancel: () -> Unit = {},
     barVisible: Boolean = !WindowInsets.isImeVisible,
 ) {
     val o = r.dataOrNull
@@ -264,6 +277,11 @@ fun OrderDetailScreen(
                     // Only on an order already linked to a conversation: linking one is a picker
                     // the web has and this screen does not.
                     onSendToChat = if (me.can("inbox.access") && o.conversationId != null) onSendToChat else null,
+                    // The web shows this to everyone and lets the server 403 whoever lacks the
+                    // permission. Gated here instead, the way every other action on this screen
+                    // is: a menu item that always answers «Рухсат йўқ» is not an action.
+                    // Never on an order already canceled — there is nothing left to cancel.
+                    onCancel = if (me.can("order.cancel") && !o.summary.status.owesNothing) onOpenCancel else null,
                 )
             }
             PullToRefreshBox(
@@ -395,6 +413,22 @@ fun OrderDetailScreen(
     }
 
     lightboxAt?.let { at -> Lightbox(photos, at, onDismiss = { lightboxAt = null }) }
+    if (cancel != null && o != null) {
+        CancelOrderSheet(
+            orderNumber = o.summary.orderNumber,
+            // A role the server already trusts is not asked for a password it does not need.
+            needsPassword = me.role != uz.etalon.crm.core.model.Role.OWNER &&
+                me.role != uz.etalon.crm.core.model.Role.ADMIN,
+            password = cancel.password,
+            reason = cancel.reason,
+            submitting = cancel.submitting,
+            error = cancel.error,
+            onPasswordChange = onCancelPasswordChange,
+            onReasonChange = onCancelReasonChange,
+            onConfirm = onConfirmCancel,
+            onDismiss = onDismissCancel,
+        )
+    }
     if (phoneSheet && o != null) {
         PhoneActionSheet(
             phone = o.summary.client.phone,
@@ -439,6 +473,7 @@ private fun DetailTopBar(
     onBack: () -> Unit,
     onShare: (() -> Unit)?,
     onSendToChat: (() -> Unit)?,
+    onCancel: (() -> Unit)?,
 ) = Column {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
@@ -457,7 +492,7 @@ private fun DetailTopBar(
             modifier = Modifier.weight(1f),
         )
         StatusTag(o.summary.status)
-        if (onShare != null || onSendToChat != null) {
+        if (onShare != null || onSendToChat != null || onCancel != null) {
             Box {
                 EtalonIconButton(
                     EtalonIcons.EllipsisVertical,
@@ -475,6 +510,18 @@ private fun DetailTopBar(
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.detail_menu_send_chat), style = EtalonType.body) },
                             onClick = { menuOpen = false; onSendToChat() },
+                        )
+                    }
+                    if (onCancel != null) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(R.string.detail_menu_cancel),
+                                    style = EtalonType.body,
+                                    color = EtalonColors.red,
+                                )
+                            },
+                            onClick = { menuOpen = false; onCancel() },
                         )
                     }
                 }

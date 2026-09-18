@@ -47,6 +47,7 @@ interface OrderDetailSource {
     suspend fun cancelUpload(id: String)
     suspend fun deleteLoadedPhoto(orderId: String, photoId: String): Result<Unit>
     suspend fun sendToChat(orderId: String): Result<Unit>
+    suspend fun cancelOrder(orderId: String, reason: String?, password: String?): Result<Unit>
 }
 
 class RepositoryOrderDetailSource @Inject constructor(
@@ -65,6 +66,8 @@ class RepositoryOrderDetailSource @Inject constructor(
     override suspend fun cancelUpload(id: String) = outbox.cancel(id)
     override suspend fun deleteLoadedPhoto(orderId: String, photoId: String) = logistics.deleteLoadedPhoto(orderId, photoId)
     override suspend fun sendToChat(orderId: String) = logistics.sendOrderToChat(orderId)
+    override suspend fun cancelOrder(orderId: String, reason: String?, password: String?) =
+        logistics.cancelOrder(orderId, reason, password)
 }
 
 /** The list side gets away with a Hilt subclass (`HiltOrdersListViewModel`); an assisted-injected
@@ -206,6 +209,39 @@ class OrderDetailViewModel @AssistedInject constructor(
      *  LogisticsRepository re-fetches the order on success, which is what drops the tile. */
     fun deletePhoto(photoId: String) = runAction { source.deleteLoadedPhoto(orderId, photoId) }
 
+    // ── «Буюртмани бекор қилиш» ──────────────────────────────────────
+
+    /** Typed input lives here rather than in the composition so the keypad opening, or a rotation,
+     *  cannot lose a half-typed password. */
+    private val _cancel = MutableStateFlow<CancelSheetState?>(null)
+    val cancel: StateFlow<CancelSheetState?> = _cancel.asStateFlow()
+
+    fun openCancel() { _cancel.value = CancelSheetState() }
+    fun dismissCancel() { if (_cancel.value?.submitting != true) _cancel.value = null }
+    fun setCancelPassword(v: String) { _cancel.value = _cancel.value?.copy(password = v, error = null) }
+    fun setCancelReason(v: String) { _cancel.value = _cancel.value?.copy(reason = v, error = null) }
+
+    /**
+     * The server decides whether this caller may cancel — an OWNER/ADMIN by role, anyone else by
+     * the company password — so the sheet sends whatever was typed and shows the 403 verbatim.
+     * Guessing the rule here would mean two places to keep in step with it.
+     */
+    fun confirmCancel() {
+        val current = _cancel.value ?: return
+        if (current.submitting) return
+        _cancel.value = current.copy(submitting = true, error = null)
+        viewModelScope.launch {
+            source.cancelOrder(
+                orderId,
+                reason = current.reason.trim().takeIf { it.isNotEmpty() },
+                password = current.password.takeIf { it.isNotEmpty() },
+            ).fold(
+                onSuccess = { _cancel.value = null },
+                onFailure = { t -> _cancel.value = _cancel.value?.copy(submitting = false, error = t.toAppError().message) },
+            )
+        }
+    }
+
     /** «Чатга юбориш» — fire and report. Online only: the server has to reach Chromium and
      *  Telegram, neither of which an outbox replay could stand in for. */
     fun sendToChat() = runAction { source.sendToChat(orderId) }
@@ -219,3 +255,11 @@ class OrderDetailViewModel @AssistedInject constructor(
         }
     }
 }
+
+/** What the cancel sheet is holding while it is open. */
+data class CancelSheetState(
+    val password: String = "",
+    val reason: String = "",
+    val submitting: Boolean = false,
+    val error: String? = null,
+)

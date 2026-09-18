@@ -208,4 +208,14 @@
     <string name="detail_photos_meta_at">%1$d расм · %2$s</string>
     <string name="detail_events_count">%1$d та ёзув</string>
     <string name="detail_menu_send_chat">Чатга юбориш</string>
+    <!-- ── «Буюртмани бекор қилиш» · the web's own modal, word for word ──────── -->
+    <string name="detail_cancel_title">%1$s буюртмани бекор қилиш?</string>
+    <string name="detail_cancel_body">Бекор қилиш АДМИН ролини ёки компания бекор қилиш паролини талаб қилади. Лойиҳа қайта таҳрирлаш учун Лойиҳага қайтарилади.</string>
+    <string name="detail_cancel_password_label">Бекор қилиш пароли</string>
+    <string name="detail_cancel_password_hint">Агар АДМИН бўлсангиз бўш қолдиринг</string>
+    <string name="detail_cancel_reason_label">Сабаб (ихтиёрий)</string>
+    <string name="detail_cancel_reason_hint">масалан: Мижоз бекор қилишни сўради</string>
+    <string name="detail_cancel_keep">Буюртмани сақлаш</string>
+    <string name="detail_cancel_confirm">Буюртмани бекор қилиш</string>
+    <string name="detail_menu_cancel">Буюртмани бекор қилиш</string>
 </resources>

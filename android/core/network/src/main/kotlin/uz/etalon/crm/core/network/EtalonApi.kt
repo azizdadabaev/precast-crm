@@ -5,6 +5,7 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.http.*
+import uz.etalon.crm.core.network.dto.CancelOrderRequest
 import uz.etalon.crm.core.network.dto.DraftsPageDto
 import uz.etalon.crm.core.network.dto.GalleryPageDto
 import uz.etalon.crm.core.network.dto.InboxDto
@@ -72,6 +73,11 @@ interface EtalonApi {
     // ── Drawer surfaces ─────────────────────────────────────────────
 
     /** «Лойиҳалар». `page` is what makes the route answer with an envelope instead of a bare array. */
+    /** `order.cancel`. Answers 403 when the caller is neither OWNER/ADMIN nor sent the company
+     *  cancel password — the message is the server's own Uzbek and is shown as it arrives. */
+    @POST("/api/orders/{id}/cancel")
+    suspend fun cancelOrder(@Path("id") id: String, @Body body: CancelOrderRequest): Unit
+
     @GET("/api/projects")
     suspend fun drafts(
         @Query("page") page: Int,

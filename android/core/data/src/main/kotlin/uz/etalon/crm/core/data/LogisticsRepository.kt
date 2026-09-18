@@ -10,6 +10,7 @@ import uz.etalon.crm.core.model.LatLng
 import uz.etalon.crm.core.model.Money
 import uz.etalon.crm.core.model.OutboxKind
 import uz.etalon.crm.core.network.EtalonApi
+import uz.etalon.crm.core.network.dto.CancelOrderRequest
 import uz.etalon.crm.core.network.dto.DeliveryLocationRequest
 import uz.etalon.crm.core.network.dto.DispatchCreateRequest
 import uz.etalon.crm.core.network.dto.ResolveLinkRequest
@@ -82,6 +83,14 @@ class LogisticsRepository @Inject constructor(
     suspend fun deleteShipment(orderId: String, shipmentId: String): Result<Unit> = mutate(orderId) { api.deleteShipment(orderId, shipmentId) }
     suspend fun deliverShipment(orderId: String, shipmentId: String): Result<Unit> = mutate(orderId) { api.deliverShipment(orderId, shipmentId) }
     suspend fun deleteLoadedPhoto(orderId: String, photoId: String): Result<Unit> = mutate(orderId) { api.deleteLoadedPhoto(orderId, photoId) }
+
+    /**
+     * «Буюртмани бекор қилиш». Re-fetches on success like its neighbours here: cancelling rewrites
+     * the status, the timeline and the project behind it, and the screen must not keep showing an
+     * order that no longer exists in that form.
+     */
+    suspend fun cancelOrder(orderId: String, reason: String?, password: String?): Result<Unit> =
+        mutate(orderId) { api.cancelOrder(orderId, CancelOrderRequest(reason = reason, password = password)) }
 
     /** «Чатга юбориш». The server renders the card and posts it; nothing about the order itself
      *  changes, so unlike its neighbours here this one does not re-fetch the detail. */

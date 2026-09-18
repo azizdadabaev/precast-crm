@@ -62,6 +62,17 @@ class OrderDetailViewModelTest {
         override suspend fun retryUpload(id: String) = Unit
         override suspend fun cancelUpload(id: String) = Unit
         override suspend fun deleteLoadedPhoto(orderId: String, photoId: String): Result<Unit> = Result.success(Unit)
+        var canceled = 0
+        var cancelResult: Result<Unit> = Result.success(Unit)
+        var lastCancelReason: String? = null
+        var lastCancelPassword: String? = null
+        override suspend fun cancelOrder(orderId: String, reason: String?, password: String?): Result<Unit> {
+            canceled++
+            lastCancelReason = reason
+            lastCancelPassword = password
+            return cancelResult
+        }
+
         var sentToChat = 0
         override suspend fun sendToChat(orderId: String): Result<Unit> {
             sentToChat++
@@ -283,5 +294,63 @@ class OrderDetailViewModelTest {
         advanceUntilIdle()
         assertEquals(1, src.sentToChat)
         assertNull(vm.actionError.value)
+    }
+
+    /**
+     * An OWNER cancels with nothing typed. Both fields must reach the server as null rather than
+     * as empty strings: the route's schema treats a present-but-empty password as an attempt and
+     * compares it against the company one, which would turn a legitimate role bypass into a 403.
+     */
+    @Test fun `an empty password and reason are sent as absent, not as blanks`() = runTest {
+        val src = FakeSource()
+        val vm = OrderDetailViewModel(src, "o3")
+        advanceUntilIdle()
+        vm.openCancel()
+        vm.confirmCancel()
+        advanceUntilIdle()
+        assertEquals(1, src.canceled)
+        assertNull(src.lastCancelPassword)
+        assertNull(src.lastCancelReason)
+    }
+
+    /** A reason typed with stray spaces is still a reason; one that is only spaces is not. */
+    @Test fun `a whitespace-only reason is not sent as a reason`() = runTest {
+        val src = FakeSource()
+        val vm = OrderDetailViewModel(src, "o3")
+        advanceUntilIdle()
+        vm.openCancel()
+        vm.setCancelReason("   ")
+        vm.confirmCancel()
+        advanceUntilIdle()
+        assertNull(src.lastCancelReason)
+    }
+
+    /**
+     * A refused cancel keeps the sheet open with the server's own words in it. Closing it would
+     * throw away the password the operator typed and leave them guessing why nothing happened.
+     */
+    @Test fun `a refused cancel keeps the sheet open and shows why`() = runTest {
+        val src = FakeSource(sendToChatResult = Result.success(Unit))
+        src.cancelResult = Result.failure(IllegalStateException("Бекор қилиш парол талаб қилади"))
+        val vm = OrderDetailViewModel(src, "o3")
+        advanceUntilIdle()
+        vm.openCancel()
+        vm.setCancelPassword("wrong")
+        vm.confirmCancel()
+        advanceUntilIdle()
+        assertNotNull(vm.cancel.value)
+        assertNotNull(vm.cancel.value?.error)
+        assertEquals(false, vm.cancel.value?.submitting)
+    }
+
+    /** A successful cancel closes the sheet; the re-fetched order is what tells the rest. */
+    @Test fun `a successful cancel closes the sheet`() = runTest {
+        val src = FakeSource()
+        val vm = OrderDetailViewModel(src, "o3")
+        advanceUntilIdle()
+        vm.openCancel()
+        vm.confirmCancel()
+        advanceUntilIdle()
+        assertNull(vm.cancel.value)
     }
 }

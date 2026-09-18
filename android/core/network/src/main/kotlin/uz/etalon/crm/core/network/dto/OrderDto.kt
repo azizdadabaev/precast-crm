@@ -48,6 +48,12 @@ import java.math.BigDecimal
     // Null unless the caller has inbox.access: the order route strips it otherwise.
     val conversationId: String? = null,
 )
+/**
+ * Both halves optional, exactly as CancelOrderSchema declares them: an OWNER or ADMIN sends no
+ * password at all, and the reason is never required by the server.
+ */
+@Serializable data class CancelOrderRequest(val reason: String? = null, val password: String? = null)
+
 @Serializable data class ReceiptDto(val id: String, val imageUrl: String)
 @Serializable data class PaymentDto(val id: String, val amount: String, val method: String, val status: String, val recordedAt: String, val recordedBy: NameDto? = null, val receipts: List<ReceiptDto> = emptyList())
 @Serializable data class DriverDto(val id: String, val name: String)
