@@ -42,6 +42,8 @@ import uz.etalon.crm.feature.auth.ChangePinRoute
 import uz.etalon.crm.feature.auth.LoginRoute
 import uz.etalon.crm.feature.calculator.CalculatorRoute
 import uz.etalon.crm.feature.browse.DraftsRoute
+import uz.etalon.crm.feature.browse.GalleryRoute
+import uz.etalon.crm.feature.browse.InboxRoute
 import uz.etalon.crm.feature.clients.detail.ClientDetailRoute
 import uz.etalon.crm.feature.clients.list.ClientsRoute
 import uz.etalon.crm.feature.home.HomeRoute
@@ -291,6 +293,12 @@ fun SignedInShell(
                     // stack or deep link can open it either.
                     if (me.can(PERM_ORDER_VIEW)) {
                         entry<Drafts> { DraftsRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                        entry<Gallery> { GalleryRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                    }
+                    // The list is also behind a password gate the phone cannot open; the screen
+                    // says where to unlock it rather than pretending the permission is missing.
+                    if (me.can(PERM_INBOX_ACCESS)) {
+                        entry<Inbox> { InboxRoute() }
                     }
                     if (me.can(PERM_CLIENT_VIEW)) {
                         entry<Clients> { ClientsRoute(onOpenClient = { backStack.add(ClientDetail(it)) }) }

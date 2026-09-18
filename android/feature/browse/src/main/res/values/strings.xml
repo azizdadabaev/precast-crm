@@ -12,4 +12,25 @@
     <string name="drafts_meta">%1$d хона · %2$s</string>
     <string name="drafts_empty">Ҳозирча лойиҳалар йўқ — ҳисоб-китобни бошланг.</string>
     <string name="drafts_empty_search">«%1$s» бўйича лойиҳа топилмади.</string>
+
+    <!-- ── «Галерея» · the web's /gallery ────────────────────────────────────── -->
+    <string name="gallery_title">Галерея</string>
+    <string name="gallery_subtitle">Барча юкланган ва етказилган фотолар</string>
+    <string name="gallery_search_hint">Буюртма №, исм, телефон…</string>
+    <string name="gallery_empty">Ҳали фото йўқ</string>
+    <string name="gallery_photo_count">%1$d фото</string>
+    <string name="gallery_kind_loaded">Юкланди</string>
+    <string name="gallery_kind_delivered">Етказилди</string>
+    <string name="gallery_kind_shipment">Жўнатма</string>
+
+    <!-- ── «Хабарлар» · the web's /inbox ─────────────────────────────────────── -->
+    <string name="inbox_title">Хабарлар</string>
+    <string name="inbox_search_hint">Қидириш</string>
+    <string name="inbox_empty">Ҳозирча хабарлар йўқ</string>
+    <string name="inbox_empty_search">Қидирув бўйича натижа йўқ</string>
+    <!-- Shown in place of a blank snippet, exactly as the web substitutes it. -->
+    <string name="inbox_no_snippet">Хабар</string>
+    <!-- The inbox password gate. The phone cannot unlock it, so it says where to. -->
+    <string name="inbox_locked_title">Хабарлар қулфланган</string>
+    <string name="inbox_locked_body">Очиш учун веб-CRM да паролни киритинг.</string>
 </resources>

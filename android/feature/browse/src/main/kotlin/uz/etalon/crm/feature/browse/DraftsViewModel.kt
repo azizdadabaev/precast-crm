@@ -62,4 +62,4 @@ class DraftsViewModel @Inject constructor(private val repo: BrowseRepository) : 
 }
 
 /** Long enough that a name is not four requests, short enough that the list does not feel stuck. */
-private const val SEARCH_DEBOUNCE_MS = 300L
+internal const val SEARCH_DEBOUNCE_MS = 300L
