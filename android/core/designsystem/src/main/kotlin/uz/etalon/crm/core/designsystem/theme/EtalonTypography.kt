@@ -50,6 +50,9 @@ object EtalonType {
     val meta = Base.copy(fontSize = 11.sp, fontWeight = FontWeight.W400)
     /** The 11 sp step at 600 — a form field's label, a KPI footnote, a segment. [meta] is the same
      *  size at 400, and eight call sites used to write out the `copy` by hand. */
+    /** 7a room grid: an 11 sp figure under a 10 sp caption. Bolder than [labelSm], which is a
+     *  label rather than a number. */
+    val figureSm = Base.copy(fontSize = 11.sp, fontWeight = FontWeight.W700)
     val labelSm = Base.copy(fontSize = 11.sp, fontWeight = FontWeight.W600)
     val tag = Base.copy(fontSize = 10.sp, fontWeight = FontWeight.W600)
     /**

@@ -95,6 +95,9 @@ fun LoadListCard(
 fun LoadListCard(
     modifier: Modifier = Modifier,
     collapsible: Boolean = false,
+    /** Beside the title. The order detail puts «юкловчи учун · ~12 246 кг» here, where design 7a
+     *  draws it; the load screens have nothing to say there and pass nothing. */
+    trailing: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     var expanded by rememberSaveable(collapsible) { mutableStateOf(!collapsible) }
@@ -119,6 +122,7 @@ fun LoadListCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            if (trailing != null) trailing()
             if (collapsible) {
                 EtalonIcon(
                     if (expanded) EtalonIcons.ChevronUp else EtalonIcons.ChevronDown,

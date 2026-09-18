@@ -1,5 +1,7 @@
 package uz.etalon.crm.feature.orders.detail
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +26,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import uz.etalon.crm.core.designsystem.icon.EtalonIcon
+import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.components.Tag
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -52,11 +60,11 @@ import java.math.BigDecimal
  */
 @Composable
 internal fun RoomsCard(rooms: List<RoomLine>) {
-    // Every row starts shut. v1.3 §3.3 opens the first one, but that was written for a card in
-    // isolation: on the real screen an open row is a beam diagram, six detail lines and the price
-    // composition sitting between the hero and everything the operator came to do — payments,
-    // delivery, the shipment. Checking the quote is the «Check» job, not the first one.
-    var openIndex by remember { mutableStateOf(-1) }
+    // The prototype opens the first room with the card, so this does too. It costs height — the
+    // three tests that broke when I first tried it were the payments and delivery cards going
+    // below the fold — but a card that opens showing a price and none of its working is not what
+    // 7a draws.
+    var openIndex by remember { mutableStateOf(0) }
     WhiteCard(
         title = stringResource(R.string.detail_rooms),
         trailing = {
@@ -139,12 +147,18 @@ private fun RoomRow(room: RoomLine, index: Int, open: Boolean, onToggle: () -> U
             maxLines = 2,
             modifier = Modifier.weight(1f),
         )
-        Text(
-            stringResource(R.string.detail_room_counts, room.beamCount, room.totalBlocks),
-            style = EtalonType.meta,
-            color = EtalonColors.ink3,
-            maxLines = 1,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CountPair(room.beamCount, stringResource(R.string.detail_room_beams))
+            Spacer(Modifier.width(EtalonSpace.sm))
+            CountPair(room.totalBlocks, stringResource(R.string.detail_room_blocks))
+            Spacer(Modifier.width(EtalonSpace.xs))
+            EtalonIcon(
+                if (open) EtalonIcons.ChevronUp else EtalonIcons.ChevronDown,
+                null,
+                tint = EtalonColors.ink3,
+                size = 14.dp,
+            )
+        }
     }
     if (open) {
         Spacer(Modifier.height(EtalonSpace.rowGap))
@@ -169,16 +183,35 @@ private fun RoomRow(room: RoomLine, index: Int, open: Boolean, onToggle: () -> U
  */
 @Composable
 private fun BeamDiagram(room: RoomLine) = Column(
-    Modifier.fillMaxWidth().clip(EtalonShapes.lg).background(EtalonColors.page)
-        .padding(horizontal = EtalonSpace.sm, vertical = EtalonSpace.sm),
+    Modifier.fillMaxWidth().clip(EtalonShapes.md).background(EtalonColors.page)
+        .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.md)
+        .padding(EtalonSpace.sm),
 ) {
-    Row(Modifier.fillMaxWidth().height(BeamBarHeight), verticalAlignment = Alignment.CenterVertically) {
-        BearingZone()
-        Box(
-            Modifier.weight(1f).height(BeamBarHeight)
-                .clip(EtalonShapes.xs).background(EtalonColors.indigo),
+    // 56 dp tall with the beam across the middle 76 % and a hatched bearing at each end, exactly
+    // as the prototype draws it. Hatched rather than filled: the bearing is the wall the beam
+    // rests ON, not more beam, and a solid block reads as the same material.
+    Canvas(Modifier.fillMaxWidth().height(DiagramHeight)) {
+        val bearingW = size.width * BEARING_FRACTION
+        val step = 7.dp.toPx()
+        // 135°: every line drawn from an x on the top edge down-left, so the band fills evenly.
+        var x = 0f
+        while (x < bearingW + size.height) {
+            drawLine(EtalonColors.hatch, Offset(x, 0f), Offset(x - size.height, size.height), strokeWidth = 3.dp.toPx() / 2)
+            drawLine(
+                EtalonColors.hatch,
+                Offset(size.width - bearingW + x, 0f),
+                Offset(size.width - bearingW + x - size.height, size.height),
+                strokeWidth = 3.dp.toPx() / 2,
+            )
+            x += step
+        }
+        val barH = 6.dp.toPx()
+        drawRoundRect(
+            color = EtalonColors.indigo,
+            topLeft = Offset(bearingW, size.height / 2 - barH / 2),
+            size = Size(size.width - bearingW * 2, barH),
+            cornerRadius = CornerRadius(barH / 2, barH / 2),
         )
-        BearingZone()
     }
     Spacer(Modifier.height(EtalonSpace.xs))
     Text(
@@ -190,8 +223,6 @@ private fun BeamDiagram(room: RoomLine) = Column(
         stringResource(
             R.string.detail_beam_sub,
             formatDecimal(room.innerWidth, 2),
-            // Bearing is stored in metres; the caption reads in centimetres because that is how
-            // it is measured on site.
             formatDecimal(room.bearing.multiply(BigDecimal(100)), 0),
         ),
         style = EtalonType.meta,
@@ -199,51 +230,61 @@ private fun BeamDiagram(room: RoomLine) = Column(
     )
 }
 
-/** The wall the beam bears on — hatched in the panel's own lavender so it reads as structure. */
+/** 7a's detail grid: three columns of a caption over its figure, two rows deep. */
 @Composable
-private fun BearingZone() = Box(
-    Modifier.width(BearingWidth).height(BeamBarHeight)
-        .clip(EtalonShapes.xs).background(EtalonColors.lavender),
-)
-
-/** §3.3's detail grid, as label/value rows rather than three columns — at 130 % font scale three
- *  columns of Cyrillic captions cannot hold «Ғишт / қатор» and a figure on one line. */
-@Composable
-private fun DetailGrid(room: RoomLine) = Column(Modifier.fillMaxWidth()) {
-    DetailLine(
-        stringResource(R.string.detail_room_pattern),
-        buildString {
-            append(stringResource(patternLabel(room.pattern)))
+private fun DetailGrid(room: RoomLine) = Column(
+    Modifier.fillMaxWidth().padding(top = EtalonSpace.rowGap),
+    verticalArrangement = Arrangement.spacedBy(EtalonSpace.sm),
+) {
+    Row(Modifier.fillMaxWidth()) {
+        GridCell(
+            stringResource(R.string.detail_room_pattern),
+            stringResource(patternLabel(room.pattern)),
             // Only when a human overrode the engine's pick — otherwise the note is noise.
-            if (room.pattern != room.patternAuto) {
-                append(' ')
-                append(stringResource(R.string.detail_room_pattern_auto, stringResource(patternLabel(room.patternAuto))))
-            }
-        },
-    )
-    DetailLine(
-        stringResource(R.string.detail_room_blocks_per_row),
-        stringResource(R.string.detail_room_blocks_rows, room.blocksPerRow, room.blockRows),
-    )
-    DetailLine(stringResource(R.string.detail_room_monolith), formatDecimal(room.monolithLength, 2) + " м")
-    DetailLine(stringResource(R.string.detail_area), formatArea(room.monolithArea))
-    DetailLine(stringResource(R.string.detail_room_m2price), formatMoney(room.m2Price))
-    DetailLine(stringResource(R.string.detail_room_subtotal), formatMoney(room.subtotal), strong = true)
+            note = if (room.pattern != room.patternAuto) {
+                stringResource(R.string.detail_room_pattern_auto, stringResource(patternLabel(room.patternAuto)))
+            } else {
+                null
+            },
+            modifier = Modifier.weight(1f),
+        )
+        GridCell(
+            stringResource(R.string.detail_room_blocks_per_row),
+            stringResource(R.string.detail_room_blocks_rows, room.blocksPerRow, room.blockRows),
+            modifier = Modifier.weight(1f),
+        )
+        GridCell(
+            stringResource(R.string.detail_room_monolith),
+            formatDecimal(room.monolithLength, 2) + " м",
+            modifier = Modifier.weight(1f),
+        )
+    }
+    Row(Modifier.fillMaxWidth()) {
+        GridCell(stringResource(R.string.detail_area), formatArea(room.monolithArea), modifier = Modifier.weight(1f))
+        GridCell(stringResource(R.string.detail_room_m2price), formatMoney(room.m2Price), modifier = Modifier.weight(1f))
+        GridCell(stringResource(R.string.detail_room_subtotal), formatMoney(room.subtotal), modifier = Modifier.weight(1f))
+    }
 }
 
 @Composable
-private fun DetailLine(caption: String, value: String, strong: Boolean = false) = Row(
-    Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs),
-    Arrangement.SpaceBetween,
-    Alignment.CenterVertically,
-) {
-    Text(caption, style = EtalonType.label, color = EtalonColors.ink2, modifier = Modifier.weight(1f))
-    Text(
-        value,
-        style = if (strong) EtalonType.rowAmount else EtalonType.body,
-        color = EtalonColors.ink,
-        maxLines = 1,
-    )
+private fun GridCell(caption: String, value: String, modifier: Modifier = Modifier, note: String? = null) =
+    Column(modifier.padding(end = EtalonSpace.xs)) {
+        Text(caption, style = EtalonType.caption, color = EtalonColors.ink3, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row {
+            Text(value, style = EtalonType.figureSm, color = EtalonColors.ink, maxLines = 1)
+            if (note != null) {
+                Spacer(Modifier.width(3.dp))
+                Text(note, style = EtalonType.meta, color = EtalonColors.ink3, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+
+/** «14 балка» — the figure in ink, the unit quiet behind it. */
+@Composable
+private fun CountPair(count: Int, unit: String) = Row(verticalAlignment = Alignment.CenterVertically) {
+    Text(count.toString(), style = EtalonType.rowAmount, color = EtalonColors.ink, maxLines = 1)
+    Spacer(Modifier.width(3.dp))
+    Text(unit, style = EtalonType.meta, color = EtalonColors.ink3, maxLines = 1)
 }
 
 /**
@@ -318,5 +359,8 @@ private fun patternLabel(code: String): Int = when (code) {
     else -> R.string.detail_pattern_gbg
 }
 
-private val BeamBarHeight = 10.dp
-private val BearingWidth = 18.dp
+private val DiagramHeight = 56.dp
+
+/** Each bearing zone is 12 % of the width, so the beam spans the middle 76 %  14 the prototype
+ *  proportions. Not to scale with the real bearing, which would be invisible on a phone. */
+private const val BEARING_FRACTION = 0.12f

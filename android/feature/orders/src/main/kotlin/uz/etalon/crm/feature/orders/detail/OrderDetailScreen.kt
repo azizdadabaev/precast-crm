@@ -298,7 +298,7 @@ fun OrderDetailScreen(
                 // canceled order collapsed, because what was quoted is still worth reading but
                 // nothing is going on a lorry.
                 if (o.rooms.isNotEmpty()) {
-                    item { LoadListCard(o.loadList, o.totalBlocks, o.weightKg, collapsible = canceled) }
+                    item { OrderLoadList(o, collapsible = canceled) }
                 }
                 // §3.3: the priced breakdown sits directly under the load list — what goes on
                 // the lorry, then what it costs. Drawn on a canceled order too: the quote is
@@ -339,7 +339,7 @@ fun OrderDetailScreen(
                 val canAdd = canAddPhoto(o, me)
                 if (photos.isNotEmpty() || canAdd) {
                     item {
-                        WhiteCard(stringResource(R.string.photos)) {
+                        WhiteCard(stringResource(R.string.detail_truck_photos)) {
                             PhotoStrip(
                                 photos = photos,
                                 onOpen = { lightboxAt = it },
@@ -827,7 +827,7 @@ private fun PaymentsCard(o: OrderDetail) = WhiteCard(stringResource(R.string.det
  */
 @Composable
 private fun DeliveryCard(o: OrderDetail, onLocation: (() -> Unit)?, @StringRes locationLabel: Int) = WhiteCard(
-    title = stringResource(R.string.detail_delivery),
+    title = stringResource(R.string.detail_process),
     trailing = onLocation?.let {
         {
             SecondaryButton(

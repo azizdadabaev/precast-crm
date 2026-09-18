@@ -52,6 +52,10 @@ object EtalonColors {
      *  This is the fill that had no token: amber legible on navy. */
     val amberOnDark = Color(0xFFFFD28A)
 
+    /** The diagonal hatch on 7a beam diagram bearing zones  14 the wall the beam rests on. A
+     *  step darker than [surfaceBorder] so the stripes read as texture, not as a border. */
+    val hatch = Color(0xFFE2E0EC)
+
     /** The load list's «Ғишт» chip — a hairline and a text dark enough to read on [warningBg]. */
     val amberBorder = Color(0xFFF5D9A8)
     val amberDeep = Color(0xFF8A5A1B)

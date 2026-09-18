@@ -105,7 +105,6 @@
 
     <string name="pending_amount">Тасдиқ кутилмоқда: %1$s</string>
     <string name="room_n">Хона %1$d</string>
-    <string name="photos">Расмлар</string>
     <string name="events">Тарих</string>
     <!-- «Тарих» event wording, one per Prisma `OrderEventType` (see EventLabels.kt). Used when the
          server sends no `message` of its own; a type this client does not know reads as
@@ -193,4 +192,15 @@
     <string name="detail_hero_paid">Тўлов</string>
     <string name="detail_uzs">UZS</string>
     <string name="detail_cd_call">Қўнғироқ қилиш</string>
+    <!-- ── 7a load list: chips, not rows ───────────────────────────────────── -->
+    <string name="detail_loadlist_weight">юкловчи учун · ~%1$s кг</string>
+    <string name="detail_loadlist_metre">м</string>
+    <string name="detail_loadlist_blocks">Ғишт</string>
+    <string name="detail_loadlist_equals">=</string>
+    <string name="detail_room_beams">балка</string>
+    <string name="detail_room_blocks">ғишт</string>
+    <!-- 7a card titles. «Жараён» is the card; «Етказиш» stays the name of the delivery COST line
+         in the price breakdown, which is a different thing on the same screen. -->
+    <string name="detail_process">Жараён</string>
+    <string name="detail_truck_photos">Юкланган машина</string>
 </resources>
