@@ -218,4 +218,6 @@
     <string name="detail_cancel_keep">Буюртмани сақлаш</string>
     <string name="detail_cancel_confirm">Буюртмани бекор қилиш</string>
     <string name="detail_menu_cancel">Буюртмани бекор қилиш</string>
+    <!-- Shut: the tap opens it. Open: the tap on a room opens that room. -->
+    <string name="detail_rooms_hint_closed">%1$d хона · очиш</string>
 </resources>

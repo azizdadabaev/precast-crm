@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,23 +61,45 @@ import java.math.BigDecimal
  */
 @Composable
 internal fun RoomsCard(rooms: List<RoomLine>) {
-    // The prototype opens the first room with the card, so this does too. It costs height — the
-    // three tests that broke when I first tried it were the payments and delivery cards going
-    // below the fold — but a card that opens showing a price and none of its working is not what
-    // 7a draws.
-    var openIndex by remember { mutableStateOf(0) }
+    // Shut, and every row inside it shut.
+    //
+    // The prototype opens the first room, and this did too until an owner opened a nine-room
+    // order on a phone: the card filled the screen and buried the payments, the delivery and the
+    // action bar under a beam diagram nobody had asked for. The breakdown is the «Check» job —
+    // wanted sometimes, in full, on purpose — so it is one tap away rather than in the way.
+    // The materials line stays visible while it is shut, which is the part that IS read in
+    // passing.
+    //
+    // rememberSaveable, so scrolling the card out of the list and back, or rotating, does not
+    // shut a breakdown the operator deliberately opened.
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var openIndex by rememberSaveable { mutableStateOf(-1) }
     WhiteCard(
         title = stringResource(R.string.detail_rooms),
+        // The header only: the rows below are buttons of their own.
+        onTitleClick = { expanded = !expanded },
         trailing = {
-            Text(
-                stringResource(R.string.detail_rooms_hint, rooms.size),
-                style = EtalonType.meta,
-                color = EtalonColors.ink3,
-                maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(
+                        if (expanded) R.string.detail_rooms_hint else R.string.detail_rooms_hint_closed,
+                        rooms.size,
+                    ),
+                    style = EtalonType.meta,
+                    color = EtalonColors.ink3,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.width(EtalonSpace.xs))
+                EtalonIcon(
+                    if (expanded) EtalonIcons.ChevronUp else EtalonIcons.ChevronDown,
+                    null,
+                    tint = EtalonColors.ink3,
+                    size = 16.dp,
+                )
+            }
         },
     ) {
-        rooms.forEachIndexed { i, room ->
+        if (expanded) rooms.forEachIndexed { i, room ->
             if (i > 0) {
                 Spacer(Modifier.height(EtalonSpace.rowGap))
                 Box(
@@ -93,7 +116,8 @@ internal fun RoomsCard(rooms: List<RoomLine>) {
                 onToggle = { openIndex = if (openIndex == i) -1 else i },
             )
         }
-        FooterStrip(rooms)
+        // Outside the `if`: collapsed, this line IS the card.
+        FooterStrip(rooms, topGap = expanded)
     }
 }
 
@@ -319,10 +343,10 @@ private fun PriceComposition(room: RoomLine) = Column(
 
 /** The order's materials in one line — what the yard loads, summed across every room. */
 @Composable
-private fun FooterStrip(rooms: List<RoomLine>) {
+private fun FooterStrip(rooms: List<RoomLine>, topGap: Boolean = true) {
     val monolith = rooms.fold(BigDecimal.ZERO) { acc, r -> acc + r.monolithLength }
     val area = rooms.fold(BigDecimal.ZERO) { acc, r -> acc + r.monolithArea }
-    Spacer(Modifier.height(EtalonSpace.rowGap))
+    if (topGap) Spacer(Modifier.height(EtalonSpace.rowGap))
     Row(
         Modifier.fillMaxWidth().clip(EtalonShapes.lg).background(EtalonColors.page)
             .padding(horizontal = EtalonSpace.sm, vertical = EtalonSpace.xs),

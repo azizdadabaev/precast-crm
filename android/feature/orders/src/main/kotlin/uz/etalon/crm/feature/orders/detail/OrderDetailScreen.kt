@@ -563,6 +563,10 @@ internal fun WhiteCard(
     title: String?,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    /** Toggles a card whose CONTENT is itself interactive. [onClick] makes the whole surface a
+     *  button, which on Â«Ò²Ð¸ÑÐ¾Ð±-ÐºÐ¸ÑÐ¾Ð±Â» would mean a tap on the padding between two rooms shut the
+     *  breakdown the operator had just opened. */
+    onTitleClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) = Column(
@@ -572,7 +576,18 @@ internal fun WhiteCard(
         .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
 ) {
     if (title != null || trailing != null) {
-        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth()
+                .then(
+                    if (onTitleClick != null) {
+                        Modifier.clickable(role = Role.Button, onClick = onTitleClick)
+                    } else {
+                        Modifier
+                    },
+                ),
+            Arrangement.SpaceBetween,
+            Alignment.CenterVertically,
+        ) {
             Text(
                 title.orEmpty(),
                 style = EtalonType.sectionTitle,
