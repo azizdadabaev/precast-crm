@@ -174,7 +174,10 @@ fun DetailPanel(
     // an empty FlowRow would still cost its two spacers — 26 dp of dead panel above the divider.
     tiles: (@Composable FlowRowScope.() -> Unit)? = null,
     totals: @Composable RowScope.() -> Unit,
-    onBack: () -> Unit,
+    /** Null draws no button but keeps its 48 dp, exactly as a null [onCall] does, so the date
+     *  stays centred. The order detail passes null: its back arrow lives in the sticky top bar,
+     *  which does not scroll away, and two back arrows on one screen is one too many. */
+    onBack: (() -> Unit)? = null,
     dateLabel: String,
     onCall: (() -> Unit)?,
     actions: (@Composable RowScope.() -> Unit)? = null,
@@ -184,7 +187,8 @@ fun DetailPanel(
     modifier.fillMaxWidth().clip(EtalonShapes.sheet).background(EtalonColors.navy).padding(10.dp),
 ) {
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        EtalonIconButton(EtalonIcons.ArrowLeft, stringResource(R.string.ds_cd_back), onBack, onDark = true)
+        if (onBack != null) EtalonIconButton(EtalonIcons.ArrowLeft, stringResource(R.string.ds_cd_back), onBack, onDark = true)
+        else Spacer(Modifier.size(EtalonSpace.minTouch))
         Text(dateLabel, style = EtalonType.label, color = EtalonColors.onDarkMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         // Only wrapped in a Row when there is something to put beside the call button: an extra
         // layout node around the lone button would be a chance for the order detail's frames to

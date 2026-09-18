@@ -185,4 +185,5 @@
     <!-- Recorded but not yet confirmed by an owner. Neither paid nor outstanding, so it hangs
          under the bar rather than moving either figure. -->
     <string name="detail_pending_confirmation">+ %1$s тасдиқлаш кутилмоқда</string>
+    <string name="detail_cd_back">Орқага</string>
 </resources>

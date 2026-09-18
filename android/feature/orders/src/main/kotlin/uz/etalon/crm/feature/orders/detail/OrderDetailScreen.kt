@@ -81,6 +81,7 @@ import uz.etalon.crm.core.designsystem.components.TimelineStep
 import uz.etalon.crm.core.designsystem.components.navPillContentPadding
 import uz.etalon.crm.core.designsystem.components.timelineFor
 import uz.etalon.crm.core.designsystem.icon.EtalonIcon
+import uz.etalon.crm.core.designsystem.components.EtalonIconButton
 import uz.etalon.crm.core.designsystem.icon.EtalonIcons
 import uz.etalon.crm.core.designsystem.theme.EtalonColors
 import uz.etalon.crm.core.designsystem.theme.EtalonShapes
@@ -240,11 +241,14 @@ fun OrderDetailScreen(
     // comment field's own «Юбориш» beneath it — behind the keyboard. The whole screen shortens, and
     // the focused field is scrolled into what is left of it.
     Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding().imePadding()) {
-        PullToRefreshBox(
-            isRefreshing = r is Resource.Loading && o == null,
-            onRefresh = onRefresh,
-            modifier = Modifier.fillMaxSize(),
-        ) {
+        Column(Modifier.fillMaxSize()) {
+            // Outside the list, so it stays put while the cards scroll under it.
+            if (o != null) DetailTopBar(o, onBack)
+            PullToRefreshBox(
+                isRefreshing = r is Resource.Loading && o == null,
+                onRefresh = onRefresh,
+                modifier = Modifier.weight(1f),
+            ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 // The other sticky-bar screens sit in a Scaffold, which adds the bar's own height
@@ -278,7 +282,7 @@ fun OrderDetailScreen(
                 if (r is Resource.Error) item { ErrorBanner(r.error.message, onRetry = onRefresh) }
                 if (actionError != null) item { ErrorBanner(actionError) }
                 if (o == null) return@LazyColumn
-                item { Panel(o, onBack = onBack, onCall = { dial(ctx, o.summary.client.phone) }) }
+                item { Panel(o, onCall = { dial(ctx, o.summary.client.phone) }) }
                 val canceled = o.summary.status.owesNothing
                 if (canceled) item { CanceledNotice(o) }
                 // Spec §5.1a: the loader's own section, and the one the owner named as the reason
@@ -350,6 +354,7 @@ fun OrderDetailScreen(
                 }
                 if (o.events.isNotEmpty()) item { EventsCard(o.events) }
             }
+            }
         }
         if (o != null && barVisible) {
             ActionBar(step, door, onLoadTruck, onDeliveryProof, onOpenShipments, onRecordPayment)
@@ -373,13 +378,48 @@ fun OrderDetailScreen(
     }
 }
 
+/**
+ * §3.3's sticky header: which order this is, what state it is in, and the way back — pinned, so
+ * none of the three scroll away.
+ *
+ * It earns its place because «Ҳисоб-китоб» made this screen long. The order number and status used
+ * to be readable only at the very top, in the hero; an operator two cards down had no way to
+ * confirm which order they were about to load a truck for without scrolling back.
+ *
+ * No «⋯» yet. 7a's menu is «Юбориш (расм)» and «Чатга юбориш» after the owner cut the other four
+ * as desk work, and neither exists for an order yet — sharing renders a quote image (the
+ * calculator's own, not an order's) and the chat hand-off needs a conversation id the order API
+ * does not return. A button that opens an empty menu is worse than no button.
+ */
+@Composable
+private fun DetailTopBar(o: OrderDetail, onBack: () -> Unit) = Column {
+    Row(
+        Modifier.fillMaxWidth().background(EtalonColors.page)
+            .padding(horizontal = EtalonSpace.sm, vertical = EtalonSpace.xs),
+        horizontalArrangement = Arrangement.spacedBy(EtalonSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        EtalonIconButton(EtalonIcons.ArrowLeft, stringResource(R.string.detail_cd_back), onBack)
+        Text(
+            formatOrderNo(o.summary.orderNumber),
+            style = EtalonType.titleSm,
+            color = EtalonColors.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        StatusTag(o.summary.status)
+    }
+    HorizontalDivider(color = EtalonColors.surfaceBorder, thickness = EtalonSpace.hairline)
+}
+
 /** The hero. 7a moved the rooms out to their own «Ҳисоб-китоб» card, so the panel carries no room
  *  tiles at all: a tile read «36,89 м² / Garage · 5 × 7», which states a price-bearing figure and a
  *  pair of dimensions with no relationship between them, and the owner rejected it. Drawing them
  *  here as well as on the card would also print the same room twice on one screen, in two different
  *  areas — the tile used billedArea, the card uses monolithArea. */
 @Composable
-private fun Panel(o: OrderDetail, onBack: () -> Unit, onCall: () -> Unit) = DetailPanel(
+private fun Panel(o: OrderDetail, onCall: () -> Unit) = DetailPanel(
     caption = stringResource(R.string.detail_caption),
     headline = formatOrderNo(o.summary.orderNumber),
     // The full wording, «Жўнатилган», exactly as the capture draws it — the abbreviations
@@ -407,7 +447,6 @@ private fun Panel(o: OrderDetail, onBack: () -> Unit, onCall: () -> Unit) = Deta
             modifier = Modifier.weight(1f),
         )
     },
-    onBack = onBack,
     dateLabel = formatDate(o.summary.scheduledAt),
     onCall = onCall,
 )
