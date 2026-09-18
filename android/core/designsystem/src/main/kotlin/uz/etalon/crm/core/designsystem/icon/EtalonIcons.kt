@@ -45,6 +45,7 @@ object EtalonIcons {
     val GripHorizontal = R.drawable.ic_lu_grip_horizontal
     val House = R.drawable.ic_lu_house
     val Images = R.drawable.ic_lu_images
+    val Paperclip = R.drawable.ic_lu_paperclip
     /** The delivery location's pin (§5.2). [Navigation]'s arrow is the *go there* action; this is
      *  the place itself — a saved coordinate on the order. */
     val MapPin = R.drawable.ic_lu_map_pin

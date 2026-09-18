@@ -16,6 +16,7 @@ import uz.etalon.crm.core.designsystem.theme.EtalonShapes
 import uz.etalon.crm.core.designsystem.theme.EtalonType
 import uz.etalon.crm.core.model.DiscrepancyStatus
 import uz.etalon.crm.core.model.OrderStatus
+import uz.etalon.crm.core.model.PaymentMethod
 import uz.etalon.crm.core.model.PaymentState
 import uz.etalon.crm.core.model.PaymentStatus
 import uz.etalon.crm.core.model.ShipmentStatus
@@ -292,4 +293,17 @@ fun discrepancyStatusLabel(s: DiscrepancyStatus): Int = when (s) {
     DiscrepancyStatus.RESOLVED_WRITEOFF -> R.string.discrepancy_writeoff
     DiscrepancyStatus.DISPUTED -> R.string.discrepancy_disputed
     DiscrepancyStatus.UNKNOWN -> R.string.status_unknown
+}
+
+/**
+ * How a payment was taken. Moved here from `:feature:payments` when the order detail needed the
+ * same five words on its own payment rows — the `when` the compiler makes exhaustive is what keeps
+ * a new [PaymentMethod] from silently rendering blank.
+ */
+fun paymentMethodLabel(method: PaymentMethod): Int = when (method) {
+    PaymentMethod.CASH -> R.string.ds_method_cash
+    PaymentMethod.BANK_TRANSFER -> R.string.ds_method_bank
+    PaymentMethod.CLICK -> R.string.ds_method_click
+    PaymentMethod.PAYME -> R.string.ds_method_payme
+    PaymentMethod.OTHER, PaymentMethod.UNKNOWN -> R.string.ds_method_other
 }

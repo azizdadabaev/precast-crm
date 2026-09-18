@@ -118,4 +118,11 @@
     <plurals name="outbox_pending">
         <item quantity="other">%1$d та маълумот юборилмоқда…</item>
     </plurals>
+    <!-- How a payment was taken. Lives here, not in :feature:payments, because the order detail
+         prints the same five words on its own payment rows. -->
+    <string name="ds_method_cash">Нақд</string>
+    <string name="ds_method_bank">Банк</string>
+    <string name="ds_method_click">Click</string>
+    <string name="ds_method_payme">Payme</string>
+    <string name="ds_method_other">Бошқа</string>
 </resources>

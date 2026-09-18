@@ -12,6 +12,8 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -380,8 +382,12 @@ class OrderDetailScreenshotTest {
         list().performScrollToNode(row)
         rule.onNode(row).assertTextEquals("Барчаси (6)")
         rule.onNode(row).performClick()
+        // Expanded, six two-line entries push the button below the fold, and a click on a node
+        // that is not laid out does not land. Scroll it back under the thumb before each tap.
+        list().performScrollToNode(row)
         rule.onNode(row).assertTextEquals("Камроқ")
         rule.onNode(row).performClick()
+        list().performScrollToNode(row)
         rule.onNode(row).assertTextEquals("Барчаси (6)")
     }
 
@@ -528,6 +534,11 @@ class OrderDetailScreenshotTest {
         )
         val lastCard = hasTestTag(TAG_EVENTS_ALL)
         list().performScrollToNode(lastCard)
+        // performScrollToNode stops as soon as the node is laid out, which can leave it sitting
+        // under the bar while the list still has room to scroll. The clearance the list reserves
+        // (navPillContentPadding's extraBottom) only applies at the END of the scroll, so go
+        // there — once at max scroll further swipes are no-ops, so this is stable.
+        repeat(3) { list().performTouchInput { swipeUp() } }
         rule.waitForIdle()
 
         val button = rule.onNode(hasText("Тўлов қайд қилиш")).getUnclippedBoundsInRoot()

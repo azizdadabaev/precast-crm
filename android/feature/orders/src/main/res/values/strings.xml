@@ -66,7 +66,7 @@
     <!-- On a canceled order the progress card and the cost breakdown are both hidden, so the
          payment rows would have no total to be read against; this footer is the only place that
          states the denominator. -->
-    <string name="detail_payments_confirmed_of">Тасдиқланган: %1$s / %2$s</string>
+    <string name="detail_payments_confirmed_of">тасдиқланган %1$s / %2$s</string>
     <string name="action_load">Юклаш</string>
 
     <!-- The cancellation notice. «Сабаб кўрсатилмаган» is honest about an order that was canceled
@@ -203,4 +203,8 @@
          in the price breakdown, which is a different thing on the same screen. -->
     <string name="detail_process">Жараён</string>
     <string name="detail_truck_photos">Юкланган машина</string>
+    <string name="detail_receipt">чек</string>
+    <string name="detail_photos_meta">%1$d расм</string>
+    <string name="detail_photos_meta_at">%1$d расм · %2$s</string>
+    <string name="detail_events_count">%1$d та ёзув</string>
 </resources>

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -66,8 +67,9 @@ import uz.etalon.crm.core.designsystem.components.LoadListCard
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.OutboxBanner
 import uz.etalon.crm.core.designsystem.components.PaymentStatusTag
+import uz.etalon.crm.core.designsystem.components.paymentMethodLabel
 import uz.etalon.crm.core.designsystem.components.PhotoRef
-import uz.etalon.crm.core.designsystem.components.PhotoStrip
+import uz.etalon.crm.core.designsystem.components.PhotoGrid
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.share.rememberShareImage
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
@@ -237,6 +239,8 @@ fun OrderDetailScreen(
     } + EtalonSpace.xs
     var lightboxAt by remember { mutableStateOf<Int?>(null) }
     var deleteCandidate by remember { mutableStateOf<PhotoRef?>(null) }
+    // The receipts of one payment, opened in the same lightbox the loaded-truck photos use.
+    var receiptsAt by remember { mutableStateOf<List<String>>(emptyList()) }
     // Only a photo the server already knows can be deleted; a queued one has no id to delete by.
     val onPhotoLongPress: ((Int) -> Unit)? = if (canEdit) {
         { index -> photos.getOrNull(index)?.takeIf { p -> p.id != null }?.let { p -> deleteCandidate = p } }
@@ -311,7 +315,7 @@ fun OrderDetailScreen(
                 if (!canceled) {
                     if (hasCostBreakdown(o)) item { CostsCard(o) }
                 }
-                if (o.payments.isNotEmpty() || !o.pendingAmount.isZero) item { PaymentsCard(o) }
+                if (o.payments.isNotEmpty() || !o.pendingAmount.isZero) item { PaymentsCard(o) { urls -> receiptsAt = urls } }
                 item {
                     DeliveryCard(
                         o = o,
@@ -339,8 +343,20 @@ fun OrderDetailScreen(
                 val canAdd = canAddPhoto(o, me)
                 if (photos.isNotEmpty() || canAdd) {
                     item {
-                        WhiteCard(stringResource(R.string.detail_truck_photos)) {
-                            PhotoStrip(
+                        WhiteCard(
+                            stringResource(R.string.detail_truck_photos),
+                            trailing = {
+                                Text(
+                                    o.loadedAt?.let {
+                                        stringResource(R.string.detail_photos_meta_at, photos.size, formatDate(it))
+                                    } ?: stringResource(R.string.detail_photos_meta, photos.size),
+                                    style = EtalonType.caption,
+                                    color = EtalonColors.ink3,
+                                    maxLines = 1,
+                                )
+                            },
+                        ) {
+                            PhotoGrid(
                                 photos = photos,
                                 onOpen = { lightboxAt = it },
                                 onAdd = if (canAdd) onAddPhoto else null,
@@ -369,6 +385,9 @@ fun OrderDetailScreen(
     }
 
     lightboxAt?.let { at -> Lightbox(photos, at, onDismiss = { lightboxAt = null }) }
+    if (receiptsAt.isNotEmpty()) {
+        Lightbox(receiptsAt.map { PhotoRef(null, it) }, 0, onDismiss = { receiptsAt = emptyList() })
+    }
     deleteCandidate?.let { photo ->
         AlertDialog(
             onDismissRequest = { deleteCandidate = null },
@@ -663,16 +682,39 @@ private fun CommentRow(c: OrderComment) = Row(
 @Composable
 private fun EventsCard(events: List<OrderEventLine>) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    WhiteCard(stringResource(R.string.events)) {
+    WhiteCard(
+        stringResource(R.string.events),
+        trailing = {
+            Text(
+                stringResource(R.string.detail_events_count, events.size),
+                style = EtalonType.caption,
+                color = EtalonColors.ink3,
+                maxLines = 1,
+            )
+        },
+    ) {
         (if (expanded) events else events.take(COLLAPSED_EVENTS)).forEach { e ->
             val what = eventMessage(e.type, e.message)
                 ?: stringResource(orderEventLabel(e.type) ?: R.string.event_generic)
-            Text(
-                "${formatDateTime(e.createdAt)} · $what${e.actorName?.let { " · $it" } ?: ""}",
-                style = EtalonType.meta,
-                color = EtalonColors.ink2,
-                modifier = Modifier.padding(top = EtalonSpace.xs),
-            )
+            Row(Modifier.fillMaxWidth().padding(top = EtalonSpace.xs)) {
+                // The dot is the timeline: it marks each entry as a thing that happened, which a
+                // run of identical grey sentences does not.
+                Box(
+                    Modifier.padding(top = 5.dp).size(EventDot).clip(EtalonShapes.pill)
+                        .background(EtalonColors.indigo),
+                )
+                Spacer(Modifier.width(EtalonSpace.sm))
+                Column(Modifier.weight(1f)) {
+                    Text(what, style = EtalonType.meta, color = EtalonColors.ink)
+                    Text(
+                        "${e.actorName?.let { "$it · " } ?: ""}${formatDateTime(e.createdAt)}",
+                        style = EtalonType.caption,
+                        color = EtalonColors.ink3,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
         if (events.size > COLLAPSED_EVENTS) {
             Text(
@@ -774,23 +816,62 @@ private fun CostRow(caption: String, value: String, total: Boolean = false) = Ro
 }
 
 @Composable
-private fun PaymentsCard(o: OrderDetail) = WhiteCard(stringResource(R.string.detail_payments)) {
+private fun PaymentsCard(o: OrderDetail, onReceipts: (List<String>) -> Unit) = WhiteCard(
+    stringResource(R.string.detail_payments),
+    trailing = {
+        Text(
+            stringResource(
+                R.string.detail_payments_confirmed_of,
+                formatMoney(o.summary.confirmedPaid),
+                formatMoney(o.summary.totalPrice),
+            ),
+            style = EtalonType.caption,
+            color = EtalonColors.ink3,
+            maxLines = 1,
+        )
+    },
+) {
     o.payments.forEach { p ->
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
+        Column(Modifier.fillMaxWidth().padding(vertical = EtalonSpace.xs)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 MoneyText(p.amount, style = EtalonType.rowAmount, color = EtalonColors.ink)
-                Text(
-                    "${formatDateTime(p.recordedAt)}${p.recordedByName?.let { " · $it" } ?: ""}",
-                    style = EtalonType.meta,
-                    color = EtalonColors.ink2,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Spacer(Modifier.width(EtalonSpace.sm))
+                PaymentStatusTag(p.status)
             }
-            PaymentStatusTag(p.status)
+            // How it was taken, then who recorded it and when — the two questions asked of a row
+            // in the confirm queue, in the order 7a asks them.
+            Text(
+                stringResource(paymentMethodLabel(p.method)),
+                style = EtalonType.meta,
+                color = EtalonColors.ink2,
+                maxLines = 1,
+            )
+            Text(
+                "${p.recordedByName?.let { "$it · " } ?: ""}${formatDateTime(p.recordedAt)}",
+                style = EtalonType.meta,
+                color = EtalonColors.ink3,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Only when a receipt exists. «+ чек» — uploading one from here — is the half this
+            // screen cannot do yet: it needs POST /api/payments/{id}/receipts, which the app has
+            // no call for, and a button that opens nothing is worse than no button.
+            if (p.receiptUrls.isNotEmpty()) {
+                Row(
+                    Modifier.padding(top = 2.dp)
+                        .clickable(role = Role.Button) { onReceipts(p.receiptUrls) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    EtalonIcon(EtalonIcons.Paperclip, null, tint = EtalonColors.indigo, size = 14.dp)
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        stringResource(R.string.detail_receipt),
+                        style = EtalonType.caption,
+                        color = EtalonColors.indigo,
+                        maxLines = 1,
+                    )
+                }
+            }
         }
     }
     if (!o.pendingAmount.isZero) {
@@ -798,21 +879,6 @@ private fun PaymentsCard(o: OrderDetail) = WhiteCard(stringResource(R.string.det
             stringResource(R.string.pending_amount, formatMoney(o.pendingAmount)),
             style = EtalonType.meta,
             color = EtalonColors.indigo,
-            modifier = Modifier.padding(top = EtalonSpace.xs),
-        )
-    }
-    // On a canceled order the progress card and the cost breakdown are both gone, so these rows
-    // would be sums with nothing to be read against. This is the only place left that can state
-    // the denominator — how much of the order's price the cash on file actually covered.
-    if (o.summary.status.owesNothing) {
-        Text(
-            stringResource(
-                R.string.detail_payments_confirmed_of,
-                formatMoney(o.summary.confirmedPaid),
-                formatMoney(o.summary.totalPrice),
-            ),
-            style = EtalonType.meta,
-            color = EtalonColors.ink2,
             modifier = Modifier.padding(top = EtalonSpace.xs),
         )
     }
@@ -956,3 +1022,5 @@ private fun BoxScope.ActionBar(
         }
     }
 }
+
+private val EventDot = 6.dp
