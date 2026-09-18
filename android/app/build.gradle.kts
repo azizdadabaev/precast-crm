@@ -62,6 +62,7 @@ dependencies {
     implementation(project(":feature:logistics"))
     implementation(project(":feature:payments"))
     implementation(project(":feature:capture"))
+    implementation(project(":feature:browse"))
     implementation(project(":feature:clients"))
     implementation(project(":feature:home"))
     implementation(project(":feature:calculator"))

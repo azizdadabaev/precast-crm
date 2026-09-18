@@ -5,6 +5,9 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import retrofit2.http.*
+import uz.etalon.crm.core.network.dto.DraftsPageDto
+import uz.etalon.crm.core.network.dto.GalleryPageDto
+import uz.etalon.crm.core.network.dto.InboxDto
 import uz.etalon.crm.core.network.dto.*
 
 /**
@@ -65,6 +68,29 @@ interface EtalonApi {
      */
     @POST("/api/orders/{id}/send-to-chat")
     suspend fun sendOrderToChat(@Path("id") id: String): Unit
+
+    // ── Drawer surfaces ─────────────────────────────────────────────
+
+    /** «Лойиҳалар». `page` is what makes the route answer with an envelope instead of a bare array. */
+    @GET("/api/projects")
+    suspend fun drafts(
+        @Query("page") page: Int,
+        @Query("pageSize") pageSize: Int,
+        @Query("status") status: String?,
+        @Query("q") query: String?,
+    ): DraftsPageDto
+
+    @GET("/api/gallery")
+    suspend fun gallery(
+        @Query("page") page: Int,
+        @Query("pageSize") pageSize: Int,
+        @Query("q") query: String?,
+    ): GalleryPageDto
+
+    /** Answers 403 with `details.code = "INBOX_LOCKED"` when the permission is held but the
+     *  session is locked — see InboxRepository for what the app does with that. */
+    @GET("/api/inbox")
+    suspend fun inbox(): InboxDto
 
     @Multipart
     @POST("/api/orders/{id}/load")

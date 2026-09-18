@@ -3,6 +3,7 @@ package uz.etalon.crm.nav
 import androidx.navigation3.runtime.NavKey
 import uz.etalon.crm.core.model.Me
 import uz.etalon.crm.shell.Destination
+import uz.etalon.crm.shell.DrawerDestination
 
 internal const val PERM_DRIVER_VIEW = "driver.view"
 internal const val PERM_DISPATCH_CREATE = "dispatch.create"
@@ -10,6 +11,8 @@ internal const val PERM_PAYMENT_VIEW = "payment.view"
 internal const val PERM_PAYMENT_RECORD = "payment.record"
 internal const val PERM_DISCREPANCY_VIEW = "discrepancy.view"
 internal const val PERM_CLIENT_VIEW = "client.view"
+internal const val PERM_ORDER_VIEW = "order.view"
+internal const val PERM_INBOX_ACCESS = "inbox.access"
 internal const val PERM_CALCULATOR_USE = "calculator.use"
 /** The Excel backup behind the Жадвал header's download button (design §5, R4) — the same
  *  permission `src/app/api/orders/export/route.ts` checks before it builds the workbook. */
@@ -69,6 +72,8 @@ internal fun gatingPermission(key: NavKey): String? = when (key) {
     is RecordPayment -> PERM_PAYMENT_RECORD
     is Discrepancies -> PERM_DISCREPANCY_VIEW
     is Clients, is ClientDetail -> PERM_CLIENT_VIEW
+    is Drafts, is Gallery -> PERM_ORDER_VIEW
+    is Inbox -> PERM_INBOX_ACCESS
     is Calculator -> PERM_CALCULATOR_USE
     else -> null
 }
@@ -91,4 +96,12 @@ fun startKeyFor(me: Me, deepLinkOrderId: String?): Key = when {
     me.can("order.view") && deepLinkOrderId != null -> OrderDetail(deepLinkOrderId)
     me.can("order.view") -> Orders
     else -> Home
+}
+
+/** What a drawer row opens. Same shape as [Destination.key], for the sections off the bar. */
+internal fun DrawerDestination.key(): Key = when (this) {
+    DrawerDestination.GALLERY -> Gallery
+    DrawerDestination.DRAFTS_LINK -> Drafts
+    DrawerDestination.CLIENTS -> Clients
+    DrawerDestination.INBOX -> Inbox
 }

@@ -5,6 +5,9 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
 import uz.etalon.crm.core.network.EtalonApi
+import uz.etalon.crm.core.network.dto.DraftsPageDto
+import uz.etalon.crm.core.network.dto.GalleryPageDto
+import uz.etalon.crm.core.network.dto.InboxDto
 import uz.etalon.crm.core.network.dto.*
 
 /**
@@ -39,6 +42,11 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun order(id: String): OrderDetailDto = unused("order")
     override suspend fun capacity(from: String, to: String): CapacityDto = unused("capacity")
     override suspend fun exportBackup(): ResponseBody = unused("exportBackup")
+
+    override suspend fun drafts(page: Int, pageSize: Int, status: String?, query: String?): DraftsPageDto = unused("drafts")
+    override suspend fun gallery(page: Int, pageSize: Int, query: String?): GalleryPageDto = unused("gallery")
+    override suspend fun inbox(): InboxDto = unused("inbox")
+    override suspend fun sendOrderToChat(id: String) = unused("sendOrderToChat")
 
     override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = unused("loadTruck")
     override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): GalleryPhotoDto = unused("addLoadedPhoto")

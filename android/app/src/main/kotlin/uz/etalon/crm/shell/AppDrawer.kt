@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -137,7 +138,7 @@ private fun DrawerRow(entry: DrawerDestination, onClick: () -> Unit) = Row(
 /** The web sidebar's icon for the same row, so the two apps look like one product. */
 private fun DrawerDestination.icon(): Int = when (this) {
     DrawerDestination.GALLERY -> EtalonIcons.Images
-    DrawerDestination.DRAFTS_LINK -> EtalonIcons.FileText
+    DrawerDestination.DRAFTS_LINK -> EtalonIcons.Save
     DrawerDestination.CLIENTS -> EtalonIcons.Users
     DrawerDestination.INBOX -> EtalonIcons.MessageCircle
 }

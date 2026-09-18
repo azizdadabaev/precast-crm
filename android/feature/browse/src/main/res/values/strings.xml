@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ── «Лойиҳалар» · the web's /projects ─────────────────────────────────── -->
+    <string name="drafts_title">Лойиҳалар</string>
+    <string name="drafts_subtitle">Сақланган ҳисоб-китоблар, ҳали буюртма берилмаган.</string>
+    <string name="drafts_search_hint">Исм, телефон ёки манзил</string>
+    <string name="drafts_seg_drafts">Лойиҳалар</string>
+    <string name="drafts_seg_all">Барчаси</string>
+    <string name="drafts_tag_draft">Лойиҳа</string>
+    <string name="drafts_no_client">Мижоз кўрсатилмаган</string>
+    <!-- «3 хона · 78,70 м²» -->
+    <string name="drafts_meta">%1$d хона · %2$s</string>
+    <string name="drafts_empty">Ҳозирча лойиҳалар йўқ — ҳисоб-китобни бошланг.</string>
+    <string name="drafts_empty_search">«%1$s» бўйича лойиҳа топилмади.</string>
+</resources>

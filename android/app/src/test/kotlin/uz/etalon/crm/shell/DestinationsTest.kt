@@ -11,6 +11,7 @@ import uz.etalon.crm.nav.Calculator
 import uz.etalon.crm.nav.ChangePin
 import uz.etalon.crm.nav.ClientDetail
 import uz.etalon.crm.nav.Clients
+import uz.etalon.crm.nav.Drafts
 import uz.etalon.crm.nav.Discrepancies
 import uz.etalon.crm.nav.Home
 import uz.etalon.crm.nav.OrderDetail
@@ -35,17 +36,46 @@ class DestinationsTest {
         assertEquals(
             listOf(
                 Destination.HOME, Destination.ORDERS, Destination.CALCULATOR,
-                Destination.PAYMENTS, Destination.CLIENTS,
+                Destination.PAYMENTS, Destination.DRAFTS,
             ),
             destinationsFor(me("order.view", "calculator.use", "payment.view", "client.view")),
         )
     }
 
+    /**
+     * «Мижозлар» left the bar for the drawer and must still be reachable, or the swap
+     * would have removed a screen rather than moved it. «Лойиҳалар» is filtered OUT of the
+     * drawer while it holds a bar cell: one place per destination on any one screen.
+     */
+    @Test
+    fun `the drawer carries what the bar gave up, and never doubles a bar cell`() {
+        val full = me("order.view", "calculator.use", "payment.view", "client.view", "inbox.access")
+        val drawer = drawerDestinationsFor(full)
+        assertEquals(
+            listOf(DrawerDestination.GALLERY, DrawerDestination.CLIENTS, DrawerDestination.INBOX),
+            drawer,
+        )
+        assertFalse(DrawerDestination.DRAFTS_LINK in drawer)
+    }
+
+    /** No `inbox.access`, no «Хабарлар» row — the drawer filters the same way the bar does. */
+    @Test
+    fun `a drawer row without its permission is absent, not disabled`() {
+        val noInbox = me("order.view", "client.view")
+        assertFalse(DrawerDestination.INBOX in drawerDestinationsFor(noInbox))
+    }
+
     /** A DRIVER holds `order.view` and `payment.record` — which is not `payment.view` — so their
      *  bar is two cells wide. Fewer cells, never a disabled one. */
     @Test
-    fun `a driver sees home and orders only`() {
-        assertEquals(listOf(Destination.HOME, Destination.ORDERS), destinationsFor(me("order.view", "payment.record")))
+    fun `a driver sees home, orders and drafts`() {
+        // «Лойиҳалар» rides on `order.view`, which a DRIVER holds — so they get the cell, exactly as
+        // they get /projects on the web, which gates it on the same permission. Matching the desk
+        // app matters more here than guessing that a driver would not look.
+        assertEquals(
+            listOf(Destination.HOME, Destination.ORDERS, Destination.DRAFTS),
+            destinationsFor(me("order.view", "payment.record")),
+        )
     }
 
     @Test
@@ -59,7 +89,7 @@ class DestinationsTest {
         assertEquals(Orders, Destination.ORDERS.key())
         assertEquals(Calculator, Destination.CALCULATOR.key())
         assertEquals(Payments, Destination.PAYMENTS.key())
-        assertEquals(Clients, Destination.CLIENTS.key())
+        assertEquals(Drafts, Destination.DRAFTS.key())
     }
 
     // ── start keys ────────────────────────────────────────────────────────────────
@@ -130,7 +160,7 @@ class DestinationsTest {
     @Test
     fun `a user without client view neither sees the cell nor can reach clients`() {
         val noClients = me("order.view")
-        assertFalse(Destination.CLIENTS in destinationsFor(noClients))
+        assertFalse(DrawerDestination.CLIENTS in drawerDestinationsFor(noClients))
         assertFalse(noClients.canOpen(Clients))
         assertFalse(noClients.canOpen(ClientDetail("c1")))
     }

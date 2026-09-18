@@ -41,6 +41,7 @@ import uz.etalon.crm.core.ui.format.TASHKENT
 import uz.etalon.crm.feature.auth.ChangePinRoute
 import uz.etalon.crm.feature.auth.LoginRoute
 import uz.etalon.crm.feature.calculator.CalculatorRoute
+import uz.etalon.crm.feature.browse.DraftsRoute
 import uz.etalon.crm.feature.clients.detail.ClientDetailRoute
 import uz.etalon.crm.feature.clients.list.ClientsRoute
 import uz.etalon.crm.feature.home.HomeRoute
@@ -62,6 +63,8 @@ import uz.etalon.crm.shell.AccountSheet
 import uz.etalon.crm.shell.AccountViewModel
 import uz.etalon.crm.shell.Destination
 import uz.etalon.crm.shell.NoAccessScreen
+import uz.etalon.crm.shell.AppDrawer
+import uz.etalon.crm.shell.drawerDestinationsFor
 import uz.etalon.crm.shell.destinationsFor
 import java.time.LocalDate
 import javax.inject.Inject
@@ -93,7 +96,7 @@ private fun Destination.icon(): Int = when (this) {
     Destination.ORDERS -> EtalonIcons.FileText
     Destination.CALCULATOR -> EtalonIcons.Calculator
     Destination.PAYMENTS -> EtalonIcons.Wallet
-    Destination.CLIENTS -> EtalonIcons.Users
+    Destination.DRAFTS -> EtalonIcons.Save
 }
 
 /**
@@ -177,6 +180,8 @@ fun SignedInShell(
     val selected = destinations.indexOf(current?.let(::tabFor))
     val locked = current != null && hidesNav(current)
     var showAccount by remember { mutableStateOf(false) }
+    var showDrawer by remember { mutableStateOf(false) }
+    val drawerEntries = drawerDestinationsFor(me)
     val labels = destinations.map { stringResource(it.shortLabelRes) }
     val descriptions = destinations.map { stringResource(it.labelRes) }
     val items = remember(destinations, labels) {
@@ -215,6 +220,7 @@ fun SignedInShell(
                             onOpenOrder = { backStack.add(OrderDetail(it)) },
                             onOpenOrders = { switchTab(backStack, Orders) },
                             onOpenAccount = { showAccount = true },
+                            onOpenMenu = { showDrawer = true },
                             // Design §4's three dashboard hand-offs. Two of them speak to the
                             // Orders tab through a store before switching to it, because the tab
                             // has no route arguments: the ViewModel reads both on start.
@@ -283,6 +289,9 @@ fun SignedInShell(
                     // Registered only for an operator who may read the client list, the Drivers
                     // pattern: without client.view the route does not exist, so no restored back
                     // stack or deep link can open it either.
+                    if (me.can(PERM_ORDER_VIEW)) {
+                        entry<Drafts> { DraftsRoute(onOpenOrder = { backStack.add(OrderDetail(it)) }) }
+                    }
                     if (me.can(PERM_CLIENT_VIEW)) {
                         entry<Clients> { ClientsRoute(onOpenClient = { backStack.add(ClientDetail(it)) }) }
                         entry<ClientDetail> { k ->
@@ -383,6 +392,20 @@ fun SignedInShell(
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }
+                },
+            )
+        }
+        // Above the pill and below the account sheet: the drawer covers the bar it replaces the
+        // fifth cell of, and a tap on the scrim is the way out.
+        if (!locked) {
+            AppDrawer(
+                open = showDrawer,
+                me = me,
+                entries = drawerEntries,
+                onDismiss = { showDrawer = false },
+                onSelect = { entry ->
+                    showDrawer = false
+                    switchTab(backStack, entry.key())
                 },
             )
         }

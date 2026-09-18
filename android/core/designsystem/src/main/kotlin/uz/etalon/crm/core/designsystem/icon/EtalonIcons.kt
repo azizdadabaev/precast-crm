@@ -49,6 +49,7 @@ object EtalonIcons {
     /** The delivery location's pin (§5.2). [Navigation]'s arrow is the *go there* action; this is
      *  the place itself — a saved coordinate on the order. */
     val MapPin = R.drawable.ic_lu_map_pin
+    val Menu = R.drawable.ic_lu_menu
     val MessageCircle = R.drawable.ic_lu_message_circle
     val Minus = R.drawable.ic_lu_minus
     val Navigation = R.drawable.ic_lu_navigation

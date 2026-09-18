@@ -118,4 +118,5 @@
     <!-- A queued row whose payload carried no client name — the operator still has to be able to
          tell the rows apart and dismiss the right one. -->
     <string name="home_outbox_rejected_no_client">Номсиз мижоз</string>
+    <string name="home_menu">Меню</string>
 </resources>

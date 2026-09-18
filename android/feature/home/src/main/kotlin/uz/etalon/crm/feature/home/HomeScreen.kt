@@ -78,6 +78,9 @@ fun HomeRoute(
     onOpenOrder: (String) -> Unit,
     onOpenOrders: () -> Unit,
     onOpenAccount: () -> Unit,
+    /** The drawer. It lives on this bar because Home is where every session starts and the only
+     *  root with an app bar of its own — the other tabs draw their own titles. */
+    onOpenMenu: () -> Unit,
     /** §4: the «Фаол мижозлар» card is a door to the clients tab. */
     onOpenClients: () -> Unit,
     /** §4: «Бугунги етказишлар» opens the orders calendar on today, whose day sheet lists exactly
@@ -96,6 +99,7 @@ fun HomeRoute(
     HomeScreen(
         s = s, me = me, now = Instant.now(), onRefresh = vm::refresh,
         onOpenOrder = onOpenOrder, onOpenOrders = onOpenOrders, onOpenAccount = onOpenAccount,
+        onOpenMenu = onOpenMenu,
         onOpenOutbox = { showOutbox = true },
         onOpenClients = onOpenClients, onOpenCalendarToday = onOpenCalendarToday,
         onOpenOrdersList = onOpenOrdersList,
@@ -164,6 +168,8 @@ fun HomeScreen(
     onOpenOrder: (String) -> Unit,
     onOpenOrders: () -> Unit,
     onOpenAccount: () -> Unit,
+    // Defaulted: the screenshot tests build this screen directly and have no drawer to open.
+    onOpenMenu: () -> Unit = {},
     onOpenOutbox: () -> Unit,
     onOpenClients: () -> Unit,
     onOpenCalendarToday: () -> Unit,
@@ -189,7 +195,7 @@ fun HomeScreen(
             contentPadding = navPillContentPadding(top = EtalonSpace.sm),
             verticalArrangement = Arrangement.spacedBy(SECTION_GAP),
         ) {
-            item { AppBarRow(me, now, s.outboxBadge > 0, onOpenOutbox, onOpenAccount) }
+            item { AppBarRow(me, now, s.outboxBadge > 0, onOpenOutbox, onOpenAccount, onOpenMenu) }
             // First of the data blocks, as on every other list in this app: a failed refresh must
             // never leave a stale figure above the reason it is stale.
             s.error?.let { e ->
@@ -264,6 +270,7 @@ private fun AppBarRow(
     hasPending: Boolean,
     onOpenOutbox: () -> Unit,
     onOpenAccount: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) = Row(
     Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.headerMargin),
     verticalAlignment = Alignment.CenterVertically,
@@ -274,6 +281,11 @@ private fun AppBarRow(
         Text(formatLongDate(now), style = EtalonType.body, color = EtalonColors.ink2)
     }
     Spacer(Modifier.weight(1f))
+    EtalonIconButton(
+        EtalonIcons.Menu, stringResource(R.string.home_menu), onOpenMenu,
+        size = 36.dp, shape = EtalonShapes.md,
+    )
+    Spacer(Modifier.width(EtalonSpace.sm))
     // A rounded square, not a circle: `2b-home.png` draws the bell in a 36 dp `md` box and keeps
     // the pill shape for the avatar beside it, so the two do not read as a pair of buttons.
     EtalonIconButton(

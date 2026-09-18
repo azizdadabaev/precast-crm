@@ -34,8 +34,7 @@ class TabForTest {
         assertEquals(Destination.ORDERS, tabFor(Orders))
         assertEquals(Destination.CALCULATOR, tabFor(Calculator))
         assertEquals(Destination.PAYMENTS, tabFor(Payments))
-        assertEquals(Destination.CLIENTS, tabFor(Clients))
-        assertEquals(Destination.CLIENTS, tabFor(ClientDetail("c")))
+        assertEquals(Destination.DRAFTS, tabFor(Drafts))
     }
 
     /** The signed-out key never reaches the pill, and an index of -1 lights no cell. */
