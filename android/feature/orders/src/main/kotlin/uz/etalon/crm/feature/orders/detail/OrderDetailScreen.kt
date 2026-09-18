@@ -33,6 +33,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -71,6 +73,7 @@ import uz.etalon.crm.core.designsystem.components.PhotoStrip
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.PaymentStateTag
 import uz.etalon.crm.core.designsystem.components.ProgressCard
+import uz.etalon.crm.core.designsystem.share.rememberShareImage
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StatusTag
 import uz.etalon.crm.core.designsystem.components.StepTimeline
@@ -208,6 +211,15 @@ fun OrderDetailScreen(
     barVisible: Boolean = !WindowInsets.isImeVisible,
 ) {
     val o = r.dataOrNull
+    // Composed offscreen by rememberShareImage, which is why it is built here rather than inside
+    // the top bar: the card must exist in the composition for the capture to have anything to
+    // record. Null until the order has loaded — there is nothing to send before then.
+    val share = o?.let {
+        rememberShareImage(
+            subject = stringResource(R.string.detail_share_subject, it.summary.orderNumber),
+            failureText = stringResource(R.string.detail_share_failed),
+        ) { OrderShareCard(it) }
+    }
     val ctx = LocalContext.current
     val canEdit = me.can("order.edit")
     val unfinishedUploads = pending.count { !it.failed }
@@ -243,7 +255,7 @@ fun OrderDetailScreen(
     Box(Modifier.fillMaxSize().background(EtalonColors.page).statusBarsPadding().imePadding()) {
         Column(Modifier.fillMaxSize()) {
             // Outside the list, so it stays put while the cards scroll under it.
-            if (o != null) DetailTopBar(o, onBack)
+            if (o != null) DetailTopBar(o, onBack, share?.onClick)
             PullToRefreshBox(
                 isRefreshing = r is Resource.Loading && o == null,
                 onRefresh = onRefresh,
@@ -386,13 +398,13 @@ fun OrderDetailScreen(
  * to be readable only at the very top, in the hero; an operator two cards down had no way to
  * confirm which order they were about to load a truck for without scrolling back.
  *
- * No «⋯» yet. 7a's menu is «Юбориш (расм)» and «Чатга юбориш» after the owner cut the other four
- * as desk work, and neither exists for an order yet — sharing renders a quote image (the
- * calculator's own, not an order's) and the chat hand-off needs a conversation id the order API
- * does not return. A button that opens an empty menu is worse than no button.
+ * The «⋯» carries one item. 7a's menu was «Юбориш (расм)» and «Чатга юбориш» after the owner cut
+ * the other four as desk work, and the chat hand-off still has nowhere to go: it needs the
+ * project's conversation id, which GET /api/orders/{id} does not return to this app.
  */
 @Composable
-private fun DetailTopBar(o: OrderDetail, onBack: () -> Unit) = Column {
+private fun DetailTopBar(o: OrderDetail, onBack: () -> Unit, onShare: (() -> Unit)?) = Column {
+    var menuOpen by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().background(EtalonColors.page)
             .padding(horizontal = EtalonSpace.sm, vertical = EtalonSpace.xs),
@@ -409,6 +421,21 @@ private fun DetailTopBar(o: OrderDetail, onBack: () -> Unit) = Column {
             modifier = Modifier.weight(1f),
         )
         StatusTag(o.summary.status)
+        if (onShare != null) {
+            Box {
+                EtalonIconButton(
+                    EtalonIcons.EllipsisVertical,
+                    stringResource(R.string.detail_cd_menu),
+                    { menuOpen = true },
+                )
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.detail_menu_share), style = EtalonType.body) },
+                        onClick = { menuOpen = false; onShare() },
+                    )
+                }
+            }
+        }
     }
     HorizontalDivider(color = EtalonColors.surfaceBorder, thickness = EtalonSpace.hairline)
 }

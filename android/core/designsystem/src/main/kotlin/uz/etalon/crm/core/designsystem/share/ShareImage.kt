@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Constraints
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.CancellationException
@@ -121,7 +122,15 @@ fun rememberShareImage(
     var shareError by remember { mutableStateOf<String?>(null) }
 
     ZeroSizeCapture {
-        Box(Modifier.drawWithContent { layer.record { this@drawWithContent.drawContent() } }) {
+        // The card is composed for the capture but is not on screen, so it must not be in the
+        // semantics tree either: TalkBack would otherwise read out a card nobody can see, and a
+        // node search — a test's, or an automation's — would find every figure on this screen
+        // twice.
+        Box(
+            Modifier
+                .clearAndSetSemantics {}
+                .drawWithContent { layer.record { this@drawWithContent.drawContent() } },
+        ) {
             content()
         }
     }

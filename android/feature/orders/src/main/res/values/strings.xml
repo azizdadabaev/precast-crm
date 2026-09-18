@@ -186,4 +186,10 @@
          under the bar rather than moving either figure. -->
     <string name="detail_pending_confirmation">+ %1$s тасдиқлаш кутилмоқда</string>
     <string name="detail_cd_back">Орқага</string>
+    <!-- ── The order as a sendable PNG (§3.3's «Юбориш (расм)») ─────────────── -->
+    <string name="detail_share_title">Буюртма №%1$s</string>
+    <string name="detail_share_subject">Буюртма №%1$s</string>
+    <string name="detail_share_failed">Расмни тайёрлаб бўлмади</string>
+    <string name="detail_menu_share">Юбориш (расм)</string>
+    <string name="detail_cd_menu">Яна</string>
 </resources>
