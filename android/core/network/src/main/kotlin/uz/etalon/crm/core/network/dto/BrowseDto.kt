@@ -69,6 +69,11 @@ data class GalleryPostDto(
 // `aiState`/`aiPaused` exist on the conversation but this route does not select them; they arrive
 // only from GET /api/inbox/{id}, so they are deliberately absent here.
 
+@Serializable data class InboxUnlockRequest(val password: String)
+
+/** `token` is the 12 h JWT that goes back as the X-Inbox-Unlock header. */
+@Serializable data class InboxUnlockDto(val unlocked: Boolean = false, val token: String? = null)
+
 @Serializable
 data class InboxDto(
     val conversations: List<ConversationDto> = emptyList(),

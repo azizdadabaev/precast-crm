@@ -116,6 +116,8 @@ private class ProbingTokenStore(private val onSet: suspend () -> Unit) : TokenSt
     override suspend fun set(token: String) { onSet(); delegate.set(token) }
     override suspend fun clear() = delegate.clear()
     override val isLoggedIn: Flow<Boolean> get() = delegate.isLoggedIn
+    override suspend fun inboxUnlock() = delegate.inboxUnlock()
+    override suspend fun setInboxUnlock(token: String) = delegate.setInboxUnlock(token)
 }
 
 @RunWith(RobolectricTestRunner::class)

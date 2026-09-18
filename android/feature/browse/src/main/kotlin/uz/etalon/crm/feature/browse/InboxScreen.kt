@@ -27,6 +27,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import uz.etalon.crm.core.designsystem.components.EtalonTextField
+import uz.etalon.crm.core.designsystem.components.FormCard
+import uz.etalon.crm.core.designsystem.components.FormField
+import uz.etalon.crm.core.designsystem.components.PrimaryButton
 import uz.etalon.crm.core.designsystem.components.Avatar
 import uz.etalon.crm.core.designsystem.components.EmptyState
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
@@ -56,7 +65,20 @@ import uz.etalon.crm.core.ui.format.formatDateTime
 fun InboxRoute(vm: InboxViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
-    InboxScreen(state = state, query = query, onQueryChange = vm::setQuery, onRetry = vm::refresh)
+    val password by vm.password.collectAsStateWithLifecycle()
+    val unlocking by vm.unlocking.collectAsStateWithLifecycle()
+    val unlockError by vm.unlockError.collectAsStateWithLifecycle()
+    InboxScreen(
+        state = state,
+        query = query,
+        onQueryChange = vm::setQuery,
+        onRetry = vm::refresh,
+        password = password,
+        unlocking = unlocking,
+        unlockError = unlockError,
+        onPasswordChange = vm::setPassword,
+        onUnlock = vm::unlock,
+    )
 }
 
 @Composable
@@ -65,6 +87,11 @@ internal fun InboxScreen(
     query: String,
     onQueryChange: (String) -> Unit,
     onRetry: () -> Unit,
+    password: String = "",
+    unlocking: Boolean = false,
+    unlockError: String? = null,
+    onPasswordChange: (String) -> Unit = {},
+    onUnlock: () -> Unit = {},
 ) {
     val all = state.dataOrNull.orEmpty()
     // Filtered here, not on the server: the route takes no query at all and caps at 500, so the
@@ -76,7 +103,13 @@ internal fun InboxScreen(
             Text(stringResource(R.string.inbox_title), style = EtalonType.displayTitle, color = EtalonColors.ink)
         }
         if (locked) {
-            LockedNotice()
+            UnlockForm(
+                password = password,
+                unlocking = unlocking,
+                error = unlockError,
+                onPasswordChange = onPasswordChange,
+                onUnlock = onUnlock,
+            )
             return@Column
         }
         Column(Modifier.padding(horizontal = EtalonSpace.cardMargin)) {
@@ -110,25 +143,67 @@ internal fun InboxScreen(
     }
 }
 
+/**
+ * The password gate, asked here instead of pointed at.
+ *
+ * This screen used to say Â«unlock it in the web CRMÂ», which is no help at all to an operator
+ * holding a phone and nothing else. It is the same password either way and the same
+ * `POST /api/inbox/unlock` behind it, so there was never a reason the app could not ask.
+ *
+ * On success the token is kept for this device and the list is re-requested; the interceptor
+ * carries it from then on, including for Â«Ð§Ð°ÑÐ³Ð° ÑÐ±Ð¾ÑÐ¸ÑÂ», which is behind the same gate.
+ */
 @Composable
-private fun LockedNotice() = Column(
-    Modifier.fillMaxWidth().padding(EtalonSpace.xl),
-    horizontalAlignment = Alignment.CenterHorizontally,
-) {
+private fun UnlockForm(
+    password: String,
+    unlocking: Boolean,
+    error: String?,
+    onPasswordChange: (String) -> Unit,
+    onUnlock: () -> Unit,
+) = Column(Modifier.fillMaxWidth().padding(horizontal = EtalonSpace.cardMargin)) {
     Text(
         stringResource(R.string.inbox_locked_title),
         style = EtalonType.sectionTitle,
         color = EtalonColors.ink,
-        textAlign = TextAlign.Center,
     )
     Spacer(Modifier.height(EtalonSpace.xs))
     Text(
         stringResource(R.string.inbox_locked_body),
-        style = EtalonType.body,
+        style = EtalonType.meta,
         color = EtalonColors.ink2,
-        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(EtalonSpace.md))
+    FormCard {
+        FormField(stringResource(R.string.inbox_password_label), divider = false) {
+            EtalonTextField(
+                value = password,
+                onValueChange = onPasswordChange,
+                placeholder = stringResource(R.string.inbox_password_hint),
+                enabled = !unlocking,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Go,
+                ),
+                // The keyboard's own Go key submits: on a one-field form, reaching past it to a
+                // button is a step for nothing.
+                keyboardActions = KeyboardActions(onGo = { onUnlock() }),
+                visualTransformation = PasswordVisualTransformation(),
+            )
+        }
+    }
+    error?.let {
+        Spacer(Modifier.height(EtalonSpace.sm))
+        ErrorBanner(it)
+    }
+    Spacer(Modifier.height(EtalonSpace.md))
+    PrimaryButton(
+        text = stringResource(R.string.inbox_unlock),
+        onClick = onUnlock,
+        enabled = password.isNotBlank(),
+        loading = unlocking,
     )
 }
+
 
 @Composable
 private fun ConversationRow(c: Conversation) = Row(

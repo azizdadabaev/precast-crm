@@ -44,21 +44,22 @@ class InboxScreenTest {
     }
 
     /**
-     * The inbox sits behind a password gate as well as `inbox.access`, and the phone has no way
-     * through it. An owner who holds the permission must not be told they lack it — that sends
-     * them looking in the wrong place entirely.
+     * The inbox sits behind a password gate as well as `inbox.access`. An owner who holds the
+     * permission must not be told they lack it, and must be able to get past the gate HERE — the
+     * screen used to point at the web CRM, which is no help to somebody holding only a phone.
      */
-    @Test fun `a locked inbox says where to unlock it, not that permission is missing`() {
+    @Test fun `a locked inbox asks for the password instead of pointing at the web`() {
         show(Resource.Error(null, AppError.Network("Хабарлар қулфланган · Inbox locked — enter password")))
         rule.onNodeWithText("Хабарлар қулфланган").assertExists()
-        rule.onNodeWithText("Очиш учун веб-CRM да паролни киритинг.").assertExists()
+        rule.onNodeWithText("Парол").assertExists()
+        rule.onNodeWithText("Очиш").assertExists()
     }
 
     /** Any OTHER failure is a real one and keeps saying what it was. */
     @Test fun `an ordinary failure is not mistaken for the lock`() {
         show(Resource.Error(null, AppError.Network("Тармоқ хатоси")))
         rule.onNodeWithText("Тармоқ хатоси").assertExists()
-        rule.onNodeWithText("Очиш учун веб-CRM да паролни киритинг.").assertDoesNotExist()
+        rule.onNodeWithText("Очиш").assertDoesNotExist()
     }
 
     /** A chat whose last message was a photo or a voice note has no text; the row must not show a

@@ -7,6 +7,8 @@ import uz.etalon.crm.core.model.GalleryKind
 import uz.etalon.crm.core.model.GalleryPage
 import uz.etalon.crm.core.model.GalleryPost
 import uz.etalon.crm.core.model.Money
+import uz.etalon.crm.core.datastore.TokenStore
+import uz.etalon.crm.core.network.dto.InboxUnlockRequest
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.ConversationDto
 import uz.etalon.crm.core.network.dto.DraftDto
@@ -24,7 +26,10 @@ import javax.inject.Singleton
  * that into three classes would be three copies of the same four lines.
  */
 @Singleton
-class BrowseRepository @Inject constructor(private val api: EtalonApi) {
+class BrowseRepository @Inject constructor(
+    private val api: EtalonApi,
+    private val tokens: TokenStore,
+) {
 
     suspend fun drafts(page: Int, query: String?, draftsOnly: Boolean): Result<DraftsPage> =
         runCatchingCancellable {
@@ -58,6 +63,21 @@ class BrowseRepository @Inject constructor(private val api: EtalonApi) {
 
     suspend fun conversations(): Result<List<Conversation>> = runCatchingCancellable {
         api.inbox().conversations.map { it.toDomain() }
+    }
+
+    /**
+     * Opens the inbox for this device and keeps the token, which [AuthInterceptor] then sends on
+     * every request.
+     *
+     * The phone has to be able to do this. The web has an unlock dialog and the app sent people to
+     * it, which is useless to an operator holding only a phone — and it is the same password
+     * either way, so there was never a reason the app could not ask for it itself.
+     */
+    suspend fun unlockInbox(password: String): Result<Unit> = runCatchingCancellable {
+        val dto = api.unlockInbox(InboxUnlockRequest(password))
+        val token = dto.token
+        if (!dto.unlocked || token.isNullOrBlank()) error("unlock refused")
+        tokens.setInboxUnlock(token)
     }
 }
 

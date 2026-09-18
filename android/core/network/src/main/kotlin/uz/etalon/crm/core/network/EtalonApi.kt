@@ -9,6 +9,8 @@ import uz.etalon.crm.core.network.dto.CancelOrderRequest
 import uz.etalon.crm.core.network.dto.DraftsPageDto
 import uz.etalon.crm.core.network.dto.GalleryPageDto
 import uz.etalon.crm.core.network.dto.InboxDto
+import uz.etalon.crm.core.network.dto.InboxUnlockDto
+import uz.etalon.crm.core.network.dto.InboxUnlockRequest
 import uz.etalon.crm.core.network.dto.*
 
 /**
@@ -97,6 +99,10 @@ interface EtalonApi {
      *  session is locked — see InboxRepository for what the app does with that. */
     @GET("/api/inbox")
     suspend fun inbox(): InboxDto
+
+    /** Answers 401 «Нотўғри парол» on a wrong password. NOT a session 401 — see InboxRepository. */
+    @POST("/api/inbox/unlock")
+    suspend fun unlockInbox(@Body body: InboxUnlockRequest): InboxUnlockDto
 
     @Multipart
     @POST("/api/orders/{id}/load")

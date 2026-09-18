@@ -9,6 +9,8 @@ import uz.etalon.crm.core.network.dto.CancelOrderRequest
 import uz.etalon.crm.core.network.dto.DraftsPageDto
 import uz.etalon.crm.core.network.dto.GalleryPageDto
 import uz.etalon.crm.core.network.dto.InboxDto
+import uz.etalon.crm.core.network.dto.InboxUnlockDto
+import uz.etalon.crm.core.network.dto.InboxUnlockRequest
 import uz.etalon.crm.core.network.dto.*
 
 /**
@@ -47,6 +49,7 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun drafts(page: Int, pageSize: Int, status: String?, query: String?): DraftsPageDto = unused("drafts")
     override suspend fun gallery(page: Int, pageSize: Int, query: String?): GalleryPageDto = unused("gallery")
     override suspend fun inbox(): InboxDto = unused("inbox")
+    override suspend fun unlockInbox(body: InboxUnlockRequest): InboxUnlockDto = unused("unlockInbox")
     override suspend fun sendOrderToChat(id: String) = unused("sendOrderToChat")
     override suspend fun cancelOrder(id: String, body: CancelOrderRequest) = unused("cancelOrder")
 

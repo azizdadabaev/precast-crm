@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -43,6 +44,41 @@ class InboxViewModel @Inject constructor(private val repo: BrowseRepository) : V
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), Resource.Loading(null))
+
+    // ── The password gate ─────────────────────────────────────────────
+
+    private val _password = MutableStateFlow("")
+    val password: StateFlow<String> = _password.asStateFlow()
+
+    private val _unlocking = MutableStateFlow(false)
+    val unlocking: StateFlow<Boolean> = _unlocking.asStateFlow()
+
+    private val _unlockError = MutableStateFlow<String?>(null)
+    val unlockError: StateFlow<String?> = _unlockError.asStateFlow()
+
+    fun setPassword(v: String) { _password.value = v; _unlockError.value = null }
+
+    /** On success the token is stored and the list is simply re-requested — the interceptor now
+     *  carries the header, so the same call that was refused a moment ago succeeds. */
+    fun unlock() {
+        val pw = _password.value
+        if (pw.isBlank() || _unlocking.value) return
+        _unlocking.value = true
+        _unlockError.value = null
+        viewModelScope.launch {
+            repo.unlockInbox(pw).fold(
+                onSuccess = {
+                    _password.value = ""
+                    _unlocking.value = false
+                    reload.value++
+                },
+                onFailure = { t ->
+                    _unlocking.value = false
+                    _unlockError.value = t.toAppError().message
+                },
+            )
+        }
+    }
 
     fun setQuery(value: String) { _query.value = value }
     fun refresh() { reload.value++ }

@@ -25,8 +25,15 @@ class AuthInterceptor(private val tokens: TokenProvider) : Interceptor {
         val pinned = !isPublic && req.header("Authorization") != null
         val token = if (isPublic || pinned) null else runBlocking { tokens.token() }
         val authed = if (token != null) req.newBuilder().header("Authorization", "Bearer $token").build() else req
-        val res = chain.proceed(authed)
+        // Attached to every request rather than to the inbox list alone: «Чатга юбориш» sits behind
+        // the same withInboxAccess gate, and a header the other routes ignore costs them nothing.
+        val unlock = if (isPublic) null else runBlocking { tokens.inboxUnlockToken() }
+        val sent = if (unlock != null) authed.newBuilder().header(INBOX_UNLOCK_HEADER, unlock).build() else authed
+        val res = chain.proceed(sent)
         if (res.code == 401 && !keepsSession) runBlocking { tokens.onUnauthorized() }
         return res
     }
 }
+
+/** `src/lib/inbox-auth.ts` reads the unlock token from this header as well as from its cookie. */
+const val INBOX_UNLOCK_HEADER = "X-Inbox-Unlock"

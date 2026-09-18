@@ -32,5 +32,8 @@
     <string name="inbox_no_snippet">Хабар</string>
     <!-- The inbox password gate. The phone cannot unlock it, so it says where to. -->
     <string name="inbox_locked_title">Хабарлар қулфланган</string>
-    <string name="inbox_locked_body">Очиш учун веб-CRM да паролни киритинг.</string>
+    <string name="inbox_locked_body">Давом этиш учун хабарлар паролини киритинг.</string>
+    <string name="inbox_password_label">Парол</string>
+    <string name="inbox_password_hint">Хабарлар паролини киритинг</string>
+    <string name="inbox_unlock">Очиш</string>
 </resources>
