@@ -182,4 +182,7 @@
     <string name="detail_room_price_line">%1$s × %2$s = %3$s</string>
     <string name="detail_room_price_extras">+ %1$s балка</string>
     <string name="detail_rooms_footer">%1$d Ғ · %2$d Б · %3$s м · %4$s</string>
+    <!-- Recorded but not yet confirmed by an owner. Neither paid nor outstanding, so it hangs
+         under the bar rather than moving either figure. -->
+    <string name="detail_pending_confirmation">+ %1$s тасдиқлаш кутилмоқда</string>
 </resources>

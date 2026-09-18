@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,13 +47,27 @@ fun ProgressCard(
     remainingLabel: String,
     settled: Boolean,
     modifier: Modifier = Modifier,
+    /** The order's own AWAITING / PARTIALLY / FULLY tag, beside the label. The percentage says
+     *  how far along the money is; this says what the order's payment state is called — the two
+     *  disagree in the one case that matters, an order 100 % covered by payments nobody has
+     *  confirmed yet. */
+    stateTag: (@Composable () -> Unit)? = null,
+    /** Money recorded but not yet confirmed. Drawn under the bar because it is neither paid nor
+     *  outstanding: leaving it out makes «Қолди» look wrong to whoever recorded the payment. */
+    pendingLabel: String? = null,
 ) = Column(
     modifier.fillMaxWidth().clip(EtalonShapes.xl).background(EtalonColors.surface)
         .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
         .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.cardPadV),
 ) {
     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-        Text(label, style = EtalonType.label, color = EtalonColors.ink2, maxLines = 1)
+        Row(horizontalArrangement = Arrangement.spacedBy(EtalonSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(EtalonSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = EtalonType.label, color = EtalonColors.ink2, maxLines = 1)
+            if (stateTag != null) stateTag()
+        }
+            if (stateTag != null) stateTag()
+        }
         Text(
             percentText,
             style = EtalonType.label,
@@ -94,5 +109,9 @@ fun ProgressCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+    if (pendingLabel != null) {
+        Spacer(Modifier.height(EtalonSpace.xs))
+        Text(pendingLabel, style = EtalonType.meta, color = EtalonColors.heavy, maxLines = 2)
     }
 }

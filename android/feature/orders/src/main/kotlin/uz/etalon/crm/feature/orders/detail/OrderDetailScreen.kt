@@ -69,6 +69,7 @@ import uz.etalon.crm.core.designsystem.components.PaymentStatusTag
 import uz.etalon.crm.core.designsystem.components.PhotoRef
 import uz.etalon.crm.core.designsystem.components.PhotoStrip
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
+import uz.etalon.crm.core.designsystem.components.PaymentStateTag
 import uz.etalon.crm.core.designsystem.components.ProgressCard
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StatusTag
@@ -441,6 +442,9 @@ private fun PaymentProgress(o: OrderDetail) {
         paidLabel = stringResource(R.string.detail_paid_amount, formatMoney(o.summary.confirmedPaid)),
         remainingLabel = stringResource(R.string.detail_remaining_amount, formatMoney(o.remaining)),
         settled = o.remaining.isZero,
+        stateTag = { PaymentStateTag(o.summary.paymentState) },
+        pendingLabel = o.pendingAmount.takeIf { !it.isZero }
+            ?.let { stringResource(R.string.detail_pending_confirmation, formatMoney(it)) },
     )
 }
 
