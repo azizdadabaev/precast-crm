@@ -125,4 +125,7 @@
     <string name="ds_method_click">Click</string>
     <string name="ds_method_payme">Payme</string>
     <string name="ds_method_other">Бошқа</string>
+    <!-- The two things an operator does with a number they tapped. -->
+    <string name="ds_phone_copy">Нусха олиш</string>
+    <string name="ds_phone_call">Қўнғироқ қилиш</string>
 </resources>

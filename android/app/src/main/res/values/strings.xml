@@ -37,4 +37,10 @@
     <string name="channel_payments">Тўловлар</string>
     <string name="channel_inbox">Хабарлар</string>
     <string name="channel_comments">Изоҳлар</string>
+    <!-- The bar's fifth cell, and the drawer. Both words are the web sidebar's own. -->
+    <string name="nav_drafts">Лойиҳалар</string>
+    <string name="nav_drafts_short">Лойиҳа</string>
+    <string name="nav_gallery">Галерея</string>
+    <string name="nav_inbox">Хабарлар</string>
+    <string name="nav_menu">Меню</string>
 </resources>

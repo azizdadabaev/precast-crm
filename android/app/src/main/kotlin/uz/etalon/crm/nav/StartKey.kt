@@ -20,8 +20,8 @@ internal fun Destination.key(): Key = when (this) {
     Destination.HOME -> Home
     Destination.ORDERS -> Orders
     Destination.CALCULATOR -> Calculator
-    Destination.CLIENTS -> Clients
     Destination.PAYMENTS -> Payments
+    Destination.DRAFTS -> Drafts
 }
 
 /**
@@ -37,7 +37,10 @@ internal fun tabFor(key: NavKey): Destination? = when (key) {
     -> Destination.ORDERS
     is Calculator -> Destination.CALCULATOR
     is Payments -> Destination.PAYMENTS
-    is Clients, is ClientDetail -> Destination.CLIENTS
+    is Drafts -> Destination.DRAFTS
+    // Drawer roots light no cell: the bar has no seat for them, and lighting a neighbouring
+    // cell would say the operator is somewhere they are not.
+    is Clients, is ClientDetail, is Gallery, is Inbox -> null
     else -> null
 }
 

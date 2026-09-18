@@ -67,6 +67,8 @@ import uz.etalon.crm.core.designsystem.components.LoadListCard
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.OutboxBanner
 import uz.etalon.crm.core.designsystem.components.PaymentStatusTag
+import uz.etalon.crm.core.ui.format.formatPhone
+import uz.etalon.crm.core.designsystem.components.PhoneActionSheet
 import uz.etalon.crm.core.designsystem.components.paymentMethodLabel
 import uz.etalon.crm.core.designsystem.components.PhotoRef
 import uz.etalon.crm.core.designsystem.components.PhotoGrid
@@ -155,10 +157,6 @@ private fun stripPhotos(o: OrderDetail): List<PhotoRef> =
     o.loadedPhotos.map { PhotoRef(it.id, it.url) } +
         listOfNotNull(o.deliveryProofUrl?.takeIf { url -> o.loadedPhotos.none { it.url == url } }?.let { PhotoRef(null, it) })
 
-private fun dial(ctx: Context, phone: String) {
-    ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:+$phone")))
-}
-
 /**
  * Design 7a: a sticky [DetailTopBar] over the [OrderHeroPanel], «Юклаш рўйхати», the
  * «Ҳисоб-китоб» rooms card, the «Етказиш» card with its [StepTimeline], and then payments,
@@ -243,6 +241,7 @@ fun OrderDetailScreen(
     var deleteCandidate by remember { mutableStateOf<PhotoRef?>(null) }
     // The receipts of one payment, opened in the same lightbox the loaded-truck photos use.
     var receiptsAt by remember { mutableStateOf<List<String>>(emptyList()) }
+    var phoneSheet by remember { mutableStateOf(false) }
     // Only a photo the server already knows can be deleted; a queued one has no id to delete by.
     val onPhotoLongPress: ((Int) -> Unit)? = if (canEdit) {
         { index -> photos.getOrNull(index)?.takeIf { p -> p.id != null }?.let { p -> deleteCandidate = p } }
@@ -305,7 +304,7 @@ fun OrderDetailScreen(
                 if (r is Resource.Error) item { ErrorBanner(r.error.message, onRetry = onRefresh) }
                 if (actionError != null) item { ErrorBanner(actionError) }
                 if (o == null) return@LazyColumn
-                item { OrderHeroPanel(o, onCall = { dial(ctx, o.summary.client.phone) }) }
+                item { OrderHeroPanel(o, onPhone = { phoneSheet = true }) }
                 val canceled = o.summary.status.owesNothing
                 if (canceled) item { CanceledNotice(o) }
                 // Spec §5.1a: the loader's own section, and the one the owner named as the reason
@@ -396,6 +395,13 @@ fun OrderDetailScreen(
     }
 
     lightboxAt?.let { at -> Lightbox(photos, at, onDismiss = { lightboxAt = null }) }
+    if (phoneSheet && o != null) {
+        PhoneActionSheet(
+            phone = o.summary.client.phone,
+            formatted = formatPhone(o.summary.client.phone),
+            onDismiss = { phoneSheet = false },
+        )
+    }
     if (receiptsAt.isNotEmpty()) {
         Lightbox(receiptsAt.map { PhotoRef(null, it) }, 0, onDismiss = { receiptsAt = emptyList() })
     }

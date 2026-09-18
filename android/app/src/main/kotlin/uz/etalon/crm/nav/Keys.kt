@@ -15,6 +15,20 @@ import kotlinx.serialization.Serializable
 
 // ── Clients ──────────────────────────────────────────────────────────────────
 /** The bottom-bar tab (Destination.CLIENTS). Carries no back arrow, like Orders and Payments. */
+// ── Drawer destinations ──────────────────────────────────────────────────────
+// Sections the bar has no room for. They mirror the web sidebar's own list and labels, so an
+// operator who knows the desk app finds the same words behind the drawer.
+
+/** «Галерея» — `/gallery` on the web, `order.view`. */
+@Serializable data object Gallery : Key
+
+/** «Хабарлар» — `/inbox` on the web, `inbox.access`. */
+@Serializable data object Inbox : Key
+
+/** «Лойиҳалар» — the web's `/projects`: calculations saved but not yet placed as orders. This one
+ *  IS a bar cell (Destination.DRAFTS); it took the seat «Мижозлар» gave up. */
+@Serializable data object Drafts : Key
+
 @Serializable data object Clients : Key
 @Serializable data class ClientDetail(val id: String) : Key
 

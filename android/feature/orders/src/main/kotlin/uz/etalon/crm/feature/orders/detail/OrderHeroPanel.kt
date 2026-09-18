@@ -3,6 +3,7 @@ package uz.etalon.crm.feature.orders.detail
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import uz.etalon.crm.core.ui.format.formatPhone
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,7 +61,7 @@ import uz.etalon.crm.feature.orders.R
  * reader join a total on a dark panel to a percentage on a white card below it.
  */
 @Composable
-internal fun OrderHeroPanel(o: OrderDetail, onCall: () -> Unit) = Column(
+internal fun OrderHeroPanel(o: OrderDetail, onPhone: () -> Unit) = Column(
     // §1.3's nesting: navy(22, pad 10) → indigoPanel(18, pad 14).
     Modifier.fillMaxWidth().clip(EtalonShapes.sheet).background(EtalonColors.navy)
         .padding(EtalonSpace.rowGap),
@@ -89,11 +90,25 @@ internal fun OrderHeroPanel(o: OrderDetail, onCall: () -> Unit) = Column(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                // The number itself, readable without tapping anything — the web has always shown
+                // it and only the phone hid it behind an icon. Tapping asks what to do with it.
+                if (o.summary.client.phone.isNotBlank()) {
+                    Text(
+                        formatPhone(o.summary.client.phone),
+                        style = EtalonType.rowAmount,
+                        color = EtalonColors.onDark,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .padding(top = 1.dp)
+                            .clip(EtalonShapes.xs)
+                            .clickable(role = Role.Button, onClick = onPhone),
+                    )
+                }
             }
             // A phone with no number is a button that cannot work; the slot stays so the name
             // column keeps its width either way.
             if (o.summary.client.phone.isNotBlank()) {
-                EtalonIconButton(EtalonIcons.Phone, stringResource(R.string.detail_cd_call), onCall, onDark = true)
+                EtalonIconButton(EtalonIcons.Phone, stringResource(R.string.detail_cd_call), onPhone, onDark = true)
             } else {
                 Spacer(Modifier.size(EtalonSpace.minTouch))
             }
