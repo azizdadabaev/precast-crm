@@ -25,6 +25,9 @@ import kotlinx.serialization.Serializable
 /** «Хабарлар» — `/inbox` on the web, `inbox.access`. */
 @Serializable data object Inbox : Key
 
+/** One conversation, opened from that list. */
+@Serializable data class ChatThread(val conversationId: String) : Key
+
 /** «Лойиҳалар» — the web's `/projects`: calculations saved but not yet placed as orders. This one
  *  IS a bar cell (Destination.DRAFTS); it took the seat «Мижозлар» gave up. */
 @Serializable data object Drafts : Key

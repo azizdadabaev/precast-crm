@@ -2,6 +2,8 @@ package uz.etalon.crm.feature.browse
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,7 +64,7 @@ import uz.etalon.crm.core.ui.format.formatDateTime
  * already hold.
  */
 @Composable
-fun InboxRoute(vm: InboxViewModel = hiltViewModel()) {
+fun InboxRoute(onOpenChat: (String) -> Unit, vm: InboxViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
     val password by vm.password.collectAsStateWithLifecycle()
@@ -78,6 +80,7 @@ fun InboxRoute(vm: InboxViewModel = hiltViewModel()) {
         unlockError = unlockError,
         onPasswordChange = vm::setPassword,
         onUnlock = vm::unlock,
+        onOpenChat = onOpenChat,
     )
 }
 
@@ -92,6 +95,7 @@ internal fun InboxScreen(
     unlockError: String? = null,
     onPasswordChange: (String) -> Unit = {},
     onUnlock: () -> Unit = {},
+    onOpenChat: (String) -> Unit = {},
 ) {
     val all = state.dataOrNull.orEmpty()
     // Filtered here, not on the server: the route takes no query at all and caps at 500, so the
@@ -138,7 +142,7 @@ internal fun InboxScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(EtalonSpace.xs),
         ) {
-            items(rows, key = { it.id }) { ConversationRow(it) }
+            items(rows, key = { it.id }) { ConversationRow(it, onClick = { onOpenChat(it.id) }) }
         }
     }
 }
@@ -206,9 +210,10 @@ private fun UnlockForm(
 
 
 @Composable
-private fun ConversationRow(c: Conversation) = Row(
+private fun ConversationRow(c: Conversation, onClick: () -> Unit) = Row(
     Modifier.fillMaxWidth().clip(EtalonShapes.xl).background(EtalonColors.surface)
         .border(EtalonSpace.hairline, EtalonColors.surfaceBorder, EtalonShapes.xl)
+        .clickable(role = Role.Button, onClick = onClick)
         .padding(horizontal = EtalonSpace.cardPadH, vertical = EtalonSpace.rowGap),
     horizontalArrangement = Arrangement.spacedBy(EtalonSpace.rowGap),
     verticalAlignment = Alignment.CenterVertically,

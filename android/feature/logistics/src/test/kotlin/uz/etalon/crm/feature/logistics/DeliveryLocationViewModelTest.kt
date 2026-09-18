@@ -9,7 +9,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import uz.etalon.crm.core.model.*
 import uz.etalon.crm.feature.logistics.location.DeliveryLocationViewModel
-import uz.etalon.crm.feature.logistics.location.DeviceLocation
+import uz.etalon.crm.core.ui.location.DeviceLocation
 import uz.etalon.crm.feature.logistics.location.RefreshOrderUseCase
 import uz.etalon.crm.feature.logistics.location.ResolveMapLinkUseCase
 import uz.etalon.crm.feature.logistics.location.SetDeliveryLocationUseCase

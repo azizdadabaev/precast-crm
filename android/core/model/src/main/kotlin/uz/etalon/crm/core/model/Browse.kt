@@ -70,3 +70,47 @@ data class Conversation(
     val lastSnippet: String,
     val unread: Boolean,
 )
+
+/** One message in a thread. */
+data class ChatMessage(
+    val id: String,
+    val outbound: Boolean,
+    val text: String?,
+    val kind: MessageKind,
+    /** Server-relative; the repository prefixes the base URL before the UI sees it. */
+    val mediaUrl: String?,
+    val mediaName: String?,
+    val lat: Double?,
+    val lng: Double?,
+    val locationTitle: String?,
+    /** Seconds, for voice and video. */
+    val durationSec: Int?,
+    /** The server could not fetch this media from Telegram, or it was too large to store. */
+    val mediaMissing: Boolean,
+    val failed: Boolean,
+    val createdAt: Instant,
+)
+
+/**
+ * What a bubble draws. `TEXT` is the absence of media, not a kind the server sends.
+ *
+ * `UNSUPPORTED` is deliberate rather than a crash: the server's enum can grow — it already carries
+ * kinds this app draws no bubble for — and a message nobody can render must still occupy its place
+ * in the thread, or the conversation silently loses a turn.
+ */
+enum class MessageKind { TEXT, IMAGE, VOICE, VIDEO, DOCUMENT, LOCATION, UNSUPPORTED }
+
+data class Thread(
+    val id: String,
+    val displayName: String,
+    val username: String?,
+    val messages: List<ChatMessage>,
+)
+
+/** A quote linked to a chat — what «Лойиҳа юбориш» can send back into it. */
+data class ChatProject(
+    val id: String,
+    val draftNumber: Int?,
+    val orderId: String?,
+    val orderNumber: String?,
+)

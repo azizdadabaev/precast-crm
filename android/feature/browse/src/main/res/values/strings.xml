@@ -36,4 +36,21 @@
     <string name="inbox_password_label">Парол</string>
     <string name="inbox_password_hint">Хабарлар паролини киритинг</string>
     <string name="inbox_unlock">Очиш</string>
+
+    <!-- ── One conversation ─────────────────────────────────────────────────── -->
+    <string name="thread_back">Орқага</string>
+    <string name="thread_placeholder">Жавоб ёзинг…</string>
+    <string name="thread_send">Юбориш</string>
+    <string name="thread_attach">Расм юбориш</string>
+    <string name="thread_send_location">Жойлашувни юбориш</string>
+    <string name="thread_send_quote">Хулосани юбориш</string>
+    <string name="thread_open_order">Буюртмани очиш</string>
+    <string name="thread_location">Жойлашув</string>
+    <string name="thread_voice">Овозли хабар</string>
+    <string name="thread_video">Видео</string>
+    <string name="thread_document">Ҳужжат</string>
+    <string name="thread_failed">юборилмади</string>
+    <!-- The server could not fetch this from Telegram, or it was past the download limit. -->
+    <string name="thread_media_missing">Медиа юкланмади</string>
+    <string name="thread_unsupported">Қўллаб-қувватланмайди</string>
 </resources>

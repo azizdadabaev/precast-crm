@@ -10,6 +10,11 @@ import uz.etalon.crm.core.network.dto.DraftDto
 import uz.etalon.crm.core.network.dto.DraftsPageDto
 import uz.etalon.crm.core.network.dto.GalleryPageDto
 import uz.etalon.crm.core.network.dto.InboxDto
+import uz.etalon.crm.core.network.dto.ChatProjectDto
+import uz.etalon.crm.core.network.dto.ReplyLocationRequest
+import uz.etalon.crm.core.network.dto.ReplyTextRequest
+import uz.etalon.crm.core.network.dto.MessageDto
+import uz.etalon.crm.core.network.dto.ThreadDto
 import uz.etalon.crm.core.network.dto.InboxUnlockDto
 import uz.etalon.crm.core.network.dto.InboxUnlockRequest
 import uz.etalon.crm.core.network.dto.*
@@ -104,6 +109,33 @@ interface EtalonApi {
      *  session is locked — see InboxRepository for what the app does with that. */
     @GET("/api/inbox")
     suspend fun inbox(): InboxDto
+
+    /** One conversation and its last 500 messages. Reading it marks it read, server-side. */
+    @GET("/api/inbox/{id}")
+    suspend fun thread(@Path("id") id: String): ThreadDto
+
+    @POST("/api/inbox/{id}/reply")
+    suspend fun replyText(@Path("id") id: String, @Body body: ReplyTextRequest): MessageDto
+
+    @Multipart
+    @POST("/api/inbox/{id}/reply-photo")
+    suspend fun replyPhoto(
+        @Path("id") id: String,
+        @Part photo: MultipartBody.Part,
+        @Part("caption") caption: RequestBody,
+    ): MessageDto
+
+    /** Added for the phone: the function existed server-side, the route did not. */
+    @POST("/api/inbox/{id}/reply-location")
+    suspend fun replyLocation(@Path("id") id: String, @Body body: ReplyLocationRequest): MessageDto
+
+    /** The quotes already linked to this chat. */
+    @GET("/api/inbox/{id}/projects")
+    suspend fun chatProjects(@Path("id") id: String): List<ChatProjectDto>
+
+    /** Renders the draft server-side and posts it, as the order route does. */
+    @POST("/api/projects/{id}/send-to-chat")
+    suspend fun sendProjectToChat(@Path("id") id: String): Unit
 
     /** Answers 401 «Нотўғри парол» on a wrong password. NOT a session 401 — see InboxRepository. */
     @POST("/api/inbox/unlock")

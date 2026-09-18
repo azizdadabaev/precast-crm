@@ -1,6 +1,7 @@
 package uz.etalon.crm.core.network.dto
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 // ── «Лойиҳалар» · GET /api/projects?page=… (order.view) ──────────────────────
 // Asking for a page is what switches the route from a bare array to this envelope, so the app
@@ -108,3 +109,56 @@ data class ConversationDto(
     val lastSnippet: String = "",
     val unread: Boolean = true,
 )
+
+// ── One conversation · GET /api/inbox/{id} ───────────────────────────────────
+// No pagination: the route returns the last 500 messages, oldest first, and marks the
+// conversation read as a side effect of being read.
+
+@Serializable
+data class ThreadDto(
+    val conversation: ThreadHeadDto,
+    val messages: List<MessageDto> = emptyList(),
+)
+
+@Serializable
+data class ThreadHeadDto(
+    val id: String,
+    val displayName: String,
+    val username: String? = null,
+    val aiState: String = "HUMAN_ACTIVE",
+    val aiPaused: Boolean = false,
+)
+
+/**
+ * `mediaKind == null` is a plain text message. A LOCATION carries no [mediaPath] at all — its
+ * coordinates live only in [mediaMeta].
+ */
+@Serializable
+data class MessageDto(
+    val id: String,
+    val direction: String,
+    val text: String? = null,
+    val mediaKind: String? = null,
+    /** Server-relative («/uploads/inbox/…»), so it needs the base URL prefixing before loading. */
+    val mediaPath: String? = null,
+    val mediaName: String? = null,
+    val mediaMeta: JsonObject? = null,
+    val failed: Boolean = false,
+    val createdAt: String,
+    val mediaGroupId: String? = null,
+)
+
+@Serializable data class ReplyTextRequest(val text: String)
+@Serializable data class ReplyLocationRequest(val lat: Double, val lng: Double)
+
+/** One quote already linked to this chat — what «Лойиҳа юбориш» offers. */
+@Serializable
+data class ChatProjectDto(
+    val id: String,
+    val draftNumber: Int? = null,
+    val status: String = "DRAFT",
+    val name: String? = null,
+    val order: ChatProjectOrderDto? = null,
+)
+
+@Serializable data class ChatProjectOrderDto(val id: String, val orderNumber: String)

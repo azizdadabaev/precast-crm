@@ -10,6 +10,11 @@ import uz.etalon.crm.core.network.dto.DraftDto
 import uz.etalon.crm.core.network.dto.DraftsPageDto
 import uz.etalon.crm.core.network.dto.GalleryPageDto
 import uz.etalon.crm.core.network.dto.InboxDto
+import uz.etalon.crm.core.network.dto.ChatProjectDto
+import uz.etalon.crm.core.network.dto.ReplyLocationRequest
+import uz.etalon.crm.core.network.dto.ReplyTextRequest
+import uz.etalon.crm.core.network.dto.MessageDto
+import uz.etalon.crm.core.network.dto.ThreadDto
 import uz.etalon.crm.core.network.dto.InboxUnlockDto
 import uz.etalon.crm.core.network.dto.InboxUnlockRequest
 import uz.etalon.crm.core.network.dto.*
@@ -51,6 +56,12 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun draft(id: String): DraftDto = unused("draft")
     override suspend fun gallery(page: Int, pageSize: Int, query: String?): GalleryPageDto = unused("gallery")
     override suspend fun inbox(): InboxDto = unused("inbox")
+    override suspend fun thread(id: String): ThreadDto = unused("thread")
+    override suspend fun replyText(id: String, body: ReplyTextRequest): MessageDto = unused("replyText")
+    override suspend fun replyPhoto(id: String, photo: MultipartBody.Part, caption: RequestBody): MessageDto = unused("replyPhoto")
+    override suspend fun replyLocation(id: String, body: ReplyLocationRequest): MessageDto = unused("replyLocation")
+    override suspend fun chatProjects(id: String): List<ChatProjectDto> = unused("chatProjects")
+    override suspend fun sendProjectToChat(id: String) = unused("sendProjectToChat")
     override suspend fun unlockInbox(body: InboxUnlockRequest): InboxUnlockDto = unused("unlockInbox")
     override suspend fun sendOrderToChat(id: String) = unused("sendOrderToChat")
     override suspend fun cancelOrder(id: String, body: CancelOrderRequest) = unused("cancelOrder")

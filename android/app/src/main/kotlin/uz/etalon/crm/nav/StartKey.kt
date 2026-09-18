@@ -43,7 +43,7 @@ internal fun tabFor(key: NavKey): Destination? = when (key) {
     is Drafts -> Destination.DRAFTS
     // Drawer roots light no cell: the bar has no seat for them, and lighting a neighbouring
     // cell would say the operator is somewhere they are not.
-    is Clients, is ClientDetail, is Gallery, is Inbox -> null
+    is Clients, is ClientDetail, is Gallery, is Inbox, is ChatThread -> null
     else -> null
 }
 
@@ -73,7 +73,7 @@ internal fun gatingPermission(key: NavKey): String? = when (key) {
     is Discrepancies -> PERM_DISCREPANCY_VIEW
     is Clients, is ClientDetail -> PERM_CLIENT_VIEW
     is Drafts, is Gallery -> PERM_ORDER_VIEW
-    is Inbox -> PERM_INBOX_ACCESS
+    is Inbox, is ChatThread -> PERM_INBOX_ACCESS
     is Calculator -> PERM_CALCULATOR_USE
     else -> null
 }

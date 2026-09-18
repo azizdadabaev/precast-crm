@@ -15,6 +15,7 @@ import uz.etalon.crm.core.data.LogisticsRepository
 import uz.etalon.crm.core.data.OrdersRepository
 import uz.etalon.crm.core.data.toAppError
 import uz.etalon.crm.core.model.AppError
+import uz.etalon.crm.core.ui.location.DeviceLocation
 import uz.etalon.crm.core.model.LatLng
 import uz.etalon.crm.core.model.OrderDetail
 import uz.etalon.crm.core.model.Resource

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Moved here with DeviceLocation when a second feature (the inbox composer) needed a fix. -->
+    <string name="location_permission_needed">Жойни аниқлаш учун рухсат керак</string>
+    <string name="location_failed">Жойни аниқлаш муваффақиятсиз тугади</string>
+</resources>

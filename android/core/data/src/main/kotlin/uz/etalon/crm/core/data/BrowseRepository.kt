@@ -14,6 +14,22 @@ import uz.etalon.crm.core.calc.Calc
 import uz.etalon.crm.core.calc.Pattern
 import uz.etalon.crm.core.calc.CalculatorDraft
 import uz.etalon.crm.core.calc.SlabRow
+import java.io.File
+import javax.inject.Named
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import uz.etalon.crm.core.model.ChatMessage
+import uz.etalon.crm.core.model.ChatProject
+import uz.etalon.crm.core.model.MessageKind
+import uz.etalon.crm.core.model.Thread
+import uz.etalon.crm.core.network.dto.MessageDto
+import uz.etalon.crm.core.network.dto.ReplyLocationRequest
+import uz.etalon.crm.core.network.dto.ReplyTextRequest
 import uz.etalon.crm.core.network.EtalonApi
 import uz.etalon.crm.core.network.dto.ConversationDto
 import uz.etalon.crm.core.network.dto.DraftDto
@@ -35,6 +51,8 @@ class BrowseRepository @Inject constructor(
     private val api: EtalonApi,
     private val tokens: TokenStore,
     private val calculator: CalculatorRepository,
+    /** Media paths arrive server-relative; Coil needs them absolute. */
+    @Named("apiBaseUrl") private val baseUrl: String,
 ) {
 
     /**
@@ -90,8 +108,56 @@ class BrowseRepository @Inject constructor(
         api.inbox().conversations.map { it.toDomain() }
     }
 
+    // ââ One conversation ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+
+    suspend fun thread(id: String): Result<Thread> = runCatchingCancellable {
+        val dto = api.thread(id)
+        Thread(
+            id = dto.conversation.id,
+            displayName = dto.conversation.displayName,
+            username = dto.conversation.username,
+            messages = dto.messages.map { it.toDomain(baseUrl) },
+        )
+    }
+
+    suspend fun sendText(conversationId: String, text: String): Result<Unit> = runCatchingCancellable {
+        api.replyText(conversationId, ReplyTextRequest(text.trim()))
+    }
+
     /**
-     * Opens the inbox for this device and keeps the token, which [AuthInterceptor] then sends on
+     * @param image already re-encoded by ImagePrep. The route takes jpeg/png/webp only and caps at
+     *   8 MB, which a phone camera's original file clears on its own.
+     */
+    suspend fun sendPhoto(conversationId: String, image: File, caption: String): Result<Unit> =
+        runCatchingCancellable {
+            api.replyPhoto(
+                id = conversationId,
+                photo = MultipartBody.Part.createFormData("photo", image.name, image.asRequestBody(JPEG)),
+                caption = caption.trim().toRequestBody(TEXT),
+            )
+        }
+
+    suspend fun sendLocation(conversationId: String, lat: Double, lng: Double): Result<Unit> =
+        runCatchingCancellable { api.replyLocation(conversationId, ReplyLocationRequest(lat, lng)) }
+
+    suspend fun chatProjects(conversationId: String): Result<List<ChatProject>> = runCatchingCancellable {
+        api.chatProjects(conversationId).map {
+            ChatProject(
+                id = it.id,
+                draftNumber = it.draftNumber,
+                orderId = it.order?.id,
+                orderNumber = it.order?.orderNumber,
+            )
+        }
+    }
+
+    /** The server renders the card; nothing is drawn or uploaded here. */
+    suspend fun sendProjectToChat(projectId: String): Result<Unit> =
+        runCatchingCancellable { api.sendProjectToChat(projectId) }
+
+    /**
+     * Opens the inbox for this device
+ and keeps the token, which [AuthInterceptor] then sends on
      * every request.
      *
      * The phone has to be able to do this. The web has an unlock dialog and the app sent people to
@@ -208,3 +274,44 @@ private fun DraftDto.toCalculatorDraft() = CalculatorDraft(
     // What stops a save-then-place leaving a duplicate: POST /api/orders reuses this Project.
     projectId = id,
 )
+
+/**
+ * A wire message as a bubble.
+ *
+ * `mediaKind == null` is the server saying "plain text", not a missing field. LOCATION is the one
+ * kind whose payload is not a file at all â its coordinates arrive only inside `mediaMeta`, and a
+ * LOCATION without them is undrawable, which is why the UI checks for nulls rather than assuming.
+ */
+private fun MessageDto.toDomain(baseUrl: String) = ChatMessage(
+    id = id,
+    outbound = direction == "OUTBOUND",
+    text = text,
+    kind = when (mediaKind) {
+        null -> MessageKind.TEXT
+        "IMAGE" -> MessageKind.IMAGE
+        "VOICE", "AUDIO" -> MessageKind.VOICE
+        "VIDEO", "VIDEO_NOTE" -> MessageKind.VIDEO
+        "DOCUMENT" -> MessageKind.DOCUMENT
+        "LOCATION" -> MessageKind.LOCATION
+        else -> MessageKind.UNSUPPORTED
+    },
+    // The path is server-relative; Coil needs an absolute one.
+    mediaUrl = mediaPath?.let { if (it.startsWith("http")) it else baseUrl.trimEnd('/') + it },
+    mediaName = mediaName,
+    lat = mediaMeta?.double("lat"),
+    lng = mediaMeta?.double("lng"),
+    locationTitle = mediaMeta?.string("title"),
+    durationSec = mediaMeta?.double("duration")?.toInt(),
+    // The server marks media it could not fetch or that Telegram would not hand over. The bubble
+    // says so instead of showing a broken image.
+    mediaMissing = mediaMeta?.bool("unavailable") == true || mediaMeta?.bool("oversize") == true,
+    failed = failed,
+    createdAt = Instant.parse(createdAt),
+)
+
+private fun JsonObject.double(key: String): Double? = (this[key] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
+private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()
+
+private val JPEG = "image/jpeg".toMediaType()
+private val TEXT = "text/plain".toMediaType()
