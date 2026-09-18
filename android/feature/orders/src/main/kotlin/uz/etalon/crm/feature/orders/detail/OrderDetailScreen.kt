@@ -59,20 +59,16 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.components.Avatar
-import uz.etalon.crm.core.designsystem.components.DetailPanel
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
 import uz.etalon.crm.core.designsystem.components.EtalonTextField
 import uz.etalon.crm.core.designsystem.components.Lightbox
 import uz.etalon.crm.core.designsystem.components.LoadListCard
 import uz.etalon.crm.core.designsystem.components.MoneyText
 import uz.etalon.crm.core.designsystem.components.OutboxBanner
-import uz.etalon.crm.core.designsystem.components.PanelTotal
 import uz.etalon.crm.core.designsystem.components.PaymentStatusTag
 import uz.etalon.crm.core.designsystem.components.PhotoRef
 import uz.etalon.crm.core.designsystem.components.PhotoStrip
 import uz.etalon.crm.core.designsystem.components.PrimaryButton
-import uz.etalon.crm.core.designsystem.components.PaymentStateTag
-import uz.etalon.crm.core.designsystem.components.ProgressCard
 import uz.etalon.crm.core.designsystem.share.rememberShareImage
 import uz.etalon.crm.core.designsystem.components.SecondaryButton
 import uz.etalon.crm.core.designsystem.components.StatusTag
@@ -161,9 +157,9 @@ private fun dial(ctx: Context, phone: String) {
 }
 
 /**
- * `2b-order-detail.png`: the navy [DetailPanel] over the «Тўлов ҳолати» [ProgressCard], the
- * «Етказиш» card with its [StepTimeline], and then the cards R7 keeps — payments, shipments,
- * photos, events — under a sticky action bar.
+ * Design 7a: a sticky [DetailTopBar] over the [OrderHeroPanel], «Юклаш рўйхати», the
+ * «Ҳисоб-китоб» rooms card, the «Етказиш» card with its [StepTimeline], and then payments,
+ * shipments, photos and events — under a sticky action bar.
  *
  * The shell draws the floating nav pill *over* this screen and has no `Scaffold`, so the root is a
  * plain `Box`: it pads the status bar itself, the list reserves the pill's band plus
@@ -294,7 +290,7 @@ fun OrderDetailScreen(
                 if (r is Resource.Error) item { ErrorBanner(r.error.message, onRetry = onRefresh) }
                 if (actionError != null) item { ErrorBanner(actionError) }
                 if (o == null) return@LazyColumn
-                item { Panel(o, onCall = { dial(ctx, o.summary.client.phone) }) }
+                item { OrderHeroPanel(o, onCall = { dial(ctx, o.summary.client.phone) }) }
                 val canceled = o.summary.status.owesNothing
                 if (canceled) item { CanceledNotice(o) }
                 // Spec §5.1a: the loader's own section, and the one the owner named as the reason
@@ -313,7 +309,6 @@ fun OrderDetailScreen(
                 // sale that never happened is a claim about money that is not owed. The payments
                 // card below still draws — cash that was taken is history and stays visible.
                 if (!canceled) {
-                    item { PaymentProgress(o) }
                     if (hasCostBreakdown(o)) item { CostsCard(o) }
                 }
                 if (o.payments.isNotEmpty() || !o.pendingAmount.isZero) item { PaymentsCard(o) }
@@ -440,44 +435,6 @@ private fun DetailTopBar(o: OrderDetail, onBack: () -> Unit, onShare: (() -> Uni
     HorizontalDivider(color = EtalonColors.surfaceBorder, thickness = EtalonSpace.hairline)
 }
 
-/** The hero. 7a moved the rooms out to their own «Ҳисоб-китоб» card, so the panel carries no room
- *  tiles at all: a tile read «36,89 м² / Garage · 5 × 7», which states a price-bearing figure and a
- *  pair of dimensions with no relationship between them, and the owner rejected it. Drawing them
- *  here as well as on the card would also print the same room twice on one screen, in two different
- *  areas — the tile used billedArea, the card uses monolithArea. */
-@Composable
-private fun Panel(o: OrderDetail, onCall: () -> Unit) = DetailPanel(
-    caption = stringResource(R.string.detail_caption),
-    headline = formatOrderNo(o.summary.orderNumber),
-    // The full wording, «Жўнатилган», exactly as the capture draws it — the abbreviations
-    // («Йўлда») exist for the list rows' width, and `orderStatusShortLabel` itself says the full
-    // words stay in use on panels and detail screens.
-    statusTag = { StatusTag(o.summary.status, TagSurface.PANEL_ON_INDIGO) },
-    clientName = o.summary.client.name,
-    addressLine = formatAddressLine(o.summary.client.address),
-    totals = {
-        PanelTotal(stringResource(R.string.detail_area), formatArea(o.summary.totalArea), modifier = Modifier.weight(1f))
-        PanelTotal(stringResource(R.string.detail_total), formatMoney(o.summary.totalPrice), modifier = Modifier.weight(1f))
-        // A canceled order owes nothing (`OrderStatus.owesNothing`), so «Қолди» is a dash rather
-        // than its untouched total — the rows on Home and Orders already draw nothing for one, and
-        // the screen they open must not contradict them. Muted, because «—» is an absence, not a
-        // figure, and green would read as settled.
-        val owesNothing = o.summary.status.owesNothing
-        PanelTotal(
-            stringResource(R.string.detail_remaining),
-            if (owesNothing) stringResource(R.string.detail_no_balance) else formatMoney(o.remaining),
-            valueColor = when {
-                owesNothing -> EtalonColors.onDarkMuted
-                o.remaining.isZero -> EtalonColors.paidOnDark
-                else -> EtalonColors.onDark
-            },
-            modifier = Modifier.weight(1f),
-        )
-    },
-    dateLabel = formatDate(o.summary.scheduledAt),
-    onCall = onCall,
-)
-
 /** The one permitted BigDecimal→Float crossing on this screen: bar geometry, never a figure. */
 internal fun paidFraction(o: OrderDetail): Float {
     val total = o.summary.totalPrice.amount
@@ -497,21 +454,6 @@ internal fun paidPercent(o: OrderDetail): Int = when {
     o.remaining.isZero -> 100
     o.summary.confirmedPaid.isZero -> 0
     else -> (paidFraction(o) * 100).roundToInt().coerceIn(1, 99)
-}
-
-@Composable
-private fun PaymentProgress(o: OrderDetail) {
-    ProgressCard(
-        label = stringResource(R.string.detail_payment_state),
-        fraction = paidFraction(o),
-        percentText = stringResource(R.string.detail_percent_paid, paidPercent(o)),
-        paidLabel = stringResource(R.string.detail_paid_amount, formatMoney(o.summary.confirmedPaid)),
-        remainingLabel = stringResource(R.string.detail_remaining_amount, formatMoney(o.remaining)),
-        settled = o.remaining.isZero,
-        stateTag = { PaymentStateTag(o.summary.paymentState) },
-        pendingLabel = o.pendingAmount.takeIf { !it.isZero }
-            ?.let { stringResource(R.string.detail_pending_confirmation, formatMoney(it)) },
-    )
 }
 
 /**
@@ -879,7 +821,7 @@ private fun PaymentsCard(o: OrderDetail) = WhiteCard(stringResource(R.string.det
 /**
  * The «Етказиш» card: the three-step timeline ([timelineFor]) over the `Сана · Ҳайдовчи` footer.
  *
- * The location control rides in the card's header. [DetailPanel] offers one trailing slot and the
+ * The location control rides in the card's header. The panel offers one trailing slot and the
  * dialer has it, so the pin — which is a *delivery* affordance — lives with the delivery card
  * rather than being dropped.
  */

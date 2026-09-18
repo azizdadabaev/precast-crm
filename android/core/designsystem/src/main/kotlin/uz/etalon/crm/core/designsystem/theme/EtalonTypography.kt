@@ -37,6 +37,9 @@ object EtalonType {
     /** The «UZS» in front of a KPI figure: 14/500 at 50 % opacity — the opacity is applied by the
      *  component, not baked in, so the same style works on light and on navy. */
     val kpiUnit = Base.copy(fontSize = 14.sp, fontWeight = FontWeight.W500)
+    /** Чa's hero total. Between [kpi] and [amountLg]: the largest figure on the order
+     *  detail, but it shares a panel with two smaller ones and must not crowd them. */
+    val heroAmount = Base.copy(fontSize = 28.sp, fontWeight = FontWeight.W800, letterSpacing = (-0.02).em)
     val amountLg = Base.copy(fontSize = 30.sp, fontWeight = FontWeight.W800, letterSpacing = (-0.02).em)
     val titleSm = Base.copy(fontSize = 16.sp, fontWeight = FontWeight.W800, letterSpacing = (-0.01).em)
     val sectionTitle = Base.copy(fontSize = 14.sp, fontWeight = FontWeight.W700)

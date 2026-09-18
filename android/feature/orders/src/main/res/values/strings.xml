@@ -50,17 +50,12 @@
     <string name="orders_day_sheet_no_load">—</string>
 
     <!-- ── Order detail, spec §3.3 / `2b-order-detail.png` ──────────────────── -->
-    <string name="detail_caption">Буюртма</string>
     <string name="detail_area">Майдон</string>
     <string name="detail_total">Жами</string>
     <string name="detail_remaining">Қолди</string>
     <!-- The «Қолди» figure of a canceled order: an EM DASH (U+2014), not a number. A canceled
          order owes nothing, so a sum here would be a false claim — see OrderStatus.owesNothing. -->
     <string name="detail_no_balance">—</string>
-    <string name="detail_payment_state">Тўлов ҳолати</string>
-    <string name="detail_percent_paid">%1$d%% тўланган</string>
-    <string name="detail_paid_amount">Тўланган %1$s</string>
-    <string name="detail_remaining_amount">Қолди %1$s</string>
     <string name="detail_delivery">Етказиш</string>
     <!-- The three step labels moved to :core:designsystem with `timelineFor` (ruling R13) —
          ds_step_placed / ds_step_loaded / ds_step_delivered, same words. -->
@@ -192,4 +187,10 @@
     <string name="detail_share_failed">Расмни тайёрлаб бўлмади</string>
     <string name="detail_menu_share">Юбориш (расм)</string>
     <string name="detail_cd_menu">Яна</string>
+    <!-- ── 7a hero panel ───────────────────────────────────────────────────── -->
+    <!-- Appended to the scheduled date: «Пайшанба, 18 июн · қабул 17 июн». -->
+    <string name="detail_placed_on"> · қабул %1$s</string>
+    <string name="detail_hero_paid">Тўлов</string>
+    <string name="detail_uzs">UZS</string>
+    <string name="detail_cd_call">Қўнғироқ қилиш</string>
 </resources>
