@@ -9,6 +9,11 @@ const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
   "/api/health",
+  // The Android updater asks this before it has a session, and an app too old to sign in still has
+  // to be able to learn that it is old. It discloses a version number and the URL of a build
+  // /uploads already serves publicly. Gating it here answers 401, which the app reads as an expired
+  // session — so a phone would be signed out on every launch.
+  "/api/mobile/app-version",
   "/api/telegram/webhook",
   "/api/instagram/webhook", // Meta webhook — GET verify handshake + signed POST (HMAC), not the session
   "/privacy", // public policy pages — required by Meta for Live mode / App Review
