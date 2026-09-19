@@ -2,7 +2,6 @@ export const dynamic = "force-dynamic";
 
 import { promises as fs } from "fs";
 import path from "path";
-import { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 
@@ -47,7 +46,7 @@ const Manifest = z.object({
  * state of a server whose operator has not shipped a build yet — and the app treats it as
  * "nothing new".
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   let raw: string;
   try {
     raw = await fs.readFile(MANIFEST, "utf8");
@@ -64,7 +63,12 @@ export async function GET(req: NextRequest) {
     return fail("Янгиланиш маълумоти нотўғри · Manifest is invalid", 500);
   }
 
-  const m = parsed.data;
-  const url = m.url.startsWith("http") ? m.url : new URL(m.url, req.nextUrl.origin).toString();
-  return ok({ ...m, url });
+  // The URL goes back exactly as written, absolute or relative.
+  //
+  // It used to be resolved here against `req.nextUrl.origin`, which behind the reverse proxy is the
+  // container's own bind address: the phone was handed «https://0.0.0.0:3000/uploads/…» and could
+  // never have downloaded it. Trusting X-Forwarded-Host instead would only move the guess. The app
+  // already resolves a relative path against the base URL it was built with — the one address it
+  // knows is right — so the server has no business guessing its own public name.
+  return ok(parsed.data);
 }
