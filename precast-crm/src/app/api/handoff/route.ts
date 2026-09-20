@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ok, fail, handler } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
-import { verifyDeviceToken } from "@/lib/handoff-auth";
+import { HANDOFF_ACTION, resolveHandoffCaller } from "@/lib/handoff-caller";
 import { isHandoffPresetKey, type HandoffPresetKey } from "@/lib/handoff-presets";
 import { expiryFrom, generateToken } from "@/lib/handoff-token";
 import { normalizePhone } from "@/lib/phone";
@@ -14,11 +14,15 @@ import { normalizePhone } from "@/lib/phone";
 /**
  * Call → Telegram handoff.
  *
- * POST creates the pending follow-up the Android overlay app SMSes to the
- * caller; it authenticates with the narrow device token, NOT a user session.
+ * POST creates the pending follow-up that gets SMSed to the caller. It accepts
+ * EITHER the narrow device token (the standalone overlay app of spec §4.2) or a
+ * signed-in operator holding `inbox.access` (the Etalon Android app, which folds
+ * the overlay in — Android architecture spec §4.7). See `handoff-caller.ts` for
+ * why both, and why the device secret is tried first.
+ *
  * GET is the owner's list of who never replied, behind the normal cookie
- * permission gate. Two different credentials, so they stay two handlers —
- * the POST must never be routed through withPermission.
+ * permission gate. The two still stay separate handlers — the POST must never be
+ * routed through withPermission, because the device token is not a user.
  *
  * This route only ever CREATES PendingFollowUp rows and cancels the ones it
  * previously created for the same phone. It touches no other table.
@@ -47,7 +51,8 @@ function composeSmsText(token: string, handle: string): string {
 }
 
 export const POST = handler(async (req: NextRequest) => {
-  if (!verifyDeviceToken(req)) {
+  const caller = await resolveHandoffCaller(req);
+  if (!caller) {
     return fail("Авторизация талаб қилинади · Authentication required", 401);
   }
 
@@ -106,7 +111,17 @@ export const POST = handler(async (req: NextRequest) => {
           data: { status: "CANCELED" },
         });
         return tx.pendingFollowUp.create({
-          data: { token, phone, presets, expiresAt: expiryFrom(new Date()) },
+          data: {
+            token,
+            phone,
+            presets,
+            // Null for the device token, which names nobody; the operator's id
+            // when the Etalon app created it signed in. The column has existed
+            // since the first migration and was never filled until there was a
+            // client that could say who was calling.
+            createdById: caller.userId,
+            expiresAt: expiryFrom(new Date()),
+          },
         });
       });
 
