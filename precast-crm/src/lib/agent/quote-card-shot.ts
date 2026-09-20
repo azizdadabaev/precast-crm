@@ -87,14 +87,25 @@ async function getBrowser(executablePath: string): Promise<Browser> {
   }
 }
 
-/** Screenshot the real share card via a headless browser. Throws on any failure
- *  (no executable, launch/nav/timeout) so the caller can fall back. */
-async function screenshotShareCard(projectId: string): Promise<Buffer> {
+/**
+ * Screenshot an internal quote-card render page and return the PNG.
+ *
+ * Takes the PATH rather than a project id, because there are two render targets
+ * now: a saved project, and a payload parked in this process by the Android
+ * calculator (`src/lib/quote-card-payload.ts`). Both draw the same
+ * CalculationShareCard, which is the whole point — one card definition and one
+ * renderer, so a customer cannot receive two different documents depending on
+ * whether the operator was at a desk or in their house.
+ *
+ * Throws on any failure (no executable, launch/nav/timeout) so each caller
+ * decides for itself whether to fall back or to report it.
+ */
+export async function screenshotQuoteCardPath(path: string): Promise<Buffer> {
   const executablePath = resolveExecutable();
   if (!executablePath) throw new Error('no Chromium/Chrome executable found (set PUPPETEER_EXECUTABLE_PATH)');
 
   const port = process.env.PORT ?? '3000';
-  const url = `http://127.0.0.1:${port}/internal/quote-card/${projectId}?k=${QUOTE_CARD_TOKEN}`;
+  const url = `http://127.0.0.1:${port}${path}`;
 
   const browser = await getBrowser(executablePath);
   const page = await browser.newPage();
@@ -138,7 +149,9 @@ async function fallbackOgImage(projectId: string): Promise<Buffer> {
  */
 export async function renderAgentQuoteImage(projectId: string): Promise<Buffer> {
   try {
-    return await screenshotShareCard(projectId);
+    return await screenshotQuoteCardPath(
+      `/internal/quote-card/${projectId}?k=${QUOTE_CARD_TOKEN}`,
+    );
   } catch (err) {
     console.warn(
       '[agent:quote-image] headless render failed — using next/og fallback:',
