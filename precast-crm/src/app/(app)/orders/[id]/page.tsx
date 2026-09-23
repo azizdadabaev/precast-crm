@@ -24,7 +24,7 @@ import {
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { ReceiptStrip } from "@/components/payments/ReceiptStrip";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { formatDate, formatDateTime, formatNumber } from "@/lib/utils";
 import { displayedDiscount } from "@/lib/order-display";
 import { PhoneLink } from "@/components/PhoneLink";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
@@ -1532,17 +1532,21 @@ export default function OrderDetailPage() {
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {p.collectedByDriver ? p.collectedByDriver.name : "—"}
-                    {p.collectedAt && <div className="tabular-nums">{formatDate(p.collectedAt)}</div>}
+                    {p.collectedAt && <div className="tabular-nums">{formatDateTime(p.collectedAt)}</div>}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {p.recordedBy ? p.recordedBy.name : "—"}
-                    <div className="tabular-nums">{formatDate(p.recordedAt)}</div>
+                    {/* Every stamp in this table carries the hour and minute: two payments on one
+                        day are told apart by their time, and «who confirmed it, and when» is what
+                        the owner reads this table for. Milestone dates elsewhere on the page —
+                        placed, scheduled — stay calendar days. */}
+                    <div className="tabular-nums">{formatDateTime(p.recordedAt)}</div>
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {p.handedOverToOfficeAt ? (
                       <>
                         {p.handedOverTo?.name ?? "—"}
-                        <div className="tabular-nums">{formatDate(p.handedOverToOfficeAt)}</div>
+                        <div className="tabular-nums">{formatDateTime(p.handedOverToOfficeAt)}</div>
                       </>
                     ) : (
                       "—"
@@ -1552,7 +1556,7 @@ export default function OrderDetailPage() {
                     {p.confirmedAt ? (
                       <>
                         {p.confirmedBy?.name ?? "—"}
-                        <div className="tabular-nums">{formatDate(p.confirmedAt)}</div>
+                        <div className="tabular-nums">{formatDateTime(p.confirmedAt)}</div>
                       </>
                     ) : p.rejectedAt ? (
                       <>
@@ -1764,7 +1768,7 @@ export default function OrderDetailPage() {
             </div>
             {order.deliveryProofUploadedAt && (
               <div className="text-[10px] text-muted-foreground">
-                {t("Юкланди", "Uploaded")} {formatDate(order.deliveryProofUploadedAt)}
+                {t("Юкланди", "Uploaded")} {formatDateTime(order.deliveryProofUploadedAt)}
               </div>
             )}
           </div>
@@ -1824,7 +1828,7 @@ export default function OrderDetailPage() {
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-                  {formatDate(e.createdAt)}
+                  {formatDateTime(e.createdAt)}
                 </span>
               </li>
             ))}

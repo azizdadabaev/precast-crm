@@ -8,7 +8,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ConfirmPaymentDialog, type PaymentForConfirm } from "@/components/payments/ConfirmPaymentDialog";
-import { formatDate, formatNumber } from "@/lib/utils";
+import { formatDateTime, formatNumber } from "@/lib/utils";
 import { PhoneLink } from "@/components/PhoneLink";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
@@ -238,7 +238,7 @@ export default function PaymentsPage() {
                         {p.collectedByDriver?.name ?? <span className="text-text-tertiary">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
-                        {formatDate(p.recordedAt)}
+                        {formatDateTime(p.recordedAt)}
                       </td>
                       <td className="px-3 py-2.5">
                         <Chip variant={meta.variant}>
