@@ -168,7 +168,8 @@ export const getQuoteDefinition: AgentToolDefinition = {
   description:
     'Price a beam-and-block (precast) FLOORING slab for a room — or several ' +
     'IDENTICAL rooms at once via `count` — and return a binding quote_id. Input the ' +
-    'inside-wall dimensions in METERS (wall-to-wall). ' +
+    'inside-wall dimensions in METERS (wall-to-wall). INNER size only — never an outer ' +
+    '"bitondan bitonga" / "tashqi" size, and never a side the customer did not give. ' +
     'Returns subtotal (ONE room), count, line_total (= subtotal × count, the total ' +
     'for all the identical rooms), m²-price, pattern, a bill of materials, an ' +
     'approximate delivered weight in kg (weight_kg — useful to volunteer for ' +

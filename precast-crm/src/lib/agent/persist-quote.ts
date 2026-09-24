@@ -189,6 +189,59 @@ export function mergeDraftRooms(
   return { rooms: [...existingRooms, ...extras], changed: true, mode: 'merge' };
 }
 
+// Below this a number in a reply is an m² rate, a weight or a size — never a room
+// total (the smallest real room is ~5 m² × 140 000 ≈ 700 000).
+const MIN_SPOKEN_TOTAL = 300_000;
+const GROUPED_AMOUNT = /(?<![\d.,])\d{1,3}(?:[\s.,]\d{3})+(?![\d])|(?<![\d.,+])\d{6,8}(?![\d])/gu; // \s covers Telegram's no-break spaces; 9+ bare digits = a phone number, not a total
+const MILLIONS = /(?<![\d.,])(\d+(?:[.,]\d+)?)\s*(?:mln|million|млн|миллион)/giu;
+
+/**
+ * The money amounts a reply states — what the customer actually reads. Covers
+ * grouped figures ("13 073 960", "3.840.760") and rounded millions ("13 mln").
+ * Pure.
+ */
+export function extractSpokenAmounts(text: string): number[] {
+  const amounts: number[] = [];
+  for (const m of text.matchAll(MILLIONS)) amounts.push(Math.round(Number(m[1].replace(',', '.')) * 1_000_000));
+  for (const m of text.matchAll(GROUPED_AMOUNT)) amounts.push(Number(m[0].replace(/[^\d]/g, '')));
+  return amounts.filter((a) => a >= MIN_SPOKEN_TOTAL);
+}
+
+// "Light rounding fine" per the prompt — 13 mln still names 13 073 960.
+const amountsMatch = (spoken: number, total: number) =>
+  Math.abs(spoken - total) <= Math.max(1_000, total * 0.02);
+
+/**
+ * Make the saved draft (and so the card) agree with the total the reply SAID.
+ * mergeDraftRooms appends any room it hasn't seen, so a CORRECTION (7×4 → 7×5)
+ * used to land next to the room it replaced — live bug 0575D: the text said
+ * 13 073 960 for three rooms, the card showed four rooms and 17 521 880, and the
+ * customer left. When the turn re-quoted rooms the draft already holds AND the
+ * reply's total is this turn's set (not the merged one), the turn replaces the
+ * draft. A genuinely new room (no overlap) still appends — a house arrives room
+ * by room. `matchesReply` is false when the reply states amounts and none of them
+ * is either total: the card would contradict the text, so it must not be sent.
+ * Pure.
+ */
+export function reconcileDraftWithReply(input: {
+  existingRooms: RoomInput[];
+  turnRooms: RoomInput[];
+  merged: { rooms: RoomInput[]; mode: 'unchanged' | 'replace' | 'merge' };
+  mergedTotal: number;
+  turnTotal: number;
+  spokenAmounts: number[];
+}): { rooms: RoomInput[]; mode: 'unchanged' | 'replace' | 'merge'; matchesReply: boolean } {
+  const { existingRooms, turnRooms, merged, mergedTotal, turnTotal, spokenAmounts } = input;
+  if (spokenAmounts.length === 0) return { rooms: merged.rooms, mode: merged.mode, matchesReply: true };
+  const said = (total: number) => spokenAmounts.some((a) => amountsMatch(a, total));
+  const existingFp = new Set(existingRooms.map((r) => roomsFingerprint([r])));
+  const requotedKnownRoom = turnRooms.some((r) => existingFp.has(roomsFingerprint([r])));
+  if (merged.mode === 'merge' && requotedKnownRoom && said(turnTotal) && !said(mergedTotal)) {
+    return { rooms: turnRooms, mode: 'replace', matchesReply: true };
+  }
+  return { rooms: merged.rooms, mode: merged.mode, matchesReply: said(mergedTotal) || said(turnTotal) };
+}
+
 export interface PersistedDraft {
   projectId: string;
   draftNumber: number | null;
@@ -197,6 +250,9 @@ export interface PersistedDraft {
    *  holds — the caller then skips re-sending the summary image/notes (live bug:
    *  a customer re-sending the same drawing got the same card 3× in 10 min). */
   changed: boolean;
+  /** False when the reply stated a total the saved draft doesn't add up to — the
+   *  caller must NOT send the card (it would contradict the text) and flags staff. */
+  matchesReply: boolean;
 }
 
 const num3 = (v: unknown): string => Number(v).toFixed(3);
@@ -272,6 +328,8 @@ export function resolveDraftIdentity(s: DraftIdentitySources): { name: string | 
 export async function persistConversationDraft(
   conversation: AgentDraftConversation,
   rooms: RoomInput[],
+  /** The reply the customer received this turn — the draft must agree with it. */
+  replyText?: string,
 ): Promise<PersistedDraft | null> {
   if (rooms.length === 0) return null;
 
@@ -319,17 +377,32 @@ export async function persistConversationDraft(
       m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
       m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
     }));
-    const merge = mergeDraftRooms(existingRooms, policyRooms);
-    if (existing && !merge.changed) {
-      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: false };
+    const merged = mergeDraftRooms(existingRooms, policyRooms);
+    if (existing && !merged.changed) {
+      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: false, matchesReply: true };
     }
+    const mergedTotals = computeOrderTotals(merged.rooms, NO_EXTRAS, pricing);
+    const reconciled = reconcileDraftWithReply({
+      existingRooms,
+      turnRooms: policyRooms,
+      merged,
+      mergedTotal: mergedTotals.totalPrice,
+      turnTotal: computeOrderTotals(policyRooms, NO_EXTRAS, pricing).totalPrice,
+      spokenAmounts: extractSpokenAmounts(replyText ?? ''),
+    });
+    if (reconciled.mode !== merged.mode) {
+      console.log(`[agent:draft] reply total matches this turn's rooms — ${merged.mode} → ${reconciled.mode}`);
+    }
+    const finalRooms = reconciled.rooms;
+    const { matchesReply } = reconciled;
 
-    const { computed } = computeOrderTotals(merge.rooms, NO_EXTRAS, pricing);
+    const { computed } =
+      finalRooms === merged.rooms ? mergedTotals : computeOrderTotals(finalRooms, NO_EXTRAS, pricing);
     const calcs = computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i }));
     const dimensions = {
-      width: merge.rooms[0].innerWidth,
-      length: merge.rooms[0].innerLength,
-      notes: `${merge.rooms.length} room${merge.rooms.length === 1 ? '' : 's'} · AI`,
+      width: finalRooms[0].innerWidth,
+      length: finalRooms[0].innerLength,
+      notes: `${finalRooms.length} room${finalRooms.length === 1 ? '' : 's'} · AI`,
     };
     // The customer-stated identity (the order's Client, or values already on the
     // draft) outranks the channel profile name — see resolveDraftIdentity.
@@ -376,7 +449,7 @@ export async function persistConversationDraft(
           calculations: { create: calcs },
         },
       });
-      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: true };
+      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: true, matchesReply };
     }
 
     const maxAgg = await tx.project.aggregate({ _max: { draftNumber: true } });
@@ -395,6 +468,6 @@ export async function persistConversationDraft(
       },
       select: { id: true, draftNumber: true },
     });
-    return { projectId: created.id, draftNumber: created.draftNumber, isNew: true, changed: true };
+    return { projectId: created.id, draftNumber: created.draftNumber, isNew: true, changed: true, matchesReply };
   });
 }

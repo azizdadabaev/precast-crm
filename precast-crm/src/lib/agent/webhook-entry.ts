@@ -15,7 +15,8 @@ import { saveAgentProposal, saveAgentProposalRow } from './proposal';
 import { applyAutoMode, defaultAutoModeDeps, routeToHuman } from './auto-mode';
 import { agentSendLimiter } from './agent-rate-limit';
 import { detectConversationLanguage, type ReplyLanguage } from './prompt';
-import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote } from './vision';
+import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote, roomsStatedIn } from './vision';
+import { enqueueInboundText, type BurstMeta, type BurstRunFn, type BurstSource } from './burst';
 import { detectLocationIntent, locationReplyText, COMPANY_LOCATION } from './location';
 import { extractQuotedRooms, persistConversationDraft } from './persist-quote';
 import { extractProofTopics } from './tools/share-proof';
@@ -91,7 +92,14 @@ async function generateAndPersistProposal(
 async function saveDraftAndSendSummary(
   conversation: InboundConversation,
   rooms: RoomInput[],
-  opts: { source: 'text' | 'image' | 'voice'; language: ReplyLanguage },
+  opts: {
+    source: BurstSource;
+    language: ReplyLanguage;
+    /** The reply the customer just received — the card must agree with it. */
+    replyText: string;
+    /** The voice transcript / plan read of this batch — what the media said. */
+    mediaText: string;
+  },
 ): Promise<void> {
   try {
     const conv = await prisma.conversation.findUnique({
@@ -105,6 +113,7 @@ async function saveDraftAndSendSummary(
         sharedContactPhone: conversation.sharedContactPhone,
       },
       rooms,
+      opts.replyText,
     );
     if (!draft) return;
 
@@ -114,6 +123,27 @@ async function saveDraftAndSendSummary(
     // cards in 10 minutes). Stay quiet; the agent's text reply already went out.
     if (!draft.changed) {
       console.log('[agent:draft+summary] rooms unchanged — skipping duplicate card/notes');
+      return;
+    }
+
+    // The reply named a total the saved draft doesn't add up to. A card that
+    // contradicts the text is worse than no card (live bug 0575D: the text said
+    // 13 073 960, the card 17 521 880, and the customer left) — hold it back and
+    // have an operator check the draft.
+    if (!draft.matchesReply) {
+      console.warn(`[agent:draft+summary] reply total ≠ draft total — card withheld (project ${draft.projectId})`);
+      try {
+        const { emitNotifications, usersWithPermission } = await import('@/lib/notifications');
+        await emitNotifications({
+          type: 'AGENT_ESCALATION',
+          userIds: await usersWithPermission('inbox.access'),
+          title: 'Ҳисоб расми юборилмади · Quote card withheld',
+          body: 'AI жавобидаги сумма лойиҳа суммасига тўғри келмади — лойиҳани текшириб, мижозга ўзингиз юборинг',
+          projectId: draft.projectId,
+        });
+      } catch (err) {
+        console.error('[agent:card-mismatch-alert]', err);
+      }
       return;
     }
 
@@ -161,11 +191,13 @@ async function saveDraftAndSendSummary(
 
     // For EXTRACTED dimensions (drawing/voice), follow the image with a line that
     // states what we read and invites a typed correction → recalculation. Typed
-    // dimensions don't need it (the customer typed them).
-    if (opts.source !== 'text') {
+    // dimensions don't need it (the customer typed them). It lists only rooms the
+    // media itself carried — never sizes pulled from earlier messages.
+    const fromMedia = opts.source === 'text' ? [] : roomsStatedIn(rooms, opts.mediaText);
+    if (opts.source !== 'text' && fromMedia.length > 0) {
       await sendBusinessReply({
         conversationId: conversation.id,
-        text: mediaCorrectionNote(rooms, opts.language, opts.source),
+        text: mediaCorrectionNote(fromMedia, opts.language, opts.source),
         userId: null,
       });
     }
@@ -232,12 +264,71 @@ async function sendCompanyLocation(
   });
 }
 
-export async function runAgentForInbound(
+// Per-conversation run chain: at most ONE agent run per conversation at a time,
+// whatever path started it (text burst, voice, vision, simulate). The burst
+// buffer already serializes the webhook paths; this is the backstop for the rest.
+const runChains = new Map<string, Promise<void>>();
+
+function inConversationOrder(conversationId: string, work: () => Promise<void>): Promise<void> {
+  const run = (runChains.get(conversationId) ?? Promise.resolve()).then(work);
+  const tail = run.catch(() => undefined);
+  runChains.set(conversationId, tail);
+  void tail.then(() => {
+    if (runChains.get(conversationId) === tail) runChains.delete(conversationId);
+  });
+  return run;
+}
+
+export function runAgentForInbound(
   conversation: InboundConversation,
   inboundText: string,
   /** One id, or the whole coalesced burst's ids (see burst.ts). */
   excludeMessageId: string | string[],
-  source: 'text' | 'image' | 'voice' = 'text',
+  source: BurstSource = 'text',
+  /** The voice transcript / plan read inside inboundText (see BurstMeta). */
+  mediaText: string = source === 'text' ? '' : inboundText,
+): Promise<void> {
+  return inConversationOrder(conversation.id, () =>
+    runAgentTurn(conversation, inboundText, excludeMessageId, source, mediaText),
+  );
+}
+
+/** The burst buffer's run function — every webhook path (text, voice, vision)
+ *  queues through it so a conversation gets one reply at a time. */
+export const runQueuedBatch: BurstRunFn = (conversation, joinedText, ids, meta: BurstMeta) =>
+  runAgentForInbound(conversation, joinedText, ids, meta.source, meta.mediaText);
+
+/** How the voice/vision handlers hand their text (transcript, plan read, or a
+ *  caption) to the agent. */
+export type MediaDispatch = (
+  conversation: InboundConversation,
+  text: string,
+  messageId: string,
+  source: BurstSource,
+) => Promise<void>;
+
+/** Run the agent right away and wait for it — the Simulate route reads the
+ *  proposal as soon as the handler returns. */
+export const runMediaNow: MediaDispatch = (conversation, text, messageId, source) =>
+  runAgentForInbound(conversation, text, messageId, source);
+
+/** Webhooks: queue the media text with the conversation's text burst, stamped with
+ *  when the customer SENT it, so a voice note and the line typed after it get ONE
+ *  reply (live bug 0575D: two parallel quotes a minute apart). */
+export const queueMedia: MediaDispatch = async (conversation, text, messageId, source) => {
+  const row = await prisma.message.findUnique({ where: { id: messageId }, select: { createdAt: true } });
+  enqueueInboundText(conversation, text, messageId, runQueuedBatch, {
+    source,
+    at: row?.createdAt.getTime() ?? Date.now(),
+  });
+};
+
+async function runAgentTurn(
+  conversation: InboundConversation,
+  inboundText: string,
+  excludeMessageId: string | string[],
+  source: BurstSource,
+  mediaText: string,
 ): Promise<void> {
   const excludeIds = Array.isArray(excludeMessageId) ? excludeMessageId : [excludeMessageId];
   const lastMessageId = excludeIds[excludeIds.length - 1];
@@ -254,13 +345,11 @@ export async function runAgentForInbound(
     }
 
     // Show the customer a live "typing…" indicator while we prepare an auto reply.
-    // Only the direct TEXT path starts it here; for image/voice the vision/voice
-    // handler already started one covering its transcription/extraction too.
+    // Every source starts it here: a voice/vision batch now runs from the burst
+    // queue, after its handler's own typing (transcription/extraction) stopped.
     // No simulated "typing…" on Instagram — Meta bars human-mimicry. Telegram only.
     const typing =
-      config.mode === 'auto' && source === 'text' && conversation.channel === 'TELEGRAM'
-        ? startTyping(conversation.id)
-        : null;
+      config.mode === 'auto' && conversation.channel === 'TELEGRAM' ? startTyping(conversation.id) : null;
     try {
       const { outcome, quotedRooms, proofTopics } = await generateAndPersistProposal(
         conversation,
@@ -294,6 +383,8 @@ export async function runAgentForInbound(
             await saveDraftAndSendSummary(conversation, quotedRooms, {
               source,
               language: outcome.language as ReplyLanguage,
+              replyText: outcome.decision.reply,
+              mediaText,
             });
           }
           // Auto only: the agent asked to show proof this turn → send the clips
@@ -329,6 +420,7 @@ export async function runVisionForInbound(
    *  image turns out non-construction, the caption falls through to the normal
    *  text agent so a joke/forward still gets a (light) human reply. */
   caption?: string | null,
+  dispatch: MediaDispatch = runMediaNow,
 ): Promise<void> {
   let typing: ReturnType<typeof startTyping> | null = null;
   try {
@@ -370,7 +462,7 @@ export async function runVisionForInbound(
     if (dims.found && dims.confidence === 'high' && dims.rooms.length > 0) {
       const dimsText = describeExtractedRooms(dims.rooms, language);
       await prisma.message.update({ where: { id: inboundMessageId }, data: { text: dimsText } });
-      await runAgentForInbound(conversation, dimsText, inboundMessageId, 'image');
+      await dispatch(conversation, dimsText, inboundMessageId, 'image');
       return;
     }
 
@@ -382,7 +474,7 @@ export async function runVisionForInbound(
     if (dims.isPlanLike === false) {
       if (caption && caption.trim()) {
         console.log('[agent:vision] non-construction image — routing caption to the text agent');
-        await runAgentForInbound(conversation, caption, inboundMessageId, 'text');
+        await dispatch(conversation, caption, inboundMessageId, 'text');
       } else {
         console.log('[agent:vision] non-construction image — no dimensions fallback sent');
       }
@@ -431,6 +523,7 @@ export async function runVoiceForInbound(
   mediaPath: string,
   mimeType: string,
   inboundMessageId: string,
+  dispatch: MediaDispatch = runMediaNow,
 ): Promise<void> {
   let typing: ReturnType<typeof startTyping> | null = null;
   try {
@@ -461,7 +554,7 @@ export async function runVoiceForInbound(
     // future history), then run the normal pipeline on it — same as a typed message
     // (quote, short price, conversation-linked draft, 1:1 image), honoring the mode.
     await prisma.message.update({ where: { id: inboundMessageId }, data: { text: transcript } });
-    await runAgentForInbound(conversation, transcript, inboundMessageId, 'voice');
+    await dispatch(conversation, transcript, inboundMessageId, 'voice');
   } catch (err) {
     console.error('[agent:voice]', err);
   } finally {

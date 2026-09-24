@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { enqueueInboundText, _resetBurstsForTest, type BurstConversation } from './burst';
+import { enqueueInboundText, _resetBurstsForTest, type BurstConversation, type BurstMeta } from './burst';
 
 const conv = (id = 'c1'): BurstConversation => ({ id, aiState: 'AI_HANDLING', aiPaused: false, sharedContactPhone: null, channel: 'TELEGRAM' });
 
@@ -75,5 +75,36 @@ describe('enqueueInboundText (burst coalescing)', () => {
     await vi.advanceTimersByTimeAsync(600);
     expect(runs).toHaveLength(2);
     expect(new Set(runs.map((r) => r.id))).toEqual(new Set(['a', 'b']));
+  });
+
+  it('a voice transcript joins the text burst — ONE reply, in the order they were sent (live bug 0575D)', async () => {
+    // 10:29 voice note, 10:30 "7×5" typed: the transcript is ready only AFTER the
+    // text arrived, and the two used to be answered by two parallel runs.
+    const runs: Array<{ text: string; ids: string[]; meta: BurstMeta }> = [];
+    const run = async (_c: BurstConversation, text: string, ids: string[], meta: BurstMeta) => {
+      runs.push({ text, ids, meta });
+    };
+    const sentAt = Date.now();
+    enqueueInboundText(conv(), '7×5', 'txt', run, { debounceMs: 1000, maxWaitMs: 5000 });
+    await vi.advanceTimersByTimeAsync(400);
+    enqueueInboundText(conv(), "Yo'lkiradan tashqari qancha bo'ladi?", 'voice', run, {
+      debounceMs: 1000,
+      maxWaitMs: 5000,
+      source: 'voice',
+      at: sentAt - 60_000,
+    });
+    await vi.advanceTimersByTimeAsync(1100);
+
+    expect(runs).toHaveLength(1);
+    expect(runs[0].text).toBe("Yo'lkiradan tashqari qancha bo'ladi?\n7×5");
+    expect(runs[0].ids).toEqual(['voice', 'txt']);
+    expect(runs[0].meta).toEqual({ source: 'voice', mediaText: "Yo'lkiradan tashqari qancha bo'ladi?" });
+  });
+
+  it('a text-only batch reports source text and no media text', async () => {
+    const metas: BurstMeta[] = [];
+    enqueueInboundText(conv(), 'salom', 'm1', async (_c, _t, _i, meta) => void metas.push(meta), { debounceMs: 500 });
+    await vi.advanceTimersByTimeAsync(600);
+    expect(metas).toEqual([{ source: 'text', mediaText: '' }]);
   });
 });

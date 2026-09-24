@@ -66,6 +66,22 @@ export function mediaCorrectionNote(
   }
 }
 
+/**
+ * The rooms whose width AND length both appear as numbers in the media's own
+ * text (voice transcript / vision read). The correction note claims "from the
+ * voice note I took…", so it may only list sizes that voice note carried — live
+ * bug 0575D: a delivery-question voice note got "Ovozli xabardan … 4×7, 4×6,
+ * 4×4.8", sizes that came from earlier messages. Pure.
+ */
+export function roomsStatedIn<R extends { innerWidth: number; innerLength: number }>(
+  rooms: ReadonlyArray<R>,
+  mediaText: string,
+): R[] {
+  const said = (mediaText.match(/\d+(?:[.,]\d+)?/g) ?? []).map((n) => Number(n.replace(',', '.')));
+  const has = (v: number) => said.some((n) => Math.abs(n - v) < 0.005);
+  return rooms.filter((r) => has(r.innerWidth) && has(r.innerLength));
+}
+
 /** Friendly ask for typed dimensions when the plan can't be read clearly. */
 export function visionFallbackReply(language: ReplyLanguage): string {
   switch (language) {

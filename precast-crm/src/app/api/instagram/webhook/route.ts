@@ -7,7 +7,7 @@ import { parseInstagramWebhook } from "@/lib/instagram/parse";
 import { igGetName, igDownloadMedia } from "@/lib/instagram/api";
 import { saveBufferToUploads } from "@/lib/uploads";
 import { emitInbox } from "@/lib/inbox-bus";
-import { runAgentForInbound, runVisionForInbound, runVoiceForInbound } from "@/lib/agent/webhook-entry";
+import { runVisionForInbound, runVoiceForInbound, runQueuedBatch, queueMedia } from "@/lib/agent/webhook-entry";
 import { enqueueInboundText } from "@/lib/agent/burst";
 
 /** GET — Meta's subscription handshake: echo hub.challenge iff the verify token matches. */
@@ -101,11 +101,11 @@ export async function POST(req: NextRequest): Promise<Response> {
       };
       if (m.text && m.text.trim()) {
         // Bursts coalesce per conversation — one consolidated reply (burst.ts).
-        enqueueInboundText(conv, m.text, message.id, (c, joined, ids) => runAgentForInbound(c, joined, ids));
+        enqueueInboundText(conv, m.text, message.id, runQueuedBatch);
       } else if (m.media?.kind === "IMAGE" && mediaPath) {
-        void runVisionForInbound(conv, mediaPath, "image/jpeg", message.id).catch((e) => console.error("[ig vision]", e));
+        void runVisionForInbound(conv, mediaPath, "image/jpeg", message.id, null, queueMedia).catch((e) => console.error("[ig vision]", e));
       } else if (m.media?.kind === "VOICE" && mediaPath) {
-        void runVoiceForInbound(conv, mediaPath, "audio/ogg", message.id).catch((e) => console.error("[ig voice]", e));
+        void runVoiceForInbound(conv, mediaPath, "audio/ogg", message.id, queueMedia).catch((e) => console.error("[ig voice]", e));
       }
     } catch (err) {
       console.error("[instagram webhook]", err);

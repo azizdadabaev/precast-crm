@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote } from './vision';
+import { describeExtractedRooms, visionFallbackReply, mediaCorrectionNote, roomsStatedIn } from './vision';
 import { parseDimensions, betterDimensions } from './llm/gemini';
 import type { ExtractedDimensions } from './llm/provider';
 
@@ -121,5 +121,27 @@ describe('mediaCorrectionNote', () => {
   it('localizes the note (ru / uz-cyrillic)', () => {
     expect(mediaCorrectionNote([{ innerWidth: 3, innerLength: 4 }], 'ru', 'image')).toContain('чертеж');
     expect(mediaCorrectionNote([{ innerWidth: 3, innerLength: 4 }], 'uz-cyrillic', 'voice')).toContain('Овозли');
+  });
+});
+
+describe('roomsStatedIn (the correction note only claims sizes the media actually carried)', () => {
+  const r4x7 = { innerWidth: 4, innerLength: 7 };
+  const r4x6 = { innerWidth: 4, innerLength: 6 };
+  const r4x48 = { innerWidth: 4, innerLength: 4.8 };
+
+  it('a voice note with no sizes claims none (live bug 0575D: it listed 4×7, 4×6, 4×4.8)', () => {
+    const transcript =
+      "Xo'p bo'pti, yo'lkirasi naprimer hisoblab nima qilaverasiz. Mahsulot berib yuborish xizmati qancha bo'ladi?";
+    expect(roomsStatedIn([r4x7, r4x6, r4x48], transcript)).toEqual([]);
+  });
+
+  it('keeps only the rooms whose BOTH sides were said', () => {
+    const transcript = "Bitondan bitonga 7 metr, bu yog'i 4-u 80, o'rtasi 6 ga 4.";
+    expect(roomsStatedIn([r4x7, r4x6, r4x48], transcript)).toEqual([r4x7, r4x6]);
+  });
+
+  it('reads decimal commas and the vision dimensions text', () => {
+    expect(roomsStatedIn([r4x48], 'eni 4, boʻyi 4,8')).toEqual([r4x48]);
+    expect(roomsStatedIn([r4x48], "Rasmdagi xona o'lchamlari: 4×4.8 m. Narxi qancha?")).toEqual([r4x48]);
   });
 });

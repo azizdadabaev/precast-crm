@@ -8,7 +8,7 @@ import { isValidWebhookSecret } from "@/lib/telegram/webhook-secret";
 import { tgGetFilePath, tgDownloadFile, TELEGRAM_MAX_DOWNLOAD_BYTES } from "@/lib/telegram/api";
 import { saveBufferToUploads } from "@/lib/uploads";
 import { emitInbox } from "@/lib/inbox-bus";
-import { runAgentForInbound, runVisionForInbound, runVoiceForInbound } from "@/lib/agent/webhook-entry";
+import { runVisionForInbound, runVoiceForInbound, runQueuedBatch, queueMedia } from "@/lib/agent/webhook-entry";
 import { enqueueInboundText } from "@/lib/agent/burst";
 import { handleApprovalCallback } from "@/lib/agent/approval-webhook";
 import {
@@ -356,7 +356,7 @@ export async function POST(req: NextRequest) {
         },
         parsed.text,
         message.id,
-        (conv, joined, ids) => runAgentForInbound(conv, joined, ids),
+        runQueuedBatch,
       );
     }
 
@@ -376,6 +376,7 @@ export async function POST(req: NextRequest) {
         "image/jpeg",
         message.id,
         parsed.text, // caption — falls through to the text agent if the image is non-construction
+        queueMedia, // joins the text burst — one reply per conversation at a time
       ).catch((e) => console.error("[telegram webhook vision]", e));
     }
 
@@ -393,6 +394,7 @@ export async function POST(req: NextRequest) {
         mediaPath,
         "audio/ogg",
         message.id,
+        queueMedia, // the transcript joins the text burst (live bug 0575D: two parallel quotes)
       ).catch((e) => console.error("[telegram webhook voice]", e));
     }
   } catch (err) {

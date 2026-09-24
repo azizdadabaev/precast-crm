@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { extractQuotedRooms, resolveDraftIdentity, roomsFingerprint, mergeDraftRooms, feasibleRooms } from './persist-quote';
+import {
+  extractQuotedRooms,
+  resolveDraftIdentity,
+  roomsFingerprint,
+  mergeDraftRooms,
+  feasibleRooms,
+  extractSpokenAmounts,
+  reconcileDraftWithReply,
+} from './persist-quote';
 import type { LlmMessage } from './llm/provider';
 
 describe('feasibleRooms (no un-buildable beam reaches the draft/card)', () => {
@@ -260,5 +268,130 @@ describe('extractQuotedRooms', () => {
 
   it('returns nothing for an empty / no-tool turn', () => {
     expect(extractQuotedRooms([{ role: 'assistant', content: 'Assalomu alaykum!' }])).toEqual([]);
+  });
+});
+
+describe('extractSpokenAmounts (the totals a customer reads in the reply)', () => {
+  it('reads space-grouped UZS amounts and ignores dimensions, m² rates and weights', () => {
+    const reply = "7x5, 6x4 va 4.8x4 xonalar uchun jami 13 073 960 so'm chiqadi. 1 m² 140 000 so'm, og'irligi 4 938 kg.";
+    expect(extractSpokenAmounts(reply)).toEqual([13_073_960]);
+  });
+
+  it('reads nbsp / dot / comma grouping and an ungrouped long number', () => {
+    expect(extractSpokenAmounts("Jami 6 273 080 so'm")).toEqual([6_273_080]);
+    expect(extractSpokenAmounts('Итого 3.840.760 сум')).toEqual([3_840_760]);
+    expect(extractSpokenAmounts('total 11,248,800')).toEqual([11_248_800]);
+    expect(extractSpokenAmounts('jami 3840760')).toEqual([3_840_760]);
+  });
+
+  it('reads a rounded "mln" figure', () => {
+    expect(extractSpokenAmounts("Taxminan 13 mln so'm")).toEqual([13_000_000]);
+    expect(extractSpokenAmounts('13,1 млн сўм')).toEqual([13_100_000]);
+  });
+
+  it('returns nothing for a reply without a total', () => {
+    expect(extractSpokenAmounts("Ha, aka, faqat materiallarning narxi o'zi.")).toEqual([]);
+  });
+
+  it('never reads a phone number as an amount', () => {
+    expect(extractSpokenAmounts('Azizbek: +998 93 481 33 30, yoki 934813330 ga qo\'ng\'iroq qiling')).toEqual([]);
+  });
+});
+
+describe('reconcileDraftWithReply (the card must show what the text said)', () => {
+  // Live incident 2026-09-24 (draft 0575D): the draft held 4×7, 4×6, 4×4.8; the
+  // agent re-quoted 5×7, 4×6, 4×4.8 and SAID 13 073 960 — but the card merged the
+  // old 4×7 in as a fourth room and showed 17 521 880.
+  const r4x7 = { innerWidth: 4, innerLength: 7 };
+  const r4x6 = { innerWidth: 4, innerLength: 6 };
+  const r4x48 = { innerWidth: 4, innerLength: 4.8 };
+  const r5x7 = { innerWidth: 5, innerLength: 7 };
+  const existing = [r4x7, r4x6, r4x48];
+  const turn = [r5x7, r4x6, r4x48];
+
+  it('a corrected re-quote whose spoken total = this turn replaces the set (0575D)', () => {
+    const merged = mergeDraftRooms(existing, turn);
+    expect(merged.mode).toBe('merge'); // the old behaviour — 4 rooms on the card
+    const r = reconcileDraftWithReply({
+      existingRooms: existing,
+      turnRooms: turn,
+      merged,
+      mergedTotal: 17_521_880,
+      turnTotal: 13_073_960,
+      spokenAmounts: [13_073_960],
+    });
+    expect(r.mode).toBe('replace');
+    expect(r.rooms).toEqual(turn);
+    expect(r.matchesReply).toBe(true);
+  });
+
+  it('a genuinely new room (no overlap) still APPENDS even if only its own price was said', () => {
+    const merged = mergeDraftRooms([r4x6], [r5x7]);
+    const r = reconcileDraftWithReply({
+      existingRooms: [r4x6],
+      turnRooms: [r5x7],
+      merged,
+      mergedTotal: 10_022_680,
+      turnTotal: 6_273_080,
+      spokenAmounts: [6_273_080],
+    });
+    expect(r.mode).toBe('merge');
+    expect(r.rooms).toEqual([r4x6, r5x7]);
+    expect(r.matchesReply).toBe(true);
+  });
+
+  it('keeps the merge when the reply states the combined total', () => {
+    const merged = mergeDraftRooms(existing, turn);
+    const r = reconcileDraftWithReply({
+      existingRooms: existing,
+      turnRooms: turn,
+      merged,
+      mergedTotal: 17_521_880,
+      turnTotal: 13_073_960,
+      spokenAmounts: [17_521_880],
+    });
+    expect(r.mode).toBe('merge');
+    expect(r.rooms).toHaveLength(4);
+    expect(r.matchesReply).toBe(true);
+  });
+
+  it('flags a mismatch when the reply states a total the card would not show', () => {
+    const merged = mergeDraftRooms([], [r4x6]);
+    const r = reconcileDraftWithReply({
+      existingRooms: [],
+      turnRooms: [r4x6],
+      merged,
+      mergedTotal: 3_749_600,
+      turnTotal: 3_749_600,
+      spokenAmounts: [11_248_800],
+    });
+    expect(r.matchesReply).toBe(false);
+  });
+
+  it('tolerates light rounding ("13 mln" for 13 073 960)', () => {
+    const merged = mergeDraftRooms(existing, turn);
+    const r = reconcileDraftWithReply({
+      existingRooms: existing,
+      turnRooms: turn,
+      merged,
+      mergedTotal: 17_521_880,
+      turnTotal: 13_073_960,
+      spokenAmounts: [13_000_000],
+    });
+    expect(r.mode).toBe('replace');
+  });
+
+  it('no amount in the reply → the merge decides, nothing to contradict', () => {
+    const merged = mergeDraftRooms(existing, turn);
+    const r = reconcileDraftWithReply({
+      existingRooms: existing,
+      turnRooms: turn,
+      merged,
+      mergedTotal: 17_521_880,
+      turnTotal: 13_073_960,
+      spokenAmounts: [],
+    });
+    expect(r.mode).toBe('merge');
+    expect(r.matchesReply).toBe(true);
   });
 });

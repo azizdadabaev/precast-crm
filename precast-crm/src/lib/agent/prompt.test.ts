@@ -128,6 +128,32 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt(base)).toContain('COUNT EVERY ROOM via the tool');
   });
 
+  it('teaches outer vs inner size and one room per space (live bug 0575D: 1 room quoted as 3)', () => {
+    // "Bitondan bitonga 7 metr, bu yog'i 4.80, o'rtasi 6 ga 4" is ONE room — outer
+    // 7×4.8, inner 6×4 — and the agent priced three rooms plus a 7×5 fourth.
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('# ROOM SIZES — READ THEM LIKE A BUILDER');
+    expect(p).toContain('OUTER vs INNER');
+    expect(p).toContain('"Bitondan bitonga"');
+    expect(p).toContain('WALL-THICKNESS CHECK');
+    expect(p).toContain('COUNT ROOMS FROM WORDS, NOT NUMBERS');
+    expect(p).toContain('NEVER INVENT A SIZE');
+    expect(p).toContain('WAIT for the answer');
+    expect(p).toContain('A BARE NEW SIZE');
+    // ...and the worked example from that chat is in the few-shot.
+    expect(p).toContain("Ichki o'lchami 6×4 bo'yicha <NARX>");
+  });
+
+  it('no longer tells the agent that every new size is cumulative', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).not.toContain('ROOMS ARE CUMULATIVE');
+    expect(p).toContain('A corrected room REPLACES the old one');
+  });
+
+  it('tells the agent to clear up a confused customer instead of defending the number', () => {
+    expect(buildSystemPrompt(base)).toContain('CUSTOMER DOUBTS OR MISREADS A NUMBER');
+  });
+
   it('pins the detected reply language', () => {
     expect(buildSystemPrompt({ ...base, language: 'ru' })).toContain('Reply in Russian');
     expect(buildSystemPrompt({ ...base, language: 'uz-cyrillic' })).toContain('Uzbek (Cyrillic script)');
