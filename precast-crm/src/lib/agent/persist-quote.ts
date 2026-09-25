@@ -211,35 +211,44 @@ export function extractSpokenAmounts(text: string): number[] {
 const amountsMatch = (spoken: number, total: number) =>
   Math.abs(spoken - total) <= Math.max(1_000, total * 0.02);
 
+/** Same rooms regardless of order (count-aware). */
+function sameRoomSet(a: RoomInput[], b: RoomInput[]): boolean {
+  const key = (rooms: RoomInput[]) => rooms.map((r) => roomsFingerprint([r])).sort().join('|');
+  return a.length === b.length && key(a) === key(b);
+}
+
 /**
- * Make the saved draft (and so the card) agree with the total the reply SAID.
- * mergeDraftRooms appends any room it hasn't seen, so a CORRECTION (7×4 → 7×5)
- * used to land next to the room it replaced — live bug 0575D: the text said
- * 13 073 960 for three rooms, the card showed four rooms and 17 521 880, and the
- * customer left. When the turn re-quoted rooms the draft already holds AND the
- * reply's total is this turn's set (not the merged one), the turn replaces the
- * draft. A genuinely new room (no overlap) still appends — a house arrives room
- * by room. `matchesReply` is false when the reply states amounts and none of them
- * is either total: the card would contradict the text, so it must not be sent.
- * Pure.
+ * Make the saved draft (and so the card) show exactly what the reply's total
+ * covers — the card follows the TEXT, never the other way round.
+ *   - the reply states the merged total (existing + this turn) → keep the merge
+ *     (a house described room by room, "ikkalasi birga <JAMI>")
+ *   - the reply's total is THIS turn's rooms only → they replace the draft, even
+ *     when no room overlaps and even when mergeDraftRooms saw "nothing new"
+ *   - the reply states amounts that are neither → `matchesReply: false`: the card
+ *     would contradict the text, so it must not be sent
+ * Live bugs: 0575D — a correction (7×4 → 7×5) landed next to the room it
+ * replaced (text 13 073 960, card 17 521 880); 0368D — a new drawing's 8 rooms
+ * were appended to the 8 of an older one (text 15 601 740, card 16 rooms /
+ * 41 130 740), and the agent's re-quote after the complaint was a subset of the
+ * polluted draft, so "unchanged" meant the corrected card never went out. Pure.
  */
 export function reconcileDraftWithReply(input: {
   existingRooms: RoomInput[];
   turnRooms: RoomInput[];
-  merged: { rooms: RoomInput[]; mode: 'unchanged' | 'replace' | 'merge' };
+  merged: { rooms: RoomInput[]; changed: boolean; mode: 'unchanged' | 'replace' | 'merge' };
   mergedTotal: number;
   turnTotal: number;
   spokenAmounts: number[];
-}): { rooms: RoomInput[]; mode: 'unchanged' | 'replace' | 'merge'; matchesReply: boolean } {
+}): { rooms: RoomInput[]; mode: 'unchanged' | 'replace' | 'merge'; changed: boolean; matchesReply: boolean } {
   const { existingRooms, turnRooms, merged, mergedTotal, turnTotal, spokenAmounts } = input;
-  if (spokenAmounts.length === 0) return { rooms: merged.rooms, mode: merged.mode, matchesReply: true };
+  const kept = { rooms: merged.rooms, mode: merged.mode, changed: merged.changed };
+  if (spokenAmounts.length === 0) return { ...kept, matchesReply: true };
   const said = (total: number) => spokenAmounts.some((a) => amountsMatch(a, total));
-  const existingFp = new Set(existingRooms.map((r) => roomsFingerprint([r])));
-  const requotedKnownRoom = turnRooms.some((r) => existingFp.has(roomsFingerprint([r])));
-  if (merged.mode === 'merge' && requotedKnownRoom && said(turnTotal) && !said(mergedTotal)) {
-    return { rooms: turnRooms, mode: 'replace', matchesReply: true };
+  if (said(mergedTotal)) return { ...kept, matchesReply: true };
+  if (said(turnTotal)) {
+    return { rooms: turnRooms, mode: 'replace', changed: !sameRoomSet(turnRooms, existingRooms), matchesReply: true };
   }
-  return { rooms: merged.rooms, mode: merged.mode, matchesReply: said(mergedTotal) || said(turnTotal) };
+  return { ...kept, matchesReply: false };
 }
 
 export interface PersistedDraft {
@@ -378,10 +387,9 @@ export async function persistConversationDraft(
       m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
     }));
     const merged = mergeDraftRooms(existingRooms, policyRooms);
-    if (existing && !merged.changed) {
-      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: false, matchesReply: true };
-    }
     const mergedTotals = computeOrderTotals(merged.rooms, NO_EXTRAS, pricing);
+    // Runs even when mergeDraftRooms saw "nothing new": a re-quote of a subset of
+    // a polluted draft must still be able to replace it (live bug 0368D).
     const reconciled = reconcileDraftWithReply({
       existingRooms,
       turnRooms: policyRooms,
@@ -391,10 +399,13 @@ export async function persistConversationDraft(
       spokenAmounts: extractSpokenAmounts(replyText ?? ''),
     });
     if (reconciled.mode !== merged.mode) {
-      console.log(`[agent:draft] reply total matches this turn's rooms — ${merged.mode} → ${reconciled.mode}`);
+      console.log(`[agent:draft] reply total covers this turn's rooms only — ${merged.mode} → ${reconciled.mode}`);
+    }
+    const { matchesReply } = reconciled;
+    if (existing && !reconciled.changed) {
+      return { projectId: existing.id, draftNumber: existing.draftNumber, isNew: false, changed: false, matchesReply };
     }
     const finalRooms = reconciled.rooms;
-    const { matchesReply } = reconciled;
 
     const { computed } =
       finalRooms === merged.rooms ? mergedTotals : computeOrderTotals(finalRooms, NO_EXTRAS, pricing);

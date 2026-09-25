@@ -325,7 +325,23 @@ describe('reconcileDraftWithReply (the card must show what the text said)', () =
     expect(r.matchesReply).toBe(true);
   });
 
-  it('a genuinely new room (no overlap) still APPENDS even if only its own price was said', () => {
+  it('an added room APPENDS when the reply states the combined total ("ikkalasi birga")', () => {
+    const merged = mergeDraftRooms([r4x6], [r5x7]);
+    const r = reconcileDraftWithReply({
+      existingRooms: [r4x6],
+      turnRooms: [r5x7],
+      merged,
+      mergedTotal: 10_022_680,
+      turnTotal: 6_273_080,
+      spokenAmounts: [6_273_080, 10_022_680],
+    });
+    expect(r.mode).toBe('merge');
+    expect(r.rooms).toEqual([r4x6, r5x7]);
+    expect(r.changed).toBe(true);
+    expect(r.matchesReply).toBe(true);
+  });
+
+  it('a reply naming only this turn\'s total replaces the draft — the card follows the text', () => {
     const merged = mergeDraftRooms([r4x6], [r5x7]);
     const r = reconcileDraftWithReply({
       existingRooms: [r4x6],
@@ -335,8 +351,8 @@ describe('reconcileDraftWithReply (the card must show what the text said)', () =
       turnTotal: 6_273_080,
       spokenAmounts: [6_273_080],
     });
-    expect(r.mode).toBe('merge');
-    expect(r.rooms).toEqual([r4x6, r5x7]);
+    expect(r.mode).toBe('replace');
+    expect(r.rooms).toEqual([r5x7]);
     expect(r.matchesReply).toBe(true);
   });
 
@@ -379,6 +395,70 @@ describe('reconcileDraftWithReply (the card must show what the text said)', () =
       spokenAmounts: [13_000_000],
     });
     expect(r.mode).toBe('replace');
+  });
+
+  describe('live bug 0368D — a new drawing appended to an older one', () => {
+    // The draft held 8 rooms from an earlier drawing; the customer's new drawing
+    // had 8 DIFFERENT rooms. The text said 15 601 740, the card showed 16 rooms and
+    // 41 130 740. No room overlapped, so the old overlap rule never fired.
+    const old = [
+      { innerWidth: 4.8, innerLength: 5.23 }, { innerWidth: 3.7, innerLength: 7.53 },
+      { innerWidth: 3.9, innerLength: 4.04 }, { innerWidth: 2.6, innerLength: 4.02 },
+      { innerWidth: 4, innerLength: 5.1 }, { innerWidth: 2.65, innerLength: 4.02 },
+      { innerWidth: 2.35, innerLength: 4.02 }, { innerWidth: 5.9, innerLength: 6.21 },
+    ];
+    const drawing = [
+      { innerWidth: 3.15, innerLength: 3.7 }, { innerWidth: 3.5, innerLength: 5.8 },
+      { innerWidth: 3.15, innerLength: 3.7 }, { innerWidth: 1.86, innerLength: 2.2 },
+      { innerWidth: 3.5, innerLength: 4.6 }, { innerWidth: 3.5, innerLength: 4.6 },
+      { innerWidth: 3.5, innerLength: 4.6 }, { innerWidth: 1.2, innerLength: 2 },
+    ];
+
+    it('the new drawing replaces the old rooms when the reply names its total', () => {
+      const merged = mergeDraftRooms(old, drawing);
+      expect(merged.rooms).toHaveLength(16); // what went out on the card
+      const r = reconcileDraftWithReply({
+        existingRooms: old,
+        turnRooms: drawing,
+        merged,
+        mergedTotal: 41_130_740,
+        turnTotal: 15_601_740,
+        spokenAmounts: extractSpokenAmounts("Hamma xonalar birgalikda 15 601 740 so'm chiqadi, aka."),
+      });
+      expect(r.mode).toBe('replace');
+      expect(r.rooms).toEqual(drawing);
+      expect(r.changed).toBe(true);
+      expect(r.matchesReply).toBe(true);
+    });
+
+    it('the re-quote after the complaint fixes a polluted draft (a subset used to read as "unchanged")', () => {
+      const polluted = [...old, ...drawing];
+      const merged = mergeDraftRooms(polluted, drawing);
+      expect(merged.changed).toBe(false); // the old path stopped here — no corrected card
+      const r = reconcileDraftWithReply({
+        existingRooms: polluted,
+        turnRooms: drawing,
+        merged,
+        mergedTotal: 41_130_740,
+        turnTotal: 15_601_740,
+        spokenAmounts: extractSpokenAmounts("Uzr, aka, to'g'ri hisob — 15 601 740 so'm."),
+      });
+      expect(r.rooms).toEqual(drawing);
+      expect(r.changed).toBe(true); // → the corrected card goes out
+    });
+
+    it('re-quoting a draft that already matches stays unchanged (no duplicate card)', () => {
+      const merged = mergeDraftRooms(drawing, drawing);
+      const r = reconcileDraftWithReply({
+        existingRooms: drawing,
+        turnRooms: drawing,
+        merged,
+        mergedTotal: 15_601_740,
+        turnTotal: 15_601_740,
+        spokenAmounts: [15_601_740],
+      });
+      expect(r.changed).toBe(false);
+    });
   });
 
   it('no amount in the reply → the merge decides, nothing to contradict', () => {

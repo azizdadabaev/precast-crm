@@ -154,6 +154,13 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt(base)).toContain('CUSTOMER DOUBTS OR MISREADS A NUMBER');
   });
 
+  it('forbids promising to fix or resend the picture (live bug 0368D: "Hozir yangiladim… to\'g\'ri rasm ham boradi")', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain('THE CALCULATION PICTURE IS SENT BY THE SYSTEM, NOT BY YOU');
+    expect(p).toContain('NEVER say "yangiladim"');
+    expect(p).toContain('call get_quote again for exactly the rooms they have NOW');
+  });
+
   it('pins the detected reply language', () => {
     expect(buildSystemPrompt({ ...base, language: 'ru' })).toContain('Reply in Russian');
     expect(buildSystemPrompt({ ...base, language: 'uz-cyrillic' })).toContain('Uzbek (Cyrillic script)');
