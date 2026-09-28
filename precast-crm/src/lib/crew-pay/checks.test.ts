@@ -65,3 +65,20 @@ describe("closeBlockers", () => {
     expect(closeBlockers(issues, "2026-09-14")).toHaveLength(0);
   });
 });
+
+describe("OLD_DEBT needs continuous debt (deferred #5)", () => {
+  it("does not warn when the debt was cleared in between and came back", () => {
+    const i = mk({
+      days: [{ date: "2026-09-15", moulded: 1000, broken: 0, attendance: { a: 1 } }], // earns 500 000 → clears the debt
+      ledger: [
+        { id: "1", seq: 1, date: "2026-09-01", workerId: "a", type: "ADVANCE", amount: 100000 },
+        { id: "2", seq: 2, date: "2026-09-29", workerId: "a", type: "ADVANCE", amount: 900000 },
+      ],
+    });
+    expect(codes(i, "2026-10-02")).not.toContain("OLD_DEBT");
+  });
+  it("still warns when the debt never cleared for 30 days", () => {
+    const i = mk({ ledger: [{ id: "1", seq: 1, date: "2026-09-01", workerId: "a", type: "ADVANCE", amount: 100000 }] });
+    expect(codes(i, "2026-10-02")).toContain("OLD_DEBT");
+  });
+});

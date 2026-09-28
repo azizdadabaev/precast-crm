@@ -129,3 +129,14 @@ describe("fmtSom rounds fractional so'm for display", () => {
     expect(fmtSom(-0.2)).toBe("0");
   });
 });
+
+describe("future dates are rejected (deferred #2)", () => {
+  it("rejects a production day dated after today", () =>
+    expect(() => validateDayWrite({ date: "2026-09-29", moulded: 100, broken: 0, attendance: { a: 1 } }, input, { today: "2026-09-28" }))
+      .toThrowError(/Келажак/));
+  it("accepts today", () =>
+    expect(() => validateDayWrite({ date: "2026-09-28", moulded: 100, broken: 0, attendance: { a: 1 } }, input, { today: "2026-09-28" }))
+      .not.toThrow());
+  it("rejects a cash entry dated after today", () =>
+    expect(() => validateLedgerWrite({ date: "2026-10-01", workerId: "a", type: "ADVANCE", amount: 1 }, "2026-09-28")).toThrowError(/Келажак/));
+});

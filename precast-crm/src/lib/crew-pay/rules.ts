@@ -13,6 +13,7 @@ export class CrewPayError extends Error {
 
 export const CLOSED_WEEK_MESSAGE = "Бу ҳафта ёпилган — аввал қайта очинг · This week is closed";
 
+const FUTURE_DATE = "Келажакдаги санага ёзиб бўлмайди — бугунги ёки ўтган санани танланг";
 const BEFORE_FIRST_WEEK = `Сана ${fmtDay(FIRST_WEEK_START)}.2026 дан олдин бўлиши мумкин эмас`;
 
 /** Calendar date in Asia/Tashkent (the plant's business day). */
@@ -83,8 +84,9 @@ export interface DayWrite {
   notes?: string | null;
 }
 
-export function validateDayWrite(day: DayWrite, input: EngineInput, opts: { confirmNoAttendance?: boolean }): void {
+export function validateDayWrite(day: DayWrite, input: EngineInput, opts: { confirmNoAttendance?: boolean; today?: IsoDate }): void {
   if (day.date < FIRST_WEEK_START) throw new CrewPayError(BEFORE_FIRST_WEEK);
+  if (opts.today && day.date > opts.today) throw new CrewPayError(FUTURE_DATE);
   if (day.moulded != null && day.broken > day.moulded) throw new CrewPayError("Синган блоклар қолипланганидан кўп бўлиши мумкин эмас");
   if (day.moulded == null && day.broken > 0) throw new CrewPayError("Аввал қолипланган блоклар сонини киритинг");
   for (const [workerId, v] of Object.entries(day.attendance)) {
@@ -107,8 +109,9 @@ export interface LedgerWrite {
   amount: number;
 }
 
-export function validateLedgerWrite(e: LedgerWrite): void {
+export function validateLedgerWrite(e: LedgerWrite, today?: IsoDate): void {
   if (e.date < FIRST_WEEK_START) throw new CrewPayError(BEFORE_FIRST_WEEK);
+  if (today && e.date > today) throw new CrewPayError(FUTURE_DATE);
   if (!Number.isInteger(e.amount) || e.amount === 0) throw new CrewPayError("Сумма бутун сон ва нолдан фарқли бўлиши керак");
   if (e.amount < 0 && e.type !== "CORRECTION") throw new CrewPayError("Манфий сумма фақат «Тузатиш» учун — хатони тузатиш билан қайтаринг");
 }

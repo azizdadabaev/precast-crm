@@ -143,6 +143,8 @@ export interface PayView {
   locked: boolean;
   /** Only the newest closed week can be reopened. */
   canReopen: boolean;
+  /** Sunday has passed — closing earlier asks for confirmation in the UI. */
+  weekEnded: boolean;
   snapshot: unknown | null;
   debtCap: number;
   rows: PayRow[];
@@ -162,6 +164,7 @@ export function payView(s: CrewState, weekStart: IsoDate, today: IsoDate): PayVi
     weekStart, weekEnd: addDays(weekStart, 6), closed: s.closedWeeks.has(weekStart),
     locked: isLocked(s.closedWeeks, weekStart),
     canReopen: s.closedWeeks.has(weekStart) && [...s.closedWeeks].sort().at(-1) === weekStart,
+    weekEnded: addDays(weekStart, 6) < today,
     snapshot: s.snapshots.get(weekStart) ?? null,
     debtCap: settingOn(s.input.settings, "DEBT_CAP", weekStart) ?? 1,
     rows,

@@ -64,7 +64,7 @@ export async function saveDay(user: Actor, body: DayBody) {
     const s = await loadCrewState(tx);
     assertWeeksOpen(s.closedWeeks, [body.date]);
     validateDayWrite({ date: body.date, moulded: body.moulded, broken: body.broken, attendance: body.attendance }, s.input,
-      { confirmNoAttendance: body.confirmNoAttendance });
+      { confirmNoAttendance: body.confirmNoAttendance, today: todayTashkent() });
     const day = await tx.crewDay.upsert({
       where: { workDate: toDbDate(body.date) },
       create: { workDate: toDbDate(body.date), moulded: body.moulded, broken: body.broken, notes: body.notes ?? null, updatedById: user.id },
@@ -79,12 +79,13 @@ export async function saveDay(user: Actor, body: DayBody) {
   return { id };
 }
 
-export async function addLedgerEntry(user: Actor, body: LedgerBody) {
+/** `reversesEntryId` is internal (set by reverseLedgerEntry), never taken from the request body. */
+export async function addLedgerEntry(user: Actor, body: LedgerBody, link: { reversesEntryId?: string } = {}) {
   const result = await prisma.$transaction(async (tx) => {
     const s = await loadCrewState(tx);
     if (!s.input.workers.some((w) => w.id === body.workerId)) throw new CrewPayError("Номаълум ишчи");
     assertWeeksOpen(s.closedWeeks, [body.date]);
-    validateLedgerWrite(body);
+    validateLedgerWrite(body, todayTashkent());
     if (body.clientKey && (await tx.crewLedgerEntry.findUnique({ where: { clientKey: body.clientKey } }))) {
       throw new CrewPayError("Бу ёзув аллақачон сақланган", 409);
     }
@@ -99,7 +100,7 @@ export async function addLedgerEntry(user: Actor, body: LedgerBody) {
     const e = await tx.crewLedgerEntry.create({
       data: { entryDate: toDbDate(body.date), workerId: body.workerId, type: body.type, amount: body.amount,
               method: body.method, reason: body.reason ?? null, signed: body.signed ?? false,
-              clientKey: body.clientKey ?? null, createdById: user.id },
+              clientKey: body.clientKey ?? null, reversesEntryId: link.reversesEntryId ?? null, createdById: user.id },
     });
     return { id: e.id, warning };
   }, SERIALIZABLE);
@@ -124,12 +125,11 @@ export async function reverseLedgerEntry(user: Actor, id: string, body: ReverseB
   const orig = await prisma.crewLedgerEntry.findUnique({ where: { id } });
   if (!orig) throw new CrewPayError("Ёзув топилмади", 404);
   const amount = body.amount ?? -orig.amount;
-  const created = await addLedgerEntry(user, {
+  // The link is written in the same insert, so a correction can never exist unlinked.
+  return addLedgerEntry(user, {
     date: body.date, workerId: orig.workerId, type: "CORRECTION", amount, method: orig.method,
     reason: body.reason ?? `№${orig.seq} ни қайтариш`, signed: false,
-  });
-  await prisma.crewLedgerEntry.update({ where: { id: created.id }, data: { reversesEntryId: orig.id } });
-  return created;
+  }, { reversesEntryId: orig.id });
 }
 
 export async function payWorkers(user: Actor, weekStart: IsoDate, body: PayBody) {

@@ -89,7 +89,12 @@ export function runChecks(input: EngineInput, weeks: Map<IsoDate, WeekCalc>, tod
   if (monthAgo >= FIRST_WEEK_START) {
     for (const w of input.workers) {
       const now = balanceAt(input, weeks, w.id, today);
-      if (now < 0 && balanceAt(input, weeks, w.id, monthAgo) < 0) {
+      // In debt the WHOLE time: check every point the balance can change inside
+      // the 30 days (each week start and each of the worker's ledger dates).
+      const points = [monthAgo, today,
+        ...[...weeks.keys()].filter((ws) => ws > monthAgo && ws <= today),
+        ...input.ledger.filter((e) => e.workerId === w.id && e.date > monthAgo && e.date <= today).map((e) => e.date)];
+      if (now < 0 && points.every((d) => balanceAt(input, weeks, w.id, d) < 0)) {
         out.push({ level: "warning", code: "OLD_DEBT", workerId: w.id,
           message: `${w.name} ${OLD_DEBT_DAYS} кундан бери қарздор (${fmtSom(-now)} сўм) — ёзма келишув ёки ушлаб қолиш буйруғи керак` });
       }

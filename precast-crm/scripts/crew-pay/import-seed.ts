@@ -38,8 +38,14 @@ async function main() {
   const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as FullSeed;
   const golden = JSON.parse(readFileSync(goldenPath, "utf-8"));
 
-  const counts = await Promise.all([prisma.crewWorker.count(), prisma.crewDay.count(), prisma.crewLedgerEntry.count(), prisma.crewRate.count()]);
-  if (counts.some((c) => c > 0)) throw new Error(`crew tables are not empty (${counts.join("/")}) — refusing to import twice`);
+  const tables = {
+    workers: prisma.crewWorker.count(), days: prisma.crewDay.count(), ledger: prisma.crewLedgerEntry.count(),
+    rates: prisma.crewRate.count(), settings: prisma.crewSetting.count(), weeks: prisma.crewPayWeek.count(),
+  };
+  const counts = Object.fromEntries(await Promise.all(Object.entries(tables).map(async ([k, p]) => [k, await p])));
+  if (Object.values(counts).some((c) => (c as number) > 0)) {
+    throw new Error(`crew tables are not empty (${JSON.stringify(counts)}) — refusing to import twice`);
+  }
 
   await prisma.$transaction(async (tx) => {
     for (const s of seed.settings) {

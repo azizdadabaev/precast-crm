@@ -5,6 +5,9 @@ export const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Сана Y
 export const WeekStartSchema = IsoDateSchema.refine(isMonday, "Ҳафта душанбадан бошланиши керак");
 const Method = z.enum(["CASH", "CARD", "OFFSET", "OTHER"]);
 const Text = z.string().trim().max(500).nullable().optional();
+// Guards a typo (an extra zero or three) before it reaches the Int column.
+const MAX_SOM = 1_000_000_000;
+const TOO_BIG = "Сумма жуда катта — 1 000 000 000 сўмдан ошмаслиги керак";
 
 export const DayBody = z.object({
   date: IsoDateSchema,
@@ -19,8 +22,9 @@ export type DayBody = z.infer<typeof DayBody>;
 export const LedgerBody = z.object({
   date: IsoDateSchema,
   workerId: z.string().min(1),
-  type: z.enum(["ADVANCE", "WEEKLY_PAY", "CORRECTION"]),
-  amount: z.number().int(),
+  // Weekly pay is recorded only through the Pay button (dated inside its week).
+  type: z.enum(["ADVANCE", "CORRECTION"]),
+  amount: z.number().int().min(-MAX_SOM, TOO_BIG).max(MAX_SOM, TOO_BIG),
   method: Method.default("CASH"),
   reason: Text,
   signed: z.boolean().optional(),
@@ -32,12 +36,12 @@ export type LedgerBody = z.infer<typeof LedgerBody>;
 export const LedgerPatchBody = z.object({ reason: Text, signed: z.boolean().optional(), method: Method.optional() });
 export type LedgerPatchBody = z.infer<typeof LedgerPatchBody>;
 
-export const ReverseBody = z.object({ date: IsoDateSchema, amount: z.number().int().optional(), reason: Text });
+export const ReverseBody = z.object({ date: IsoDateSchema, amount: z.number().int().min(-MAX_SOM, TOO_BIG).max(MAX_SOM, TOO_BIG).optional(), reason: Text });
 export type ReverseBody = z.infer<typeof ReverseBody>;
 
 export const PayBody = z.object({
   payments: z.array(z.object({
-    workerId: z.string().min(1), amount: z.number().int().min(0), method: Method, clientKey: z.string().min(8).max(64),
+    workerId: z.string().min(1), amount: z.number().int().min(0).max(MAX_SOM, TOO_BIG), method: Method, clientKey: z.string().min(8).max(64),
   })).min(1),
 });
 export type PayBody = z.infer<typeof PayBody>;

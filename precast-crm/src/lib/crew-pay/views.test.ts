@@ -81,3 +81,10 @@ describe("views mark weeks before the last closed week as locked (final review #
     expect(payView(s2, "2026-09-21", "2026-09-30")).toMatchObject({ closed: true, locked: true, canReopen: true });
   });
 });
+
+describe("payView tells whether the week has ended (deferred #2)", () => {
+  it("is false mid-week and true after Sunday", () => {
+    expect(payView(state, "2026-09-21", "2026-09-26").weekEnded).toBe(false);
+    expect(payView(state, "2026-09-21", "2026-09-28").weekEnded).toBe(true);
+  });
+});

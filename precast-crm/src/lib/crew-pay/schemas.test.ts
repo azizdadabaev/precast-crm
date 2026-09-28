@@ -25,3 +25,18 @@ describe("crew pay request schemas", () => {
     expect(ReopenBody.safeParse({ reason: "Oybek sanog'i xato" }).success).toBe(true);
   });
 });
+
+describe("deferred #4 and #8", () => {
+  it("records weekly pay only through the Pay button, not the ledger form", () =>
+    expect(LedgerBody.safeParse({ date: "2026-09-22", workerId: "a", type: "WEEKLY_PAY", amount: 1, method: "CASH" }).success).toBe(false));
+  it("still accepts advances and corrections", () => {
+    expect(LedgerBody.safeParse({ date: "2026-09-22", workerId: "a", type: "ADVANCE", amount: 1, method: "CASH" }).success).toBe(true);
+    expect(LedgerBody.safeParse({ date: "2026-09-22", workerId: "a", type: "CORRECTION", amount: -1, method: "CASH" }).success).toBe(true);
+  });
+  it("rejects a typo-sized amount with an Uzbek message", () => {
+    const r = LedgerBody.safeParse({ date: "2026-09-22", workerId: "a", type: "ADVANCE", amount: 5_000_000_000, method: "CASH" });
+    expect(r.success).toBe(false);
+    expect(JSON.stringify(r)).toMatch(/Сумма жуда катта/);
+    expect(PayBody.safeParse({ payments: [{ workerId: "a", amount: 5_000_000_000, method: "CASH", clientKey: "abcdefgh" }] }).success).toBe(false);
+  });
+});
