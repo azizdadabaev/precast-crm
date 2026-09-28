@@ -121,3 +121,11 @@ describe("closed weeks lock everything before them (final review #1)", () => {
     expect(() => assertCanReopen(closed, "2026-09-21")).not.toThrow();
   });
 });
+
+describe("fmtSom rounds fractional so'm for display", () => {
+  it("rounds half away from zero and never shows −0", () => {
+    expect(fmtSom(785295.2)).toBe("785 295");
+    expect(fmtSom(785295.5)).toBe("785 296");
+    expect(fmtSom(-0.2)).toBe("0");
+  });
+});

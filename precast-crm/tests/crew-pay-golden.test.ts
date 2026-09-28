@@ -5,7 +5,7 @@ import { seedToEngineInput, type Seed } from "./crew-pay-seed";
 
 const load = (f: string) => JSON.parse(readFileSync(`tests/fixtures/crew-pay/${f}`, "utf-8"));
 
-for (const [seedFile, goldenFile] of [["seed.json", "golden.json"], ["seed-cap50.json", "golden-cap50.json"]]) {
+for (const [seedFile, goldenFile] of [["seed.json", "golden.json"], ["seed-cap50.json", "golden-cap50.json"], ["seed-allow3.json", "golden-allow3.json"]]) {
   describe(`golden parity with the workbook engine (${seedFile})`, () => {
     const seed = load(seedFile) as Seed;
     const golden = load(goldenFile);

@@ -1,9 +1,11 @@
 import type { IsoDate } from "./engine";
 
-/** 5928500 → "5 928 500"; negatives use a real minus sign. Whole so'm only. */
+/** 5928500 → "5 928 500"; negatives use a real minus sign. Shown in whole so'm,
+ *  rounded half away from zero (a pot can carry fractions with a breakage allowance). */
 export function fmtSom(n: number): string {
-  const s = String(Math.abs(Math.trunc(n))).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  return n < 0 ? `−${s}` : s;
+  const r = Math.floor(Math.abs(n) + 0.5);
+  const s = String(r).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return n < 0 && r !== 0 ? `−${s}` : s;
 }
 
 /** "2026-09-04" → "04.09" */

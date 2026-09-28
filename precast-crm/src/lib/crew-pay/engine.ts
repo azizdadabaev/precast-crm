@@ -104,7 +104,9 @@ export function dayCalc(input: EngineInput, day: EngineDay): DayCalc {
     good: moulded - broken,
     paidBlocks,
     rate,
-    payValue: xround(paidBlocks * (rate ?? 0)),
+    // Not rounded per day: the workbook sums exact pay values and rounds only
+    // each worker's share (golden-allow3 proves parity with a 3 % allowance).
+    payValue: paidBlocks * (rate ?? 0),
     crewDays,
   };
 }
