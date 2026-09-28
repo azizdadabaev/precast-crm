@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { api, ApiError } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Som, WeekPicker, useCrewWeek, CrewError } from "@/components/crew-pay/shared";
+import { Som, WeekPicker, useCrewWeek, CrewError, weekFromQuery } from "@/components/crew-pay/shared";
 import { fmtDay, fmtSom } from "@/lib/crew-pay/format";
 import { todayTashkent } from "@/lib/crew-pay/rules";
 import type { DaysView } from "@/lib/crew-pay/views";
@@ -15,8 +16,11 @@ import type { DaysView } from "@/lib/crew-pay/views";
 type Row = DaysView["rows"][number];
 const next = (v: number | undefined) => (v === 1 ? 0.5 : v === 0.5 ? undefined : 1);
 
-function DayCard({ row, workers, closed, onSaved }: { row: Row; workers: DaysView["workers"]; closed: boolean; onSaved: () => void }) {
+function DayCard({ row, workers, closed: weekClosed, onSaved }: { row: Row; workers: DaysView["workers"]; closed: boolean; onSaved: () => void }) {
   const today = todayTashkent();
+  const future = row.date > today;
+  const closed = weekClosed || future;
+  const employed = (w: DaysView["workers"][number]) => w.joinedOn <= row.date && (!w.leftOn || row.date <= w.leftOn);
   const [moulded, setMoulded] = useState(row.moulded == null ? "" : String(row.moulded));
   const [broken, setBroken] = useState(row.broken ? String(row.broken) : "");
   const [att, setAtt] = useState<Record<string, number>>(row.attendance);
@@ -48,7 +52,7 @@ function DayCard({ row, workers, closed, onSaved }: { row: Row; workers: DaysVie
   return (
     <div className={cn("rounded-md border p-3 space-y-3", row.date === today && "border-primary")}>
       <div className="flex items-baseline justify-between gap-2">
-        <div className="font-semibold">{row.dayName} <span className="font-mono tabular-nums text-muted-foreground">{fmtDay(row.date)}</span></div>
+        <div className="font-semibold">{row.dayName} <span className="font-mono tabular-nums text-muted-foreground">{fmtDay(row.date)}</span>{future && <span className="ml-2 text-xs font-normal text-muted-foreground">ҳали келмаган</span>}</div>
         <div className="text-sm"><Som value={row.payValue} /></div>
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -65,9 +69,9 @@ function DayCard({ row, workers, closed, onSaved }: { row: Row; workers: DaysVie
         {workers.map((w) => {
           const v = att[w.id];
           return (
-            <button key={w.id} type="button" disabled={closed}
+            <button key={w.id} type="button" disabled={closed || !employed(w)} title={employed(w) ? undefined : "Бу санада ишламаган"}
               onClick={() => setAtt((a) => { const n = { ...a }; const nv = next(a[w.id]); if (nv) n[w.id] = nv; else delete n[w.id]; return n; })}
-              className={cn("min-h-[44px] rounded-full border px-3 text-sm",
+              className={cn("min-h-[44px] rounded-full border px-3 text-sm disabled:opacity-50",
                 v === 1 ? "bg-primary text-primary-foreground border-primary" : v === 0.5 ? "border-primary text-primary" : "text-muted-foreground")}>
               {w.name} <span className="font-mono">{v === 1 ? "1" : v === 0.5 ? "½" : "—"}</span>
             </button>
@@ -75,7 +79,7 @@ function DayCard({ row, workers, closed, onSaved }: { row: Row; workers: DaysVie
         })}
         {!closed && workers.length > 0 && (
           <Button type="button" variant="ghost" size="sm" className="min-h-[44px]"
-            onClick={() => setAtt(Object.fromEntries(workers.map((w) => [w.id, 1])))}>Ҳамма келди</Button>
+            onClick={() => setAtt(Object.fromEntries(workers.filter(employed).map((w) => [w.id, 1])))}>Ҳамма келди</Button>
         )}
       </div>
       <Input placeholder="Изоҳ" disabled={closed} value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -89,7 +93,8 @@ function DayCard({ row, workers, closed, onSaved }: { row: Row; workers: DaysVie
 }
 
 export default function CrewDaysPage() {
-  const [week, setWeek] = useCrewWeek();
+  const params = useSearchParams();
+  const [week, setWeek] = useCrewWeek(weekFromQuery(params.get("week")));
   const qc = useQueryClient();
   const { data, error, isLoading } = useQuery<DaysView>({
     queryKey: ["crew-pay", "days", week],

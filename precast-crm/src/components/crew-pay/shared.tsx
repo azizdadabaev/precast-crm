@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { addDays, weekStartOf, type IsoDate, type PayStatus } from "@/lib/crew-pay/engine";
 import { fmtDay, fmtSom } from "@/lib/crew-pay/format";
 import { todayTashkent } from "@/lib/crew-pay/rules";
 import type { CrewIssue } from "@/lib/crew-pay/checks";
+import { issueHref } from "@/lib/crew-pay/links";
 
 export function Som({ value, className, unit = true }: { value: number; className?: string; unit?: boolean }) {
   return (
@@ -64,8 +68,10 @@ export function IssuesBanner({ issues }: { issues: CrewIssue[] }) {
       {open && (
         <ul className="mt-2 space-y-1">
           {[...errors, ...warnings].map((i, k) => (
-            <li key={k} className={i.level === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-400"}>
-              {i.message}
+            <li key={k}>
+              <Link href={issueHref(i)} className={cn("hover:underline", i.level === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-400")}>
+                {i.message}
+              </Link>
             </li>
           ))}
         </ul>
@@ -89,3 +95,37 @@ export const STATUS_UZ: Record<PayStatus, { label: string; variant: "success" | 
   YOU_OWE: { label: "Сиз қарздорсиз", variant: "secondary" },
   OWES_YOU: { label: "Ишчи қарздор", variant: "destructive" },
 };
+
+/** In-app replacement for window.prompt: one labelled field, Cancel / Save. */
+export function PromptDialog({
+  open, title, label, initial = "", type = "text", minLength = 0, confirmText = "Сақлаш", onClose, onSubmit,
+}: {
+  open: boolean; title: string; label: string; initial?: string; type?: "text" | "date";
+  minLength?: number; confirmText?: string; onClose: () => void; onSubmit: (value: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  useEffect(() => { if (open) setValue(initial); }, [open, initial]);
+  const ok = value.trim().length >= minLength;
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (ok) onSubmit(value.trim()); }}>
+          <label className="block text-sm text-muted-foreground">{label}
+            <Input autoFocus type={type} value={value} onChange={(e) => setValue(e.target.value)} className="mt-1" />
+          </label>
+          {minLength > 0 && !ok && <p className="text-xs text-muted-foreground">Камида {minLength} та белги</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>Бекор қилиш</Button>
+            <Button type="submit" disabled={!ok}>{confirmText}</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** The ?week=YYYY-MM-DD query value if it is a valid Monday (links from the checks banner). */
+export function weekFromQuery(v: string | null): IsoDate | undefined {
+  return v && /^\d{4}-\d{2}-\d{2}$/.test(v) && weekStartOf(v) === v ? v : undefined;
+}

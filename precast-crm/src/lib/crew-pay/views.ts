@@ -78,7 +78,7 @@ export function overviewView(s: CrewState, weekStart: IsoDate, today: IsoDate): 
 export interface DaysView {
   weekStart: IsoDate;
   closed: boolean;
-  workers: Array<{ id: string; code: string; name: string }>;
+  workers: Array<{ id: string; code: string; name: string; joinedOn: IsoDate; leftOn: IsoDate | null }>;
   rows: Array<{
     date: IsoDate; dayName: string; moulded: number | null; broken: number; notes: string | null;
     attendance: Record<string, number>; good: number; paidBlocks: number; crewDays: number; rate: number | null; payValue: number;
@@ -90,7 +90,7 @@ export function daysView(s: CrewState, weekStart: IsoDate): DaysView {
   const weekEnd = addDays(weekStart, 6);
   const workers = s.input.workers
     .filter((w) => w.joinedOn <= weekEnd && (!w.leftOn || w.leftOn >= weekStart))
-    .map((w) => ({ id: w.id, code: w.code, name: w.name }));
+    .map((w) => ({ id: w.id, code: w.code, name: w.name, joinedOn: w.joinedOn, leftOn: w.leftOn }));
   const rows = Array.from({ length: 7 }, (_, k) => {
     const date = addDays(weekStart, k);
     const day = s.input.days.find((d) => d.date === date) ?? { date, moulded: null, broken: 0, attendance: {} };
@@ -113,10 +113,13 @@ export interface LedgerRowView extends EngineLedgerEntry, LedgerMeta {
   weekStart: IsoDate;
   balanceAfter: number;
   closed: boolean;
+  /** A correction already reverses this entry. */
+  reversed: boolean;
 }
 export interface LedgerView { entries: LedgerRowView[]; totals: Record<LedgerType, number> }
 
 export function ledgerView(s: CrewState, f: { workerId?: string; type?: LedgerType; weekStart?: IsoDate }): LedgerView {
+  const reversedIds = new Set([...s.ledgerMeta.values()].map((m) => m.reversesEntryId).filter(Boolean));
   const entries = s.input.ledger
     .filter((e) => (!f.workerId || e.workerId === f.workerId) && (!f.type || e.type === f.type) &&
                    (!f.weekStart || inWeek(e.date, f.weekStart)))
@@ -128,6 +131,7 @@ export function ledgerView(s: CrewState, f: { workerId?: string; type?: LedgerTy
       weekStart: weekStartOf(e.date),
       balanceAfter: balanceAt(s.input, s.weeks, e.workerId, e.date),
       closed: isLocked(s.closedWeeks, e.date),
+      reversed: reversedIds.has(e.id),
     }));
   const totals: Record<LedgerType, number> = { ADVANCE: 0, WEEKLY_PAY: 0, CORRECTION: 0 };
   for (const e of entries) totals[e.type] += e.amount;

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock, Printer } from "lucide-react";
 import { api } from "@/lib/fetcher";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Som, WeekPicker, CrewError, STATUS_UZ, newKey } from "@/components/crew-pay/shared";
+import { Som, WeekPicker, CrewError, STATUS_UZ, newKey, PromptDialog, weekFromQuery } from "@/components/crew-pay/shared";
 import { fmtDay, fmtPct, fmtSom } from "@/lib/crew-pay/format";
 import type { PayView } from "@/lib/crew-pay/views";
 import type { IsoDate, PayRow } from "@/lib/crew-pay/engine";
@@ -19,7 +20,9 @@ type Draft = { workerId: string; name: string; amount: string; method: "CASH" | 
 
 export default function CrewPayDayPage() {
   const qc = useQueryClient();
-  const [week, setWeek] = useState<IsoDate | "default">("default");
+  const params = useSearchParams();
+  const [week, setWeek] = useState<IsoDate | "default">(weekFromQuery(params.get("week")) ?? "default");
+  const [reopening, setReopening] = useState(false);
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
   const { data, error, isLoading } = useQuery<Data>({
     queryKey: ["crew-pay", "pay", week],
@@ -52,13 +55,16 @@ export default function CrewPayDayPage() {
         {data && (data.locked ? (
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1 text-sm text-muted-foreground"><Lock className="h-4 w-4" /> {data.closed ? "Ҳафта ёпилган" : "Кейинги ҳафта ёпилган"}</span>
-            {data.canReopen && <Button variant="outline" onClick={() => { const r = window.prompt("Нима учун қайта очилмоқда?"); if (r) reopen.mutate(r); }}>Қайта очиш</Button>}
+            {data.canReopen && <Button variant="outline" onClick={() => setReopening(true)}>Қайта очиш</Button>}
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button disabled={!data.rows.some((r) => r.stillToPay > 0)} onClick={() => openPay(data.rows)}>Ҳаммасига тўлаш</Button>
             <Button variant="outline" disabled={data.blockers.length > 0 || close.isPending}
-              onClick={() => window.confirm("Ҳафта ёпилсинми? Кейин бу ҳафтанинг кунлари ва кассаси ўзгармайди.") && close.mutate()}>
+              onClick={() => window.confirm(
+                (data.weekEnded ? "" : "Ҳафта ҳали тугамаган — барибир ёпилсинми?\n\n") +
+                "Ёпилгандан кейин бу ҳафтанинг кунлари ва кассаси ўзгармайди.",
+              ) && close.mutate()}>
               Ҳафтани ёпиш
             </Button>
           </div>
@@ -121,6 +127,9 @@ export default function CrewPayDayPage() {
         </div>
       )}
       {data && <p className="text-xs text-muted-foreground">Эски қарзни ушлаб қолиш чегараси шу ҳафта: {fmtPct(data.debtCap)}. Тўлов {fmtDay(data.paymentDate)} сана билан ёзилади.</p>}
+
+      <PromptDialog open={reopening} title="Ҳафтани қайта очиш" label="Нима учун қайта очилмоқда?" minLength={3}
+        confirmText="Қайта очиш" onClose={() => setReopening(false)} onSubmit={(r) => { reopen.mutate(r); setReopening(false); }} />
 
       <Dialog open={drafts != null} onOpenChange={(o) => !o && setDrafts(null)}>
         <DialogContent>

@@ -88,3 +88,24 @@ describe("payView tells whether the week has ended (deferred #2)", () => {
     expect(payView(state, "2026-09-21", "2026-09-28").weekEnded).toBe(true);
   });
 });
+
+describe("daysView gives each worker's working dates (deferred #7: all-present skips leavers)", () => {
+  it("includes joinedOn / leftOn so the UI can skip a worker who left mid-week", () => {
+    const v = daysView(state, "2026-09-07"); // Bek left 10.09
+    expect(v.workers.find((w) => w.id === "b")).toMatchObject({ joinedOn: "2026-08-31", leftOn: "2026-09-10" });
+  });
+});
+
+describe("ledgerView marks entries that were already reversed", () => {
+  it("flags the original once a correction points at it, so it cannot be reversed twice", () => {
+    const s3 = buildState({
+      input: { ...input, ledger: [...input.ledger, { id: "c1", seq: 4, date: "2026-09-23", workerId: "a", type: "CORRECTION", amount: -100000 }] },
+      closedWeekStarts: [], snapshots: new Map(),
+      ledgerMeta: new Map([["c1", { method: "CASH", reason: null, signed: false, reversesEntryId: "e3" }]]),
+      workerMeta: new Map(), dayNotes: new Map(),
+    });
+    const v = ledgerView(s3, { workerId: "a" });
+    expect(v.entries.find((e) => e.id === "e3")?.reversed).toBe(true);
+    expect(v.entries.find((e) => e.id === "c1")?.reversed).toBe(false);
+  });
+});

@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Som, CrewError, newKey } from "@/components/crew-pay/shared";
+import { Som, CrewError, newKey, WeekPicker, PromptDialog } from "@/components/crew-pay/shared";
 import { fmtDay } from "@/lib/crew-pay/format";
 import { todayTashkent } from "@/lib/crew-pay/rules";
-import type { LedgerView, WorkersView } from "@/lib/crew-pay/views";
-import type { LedgerType } from "@/lib/crew-pay/engine";
+import { weekStartOf, type IsoDate, type LedgerType } from "@/lib/crew-pay/engine";
+import type { LedgerRowView, LedgerView, WorkersView } from "@/lib/crew-pay/views";
 
 const TYPE_UZ: Record<LedgerType, string> = { ADVANCE: "Аванс", WEEKLY_PAY: "Иш ҳақи", CORRECTION: "Тузатиш" };
 const METHOD_UZ = { CASH: "Нақд", CARD: "Карта", OFFSET: "Ҳисобга олиш", OTHER: "Бошқа" } as const;
@@ -18,15 +19,18 @@ const selectCls = "h-10 rounded-md border bg-background px-3 text-sm";
 
 export default function CrewLedgerPage() {
   const qc = useQueryClient();
-  const [filterWorker, setFilterWorker] = useState("");
+  const params = useSearchParams();
+  const [filterWorker, setFilterWorker] = useState(params.get("worker") ?? "");
   const [filterType, setFilterType] = useState("");
+  const [filterWeek, setFilterWeek] = useState<IsoDate | null>(null);
+  const [editing, setEditing] = useState<LedgerRowView | null>(null);
   const [form, setForm] = useState({ date: todayTashkent(), workerId: "", amount: "", reason: "", method: "CASH" as Method });
   const [key, setKey] = useState(newKey);
 
   const workers = useQuery<WorkersView>({ queryKey: ["crew-pay", "workers"], queryFn: () => api("/api/crew-pay/workers") });
   const ledger = useQuery<LedgerView>({
-    queryKey: ["crew-pay", "ledger", filterWorker, filterType],
-    queryFn: () => api(`/api/crew-pay/ledger?worker=${filterWorker}&type=${filterType}`),
+    queryKey: ["crew-pay", "ledger", filterWorker, filterType, filterWeek],
+    queryFn: () => api(`/api/crew-pay/ledger?worker=${filterWorker}&type=${filterType}${filterWeek ? `&week=${filterWeek}` : ""}`),
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ["crew-pay"] });
 
@@ -50,7 +54,7 @@ export default function CrewLedgerPage() {
     onSuccess: refresh,
   });
   const patch = useMutation({
-    mutationFn: ({ id, ...body }: { id: string; signed?: boolean; reason?: string | null }) =>
+    mutationFn: ({ id, ...body }: { id: string; signed?: boolean; reason?: string | null; method?: Method }) =>
       api(`/api/crew-pay/ledger/${id}`, { method: "PATCH", json: body }),
     onSuccess: refresh,
   });
@@ -62,7 +66,7 @@ export default function CrewLedgerPage() {
       <div className="rounded-md border p-3 space-y-3">
         <div className="font-semibold">Аванс бериш</div>
         <div className="grid gap-2 sm:grid-cols-5">
-          <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+          <Input type="date" max={todayTashkent()} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           <select className={selectCls} value={form.workerId} onChange={(e) => setForm({ ...form, workerId: e.target.value })}>
             <option value="">Ишчини танланг</option>
             {active.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -80,7 +84,7 @@ export default function CrewLedgerPage() {
         <CrewError error={add.error} />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select className={selectCls} value={filterWorker} onChange={(e) => setFilterWorker(e.target.value)}>
           <option value="">Ҳамма ишчилар</option>
           {workers.data?.workers.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -89,6 +93,12 @@ export default function CrewLedgerPage() {
           <option value="">Ҳамма турлар</option>
           {Object.entries(TYPE_UZ).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
+        <select className={selectCls} value={filterWeek ? "week" : ""}
+          onChange={(e) => setFilterWeek(e.target.value ? weekStartOf(todayTashkent()) : null)}>
+          <option value="">Ҳамма ҳафталар</option>
+          <option value="week">Битта ҳафта</option>
+        </select>
+        {filterWeek && <WeekPicker week={filterWeek} onChange={setFilterWeek} />}
       </div>
 
       <CrewError error={ledger.error ?? reverse.error ?? patch.error} />
@@ -120,10 +130,15 @@ export default function CrewLedgerPage() {
                     <td className="px-3 py-2 max-w-[160px] truncate">{e.workerName}</td>
                     <td className="px-3 py-2">{TYPE_UZ[e.type]}</td>
                     <td className="px-3 py-2 text-right"><Som value={e.amount} unit={false} /></td>
-                    <td className="px-3 py-2">{METHOD_UZ[e.method]}</td>
+                    <td className="px-3 py-2">
+                      <select className="h-9 rounded-md border bg-background px-2 text-sm" aria-label="Тўлов усули" value={e.method}
+                        onChange={(ev) => patch.mutate({ id: e.id, method: ev.target.value as Method })}>
+                        {Object.entries(METHOD_UZ).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </td>
                     <td className="px-3 py-2 max-w-[220px]">
                       <button className="block w-full max-w-[220px] truncate text-left hover:underline min-h-[44px]" title={e.reason ?? "Сабабни ўзгартириш"}
-                        onClick={() => { const r = window.prompt("Сабаб", e.reason ?? ""); if (r !== null) patch.mutate({ id: e.id, reason: r || null }); }}>
+                        onClick={() => setEditing(e)}>
                         {e.reason || <span className="text-muted-foreground">—</span>}
                       </button>
                     </td>
@@ -133,7 +148,7 @@ export default function CrewLedgerPage() {
                     </td>
                     <td className="px-3 py-2 text-right"><Som value={e.balanceAfter} unit={false} /></td>
                     <td className="px-3 py-2 text-right">
-                      {e.type !== "CORRECTION" && (
+                      {e.type !== "CORRECTION" && !e.reversed && (
                         <Button variant="ghost" size="sm" disabled={reverse.isPending}
                           onClick={() => window.confirm(`№${e.seq} қайтарилсинми? Қарама-қарши «Тузатиш» ёзуви қўшилади.`) && reverse.mutate(e.id)}>
                           Қайтариш
@@ -147,6 +162,9 @@ export default function CrewLedgerPage() {
           </div>
         </>
       )}
+      <PromptDialog open={editing != null} title={editing ? `№${editing.seq} — сабаб` : ""} label="Сабаб"
+        initial={editing?.reason ?? ""} onClose={() => setEditing(null)}
+        onSubmit={(v) => { if (editing) patch.mutate({ id: editing.id, reason: v || null }); setEditing(null); }} />
     </div>
   );
 }
