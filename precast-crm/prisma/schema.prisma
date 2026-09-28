@@ -1715,3 +1715,134 @@ model PendingFollowUp {
   @@index([phone])
   @@map("pending_follow_ups")
 }
+
+// ─── Crew pay (Бригада маоши) — 10 cm filler-block crew, piece-rate ─────────
+// Replaces the Donabay workbook. Only raw inputs are stored; every pay figure
+// is computed by src/lib/crew-pay/engine.ts. Money = whole so'm (Int). The
+// ledger is append-only (no delete; amount/date/worker/type never updated).
+// Spec: docs/superpowers/specs/2026-09-28-crew-pay-design.md
+
+enum CrewWorkerStatus {
+  ACTIVE
+  LEFT
+}
+
+enum CrewLedgerType {
+  ADVANCE
+  WEEKLY_PAY
+  CORRECTION
+}
+
+enum CrewLedgerMethod {
+  CASH
+  CARD
+  OFFSET
+  OTHER
+}
+
+enum CrewSettingKey {
+  BREAK_ALLOWANCE
+  DEBT_CAP
+  REJECT_ALARM
+}
+
+enum CrewWeekState {
+  OPEN
+  CLOSED
+}
+
+model CrewWorker {
+  id         String           @id @default(cuid())
+  code       String           @unique // W01… never reused
+  name       String           @unique
+  status     CrewWorkerStatus @default(ACTIVE)
+  joinedOn   DateTime         @db.Date
+  leftOn     DateTime?        @db.Date
+  phone      String?
+  notes      String?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  attendance CrewAttendance[]
+  ledger     CrewLedgerEntry[]
+}
+
+model CrewDay {
+  id          String           @id @default(cuid())
+  workDate    DateTime         @unique @db.Date
+  moulded     Int? // null = not entered yet
+  broken      Int              @default(0)
+  notes       String?
+  updatedById String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  attendance  CrewAttendance[]
+}
+
+model CrewAttendance {
+  dayId    String
+  workerId String
+  halfDays Int // 1 = half day, 2 = full day; absent = no row
+  day      CrewDay    @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  worker   CrewWorker @relation(fields: [workerId], references: [id])
+
+  @@id([dayId, workerId])
+}
+
+model CrewLedgerEntry {
+  id              String           @id @default(cuid())
+  seq             Int              @unique @default(autoincrement())
+  entryDate       DateTime         @db.Date
+  workerId        String
+  type            CrewLedgerType
+  amount          Int // > 0 unless CORRECTION (≠ 0)
+  method          CrewLedgerMethod @default(CASH)
+  reason          String?
+  signed          Boolean          @default(false)
+  reversesEntryId String?
+  payWeekStart    DateTime?        @db.Date // informational only
+  clientKey       String?          @unique // double-submit guard
+  givenByName     String? // imported rows
+  createdById     String?
+  createdAt       DateTime         @default(now())
+  worker          CrewWorker       @relation(fields: [workerId], references: [id])
+
+  @@index([workerId, entryDate])
+}
+
+model CrewRate {
+  id            String   @id @default(cuid())
+  effectiveFrom DateTime @unique @db.Date
+  ratePerBlock  Int
+  createdById   String?
+  createdAt     DateTime @default(now())
+}
+
+model CrewSetting {
+  id            String         @id @default(cuid())
+  key           CrewSettingKey
+  value         Decimal        @db.Decimal(5, 4) // 0.08 = 8 %
+  effectiveFrom DateTime       @db.Date
+  createdById   String?
+  createdAt     DateTime       @default(now())
+
+  @@unique([key, effectiveFrom])
+}
+
+model CrewPayWeek {
+  weekStart  DateTime           @id @db.Date
+  state      CrewWeekState      @default(OPEN)
+  closedAt   DateTime?
+  closedById String?
+  snapshot   Json? // Weekly Pay table frozen at close
+  events     CrewPayWeekEvent[]
+}
+
+model CrewPayWeekEvent {
+  id        String      @id @default(cuid())
+  weekStart DateTime    @db.Date
+  action    String // "close" | "reopen"
+  reason    String?
+  byId      String?
+  at        DateTime    @default(now())
+  week      CrewPayWeek @relation(fields: [weekStart], references: [weekStart])
+}

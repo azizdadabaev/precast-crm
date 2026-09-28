@@ -62,6 +62,7 @@ export const ACTIONS = [
   // Inventory
   "inventory.view",
   "inventory.manage",
+  "crewpay.manage", // 10 cm filler-block crew pay (owner-only)
 
   // Dashboard
   "dashboard.view", // financial KPIs
@@ -176,6 +177,11 @@ export const PERMISSION_GROUPS: Array<{
     label: "Хабарлар · Inbox",
     actions: ["inbox.access"],
   },
+  {
+    key: "crewpay",
+    label: "Бригада маоши · Crew pay",
+    actions: ["crewpay.manage"],
+  },
 ];
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -215,6 +221,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "discrepancy.resolve": "Тафовутларни ҳал қилиш · Resolve discrepancies",
   "inventory.view": "Омборни кўриш · View inventory",
   "inventory.manage": "Омборни бошқариш · Manage inventory",
+  "crewpay.manage": "Бригада маоши (10 см блок) · Crew pay (owner-only)",
   "dashboard.view": "Молиявий бошқарув · Financial dashboard",
   "dashboard.viewBasic": "Оддий бошқарув · Basic dashboard",
   "sandbox.access": "Тажриба зонаси · Sandbox access",
@@ -264,6 +271,7 @@ export const ROLE_TEMPLATES: Record<string, Action[]> = {
     "discrepancy.resolve",
     "inventory.view",
     "inventory.manage",
+    "crewpay.manage",
     "dashboard.view",
     "dashboard.viewBasic",
     "sandbox.access",

@@ -171,6 +171,13 @@ export const OPERATIONS_NAV: NavItem[] = [
     permission: "inventory.view",
   },
   {
+    href: "/crew-pay",
+    label: "Бригада маоши",
+    sub: "Crew pay",
+    icon: Coins,
+    permission: "crewpay.manage",
+  },
+  {
     href: "/inventory",
     label: "Омбор",
     sub: "Warehouse",
