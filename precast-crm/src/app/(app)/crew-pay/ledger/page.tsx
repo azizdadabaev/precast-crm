@@ -122,7 +122,7 @@ export default function CrewLedgerPage() {
                     <td className="px-3 py-2 text-right"><Som value={e.amount} unit={false} /></td>
                     <td className="px-3 py-2">{METHOD_UZ[e.method]}</td>
                     <td className="px-3 py-2 max-w-[220px]">
-                      <button className="truncate text-left hover:underline min-h-[44px]" title="Сабабни ўзгартириш"
+                      <button className="block w-full max-w-[220px] truncate text-left hover:underline min-h-[44px]" title={e.reason ?? "Сабабни ўзгартириш"}
                         onClick={() => { const r = window.prompt("Сабаб", e.reason ?? ""); if (r !== null) patch.mutate({ id: e.id, reason: r || null }); }}>
                         {e.reason || <span className="text-muted-foreground">—</span>}
                       </button>

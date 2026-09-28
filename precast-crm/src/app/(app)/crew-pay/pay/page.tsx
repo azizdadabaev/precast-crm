@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock } from "lucide-react";
+import { Lock, Printer } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,7 +73,7 @@ export default function CrewPayDayPage() {
       )}
       {data && (
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm [&_td]:px-2 [&_th]:px-2">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Ишчи</th><th className="px-3 py-2 text-right">Кун</th>
@@ -90,8 +90,7 @@ export default function CrewPayDayPage() {
               {data.rows.map((r) => (
                 <tr key={r.workerId} className="border-t">
                   <td className="px-3 py-2 max-w-[160px] truncate">{r.name}</td>
-                  <td className="px-3 py-2 text-right font-mono tabular-nums">{String(r.days).replace(".", ",")}
-                    {r.sharePct != null && <span className="text-xs text-muted-foreground"> · {fmtPct(r.sharePct)}</span>}</td>
+                  <td className="px-3 py-2 text-right font-mono tabular-nums" title={r.sharePct != null ? `улуш ${fmtPct(r.sharePct)}` : undefined}>{String(r.days).replace(".", ",")}</td>
                   <td className="px-3 py-2 text-right"><Som value={r.earned} unit={false} /></td>
                   <td className="px-3 py-2 text-right"><Som value={r.broughtForward} unit={false} /></td>
                   <td className="px-3 py-2 text-right"><Som value={r.advances} unit={false} /></td>
@@ -99,10 +98,10 @@ export default function CrewPayDayPage() {
                   <td className="px-3 py-2 text-right font-semibold"><Som value={r.toPay} unit={false} /></td>
                   <td className="px-3 py-2 text-right"><Som value={r.paid} unit={false} /></td>
                   <td className="px-3 py-2 text-right"><Som value={r.carriedForward} unit={false} /></td>
-                  <td className="px-3 py-2"><Badge variant={STATUS_UZ[r.status].variant}>{STATUS_UZ[r.status].label}</Badge></td>
+                  <td className="px-3 py-2"><Badge className="whitespace-nowrap" variant={STATUS_UZ[r.status].variant}>{STATUS_UZ[r.status].label}</Badge></td>
                   <td className="px-3 py-2 whitespace-nowrap text-right">
                     {!data.closed && r.stillToPay > 0 && <Button size="sm" onClick={() => openPay([r])}>Тўлаш</Button>}
-                    <Button asChild variant="ghost" size="sm"><Link href={`/crew-pay/payslip/${data.weekStart}/${r.workerId}`} target="_blank">Варақа</Link></Button>
+                    <Button asChild variant="ghost" size="icon" title="Иш ҳақи варақаси"><Link href={`/crew-pay/payslip/${data.weekStart}/${r.workerId}`} target="_blank" aria-label="Иш ҳақи варақаси"><Printer className="h-4 w-4" /></Link></Button>
                   </td>
                 </tr>
               ))}

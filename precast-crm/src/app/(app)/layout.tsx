@@ -44,10 +44,15 @@ export default async function AppShellLayout({
     <div className="flex h-screen bg-background">
       <AudioUnlocker />
       <NotificationListener />
-      <Sidebar user={user} />
+      {/* App chrome never prints (e.g. the crew-pay payslip); `contents` keeps the screen layout unchanged. */}
+      <div className="contents print:hidden">
+        <Sidebar user={user} />
+      </div>
       <div className="flex-1 min-w-0 flex flex-col">
-        <TopBar />
-        <MobileTopbar user={user} />
+        <div className="contents print:hidden">
+          <TopBar />
+          <MobileTopbar user={user} />
+        </div>
         <main className="flex-1 overflow-auto">
           {/* Layout mode (full-bleed / wide / centered) is decided client-side
               in MainContainer via usePathname — the server layout is preserved

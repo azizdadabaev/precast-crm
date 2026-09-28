@@ -42,6 +42,7 @@ const BREADCRUMB: Record<string, { uz: string; en: string }> = {
   discrepancies: { uz: "Тафовутлар", en: "Discrepancies" },
   drivers: { uz: "Ҳайдовчилар", en: "Drivers" },
   production: { uz: "Ишлаб чиқариш", en: "Production" },
+  "crew-pay": { uz: "Бригада маоши", en: "Crew pay" },
   inventory: { uz: "Омбор", en: "Warehouse" },
   sandbox: { uz: "Тажриба", en: "Sandbox" },
   users: { uz: "Фойдаланувчилар", en: "Users" },
