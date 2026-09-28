@@ -1,7 +1,7 @@
 // The workbook's "Checks" sheet as data: errors block closing a week,
 // warnings inform. Messages are Uzbek Cyrillic (owner-facing).
 import {
-  FIRST_WEEK_START, SHARE_DRIFT_TOLERANCE, addDays, balanceAt, dayCalc, settingOn, weekStartOf, weeklyPay,
+  FIRST_WEEK_START, SHARE_DRIFT_TOLERANCE, addDays, balanceAt, dayCalc, settingOn, weekStartOf,
   type EngineInput, type IsoDate, type WeekCalc,
 } from "./engine";
 import { activeOn } from "./rules";
@@ -59,13 +59,20 @@ export function runChecks(input: EngineInput, weeks: Map<IsoDate, WeekCalc>, tod
     if (alarm != null && w.rejectRate != null && w.rejectRate > alarm) {
       out.push({ level: "warning", code: "REJECT_HIGH", weekStart: w.weekStart, message: `${fmtDay(w.weekStart)} ҳафтаси: брак ${fmtPct(w.rejectRate)} — чегара ${fmtPct(alarm)}` });
     }
-    if (addDays(w.weekEnd, UNPAID_AFTER_DAYS) <= today) {
-      for (const row of weeklyPay(input, weeks, w.weekStart)) {
-        if (row.stillToPay > 0) {
-          out.push({ level: "warning", code: "WEEK_UNPAID", weekStart: w.weekStart, workerId: row.workerId,
-            message: `${fmtDay(w.weekStart)} ҳафтаси тугаганига ${UNPAID_AFTER_DAYS} кундан ошди: ${row.name}га ${fmtSom(row.stillToPay)} сўм тўланмаган` });
-        }
-      }
+  }
+
+  // Money earned in weeks that ended 14+ days ago and still not handed over.
+  // Compared against ALL cash to date, not one week's "paid" column: a week
+  // paid late is dated in the next week (workbook rule), so a per-week check
+  // would flag it forever (live data: week 31.08 was paid on 09.09).
+  const cutoff = addDays(today, -UNPAID_AFTER_DAYS);
+  for (const worker of input.workers) {
+    let earnedOld = 0;
+    for (const w of weeks.values()) if (w.weekEnd <= cutoff) earnedOld += w.shares[worker.id] ?? 0;
+    const unpaid = earnedOld - input.ledger.reduce((s, e) => (e.workerId === worker.id && e.date <= today ? s + e.amount : s), 0);
+    if (unpaid > 0) {
+      out.push({ level: "warning", code: "WEEK_UNPAID", workerId: worker.id,
+        message: `${worker.name}: ${UNPAID_AFTER_DAYS} кундан олдин ишлаган ${fmtSom(unpaid)} сўми ҳали тўланмаган` });
     }
   }
 

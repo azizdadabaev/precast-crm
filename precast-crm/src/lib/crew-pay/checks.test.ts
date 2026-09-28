@@ -33,6 +33,21 @@ describe("runChecks", () => {
     expect(codes(i, "2026-09-20")).toContain("WEEK_UNPAID");     // week ended 06.09, +14 = 20.09
     expect(codes(i, "2026-09-19")).not.toContain("WEEK_UNPAID");
   });
+  it("does not call a week unpaid when it was paid late, in the following week (live data: 31.08 paid on 09.09)", () => {
+    const i = mk({
+      days: [{ date: "2026-09-01", moulded: 100, broken: 0, attendance: { a: 1 } }], // earns 50 000 in week 31.08
+      ledger: [{ id: "1", seq: 1, date: "2026-09-08", workerId: "a", type: "WEEKLY_PAY", amount: 50000 }], // paid next week
+    });
+    expect(codes(i, "2026-09-28")).not.toContain("WEEK_UNPAID");
+  });
+  it("still warns while money earned over 14 days ago remains unpaid", () => {
+    const i = mk({
+      days: [{ date: "2026-09-01", moulded: 100, broken: 0, attendance: { a: 1 } }],
+      ledger: [{ id: "1", seq: 1, date: "2026-09-08", workerId: "a", type: "WEEKLY_PAY", amount: 30000 }],
+    });
+    const issue = runChecks(i, computeWeeks(i), "2026-09-28").find((x) => x.code === "WEEK_UNPAID");
+    expect(issue?.message).toContain("20 000");
+  });
   it("warns on debt older than 30 days", () => {
     const i = mk({ ledger: [{ id: "1", seq: 1, date: "2026-09-01", workerId: "a", type: "ADVANCE", amount: 100 }] });
     expect(codes(i, "2026-10-02")).toContain("OLD_DEBT");
