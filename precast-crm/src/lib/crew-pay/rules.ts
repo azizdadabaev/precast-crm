@@ -28,20 +28,46 @@ export function clampToWeek(date: IsoDate, weekStart: IsoDate): IsoDate {
   return date < weekStart ? weekStart : date > end ? end : date;
 }
 
+const lastClosedWeek = (closed: ReadonlySet<IsoDate>): IsoDate | undefined => [...closed].sort().at(-1);
+
+/**
+ * Everything up to the end of the last closed week is locked, not just the
+ * closed weeks themselves: a week's brought-forward depends on every earlier
+ * week, so editing an open week that lies BEFORE a closed one would silently
+ * change the closed week's TO PAY and status.
+ */
+export function isLocked(closed: ReadonlySet<IsoDate>, date: IsoDate): boolean {
+  const last = lastClosedWeek(closed);
+  return !!last && date <= addDays(last, 6);
+}
+
 export function assertWeeksOpen(closed: ReadonlySet<IsoDate>, dates: IsoDate[]): void {
-  for (const d of dates) if (closed.has(weekStartOf(d))) throw new CrewPayError(CLOSED_WEEK_MESSAGE, 409);
+  for (const d of dates) {
+    if (!isLocked(closed, d)) continue;
+    if (closed.has(weekStartOf(d))) throw new CrewPayError(CLOSED_WEEK_MESSAGE, 409);
+    throw new CrewPayError(
+      `Кейинги ҳафта ёпилган — бу санани ўзгартириш учун аввал ${fmtDay(lastClosedWeek(closed)!)} ҳафтасини қайта очинг`,
+      409,
+    );
+  }
 }
 
 /** A rate/setting may only start after the last closed week, or it would change a paid week. */
 export function assertEffectiveDateAllowed(closed: ReadonlySet<IsoDate>, date: IsoDate): void {
-  const lastClosed = [...closed].sort().at(-1);
   if (date < FIRST_WEEK_START) throw new CrewPayError(BEFORE_FIRST_WEEK);
-  if (lastClosed && date <= addDays(lastClosed, 6)) {
+  if (isLocked(closed, date)) {
     throw new CrewPayError(
-      `Ёпилган ҳафталарни ўзгартирмаслик учун сана ${fmtDay(addDays(lastClosed, 7))} дан кейин бўлиши керак`,
+      `Ёпилган ҳафталарни ўзгартирмаслик учун сана ${fmtDay(addDays(lastClosedWeek(closed)!, 7))} дан кейин бўлиши керак`,
       409,
     );
   }
+}
+
+/** Weeks reopen newest-first, so a reopened week never sits under a still-closed one. */
+export function assertCanReopen(closed: ReadonlySet<IsoDate>, weekStart: IsoDate): void {
+  const last = lastClosedWeek(closed);
+  if (!closed.has(weekStart)) throw new CrewPayError("Бу ҳафта ёпилмаган", 409);
+  if (weekStart !== last) throw new CrewPayError(`Аввал охирги ёпилган ҳафтани (${fmtDay(last!)}) қайта очинг`, 409);
 }
 
 export function activeOn(w: EngineWorker, date: IsoDate): boolean {

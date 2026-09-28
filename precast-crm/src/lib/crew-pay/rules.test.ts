@@ -99,3 +99,25 @@ describe("planPayments (Review Focus 3)", () => {
     expect(planPayments(new Set(["k2"]), reqs).map((r) => r.clientKey)).toEqual(["k1"]);
   });
 });
+
+import { isLocked, assertCanReopen } from "./rules";
+
+describe("closed weeks lock everything before them (final review #1)", () => {
+  const closed = new Set(["2026-09-14", "2026-09-21"]);
+  it("rejects a write into an OPEN week that lies before the last closed week", () => {
+    // Editing 07.09 would silently change 14.09 / 21.09's brought-forward and TO PAY.
+    const open = new Set(["2026-09-21"]); // 07.09 and 14.09 were never closed / were reopened
+    expect(() => assertWeeksOpen(open, ["2026-09-08"])).toThrowError(/21\.09/);
+    try { assertWeeksOpen(open, ["2026-09-08"]); } catch (e) { expect((e as CrewPayError).status).toBe(409); }
+  });
+  it("isLocked is true up to the end of the last closed week only", () => {
+    expect(isLocked(closed, "2026-09-01")).toBe(true);
+    expect(isLocked(closed, "2026-09-27")).toBe(true);
+    expect(isLocked(closed, "2026-09-28")).toBe(false);
+    expect(isLocked(new Set(), "2026-09-01")).toBe(false);
+  });
+  it("only the latest closed week can be reopened", () => {
+    expect(() => assertCanReopen(closed, "2026-09-14")).toThrowError(/21\.09/);
+    expect(() => assertCanReopen(closed, "2026-09-21")).not.toThrow();
+  });
+});

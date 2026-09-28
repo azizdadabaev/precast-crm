@@ -5,7 +5,7 @@ import {
   type EngineInput, type EngineLedgerEntry, type IsoDate, type LedgerType, type PayRow, type WeekCalc,
 } from "./engine";
 import { runChecks, closeBlockers, type CrewIssue } from "./checks";
-import { activeOn } from "./rules";
+import { activeOn, isLocked } from "./rules";
 import { WEEKDAY_UZ } from "./format";
 
 export type LedgerMethod = "CASH" | "CARD" | "OFFSET" | "OTHER";
@@ -102,7 +102,7 @@ export function daysView(s: CrewState, weekStart: IsoDate): DaysView {
   });
   const w = s.weeks.get(weekStart);
   return {
-    weekStart, closed: s.closedWeeks.has(weekStart), workers, rows,
+    weekStart, closed: isLocked(s.closedWeeks, weekStart), workers, rows,
     totals: { moulded: w?.moulded ?? 0, broken: w?.broken ?? 0, good: w?.good ?? 0, pot: w?.pot ?? 0, crewDays: w?.crewDays ?? 0 },
   };
 }
@@ -127,7 +127,7 @@ export function ledgerView(s: CrewState, f: { workerId?: string; type?: LedgerTy
       workerName: workerName(s, e.workerId),
       weekStart: weekStartOf(e.date),
       balanceAfter: balanceAt(s.input, s.weeks, e.workerId, e.date),
-      closed: s.closedWeeks.has(weekStartOf(e.date)),
+      closed: isLocked(s.closedWeeks, e.date),
     }));
   const totals: Record<LedgerType, number> = { ADVANCE: 0, WEEKLY_PAY: 0, CORRECTION: 0 };
   for (const e of entries) totals[e.type] += e.amount;
@@ -139,6 +139,10 @@ export interface PayView {
   weekStart: IsoDate;
   weekEnd: IsoDate;
   closed: boolean;
+  /** Read-only: this week lies on or before the last closed week. */
+  locked: boolean;
+  /** Only the newest closed week can be reopened. */
+  canReopen: boolean;
   snapshot: unknown | null;
   debtCap: number;
   rows: PayRow[];
@@ -156,6 +160,8 @@ export function payView(s: CrewState, weekStart: IsoDate, today: IsoDate): PayVi
   const sum = (k: keyof PayView["totals"]) => rows.reduce((t, r) => t + r[k], 0);
   return {
     weekStart, weekEnd: addDays(weekStart, 6), closed: s.closedWeeks.has(weekStart),
+    locked: isLocked(s.closedWeeks, weekStart),
+    canReopen: s.closedWeeks.has(weekStart) && [...s.closedWeeks].sort().at(-1) === weekStart,
     snapshot: s.snapshots.get(weekStart) ?? null,
     debtCap: settingOn(s.input.settings, "DEBT_CAP", weekStart) ?? 1,
     rows,

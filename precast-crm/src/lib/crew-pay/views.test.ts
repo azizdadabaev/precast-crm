@@ -69,3 +69,15 @@ describe("views", () => {
     expect(p.row.earned).toBe(990000);
   });
 });
+
+describe("views mark weeks before the last closed week as locked (final review #1)", () => {
+  const s2 = buildState({
+    input, closedWeekStarts: ["2026-09-21"], snapshots: new Map(),
+    ledgerMeta: new Map(), workerMeta: new Map(), dayNotes: new Map(),
+  });
+  it("an open week before a closed one is locked for editing", () => {
+    expect(daysView(s2, "2026-08-31").closed).toBe(true);
+    expect(payView(s2, "2026-08-31", "2026-09-30")).toMatchObject({ closed: false, locked: true, canReopen: false });
+    expect(payView(s2, "2026-09-21", "2026-09-30")).toMatchObject({ closed: true, locked: true, canReopen: true });
+  });
+});

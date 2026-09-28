@@ -2,14 +2,14 @@
 // the engine on read. Each write runs in one transaction that re-loads state,
 // applies the pure rules (closed weeks, validation), then writes. Audit rows
 // are written after commit, fire-and-forget (src/lib/audit.ts).
-import type { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { balanceAt, weeklyPay, type EngineInput, type IsoDate } from "./engine";
 import { buildState, type CrewState, type LedgerMeta } from "./views";
 import { runChecks, closeBlockers } from "./checks";
 import {
-  CrewPayError, assertEffectiveDateAllowed, assertWeeksOpen, clampToWeek, planPayments, todayTashkent,
+  CrewPayError, assertCanReopen, assertEffectiveDateAllowed, assertWeeksOpen, clampToWeek, planPayments, todayTashkent,
   validateDayWrite, validateLedgerWrite,
 } from "./rules";
 import { fmtSom } from "./format";
@@ -51,6 +51,11 @@ export async function loadCrewState(db: Db = prisma): Promise<CrewState> {
   });
 }
 
+// Every write re-reads state and checks the closed-week lock before writing;
+// Serializable makes that read-check-write atomic against a concurrent close,
+// pay or edit (a lost race surfaces as P2034 → Uzbek "retry" via crewRoute).
+const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
+
 const audit = (user: Actor, action: string, targetId: string, message: string, metadata?: Record<string, unknown>) =>
   void recordAudit({ userId: user.id, action, targetType: "crewpay", targetId, message, metadata: metadata ?? null });
 
@@ -69,7 +74,7 @@ export async function saveDay(user: Actor, body: DayBody) {
     const rows = Object.entries(body.attendance).map(([workerId, v]) => ({ dayId: day.id, workerId, halfDays: v === 1 ? 2 : 1 }));
     if (rows.length) await tx.crewAttendance.createMany({ data: rows });
     return day.id;
-  });
+  }, SERIALIZABLE);
   audit(user, "crewpay.day.save", id, `Кун сақланди ${body.date}`, { ...body });
   return { id };
 }
@@ -97,7 +102,7 @@ export async function addLedgerEntry(user: Actor, body: LedgerBody) {
               clientKey: body.clientKey ?? null, createdById: user.id },
     });
     return { id: e.id, warning };
-  });
+  }, SERIALIZABLE);
   audit(user, "crewpay.ledger.add", result.id, `${body.type} ${fmtSom(body.amount)} сўм`, { ...body });
   return result;
 }
@@ -144,7 +149,7 @@ export async function payWorkers(user: Actor, weekStart: IsoDate, body: PayBody)
       });
     }
     return todo.length;
-  });
+  }, SERIALIZABLE);
   audit(user, "crewpay.pay", weekStart, `Иш ҳақи тўланди (${created} та)`, { weekStart, date, payments: body.payments });
   return { created };
 }
@@ -163,14 +168,14 @@ export async function closeWeek(user: Actor, weekStart: IsoDate) {
     });
     await tx.crewPayWeekEvent.create({ data: { weekStart: toDbDate(weekStart), action: "close", byId: user.id } });
     return { weekStart };
-  });
+  }, SERIALIZABLE);
   audit(user, "crewpay.week.close", weekStart, `${weekStart} ҳафтаси ёпилди`);
   return result;
 }
 
 export async function reopenWeek(user: Actor, weekStart: IsoDate, reason: string) {
-  const wk = await prisma.crewPayWeek.findUnique({ where: { weekStart: toDbDate(weekStart) } });
-  if (!wk || wk.state !== "CLOSED") throw new CrewPayError("Бу ҳафта ёпилмаган", 409);
+  const closed = await prisma.crewPayWeek.findMany({ where: { state: "CLOSED" }, select: { weekStart: true } });
+  assertCanReopen(new Set(closed.map((w) => fromDbDate(w.weekStart))), weekStart);
   await prisma.$transaction([
     prisma.crewPayWeek.update({ where: { weekStart: toDbDate(weekStart) }, data: { state: "OPEN" } }),
     prisma.crewPayWeekEvent.create({ data: { weekStart: toDbDate(weekStart), action: "reopen", reason, byId: user.id } }),
