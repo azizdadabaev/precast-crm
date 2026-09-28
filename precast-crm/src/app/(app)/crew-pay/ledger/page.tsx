@@ -7,7 +7,7 @@ import { api, ApiError } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Som, CrewError, newKey, WeekPicker, PromptDialog } from "@/components/crew-pay/shared";
-import { fmtDay } from "@/lib/crew-pay/format";
+import { fmtDay, fmtSom } from "@/lib/crew-pay/format";
 import { todayTashkent } from "@/lib/crew-pay/rules";
 import { weekStartOf, type IsoDate, type LedgerType } from "@/lib/crew-pay/engine";
 import type { LedgerRowView, LedgerView, WorkersView } from "@/lib/crew-pay/views";
@@ -128,8 +128,11 @@ export default function CrewLedgerPage() {
                     <td className="px-3 py-2 font-mono tabular-nums">{e.seq}</td>
                     <td className="px-3 py-2 font-mono tabular-nums">{fmtDay(e.date)}</td>
                     <td className="px-3 py-2 max-w-[160px] truncate">{e.workerName}</td>
-                    <td className="px-3 py-2">{TYPE_UZ[e.type]}</td>
-                    <td className="px-3 py-2 text-right"><Som value={e.amount} unit={false} /></td>
+                    <td className="px-3 py-2">
+                      {e.reversesEntryId ? "Бекор қилиш" : TYPE_UZ[e.type]}
+                      {e.reversed && <span className="ml-1 text-xs text-muted-foreground">(бекор қилинган)</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right"><Som value={e.amount} unit={false} className={e.reversed ? "line-through opacity-60" : undefined} /></td>
                     <td className="px-3 py-2">
                       <select className="h-9 rounded-md border bg-background px-2 text-sm" aria-label="Тўлов усули" value={e.method}
                         onChange={(ev) => patch.mutate({ id: e.id, method: ev.target.value as Method })}>
@@ -150,8 +153,13 @@ export default function CrewLedgerPage() {
                     <td className="px-3 py-2 text-right">
                       {e.type !== "CORRECTION" && !e.reversed && (
                         <Button variant="ghost" size="sm" disabled={reverse.isPending}
-                          onClick={() => window.confirm(`№${e.seq} қайтарилсинми? Қарама-қарши «Тузатиш» ёзуви қўшилади.`) && reverse.mutate(e.id)}>
-                          Қайтариш
+                          onClick={() => window.confirm(
+                            `№${e.seq} — ${e.workerName}, ${TYPE_UZ[e.type].toLowerCase()} ${fmtSom(e.amount)} сўм бекор қилинсинми?
+
+` +
+                            `Бу ${e.type === "ADVANCE" ? "аванс" : "пул"} берилмаган деб ҳисобланади. Агар пулни ҳақиқатан берган бўлсангиз, бекор қилманг.`,
+                          ) && reverse.mutate(e.id)}>
+                          Бекор қилиш
                         </Button>
                       )}
                     </td>

@@ -32,12 +32,14 @@ export async function loadCrewState(db: Db = prisma): Promise<CrewState> {
     db.crewSetting.findMany(),
     db.crewPayWeek.findMany(),
   ]);
+  const typeById = new Map(ledger.map((e) => [e.id, e.type]));
   const input: EngineInput = {
     workers: workers.map((w) => ({ id: w.id, code: w.code, name: w.name, status: w.status,
       joinedOn: fromDbDate(w.joinedOn), leftOn: w.leftOn ? fromDbDate(w.leftOn) : null })),
     days: days.map((d) => ({ date: fromDbDate(d.workDate), moulded: d.moulded, broken: d.broken,
       attendance: Object.fromEntries(d.attendance.map((a) => [a.workerId, a.halfDays / 2])) })),
-    ledger: ledger.map((e) => ({ id: e.id, seq: e.seq, date: fromDbDate(e.entryDate), workerId: e.workerId, type: e.type, amount: e.amount })),
+    ledger: ledger.map((e) => ({ id: e.id, seq: e.seq, date: fromDbDate(e.entryDate), workerId: e.workerId, type: e.type, amount: e.amount,
+      reverses: e.reversesEntryId ? typeById.get(e.reversesEntryId) : undefined })),
     rates: rates.map((r) => ({ effectiveFrom: fromDbDate(r.effectiveFrom), ratePerBlock: r.ratePerBlock })),
     settings: settings.map((s) => ({ key: s.key, value: Number(s.value), effectiveFrom: fromDbDate(s.effectiveFrom) })),
   };
@@ -128,7 +130,7 @@ export async function reverseLedgerEntry(user: Actor, id: string, body: ReverseB
   // The link is written in the same insert, so a correction can never exist unlinked.
   return addLedgerEntry(user, {
     date: body.date, workerId: orig.workerId, type: "CORRECTION", amount, method: orig.method,
-    reason: body.reason ?? `№${orig.seq} ни қайтариш`, signed: false,
+    reason: body.reason ?? `№${orig.seq} бекор қилинди`, signed: false,
   }, { reversesEntryId: orig.id });
 }
 

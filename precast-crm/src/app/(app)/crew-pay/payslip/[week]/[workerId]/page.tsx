@@ -35,7 +35,7 @@ export default function PayslipPage({ params }: { params: { week: string; worker
         <div className="flex justify-between border-b py-1"><span>Ишлаган кунлари</span><span className="font-mono tabular-nums">{String(r.days).replace(".", ",")}</span></div>
         {line("Шу ҳафта ишлади", r.earned)}
         {line("Олдинги қолдиқ", r.broughtForward)}
-        {data.advances.map((e) => line(`Аванс ${fmtDay(e.date)}${e.reason ? ` · ${e.reason}` : ""} (№${e.seq})`, -e.amount))}
+        {data.advances.map((e) => line(`${e.reversesEntryId ? "Аванс бекор қилинди" : "Аванс"} ${fmtDay(e.date)}${e.reason && !e.reversesEntryId ? ` · ${e.reason}` : ""} (№${e.seq})`, -e.amount))}
         {data.corrections.map((e) => line(`Тузатиш ${fmtDay(e.date)}${e.reason ? ` · ${e.reason}` : ""} (№${e.seq})`, -e.amount))}
         {line("Жами тегишли", r.due)}
         {line("ТЎЛАШ КЕРАК", r.toPay, true)}

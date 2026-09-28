@@ -163,3 +163,42 @@ describe("balanceAt", () => {
     expect(balanceAt(input, computeWeeks(input), "a", "2026-09-21")).toBe(400000);
   });
 });
+
+describe("a cancelled entry is shown in its own column (owner's test 28.09: pay → «Қайтариш» → pay again)", () => {
+  // Oybek, week 28.09: owed 275 375; paid it, cancelled that payment, paid again.
+  const scenario = base({
+    days: [{ date: "2026-09-28", moulded: 1101.5, broken: 0, attendance: { a: 1, b: 1 } }], // pot 550 750 → 275 375 each
+    ledger: [
+      { id: "p1", seq: 1, date: "2026-09-28", workerId: "a", type: "WEEKLY_PAY", amount: 275375 },
+      { id: "c1", seq: 2, date: "2026-09-28", workerId: "a", type: "CORRECTION", amount: -275375, reverses: "WEEKLY_PAY" },
+      { id: "p2", seq: 3, date: "2026-09-28", workerId: "a", type: "WEEKLY_PAY", amount: 275375 },
+    ],
+  });
+  it("shows the payment once, not twice, and does not inflate TO PAY", () => {
+    const a = weeklyPay(scenario, computeWeeks(scenario), "2026-09-28").find((r) => r.workerId === "a")!;
+    expect(a).toMatchObject({ earned: 275375, paid: 275375, corrections: 0, toPay: 275375, stillToPay: 0, carriedForward: 0, status: "SETTLED" });
+  });
+  it("after only the cancellation, the money is owed again", () => {
+    const i = { ...scenario, ledger: scenario.ledger.slice(0, 2) };
+    const a = weeklyPay(i, computeWeeks(i), "2026-09-28").find((r) => r.workerId === "a")!;
+    expect(a).toMatchObject({ paid: 0, toPay: 275375, stillToPay: 275375, carriedForward: 275375, status: "NOT_YET_PAID" });
+  });
+  it("a cancelled advance nets out of the advances column", () => {
+    const i = base({
+      days: [{ date: "2026-09-28", moulded: 1000, broken: 0, attendance: { a: 1 } }],
+      ledger: [
+        { id: "x1", seq: 1, date: "2026-09-28", workerId: "a", type: "ADVANCE", amount: 300000 },
+        { id: "x2", seq: 2, date: "2026-09-28", workerId: "a", type: "CORRECTION", amount: -300000, reverses: "ADVANCE" },
+      ],
+    });
+    const a = weeklyPay(i, computeWeeks(i), "2026-09-28").find((r) => r.workerId === "a")!;
+    expect(a).toMatchObject({ advances: 0, corrections: 0, toPay: 500000 });
+  });
+  it("a plain correction still lands in the corrections column", () => {
+    const i = base({
+      days: [{ date: "2026-09-28", moulded: 1000, broken: 0, attendance: { a: 1 } }],
+      ledger: [{ id: "k", seq: 1, date: "2026-09-28", workerId: "a", type: "CORRECTION", amount: 20000 }],
+    });
+    expect(weeklyPay(i, computeWeeks(i), "2026-09-28").find((r) => r.workerId === "a")).toMatchObject({ corrections: 20000 });
+  });
+});

@@ -109,3 +109,21 @@ describe("ledgerView marks entries that were already reversed", () => {
     expect(v.entries.find((e) => e.id === "c1")?.reversed).toBe(false);
   });
 });
+
+describe("cancellations show in their own column in Касса totals and on the payslip", () => {
+  const s4 = buildState({
+    input: { ...input, ledger: [...input.ledger,
+      { id: "p9", seq: 9, date: "2026-09-23", workerId: "a", type: "WEEKLY_PAY", amount: 50000 },
+      { id: "c9", seq: 10, date: "2026-09-23", workerId: "a", type: "CORRECTION", amount: -50000, reverses: "WEEKLY_PAY" }] },
+    closedWeekStarts: [], snapshots: new Map(),
+    ledgerMeta: new Map([["c9", { method: "CASH", reason: null, signed: false, reversesEntryId: "p9" }]]),
+    workerMeta: new Map(), dayNotes: new Map(),
+  });
+  it("Касса totals net the cancelled payment out of «Иш ҳақи»", () =>
+    expect(ledgerView(s4, { workerId: "a" }).totals).toEqual({ ADVANCE: 100000, WEEKLY_PAY: 0, CORRECTION: 0 }));
+  it("the payslip lists the cancellation with the payments, not as a correction", () => {
+    const p = payslipView(s4, "2026-09-21", "a");
+    expect(p.corrections).toHaveLength(0);
+    expect(p.payments.map((e) => e.amount)).toEqual([50000, -50000]);
+  });
+});

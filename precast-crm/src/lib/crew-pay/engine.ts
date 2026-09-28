@@ -29,6 +29,8 @@ export interface EngineLedgerEntry {
   workerId: string;
   type: LedgerType;
   amount: number;
+  /** Set on a CORRECTION made by «Бекор қилиш»: the type of the entry it cancels. */
+  reverses?: LedgerType;
 }
 export interface EngineRate { effectiveFrom: IsoDate; ratePerBlock: number }
 export interface EngineSetting { key: SettingKey; value: number; effectiveFrom: IsoDate }
@@ -187,6 +189,18 @@ export interface PayRow {
   status: PayStatus;
 }
 
+/**
+ * The Weekly Pay column an entry counts in. A cancellation counts in the column
+ * of the entry it cancels (a cancelled payment reduces "paid", a cancelled
+ * advance reduces "advances"), so cancel-then-pay-again shows the payment once
+ * instead of inflating both "paid" and TO PAY. The balance is the same either
+ * way; only the columns differ. Workbook corrections carry no link and stay in
+ * the corrections column (parity).
+ */
+export function ledgerColumn(e: EngineLedgerEntry): LedgerType {
+  return e.type === "CORRECTION" && e.reverses && e.reverses !== "CORRECTION" ? e.reverses : e.type;
+}
+
 const sumLedger = (input: EngineInput, pred: (e: EngineLedgerEntry) => boolean): number =>
   input.ledger.reduce((s, e) => (pred(e) ? s + e.amount : s), 0);
 
@@ -199,7 +213,7 @@ export function weeklyPay(input: EngineInput, weeks: Map<IsoDate, WeekCalc>, wee
     for (const [s, week] of weeks) if (s < weekStart) earnedBefore += week.shares[w.id] ?? 0;
     const cashBefore = sumLedger(input, (e) => e.workerId === w.id && e.date < weekStart);
     const inWeek = (t: LedgerType) =>
-      sumLedger(input, (e) => e.workerId === w.id && e.type === t && e.date >= weekStart && e.date <= weekEnd);
+      sumLedger(input, (e) => e.workerId === w.id && ledgerColumn(e) === t && e.date >= weekStart && e.date <= weekEnd);
     const G = earnedBefore - cashBefore;
     const days = wk?.days[w.id] ?? 0;
     const F = wk?.shares[w.id] ?? 0;

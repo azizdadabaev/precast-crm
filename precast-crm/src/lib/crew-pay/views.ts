@@ -1,7 +1,7 @@
 // Pure builders: engine output → the JSON each crew-pay screen renders.
 // Routes stay thin; these are unit-tested without a database.
 import {
-  addDays, balanceAt, computeWeeks, dayCalc, settingOn, weekStartOf, weeklyPay,
+  addDays, balanceAt, computeWeeks, dayCalc, ledgerColumn, settingOn, weekStartOf, weeklyPay,
   type EngineInput, type EngineLedgerEntry, type IsoDate, type LedgerType, type PayRow, type WeekCalc,
 } from "./engine";
 import { runChecks, closeBlockers, type CrewIssue } from "./checks";
@@ -134,7 +134,7 @@ export function ledgerView(s: CrewState, f: { workerId?: string; type?: LedgerTy
       reversed: reversedIds.has(e.id),
     }));
   const totals: Record<LedgerType, number> = { ADVANCE: 0, WEEKLY_PAY: 0, CORRECTION: 0 };
-  for (const e of entries) totals[e.type] += e.amount;
+  for (const e of entries) totals[ledgerColumn(e)] += e.amount;
   return { entries, totals };
 }
 
@@ -253,8 +253,8 @@ export function payslipView(s: CrewState, weekStart: IsoDate, workerId: string):
   const entries = ledgerView(s, { workerId, weekStart }).entries.sort((a, b) => a.seq - b.seq);
   return {
     worker: { id: w.id, name: w.name, code: w.code }, weekStart, weekEnd: addDays(weekStart, 6), row,
-    advances: entries.filter((e) => e.type === "ADVANCE"),
-    corrections: entries.filter((e) => e.type === "CORRECTION"),
-    payments: entries.filter((e) => e.type === "WEEKLY_PAY"),
+    advances: entries.filter((e) => ledgerColumn(e) === "ADVANCE"),
+    corrections: entries.filter((e) => ledgerColumn(e) === "CORRECTION"),
+    payments: entries.filter((e) => ledgerColumn(e) === "WEEKLY_PAY"),
   };
 }
