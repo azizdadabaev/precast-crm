@@ -108,3 +108,58 @@ describe("computeWeeks", () => {
     expect([...computeWeeks(i).keys()]).toEqual(["2026-08-31", "2026-09-21"]);
   });
 });
+
+import { weeklyPay, balanceAt } from "./engine";
+
+describe("weeklyPay", () => {
+  const input = base({
+    days: [
+      { date: "2026-09-21", moulded: 2000, broken: 0, attendance: { a: 1, b: 1 } }, // pot 1 000 000
+      { date: "2026-09-28", moulded: 2000, broken: 0, attendance: { a: 1, b: 1 } },
+    ],
+    ledger: [
+      { id: "1", seq: 1, date: "2026-09-22", workerId: "a", type: "ADVANCE", amount: 800000 }, // a owes 300 000 after wk1
+      { id: "2", seq: 2, date: "2026-09-27", workerId: "b", type: "WEEKLY_PAY", amount: 500000 },
+    ],
+    settings: [
+      { key: "DEBT_CAP", value: 1, effectiveFrom: "2026-08-31" },
+      { key: "DEBT_CAP", value: 0.5, effectiveFrom: "2026-09-28" },
+    ],
+  });
+  const weeks = computeWeeks(input);
+
+  it("takes the same-week advance in full", () => {
+    const a = weeklyPay(input, weeks, "2026-09-21").find((r) => r.workerId === "a")!;
+    expect(a).toMatchObject({ earned: 500000, advances: 800000, due: -300000, toPay: 0, carriedForward: -300000, status: "OWES_YOU" });
+  });
+  it("caps old-debt recovery at the debt cap in force at the week start", () => {
+    const a = weeklyPay(input, weeks, "2026-09-28").find((r) => r.workerId === "a")!;
+    // G = -300 000, F = 500 000, cap 50 % → recover min(300 000, 250 000) = 250 000
+    expect(a).toMatchObject({ broughtForward: -300000, earned: 500000, toPay: 250000, status: "NOT_YET_PAID" });
+  });
+  it("marks a fully paid worker settled", () => {
+    const b = weeklyPay(input, weeks, "2026-09-21").find((r) => r.workerId === "b")!;
+    expect(b).toMatchObject({ toPay: 500000, paid: 500000, stillToPay: 0, carriedForward: 0, status: "SETTLED" });
+  });
+  it("counts a correction in its own column and lowers the balance", () => {
+    const i2 = { ...input, ledger: [...input.ledger, { id: "3", seq: 3, date: "2026-09-23", workerId: "b", type: "CORRECTION" as const, amount: -100000 }] };
+    const b = weeklyPay(i2, computeWeeks(i2), "2026-09-21").find((r) => r.workerId === "b")!;
+    // TO PAY becomes 600 000, 500 000 already paid → 100 000 still to pay
+    expect(b).toMatchObject({ corrections: -100000, due: 600000, toPay: 600000, stillToPay: 100000, carriedForward: 100000, status: "NOT_YET_PAID" });
+  });
+  it("gives a zero row to a worker with no days that week", () => {
+    const i3 = base({ days: [{ date: "2026-09-21", moulded: 100, broken: 0, attendance: { a: 1 } }] });
+    const b = weeklyPay(i3, computeWeeks(i3), "2026-09-21").find((r) => r.workerId === "b")!;
+    expect(b).toMatchObject({ days: 0, earned: 0, toPay: 0, status: "SETTLED", sharePct: 0 });
+  });
+});
+
+describe("balanceAt", () => {
+  it("includes the whole current week's share and all cash up to the date", () => {
+    const input = base({
+      days: [{ date: "2026-09-21", moulded: 2000, broken: 0, attendance: { a: 1, b: 1 } }],
+      ledger: [{ id: "1", seq: 1, date: "2026-09-21", workerId: "a", type: "ADVANCE", amount: 100000 }],
+    });
+    expect(balanceAt(input, computeWeeks(input), "a", "2026-09-21")).toBe(400000);
+  });
+});

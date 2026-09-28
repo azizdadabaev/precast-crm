@@ -162,3 +162,73 @@ export function computeWeeks(input: EngineInput): Map<IsoDate, WeekCalc> {
   }
   return new Map([...acc.entries()].sort(([a], [b]) => a.localeCompare(b)));
 }
+
+export type PayStatus = "OWES_YOU" | "NOT_YET_PAID" | "YOU_OWE" | "SETTLED";
+
+/** One Weekly Pay row (rules §6). Letters = the workbook's columns. */
+export interface PayRow {
+  workerId: string;
+  code: string;
+  name: string;
+  days: number;
+  /** days ÷ crew-days (display only); null when the week has no attendance. */
+  sharePct: number | null;
+  earned: number;          // F
+  broughtForward: number;  // G (+ owner owes worker, − worker owes owner)
+  advances: number;        // H
+  corrections: number;     // I
+  due: number;             // J
+  toPay: number;           // K
+  paid: number;            // L
+  stillToPay: number;      // M
+  carriedForward: number;  // N
+  status: PayStatus;
+}
+
+const sumLedger = (input: EngineInput, pred: (e: EngineLedgerEntry) => boolean): number =>
+  input.ledger.reduce((s, e) => (pred(e) ? s + e.amount : s), 0);
+
+export function weeklyPay(input: EngineInput, weeks: Map<IsoDate, WeekCalc>, weekStart: IsoDate): PayRow[] {
+  const weekEnd = addDays(weekStart, 6);
+  const wk = weeks.get(weekStart);
+  const cap = settingOn(input.settings, "DEBT_CAP", weekStart) ?? 1;
+  return input.workers.map((w) => {
+    let earnedBefore = 0;
+    for (const [s, week] of weeks) if (s < weekStart) earnedBefore += week.shares[w.id] ?? 0;
+    const cashBefore = sumLedger(input, (e) => e.workerId === w.id && e.date < weekStart);
+    const inWeek = (t: LedgerType) =>
+      sumLedger(input, (e) => e.workerId === w.id && e.type === t && e.date >= weekStart && e.date <= weekEnd);
+    const G = earnedBefore - cashBefore;
+    const days = wk?.days[w.id] ?? 0;
+    const F = wk?.shares[w.id] ?? 0;
+    const H = inWeek("ADVANCE");
+    const I = inWeek("CORRECTION");
+    const L = inWeek("WEEKLY_PAY");
+    const J = G + F - H - I;
+    // Old debt beyond cap × earnings carries forward; same-week advances are
+    // prepayments and are always taken in full (rules §6).
+    const K = G >= 0 ? xround(Math.max(0, J)) : xround(Math.max(0, F - H - I - Math.min(-G, cap * F)));
+    const M = Math.max(0, K - L);
+    const N = J - L;
+    const n = xround(N);
+    const status: PayStatus = n < 0 ? "OWES_YOU" : n > 0 && M > 0 ? "NOT_YET_PAID" : n > 0 ? "YOU_OWE" : "SETTLED";
+    return {
+      workerId: w.id, code: w.code, name: w.name, days,
+      sharePct: wk && wk.crewDays > 0 ? days / wk.crewDays : null,
+      earned: F, broughtForward: G, advances: H, corrections: I, due: J,
+      toPay: K, paid: L, stillToPay: M, carriedForward: N, status,
+    };
+  });
+}
+
+/**
+ * Worker balance on `date` (rules §7/§8): shares of every week up to and
+ * including the week of `date`, minus every ledger amount dated <= `date`.
+ * Positive = owner owes the worker. Used for ledger "balance after" and "owed now".
+ */
+export function balanceAt(input: EngineInput, weeks: Map<IsoDate, WeekCalc>, workerId: string, date: IsoDate): number {
+  const ws = weekStartOf(date);
+  let earned = 0;
+  for (const [s, week] of weeks) if (s <= ws) earned += week.shares[workerId] ?? 0;
+  return earned - sumLedger(input, (e) => e.workerId === workerId && e.date <= date);
+}

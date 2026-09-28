@@ -1,0 +1,448 @@
+{
+ "_source": "Donabay_1 2026-09-24_with-history.xlsx, extracted 2026-09-28",
+ "currency": "UZS",
+ "timezone": "Asia/Tashkent",
+ "first_week_start": "2026-08-31",
+ "settings": [
+  {
+   "key": "break_allowance_pct",
+   "value": 0.0,
+   "effective_from": "2026-08-31"
+  },
+  {
+   "key": "debt_cap_pct",
+   "value": 1.0,
+   "effective_from": "2026-08-31"
+  },
+  {
+   "key": "reject_alarm_pct",
+   "value": 0.08,
+   "effective_from": "2026-08-31"
+  },
+  {
+   "key": "debt_cap_pct",
+   "value": 0.5,
+   "effective_from": "2026-09-28"
+  }
+ ],
+ "pay_rates": [
+  {
+   "effective_from": "2026-08-31",
+   "rate_per_block": 500
+  }
+ ],
+ "workers": [
+  {
+   "code": "W01",
+   "name": "Davlatbek",
+   "status": "active",
+   "joined_on": "2026-08-31",
+   "left_on": null,
+   "phone": null,
+   "notes": "joined_on set to first week start; workbook had placeholder 2026-09-21, real date still to be confirmed by owner"
+  },
+  {
+   "code": "W02",
+   "name": "Xusanboy",
+   "status": "active",
+   "joined_on": "2026-08-31",
+   "left_on": null,
+   "phone": null,
+   "notes": "joined_on set to first week start; workbook had placeholder 2026-09-21, real date still to be confirmed by owner"
+  },
+  {
+   "code": "W03",
+   "name": "Oybek",
+   "status": "active",
+   "joined_on": "2026-08-31",
+   "left_on": null,
+   "phone": null,
+   "notes": "joined_on set to first week start; workbook had placeholder 2026-09-21, real date still to be confirmed by owner"
+  },
+  {
+   "code": "W04",
+   "name": "Nomonjon",
+   "status": "active",
+   "joined_on": "2026-08-31",
+   "left_on": null,
+   "phone": null,
+   "notes": "Previously mistyped as Abdurashid. joined_on set to first week start; workbook had placeholder 2026-09-21, real date still to be confirmed by owner"
+  }
+ ],
+ "daily_log": [
+  {
+   "date": "2026-09-04",
+   "moulded": 266,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-05",
+   "moulded": 1967,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-06",
+   "moulded": 2331,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-07",
+   "moulded": 1771,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-08",
+   "moulded": 1260,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-09",
+   "moulded": 2380,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-14",
+   "moulded": 2422,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-15",
+   "moulded": 1750,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-16",
+   "moulded": 2107,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-18",
+   "moulded": 2905,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": "From the old sheet"
+  },
+  {
+   "date": "2026-09-21",
+   "moulded": 1568,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": null
+  },
+  {
+   "date": "2026-09-22",
+   "moulded": 1876,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": null
+  },
+  {
+   "date": "2026-09-23",
+   "moulded": 1925,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": null
+  },
+  {
+   "date": "2026-09-24",
+   "moulded": 2226,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": null
+  },
+  {
+   "date": "2026-09-26",
+   "moulded": 1310,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": null
+  },
+  {
+   "date": "2026-09-28",
+   "moulded": 2000,
+   "broken": 0,
+   "attendance": {
+    "W01": 1,
+    "W02": 1,
+    "W03": 1,
+    "W04": 1
+   },
+   "notes": null
+  }
+ ],
+ "cash_ledger": [
+  {
+   "seq": 1,
+   "date": "2026-09-04",
+   "worker": "W03",
+   "type": "advance",
+   "amount": 500000,
+   "reason": "Avans (old sheet, 4-9 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 2,
+   "date": "2026-09-04",
+   "worker": "W01",
+   "type": "advance",
+   "amount": 200000,
+   "reason": "Avans (old sheet, 4-9 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 3,
+   "date": "2026-09-04",
+   "worker": "W02",
+   "type": "advance",
+   "amount": 200000,
+   "reason": "Avans (old sheet, 4-9 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 4,
+   "date": "2026-09-04",
+   "worker": "W04",
+   "type": "advance",
+   "amount": 500000,
+   "reason": "Avans (old sheet, 4-9 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 5,
+   "date": "2026-09-09",
+   "worker": "W03",
+   "type": "weekly_pay",
+   "amount": 1247000,
+   "reason": "Berdim (old sheet, 4-9 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 6,
+   "date": "2026-09-09",
+   "worker": "W01",
+   "type": "weekly_pay",
+   "amount": 1046875,
+   "reason": "Berdim (old sheet, 4-9 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 7,
+   "date": "2026-09-09",
+   "worker": "W02",
+   "type": "weekly_pay",
+   "amount": 1046875,
+   "reason": "Berdim (old sheet, 4-9 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 8,
+   "date": "2026-09-09",
+   "worker": "W04",
+   "type": "weekly_pay",
+   "amount": 1247000,
+   "reason": "Berdim (old sheet, 4-9 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 9,
+   "date": "2026-09-18",
+   "worker": "W02",
+   "type": "advance",
+   "amount": 500000,
+   "reason": "Avans (old sheet, 14-18 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 10,
+   "date": "2026-09-18",
+   "worker": "W03",
+   "type": "weekly_pay",
+   "amount": 1000000,
+   "reason": "Berdim (old sheet, 14-18 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 11,
+   "date": "2026-09-18",
+   "worker": "W01",
+   "type": "weekly_pay",
+   "amount": 1148000,
+   "reason": "Berdim (old sheet, 14-18 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 12,
+   "date": "2026-09-18",
+   "worker": "W02",
+   "type": "weekly_pay",
+   "amount": 648000,
+   "reason": "Berdim (old sheet, 14-18 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 13,
+   "date": "2026-09-18",
+   "worker": "W04",
+   "type": "weekly_pay",
+   "amount": 1000000,
+   "reason": "Berdim (old sheet, 14-18 Sep)",
+   "method": "cash"
+  },
+  {
+   "seq": 14,
+   "date": "2026-09-21",
+   "worker": "W01",
+   "type": "advance",
+   "amount": 150000,
+   "reason": "Karta",
+   "method": "cash"
+  },
+  {
+   "seq": 15,
+   "date": "2026-09-22",
+   "worker": "W02",
+   "type": "advance",
+   "amount": 500000,
+   "reason": "Karta+Naqd",
+   "method": "cash"
+  },
+  {
+   "seq": 16,
+   "date": "2026-09-25",
+   "worker": "W02",
+   "type": "advance",
+   "amount": 2300000,
+   "reason": "O'qishga",
+   "method": "cash"
+  },
+  {
+   "seq": 17,
+   "date": "2026-09-26",
+   "worker": "W03",
+   "type": "weekly_pay",
+   "amount": 860000,
+   "reason": "Cash, week of 21 Sep",
+   "method": "cash"
+  },
+  {
+   "seq": 18,
+   "date": "2026-09-26",
+   "worker": "W04",
+   "type": "weekly_pay",
+   "amount": 860000,
+   "reason": "Cash, week of 21 Sep",
+   "method": "cash"
+  },
+  {
+   "seq": 19,
+   "date": "2026-09-26",
+   "worker": "W01",
+   "type": "weekly_pay",
+   "amount": 760000,
+   "reason": "Cash, week of 21 Sep",
+   "method": "cash"
+  },
+  {
+   "seq": 20,
+   "date": "2026-09-26",
+   "worker": "W01",
+   "type": "weekly_pay",
+   "amount": 203125,
+   "reason": "NOT cash - offset against his personal debt to owner",
+   "method": "offset"
+  }
+ ]
+}
