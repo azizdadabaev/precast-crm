@@ -138,27 +138,6 @@ export const NAV: NavItem[] = [
     icon: Wallet,
     permission: "payment.view",
   },
-  {
-    href: "/ledger",
-    label: "Ҳисоб журнали",
-    sub: "Ledger",
-    icon: BookOpen,
-    permission: "ledger.view",
-  },
-  {
-    href: "/discrepancies",
-    label: "Тафовутлар",
-    sub: "Discrepancies",
-    icon: AlertTriangle,
-    permission: "discrepancy.view",
-  },
-  {
-    href: "/sandbox/tapered",
-    label: "Мураккаб шакллар",
-    sub: "Complex shapes",
-    icon: Shapes,
-    permission: "sandbox.access",
-  },
 ];
 
 /** Items grouped under the "Операциялар · Operations" collapsible section. */
@@ -204,6 +183,27 @@ export const OPERATIONS_NAV: NavItem[] = [
     sub: "Gazoblok stock",
     icon: Warehouse,
     permission: "any-auth",
+  },
+  {
+    href: "/ledger",
+    label: "Ҳисоб журнали",
+    sub: "Ledger",
+    icon: BookOpen,
+    permission: "ledger.view",
+  },
+  {
+    href: "/discrepancies",
+    label: "Тафовутлар",
+    sub: "Discrepancies",
+    icon: AlertTriangle,
+    permission: "discrepancy.view",
+  },
+  {
+    href: "/sandbox/tapered",
+    label: "Мураккаб шакллар",
+    sub: "Complex shapes",
+    icon: Shapes,
+    permission: "sandbox.access",
   },
 ];
 
