@@ -15,7 +15,11 @@ export interface EngineWorker {
   joinedOn: IsoDate;
   leftOn: IsoDate | null;
 }
-/** attendance: workerId → 1 (full day) or 0.5 (half day); absent = no key. */
+/**
+ * attendance: workerId → days counted (absent = no key). The CRM only writes 1:
+ * no half days, pay follows blocks produced. The engine stays numeric for
+ * parity with the workbook's reference engine.
+ */
 export interface EngineDay {
   date: IsoDate;
   moulded: number | null;

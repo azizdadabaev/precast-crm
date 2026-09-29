@@ -31,8 +31,12 @@ for r in range(7, 378):
     att = {}
     for k in range(12):                       # G..R = worker slots W01..W12
         v = ws.cell(r, 7 + k).value
-        if isinstance(v, (int, float)) and v in (0.5, 1):
-            att[slot_code[k]] = v
+        if isinstance(v, (int, float)) and v == 1:
+            att[slot_code[k]] = 1
+        elif isinstance(v, (int, float)) and v not in (0, None):
+            # The CRM has no half days (pay follows blocks produced), so stop
+            # rather than silently re-sharing an already-paid week.
+            raise SystemExit(f"Attendance Log row {r}: {slot_code[k]} = {v}; only 1 (came) is allowed")
     if moulded is None and not att and broken in (None, 0):
         continue
     days.append({"date": date, "moulded": moulded, "broken": broken or 0, "attendance": att, "notes": ws.cell(r, 24).value})

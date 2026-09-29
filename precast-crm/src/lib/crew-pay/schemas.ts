@@ -13,7 +13,7 @@ export const DayBody = z.object({
   date: IsoDateSchema,
   moulded: z.number().int().min(0).nullable(),
   broken: z.number().int().min(0).default(0),
-  attendance: z.record(z.string(), z.union([z.literal(1), z.literal(0.5)])),
+  attendance: z.record(z.string(), z.literal(1)),
   notes: Text,
   confirmNoAttendance: z.boolean().optional(),
 });

@@ -217,7 +217,7 @@ Inputs are plain arrays: workers, days with attendance (halfDays / 2), ledger, r
 - **Golden test** (`tests/crew-pay-golden.test.ts`). The fixtures are the pack's `seed_data.json`, plus the `golden_tests.json` produced by running the pack's `reference_engine.py`, and a second golden file produced by the same engine with the DEBT_CAP 0.5 row added. The TS engine must equal both, every field.
 - **Unit tests:**
   - `xround` on negatives and halves;
-  - a half day;
+  - a half day (engine only, workbook parity; the CRM rejects 0,5 since 2026-09-29: the crew is paid for blocks produced, so whoever came counts a full day);
   - a worker with 0 days in a week;
   - a mid-week rate change;
   - breakage allowance 3 %;

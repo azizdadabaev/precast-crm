@@ -73,7 +73,8 @@ export async function saveDay(user: Actor, body: DayBody) {
       update: { moulded: body.moulded, broken: body.broken, notes: body.notes ?? null, updatedById: user.id },
     });
     await tx.crewAttendance.deleteMany({ where: { dayId: day.id } });
-    const rows = Object.entries(body.attendance).map(([workerId, v]) => ({ dayId: day.id, workerId, halfDays: v === 1 ? 2 : 1 }));
+    // No half days any more: every present worker is stored as a full day (2).
+    const rows = Object.keys(body.attendance).map((workerId) => ({ dayId: day.id, workerId, halfDays: 2 }));
     if (rows.length) await tx.crewAttendance.createMany({ data: rows });
     return day.id;
   }, SERIALIZABLE);

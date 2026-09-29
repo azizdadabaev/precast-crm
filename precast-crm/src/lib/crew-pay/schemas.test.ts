@@ -3,9 +3,11 @@ import { DayBody, LedgerBody, PayBody, WeekStartSchema, SettingBody, ReopenBody 
 
 describe("crew pay request schemas", () => {
   it("accepts a day and normalises absent attendance", () => {
-    const d = DayBody.parse({ date: "2026-09-22", moulded: 1876, broken: 0, attendance: { a: 1, b: 0.5 } });
-    expect(d.attendance).toEqual({ a: 1, b: 0.5 });
+    const d = DayBody.parse({ date: "2026-09-22", moulded: 1876, broken: 0, attendance: { a: 1, b: 1 } });
+    expect(d.attendance).toEqual({ a: 1, b: 1 });
   });
+  it("rejects a half day: a worker came (1) or is left out", () =>
+    expect(DayBody.safeParse({ date: "2026-09-22", moulded: 1876, broken: 0, attendance: { a: 1, b: 0.5 } }).success).toBe(false));
   it("rejects negative or fractional block counts", () => {
     expect(DayBody.safeParse({ date: "2026-09-22", moulded: -1, broken: 0, attendance: {} }).success).toBe(false);
     expect(DayBody.safeParse({ date: "2026-09-22", moulded: 1.5, broken: 0, attendance: {} }).success).toBe(false);

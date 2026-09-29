@@ -59,8 +59,10 @@ describe("validateDayWrite (Review Focus 2)", () => {
   it("accepts a normal day", () => expect(() => validateDayWrite(ok, input, {})).not.toThrow());
   it("rejects more broken than moulded", () =>
     expect(() => validateDayWrite({ ...ok, broken: 101 }, input, {})).toThrowError(/Синган/));
-  it("rejects attendance other than 1 or 0.5", () =>
-    expect(() => validateDayWrite({ ...ok, attendance: { a: 2 } }, input, {})).toThrowError(/Давомат/));
+  it("rejects attendance other than 1, including a half day", () => {
+    expect(() => validateDayWrite({ ...ok, attendance: { a: 2 } }, input, {})).toThrowError(/Давомат/);
+    expect(() => validateDayWrite({ ...ok, attendance: { a: 0.5 } }, input, {})).toThrowError(/Давомат/);
+  });
   it("rejects attendance for a worker after their left date", () =>
     expect(() => validateDayWrite({ ...ok, date: "2026-09-24", attendance: { b: 1 } }, input, {})).toThrowError(/ишламаётган/));
   it("rejects a date before the first week", () =>

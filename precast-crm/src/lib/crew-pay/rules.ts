@@ -79,7 +79,10 @@ export interface DayWrite {
   date: IsoDate;
   moulded: number | null;
   broken: number;
-  /** workerId → 1 or 0.5 (absent workers omitted). */
+  /**
+   * workerId → 1 (absent workers omitted). No half days: the crew is paid for
+   * blocks produced, so whoever came shares the day in full.
+   */
   attendance: Record<string, number>;
   notes?: string | null;
 }
@@ -90,7 +93,7 @@ export function validateDayWrite(day: DayWrite, input: EngineInput, opts: { conf
   if (day.moulded != null && day.broken > day.moulded) throw new CrewPayError("Синган блоклар қолипланганидан кўп бўлиши мумкин эмас");
   if (day.moulded == null && day.broken > 0) throw new CrewPayError("Аввал қолипланган блоклар сонини киритинг");
   for (const [workerId, v] of Object.entries(day.attendance)) {
-    if (v !== 1 && v !== 0.5) throw new CrewPayError("Давомат фақат 1 ёки 0,5 бўлиши мумкин");
+    if (v !== 1) throw new CrewPayError("Давомат: ишчи ё келган, ё келмаган бўлади");
     const w = input.workers.find((x) => x.id === workerId);
     if (!w) throw new CrewPayError("Номаълум ишчи");
     if (!activeOn(w, day.date)) throw new CrewPayError(`${w.name}: бу санада ишламаётган ишчига давомат белгилаб бўлмайди`);

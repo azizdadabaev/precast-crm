@@ -14,7 +14,7 @@ import { todayTashkent } from "@/lib/crew-pay/rules";
 import type { DaysView } from "@/lib/crew-pay/views";
 
 type Row = DaysView["rows"][number];
-const next = (v: number | undefined) => (v === 1 ? 0.5 : v === 0.5 ? undefined : 1);
+const next = (v: number | undefined) => (v === 1 ? undefined : 1);
 
 function DayCard({ row, workers, closed: weekClosed, onSaved }: { row: Row; workers: DaysView["workers"]; closed: boolean; onSaved: () => void }) {
   const today = todayTashkent();
@@ -72,8 +72,8 @@ function DayCard({ row, workers, closed: weekClosed, onSaved }: { row: Row; work
             <button key={w.id} type="button" disabled={closed || !employed(w)} title={employed(w) ? undefined : "Бу санада ишламаган"}
               onClick={() => setAtt((a) => { const n = { ...a }; const nv = next(a[w.id]); if (nv) n[w.id] = nv; else delete n[w.id]; return n; })}
               className={cn("min-h-[44px] rounded-full border px-3 text-sm disabled:opacity-50",
-                v === 1 ? "bg-primary text-primary-foreground border-primary" : v === 0.5 ? "border-primary text-primary" : "text-muted-foreground")}>
-              {w.name} <span className="font-mono">{v === 1 ? "1" : v === 0.5 ? "½" : "—"}</span>
+                v === 1 ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground")}>
+              {w.name} <span className="font-mono">{v === 1 ? "1" : "—"}</span>
             </button>
           );
         })}

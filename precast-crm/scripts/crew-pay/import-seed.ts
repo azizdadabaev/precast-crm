@@ -61,7 +61,7 @@ async function main() {
     }
     for (const d of seed.daily_log) {
       const day = await tx.crewDay.create({ data: { workDate: toDbDate(d.date), moulded: d.moulded, broken: d.broken ?? 0, notes: d.notes ?? null } });
-      const att = Object.entries(d.attendance).filter(([, v]) => v).map(([code, v]) => ({ dayId: day.id, workerId: idOf[code], halfDays: v === 1 ? 2 : 1 }));
+      const att = Object.entries(d.attendance).filter(([, v]) => v).map(([code]) => ({ dayId: day.id, workerId: idOf[code], halfDays: 2 }));
       if (att.length) await tx.crewAttendance.createMany({ data: att });
     }
     for (const e of [...seed.cash_ledger].sort((a, b) => a.seq - b.seq)) {
