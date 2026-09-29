@@ -1,0 +1,448 @@
+{
+ "weeks": [
+  {
+   "week_start": "2026-08-31",
+   "moulded": 4564,
+   "broken": 0,
+   "good": 4564,
+   "paid_blocks": 4564,
+   "pot": 2282000,
+   "crew_days": 12,
+   "days": {
+    "W01": 3.0,
+    "W02": 3.0,
+    "W03": 3.0,
+    "W04": 3.0
+   },
+   "shares": {
+    "W01": 570500,
+    "W02": 570500,
+    "W03": 570500,
+    "W04": 570500
+   },
+   "share_drift": 0
+  },
+  {
+   "week_start": "2026-09-07",
+   "moulded": 5411,
+   "broken": 0,
+   "good": 5411,
+   "paid_blocks": 5411,
+   "pot": 2705500,
+   "crew_days": 12,
+   "days": {
+    "W01": 3.0,
+    "W02": 3.0,
+    "W03": 3.0,
+    "W04": 3.0
+   },
+   "shares": {
+    "W01": 676375,
+    "W02": 676375,
+    "W03": 676375,
+    "W04": 676375
+   },
+   "share_drift": 0
+  },
+  {
+   "week_start": "2026-09-14",
+   "moulded": 9184,
+   "broken": 0,
+   "good": 9184,
+   "paid_blocks": 9184,
+   "pot": 4592000,
+   "crew_days": 16,
+   "days": {
+    "W01": 4.0,
+    "W02": 4.0,
+    "W03": 4.0,
+    "W04": 4.0
+   },
+   "shares": {
+    "W01": 1148000,
+    "W02": 1148000,
+    "W03": 1148000,
+    "W04": 1148000
+   },
+   "share_drift": 0
+  },
+  {
+   "week_start": "2026-09-21",
+   "moulded": 8905,
+   "broken": 0,
+   "good": 8905,
+   "paid_blocks": 8905,
+   "pot": 4452500,
+   "crew_days": 20,
+   "days": {
+    "W01": 5.0,
+    "W02": 5.0,
+    "W03": 5.0,
+    "W04": 5.0
+   },
+   "shares": {
+    "W01": 1113125,
+    "W02": 1113125,
+    "W03": 1113125,
+    "W04": 1113125
+   },
+   "share_drift": 0
+  },
+  {
+   "week_start": "2026-09-28",
+   "moulded": 2000,
+   "broken": 0,
+   "good": 2000,
+   "paid_blocks": 2000,
+   "pot": 1000000,
+   "crew_days": 4,
+   "days": {
+    "W01": 1.0,
+    "W02": 1.0,
+    "W03": 1.0,
+    "W04": 1.0
+   },
+   "shares": {
+    "W01": 250000,
+    "W02": 250000,
+    "W03": 250000,
+    "W04": 250000
+   },
+   "share_drift": 0
+  }
+ ],
+ "weekly_pay": {
+  "2026-08-31": [
+   {
+    "worker": "W01",
+    "name": "Davlatbek",
+    "days": 3.0,
+    "earned": 570500,
+    "brought_forward": 0,
+    "advances": 200000,
+    "corrections": 0,
+    "due": 370500,
+    "to_pay": 370500,
+    "paid": 0,
+    "still_to_pay": 370500,
+    "carried_forward": 370500,
+    "status": "not_yet_paid"
+   },
+   {
+    "worker": "W02",
+    "name": "Xusanboy",
+    "days": 3.0,
+    "earned": 570500,
+    "brought_forward": 0,
+    "advances": 200000,
+    "corrections": 0,
+    "due": 370500,
+    "to_pay": 370500,
+    "paid": 0,
+    "still_to_pay": 370500,
+    "carried_forward": 370500,
+    "status": "not_yet_paid"
+   },
+   {
+    "worker": "W03",
+    "name": "Oybek",
+    "days": 3.0,
+    "earned": 570500,
+    "brought_forward": 0,
+    "advances": 500000,
+    "corrections": 0,
+    "due": 70500,
+    "to_pay": 70500,
+    "paid": 0,
+    "still_to_pay": 70500,
+    "carried_forward": 70500,
+    "status": "not_yet_paid"
+   },
+   {
+    "worker": "W04",
+    "name": "Nomonjon",
+    "days": 3.0,
+    "earned": 570500,
+    "brought_forward": 0,
+    "advances": 500000,
+    "corrections": 0,
+    "due": 70500,
+    "to_pay": 70500,
+    "paid": 0,
+    "still_to_pay": 70500,
+    "carried_forward": 70500,
+    "status": "not_yet_paid"
+   }
+  ],
+  "2026-09-07": [
+   {
+    "worker": "W01",
+    "name": "Davlatbek",
+    "days": 3.0,
+    "earned": 676375,
+    "brought_forward": 370500,
+    "advances": 0,
+    "corrections": 0,
+    "due": 1046875,
+    "to_pay": 1046875,
+    "paid": 1046875,
+    "still_to_pay": 0,
+    "carried_forward": 0,
+    "status": "settled"
+   },
+   {
+    "worker": "W02",
+    "name": "Xusanboy",
+    "days": 3.0,
+    "earned": 676375,
+    "brought_forward": 370500,
+    "advances": 0,
+    "corrections": 0,
+    "due": 1046875,
+    "to_pay": 1046875,
+    "paid": 1046875,
+    "still_to_pay": 0,
+    "carried_forward": 0,
+    "status": "settled"
+   },
+   {
+    "worker": "W03",
+    "name": "Oybek",
+    "days": 3.0,
+    "earned": 676375,
+    "brought_forward": 70500,
+    "advances": 0,
+    "corrections": 0,
+    "due": 746875,
+    "to_pay": 746875,
+    "paid": 1247000,
+    "still_to_pay": 0,
+    "carried_forward": -500125,
+    "status": "owes_you"
+   },
+   {
+    "worker": "W04",
+    "name": "Nomonjon",
+    "days": 3.0,
+    "earned": 676375,
+    "brought_forward": 70500,
+    "advances": 0,
+    "corrections": 0,
+    "due": 746875,
+    "to_pay": 746875,
+    "paid": 1247000,
+    "still_to_pay": 0,
+    "carried_forward": -500125,
+    "status": "owes_you"
+   }
+  ],
+  "2026-09-14": [
+   {
+    "worker": "W01",
+    "name": "Davlatbek",
+    "days": 4.0,
+    "earned": 1148000,
+    "brought_forward": 0,
+    "advances": 0,
+    "corrections": 0,
+    "due": 1148000,
+    "to_pay": 1148000,
+    "paid": 1148000,
+    "still_to_pay": 0,
+    "carried_forward": 0,
+    "status": "settled"
+   },
+   {
+    "worker": "W02",
+    "name": "Xusanboy",
+    "days": 4.0,
+    "earned": 1148000,
+    "brought_forward": 0,
+    "advances": 500000,
+    "corrections": 0,
+    "due": 648000,
+    "to_pay": 648000,
+    "paid": 648000,
+    "still_to_pay": 0,
+    "carried_forward": 0,
+    "status": "settled"
+   },
+   {
+    "worker": "W03",
+    "name": "Oybek",
+    "days": 4.0,
+    "earned": 1148000,
+    "brought_forward": -500125,
+    "advances": 0,
+    "corrections": 0,
+    "due": 647875,
+    "to_pay": 647875,
+    "paid": 1000000,
+    "still_to_pay": 0,
+    "carried_forward": -352125,
+    "status": "owes_you"
+   },
+   {
+    "worker": "W04",
+    "name": "Nomonjon",
+    "days": 4.0,
+    "earned": 1148000,
+    "brought_forward": -500125,
+    "advances": 0,
+    "corrections": 0,
+    "due": 647875,
+    "to_pay": 647875,
+    "paid": 1000000,
+    "still_to_pay": 0,
+    "carried_forward": -352125,
+    "status": "owes_you"
+   }
+  ],
+  "2026-09-21": [
+   {
+    "worker": "W01",
+    "name": "Davlatbek",
+    "days": 5.0,
+    "earned": 1113125,
+    "brought_forward": 0,
+    "advances": 150000,
+    "corrections": 0,
+    "due": 963125,
+    "to_pay": 963125,
+    "paid": 963125,
+    "still_to_pay": 0,
+    "carried_forward": 0,
+    "status": "settled"
+   },
+   {
+    "worker": "W02",
+    "name": "Xusanboy",
+    "days": 5.0,
+    "earned": 1113125,
+    "brought_forward": 0,
+    "advances": 2800000,
+    "corrections": 0,
+    "due": -1686875,
+    "to_pay": 0,
+    "paid": 0,
+    "still_to_pay": 0,
+    "carried_forward": -1686875,
+    "status": "owes_you"
+   },
+   {
+    "worker": "W03",
+    "name": "Oybek",
+    "days": 5.0,
+    "earned": 1113125,
+    "brought_forward": -352125,
+    "advances": 0,
+    "corrections": 0,
+    "due": 761000,
+    "to_pay": 761000,
+    "paid": 860000,
+    "still_to_pay": 0,
+    "carried_forward": -99000,
+    "status": "owes_you"
+   },
+   {
+    "worker": "W04",
+    "name": "Nomonjon",
+    "days": 5.0,
+    "earned": 1113125,
+    "brought_forward": -352125,
+    "advances": 0,
+    "corrections": 0,
+    "due": 761000,
+    "to_pay": 761000,
+    "paid": 860000,
+    "still_to_pay": 0,
+    "carried_forward": -99000,
+    "status": "owes_you"
+   }
+  ],
+  "2026-09-28": [
+   {
+    "worker": "W01",
+    "name": "Davlatbek",
+    "days": 1.0,
+    "earned": 250000,
+    "brought_forward": 0,
+    "advances": 0,
+    "corrections": 0,
+    "due": 250000,
+    "to_pay": 250000,
+    "paid": 0,
+    "still_to_pay": 250000,
+    "carried_forward": 250000,
+    "status": "not_yet_paid"
+   },
+   {
+    "worker": "W02",
+    "name": "Xusanboy",
+    "days": 1.0,
+    "earned": 250000,
+    "brought_forward": -1686875,
+    "advances": 0,
+    "corrections": 0,
+    "due": -1436875,
+    "to_pay": 125000,
+    "paid": 0,
+    "still_to_pay": 125000,
+    "carried_forward": -1436875,
+    "status": "owes_you"
+   },
+   {
+    "worker": "W03",
+    "name": "Oybek",
+    "days": 1.0,
+    "earned": 250000,
+    "brought_forward": -99000,
+    "advances": 0,
+    "corrections": 0,
+    "due": 151000,
+    "to_pay": 151000,
+    "paid": 0,
+    "still_to_pay": 151000,
+    "carried_forward": 151000,
+    "status": "not_yet_paid"
+   },
+   {
+    "worker": "W04",
+    "name": "Nomonjon",
+    "days": 1.0,
+    "earned": 250000,
+    "brought_forward": -99000,
+    "advances": 0,
+    "corrections": 0,
+    "due": 151000,
+    "to_pay": 151000,
+    "paid": 0,
+    "still_to_pay": 151000,
+    "carried_forward": 151000,
+    "status": "not_yet_paid"
+   }
+  ]
+ },
+ "ledger_balance_after": {
+  "1": 70500,
+  "2": 370500,
+  "3": 370500,
+  "4": 70500,
+  "5": -500125,
+  "6": 0,
+  "7": 0,
+  "8": -500125,
+  "9": 0,
+  "10": -352125,
+  "11": 0,
+  "12": 0,
+  "13": -352125,
+  "14": 963125,
+  "15": 613125,
+  "16": -1686875,
+  "17": -99000,
+  "18": -99000,
+  "19": 0,
+  "20": 0
+ }
+}

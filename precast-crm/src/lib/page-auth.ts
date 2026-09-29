@@ -48,6 +48,8 @@ export const ROUTE_PERMISSIONS: Record<
   "/drivers": "driver.view",
   "/inventory": "inventory.view",
   "/production": "inventory.view",
+  // 10 cm filler-block crew pay — owner-only (money + workers' debts).
+  "/crew-pay": "crewpay.manage",
   "/sandbox": "sandbox.access",
   "/inbox": "inbox.access",
   "/agent": "inbox.access",
