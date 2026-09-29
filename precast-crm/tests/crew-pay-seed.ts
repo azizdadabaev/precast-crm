@@ -1,12 +1,7 @@
 import type { EngineInput, LedgerType, SettingKey } from "../src/lib/crew-pay/engine";
+import type { Seed } from "../src/lib/crew-pay/seed";
 
-export interface Seed {
-  settings: Array<{ key: string; value: number; effective_from: string }>;
-  pay_rates: Array<{ effective_from: string; rate_per_block: number }>;
-  workers: Array<{ code: string; name: string; status: string; joined_on: string; left_on: string | null }>;
-  daily_log: Array<{ date: string; moulded: number | null; broken: number | null; attendance: Record<string, number | null> }>;
-  cash_ledger: Array<{ seq: number; date: string; worker: string; type: string; amount: number }>;
-}
+export type { Seed };
 
 const SETTING: Record<string, SettingKey> = {
   break_allowance_pct: "BREAK_ALLOWANCE", debt_cap_pct: "DEBT_CAP", reject_alarm_pct: "REJECT_ALARM",

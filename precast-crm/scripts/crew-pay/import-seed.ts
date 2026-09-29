@@ -11,7 +11,7 @@ import { UserRole } from "@prisma/client";
 import { prisma } from "../../src/lib/prisma";
 import { loadCrewState, toDbDate } from "../../src/lib/crew-pay/service";
 import { balanceAt, weeklyPay } from "../../src/lib/crew-pay/engine";
-import type { Seed } from "../../tests/crew-pay-seed";
+import type { Seed } from "../../src/lib/crew-pay/seed";
 
 type FullSeed = Seed & {
   workers: Array<Seed["workers"][number] & { phone?: string | null; notes?: string | null }>;
