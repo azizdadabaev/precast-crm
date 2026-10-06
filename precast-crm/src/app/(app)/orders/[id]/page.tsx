@@ -42,6 +42,7 @@ import { addressToCyrillic } from "@/lib/regions";
 import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
 import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 import { canAddLoadedPhoto } from "@/lib/loaded-photos";
+import { editLockMessage, editPolicy } from "@/lib/order-edit-policy";
 import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
 import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCard";
 import { CommentThread } from "@/components/comments/CommentThread";
@@ -1218,8 +1219,14 @@ export default function OrderDetailPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Edit */}
                 {(() => {
-                  const editable =
-                    order.status === "PLACED" || order.status === "IN_PRODUCTION";
+                  // Same rule the server enforces: once a truck is loaded only
+                  // the owner (order.editShipped) can edit, until delivered.
+                  const policy = editPolicy({
+                    status: order.status,
+                    shipments: order.shipments,
+                    permissions: me?.permissions ?? [],
+                  });
+                  const editable = policy.allowed;
                   return (
                     <Button
                       variant="outline"
@@ -1233,10 +1240,7 @@ export default function OrderDetailPage() {
                               "Ўлчам, нарх, жадвал ёки изоҳни таҳрирлаш",
                               "Edit dimensions, pricing, schedule or notes",
                             )
-                          : t(
-                              `Ҳолат ${order.status} да таҳрир блокланган`,
-                              `Editing locked at status ${order.status}`,
-                            )
+                          : editLockMessage(policy.reason ?? "NO_PERMISSION")
                       }
                     >
                       {editable ? (

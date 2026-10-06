@@ -27,6 +27,7 @@ export const ACTIONS = [
   "order.viewAll", // see ALL orders, not just own
   "order.create",
   "order.edit",
+  "order.editShipped", // owner-only · edit an order after a truck was loaded (opt-in)
   "order.cancel",
   "order.delete", // owner-only · hard-delete an order + its children (events, payments, dispatch…)
   "order.exportBackup", // owner-only · download Excel snapshot of all orders
@@ -110,6 +111,7 @@ export const PERMISSION_GROUPS: Array<{
       "order.viewAll",
       "order.create",
       "order.edit",
+      "order.editShipped",
       "order.cancel",
       "order.delete",
       "order.exportBackup",
@@ -196,6 +198,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   "order.viewAll": "Барча буюртмаларни кўриш · View ALL orders (not just own)",
   "order.create": "Янги буюртма яратиш · Create orders",
   "order.edit": "Буюртмаларни таҳрирлаш · Edit orders",
+  "order.editShipped": "Жўнатилган буюртмани таҳрирлаш · Edit partly shipped orders (owner-only)",
   "order.cancel": "Буюртмани бекор қилиш · Cancel orders",
   "order.delete": "Буюртмани бутунлай ўчириш · Delete order permanently",
   "order.exportBackup": "Буюртмалар захираси (Excel) · Export orders backup (Excel)",

@@ -16,6 +16,13 @@ import {
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
+import { lengthKey, loadedByLength } from "@/lib/fulfilment";
+import {
+  editLockMessage,
+  editPolicy,
+  floorViolationMessage,
+  loadedFloorViolations,
+} from "@/lib/order-edit-policy";
 
 /**
  * PATCH /api/orders/[id]/edit  (order.edit)
@@ -25,9 +32,13 @@ import { calcResultToCreatePayload } from "@/lib/calc-persistence";
  * client/deal/order-number bootstrap (those are fixed for an
  * existing order).
  *
- * Status policy (per the operator decision recorded in HANDOFF.md):
- *   - PLACED, IN_PRODUCTION : edit allowed
- *   - DISPATCHED, DELIVERED, CANCELED : forbidden
+ * Edit policy (owner rules 2026-10-06, src/lib/order-edit-policy.ts):
+ *   - nothing loaded yet (PLACED / IN_PRODUCTION) : order.edit, as before
+ *   - any truck loaded, until DELIVERED            : order.editShipped only
+ *   - single-truck order already on its truck      : forbidden
+ *   - DELIVERED, CANCELED                          : forbidden
+ * An edit of a partly shipped order may not drop any beam length or the
+ * block total below what has already been loaded.
  *
  * Payment policy: existing Payment rows are PRESERVED. The route
  * recomputes `confirmedPaid` from the still-CONFIRMED payments and
@@ -69,13 +80,15 @@ export const PATCH = withPermission<{ id: string }>(
         project: { include: { calculations: true } },
         payments: { select: { status: true, amount: true } },
         client: { select: { id: true, name: true, address: true, phone: true } },
+        shipments: { select: { number: true, loadedAt: true, loadedBeams: true, loadedBlocks: true } },
       },
     });
     if (!existing) return fail("Order not found", 404);
-    if (existing.status === "DISPATCHED" || existing.status === "DELIVERED" || existing.status === "CANCELED") {
+    const policy = editPolicy({ status: existing.status, shipments: existing.shipments, permissions: user.permissions });
+    if (!policy.allowed) {
       return fail(
-        `Order in status ${existing.status} cannot be edited. Use Cancel + recreate instead.`,
-        422,
+        editLockMessage(policy.reason ?? "NO_PERMISSION"),
+        policy.reason === "NEEDS_SHIPPED_PERMISSION" ? 403 : 422,
       );
     }
 
@@ -164,6 +177,30 @@ export const PATCH = withPermission<{ id: string }>(
     const totalArea = computed.reduce((s, c) => s + c.result.monolith_area, 0);
     const totalBlocks = computed.reduce((s, c) => s + c.result.total_blocks, 0);
     const totalBeams = computed.reduce((s, c) => s + c.result.beam_count, 0);
+
+    // A truck's goods already left the yard: the edit may not go below them.
+    if (policy.shipped) {
+      const nextBeams: Record<string, number> = {};
+      for (const c of computed) {
+        const k = lengthKey(c.result.beam_length);
+        nextBeams[k] = (nextBeams[k] ?? 0) + c.result.beam_count;
+      }
+      const violations = loadedFloorViolations(
+        { beams: nextBeams, blocks: totalBlocks },
+        loadedByLength(
+          existing.shipments.map((s) => ({
+            number: s.number,
+            status: "",
+            loadedAt: s.loadedAt,
+            deliveredAt: null,
+            loadedBeams: s.loadedBeams,
+            loadedBlocks: s.loadedBlocks,
+            loadedArea: null,
+          })),
+        ),
+      );
+      if (violations.length > 0) return fail(floorViolationMessage(violations), 422);
+    }
     // Same precedence rule as POST /api/orders: explicit amount wins
     // over percent. Amount capped at subtotal.
     let discountAmount: number;
