@@ -5,16 +5,12 @@ import { aggregateByRegion, type RegionRow } from '@/lib/dashboard-regions';
 import { attributionDate } from '@/lib/payment-attribution';
 import {
   accumulateLoaded,
-  areaShares,
-  beamsFromLoadedJson,
-  hasRemainder,
   loadMonthKey,
-  physicalCompletion,
-  remainderAfterRecorded,
-  roomBeamMeters,
   type LoadEvent,
   type LoadedVolume,
 } from '@/lib/loaded-volume';
+import { contributes, dayBuckets, dayContribution } from '@/lib/fulfilment';
+import { FULFILMENT_SELECT, dayWindowWhere, fulfilmentOf } from '@/lib/fulfilment-data';
 import {
   accumulateByMonth,
   averageOrderValue,
@@ -142,6 +138,11 @@ export interface DashboardPayload {
    * overlap and could not be drawn as a donut.
    */
   ordersByPaymentState: { paid: number; partial: number; awaiting: number };
+  /**
+   * Orders that put goods on TODAY (owner 2026-10-06): a truck loaded today
+   * and/or what is still left to ship of an order scheduled today. `totalArea`
+   * (card and per order) is today's portion, not the order's whole m².
+   */
   todayDeliveries: {
     count: number;
     totalArea: number;
@@ -269,8 +270,6 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
   // Previous calendar month — for "vs last month" trend pills.
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
   const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-  const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
 
   // The capacity strip shows Mon..Sun of the current week. Compute
   // Monday by walking back from today. JavaScript's getDay() returns
@@ -292,7 +291,6 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     receivablesPrevMonthRows,
     activeCustomerRows,
     ordersByStateRows,
-    todayOrders,
     discrepanciesAgg,
     discrepanciesCount,
     cashOnRoadDispatches,
@@ -380,20 +378,6 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
       _count: { _all: true },
       where: LIVE_ORDERS,
     }),
-    prisma.order.findMany({
-      where: { ...LIVE_ORDERS, scheduledAt: { gte: todayStart, lte: todayEnd } },
-      select: {
-        id: true,
-        orderNumber: true,
-        totalArea: true,
-        status: true,
-        totalPrice: true,
-        confirmedPaid: true,
-        writeOffAmount: true,
-        client: { select: { name: true, address: true } },
-      },
-      orderBy: { scheduledAt: 'asc' },
-    }),
     prisma.discrepancy.aggregate({
       _sum: { shortfall: true },
       where: { status: 'OPEN' },
@@ -406,9 +390,19 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
         driver: { select: { id: true, name: true } },
       },
     }),
+    // Today + week capacity: every order that can put goods on a day of this
+    // week — a truck loaded, a completion, or what is left on its scheduled
+    // day. Today is inside the week, so one query serves both.
     prisma.order.findMany({
-      where: { ...LIVE_ORDERS, scheduledAt: { gte: weekStart, lte: weekEnd } },
-      select: { scheduledAt: true, totalArea: true },
+      where: { AND: [LIVE_ORDERS, dayWindowWhere(weekStart, new Date(weekEnd.getTime() + 1))] },
+      select: {
+        ...FULFILMENT_SELECT,
+        orderNumber: true,
+        totalPrice: true,
+        confirmedPaid: true,
+        writeOffAmount: true,
+        client: { select: { name: true, address: true } },
+      },
     }),
     // Region aggregation — pull each live order's client address +
     // booked value + client id. Aggregated in-memory because resolving
@@ -532,9 +526,17 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
     else if (row.paymentState === 'AWAITING_PAYMENT') ordersByPaymentState.awaiting += row._count._all;
   }
 
-  // ── Today's deliveries ──
-  const todayCount = todayOrders.length;
-  const todayArea = todayOrders.reduce((s, o) => s + Number(o.totalArea), 0);
+  // ── Today's deliveries — real data (owner 2026-10-06): goods that left
+  // today + what is still left to ship of orders scheduled today. A partly
+  // shipped order counts only its remaining part, not its whole m².
+  const weekFulfilment = weekOrders.map((o) => ({ o, f: fulfilmentOf(o) }));
+  const todayKey = dayKey(now);
+  const todayRows = weekFulfilment
+    .map(({ o, f }) => ({ o, c: dayContribution(f, todayKey) }))
+    .filter(({ c }) => contributes(c))
+    .sort((a, b) => a.o.scheduledAt.getTime() - b.o.scheduledAt.getTime());
+  const todayCount = todayRows.length;
+  const todayArea = todayRows.reduce((s, r) => s + r.c.area, 0);
 
   // ── Cash on the road ──
   const cashOnRoadTotal = cashOnRoadDispatches.reduce(
@@ -582,14 +584,8 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
       capacityM2: CAPACITY_M2_PER_DAY,
     });
   }
-  const weekIndex = new Map(weekDays.map((d, i) => [d.date, i]));
-  for (const o of weekOrders) {
-    const key = dayKey(new Date(o.scheduledAt));
-    const i = weekIndex.get(key);
-    if (i !== undefined) {
-      weekDays[i]!.bookedM2 += Number(o.totalArea);
-    }
-  }
+  const weekBuckets = dayBuckets(weekFulfilment.map(({ o, f }) => ({ id: o.id, f })));
+  for (const d of weekDays) d.bookedM2 = weekBuckets.get(d.date)?.area ?? 0;
   // Round bookedM2 for clean display.
   for (const d of weekDays) {
     d.bookedM2 = Math.round(d.bookedM2 * 10) / 10;
@@ -620,19 +616,14 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
 
   // ── Loaded volume — what physically left the yard, by month ─────────
   //
-  // Three sources, applied in this order so nothing is counted twice:
-  //   1. SPLIT SHIPMENTS — actual counted quantities per truck.
-  //   2. SINGLE TRUCK    — `Order.loadedAt` with no quantities recorded,
-  //      which by definition means the whole order went on one truck.
-  //   3. DELIVERED REMAINDER — loading paperwork is often incomplete (the
-  //      operator logs the first truck and forgets the rest; filler blocks
-  //      are not photographed the way T-beams are). Once an order is
-  //      DELIVERED the whole order demonstrably shipped, so the unrecorded
-  //      BALANCE is added. Taking the difference, not replacing the figures,
-  //      is what preserves accurate truck records where they exist.
-  //
-  // Sources 1 and 2 are mutually exclusive in the data — no order that uses
-  // shipments also sets `Order.loadedAt`.
+  // Built from the fulfilment engine (src/lib/fulfilment.ts), the same one
+  // behind the calendar, the ledger and the stock write-off:
+  //   1. SPLIT SHIPMENTS — counted quantities per truck, on its loading day.
+  //      A truck's m² comes from ITS BEAMS (owner rule 2026-10-06) — saved on
+  //      the truck at loading — not from its share of the blocks.
+  //   2. SINGLE TRUCK    — `Order.loadedAt`: the whole order on one truck.
+  //   3. DELIVERED REMAINDER — once the goods are physically complete, the
+  //      balance nobody recorded counts on the completion day.
   const loadWindowStart = new Date(
     Math.min(twelveMonthsAgo.getTime(), deliveryWindowStart.getTime()),
   );
@@ -648,101 +639,20 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
         { shipments: { some: { deliveredAt: { gte: loadWindowStart } } } },
       ],
     },
-    select: {
-      id: true,
-      status: true,
-      loadedAt: true,
-      deliveredAt: true,
-      scheduledAt: true,
-      totalArea: true,
-      totalBlocks: true,
-      totalBeams: true,
-      project: { select: { calculations: { select: { beamCount: true, beamLength: true } } } },
-      // EVERY shipment, not just loaded ones: completion asks whether all of
-      // them are delivered, and a shipment that was never loaded still counts
-      // against that. Loaded ones are filtered out in code below.
-      shipments: {
-        orderBy: { number: 'asc' },
-        select: {
-          status: true,
-          loadedAt: true,
-          deliveredAt: true,
-          loadedBeams: true,
-          loadedBlocks: true,
-        },
-      },
-    },
+    select: FULFILMENT_SELECT,
   });
 
   const loadEvents: LoadEvent[] = [];
   for (const o of loadableOrders) {
-    const rooms = o.project.calculations.map((c) => ({
-      beamCount: c.beamCount,
-      beamLength: Number(c.beamLength),
-    }));
-    // The owner's formula: Σ(beamCount × beamLength) over the order's rooms.
-    const orderTotals = {
-      blocks: o.totalBlocks,
-      beamCount: o.totalBeams,
-      beamMeters: roomBeamMeters(rooms),
-      area: Number(o.totalArea),
-    };
-
-    const recorded = { blocks: 0, beamCount: 0, beamMeters: 0, area: 0 };
-
-    // Only trucks that were actually loaded carry quantities; the rest are
-    // still needed above, to judge whether the order is complete.
-    const loadedShipments = o.shipments.filter((s) => s.loadedAt);
-
-    if (loadedShipments.length > 0) {
-      const per = loadedShipments.map((s) => {
-        const beams = beamsFromLoadedJson(s.loadedBeams);
-        return { blocks: Number(s.loadedBlocks ?? 0), ...beams };
+    for (const e of fulfilmentOf(o).events) {
+      loadEvents.push({
+        monthKey: loadMonthKey(e.at),
+        orderId: o.id,
+        blocks: e.blocks,
+        beamCount: e.beamCount,
+        beamMeters: e.beamMeters,
+        area: e.area,
       });
-      // The order's own m² cell, split across its trucks so the parts add
-      // back to exactly that figure — shipments never record area.
-      const shares = areaShares(orderTotals.area, per);
-      loadedShipments.forEach((s, i) => {
-        const e: LoadEvent = {
-          monthKey: loadMonthKey(s.loadedAt as Date),
-          orderId: o.id,
-          blocks: per[i].blocks,
-          beamCount: per[i].count,
-          beamMeters: per[i].meters,
-          area: shares[i] ?? 0,
-        };
-        recorded.blocks += e.blocks;
-        recorded.beamCount += e.beamCount;
-        recorded.beamMeters += e.beamMeters;
-        recorded.area += e.area;
-        loadEvents.push(e);
-      });
-    } else if (o.loadedAt) {
-      loadEvents.push({ monthKey: loadMonthKey(o.loadedAt), orderId: o.id, ...orderTotals });
-      recorded.blocks = orderTotals.blocks;
-      recorded.beamCount = orderTotals.beamCount;
-      recorded.beamMeters = orderTotals.beamMeters;
-      recorded.area = orderTotals.area;
-    }
-
-    // Physically complete, NOT `status === 'DELIVERED'`. That status is gated
-    // on a zero balance, so a split order whose every truck has been delivered
-    // stays at DISPATCHED while unpaid and its unrecorded balance would never
-    // be counted at all — three orders and 1 653 blocks on prod. Delivery and
-    // payment are different facts; volume follows the goods.
-    const completedAt = physicalCompletion({
-      status: o.status,
-      deliveredAt: o.deliveredAt,
-      loadedAt: o.loadedAt,
-      scheduledAt: o.scheduledAt,
-      shipments: o.shipments,
-    });
-    if (completedAt) {
-      const rest = remainderAfterRecorded(orderTotals, recorded);
-      if (hasRemainder(rest)) {
-        const when = completedAt;
-        loadEvents.push({ monthKey: loadMonthKey(when), orderId: o.id, ...rest });
-      }
     }
   }
   const loadedMap = accumulateLoaded(loadEvents);
@@ -899,11 +809,12 @@ export async function fetchDashboardData(): Promise<DashboardPayload> {
       count: todayCount,
       totalArea: Math.round(todayArea * 10) / 10,
       date: dayKey(now),
-      orders: todayOrders.map((o) => ({
+      orders: todayRows.map(({ o, c }) => ({
         id: o.id,
         orderNumber: o.orderNumber,
         clientName: o.client.name,
-        totalArea: Math.round(Number(o.totalArea) * 10) / 10,
+        // Today's portion: the truck(s) loaded today and/or what is left to ship.
+        totalArea: Math.round(c.area * 10) / 10,
         status: o.status,
         clientAddress: o.client.address ?? null,
         totalPrice: Math.round(Number(o.totalPrice)),

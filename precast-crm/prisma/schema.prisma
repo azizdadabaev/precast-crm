@@ -744,6 +744,10 @@ model Shipment {
   // Loaded truck photo
   loadedPhotoUrl String?
   loadedAt       DateTime?
+  // m² this truck carried, worked out from its beams at loading (owner rule
+  // 2026-10-06). Saved so a later owner edit never rewrites history. Null on
+  // trucks loaded before the column existed — the engine computes those.
+  loadedArea     Decimal?  @db.Decimal(10, 3)
 
   // Optional driver assignment per shipment
   driverId              String?
@@ -762,6 +766,7 @@ model Shipment {
   order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   driver       Driver? @relation("ShipmentDriver", fields: [driverId], references: [id])
   dispatchedBy User?   @relation("ShipmentDispatcher", fields: [dispatchedById], references: [id])
+  stockMovements StockMovement[]
 
   @@unique([orderId, number])
   @@index([orderId])
@@ -1008,6 +1013,9 @@ model StockMovement {
   reason            StockMovementReason
   productionEntryId String?
   orderId           String?
+  // The truck that carried these goods (stock is written off per truck at
+  // loading). Null for production, manual, single-truck and legacy rows.
+  shipmentId        String?
   actorId           String?
   note              String?
   createdAt         DateTime            @default(now())
@@ -1015,10 +1023,12 @@ model StockMovement {
   inventoryItem   InventoryItem    @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
   productionEntry ProductionEntry? @relation(fields: [productionEntryId], references: [id], onDelete: SetNull)
   order           Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  shipment        Shipment?        @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
   actor           User?            @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([inventoryItemId])
   @@index([orderId])
+  @@index([shipmentId])
   @@index([productionEntryId])
   @@index([createdAt])
   @@map("stock_movements")

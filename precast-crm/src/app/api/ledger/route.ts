@@ -14,13 +14,7 @@ import {
   sortLedger,
   type LedgerRow,
 } from '@/lib/ledger';
-import {
-  areaShares,
-  beamsFromLoadedJson,
-  physicalCompletion,
-  remainderAfterRecorded,
-  roomBeamMeters,
-} from '@/lib/loaded-volume';
+import { FULFILMENT_SELECT, fulfilmentOf } from '@/lib/fulfilment-data';
 
 // Same live-order set as every dashboard figure.
 const LIVE: Prisma.OrderWhereInput = { status: { notIn: ['CANCELED', 'DRAFT'] } };
@@ -105,122 +99,60 @@ export const GET = withPermission(
         ],
       },
       select: {
-        id: true, orderNumber: true, status: true, placedAt: true,
-        loadedAt: true, deliveredAt: true, scheduledAt: true,
-        totalArea: true, totalBlocks: true, totalBeams: true,
+        ...FULFILMENT_SELECT,
+        orderNumber: true,
+        placedAt: true,
         client: { select: { name: true } },
-        project: { select: { calculations: { select: { beamCount: true, beamLength: true } } } },
-        // EVERY shipment, not only loaded ones: completion asks whether all
-        // of them are delivered, and one that was never loaded counts against
-        // that. The loaded subset is taken in code below.
-        shipments: {
-          orderBy: { number: 'asc' },
-          select: {
-            id: true, number: true, status: true, loadedAt: true,
-            deliveredAt: true, loadedBeams: true, loadedBlocks: true,
-          },
-        },
       },
     });
 
+    // Rows come from the fulfilment engine — the same one behind the
+    // dashboard total — so a truck's m² here is the m² it carried by its
+    // beams (owner rule 2026-10-06).
     for (const o of orders) {
       const orderMonth = monthOf(o.placedAt);
-      const rooms = o.project.calculations.map((c) => ({
-        beamCount: c.beamCount,
-        beamLength: Number(c.beamLength),
-      }));
-      const totals = {
-        blocks: o.totalBlocks,
-        beamCount: o.totalBeams,
-        beamMeters: roomBeamMeters(rooms),
-        area: Number(o.totalArea),
-      };
+      const f = fulfilmentOf(o);
+      // What the trucks already recorded, and in which months — so a
+      // remainder row can say "the rest was counted in July".
       const recorded = { blocks: 0, beamCount: 0, beamMeters: 0, area: 0 };
-      // Where the already-entered loads counted, so a remainder row can say
-      // "the rest was counted in July" instead of showing a bare dash.
       const recordedMonths: string[] = [];
-
-      const push = (
-        idSuffix: string, at: Date, reason: string,
-        q: { blocks: number; beamCount: number; beamMeters: number; area: number },
-        context?: ReturnType<typeof buildRemainderContext>,
-      ) => {
-        const attributedMonth = monthOf(at);
+      for (const e of f.events) {
+        if (e.source === 'remainder') continue;
+        recorded.blocks += e.blocks;
+        recorded.beamCount += e.beamCount;
+        recorded.beamMeters += e.beamMeters;
+        recorded.area += e.area;
+        recordedMonths.push(monthOf(e.at));
+      }
+      for (const e of f.events) {
+        // Only rows landing IN this month belong in the list.
+        if (!inMonth(e.at)) continue;
+        const attributedMonth = monthOf(e.at);
+        const reason =
+          e.source === 'shipment'
+            ? LEDGER_REASONS.shipmentLoaded(e.shipmentNumber ?? 0)
+            : e.source === 'single'
+              ? LEDGER_REASONS.singleTruck
+              : LEDGER_REASONS.deliveredRemainder;
         rows.push({
-          id: `vol:${o.id}:${idSuffix}`,
+          id: `vol:${o.id}:${e.source === 'shipment' ? `ship${e.shipmentNumber}` : e.source}`,
           kind: 'volume',
           orderId: o.id,
           orderNumber: o.orderNumber,
           clientName: o.client.name,
           orderMonth,
           attributedMonth,
-          attributedAt: at.toISOString(),
+          attributedAt: e.at.toISOString(),
           reason,
-          blocks: q.blocks,
-          beamCount: q.beamCount,
-          beamMeters: Math.round(q.beamMeters * 10) / 10,
-          area: Math.round(q.area * 10) / 10,
+          blocks: e.blocks,
+          beamCount: e.beamCount,
+          beamMeters: Math.round(e.beamMeters * 10) / 10,
+          area: Math.round(e.area * 10) / 10,
           crossesMonth: orderMonth !== attributedMonth,
-          ...(context ? { context } : {}),
+          ...(e.source === 'remainder'
+            ? { context: buildRemainderContext(f.totals, recorded, recordedMonths) }
+            : {}),
         });
-      };
-
-      // Only loaded trucks carry quantities.
-      const loadedShipments = o.shipments.filter((s) => s.loadedAt);
-      if (loadedShipments.length > 0) {
-        const per = loadedShipments.map((s) => ({
-          blocks: Number(s.loadedBlocks ?? 0),
-          ...beamsFromLoadedJson(s.loadedBeams),
-        }));
-        const shares = areaShares(totals.area, per);
-        loadedShipments.forEach((s, i) => {
-          const q = {
-            blocks: per[i].blocks,
-            beamCount: per[i].count,
-            beamMeters: per[i].meters,
-            area: shares[i] ?? 0,
-          };
-          recorded.blocks += q.blocks;
-          recorded.beamCount += q.beamCount;
-          recorded.beamMeters += q.beamMeters;
-          recorded.area += q.area;
-          recordedMonths.push(monthOf(s.loadedAt as Date));
-          // Only rows landing IN this month belong in the list; the rest were
-          // summed purely to compute the remainder correctly.
-          if (inMonth(s.loadedAt)) {
-            push(`ship${s.number}`, s.loadedAt as Date, LEDGER_REASONS.shipmentLoaded(s.number), q);
-          }
-        });
-      } else if (o.loadedAt) {
-        recorded.blocks = totals.blocks;
-        recorded.beamCount = totals.beamCount;
-        recorded.beamMeters = totals.beamMeters;
-        recorded.area = totals.area;
-        recordedMonths.push(monthOf(o.loadedAt));
-        if (inMonth(o.loadedAt)) {
-          push('single', o.loadedAt, LEDGER_REASONS.singleTruck, totals);
-        }
-      }
-
-      // Physically complete, NOT `status === 'DELIVERED'` — that status is
-      // gated on a zero balance, so a delivered-but-unpaid split order would
-      // never have its unrecorded balance counted. See physicalCompletion().
-      const when = physicalCompletion({
-        status: o.status,
-        deliveredAt: o.deliveredAt,
-        loadedAt: o.loadedAt,
-        scheduledAt: o.scheduledAt,
-        shipments: o.shipments,
-      });
-      if (when) {
-        const rest = remainderAfterRecorded(totals, recorded);
-        const worth = rest.blocks > 0 || rest.beamCount > 0 || rest.beamMeters > 0.0001 || rest.area > 0.0001;
-        if (worth && inMonth(when)) {
-          push(
-            'remainder', when, LEDGER_REASONS.deliveredRemainder, rest,
-            buildRemainderContext(totals, recorded, recordedMonths),
-          );
-        }
       }
     }
 

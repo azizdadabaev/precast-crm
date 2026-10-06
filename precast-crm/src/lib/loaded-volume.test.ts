@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   accumulateLoaded,
-  areaShares,
   beamsFromLoadedJson,
   loadMonthKey,
   physicalCompletion,
@@ -69,54 +68,6 @@ describe('roomBeamMeters', () => {
     const short = roomBeamMeters([{ beamCount: 10, beamLength: 3.3 }]);
     const long = roomBeamMeters([{ beamCount: 10, beamLength: 6.4 }]);
     expect(short).not.toBeCloseTo(long, 6);
-  });
-});
-
-describe('areaShares', () => {
-  it('gives a single truck the whole order area', () => {
-    expect(areaShares(84.2, [{ blocks: 650, meters: 136.5 }])).toEqual([84.2]);
-  });
-
-  it('splits by block share and adds back to exactly the order area', () => {
-    const shares = areaShares(100, [
-      { blocks: 300, meters: 50 },
-      { blocks: 100, meters: 20 },
-    ]);
-    expect(shares[0]).toBeCloseTo(75, 6);
-    expect(shares[1]).toBeCloseTo(25, 6);
-    expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 6);
-  });
-
-  it('falls back to beam metres for a beams-only load', () => {
-    const shares = areaShares(60, [
-      { blocks: 0, meters: 30 },
-      { blocks: 0, meters: 10 },
-    ]);
-    expect(shares[0]).toBeCloseTo(45, 6);
-    expect(shares[1]).toBeCloseTo(15, 6);
-  });
-
-  it('splits evenly rather than losing the area when nothing was recorded', () => {
-    const shares = areaShares(50, [
-      { blocks: 0, meters: 0 },
-      { blocks: 0, meters: 0 },
-    ]);
-    expect(shares).toEqual([25, 25]);
-    expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(50, 6);
-  });
-
-  it('conserves area across many trucks with awkward ratios', () => {
-    const loaded = [
-      { blocks: 7, meters: 3 },
-      { blocks: 11, meters: 5 },
-      { blocks: 13, meters: 2 },
-    ];
-    const shares = areaShares(97.31, loaded);
-    expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(97.31, 6);
-  });
-
-  it('returns nothing when no truck was loaded', () => {
-    expect(areaShares(100, [])).toEqual([]);
   });
 });
 
@@ -338,14 +289,10 @@ describe('accumulateLoaded', () => {
   });
 
   it('end to end: one split order plus one single-truck order', () => {
-    // Order A: 2 trucks, 300 + 100 blocks, area 100 apportioned 75/25.
-    const shares = areaShares(100, [
-      { blocks: 300, meters: 60 },
-      { blocks: 100, meters: 20 },
-    ]);
+    // Order A: 2 trucks, 300 + 100 blocks, area 100 carried 75/25.
     const m = accumulateLoaded([
-      ev({ orderId: 'A', blocks: 300, beamCount: 12, beamMeters: 60, area: shares[0] }),
-      ev({ orderId: 'A', blocks: 100, beamCount: 4, beamMeters: 20, area: shares[1] }),
+      ev({ orderId: 'A', blocks: 300, beamCount: 12, beamMeters: 60, area: 75 }),
+      ev({ orderId: 'A', blocks: 100, beamCount: 4, beamMeters: 20, area: 25 }),
       ev({ orderId: 'B', blocks: 500, beamCount: 20, beamMeters: 90, area: 55 }),
     ]);
     const aug = m.get('2026-08')!;

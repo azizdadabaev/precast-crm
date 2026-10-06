@@ -88,44 +88,6 @@ export function roomBeamMeters(rooms: Array<{ beamCount: number; beamLength: num
   return rooms.reduce((sum, r) => sum + r.beamCount * r.beamLength, 0);
 }
 
-/**
- * Split one order's area across the trucks that carried it.
- *
- * The owner's rule is that an order's m² is the figure already shown in its m²
- * column, so the shares MUST add back up to exactly `orderArea` — no truck
- * invents area and none is lost. Shipments record beams and blocks but never
- * area, so the split is by each truck's share of the blocks loaded.
- *
- * The denominator is the loaded shipments themselves, NOT `Order.totalBlocks`:
- * on prod, 24 of 65 fully-loaded orders shipped a different block count than
- * they ordered (real over/under-loading). Dividing by the ordered count would
- * make those orders' areas fail to sum to their own m² cell, breaking the rule.
- *
- * Falls back to beam metres when an order carries no blocks (a beams-only
- * load), and to an even split when a truck records neither — otherwise a
- * zero denominator would drop the order's area entirely.
- *
- * NOTE: for a PARTIALLY loaded order (some trucks still pending) the shares
- * still total the full order area, because an unloaded shipment records no
- * quantities at all and so offers nothing to prorate against. One order is in
- * this state on prod today.
- */
-export function areaShares(
-  orderArea: number,
-  loaded: Array<{ blocks: number; meters: number }>,
-): number[] {
-  if (loaded.length === 0) return [];
-  if (loaded.length === 1) return [orderArea];
-
-  const totalBlocks = loaded.reduce((s, l) => s + l.blocks, 0);
-  if (totalBlocks > 0) return loaded.map((l) => (orderArea * l.blocks) / totalBlocks);
-
-  const totalMeters = loaded.reduce((s, l) => s + l.meters, 0);
-  if (totalMeters > 0) return loaded.map((l) => (orderArea * l.meters) / totalMeters);
-
-  return loaded.map(() => orderArea / loaded.length);
-}
-
 /** Minimum an order must expose for `physicalCompletion` to judge it. */
 export interface CompletionInput {
   status: string;
