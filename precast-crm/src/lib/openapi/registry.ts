@@ -56,6 +56,11 @@ const OrderListItem = registry.register("OrderListItem", z.object({
   id: z.string(), orderNumber: z.string(), status: OrderStatusEnum, paymentState: OrderPaymentStateEnum,
   totalPrice: Money, confirmedPaid: Money, totalArea: z.string(), totalBlocks: z.number(), totalBeams: z.number(),
   scheduledAt: z.string(), placedAt: z.string(),
+  dayActivity: z.object({
+    area: z.number(), blocks: z.number(), beamCount: z.number(), beamMeters: z.number(),
+    trucks: z.array(z.number()), single: z.boolean(), remainder: z.boolean(),
+    leftToShip: z.boolean(), scheduledHere: z.boolean(),
+  }).optional().describe("Present only with ?day=: what this order put on that calendar day"),
   client: z.object({ id: z.string(), name: z.string(), phone: z.string(), address: z.string().nullable() }),
 }).passthrough());
 

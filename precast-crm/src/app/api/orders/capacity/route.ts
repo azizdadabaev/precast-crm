@@ -6,6 +6,9 @@ import { CapacityRangeSchema } from "@/lib/validation";
 import { ok } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { CAPACITY_THRESHOLDS } from "@/lib/capacity";
+import { dayBuckets } from "@/lib/fulfilment";
+import { dayKey } from "@/lib/dashboard-metrics";
+import { FULFILMENT_SELECT, dayWindowWhere, fulfilmentOf } from "@/lib/fulfilment-data";
 
 /**
  * GET /api/orders/capacity?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -19,6 +22,12 @@ import { CAPACITY_THRESHOLDS } from "@/lib/capacity";
  *
  * Days outside the requested range or with no orders are simply omitted.
  * The client fills in zeros for empty days.
+ *
+ * Real data (owner 2026-10-06): a day = goods that actually LEFT that day
+ * (each truck on its loading day, a single-truck order on its loading day, an
+ * unrecorded remainder on its completion day) + what is still LEFT TO SHIP of
+ * orders scheduled that day. A partly shipped order therefore no longer puts
+ * its whole m² on its scheduled day. Same engine as the dashboard.
  */
 export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
@@ -27,41 +36,26 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     to: searchParams.get("to"),
   });
 
-  // Pull all orders in window. Filter out CANCELED — they don't consume capacity.
+  // Whole LOCAL days. The web sends local-midnight instants and Android sends
+  // bare dates (parsed as UTC midnight); both land inside the day they mean.
+  // Truck loads carry real clock times, so the window must cover full days.
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1);
   const orders = await prisma.order.findMany({
-    where: {
-      scheduledAt: { gte: from, lte: to },
-      status: { not: "CANCELED" },
-    },
-    select: { id: true, scheduledAt: true, totalArea: true, totalBlocks: true },
+    where: { AND: [{ status: { not: "CANCELED" } }, dayWindowWhere(start, end)] },
+    select: FULFILMENT_SELECT,
   });
 
-  // Bucket by YYYY-MM-DD in the server's local zone (Asia/Tashkent on prod is fine)
-  const byDay = new Map<string, { totalArea: number; totalOrders: number; totalBlocks: number }>();
-  for (const o of orders) {
-    const d = new Date(o.scheduledAt);
-    const key =
-      d.getFullYear() +
-      "-" +
-      String(d.getMonth() + 1).padStart(2, "0") +
-      "-" +
-      String(d.getDate()).padStart(2, "0");
-    const cur = byDay.get(key) ?? { totalArea: 0, totalOrders: 0, totalBlocks: 0 };
-    cur.totalArea += Number(o.totalArea);
-    cur.totalOrders += 1;
-    // Filler blocks the yard must have ready for the day. Frozen per-order
-    // snapshot, the same figure the orders list shows as «N та блок» — it is
-    // what was ORDERED, not what has been loaded.
-    cur.totalBlocks += o.totalBlocks;
-    byDay.set(key, cur);
-  }
-
-  const days = Array.from(byDay.entries())
-    .map(([date, agg]) => ({
+  const buckets = dayBuckets(orders.map((o) => ({ id: o.id, f: fulfilmentOf(o) })));
+  const fromKey = dayKey(start);
+  const toKey = dayKey(to);
+  const days = Array.from(buckets.entries())
+    .filter(([date]) => date >= fromKey && date <= toKey)
+    .map(([date, b]) => ({
       date,
-      totalArea: Math.round(agg.totalArea * 100) / 100,
-      totalOrders: agg.totalOrders,
-      totalBlocks: agg.totalBlocks,
+      totalArea: Math.round(b.area * 100) / 100,
+      totalOrders: b.orderIds.size,
+      totalBlocks: b.blocks,
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 

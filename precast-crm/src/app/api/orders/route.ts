@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PlaceOrderSchema } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
@@ -11,6 +12,8 @@ import { createOrder } from "@/lib/create-order";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms } from "@/lib/regions";
 import { facetsFrom, NON_LIVE_ORDER_STATUSES } from "@/lib/order-facets";
+import { contributes, dayContribution, type DayContribution } from "@/lib/fulfilment";
+import { FULFILMENT_SELECT, dayWindowWhere, fulfilmentOf } from "@/lib/fulfilment-data";
 
 /** GET /api/orders — order.view. Paginated. Search/status/day/payment filters
  * run server-side so `q` matches the full DB even when only one page
@@ -32,26 +35,6 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     : 20;
 
   const where: Record<string, unknown> = {};
-  if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
-    // Bucket by the server's local timezone so the day window matches
-    // the capacity calendar (which uses Date#getDate() — also local).
-    // The orders list page sends `day=YYYY-MM-DD` formatted from the
-    // operator's local date; resolving it as UTC midnight here would
-    // skew the window by the operator's offset (e.g. a Tashkent +05
-    // operator picking May 29 would miss any order whose scheduledAt
-    // is between 19:00 May 28 UTC and 00:00 May 29 UTC, even though
-    // that order shows in the May 29 calendar cell).
-    const [y, m, d] = day.split("-").map((n) => Number(n));
-    if (
-      Number.isFinite(y) &&
-      Number.isFinite(m) &&
-      Number.isFinite(d)
-    ) {
-      const start = new Date(y, m - 1, d, 0, 0, 0, 0);
-      const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0);
-      where.scheduledAt = { gte: start, lt: end };
-    }
-  }
   if (q) {
     const phoneForms = phoneMatchForms(q);
     // Latin↔Cyrillic widening: if the operator typed a region name in
@@ -71,6 +54,32 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       }
     }
     where.OR = filters;
+  }
+
+  // Day filter (owner 2026-10-06): the orders that put something on that
+  // calendar day — a truck loaded, a completion, or what is left to ship on
+  // its scheduled day — plus orders scheduled that day even when they shipped
+  // on another day (tagged in the UI). Resolved to an id set so counts, pages
+  // and facets describe the same rows as the calendar cell. Day bounds are the
+  // server's LOCAL calendar, matching the capacity calendar.
+  const dayActivity = new Map<string, DayContribution>();
+  if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    const [y, m, d] = day.split("-").map((n) => Number(n));
+    if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
+      const start = new Date(y, m - 1, d, 0, 0, 0, 0);
+      const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0);
+      const candidates = await prisma.order.findMany({
+        where: {
+          AND: [dayWindowWhere(start, end), where.OR ? { OR: where.OR as Prisma.OrderWhereInput[] } : {}],
+        },
+        select: FULFILMENT_SELECT,
+      });
+      for (const c of candidates) {
+        const act = dayContribution(fulfilmentOf(c), day);
+        if (contributes(act) || act.scheduledHere) dayActivity.set(c.id, act);
+      }
+      where.id = { in: Array.from(dayActivity.keys()) };
+    }
   }
 
   // Facets describe the q/day filter with status/payment/page ignored, so the chips can show
@@ -117,7 +126,17 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
   ]);
 
   return ok({
-    items,
+    items: dayActivity.size
+      ? items.map((o) => {
+          const a = dayActivity.get(o.id);
+          return a
+            ? {
+                ...o,
+                dayActivity: { ...a, area: Math.round(a.area * 100) / 100, beamMeters: Math.round(a.beamMeters * 10) / 10 },
+              }
+            : o;
+        })
+      : items,
     total,
     page,
     pageSize,

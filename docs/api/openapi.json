@@ -197,6 +197,53 @@
           "placedAt": {
             "type": "string"
           },
+          "dayActivity": {
+            "type": "object",
+            "properties": {
+              "area": {
+                "type": "number"
+              },
+              "blocks": {
+                "type": "number"
+              },
+              "beamCount": {
+                "type": "number"
+              },
+              "beamMeters": {
+                "type": "number"
+              },
+              "trucks": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "single": {
+                "type": "boolean"
+              },
+              "remainder": {
+                "type": "boolean"
+              },
+              "leftToShip": {
+                "type": "boolean"
+              },
+              "scheduledHere": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "area",
+              "blocks",
+              "beamCount",
+              "beamMeters",
+              "trucks",
+              "single",
+              "remainder",
+              "leftToShip",
+              "scheduledHere"
+            ],
+            "description": "Present only with ?day=: what this order put on that calendar day"
+          },
           "client": {
             "type": "object",
             "properties": {

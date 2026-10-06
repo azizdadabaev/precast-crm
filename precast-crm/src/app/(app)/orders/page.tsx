@@ -31,6 +31,18 @@ interface Order {
   placedAt: string;
   client: { id: string; name: string; phone: string; address: string | null };
   project: { id: string; name: string | null };
+  /** Present when a calendar day is picked: what this order put on that day. */
+  dayActivity?: { area: number; trucks: number[]; single: boolean; remainder: boolean; leftToShip: boolean; scheduledHere: boolean };
+}
+
+/** What an order put on the picked calendar day, in one short line. */
+function dayTag(a: NonNullable<Order["dayActivity"]>): string {
+  const m2 = `${formatNumber(a.area, 2)} m²`;
+  if (a.trucks.length) return `Жўнатма ${a.trucks.join(", ")} · ${m2}`;
+  if (a.single) return `Юкланди · ${m2}`;
+  if (a.leftToShip) return `Қолган · ${m2}`;
+  if (a.remainder) return `Етказилди · ${m2}`;
+  return "Бошқа куни жўнатилган";
 }
 
 // Status → Chip variant + leading glyph + left-edge row border color.
@@ -396,6 +408,11 @@ function OrdersList() {
                       <td className="px-3 py-2.5 text-right font-mono">
                         {formatNumber(o.totalArea, 2)}{" "}
                         <span className="text-text-tertiary">m²</span>
+                        {o.dayActivity && (
+                          <div className="text-[11px] font-sans font-medium text-text-tertiary whitespace-nowrap mt-0.5">
+                            {dayTag(o.dayActivity)}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono font-bold">
                         {formatNumber(o.totalPrice, 0)}
