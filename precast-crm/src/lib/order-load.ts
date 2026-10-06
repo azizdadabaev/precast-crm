@@ -3,6 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { calcSnapshotToInventoryLines, decrementForDelivery, logStockWarnings } from "@/lib/inventory";
 
 /**
+ * The order was no longer loadable when the write landed: already loaded
+ * (e.g. the CRM button and the Telegram bot at once), moved on, or shipping in
+ * split trucks. Loading writes stock off, so it must happen exactly once.
+ */
+export class OrderLoadConflictError extends Error {}
+
+/**
  * Transition a single-truck order to LOADED with its truck photo, recording the
  * full audit trail. Shared by the in-CRM upload route (`/api/orders/[id]/load`)
  * and the Telegram bot's 🚚 Truck flow so both write byte-for-byte the same data.
@@ -29,8 +36,8 @@ export async function loadOrderWithPhoto(params: {
   const now = new Date();
 
   await prisma.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: orderId },
+    const claimed = await tx.order.updateMany({
+      where: { id: orderId, status: { in: ["PLACED", "IN_PRODUCTION"] }, shipments: { none: {} } },
       data: {
         status: "LOADED",
         loadedPhotoUrl: uploadUrl,
@@ -38,6 +45,7 @@ export async function loadOrderWithPhoto(params: {
         ...(startingStatus === "PLACED" ? { productionStartedAt: now } : {}),
       },
     });
+    if (claimed.count === 0) throw new OrderLoadConflictError();
 
     if (startingStatus === "PLACED") {
       await tx.orderEvent.create({

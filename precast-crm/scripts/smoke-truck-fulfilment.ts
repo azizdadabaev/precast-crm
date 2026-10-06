@@ -267,6 +267,63 @@ async function main() {
   const again = spawnSync("npx", ["tsx", "scripts/backfill-truck-fulfilment.ts", "--apply"], { encoding: "utf8", shell: true });
   check("backfill is idempotent", (await prisma.stockMovement.count({ where: { shipmentId: ls.id } })) === 2, again.stdout.slice(-200));
 
+  // ── D. Stock guards (final review) ────────────────────────────────
+  console.log("\n== D. stock guards ==");
+  // D1. A pending truck on an order already delivered must not load (its goods
+  //     were already written off by the delivery remainder).
+  const d1 = await placeOrder(owner, [room("D1a", 3.77, 7), room("D1b", 3, 11.6)], localMidnight(2));
+  const d1L = calcsByLength(d1);
+  const [d1k1, d1k2] = Object.keys(d1L);
+  const d1s1 = (await call(owner, "POST", `/api/orders/${d1.id}/shipments`)).body.data;
+  const d1s2 = (await call(owner, "POST", `/api/orders/${d1.id}/shipments`)).body.data;
+  await multipart(owner, `/api/orders/${d1.id}/shipments/${d1s1.id}/load`, { loadedBeams: JSON.stringify({ [d1k1]: d1L[d1k1].beams }), loadedBlocks: "100" });
+  await call(owner, "POST", `/api/orders/${d1.id}/shipments/${d1s1.id}/dispatch`, {});
+  await call(owner, "POST", `/api/orders/${d1.id}/shipments/${d1s1.id}/deliver`);
+  r = await multipart(owner, `/api/orders/${d1.id}/delivery-proof`, { cashAmount: "0", noCashCollected: "true", noCashCollectedNote: "smoke test" });
+  check("D1 setup: order delivered via delivery proof", r.status === 200, msg(r));
+  before = await stock();
+  r = await multipart(owner, `/api/orders/${d1.id}/shipments/${d1s2.id}/load`, { loadedBeams: JSON.stringify({ [d1k2]: d1L[d1k2].beams }), loadedBlocks: "50" });
+  after = await stock();
+  check("D1 loading a truck on a delivered order is refused (422)", r.status === 422, { status: r.status, m: msg(r) });
+  check("D1 …and moves no stock", delta(before, after, "BLOCK:") === 0 && delta(before, after, `BEAM:${d1k2}`) === 0);
+
+  // D2. Two loads of the same truck at once write its stock off once.
+  const d2 = await placeOrder(owner, [room("D2", 3.77, 7)], localMidnight(2));
+  const d2L = calcsByLength(d2);
+  const d2k = Object.keys(d2L)[0];
+  const d2s = (await call(owner, "POST", `/api/orders/${d2.id}/shipments`)).body.data;
+  const fields = { loadedBeams: JSON.stringify({ [d2k]: d2L[d2k].beams }), loadedBlocks: "100" };
+  const both = await Promise.all([
+    multipart(owner, `/api/orders/${d2.id}/shipments/${d2s.id}/load`, fields),
+    multipart(owner, `/api/orders/${d2.id}/shipments/${d2s.id}/load`, fields),
+  ]);
+  const okCount = both.filter((x) => x.status === 200).length;
+  const d2Moves = await prisma.stockMovement.count({ where: { shipmentId: d2s.id } });
+  check("D2 concurrent double load: exactly one succeeds", okCount === 1, both.map((x) => x.status));
+  check("D2 …and stock is written off once (2 lines)", d2Moves === 2, d2Moves);
+
+  // D3. The single-truck load refuses an order that ships in split trucks.
+  r = await multipart(owner, `/api/orders/${d2.id}/load`, {});
+  check("D3 single-truck load on a split order is refused (422)", r.status === 422, { status: r.status, m: msg(r) });
+
+  // D4. No split trucks on an order whose single truck is already loaded.
+  const d4 = await placeOrder(owner, [room("D4", 3.6, 7)], localMidnight(2));
+  await multipart(owner, `/api/orders/${d4.id}/load`, {});
+  await call(owner, "PATCH", `/api/orders/${d4.id}`, { status: "DISPATCHED" });
+  r = await call(owner, "POST", `/api/orders/${d4.id}/shipments`);
+  check("D4 split truck on a loaded single-truck order is refused (422)", r.status === 422, { status: r.status, m: msg(r) });
+
+  // D5. Two cancels at once restock once.
+  const d5 = await placeOrder(owner, [room("D5", 3.6, 7)], localMidnight(2));
+  await multipart(owner, `/api/orders/${d5.id}/load`, {});
+  const cancels = await Promise.all([
+    call(owner, "POST", `/api/orders/${d5.id}/cancel`, { reason: "smoke" }),
+    call(owner, "POST", `/api/orders/${d5.id}/cancel`, { reason: "smoke" }),
+  ]);
+  const restocks = await prisma.stockMovement.count({ where: { orderId: d5.id, reason: "CANCELLATION_RESTOCK" } });
+  check("D5 concurrent double cancel: exactly one succeeds", cancels.filter((x) => x.status === 200).length === 1, cancels.map((x) => x.status));
+  check("D5 …and restocks once (2 lines)", restocks === 2, restocks);
+
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILED`);
   process.exitCode = failures === 0 ? 0 : 1;
 }

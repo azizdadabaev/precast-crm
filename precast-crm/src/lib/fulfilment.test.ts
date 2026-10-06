@@ -139,6 +139,22 @@ describe('orderFulfilment', () => {
     expect(total).toBeCloseTo(257.041, 3);
     expect(f.events.at(-1)!.source).toBe('remainder');
   });
+  it('three trucks with rounded saved m²: nothing phantom left to ship once every beam and block is loaded', () => {
+    // Saved m² is rounded to 3 dp per truck; with 3+ trucks the parts can sum
+    // 0.001 under the order's m². Nothing physical is left in the yard, so the
+    // order must not show «Қолган» on its scheduled day.
+    const o = order0093();
+    o.shipments = [
+      { number: 1, status: 'DELIVERED', loadedAt: new Date(2026, 7, 29), deliveredAt: new Date(2026, 7, 30), loadedBeams: { '4.07': 1 }, loadedBlocks: 10, loadedArea: 2.22 },
+      { number: 2, status: 'DELIVERED', loadedAt: new Date(2026, 8, 3), deliveredAt: new Date(2026, 8, 4), loadedBeams: { '4.07': 2 }, loadedBlocks: 20, loadedArea: 4.44 },
+      { number: 3, status: 'LOADED', loadedAt: new Date(2026, 9, 1), deliveredAt: null, loadedBeams: { '4.07': 37, '3.90': 21, '3.30': 21, '3.50': 15, '4.30': 22 }, loadedBlocks: 1999, loadedArea: 250.38 },
+    ];
+    const f = orderFulfilment(o);
+    expect(f.leftToShip.blocks).toBe(0);
+    expect(f.leftToShip.beamCount).toBe(0);
+    expect(contributes(f.leftToShip)).toBe(false);
+    expect(contributes(dayContribution(f, '2026-08-25'))).toBe(false);
+  });
   it('a canceled order contributes nothing', () => {
     const f = orderFulfilment(order0093({ status: 'CANCELED' }));
     expect(f.events).toHaveLength(0);

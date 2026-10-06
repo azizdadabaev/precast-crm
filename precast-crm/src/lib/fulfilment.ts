@@ -222,14 +222,20 @@ export function orderFulfilment(o: FulfilmentInput): OrderFulfilment {
       const left = n - (already.beams[k] ?? 0);
       if (left > 0) beams[k] = left;
     }
-    const truckM2 = events.filter((e) => e.source === 'shipment').reduce((s, e) => s + e.area, 0);
-    leftToShip = {
-      beamsByLength: beams,
-      blocks: Math.max(0, o.totalBlocks - already.blocks),
-      beamCount: piecesOf(beams),
-      beamMeters: metresOf(beams),
-      area: Math.max(0, o.totalArea - truckM2),
-    };
+    const blocksLeft = Math.max(0, o.totalBlocks - already.blocks);
+    // Nothing physical left in the yard → nothing left to ship. Without this,
+    // per-truck m² rounding (3 dp) can leave a phantom 0,001 m² that would put
+    // the order on its scheduled day; completion still recovers any m².
+    if (piecesOf(beams) > 0 || blocksLeft > 0) {
+      const truckM2 = events.filter((e) => e.source === 'shipment').reduce((s, e) => s + e.area, 0);
+      leftToShip = {
+        beamsByLength: beams,
+        blocks: blocksLeft,
+        beamCount: piecesOf(beams),
+        beamMeters: metresOf(beams),
+        area: Math.max(0, o.totalArea - truckM2),
+      };
+    }
   }
 
   return { totals, events, leftToShip, complete: completedAt != null, scheduledAt: o.scheduledAt };

@@ -7,7 +7,7 @@ import { withPermission } from "@/lib/api-auth";
 import { withIdempotency } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import { recordAudit } from "@/lib/audit";
-import { loadOrderWithPhoto } from "@/lib/order-load";
+import { loadOrderWithPhoto, OrderLoadConflictError } from "@/lib/order-load";
 
 /**
  * POST /api/orders/[id]/load
@@ -29,8 +29,17 @@ import { loadOrderWithPhoto } from "@/lib/order-load";
 export const POST = withPermission<{ id: string }>(
   "order.edit",
   withIdempotency<{ id: string }>(async (req: NextRequest, { user, params }) => {
-    const order = await prisma.order.findUnique({ where: { id: params.id } });
+    const order = await prisma.order.findUnique({
+      where: { id: params.id },
+      include: { _count: { select: { shipments: true } } },
+    });
     if (!order) return fail("Буюртма топилмади · Order not found", 404);
+    if (order._count.shipments > 0) {
+      return fail(
+        "Бу буюртма бўлиб жўнатилади — ҳар бир машинани жўнатма орқали юкланг · This order ships in split trucks; load each shipment",
+        422,
+      );
+    }
     if (order.status !== "PLACED" && order.status !== "IN_PRODUCTION") {
       return fail(
         `Буюртма ҳолати юклашга мос эмас (ҳозир: ${order.status}) · Order must be PLACED or IN_PRODUCTION to load (current: ${order.status})`,
@@ -58,12 +67,19 @@ export const POST = withPermission<{ id: string }>(
       throw e;
     }
 
-    await loadOrderWithPhoto({
-      orderId: params.id,
-      uploadUrl,
-      userId: user.id,
-      startingStatus: order.status,
-    });
+    try {
+      await loadOrderWithPhoto({
+        orderId: params.id,
+        uploadUrl,
+        userId: user.id,
+        startingStatus: order.status,
+      });
+    } catch (e) {
+      if (e instanceof OrderLoadConflictError) {
+        return fail("Буюртма аллақачон юкланган · Order is already loaded", 422);
+      }
+      throw e;
+    }
 
     recordAudit({
       userId: user.id,

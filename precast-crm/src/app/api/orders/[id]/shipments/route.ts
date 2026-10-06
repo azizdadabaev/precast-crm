@@ -20,6 +20,14 @@ export const POST = withPermission<{ id: string }>(
       include: { shipments: true },
     });
     if (!order) return fail("Order not found", 404);
+    // A single-truck order already on its truck has written its whole stock
+    // off; a split truck on top would write it off again.
+    if (order.loadedAt) {
+      return fail(
+        "Буюртма битта машинада юкланган — жўнатма қўшиб бўлмайди · Order already loaded as a single truck",
+        422,
+      );
+    }
     if (!["PLACED", "IN_PRODUCTION", "DISPATCHED"].includes(order.status)) {
       return fail(
         `Split shipments can only be created from PLACED, IN_PRODUCTION or DISPATCHED (current: ${order.status})`,

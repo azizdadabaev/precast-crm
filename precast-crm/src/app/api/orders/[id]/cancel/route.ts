@@ -10,6 +10,9 @@ import { netWrittenOffForOrder, restockForCancellation } from "@/lib/inventory";
 
 const CANCEL_PASSWORD = process.env.ORDER_CANCEL_PASSWORD ?? "etalontbm";
 
+/** Someone else canceled the order between the pre-check and the write. */
+class AlreadyCanceled extends Error {}
+
 /**
  * POST /api/orders/[id]/cancel — order.cancel
  *
@@ -52,54 +55,64 @@ export const POST = withPermission<{ id: string }>(
     if (existing.status === "CANCELED")
       return fail("Order is already canceled", 422);
 
-    const updated = await prisma.$transaction(async (tx) => {
-      // Mirror exactly what this order wrote off, read from its own
-      // movement history (owner rule 2026-10-06).
-      const restockLines = await netWrittenOffForOrder(tx, existing.id);
-      const u = await tx.order.update({
-        where: { id: existing.id },
-        data: {
-          status: "CANCELED",
-          canceledAt: new Date(),
-          cancelReason: body.reason ?? null,
-        },
-      });
-      await tx.project.update({
-        where: { id: existing.projectId },
-        data: { status: "DRAFT" },
-      });
-      if (existing.project?.dealId) {
-        await tx.deal
-          .update({
-            where: { id: existing.project.dealId },
-            data: { stage: "LOST", status: "LOST" },
-          })
-          .catch(() => null);
-      }
-      await tx.orderEvent.create({
-        data: {
-          orderId: existing.id,
-          type: "ORDER_CANCELED",
-          actorId: user.id,
-          message: body.reason ?? null,
-          payload: {
-            method: isTrustedRole ? "role-bypass" : "password",
-            reason: body.reason ?? "",
-            restocked: restockLines.length > 0,
+    let updated;
+    try {
+      updated = await prisma.$transaction(async (tx) => {
+        // Conditional claim: the row lock makes a concurrent second cancel match
+        // nothing, so the restock below runs exactly once.
+        const claimed = await tx.order.updateMany({
+          where: { id: existing.id, status: { not: "CANCELED" } },
+          data: {
+            status: "CANCELED",
+            canceledAt: new Date(),
+            cancelReason: body.reason ?? null,
           },
-        },
+        });
+        if (claimed.count === 0) throw new AlreadyCanceled();
+        const u = await tx.order.findUniqueOrThrow({ where: { id: existing.id } });
+        // Mirror exactly what this order wrote off, read from its own
+        // movement history (owner rule 2026-10-06) — after the claim.
+        const restockLines = await netWrittenOffForOrder(tx, existing.id);
+        await tx.project.update({
+          where: { id: existing.projectId },
+          data: { status: "DRAFT" },
+        });
+        if (existing.project?.dealId) {
+          await tx.deal
+            .update({
+              where: { id: existing.project.dealId },
+              data: { stage: "LOST", status: "LOST" },
+            })
+            .catch(() => null);
+        }
+        await tx.orderEvent.create({
+          data: {
+            orderId: existing.id,
+            type: "ORDER_CANCELED",
+            actorId: user.id,
+            message: body.reason ?? null,
+            payload: {
+              method: isTrustedRole ? "role-bypass" : "password",
+              reason: body.reason ?? "",
+              restocked: restockLines.length > 0,
+            },
+          },
+        });
+        if (restockLines.length > 0) {
+          await restockForCancellation(
+            tx,
+            existing.id,
+            restockLines,
+            user.id,
+            body.reason ?? null,
+          );
+        }
+        return u;
       });
-      if (restockLines.length > 0) {
-        await restockForCancellation(
-          tx,
-          existing.id,
-          restockLines,
-          user.id,
-          body.reason ?? null,
-        );
-      }
-      return u;
-    });
+    } catch (e) {
+      if (e instanceof AlreadyCanceled) return fail("Order is already canceled", 422);
+      throw e;
+    }
 
     recordAudit({
       userId: user.id,
