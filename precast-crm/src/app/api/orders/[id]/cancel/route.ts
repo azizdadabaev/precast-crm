@@ -6,10 +6,7 @@ import { CancelOrderSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
-import {
-  calcSnapshotToInventoryLines,
-  restockForCancellation,
-} from "@/lib/inventory";
+import { netWrittenOffForOrder, restockForCancellation } from "@/lib/inventory";
 
 const CANCEL_PASSWORD = process.env.ORDER_CANCEL_PASSWORD ?? "etalontbm";
 
@@ -23,8 +20,9 @@ const CANCEL_PASSWORD = process.env.ORDER_CANCEL_PASSWORD ?? "etalontbm";
  * OWNER is the trusted superuser).
  *
  * Effect: order.status = CANCELED, project goes back to DRAFT,
- * deal moves to LOST. Inventory restocked if the order had been
- * DELIVERED.
+ * deal moves to LOST. Stock: exactly what this order took out of the stock
+ * book — per truck at loading, or at delivery — is put back. An order that
+ * never wrote stock off restocks nothing.
  */
 export const POST = withPermission<{ id: string }>(
   "order.cancel",
@@ -54,18 +52,10 @@ export const POST = withPermission<{ id: string }>(
     if (existing.status === "CANCELED")
       return fail("Order is already canceled", 422);
 
-    // Mirror the inventory decrement that happened on DELIVERED.
-    const wasDelivered = existing.deliveredAt != null;
-    let restockLines: ReturnType<typeof calcSnapshotToInventoryLines> = [];
-    if (wasDelivered) {
-      const project = await prisma.project.findUniqueOrThrow({
-        where: { id: existing.projectId },
-        include: { calculations: true },
-      });
-      restockLines = calcSnapshotToInventoryLines(project.calculations);
-    }
-
     const updated = await prisma.$transaction(async (tx) => {
+      // Mirror exactly what this order wrote off, read from its own
+      // movement history (owner rule 2026-10-06).
+      const restockLines = await netWrittenOffForOrder(tx, existing.id);
       const u = await tx.order.update({
         where: { id: existing.id },
         data: {
@@ -95,11 +85,11 @@ export const POST = withPermission<{ id: string }>(
           payload: {
             method: isTrustedRole ? "role-bypass" : "password",
             reason: body.reason ?? "",
-            restocked: wasDelivered,
+            restocked: restockLines.length > 0,
           },
         },
       });
-      if (wasDelivered) {
+      if (restockLines.length > 0) {
         await restockForCancellation(
           tx,
           existing.id,

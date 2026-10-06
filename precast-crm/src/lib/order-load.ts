@@ -1,5 +1,6 @@
 import type { OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { calcSnapshotToInventoryLines, decrementForDelivery, logStockWarnings } from "@/lib/inventory";
 
 /**
  * Transition a single-truck order to LOADED with its truck photo, recording the
@@ -10,6 +11,10 @@ import { prisma } from "@/lib/prisma";
  * step: when starting from PLACED we auto-advance through IN_PRODUCTION inside
  * this transaction, stamping `productionStartedAt` and recording the implicit
  * transition as its own event so the activity log + dashboard KPIs stay correct.
+ *
+ * The whole order leaves the yard on this one truck, so its beams and blocks
+ * are written off stock here, in the same transaction (owner rule 2026-10-06);
+ * «Етказилган» later writes off nothing more for it.
  *
  * Caller must have verified the order is PLACED or IN_PRODUCTION (single-truck,
  * no shipments) and already saved the photo to uploads.
@@ -63,5 +68,18 @@ export async function loadOrderWithPhoto(params: {
     await tx.galleryPhoto.create({
       data: { orderId, kind: "LOADED", url: uploadUrl, uploadedById: userId },
     });
+
+    const { project } = await tx.order.findUniqueOrThrow({
+      where: { id: orderId },
+      select: { project: { select: { calculations: true } } },
+    });
+    const warnings = await decrementForDelivery(
+      tx,
+      orderId,
+      calcSnapshotToInventoryLines(project.calculations),
+      userId,
+      { note: "Битта машина" },
+    );
+    await logStockWarnings(tx, orderId, warnings);
   });
 }

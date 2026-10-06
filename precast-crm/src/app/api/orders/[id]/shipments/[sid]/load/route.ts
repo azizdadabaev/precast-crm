@@ -6,6 +6,8 @@ import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { withIdempotency } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
+import { beamAreaTable, truckArea } from "@/lib/fulfilment";
+import { decrementForDelivery, logStockWarnings, shipmentToInventoryLines } from "@/lib/inventory";
 
 /**
  * POST /api/orders/[id]/shipments/[sid]/load
@@ -15,7 +17,9 @@ import { saveImageFromFormData, UploadError } from "@/lib/uploads";
  *   loadedBeams:  JSON string — Record<string,number> e.g. {"3.3":5,"4.3":10}
  *   loadedBlocks: number (integer string)
  *
- * Sets ShipmentStatus → LOADED.
+ * Sets ShipmentStatus → LOADED, saves the m² this truck carries (from its
+ * beams) and writes its beams + blocks off stock — the goods leave the yard
+ * with the truck (owner rule 2026-10-06).
  */
 export const POST = withPermission<{ id: string; sid: string }>(
   "dispatch.create",
@@ -54,7 +58,7 @@ export const POST = withPermission<{ id: string; sid: string }>(
     const order = await prisma.order.findUnique({
       where: { id: params.id },
       select: {
-        project: { select: { calculations: { select: { beamLength: true, beamCount: true, totalBlocks: true } } } },
+        project: { select: { calculations: { select: { beamLength: true, beamCount: true, totalBlocks: true, monolithArea: true } } } },
         shipments: {
           where: { id: { not: params.sid } },
           select: { loadedBeams: true, loadedBlocks: true },
@@ -93,6 +97,20 @@ export const POST = withPermission<{ id: string; sid: string }>(
       );
     }
 
+    // m² this truck carries, from its beams. Saved on the truck so a later
+    // owner edit of the rooms never rewrites what already left the yard.
+    const loadedArea = truckArea(
+      loadedBeams,
+      beamAreaTable(
+        order.project.calculations.map((c) => ({
+          beamLength: Number(c.beamLength),
+          beamCount: c.beamCount,
+          totalBlocks: c.totalBlocks,
+          monolithArea: Number(c.monolithArea),
+        })),
+      ),
+    );
+
     let uploadUrl: string;
     try {
       const { url } = await saveImageFromFormData(
@@ -115,6 +133,7 @@ export const POST = withPermission<{ id: string; sid: string }>(
           loadedAt: new Date(),
           loadedBeams,
           loadedBlocks,
+          loadedArea: Math.round(loadedArea * 1000) / 1000,
         },
       });
       await tx.orderEvent.create({
@@ -135,6 +154,15 @@ export const POST = withPermission<{ id: string; sid: string }>(
           uploadedById: user.id,
         },
       });
+      // Stock leaves the yard with the truck.
+      const warnings = await decrementForDelivery(
+        tx,
+        params.id,
+        shipmentToInventoryLines(loadedBeams, loadedBlocks),
+        user.id,
+        { shipmentId: params.sid, note: `Жўнатма ${shipment.number}` },
+      );
+      await logStockWarnings(tx, params.id, warnings);
       return s;
     });
 

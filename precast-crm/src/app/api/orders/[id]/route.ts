@@ -9,11 +9,7 @@ import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { deleteOrderCascade } from "@/lib/record-delete";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
-import {
-  calcSnapshotToInventoryLines,
-  decrementForDelivery,
-  formatInventoryLabel,
-} from "@/lib/inventory";
+import { writeOffRemainderOnDelivery } from "@/lib/inventory";
 
 type Params = { id: string };
 
@@ -143,21 +139,21 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
     }
   }
 
-  // If this PATCH is what flips the order to DELIVERED, also decrement
-  // inventory atomically. The canonical UI path is the delivery-proof
-  // endpoint (which carries the truck photo), but we mirror the logic
-  // here so any programmatic DELIVERED transition can't bypass the
-  // stock book.
+  // If this PATCH is what flips the order to DELIVERED, also write off, in
+  // the same transaction, whatever no truck already wrote off. The canonical
+  // UI path is the delivery-proof endpoint (which carries the truck photo),
+  // but we mirror the logic here so any programmatic DELIVERED transition
+  // can't bypass the stock book.
   const willTransitionToDelivered =
     body.status === "DELIVERED" && existing.status !== "DELIVERED";
-  let inventoryLines: ReturnType<typeof calcSnapshotToInventoryLines> = [];
-  if (willTransitionToDelivered) {
-    const project = await prisma.project.findUniqueOrThrow({
-      where: { id: existing.projectId },
-      include: { calculations: true },
-    });
-    inventoryLines = calcSnapshotToInventoryLines(project.calculations);
-  }
+  const deliveredCalculations = willTransitionToDelivered
+    ? (
+        await prisma.project.findUniqueOrThrow({
+          where: { id: existing.projectId },
+          include: { calculations: true },
+        })
+      ).calculations
+    : [];
 
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.order.update({ where: { id: existing.id }, data: updates });
@@ -172,17 +168,7 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
       });
     }
     if (willTransitionToDelivered) {
-      const warnings = await decrementForDelivery(tx, existing.id, inventoryLines);
-      for (const w of warnings) {
-        await tx.orderEvent.create({
-          data: {
-            orderId: existing.id,
-            type: "STOCK_WARNING",
-            message: `Stock went negative for ${formatInventoryLabel(w.kind, w.beamLength)} (now ${w.resultingQuantity}). Reconcile production log.`,
-            payload: w as object,
-          },
-        });
-      }
+      await writeOffRemainderOnDelivery(tx, existing.id, deliveredCalculations, user.id);
     }
     return u;
   });

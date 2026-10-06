@@ -72,6 +72,55 @@ export function calcSnapshotToInventoryLines(rows: CalcSnapshotRow[]): Inventory
   return lines;
 }
 
+/** A truck's recorded counts as inventory lines (beams ascending, blocks last). */
+export function shipmentToInventoryLines(loadedBeams: unknown, loadedBlocks: number | null): InventoryLine[] {
+  const lines: InventoryLine[] = [];
+  if (loadedBeams && typeof loadedBeams === "object" && !Array.isArray(loadedBeams)) {
+    const map = new Map<number, number>();
+    for (const [k, v] of Object.entries(loadedBeams as Record<string, unknown>)) {
+      const len = canonicalBeamLength(k);
+      const n = Number(v);
+      if (len > 0 && Number.isFinite(n) && n > 0) map.set(len, (map.get(len) ?? 0) + n);
+    }
+    for (const [len, qty] of Array.from(map.entries()).sort((a, b) => a[0] - b[0])) {
+      lines.push({ kind: "BEAM", beamLength: len, quantity: qty });
+    }
+  }
+  const blocks = Number(loadedBlocks ?? 0);
+  if (Number.isFinite(blocks) && blocks > 0) lines.push({ kind: "BLOCK", beamLength: null, quantity: blocks });
+  return lines;
+}
+
+const lineKey = (kind: InventoryKind, len: number | null) =>
+  `${kind}:${len == null ? "" : canonicalBeamLength(len)}`;
+
+/**
+ * What an order has net taken out of stock: its DELIVERY write-offs minus any
+ * CANCELLATION_RESTOCK. Production and manual rows are not the order's.
+ */
+export function netWrittenOff(
+  movements: Array<{ change: number; reason: string; kind: InventoryKind; beamLength: number | null }>,
+): InventoryLine[] {
+  const net = new Map<string, InventoryLine>();
+  for (const m of movements) {
+    if (m.reason !== "DELIVERY" && m.reason !== "CANCELLATION_RESTOCK") continue;
+    const len = m.kind === "BEAM" && m.beamLength != null ? canonicalBeamLength(m.beamLength) : null;
+    const k = lineKey(m.kind, len);
+    const cur = net.get(k) ?? { kind: m.kind, beamLength: len, quantity: 0 };
+    cur.quantity += -m.change;
+    net.set(k, cur);
+  }
+  return Array.from(net.values()).filter((l) => l.quantity > 0);
+}
+
+/** Order lines minus what is already written off, clamped at zero per line. */
+export function remainingToWriteOff(orderLines: InventoryLine[], written: InventoryLine[]): InventoryLine[] {
+  const done = new Map(written.map((l) => [lineKey(l.kind, l.beamLength), l.quantity]));
+  return orderLines
+    .map((l) => ({ ...l, quantity: l.quantity - (done.get(lineKey(l.kind, l.beamLength)) ?? 0) }))
+    .filter((l) => l.quantity > 0);
+}
+
 /** Tier label for the stock view's color rule. */
 export type StockTier = "ok" | "low" | "critical";
 
@@ -91,6 +140,8 @@ interface MovementInputBase {
   reason: "PRODUCTION" | "DELIVERY" | "MANUAL_ADJUSTMENT" | "CANCELLATION_RESTOCK";
   productionEntryId?: string | null;
   orderId?: string | null;
+  /** The truck that carried the goods (per-truck write-off). */
+  shipmentId?: string | null;
   actorId?: string | null;
   note?: string | null;
 }
@@ -145,6 +196,7 @@ export async function applyStockMovement(
       reason: movement.reason,
       productionEntryId: movement.productionEntryId ?? null,
       orderId: movement.orderId ?? null,
+      shipmentId: movement.shipmentId ?? null,
       actorId: movement.actorId ?? null,
       note: movement.note ?? null,
     },
@@ -172,6 +224,7 @@ export async function decrementForDelivery(
   orderId: string,
   lines: InventoryLine[],
   actorId?: string | null,
+  opts?: { shipmentId?: string | null; note?: string | null },
 ): Promise<NegativeStockWarning[]> {
   const warnings: NegativeStockWarning[] = [];
   for (const line of lines) {
@@ -180,7 +233,13 @@ export async function decrementForDelivery(
       tx,
       line,
       -line.quantity,
-      { reason: "DELIVERY", orderId, actorId: actorId ?? null },
+      {
+        reason: "DELIVERY",
+        orderId,
+        actorId: actorId ?? null,
+        shipmentId: opts?.shipmentId ?? null,
+        note: opts?.note ?? null,
+      },
     );
     if (resultingQuantity < 0) {
       warnings.push({
@@ -193,6 +252,59 @@ export async function decrementForDelivery(
     }
   }
   return warnings;
+}
+
+/** The order's net written-off lines, read from its own movement history. */
+export async function netWrittenOffForOrder(tx: TxClient, orderId: string): Promise<InventoryLine[]> {
+  const rows = await tx.stockMovement.findMany({
+    where: { orderId, reason: { in: ["DELIVERY", "CANCELLATION_RESTOCK"] } },
+    select: { change: true, reason: true, inventoryItem: { select: { kind: true, beamLength: true } } },
+  });
+  return netWrittenOff(
+    rows.map((r) => ({
+      change: r.change,
+      reason: r.reason,
+      kind: r.inventoryItem.kind,
+      beamLength: r.inventoryItem.beamLength == null ? null : Number(r.inventoryItem.beamLength),
+    })),
+  );
+}
+
+/** One STOCK_WARNING order event per item that went negative. */
+export async function logStockWarnings(
+  tx: TxClient,
+  orderId: string,
+  warnings: NegativeStockWarning[],
+): Promise<void> {
+  for (const w of warnings) {
+    await tx.orderEvent.create({
+      data: {
+        orderId,
+        type: "STOCK_WARNING",
+        message: `Stock went negative for ${formatInventoryLabel(w.kind, w.beamLength)} (now ${w.resultingQuantity}). Reconcile production log.`,
+        payload: w as object,
+      },
+    });
+  }
+}
+
+/**
+ * Order → DELIVERED: write off only what no truck (or single-truck load)
+ * already wrote off (owner rule 2026-10-06). Never twice; an order with no
+ * loading record writes off the whole order, exactly as before.
+ */
+export async function writeOffRemainderOnDelivery(
+  tx: TxClient,
+  orderId: string,
+  calculations: CalcSnapshotRow[],
+  actorId?: string | null,
+): Promise<void> {
+  const written = await netWrittenOffForOrder(tx, orderId);
+  const lines = remainingToWriteOff(calcSnapshotToInventoryLines(calculations), written);
+  const warnings = await decrementForDelivery(tx, orderId, lines, actorId, {
+    note: written.length > 0 ? "Етказилди — юкланмай қолган қолдиқ" : null,
+  });
+  await logStockWarnings(tx, orderId, warnings);
 }
 
 /** Mirror image — restock everything when a previously-delivered order is canceled. */

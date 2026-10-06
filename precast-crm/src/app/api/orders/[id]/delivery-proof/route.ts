@@ -6,11 +6,7 @@ import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { withIdempotency } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
-import {
-  calcSnapshotToInventoryLines,
-  decrementForDelivery,
-  formatInventoryLabel,
-} from "@/lib/inventory";
+import { writeOffRemainderOnDelivery } from "@/lib/inventory";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 
 /**
@@ -29,7 +25,8 @@ import { emitNotifications, usersWithPermission } from "@/lib/notifications";
  *   3. If cashAmount > 0: create a Payment row (PENDING_CONFIRMATION,
  *                          method = CASH, collectedById = dispatch.driverId)
  *   4. If driverReturned: stamp dispatch.returnedAt
- *   5. Inventory decrement + STOCK_WARNING events (existing behavior).
+ *   5. Stock write-off of whatever no truck already wrote off (single-truck
+ *      and split loads write their own off at loading) + STOCK_WARNING events.
  *
  * Acceptable predecessor statuses are IN_PRODUCTION (no dispatch yet) or
  * DISPATCHED (post-spec). The previous gate that required IN_PRODUCTION
@@ -93,12 +90,11 @@ export const POST = withPermission<{ id: string }>(
   }
   if (cashAmount < 0) return fail("Сумма манфий бўлиши мумкин эмас · cashAmount cannot be negative", 422);
 
-  // Pull calc snapshot for inventory decrement
+  // Calc snapshot for the stock write-off of what no truck already took.
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: order.projectId },
     include: { calculations: true },
   });
-  const inventoryLines = calcSnapshotToInventoryLines(project.calculations);
 
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.order.update({
@@ -195,18 +191,8 @@ export const POST = withPermission<{ id: string }>(
       });
     }
 
-    // Inventory decrement (existing behavior, unchanged).
-    const warnings = await decrementForDelivery(tx, order.id, inventoryLines);
-    for (const w of warnings) {
-      await tx.orderEvent.create({
-        data: {
-          orderId: order.id,
-          type: "STOCK_WARNING",
-          message: `Stock went negative for ${formatInventoryLabel(w.kind, w.beamLength)} (now ${w.resultingQuantity}). Reconcile production log.`,
-          payload: w as object,
-        },
-      });
-    }
+    // Write off only what no truck already wrote off (owner rule 2026-10-06).
+    await writeOffRemainderOnDelivery(tx, order.id, project.calculations, user.id);
 
     return u;
   });

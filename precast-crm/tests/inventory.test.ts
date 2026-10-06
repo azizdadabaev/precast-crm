@@ -4,6 +4,9 @@ import {
   calcSnapshotToInventoryLines,
   stockTier,
   formatInventoryLabel,
+  shipmentToInventoryLines,
+  netWrittenOff,
+  remainingToWriteOff,
 } from "../src/lib/inventory";
 
 describe("canonicalBeamLength", () => {
@@ -130,5 +133,65 @@ describe("formatInventoryLabel", () => {
 describe.skip("inventory — production → delivery → restock cycle (DB)", () => {
   it("placeholder", () => {
     expect(true).toBe(true);
+  });
+});
+
+// ── Stock per truck (owner rule 2026-10-06) ─────────────────────────
+
+describe("shipmentToInventoryLines", () => {
+  it("turns a truck's counts into beam lines + one block line", () => {
+    expect(shipmentToInventoryLines({ "4.07": 40, "4.30": 22, "3.30": 0 }, 980)).toEqual([
+      { kind: "BEAM", beamLength: 4.07, quantity: 40 },
+      { kind: "BEAM", beamLength: 4.3, quantity: 22 },
+      { kind: "BLOCK", beamLength: null, quantity: 980 },
+    ]);
+  });
+  it("ignores junk and empty input", () => {
+    expect(shipmentToInventoryLines(null, null)).toEqual([]);
+    expect(shipmentToInventoryLines({ x: 3, "3.9": -1 }, 0)).toEqual([]);
+  });
+});
+
+describe("netWrittenOff", () => {
+  it("nets deliveries against restocks per item", () => {
+    expect(
+      netWrittenOff([
+        { change: -40, reason: "DELIVERY", kind: "BEAM", beamLength: 4.07 },
+        { change: -980, reason: "DELIVERY", kind: "BLOCK", beamLength: null },
+        { change: -21, reason: "DELIVERY", kind: "BEAM", beamLength: 3.9 },
+        { change: 21, reason: "CANCELLATION_RESTOCK", kind: "BEAM", beamLength: 3.9 },
+        { change: 500, reason: "PRODUCTION", kind: "BLOCK", beamLength: null },
+      ]),
+    ).toEqual([
+      { kind: "BEAM", beamLength: 4.07, quantity: 40 },
+      { kind: "BLOCK", beamLength: null, quantity: 980 },
+    ]);
+  });
+  it("is empty for an order that never touched stock (delivered before the stock book)", () => {
+    expect(netWrittenOff([])).toEqual([]);
+  });
+});
+
+describe("remainingToWriteOff", () => {
+  const order = [
+    { kind: "BEAM" as const, beamLength: 4.07, quantity: 40 },
+    { kind: "BEAM" as const, beamLength: 3.9, quantity: 21 },
+    { kind: "BLOCK" as const, beamLength: null, quantity: 2029 },
+  ];
+  it("writes off only what no truck took", () => {
+    expect(remainingToWriteOff(order, [
+      { kind: "BEAM", beamLength: 4.07, quantity: 40 },
+      { kind: "BLOCK", beamLength: null, quantity: 980 },
+    ])).toEqual([
+      { kind: "BEAM", beamLength: 3.9, quantity: 21 },
+      { kind: "BLOCK", beamLength: null, quantity: 1049 },
+    ]);
+  });
+  it("is empty when everything was written off — a second delivery cannot double count", () => {
+    expect(remainingToWriteOff(order, order)).toEqual([]);
+  });
+  it("never goes negative when more was loaded than ordered", () => {
+    expect(remainingToWriteOff(order, [{ kind: "BLOCK", beamLength: null, quantity: 3000 }]))
+      .toEqual([{ kind: "BEAM", beamLength: 4.07, quantity: 40 }, { kind: "BEAM", beamLength: 3.9, quantity: 21 }]);
   });
 });
