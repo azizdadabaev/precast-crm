@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { Prisma } from "@prisma/client";
 import {
   canonicalBeamLength,
   calcSnapshotToInventoryLines,
@@ -193,5 +194,25 @@ describe("remainingToWriteOff", () => {
   it("never goes negative when more was loaded than ordered", () => {
     expect(remainingToWriteOff(order, [{ kind: "BLOCK", beamLength: null, quantity: 3000 }]))
       .toEqual([{ kind: "BEAM", beamLength: 4.07, quantity: 40 }, { kind: "BEAM", beamLength: 3.9, quantity: 21 }]);
+  });
+});
+
+describe("calcSnapshotToInventoryLines with Prisma Decimal rows", () => {
+  // Room rows straight from Prisma carry beamLength as a Decimal object, not a
+  // number or string. Every DB caller passes those, so beams must survive it.
+  it("keeps beams whose length is a Prisma.Decimal", () => {
+    expect(
+      calcSnapshotToInventoryLines([
+        { beamLength: new Prisma.Decimal("3.90"), beamCount: 13, totalBlocks: 216 },
+        { beamLength: new Prisma.Decimal("4.3"), beamCount: 2, totalBlocks: 10 },
+      ]),
+    ).toEqual([
+      { kind: "BEAM", beamLength: 3.9, quantity: 13 },
+      { kind: "BEAM", beamLength: 4.3, quantity: 2 },
+      { kind: "BLOCK", beamLength: null, quantity: 226 },
+    ]);
+  });
+  it("canonicalBeamLength accepts a Decimal", () => {
+    expect(canonicalBeamLength(new Prisma.Decimal("4.07"))).toBe(4.07);
   });
 });

@@ -27,8 +27,10 @@ export interface InventoryLine {
  * decimals. The schema column is Decimal(10, 2); we keep the in-memory
  * representation aligned so equality checks are stable.
  */
-export function canonicalBeamLength(meters: number | string): number {
-  const n = typeof meters === "string" ? Number(meters) : meters;
+export function canonicalBeamLength(meters: number | string | Prisma.Decimal): number {
+  // Room rows from Prisma carry a Decimal object; Number.isFinite() does not
+  // coerce, so passing it through unconverted silently dropped every beam line.
+  const n = typeof meters === "number" ? meters : Number(meters.toString());
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100) / 100;
 }
@@ -57,7 +59,7 @@ export function calcSnapshotToInventoryLines(rows: CalcSnapshotRow[]): Inventory
   let blockTotal = 0;
 
   for (const r of rows) {
-    const len = canonicalBeamLength(r.beamLength as number | string);
+    const len = canonicalBeamLength(r.beamLength);
     if (len > 0 && r.beamCount > 0) {
       beamMap.set(len, (beamMap.get(len) ?? 0) + r.beamCount);
     }
