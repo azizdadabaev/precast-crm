@@ -10,6 +10,7 @@ import {
   Ban,
   Loader2,
   Calendar,
+  CalendarClock,
   CheckCircle2,
   Truck,
   Plus,
@@ -43,6 +44,8 @@ import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
 import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 import { canAddLoadedPhoto } from "@/lib/loaded-photos";
 import { editLockMessage, editPolicy } from "@/lib/order-edit-policy";
+import { orderFulfilment, toFulfilmentInput } from "@/lib/fulfilment";
+import { RescheduleDialog } from "@/components/orders/RescheduleDialog";
 import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
 import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCard";
 import { CommentThread } from "@/components/comments/CommentThread";
@@ -104,6 +107,8 @@ interface OrderDetail {
     loadedBlocks: number | null;
     loadedPhotoUrl: string | null;
     loadedAt: string | null;
+    /** m² this truck carried (from its beams), saved at loading. */
+    loadedArea: string | null;
     driverWillCollectCash: boolean;
     cashToCollect: string | null;
     truckIdentifier: string | null;
@@ -231,6 +236,7 @@ export default function OrderDetailPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [cancelPassword, setCancelPassword] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [proofOpen, setProofOpen] = useState(false);
@@ -421,6 +427,13 @@ export default function OrderDetailPage() {
     }
     return Array.from(map.entries()).map(([beamLength, totalCount]) => ({ beamLength, totalCount }));
   }, [order]);
+
+  // What is still left to ship — previewed on the reschedule calendar, so a
+  // partly shipped order shows only its remaining part on the new day.
+  const leftToShipArea = useMemo(
+    () => (order ? orderFulfilment(toFulfilmentInput(order)).leftToShip.area : 0),
+    [order],
+  );
 
   if (isLoading || !order) return <div className="p-4 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>;
 
@@ -1258,6 +1271,19 @@ export default function OrderDetailPage() {
                   );
                 })()}
 
+                {/* Reschedule — date only, no re-pricing (owner 2026-10-06) */}
+                {canEditOrder && order.status !== "DELIVERED" && order.status !== "CANCELED" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRescheduleOpen(true)}
+                    title={t("Етказиб бериш санасини ўзгартириш", "Change the delivery date")}
+                  >
+                    <CalendarClock className="h-3.5 w-3.5 mr-1.5" />
+                    {t("Санани ўзгартириш", "Reschedule")}
+                  </Button>
+                )}
+
                 {/* Cancel — loud destructive button */}
                 {!isCanceled && (
                   <Button
@@ -1891,6 +1917,16 @@ export default function OrderDetailPage() {
           .filter((p) => p.status === "PENDING_CONFIRMATION")
           .reduce((s, p) => s + Number(p.amount), 0)}
         autoConfirm={canConfirmPayment}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
+      />
+
+      <RescheduleDialog
+        open={rescheduleOpen}
+        onClose={() => setRescheduleOpen(false)}
+        orderId={order.id}
+        current={new Date(order.scheduledAt)}
+        previewArea={leftToShipArea}
+        formatLabel={(d) => `${WEEKDAY_UZ[d.getDay()]}, ${formatDate(d)}`}
         onSaved={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
       />
 

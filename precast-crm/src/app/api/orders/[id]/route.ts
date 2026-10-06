@@ -97,6 +97,9 @@ export const PATCH = withPermission<Params>("order.edit", async (req: NextReques
     });
   }
   if (body.scheduledAt && body.scheduledAt.getTime() !== existing.scheduledAt.getTime()) {
+    if (existing.status === "DELIVERED") {
+      return fail("Етказилган буюртманинг санасини ўзгартириб бўлмайди · A delivered order cannot be rescheduled", 422);
+    }
     updates.scheduledAt = body.scheduledAt;
     events.push({
       type: "SCHEDULED_DATE_CHANGED",
