@@ -16,7 +16,7 @@ import { saveBufferToUploads } from '@/lib/uploads';
 import { publicBaseUrl } from '@/lib/instagram/config';
 import { buildSlabQuote, QuoteInputError, type QuoteErrorCode } from '@/lib/mcp/quote/slab';
 import { buildGazoblokQuote } from '@/lib/mcp/quote/gazoblok';
-import { gazoblokResponse, slabResponse, withStatus } from '@/lib/mcp/quote/response';
+import { cardCaption, gazoblokResponse, slabResponse, withStatus } from '@/lib/mcp/quote/response';
 import { draftMatchesSnapshot, normalizeCustomerRef, parseQuoteId, refAllows } from '@/lib/mcp/quote/status';
 import {
   gazoblokPriceListVersion,
@@ -181,7 +181,8 @@ export function registerQuoteTools(server: McpServer): void {
   server.tool(
     'render_quote_image',
     'Render the CRM quote card (the same image the Telegram agent sends) for an active floor quote: the PNG ' +
-      'itself plus a download_url to the same file, for attaching it in a chat.',
+      'itself plus a download_url to the same file, for attaching it in a chat, and the caption to send with it ' +
+      '(word for word, the same three lines staff send with the card on Telegram).',
     { quote_id: quoteId, customer_ref: customerRef },
     async (args) => guarded('render_quote_image', args, async () => {
       const q = await findQuote(args.quote_id, args.customer_ref);
@@ -207,7 +208,7 @@ export function registerQuoteTools(server: McpServer): void {
       return {
         content: [
           { type: 'image', data: png.toString('base64'), mimeType: 'image/png' },
-          { type: 'text', text: '```json\n' + JSON.stringify({ quote_id: args.quote_id, download_url }, null, 2) + '\n```' },
+          { type: 'text', text: '```json\n' + JSON.stringify({ quote_id: args.quote_id, download_url, caption: cardCaption(q.snapshot) }, null, 2) + '\n```' },
         ],
       };
     }),

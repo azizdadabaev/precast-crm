@@ -121,6 +121,9 @@ async function main() {
   const link = img.isError ? "" : String(body(img).download_url ?? "");
   const linkPath = link.replace(/^https?:\/\/[^/]+/, "");
   check("…and an unguessable download_url under /uploads/quote-cards/", /^https?:\/\/[^/]+\/uploads\/quote-cards\/[0-9a-f]{32}\.png$/.test(link), link);
+  const cap = img.isError ? "" : String(body(img).caption ?? "").replace(/[  ]/g, " ");
+  const sp = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  check("…and the Telegram «Send to chat» caption to send with it", cap === `${String(q2.draft_number).padStart(4, "0")}D\nЖами: ${sp(q2.totals.total_price)} so'm\nОғирлик: ${sp(q2.totals.total_weight_kg)} кг`, cap);
   // In production Caddy serves /uploads publicly before Next sees it; locally
   // there is no Caddy (Next's login gate would answer), so check the saved file.
   const saved = linkPath ? readFileSync(`public${linkPath}`) : Buffer.alloc(0);
