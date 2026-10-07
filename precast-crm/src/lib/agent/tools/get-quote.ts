@@ -31,7 +31,7 @@ const DEFAULT_VALIDITY_MS = 24 * 60 * 60 * 1000; // 24h — matches buildSlabQuo
 // surface uses (share-card image, projects, orders), so the agent's spoken weight
 // always matches the card it sends. Approximate — a transport estimate, never a
 // binding figure. (Billing stays on billed_area / N×PITCH — pricing is untouched.)
-const FLOOR_KG_PER_M2 = 180;
+export const FLOOR_KG_PER_M2 = 180;
 
 // Etalon manufactures beams up to 6.30 m. A longer beam (inner_width + 2×bearing
 // > 6.30) is a custom / non-standard job — the agent must hand it to staff, never

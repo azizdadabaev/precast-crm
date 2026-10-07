@@ -14,7 +14,8 @@
 // as a length CORRECTION, so the customer's inner_length stays exactly as given
 // and EVERY recompute (quote → draft → order) reproduces the same Г-Б result.
 
-import { calculateSlab, PITCH, round3, type SlabInput } from '@/services/calculation-engine';
+import { calculateSlab, PITCH, round3, type Pattern, type SlabInput } from '@/services/calculation-engine';
+import type { RoomInput } from '@/lib/calc-persistence';
 
 /**
  * Normalize a room to the agent's pattern rule:
@@ -51,5 +52,26 @@ export function applyAgentPatternPolicy(input: SlabInput): SlabInput {
     ...input,
     correction: round3((input.correction ?? 0) + delta),
     pattern: 'GB',
+  };
+}
+
+/** Apply the agent's GBG→Г-Б round-up policy to a room (same transform the
+ *  get_quote tool applies), keeping the draft in lockstep with the quote. Only
+ *  `correction` + `patternOverride` can change; inner_length is untouched.
+ *  Shared by the Telegram agent's draft and the MCP quote tools. */
+export function withAgentPatternPolicy(room: RoomInput): RoomInput {
+  const pol = applyAgentPatternPolicy({
+    inner_width: room.innerWidth,
+    inner_length: room.innerLength,
+    bearing: room.bearing,
+    correction: room.correction,
+    extra_beams: room.extraBeams,
+    force_start_beam: room.forceStartBeam,
+    pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
+  });
+  return {
+    ...room,
+    correction: pol.correction,
+    patternOverride: (pol.pattern ?? room.patternOverride ?? null) as Pattern | null,
   };
 }

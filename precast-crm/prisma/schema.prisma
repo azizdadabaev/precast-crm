@@ -453,6 +453,7 @@ model Project {
   drawingRequests DrawingRequest[]
   drawingVersions DrawingVersion[]
   comments        Comment[]
+  mcpQuotes       McpQuote[]
 
   @@index([status])
   @@index([dealId])
@@ -461,6 +462,30 @@ model Project {
   @@index([tentativeClientPhone])
   @@index([createdById])
   @@map("projects")
+}
+
+// A quote Claude produced through the MCP server (spec 2026-10-07). Immutable:
+// `snapshot` is exactly what the tool returned, so a quote keeps its price even
+// after the price list or the draft changes. A floor quote links to its AI draft
+// (one live draft per customer_ref); deleting that draft withdraws the quote.
+model McpQuote {
+  id               String   @id @default(cuid())
+  number           Int      @unique @default(autoincrement()) // quote_id = "Q-<number>"
+  kind             String // "slab" | "gazoblok"
+  source           String   @default("claude_mcp")
+  customerRef      String?
+  projectId        String?
+  supersededById   String?
+  priceListVersion String
+  input            Json
+  snapshot         Json
+  createdAt        DateTime @default(now())
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([customerRef])
+  @@index([projectId])
+  @@map("mcp_quotes")
 }
 
 /// Append-only snapshot of a project's floor plan + priced rooms, captured on

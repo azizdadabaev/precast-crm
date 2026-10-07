@@ -19,7 +19,7 @@ import { computeOrderTotals } from '@/lib/order-totals';
 import { loadPricingConfig } from '@/lib/pricing-config';
 import { nextDraftNumber } from '@/lib/draft-number';
 import { normalizePhone, extractPhoneFromText } from '@/lib/phone';
-import { applyAgentPatternPolicy } from './pattern-policy';
+import { withAgentPatternPolicy } from './pattern-policy';
 import { MAX_BEAM_LENGTH_M, MAX_ROOM_COUNT } from './tools/get-quote';
 import { DEFAULT_BEARING, type Pattern } from '@/services/calculation-engine';
 
@@ -44,26 +44,6 @@ export function feasibleRooms(rooms: RoomInput[]): RoomInput[] {
     }
     return ok;
   });
-}
-
-/** Apply the agent's GBG→Г-Б round-up policy to a room (same transform the
- *  get_quote tool applies), keeping the draft in lockstep with the quote. Only
- *  `correction` + `patternOverride` can change; inner_length is untouched. */
-function withAgentPatternPolicy(room: RoomInput): RoomInput {
-  const pol = applyAgentPatternPolicy({
-    inner_width: room.innerWidth,
-    inner_length: room.innerLength,
-    bearing: room.bearing,
-    correction: room.correction,
-    extra_beams: room.extraBeams,
-    force_start_beam: room.forceStartBeam,
-    pattern: (room.patternOverride ?? undefined) as Pattern | undefined,
-  });
-  return {
-    ...room,
-    correction: pol.correction,
-    patternOverride: (pol.pattern ?? room.patternOverride ?? null) as Pattern | null,
-  };
 }
 
 // The agent draft carries no discount/delivery — it's the bare room calculation.
