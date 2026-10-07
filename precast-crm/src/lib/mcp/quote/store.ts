@@ -35,7 +35,10 @@ export function gazoblokPriceListVersion(catalog: Array<GazoblokCatalogRow & { u
   return `gazoblok-${day(latest)}.${hash6(catalog.map((r) => [r.label, r.pricePerBlock]))}`;
 }
 
-type SnapshotBuilder<M> = (meta: M) => Prisma.InputJsonValue;
+type SnapshotBuilder<M> = (meta: M) => object;
+
+/** The snapshot as stored: plain JSON (dates already ISO strings). */
+const toJson = (v: object): Prisma.InputJsonValue => JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
 
 export async function saveSlabQuote(p: {
   input: unknown;
@@ -99,12 +102,12 @@ export async function saveSlabQuote(p: {
         snapshot: {},
       },
     });
-    const snapshot = p.snapshot({
+    const snapshot = toJson(p.snapshot({
       quoteId: formatQuoteId(row.number),
       draftNumber: project.draftNumber,
       createdAt: row.createdAt,
       supersedes: previous ? formatQuoteId(previous.number) : null,
-    });
+    }));
     await tx.mcpQuote.update({ where: { id: row.id }, data: { snapshot } });
     if (p.customerRef) {
       await tx.mcpQuote.updateMany({
@@ -139,11 +142,11 @@ export async function saveGazoblokQuote(p: {
         snapshot: {},
       },
     });
-    const snapshot = p.snapshot({
+    const snapshot = toJson(p.snapshot({
       quoteId: formatQuoteId(row.number),
       createdAt: row.createdAt,
       supersedes: previous ? formatQuoteId(previous.number) : null,
-    });
+    }));
     await tx.mcpQuote.update({ where: { id: row.id }, data: { snapshot } });
     if (p.customerRef) {
       await tx.mcpQuote.updateMany({

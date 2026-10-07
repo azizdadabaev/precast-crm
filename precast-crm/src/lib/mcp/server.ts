@@ -2,6 +2,7 @@ import { createMcpHandler } from 'mcp-handler';
 import { registerDashboardTools } from './tools/dashboard';
 import { registerOrderTools } from './tools/orders';
 import { registerClientTools } from './tools/clients';
+import { registerQuoteTools } from './tools/quotes';
 
 /**
  * Stateless MCP Streamable-HTTP handler. Tools are registered by
@@ -14,6 +15,7 @@ export const mcpHandler = createMcpHandler(
     registerDashboardTools(server);
     registerOrderTools(server);
     registerClientTools(server);
+    registerQuoteTools(server);
   },
   {
     serverInfo: { name: 'etalon-crm', version: '1.0.0' },
