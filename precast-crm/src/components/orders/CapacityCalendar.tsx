@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
 import { api } from "@/lib/fetcher";
+import { monthGridWeeks } from "@/lib/calendar-grid";
 
 export interface CapacityDay {
   date: string;        // "YYYY-MM-DD"
@@ -84,15 +85,18 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
   const [view, setView] = useState<View>("days");
   const [data, setData] = useState<CapacityResponse | null>(null);
 
-  // Range to fetch: cursor month + the leading/trailing days of the visible grid
-  const { gridStart, gridEnd } = useMemo(() => {
+  // Range to fetch: cursor month + the leading/trailing days of the visible
+  // grid. Only the weeks the month needs are drawn (4–6), never a sixth row
+  // made entirely of next month's days (owner 2026-10-07, same as Android).
+  const { gridStart, gridEnd, weeks } = useMemo(() => {
     const first = startOfMonth(cursor);
     const dow = (first.getDay() + 6) % 7; // Monday-first offset
     const start = new Date(first);
     start.setDate(start.getDate() - dow);
+    const rows = monthGridWeeks(cursor);
     const end = new Date(start);
-    end.setDate(end.getDate() + 41); // 6 weeks × 7 days - 1
-    return { gridStart: start, gridEnd: end };
+    end.setDate(end.getDate() + rows * 7 - 1);
+    return { gridStart: start, gridEnd: end, weeks: rows };
   }, [cursor]);
 
   useEffect(() => {
@@ -163,45 +167,66 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-hidden">
-      {/* Header — title is clickable to drill up to month/year picker */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border bg-muted/20">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-          aria-label="Previous"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={drillUp}
-          disabled={view === "years"}
-          className={[
-            "text-sm font-semibold inline-flex items-center gap-1 rounded-md px-3 py-1 transition-colors",
-            view === "years"
-              ? "cursor-default text-foreground"
-              : "hover:bg-accent cursor-pointer",
-          ].join(" ")}
-          title={
-            view === "days"
-              ? "Click to pick a different month or year"
-              : view === "months"
-                ? "Click to pick a different year"
-                : ""
-          }
-        >
-          <span className="tabular-nums">{titleText}</span>
-          {view !== "years" && <ChevronDown className="h-3.5 w-3.5 opacity-60" />}
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate(1)}
-          className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-          aria-label="Next"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
+      {/* Header — arrows + title (click to drill up to month/year picker) on
+          the left; the load legend sits on the right so it costs no row. */}
+      <div className="flex items-center justify-between gap-3 px-2 py-1.5 border-b border-border bg-muted/20">
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Previous"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={drillUp}
+            disabled={view === "years"}
+            className={[
+              "text-sm font-semibold inline-flex items-center gap-1 rounded-md px-3 py-1 transition-colors",
+              view === "years"
+                ? "cursor-default text-foreground"
+                : "hover:bg-accent cursor-pointer",
+            ].join(" ")}
+            title={
+              view === "days"
+                ? "Click to pick a different month or year"
+                : view === "months"
+                  ? "Click to pick a different year"
+                  : ""
+            }
+          >
+            <span className="tabular-nums">{titleText}</span>
+            {view !== "years" && <ChevronDown className="h-3.5 w-3.5 opacity-60" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(1)}
+            className="h-7 w-7 inline-flex items-center justify-center rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Next"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+        {view === "days" && (
+          <div className="hidden sm:flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[10px] font-mono tabular-nums text-muted-foreground">
+            {(["Available", "Moderate", "Heavy", "Overbooked"] as const).map((label, i) => {
+              const sample = [0, thresholds.low + 1, thresholds.moderate + 1, thresholds.heavy + 1][i];
+              const t = tierFor(sample, thresholds);
+              return (
+                <span key={label} className="inline-flex items-center gap-1" title={label}>
+                  <span className={`inline-block h-1 w-3 rounded-sm ${t.chip}`} />
+                  {label === "Available" && `≤${thresholds.low}`}
+                  {label === "Moderate" && `≤${thresholds.moderate}`}
+                  {label === "Heavy" && `≤${thresholds.heavy}`}
+                  {label === "Overbooked" && `>${thresholds.heavy}`}
+                </span>
+              );
+            })}
+            <span className="opacity-70">m²</span>
+          </div>
+        )}
       </div>
 
       {/* ── Days view ───────────────────────────────────────────── */}
@@ -209,13 +234,13 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
         <>
           <div className="grid grid-cols-7 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/40">
             {DOW_LABELS.map((d) => (
-              <div key={d} className="px-1 py-2 text-center">
+              <div key={d} className="px-1 py-1 text-center">
                 {d}
               </div>
             ))}
           </div>
           <div className="grid grid-cols-7">
-            {Array.from({ length: 42 }, (_, i) => {
+            {Array.from({ length: weeks * 7 }, (_, i) => {
               const d = new Date(gridStart);
               d.setDate(d.getDate() + i);
               const key = fmtKey(d);
@@ -240,8 +265,8 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
                     // Base cell: neutral surface with hairline dividers; the
                     // ::before pseudo (left edge stripe) carries the tier
                     // accent only when the day has actual bookings.
-                    "relative h-20 px-2 py-1.5 border-b border-r border-border/60 text-left transition-colors group",
-                    "before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r",
+                    "relative h-14 px-2 py-1 border-b border-r border-border/60 text-left transition-colors group",
+                    "before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r",
                     showTier && !isPast ? `${tier.stripe} before:opacity-100` : "before:opacity-0",
                     isPast
                       ? "cursor-not-allowed bg-muted/20"
@@ -282,7 +307,7 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
                     )}
                   </div>
                   {showTier && !isPast && (
-                    <div className="mt-1 flex items-baseline justify-between gap-1.5 text-[10px] tabular-nums font-mono leading-tight">
+                    <div className="mt-0.5 flex items-baseline justify-between gap-1.5 text-[10px] tabular-nums font-mono leading-tight">
                       <span className="text-muted-foreground">
                         {totalForTier.toFixed(0)}
                         <span className="text-text-tertiary"> m²</span>
@@ -305,26 +330,6 @@ export function CapacityCalendar({ value, onChange, pendingArea = 0, disablePast
                     </div>
                   )}
                 </button>
-              );
-            })}
-          </div>
-          {/* Legend */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2.5 border-t border-border bg-muted/20 text-[10px] text-muted-foreground">
-            {(["Available", "Moderate", "Heavy", "Overbooked"] as const).map((label, i) => {
-              const sample = [0, thresholds.low + 1, thresholds.moderate + 1, thresholds.heavy + 1][i];
-              const t = tierFor(sample, thresholds);
-              return (
-                <div key={label} className="inline-flex items-center gap-1.5">
-                  <span className={`inline-block h-1 w-3 rounded-sm ${t.chip}`} />
-                  <span className="font-medium uppercase tracking-wider">{label}</span>
-                  <span className="font-mono opacity-70">
-                    {label === "Available" && `≤${thresholds.low}`}
-                    {label === "Moderate" && `≤${thresholds.moderate}`}
-                    {label === "Heavy" && `≤${thresholds.heavy}`}
-                    {label === "Overbooked" && `>${thresholds.heavy}`}
-                    {" m²"}
-                  </span>
-                </div>
               );
             })}
           </div>
