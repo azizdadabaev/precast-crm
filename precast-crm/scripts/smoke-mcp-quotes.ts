@@ -94,6 +94,14 @@ async function main() {
   const img = await call("render_quote_image", { quote_id: q2.quote_id });
   const png = img.content.find((c) => c.type === "image");
   check("render_quote_image returns a PNG", !img.isError && png?.mimeType === "image/png" && (png?.data?.length ?? 0) > 1000, img.isError ? body(img) : png?.mimeType);
+  // A download link too, so Claude can attach the card in an Instagram chat.
+  const link = img.isError ? "" : String(body(img).download_url ?? "");
+  const linkPath = link.replace(/^https?:\/\/[^/]+/, "");
+  check("…and an unguessable download_url under /uploads/quote-cards/", /^https?:\/\/[^/]+\/uploads\/quote-cards\/[0-9a-f]{32}\.png$/.test(link), link);
+  // In production Caddy serves /uploads publicly before Next sees it; locally
+  // there is no Caddy (Next's login gate would answer), so check the saved file.
+  const saved = linkPath ? readFileSync(`public${linkPath}`) : Buffer.alloc(0);
+  check("…pointing at the saved PNG file", saved.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), saved.length);
 
   // 7. Staff deletes the draft → withdrawn.
   await prisma.project.delete({ where: { draftNumber: q2.draft_number } });

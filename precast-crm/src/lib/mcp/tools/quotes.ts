@@ -5,12 +5,15 @@
 // snapshot; nothing here edits or deletes a draft. Each call is audited with
 // source "claude_mcp" and rate-limited to ~60 calls per hour.
 
+import { randomBytes } from 'crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { loadPricingConfig } from '@/lib/pricing-config';
 import { recordAudit } from '@/lib/audit';
 import { RateLimiter } from '@/lib/agent/rate-limiter';
 import { renderAgentQuoteImage } from '@/lib/agent/quote-card-shot';
+import { saveBufferToUploads } from '@/lib/uploads';
+import { publicBaseUrl } from '@/lib/instagram/config';
 import { buildSlabQuote, QuoteInputError, type QuoteErrorCode } from '@/lib/mcp/quote/slab';
 import { buildGazoblokQuote } from '@/lib/mcp/quote/gazoblok';
 import { gazoblokResponse, slabResponse, withStatus } from '@/lib/mcp/quote/response';
@@ -169,7 +172,8 @@ export function registerQuoteTools(server: McpServer): void {
 
   server.tool(
     'render_quote_image',
-    'Render the CRM quote card (the same image the Telegram agent sends) for an active floor quote, as a PNG.',
+    'Render the CRM quote card (the same image the Telegram agent sends) for an active floor quote: the PNG ' +
+      'itself plus a download_url to the same file, for attaching it in a chat.',
     { quote_id: z.string().describe('e.g. "Q-12"') },
     async (args) => guarded('render_quote_image', args, async () => {
       const n = parseQuoteId(args.quote_id);
@@ -181,10 +185,14 @@ export function registerQuoteTools(server: McpServer): void {
         return fail('QUOTE_SUPERSEDED', `Quote ${args.quote_id} was replaced by ${q.supersededBy}; render that one instead.`);
       }
       const png = await renderAgentQuoteImage(q.projectId);
+      // Same file behind an unguessable public link (Caddy serves /uploads), so
+      // Claude can attach the card in an Instagram chat (owner/web agent 2026-10-07).
+      const path = await saveBufferToUploads(png, 'quote-cards', `${randomBytes(16).toString('hex')}.png`);
+      const download_url = `${publicBaseUrl()}${path}`;
       return {
         content: [
           { type: 'image', data: png.toString('base64'), mimeType: 'image/png' },
-          { type: 'text', text: `Quote card for ${args.quote_id}.` },
+          { type: 'text', text: '```json\n' + JSON.stringify({ quote_id: args.quote_id, download_url }, null, 2) + '\n```' },
         ],
       };
     }),
