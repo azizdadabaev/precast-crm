@@ -1141,29 +1141,6 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Stock-warning banner — surfaced when delivery decremented inventory below zero */}
-      {order.events.some((e) => e.type === "STOCK_WARNING") && (
-        <div className="rounded-lg border-2 border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
-          <div className="font-bold mb-1">
-            {t("Етказиб беришда захира манфийга тушди", "Stock went negative on delivery")}
-          </div>
-          <ul className="list-disc list-inside space-y-0.5 text-xs">
-            {order.events
-              .filter((e) => e.type === "STOCK_WARNING")
-              .slice(0, 5)
-              .map((e) => (
-                <li key={e.id}>{e.message}</li>
-              ))}
-          </ul>
-          <div className="text-xs text-warning/80 mt-2 italic">
-            {t(
-              "Ишлаб чиқариш ёзуви ёки Омбордаги қўлда созлаш орқали солиштиринг.",
-              "Reconcile via a production log entry or manual stock adjustment in Омбор.",
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Order action bar */}
       {(() => {
         const total = Number(order.totalPrice);
@@ -1826,6 +1803,29 @@ export default function OrderDetailPage() {
       {/* Comments thread — human conversation goes first; the system
           audit log below is reference material consulted less often. */}
       <CommentThread orderId={order.id} />
+
+      {/* Stock-warning banner — kept low on the page, just above the activity log (owner 2026-10-07) */}
+      {order.events.some((e) => e.type === "STOCK_WARNING") && (
+        <div className="rounded-lg border-2 border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+          <div className="font-bold mb-1">
+            {t("Етказиб беришда захира манфийга тушди", "Stock went negative on delivery")}
+          </div>
+          <ul className="list-disc list-inside space-y-0.5 text-xs">
+            {order.events
+              .filter((e) => e.type === "STOCK_WARNING")
+              .slice(0, 5)
+              .map((e) => (
+                <li key={e.id}>{e.message}</li>
+              ))}
+          </ul>
+          <div className="text-xs text-warning/80 mt-2 italic">
+            {t(
+              "Ишлаб чиқариш ёзуви ёки Омбордаги қўлда созлаш орқали солиштиринг.",
+              "Reconcile via a production log entry or manual stock adjustment in Омбор.",
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Activity log — collapsed by default */}
       <div className="rounded-lg border bg-background overflow-hidden">
