@@ -17,12 +17,11 @@ import { publicBaseUrl } from '@/lib/instagram/config';
 import { buildSlabQuote, QuoteInputError, type QuoteErrorCode } from '@/lib/mcp/quote/slab';
 import { buildGazoblokQuote } from '@/lib/mcp/quote/gazoblok';
 import { gazoblokResponse, slabResponse, withStatus } from '@/lib/mcp/quote/response';
-import { parseQuoteId } from '@/lib/mcp/quote/status';
+import { draftMatchesSnapshot, normalizeCustomerRef, parseQuoteId, refAllows } from '@/lib/mcp/quote/status';
 import {
   gazoblokPriceListVersion,
   loadGazoblokCatalog,
   loadQuote,
-  normalizeCustomerRef,
   saveGazoblokQuote,
   saveSlabQuote,
   slabPriceListVersion,
@@ -83,8 +82,17 @@ async function guarded(tool: string, args: unknown, body: () => Promise<ToolResu
 const money = (n: number) => `${n.toLocaleString('ru-RU')} UZS`;
 const lang = z.enum(['uz', 'ru', 'en']).optional().describe('Language for labels and warnings (uz = Latin Uzbek, default)');
 const customerRef = z.string().max(80).optional().describe(
-  'Stable customer reference, e.g. the Instagram handle. A new quote with the same ref replaces the previous one (older quote becomes "superseded").',
+  'Always pass the customer\'s Instagram handle. A new quote with the same ref replaces the previous one (older quote becomes "superseded"); ' +
+    'a quote saved with a ref can only be read back or rendered with that same ref.',
 );
+const quoteId = z.string().describe('The quote_id returned by get_quote / get_gazoblok_quote, e.g. "Q-12" (not a CRM draft number)');
+
+/** A quote by id, but only for the customer it was given to. */
+async function findQuote(rawId: string, rawRef: string | undefined) {
+  const n = parseQuoteId(rawId);
+  const q = n ? await loadQuote(n) : null;
+  return q && refAllows(q.customerRef, normalizeCustomerRef(rawRef)) ? q : null;
+}
 
 export function registerQuoteTools(server: McpServer): void {
   server.tool(
@@ -93,6 +101,7 @@ export function registerQuoteTools(server: McpServer): void {
       'Prices come from the CRM\'s live price list and engine — never compute prices yourself. ' +
       'By default the beams span the SHORTER wall (orientation "auto"); use "as_given" only when the customer says which walls carry the beams. ' +
       'Rooms whose beam would exceed 6.30 m come back as needs_manual_review and are not priced. ' +
+      'Send ALL of a customer\'s rooms in one call: each call replaces that customer\'s previous quote. ' +
       'The quote is saved as an AI draft in the CRM and stays valid until staff withdraw it. Materials only (beams + blocks).',
     {
       rooms: z.array(z.object({
@@ -160,11 +169,10 @@ export function registerQuoteTools(server: McpServer): void {
   server.tool(
     'get_quote_by_id',
     'Look up a saved quote (e.g. "Q-12") exactly as it was given, with its status: active, superseded (see superseded_by), ordered, or withdrawn.',
-    { quote_id: z.string().describe('e.g. "Q-12"') },
+    { quote_id: quoteId, customer_ref: customerRef },
     async (args) => guarded('get_quote_by_id', args, async () => {
-      const n = parseQuoteId(args.quote_id);
-      const q = n ? await loadQuote(n) : null;
-      if (!q) return fail('QUOTE_NOT_FOUND', `No quote ${args.quote_id}.`);
+      const q = await findQuote(args.quote_id, args.customer_ref);
+      if (!q) return fail('QUOTE_NOT_FOUND', `No quote ${args.quote_id} for this customer.`);
       const body = withStatus(q.snapshot, q.status, q.supersededBy);
       return ok(`Quote ${args.quote_id} — ${q.status}${q.supersededBy ? ` (replaced by ${q.supersededBy})` : ''}`, body);
     }),
@@ -174,15 +182,22 @@ export function registerQuoteTools(server: McpServer): void {
     'render_quote_image',
     'Render the CRM quote card (the same image the Telegram agent sends) for an active floor quote: the PNG ' +
       'itself plus a download_url to the same file, for attaching it in a chat.',
-    { quote_id: z.string().describe('e.g. "Q-12"') },
+    { quote_id: quoteId, customer_ref: customerRef },
     async (args) => guarded('render_quote_image', args, async () => {
-      const n = parseQuoteId(args.quote_id);
-      const q = n ? await loadQuote(n) : null;
-      if (!q) return fail('QUOTE_NOT_FOUND', `No quote ${args.quote_id}.`);
+      const q = await findQuote(args.quote_id, args.customer_ref);
+      if (!q) return fail('QUOTE_NOT_FOUND', `No quote ${args.quote_id} for this customer.`);
       if (q.kind !== 'slab') return fail('NOT_AVAILABLE', 'Images are available for floor quotes only.');
-      if (q.status === 'withdrawn' || !q.projectId) return fail('QUOTE_WITHDRAWN', `Quote ${args.quote_id} was withdrawn.`);
+      if (q.status === 'withdrawn' || !q.projectId || !q.draft) return fail('QUOTE_WITHDRAWN', `Quote ${args.quote_id} was withdrawn.`);
       if (q.status === 'superseded') {
         return fail('QUOTE_SUPERSEDED', `Quote ${args.quote_id} was replaced by ${q.supersededBy}; render that one instead.`);
+      }
+      // The card prints the draft's client name, phone and address, and its
+      // link is public — once staff have attached a customer, they send it.
+      if (q.status === 'ordered' || q.draft.hasClientDetails) {
+        return fail('NOT_AVAILABLE', `Quote ${args.quote_id} is being handled by the team; they will send the details.`);
+      }
+      if (!draftMatchesSnapshot(q.draft, q.snapshot)) {
+        return fail('QUOTE_CHANGED', `Staff changed quote ${args.quote_id} in the CRM; it no longer matches what was quoted. Ask the team before sending a card.`);
       }
       const png = await renderAgentQuoteImage(q.projectId);
       // Same file behind an unguessable public link (Caddy serves /uploads), so

@@ -71,11 +71,22 @@ describe('validation', () => {
   };
   it('refuses impossible sizes with clear codes', () => {
     expect(code(() => q([{ width_m: 0, length_m: 5 }]))).toBe('INVALID_INPUT');
-    expect(code(() => q([{ width_m: 13, length_m: 5 }]))).toBe('WIDTH_OUT_OF_RANGE');
+    expect(code(() => q([{ width_m: 13, length_m: 13 }]))).toBe('WIDTH_OUT_OF_RANGE');
+    expect(code(() => q([{ width_m: 13, length_m: 5 }], { orientation: 'as_given' }))).toBe('WIDTH_OUT_OF_RANGE');
     expect(code(() => q([{ width_m: 4, length_m: 51 }]))).toBe('LENGTH_OUT_OF_RANGE');
     expect(code(() => q(Array.from({ length: 21 }, () => ({ width_m: 4, length_m: 5 }))))).toBe('TOO_MANY_ROOMS');
     expect(code(() => q([]))).toBe('INVALID_INPUT');
     expect(code(() => q([{ width_m: 4, length_m: 5 }], { bearing_cm: 40 }))).toBe('INVALID_INPUT');
+  });
+  it('auto orientation checks the limits on the room, not on the order the sides were sent', () => {
+    // 13 × 5 is a normal room: the beams span 5 m. It must price like 5 × 13.
+    expect(q([{ width_m: 13, length_m: 5 }]).totals.total_price).toBe(q([{ width_m: 5, length_m: 13 }]).totals.total_price);
+    expect(q([{ width_m: 13, length_m: 5 }]).totals.total_price).toBeGreaterThan(0);
+  });
+  it('bearing can never go below the 15 cm standard (it would lower the price and dodge the 6.30 m limit)', () => {
+    expect(code(() => q([{ width_m: 4, length_m: 5 }], { bearing_cm: 10 }))).toBe('INVALID_INPUT');
+    expect(code(() => q([{ width_m: 6.2, length_m: 8 }], { bearing_cm: 5 }))).toBe('INVALID_INPUT');
+    expect(q([{ width_m: 4, length_m: 5 }], { bearing_cm: 20 }).rooms[0].beam_length_m).toBe(4.4);
   });
 });
 

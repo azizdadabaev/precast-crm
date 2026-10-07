@@ -22,6 +22,7 @@ export type QuoteErrorCode =
   | 'QUOTE_NOT_FOUND'
   | 'QUOTE_SUPERSEDED'
   | 'QUOTE_WITHDRAWN'
+  | 'QUOTE_CHANGED'
   | 'NOT_AVAILABLE'
   | 'RATE_LIMITED'
   | 'PRICING_UNAVAILABLE';
@@ -35,6 +36,10 @@ export class QuoteInputError extends Error {
 }
 
 export const MAX_ROOMS = 20;
+/** Never below the standard: a smaller bearing lowers the price and can slip a
+ *  beam under the 6.30 m limit. Larger is fine (it only lengthens the beam). */
+export const MIN_BEARING_CM = 15;
+export const MAX_BEARING_CM = 30;
 export const MAX_WIDTH_M = 12;
 export const MAX_LENGTH_M = 50;
 /** One mid-span prop above this beam length (owner's product facts). */
@@ -104,25 +109,35 @@ const NO_EXTRAS = { discountPercent: 0, discountAmount: 0, deliveryCost: 0, othe
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
-function validate(input: SlabQuoteInput): void {
+function validate(input: SlabQuoteInput, orientation: 'auto' | 'as_given'): void {
   const rooms = Array.isArray(input?.rooms) ? input.rooms : [];
   if (rooms.length === 0) throw new QuoteInputError('INVALID_INPUT', 'At least one room is required.');
   if (rooms.length > MAX_ROOMS) {
     throw new QuoteInputError('TOO_MANY_ROOMS', `At most ${MAX_ROOMS} rooms per quote.`);
   }
-  if (input.bearing_cm !== undefined && (!finite(input.bearing_cm) || input.bearing_cm < 0 || input.bearing_cm > 30)) {
-    throw new QuoteInputError('INVALID_INPUT', 'bearing_cm must be between 0 and 30.');
+  if (
+    input.bearing_cm !== undefined &&
+    (!finite(input.bearing_cm) || input.bearing_cm < MIN_BEARING_CM || input.bearing_cm > MAX_BEARING_CM)
+  ) {
+    throw new QuoteInputError(
+      'INVALID_INPUT',
+      `bearing_cm must be between ${MIN_BEARING_CM} and ${MAX_BEARING_CM} (15 is standard; a smaller bearing needs staff).`,
+    );
   }
   rooms.forEach((r, i) => {
     const label = r?.name?.trim() || `room ${i + 1}`;
     if (!finite(r?.width_m) || !finite(r?.length_m) || r.width_m <= 0 || r.length_m <= 0) {
       throw new QuoteInputError('INVALID_INPUT', `${label}: width_m and length_m must be positive numbers in metres.`);
     }
-    if (r.width_m > MAX_WIDTH_M) {
-      throw new QuoteInputError('WIDTH_OUT_OF_RANGE', `${label}: width_m ${r.width_m} is over ${MAX_WIDTH_M} m.`);
+    // In auto mode the sides are just "two walls": check the span (shorter) and
+    // the run (longer), so 13 × 5 prices exactly like 5 × 13.
+    const span = orientation === 'auto' ? Math.min(r.width_m, r.length_m) : r.width_m;
+    const run = orientation === 'auto' ? Math.max(r.width_m, r.length_m) : r.length_m;
+    if (span > MAX_WIDTH_M) {
+      throw new QuoteInputError('WIDTH_OUT_OF_RANGE', `${label}: beam span ${span} m is over ${MAX_WIDTH_M} m.`);
     }
-    if (r.length_m > MAX_LENGTH_M) {
-      throw new QuoteInputError('LENGTH_OUT_OF_RANGE', `${label}: length_m ${r.length_m} is over ${MAX_LENGTH_M} m.`);
+    if (run > MAX_LENGTH_M) {
+      throw new QuoteInputError('LENGTH_OUT_OF_RANGE', `${label}: length ${run} m is over ${MAX_LENGTH_M} m.`);
     }
   });
 }
@@ -136,9 +151,9 @@ function orient(width: number, length: number, orientation: 'auto' | 'as_given')
 }
 
 export function buildSlabQuote(input: SlabQuoteInput, pricing: PriceConfig): SlabQuoteResult {
-  validate(input);
-  const { lang, t } = textsFor(input.lang);
   const orientation: 'auto' | 'as_given' = input.orientation === 'as_given' ? 'as_given' : 'auto';
+  validate(input, orientation);
+  const { lang, t } = textsFor(input.lang);
   const bearing = (input.bearing_cm ?? 15) / 100;
   const warnings: string[] = [];
 
