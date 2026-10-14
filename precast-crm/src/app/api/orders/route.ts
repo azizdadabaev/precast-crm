@@ -12,7 +12,7 @@ import { createOrder } from "@/lib/create-order";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms } from "@/lib/regions";
 import { facetsFrom, NON_LIVE_ORDER_STATUSES } from "@/lib/order-facets";
-import { contributes, dayContribution, type DayContribution } from "@/lib/fulfilment";
+import { dayContribution, listedOnDay, type DayContribution } from "@/lib/fulfilment";
 import { FULFILMENT_SELECT, dayWindowWhere, fulfilmentOf } from "@/lib/fulfilment-data";
 
 /** GET /api/orders — order.view. Paginated. Search/status/day/payment filters
@@ -56,11 +56,11 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     where.OR = filters;
   }
 
-  // Day filter (owner 2026-10-06): the orders that put something on that
-  // calendar day — a truck loaded, a completion, or what is left to ship on
-  // its scheduled day — plus orders scheduled that day even when they shipped
-  // on another day (tagged in the UI). Resolved to an id set so counts, pages
-  // and facets describe the same rows as the calendar cell. Day bounds are the
+  // Day filter (owner 2026-10-06, 2026-10-14): the orders that put something
+  // on that calendar day — a truck loaded, a completion, or what is left to
+  // ship on its scheduled day. An order that shipped on another day is not
+  // listed on its scheduled day. Resolved to an id set so counts, pages and
+  // facets describe the same rows as the calendar cell. Day bounds are the
   // server's LOCAL calendar, matching the capacity calendar.
   const dayActivity = new Map<string, DayContribution>();
   if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
@@ -76,7 +76,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       });
       for (const c of candidates) {
         const act = dayContribution(fulfilmentOf(c), day);
-        if (contributes(act) || act.scheduledHere) dayActivity.set(c.id, act);
+        if (listedOnDay(act)) dayActivity.set(c.id, act);
       }
       where.id = { in: Array.from(dayActivity.keys()) };
     }

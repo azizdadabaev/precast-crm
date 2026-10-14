@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   lengthKey, beamAreaTable, truckArea, beamsByLengthFromJson, orderBeamLines,
-  loadedByLength, orderFulfilment, dayContribution, contributes, dayBuckets,
+  loadedByLength, orderFulfilment, dayContribution, contributes, dayBuckets, listedOnDay,
   toFulfilmentInput, type FulfilmentInput, type FulfilmentRoom,
 } from './fulfilment';
 
@@ -177,11 +177,30 @@ describe('dayContribution / dayBuckets', () => {
     expect(oct8.area).toBeCloseTo(111.43, 3);
     expect(contributes(dayContribution(f, '2026-08-25'))).toBe(false);
   });
-  it('scheduled day of a fully shipped order: listed (scheduledHere) but contributes nothing', () => {
+  it('scheduled day of a fully shipped order: contributes nothing, so it is not listed (owner 2026-10-14)', () => {
     const f = orderFulfilment(order0093());
     const c = dayContribution(f, '2026-08-25');
     expect(c.scheduledHere).toBe(true);
     expect(contributes(c)).toBe(false);
+    expect(listedOnDay(c)).toBe(false);
+  });
+  it('order 2026-10-0039: loaded the evening before its scheduled day → listed only on the day it was loaded', () => {
+    // One truck, no shipments: loaded 13 Oct 18:42, delivered 14 Oct 11:19, scheduled 14 Oct.
+    const f = orderFulfilment({
+      status: 'DELIVERED', loadedAt: new Date(2026, 9, 13, 18, 42), deliveredAt: new Date(2026, 9, 14, 11, 19),
+      scheduledAt: new Date(2026, 9, 14), totalArea: 17.46, totalBlocks: 140, totalBeams: 8,
+      rooms: [{ beamLength: 3.8, beamCount: 8, totalBlocks: 140, monolithArea: 17.46 }], shipments: [],
+    });
+    expect(listedOnDay(dayContribution(f, '2026-10-13'))).toBe(true);
+    expect(listedOnDay(dayContribution(f, '2026-10-14'))).toBe(false);
+    // The list and the calendar cell agree: the cell counts it on the 13th only.
+    const cells = dayBuckets([{ id: '0039', f }]);
+    expect(cells.get('2026-10-13')?.orderIds.has('0039')).toBe(true);
+    expect(cells.has('2026-10-14')).toBe(false);
+  });
+  it('an order not yet loaded is listed on its scheduled day', () => {
+    const f = orderFulfilment({ ...order0093(), status: 'PLACED', shipments: [], scheduledAt: new Date(2026, 9, 14) });
+    expect(listedOnDay(dayContribution(f, '2026-10-14'))).toBe(true);
   });
   it('dayBuckets sums orders per local day and counts each order once per day', () => {
     const a = orderFulfilment(order0093());
