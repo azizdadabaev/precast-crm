@@ -51,6 +51,7 @@ import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCar
 import { CommentThread } from "@/components/comments/CommentThread";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import type { BeamGroup } from "@/lib/weight-distributor";
+import { isLongBeam, loadListLines } from "@/lib/beam-strands";
 
 const WEEKDAY_UZ = ["Якшанба", "Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба"];
 
@@ -142,6 +143,8 @@ interface OrderDetail {
       m2PriceOverride: boolean;
       m2PriceReason: string | null;
       subtotal: string;
+      /** Prestressed strands per beam (GET only), from the room's m² rate level. */
+      strands?: number | null;
     }>;
   };
   events: Array<{
@@ -421,12 +424,21 @@ export default function OrderDetailPage() {
   const beamGroups: BeamGroup[] = useMemo(() => {
     if (!order) return [];
     const map = new Map<string, number>();
+    const strands = new Map<string, Set<number>>();
     for (const c of order.project.calculations) {
       const key = Number(c.beamLength).toFixed(2);
       map.set(key, (map.get(key) ?? 0) + c.beamCount);
+      if (c.strands != null && c.beamCount > 0) strands.set(key, (strands.get(key) ?? new Set()).add(c.strands));
     }
-    return Array.from(map.entries()).map(([beamLength, totalCount]) => ({ beamLength, totalCount }));
+    return Array.from(map.entries()).map(([beamLength, totalCount]) => ({
+      beamLength,
+      totalCount,
+      strands: Array.from(strands.get(beamLength) ?? []).sort((a, b) => a - b),
+    }));
   }, [order]);
+
+  // Load list chips: one per length AND strand count, for the cutting floor.
+  const loadLines = useMemo(() => (order ? loadListLines(order.project.calculations) : []), [order]);
 
   // What is still left to ship — previewed on the reschedule calendar, so a
   // partly shipped order shows only its remaining part on the new day.
@@ -761,13 +773,25 @@ export default function OrderDetailPage() {
                 Юклаш рўйхати<span className="lang-en"> · Load list</span>
               </div>
               <div className="px-4 pb-3 flex flex-wrap gap-2">
-                {beamGroups.map(({ beamLength, totalCount }) => (
-                  <div key={beamLength} className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm">
-                    <span className="font-semibold">{Number(beamLength).toFixed(2)}<span className="text-xs text-muted-foreground ml-0.5">m</span></span>
-                    <span className="text-muted-foreground text-xs">=</span>
-                    <span className="font-mono font-bold tabular-nums text-foreground">{totalCount}</span>
-                  </div>
-                ))}
+                {loadLines.map(({ beamLength, strands, totalCount }) => {
+                  // Long beams: workers cut them with 5 strands by habit — the bracket says what was priced.
+                  const long = isLongBeam(beamLength);
+                  return (
+                    <div key={`${beamLength}|${strands}`} className={`flex items-center gap-1.5 rounded-md border bg-card px-3 py-2 text-sm ${long && strands != null ? "border-2 border-warning" : "border-border"}`}>
+                      <span className="font-semibold">{beamLength}<span className="text-xs text-muted-foreground ml-0.5">m</span></span>
+                      <span className="text-muted-foreground text-xs">=</span>
+                      <span className="font-mono font-bold tabular-nums text-foreground">{totalCount}</span>
+                      {strands != null && (
+                        <span
+                          title={t(`${strands} симли`, `${strands} strands`)}
+                          className={`font-mono font-bold tabular-nums ${long ? "rounded px-1 bg-warning/10 text-warning" : "text-muted-foreground"}`}
+                        >
+                          ({strands})
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
                 <div className="flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 px-3 py-2 text-sm">
                   <span className="font-semibold text-amber-900 dark:text-amber-300">{t("Ғишт", "Block")}</span>
                   <span className="text-amber-600 dark:text-amber-500 text-xs">=</span>

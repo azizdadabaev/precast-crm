@@ -10,6 +10,8 @@ import { recordAudit } from "@/lib/audit";
 import { deleteOrderCascade } from "@/lib/record-delete";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 import { writeOffRemainderOnDelivery } from "@/lib/inventory";
+import { loadPricingConfig } from "@/lib/pricing-config";
+import { beamStrands } from "@/lib/beam-strands";
 
 type Params = { id: string };
 
@@ -66,7 +68,17 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
   if (order.project && !can(user, "inbox.access")) {
     order.project.conversationId = null;
   }
-  return ok(order);
+  if (!order.project) return ok(order);
+  // Strands per room for the load list, so web and Android show one rule.
+  const tiers = (await loadPricingConfig()).m2_price_tiers;
+  const calculations = order.project.calculations.map((c) => ({
+    ...c,
+    strands: beamStrands(
+      { beamLength: Number(c.beamLength), m2Price: Number(c.m2Price), m2PriceOverride: c.m2PriceOverride },
+      tiers,
+    ),
+  }));
+  return ok({ ...order, project: { ...order.project, calculations } });
 });
 
 /** PATCH /api/orders/[id] — order.edit. Updates status, scheduledAt, notes (with timeline event). */

@@ -13,6 +13,7 @@ import {
   type BeamGroup,
   type TruckCapacity,
 } from "@/lib/weight-distributor";
+import { isLongBeam } from "@/lib/beam-strands";
 
 interface PrevShipment {
   loadedBeams: Record<string, number>;
@@ -294,7 +295,15 @@ export function SplitShipmentLoadModal({
                 return (
                   <tr key={g.beamLength} className="border-t">
                     <td className="px-3 py-2 font-mono font-semibold">
-                      {g.beamLength} <span className="text-muted-foreground text-xs">м</span>
+                      <span className="whitespace-nowrap">{g.beamLength} <span className="text-muted-foreground text-xs">м</span></span>
+                      {g.strands && g.strands.length > 0 && (
+                        <>{" "}<span
+                          title={t(`${g.strands.join(" / ")} симли`, `${g.strands.join(" / ")} strands`)}
+                          className={`inline-block tabular-nums ${isLongBeam(g.beamLength) ? "rounded px-1 bg-warning/10 text-warning" : "text-muted-foreground"}`}
+                        >
+                          ({g.strands.join("/")})
+                        </span></>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-muted-foreground">
                       {g.totalCount}

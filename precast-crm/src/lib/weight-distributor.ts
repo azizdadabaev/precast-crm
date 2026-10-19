@@ -3,6 +3,8 @@
 export interface BeamGroup {
   beamLength: string; // e.g. "3.3" — matches Calculation.beamLength.toString()
   totalCount: number;
+  /** Strands priced for this length — more than one when rooms differ. Display only. */
+  strands?: number[];
 }
 
 export interface TruckCapacity {
