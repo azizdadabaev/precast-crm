@@ -209,7 +209,15 @@ export function orderFulfilment(o: FulfilmentInput): OrderFulfilment {
         const left = n - (onTrucks[k] ?? 0);
         if (left > 0) restBeams[k] = left;
       }
-      events.push({ at: completedAt, source: 'remainder', shipmentNumber: null, beamsByLength: restBeams, ...rest });
+      // Unrecorded goods most likely left with the trucks — usually a truck
+      // nobody registered on the same day (owner 2026-10-19, order 2026-10-0038).
+      // completedAt is no proxy: a DELIVERED order takes it from payment
+      // confirmation, which can be days after the goods left.
+      const lastLoadedAt = loaded.reduce<Date | null>(
+        (m, s) => (m == null || (s.loadedAt as Date) > m ? (s.loadedAt as Date) : m),
+        null,
+      );
+      events.push({ at: lastLoadedAt ?? completedAt, source: 'remainder', shipmentNumber: null, beamsByLength: restBeams, ...rest });
     }
   }
 

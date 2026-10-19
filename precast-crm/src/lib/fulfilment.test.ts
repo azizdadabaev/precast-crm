@@ -198,6 +198,35 @@ describe('dayContribution / dayBuckets', () => {
     expect(cells.get('2026-10-13')?.orderIds.has('0039')).toBe(true);
     expect(cells.has('2026-10-14')).toBe(false);
   });
+  it('order 2026-10-0038: blocks of an unregistered truck land on the last truck\'s loading day, not on payment confirmation', () => {
+    // Truck 1 loaded 16 Oct 19:51 with all beams but 800 of 1 249 blocks; the
+    // other 449 left the same day on a truck nobody registered (owner 2026-10-19).
+    // Truck delivered 17 Oct; payment confirmed — so status DELIVERED — 19 Oct.
+    const f = orderFulfilment({
+      status: 'DELIVERED', loadedAt: null, deliveredAt: new Date(2026, 9, 19, 9, 30),
+      scheduledAt: new Date(2026, 9, 17), totalArea: 162.226, totalBlocks: 1249, totalBeams: 76,
+      rooms: [
+        { beamLength: 4.2, beamCount: 26, totalBlocks: 494, monolithArea: 63.336 },
+        { beamLength: 2.9, beamCount: 20, totalBlocks: 260, monolithArea: 33.64 },
+        { beamLength: 4.1, beamCount: 20, totalBlocks: 360, monolithArea: 47.56 },
+        { beamLength: 4, beamCount: 5, totalBlocks: 90, monolithArea: 11.6 },
+        { beamLength: 2.1, beamCount: 5, totalBlocks: 45, monolithArea: 6.09 },
+      ],
+      shipments: [{
+        number: 1, status: 'DELIVERED', loadedAt: new Date(2026, 9, 16, 19, 51), deliveredAt: new Date(2026, 9, 17, 16, 48),
+        loadedBeams: { '2.10': 5, '2.90': 20, '4.00': 5, '4.10': 20, '4.20': 26 }, loadedBlocks: 800, loadedArea: 162.226,
+      }],
+    });
+    const rest = f.events.find((e) => e.source === 'remainder')!;
+    expect(rest.blocks).toBe(449);
+    expect(rest.area).toBe(0);
+    expect(dayContribution(f, '2026-10-16').blocks).toBe(1249);
+    expect(listedOnDay(dayContribution(f, '2026-10-16'))).toBe(true);
+    expect(listedOnDay(dayContribution(f, '2026-10-17'))).toBe(false);
+    expect(listedOnDay(dayContribution(f, '2026-10-19'))).toBe(false);
+    const cells = dayBuckets([{ id: '0038', f }]);
+    expect([...cells.keys()]).toEqual(['2026-10-16']);
+  });
   it('an order not yet loaded is listed on its scheduled day', () => {
     const f = orderFulfilment({ ...order0093(), status: 'PLACED', shipments: [], scheduledAt: new Date(2026, 9, 14) });
     expect(listedOnDay(dayContribution(f, '2026-10-14'))).toBe(true);
