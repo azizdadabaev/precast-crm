@@ -6,6 +6,7 @@ import {
 } from "@/components/calculation/MultiRoomCalculator";
 import type { ClientDraft } from "@/components/calculation/ClientInfoBar";
 import type { Pt, BeamDir, RoomShape } from "@/lib/cad/geometry";
+import type { FillerBlock } from "@/lib/filler-block";
 
 /**
  * Calculator state — auto-saved to localStorage so in-app navigation,
@@ -112,6 +113,10 @@ interface CalculatorState {
   // rule: amount > 0 wins, else percent.
   discountPercent: number;
   discountAmount: number;
+  /** Filler block the loaders put on the truck (Т / К). A new calculation
+   *  starts at КАТТА; null only when an order or draft from before the
+   *  choice existed is reopened, so saving never invents a type for it. */
+  fillerBlock: FillerBlock | null;
   /** When opening a project from /projects, this carries the project id so
    *  that "Save Project" UPDATES the existing draft instead of creating a
    *  duplicate. Persisted so it survives in-app navigation. */
@@ -155,6 +160,7 @@ interface CalculatorState {
   setRows: (rows: SlabRow[]) => void;
   setDiscountPercent: (pct: number) => void;
   setDiscountAmount: (amount: number) => void;
+  setFillerBlock: (b: FillerBlock) => void;
   setDraftProjectId: (id: string | null) => void;
   setEditingOrderId: (id: string | null) => void;
   setSourceConversationId: (id: string | null) => void;
@@ -169,7 +175,7 @@ interface CalculatorState {
    * and by hydration migration. Pass partial state; everything else
    * resets to defaults so a draft load can't leak prior session bits.
    */
-  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDiscountAmount" | "setDraftProjectId" | "setEditingOrderId" | "setSourceConversationId" | "setDockHidden" | "addDroppedImages" | "setColumnWidths" | "setRoundingGrid" | "setDrawing">>) => void;
+  loadFrom: (next: Partial<Omit<CalculatorState, "loadFrom" | "clearAll" | "setClient" | "setMatchedClientId" | "setRows" | "setDiscountPercent" | "setDiscountAmount" | "setFillerBlock" | "setDraftProjectId" | "setEditingOrderId" | "setSourceConversationId" | "setDockHidden" | "addDroppedImages" | "setColumnWidths" | "setRoundingGrid" | "setDrawing">>) => void;
   /** Wipe all draft state. Called from the Clear button and after a
    *  successful Place Order. */
   clearAll: () => void;
@@ -187,6 +193,7 @@ const INITIAL_STATE = {
   rows: [] as SlabRow[],
   discountPercent: 0,
   discountAmount: 0,
+  fillerBlock: "KATTA" as FillerBlock | null,
   draftProjectId: null,
   editingOrderId: null as string | null,
   sourceConversationId: null as string | null,
@@ -203,6 +210,7 @@ interface PersistedShape {
   rows: SlabRow[];
   discountPercent: number;
   discountAmount: number;
+  fillerBlock: FillerBlock | null;
   draftProjectId: string | null;
   editingOrderId: string | null;
   sourceConversationId: string | null;
@@ -313,6 +321,7 @@ export const useCalculatorStore = create<CalculatorState>()(
           discountAmount: amount,
           discountPercent: amount > 0 ? 0 : s.discountPercent,
         })),
+      setFillerBlock: (b) => set({ fillerBlock: b }),
       setDraftProjectId: (id) => set({ draftProjectId: id }),
       setEditingOrderId: (id) => set({ editingOrderId: id }),
       setSourceConversationId: (id) => set({ sourceConversationId: id }),
@@ -361,6 +370,7 @@ export const useCalculatorStore = create<CalculatorState>()(
         rows: s.rows,
         discountPercent: s.discountPercent,
         discountAmount: s.discountAmount,
+        fillerBlock: s.fillerBlock,
         draftProjectId: s.draftProjectId,
         editingOrderId: s.editingOrderId,
         sourceConversationId: s.sourceConversationId,

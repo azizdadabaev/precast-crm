@@ -31,6 +31,7 @@ import { handleCellNavKeyDown } from "@/lib/cell-nav";
 import { Bi, useT } from "@/lib/i18n";
 import { useLivePricing } from "@/hooks/useLivePricing";
 import type { NormBox } from "@/lib/annotation-box";
+import { FILLER_BLOCKS, fillerBlockLetter, fillerBlockName } from "@/lib/filler-block";
 
 export interface SlabRow {
   id: string;
@@ -367,6 +368,9 @@ export function MultiRoomCalculator({
   // and is keyed per user (see src/store/calculator.ts).
   const roundingGrid = useCalculatorStore((s) => s.roundingGrid);
   const changeGrid = useCalculatorStore((s) => s.setRoundingGrid);
+  // Which filler block the loaders put on the truck — a label, never priced.
+  const fillerBlock = useCalculatorStore((s) => s.fillerBlock);
+  const setFillerBlock = useCalculatorStore((s) => s.setFillerBlock);
 
   // Rebill every row when the live pricing config changes. Without this
   // the table sticks with the old tier values until the operator edits
@@ -1316,13 +1320,38 @@ export function MultiRoomCalculator({
                 </div>
               )}
               {totals.blocks > 0 && (
-                <div className="flex justify-between items-center bg-muted/30 rounded px-3 py-1.5 text-sm">
+                <div className="flex justify-between items-center gap-2 bg-muted/30 rounded px-3 py-1.5 text-sm">
                   <span className="font-semibold">
                     Ғишт{" "}
                     <span className="text-muted-foreground font-normal">
                       {t("· жами ғишт", "· total blocks")}
                     </span>
                   </span>
+                  {/* Т / К for the loaders. Neither lit = an order from before
+                      the choice existed; the operator picks one before saving. */}
+                  <div
+                    role="radiogroup"
+                    aria-label={t("Ғишт тури", "Block type")}
+                    className="ml-auto flex rounded-md border bg-background overflow-hidden text-xs"
+                  >
+                    {FILLER_BLOCKS.map((b) => (
+                      <button
+                        key={b}
+                        type="button"
+                        role="radio"
+                        aria-checked={fillerBlock === b}
+                        title={fillerBlockName(b)}
+                        onClick={() => setFillerBlock(b)}
+                        className={`px-3 h-7 font-bold transition-colors ${
+                          fillerBlock === b
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {fillerBlockLetter(b)}
+                      </button>
+                    ))}
+                  </div>
                   <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold tabular-nums">
                     {totals.blocks} {t("дона", "pcs")}
                   </span>

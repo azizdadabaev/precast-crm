@@ -26,6 +26,8 @@ interface Props {
   shipmentNumber: number;
   beamGroups: BeamGroup[];
   totalBlocks: number;
+  /** «Т» / «К» beside the block row; null on orders from before the choice. */
+  blockLetter: string | null;
   prevShipments: PrevShipment[];
   open: boolean;
   onClose: () => void;
@@ -34,7 +36,7 @@ interface Props {
 
 export function SplitShipmentLoadModal({
   orderId, shipmentId, shipmentNumber,
-  beamGroups, totalBlocks, prevShipments,
+  beamGroups, totalBlocks, blockLetter, prevShipments,
   open, onClose, onSuccess,
 }: Props) {
   const t = useT();
@@ -333,6 +335,7 @@ export function SplitShipmentLoadModal({
               <tr className="border-t bg-muted/20">
                 <td className="px-3 py-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
                   {t("Гишт", "Blocks")}
+                  {blockLetter && <span className="ml-1 font-mono font-bold text-foreground">({blockLetter})</span>}
                 </td>
                 <td className="px-3 py-2 text-right font-mono text-muted-foreground">{totalBlocks}</td>
                 <td className="px-3 py-2 text-right">

@@ -13,6 +13,9 @@ export const DealStageEnum = z.enum([
 ]);
 export const DealStatusEnum = z.enum(["OPEN", "WON", "LOST"]);
 export const ShapeTypeEnum = z.enum(["RECTANGULAR", "TRAPEZOIDAL", "IRREGULAR"]);
+// Filler block for the loaders (Т = 10 cm, К = 15 cm). On every write below:
+// absent → leave the stored choice untouched (older clients), null → clear it.
+export const FillerBlockTypeEnum = z.enum(["TAYSON", "KATTA"]);
 export const LayoutPatternEnum = z.enum(["GB", "BGB", "GBG"]);
 export const ProjectStatusEnum = z.enum(["DRAFT", "ORDERED", "ARCHIVED"]);
 export const OrderStatusEnum = z.enum([
@@ -271,6 +274,7 @@ export const SaveProjectDraftSchema = z.object({
   // the exact outline. Absent → leave any existing drawing untouched; explicit
   // null → clear it; object → set it.
   drawing: CalculatorDrawingSchema.nullish(),
+  fillerBlock: FillerBlockTypeEnum.nullish(),
 });
 
 // ── Place Order (commits the deal) ──────────────────────────────
@@ -304,6 +308,7 @@ export const PlaceOrderSchema = z.object({
   paidAmount: z.coerce.number().min(0).default(0),
   paymentMethod: PaymentMethodEnum.optional().nullable(),
   receiptUrls: z.array(z.string().max(500)).max(10).default([]),
+  fillerBlock: FillerBlockTypeEnum.nullish(),
 }).refine(
   (v) => !(v.paidAmount > 0) || !!v.paymentMethod,
   { path: ["paymentMethod"], message: "paymentMethod is required when paidAmount > 0" },
@@ -335,6 +340,7 @@ export const EditOrderSchema = z.object({
   // with a machine-readable code and the UI re-submits with the flag set.
   clientPhone: z.string().max(40).optional(),
   confirmClientPhoneChange: z.coerce.boolean().optional().default(false),
+  fillerBlock: FillerBlockTypeEnum.nullish(),
 });
 
 // ── Cancel order ────────────────────────────────────────────────

@@ -319,6 +319,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
           status: "DRAFT",
           discountPercent: body.discountPercent,
           discountAmount: body.discountAmount,
+          ...(body.fillerBlock !== undefined ? { fillerBlock: body.fillerBlock } : {}),
           // Only set when a linkable conversationId is present; a plain
           // re-save (no link in the body) must not null out an existing link.
           ...(linkConversationId ? { conversationId: linkConversationId } : {}),
@@ -362,6 +363,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
         status: "DRAFT",
         discountPercent: body.discountPercent,
         discountAmount: body.discountAmount,
+        fillerBlock: body.fillerBlock ?? null,
         conversationId: linkConversationId ?? null,
         createdById: user.id,
         clientId: existingClient?.id ?? null,

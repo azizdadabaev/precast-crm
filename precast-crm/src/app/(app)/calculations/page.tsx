@@ -34,6 +34,7 @@ import {
 } from "@/components/calculation/MultiRoomCalculator";
 import type { NormBox } from "@/lib/annotation-box";
 import { restoreDiscountInputs } from "@/lib/order-totals";
+import type { FillerBlock } from "@/lib/filler-block";
 import { projectTotal } from "@/services/calculation-engine";
 import { TaperedPrefillSchema } from "@/lib/validation";
 import { decodePrefillParam } from "@/sandbox/tapered-beam-block/calculator-bridge";
@@ -73,6 +74,7 @@ function CalculationsInner() {
   const setDiscountPercent = useCalculatorStore((s) => s.setDiscountPercent);
   const discountAmount = useCalculatorStore((s) => s.discountAmount);
   const setDiscountAmount = useCalculatorStore((s) => s.setDiscountAmount);
+  const fillerBlock = useCalculatorStore((s) => s.fillerBlock);
   const draftProjectId = useCalculatorStore((s) => s.draftProjectId);
   const setDraftProjectId = useCalculatorStore((s) => s.setDraftProjectId);
   const editingOrderId = useCalculatorStore((s) => s.editingOrderId);
@@ -416,6 +418,7 @@ function CalculationsInner() {
         project: {
           id: string;
           drawingJson: unknown;
+          fillerBlock: FillerBlock | null;
           calculations: Array<{
             id: string;
             name: string | null;
@@ -447,6 +450,7 @@ function CalculationsInner() {
       loadFrom({
         editingOrderId: order.id,
         drawing: normalizeDrawing(order.project.drawingJson),
+        fillerBlock: order.project.fillerBlock ?? null,
         client: {
           name: order.client.name,
           phone: order.client.phone,
@@ -497,6 +501,7 @@ function CalculationsInner() {
         tentativeClientPhone: string | null;
         tentativeClientAddress: string | null;
         drawingJson: unknown;
+        fillerBlock: FillerBlock | null;
         client: {
           id: string;
           name: string;
@@ -533,6 +538,7 @@ function CalculationsInner() {
         matchedClientId: p.client?.id ?? null,
         discountPercent: Number(p.discountPercent),
         discountAmount: Number(p.discountAmount),
+        fillerBlock: p.fillerBlock ?? null,
         // Restore the drawn floor plan so "Draw room" reopens the saved rooms.
         drawing: normalizeDrawing(p.drawingJson),
         rows: p.calculations.map((c) =>
@@ -735,6 +741,7 @@ function CalculationsInner() {
           conversationId: sourceConversationId ?? undefined,
           discountPercent,
           discountAmount,
+          fillerBlock,
           // Persist the drawn outline (CAD sketch) so reopening this draft
           // restores it; null when nothing was drawn / it was cleared.
           drawing,
@@ -802,6 +809,7 @@ function CalculationsInner() {
           })),
           discountPercent,
           discountAmount,
+          fillerBlock,
           deliveryCost: 0,
           otherCost: 0,
           scheduledAt: args.scheduledAt.toISOString(),
@@ -846,6 +854,7 @@ function CalculationsInner() {
             })),
             discountPercent,
             discountAmount,
+            fillerBlock,
             deliveryCost: 0,
             otherCost: 0,
             scheduledAt: args.scheduledAt.toISOString(),

@@ -1478,6 +1478,16 @@
                     },
                     "maxItems": 10,
                     "default": []
+                  },
+                  "fillerBlock": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "TAYSON",
+                      "KATTA"
+                    ]
                   }
                 },
                 "required": [
@@ -1943,6 +1953,16 @@
                     "required": [
                       "rooms",
                       "globalDir"
+                    ]
+                  },
+                  "fillerBlock": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "TAYSON",
+                      "KATTA"
                     ]
                   }
                 },

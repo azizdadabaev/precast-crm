@@ -52,6 +52,7 @@ import { CommentThread } from "@/components/comments/CommentThread";
 import { ImageLightbox } from "@/components/ImageLightbox";
 import type { BeamGroup } from "@/lib/weight-distributor";
 import { isLongBeam, loadListLines } from "@/lib/beam-strands";
+import { fillerBlockLetter, fillerBlockName, type FillerBlock } from "@/lib/filler-block";
 
 const WEEKDAY_UZ = ["Якшанба", "Душанба", "Сешанба", "Чоршанба", "Пайшанба", "Жума", "Шанба"];
 
@@ -124,6 +125,7 @@ interface OrderDetail {
     id: string;
     name: string | null;
     conversationId: string | null;
+    fillerBlock?: FillerBlock | null;
     calculations: Array<{
       id: string;
       name: string | null;
@@ -796,6 +798,14 @@ export default function OrderDetailPage() {
                   <span className="font-semibold text-amber-900 dark:text-amber-300">{t("Ғишт", "Block")}</span>
                   <span className="text-amber-600 dark:text-amber-500 text-xs">=</span>
                   <span className="font-mono font-bold tabular-nums text-amber-900 dark:text-amber-300">{calcTotals.blocks}</span>
+                  {order.project.fillerBlock && (
+                    <span
+                      title={fillerBlockName(order.project.fillerBlock)}
+                      className="font-mono font-bold text-amber-900 dark:text-amber-300"
+                    >
+                      ({fillerBlockLetter(order.project.fillerBlock)})
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1496,6 +1506,7 @@ export default function OrderDetailPage() {
           shipments={order.shipments}
           beamGroups={beamGroups}
           totalBlocks={calcTotals.blocks}
+          blockLetter={fillerBlockLetter(order.project.fillerBlock)}
           orderStatus={order.status}
           onRefresh={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
         />

@@ -256,6 +256,8 @@ export async function createOrder(
         tentativeClientName: null,
         tentativeClientPhone: null,
         tentativeClientAddress: null,
+        // Absent (AI agent, older clients) keeps whatever a saved draft chose.
+        ...(input.fillerBlock !== undefined ? { fillerBlock: input.fillerBlock } : {}),
       },
     });
 

@@ -89,6 +89,12 @@ enum DiscountMode {
   PERCENT
 }
 
+/// Filler block height. TAYSON = 10 cm «Тайсон ғишт» (Т), KATTA = 15 cm «Катта ғишт» (К).
+enum FillerBlockType {
+  TAYSON
+  KATTA
+}
+
 // New three-state lifecycle. PENDING → CONFIRMED (owner) | REJECTED (owner).
 enum PaymentStatus {
   PENDING_CONFIRMATION
@@ -417,6 +423,12 @@ model Project {
   // own discount columns at placement time.
   discountPercent Decimal @default(0) @db.Decimal(5, 2)
   discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+
+  // Which filler block the loaders put on the truck (owner 2026-10-19). A
+  // label only — both cover the same area, so counts and prices ignore it.
+  // Chosen in the calculator; the placed order reads it from its project.
+  // Null on rows from before the choice existed (not known, not guessed).
+  fillerBlock FillerBlockType?
 
   // True when this draft was created automatically by the Telegram AI sales
   // agent (Auto mode). Drives the "AI" badge + "AI Agent" filter in /projects.

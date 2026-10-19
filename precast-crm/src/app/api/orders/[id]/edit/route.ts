@@ -247,6 +247,7 @@ export const PATCH = withPermission<{ id: string }>(
       totalBeams: existing.totalBeams,
       scheduledAt: existing.scheduledAt.toISOString(),
       roomsCount: existing.project.calculations.length,
+      fillerBlock: existing.project.fillerBlock,
     };
     const newSnapshot = {
       roomsSubtotal,
@@ -261,6 +262,7 @@ export const PATCH = withPermission<{ id: string }>(
       totalBeams,
       scheduledAt: body.scheduledAt.toISOString(),
       roomsCount: computed.length,
+      fillerBlock: body.fillerBlock === undefined ? existing.project.fillerBlock : body.fillerBlock,
     };
 
     const editTx = prisma.$transaction(async (tx) => {
@@ -273,6 +275,10 @@ export const PATCH = withPermission<{ id: string }>(
           ...calcResultToCreatePayload(c.input, c.result),
         })),
       });
+      // Absent (older app builds) leaves the loaders' block choice as it was.
+      if (body.fillerBlock !== undefined) {
+        await tx.project.update({ where: { id: existing.projectId }, data: { fillerBlock: body.fillerBlock } });
+      }
       const refreshed = await tx.project.findUniqueOrThrow({
         where: { id: existing.projectId },
         include: { calculations: { orderBy: { seq: "asc" } } },

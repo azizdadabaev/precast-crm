@@ -35,6 +35,8 @@ interface Props {
   shipments: ShipmentData[];
   beamGroups: BeamGroup[];
   totalBlocks: number;
+  /** «Т» / «К» for the loaders; null on orders from before the choice. */
+  blockLetter: string | null;
   orderStatus: string;
   onRefresh: () => void;
 }
@@ -61,7 +63,7 @@ const STATUS_LABEL_UZ: Record<ShipmentStatus, string> = {
 };
 
 export function ShipmentsSection({
-  orderId, shipments, beamGroups, totalBlocks, orderStatus, onRefresh,
+  orderId, shipments, beamGroups, totalBlocks, blockLetter, orderStatus, onRefresh,
 }: Props) {
   const t = useT();
   const [loadModalShipment, setLoadModalShipment] = useState<ShipmentData | null>(null);
@@ -330,6 +332,7 @@ export function ShipmentsSection({
           shipmentNumber={loadModalShipment.number}
           beamGroups={beamGroups}
           totalBlocks={totalBlocks}
+          blockLetter={blockLetter}
           prevShipments={prevLoaded}
           open={true}
           onClose={() => setLoadModalShipment(null)}
