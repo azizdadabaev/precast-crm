@@ -343,18 +343,21 @@ function OrdersList() {
         {/* Orders owing the client money back (owner 2026-10-20). Shown only
             while there is something to refund, or while the filter is on. */}
         {(refundCount > 0 || payment === "refund") && (
-          <button
-            type="button"
-            onClick={() => setParam("payment", payment === "refund" ? null : "refund")}
-            className={cn(
-              "h-8 px-3 rounded-md border text-[12px] font-bold uppercase tracking-wider transition-colors",
-              payment === "refund"
-                ? "border-warning bg-warning text-warning-foreground"
-                : "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20",
-            )}
-          >
-            {t("Қайтариш керак", "Refund due")} · <span className="tabular-nums">{refundCount}</span>
-          </button>
+          <div className="flex border-b border-border">
+            <button
+              type="button"
+              onClick={() => setParam("payment", payment === "refund" ? null : "refund")}
+              className={cn(
+                "relative h-10 px-3 text-[12px] font-bold uppercase tracking-wider transition-colors",
+                payment === "refund" ? "text-primary" : "text-text-tertiary hover:text-foreground",
+              )}
+            >
+              {t("Қайтариш керак", "Refund due")} · <span className="tabular-nums">{refundCount}</span>
+              {payment === "refund" && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+              )}
+            </button>
+          </div>
         )}
       </div>
 
