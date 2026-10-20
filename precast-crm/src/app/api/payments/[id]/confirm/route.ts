@@ -7,6 +7,8 @@ import { PaymentConfirmSchema } from "@/lib/validation";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { emitNotifications } from "@/lib/notifications";
+import { refundDue } from "@/lib/overpayment";
+import { notifyIfOverpaid } from "@/lib/overpayment-notify";
 
 /**
  * POST /api/payments/[id]/confirm   (ADMIN | OWNER only)
@@ -70,6 +72,7 @@ export const POST = withPermission<{ id: string }>(
     }
   }
 
+  let confirmedAfter = Number(payment.order.confirmedPaid);
   const updated = await prisma.$transaction(async (tx) => {
     // 1. Update payment
     const p = await tx.payment.update({
@@ -111,6 +114,7 @@ export const POST = withPermission<{ id: string }>(
       where: { orderId: payment.orderId, status: "CONFIRMED" },
     });
     const confirmedPaid = Number(sumAgg._sum.amount ?? 0);
+    confirmedAfter = confirmedPaid;
     const total = Number(payment.order.totalPrice);
     const writeOff = Number(payment.order.writeOffAmount);
     const paymentState =
@@ -204,6 +208,12 @@ export const POST = withPermission<{ id: string }>(
     paymentId: payment.id,
     orderId: payment.orderId,
   });
+  // An amount adjusted upward can leave the client overpaid — tell the owners.
+  await notifyIfOverpaid(
+    payment.order,
+    refundDue(payment.order),
+    refundDue({ ...payment.order, confirmedPaid: confirmedAfter }),
+  );
 
   return ok(updated);
 });

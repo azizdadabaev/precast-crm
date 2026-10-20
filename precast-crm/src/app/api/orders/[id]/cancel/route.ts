@@ -7,6 +7,8 @@ import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { netWrittenOffForOrder, restockForCancellation } from "@/lib/inventory";
+import { refundDue } from "@/lib/overpayment";
+import { notifyIfOverpaid } from "@/lib/overpayment-notify";
 
 const CANCEL_PASSWORD = process.env.ORDER_CANCEL_PASSWORD ?? "etalontbm";
 
@@ -126,6 +128,8 @@ export const POST = withPermission<{ id: string }>(
         reason: body.reason ?? null,
       },
     });
+    // Money taken on a canceled order goes back to the client — tell the owners.
+    await notifyIfOverpaid(existing, refundDue(existing), refundDue(updated));
 
     return ok(updated);
   },

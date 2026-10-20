@@ -20,6 +20,8 @@ import {
   MessageCircle,
   Paperclip,
   BadgeCheck,
+  Undo2,
+  AlertCircle,
   X,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
@@ -31,6 +33,8 @@ import { PhoneLink } from "@/components/PhoneLink";
 import { DeliveryProofDialog, type DeliveryFormPayload } from "@/components/orders/DeliveryProofDialog";
 import { AddPaymentDialog } from "@/components/payments/AddPaymentDialog";
 import { SettleRemainingDialog } from "@/components/payments/SettleRemainingDialog";
+import { RefundDialog } from "@/components/payments/RefundDialog";
+import { OVERPAY_ALERT_MIN, refundDue } from "@/lib/overpayment";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { SendQuoteToChatButton } from "@/components/inbox/SendQuoteToChatButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
@@ -247,6 +251,7 @@ export default function OrderDetailPage() {
   const [proofOpen, setProofOpen] = useState(false);
   const [addPaymentOpen, setAddPaymentOpen] = useState(false);
   const [settleOpen, setSettleOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
   const [loadTruckOpen, setLoadTruckOpen] = useState(false);
   const [splitLoading, setSplitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -467,6 +472,11 @@ export default function OrderDetailPage() {
   const writeOffNum = Number(order.writeOffAmount ?? 0);
   const remainingNum = Math.max(0, totalNum - paidNum - writeOffNum);
   const fullyPaid = paidNum + writeOffNum > 0 && remainingNum === 0;
+  // The client paid more than they owe (or paid for a canceled order): every
+  // balance on this page says so instead of «Тўланган» (owner 2026-10-20).
+  const refundNum = refundDue(order);
+  const owesBack = refundNum >= OVERPAY_ALERT_MIN;
+  const balanceLabel = owesBack ? t("Қайтариш керак", "Refund due") : null;
   // Price-composition adjustments that move roomsSubtotal → totalPrice.
   // When all three are zero the subtotal equals the total, so the
   // breakdown block below is suppressed as redundant noise.
@@ -635,9 +645,9 @@ export default function OrderDetailPage() {
                     </span>
                   </div>
                   <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold">Қолди</span>
-                    <span className={`tabular-nums font-semibold ${fullyPaid ? "text-success" : remaining > 0 ? "text-warning" : "text-muted-foreground"}`}>
-                      {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remaining, 0)}
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold">{balanceLabel ?? "Қолди"}</span>
+                    <span className={`tabular-nums font-semibold ${owesBack ? "text-warning" : fullyPaid ? "text-success" : remaining > 0 ? "text-warning" : "text-muted-foreground"}`}>
+                      {owesBack ? formatNumber(refundNum, 0) : fullyPaid ? t("Тўланган", "Paid") : formatNumber(remaining, 0)}
                     </span>
                   </div>
                   <span className={`inline-block mt-0.5 text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 ${PAYMENT_STATE_BADGE[order.paymentState].cls}`}>
@@ -712,18 +722,20 @@ export default function OrderDetailPage() {
                   </div>
                   <div className="flex items-baseline justify-between gap-6">
                     <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-bold">
-                      Қолди<span className="lang-en"> · Remaining</span>
+                      {balanceLabel ?? <>Қолди<span className="lang-en"> · Remaining</span></>}
                     </span>
                     <span
                       className={`tabular-nums font-semibold ${
-                        fullyPaid
-                          ? "text-success"
-                          : remaining > 0
-                            ? "text-warning"
-                            : "text-muted-foreground"
+                        owesBack
+                          ? "text-warning"
+                          : fullyPaid
+                            ? "text-success"
+                            : remaining > 0
+                              ? "text-warning"
+                              : "text-muted-foreground"
                       }`}
                     >
-                      {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remaining, 0)}
+                      {owesBack ? formatNumber(refundNum, 0) : fullyPaid ? t("Тўланган", "Paid") : formatNumber(remaining, 0)}
                     </span>
                   </div>
                   {pendingAmount > 0 && (
@@ -1110,14 +1122,14 @@ export default function OrderDetailPage() {
                   {formatNumber(paidNum, 0)}
                 </div>
               </div>
-              <div className={`flex flex-col text-right px-4 py-3 ${fullyPaid ? "bg-success/5" : remainingNum > 0 ? "bg-warning/5" : ""}`}>
+              <div className={`flex flex-col text-right px-4 py-3 ${owesBack ? "bg-warning/5" : fullyPaid ? "bg-success/5" : remainingNum > 0 ? "bg-warning/5" : ""}`}>
                 <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-0.5">
-                  Қолди<span className="lang-en"> · Remaining</span>
+                  {balanceLabel ?? <>Қолди<span className="lang-en"> · Remaining</span></>}
                 </div>
                 <div className={`text-base font-black tabular-nums font-mono leading-none ${
-                  fullyPaid ? "text-success" : remainingNum > 0 ? "text-warning" : "text-muted-foreground"
+                  owesBack ? "text-warning" : fullyPaid ? "text-success" : remainingNum > 0 ? "text-warning" : "text-muted-foreground"
                 }`}>
-                  {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
+                  {owesBack ? formatNumber(refundNum, 0) : fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
                 </div>
               </div>
             </div>
@@ -1152,14 +1164,14 @@ export default function OrderDetailPage() {
                 </div>
               </div>
               <div className="w-px bg-border my-3" />
-              <div className={`flex flex-col justify-center text-right px-6 py-4 ${fullyPaid ? "bg-success/5" : remainingNum > 0 ? "bg-warning/5" : ""}`}>
+              <div className={`flex flex-col justify-center text-right px-6 py-4 ${owesBack ? "bg-warning/5" : fullyPaid ? "bg-success/5" : remainingNum > 0 ? "bg-warning/5" : ""}`}>
                 <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground mb-1">
-                  Қолди<span className="lang-en"> · Remaining</span>
+                  {balanceLabel ?? <>Қолди<span className="lang-en"> · Remaining</span></>}
                 </div>
                 <div className={`text-xl font-black tabular-nums font-mono leading-none ${
-                  fullyPaid ? "text-success" : remainingNum > 0 ? "text-warning" : "text-muted-foreground"
+                  owesBack ? "text-warning" : fullyPaid ? "text-success" : remainingNum > 0 ? "text-warning" : "text-muted-foreground"
                 }`}>
-                  {fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
+                  {owesBack ? formatNumber(refundNum, 0) : fullyPaid ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
                 </div>
               </div>
             </div>
@@ -1326,6 +1338,19 @@ export default function OrderDetailPage() {
                   </Button>
                 )}
 
+                {/* Refund — the client paid more than they owe. Confirmers only. */}
+                {canConfirmPayment && owesBack && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-warning/40 bg-warning/10 text-warning hover:bg-warning/20"
+                    onClick={() => setRefundOpen(true)}
+                  >
+                    <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                    Қайтариш<span className="lang-en"> · Refund</span>
+                  </Button>
+                )}
+
                 {/* Add Payment — primary CTA */}
                 {canAdd && (
                   <Button
@@ -1340,6 +1365,22 @@ export default function OrderDetailPage() {
               </div>
 
             </div>
+            {owesBack && (
+              <div className="flex items-start gap-2 border-t border-warning/30 bg-warning/10 px-4 py-2.5 text-sm text-warning">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>
+                  {order.status === "CANCELED"
+                    ? t(
+                        `Буюртма бекор қилинган, мижоз ${formatNumber(refundNum, 0)} UZS тўлаган — қайтариш керак.`,
+                        `The order is canceled and the client paid ${formatNumber(refundNum, 0)} UZS — a refund is due.`,
+                      )
+                    : t(
+                        `Мижоз ${formatNumber(refundNum, 0)} UZS ортиқча тўлаган — қайтариш керак.`,
+                        `The client overpaid by ${formatNumber(refundNum, 0)} UZS — a refund is due.`,
+                      )}
+                </span>
+              </div>
+            )}
           </div>
         );
       })()}
@@ -1562,15 +1603,25 @@ export default function OrderDetailPage() {
               {order.payments.map((p) => (
                 <tr key={p.id} className="hover:bg-muted/20">
                   <td className="px-3 py-2 text-xs uppercase tracking-wider">{p.method}</td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                  <td className={`px-3 py-2 text-right tabular-nums font-semibold ${Number(p.amount) < 0 ? "text-warning" : ""}`}>
                     {formatNumber(p.amount, 0)}
                   </td>
                   <td className="px-3 py-2">
-                    <span
-                      className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATUS_BADGE[p.status].cls}`}
-                    >
-                      {translatePaymentBadgeStatus(p.status, t)}
-                    </span>
+                    {/* A negative row is money given back (POST /orders/[id]/refund). */}
+                    {Number(p.amount) < 0 ? (
+                      <span
+                        title={p.notes ?? undefined}
+                        className="text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 bg-warning/10 text-warning"
+                      >
+                        {t("Қайтарилди", "Refunded")}
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider rounded px-2 py-0.5 ${PAYMENT_STATUS_BADGE[p.status].cls}`}
+                      >
+                        {translatePaymentBadgeStatus(p.status, t)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {p.collectedByDriver ? p.collectedByDriver.name : "—"}
@@ -1978,6 +2029,14 @@ export default function OrderDetailPage() {
         onSettled={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
       />
 
+      <RefundDialog
+        open={refundOpen}
+        onClose={() => setRefundOpen(false)}
+        orderId={order.id}
+        due={refundNum}
+        onRefunded={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
+      />
+
       {/* Cancel modal */}
       {cancelOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -1991,6 +2050,17 @@ export default function OrderDetailPage() {
                 "Cancellation requires ADMIN role or the company cancel password. The Project will move back to Draft so it can be re-edited.",
               )}
             </p>
+            {paidNum > 0 && (
+              <div className="flex items-start gap-2 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>
+                  {t(
+                    `Мижоз ${formatNumber(paidNum, 0)} UZS тўлаган — бекор қилингандан кейин уни қайтариш керак бўлади.`,
+                    `The client has paid ${formatNumber(paidNum, 0)} UZS — it will be due back after canceling.`,
+                  )}
+                </span>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider">
                 {t("Бекор қилиш пароли", "Cancel password")}

@@ -90,6 +90,7 @@ interface OrdersResponse {
   page: number;
   pageSize: number;
   totalPages: number;
+  facets?: { byPayment?: { refund?: number } };
 }
 
 // Format a Date as YYYY-MM-DD in the user's local timezone, so the day the
@@ -123,6 +124,7 @@ function OrdersList() {
   const status = (searchParams.get("status") ?? "") as "" | Order["status"];
   const page   = Math.max(1, Number(searchParams.get("page") ?? "1"));
   const dayKey = searchParams.get("day") ?? null;
+  const payment = searchParams.get("payment") ?? "";
 
   // Local input value mirrors URL's q but updates on every keystroke;
   // URL is updated via replace (no history entry) so Back still works.
@@ -143,12 +145,13 @@ function OrdersList() {
   const calendarSelected = dayKey ? new Date(`${dayKey}T00:00:00`) : null;
 
   const { data, isLoading } = useQuery<OrdersResponse>({
-    queryKey: ["orders", q, status, dayKey, page],
+    queryKey: ["orders", q, status, dayKey, payment, page],
     queryFn: () => {
       const p = new URLSearchParams();
       if (q.trim()) p.set("q", q.trim());
       if (status) p.set("status", status);
       if (dayKey) p.set("day", dayKey);
+      if (payment) p.set("payment", payment);
       p.set("page", String(page));
       p.set("pageSize", String(PAGE_SIZE));
       return api(`/api/orders?${p.toString()}`);
@@ -173,6 +176,7 @@ function OrdersList() {
   const orders = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
+  const refundCount = data?.facets?.byPayment?.refund ?? 0;
 
   // Permissions — used for the owner-only Excel backup button.
   const { data: me } = useQuery<{ permissions: string[] }>({
@@ -335,6 +339,23 @@ function OrdersList() {
             );
           })}
         </div>
+
+        {/* Orders owing the client money back (owner 2026-10-20). Shown only
+            while there is something to refund, or while the filter is on. */}
+        {(refundCount > 0 || payment === "refund") && (
+          <button
+            type="button"
+            onClick={() => setParam("payment", payment === "refund" ? null : "refund")}
+            className={cn(
+              "h-8 px-3 rounded-md border text-[12px] font-bold uppercase tracking-wider transition-colors",
+              payment === "refund"
+                ? "border-warning bg-warning text-warning-foreground"
+                : "border-warning/40 bg-warning/10 text-warning hover:bg-warning/20",
+            )}
+          >
+            {t("Қайтариш керак", "Refund due")} · <span className="tabular-nums">{refundCount}</span>
+          </button>
+        )}
       </div>
 
       {/* Table */}

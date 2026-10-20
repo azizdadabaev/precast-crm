@@ -14,6 +14,7 @@ import { addressSearchForms } from "@/lib/regions";
 import { facetsFrom, NON_LIVE_ORDER_STATUSES } from "@/lib/order-facets";
 import { dayContribution, listedOnDay, type DayContribution } from "@/lib/fulfilment";
 import { FULFILMENT_SELECT, dayWindowWhere, fulfilmentOf } from "@/lib/fulfilment-data";
+import { refundDueOrderIds } from "@/lib/overpayment-query";
 
 /** GET /api/orders — order.view. Paginated. Search/status/day/payment filters
  * run server-side so `q` matches the full DB even when only one page
@@ -97,8 +98,12 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       ? { equals: status, notIn: NON_LIVE_ORDER_STATUSES }
       : { notIn: NON_LIVE_ORDER_STATUSES };
   }
+  // «Қайтариш керак» (owner 2026-10-20): orders that owe the client money
+  // back, canceled ones included — that is where a forgotten refund hides.
+  const refundIds = await refundDueOrderIds();
+  if (payment === "refund") where.AND = [{ id: { in: refundIds } }];
 
-  const [total, items, statusGroups, paymentGroups] = await Promise.all([
+  const [total, items, statusGroups, paymentGroups, refundCount] = await Promise.all([
     prisma.order.count({ where }),
     prisma.order.findMany({
       where,
@@ -123,7 +128,11 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
       where: facetWhere,
       _count: { _all: true },
     }),
+    refundIds.length
+      ? prisma.order.count({ where: { ...facetWhere, AND: [{ id: { in: refundIds } }] } })
+      : Promise.resolve(0),
   ]);
+  const facets = facetsFrom(statusGroups, paymentGroups);
 
   return ok({
     items: dayActivity.size
@@ -141,7 +150,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     page,
     pageSize,
     totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    facets: facetsFrom(statusGroups, paymentGroups),
+    facets: { ...facets, byPayment: { ...facets.byPayment, refund: refundCount } },
   });
 });
 

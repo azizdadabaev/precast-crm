@@ -341,6 +341,19 @@ export const EditOrderSchema = z.object({
   clientPhone: z.string().max(40).optional(),
   confirmClientPhoneChange: z.coerce.boolean().optional().default(false),
   fillerBlock: FillerBlockTypeEnum.nullish(),
+  // Re-sent after the 409 OVERPAY_CONFIRM_REQUIRED prompt: the operator has
+  // seen that the edit leaves the client overpaid and saves anyway.
+  confirmOverpay: z.coerce.boolean().optional().default(false),
+});
+
+// ── Refund (money given back to the client) ─────────────────────
+// The amount is what went back, positive here; the route stores it negative.
+export const RefundSchema = z.object({
+  amount: z.coerce.number().positive(),
+  method: PaymentMethodEnum,
+  // When the money actually went back; absent = now.
+  paidOn: z.coerce.date().optional(),
+  note: z.string().trim().min(5, "сабаб (мин. 5 белги) керак · a reason (min 5 chars) is required").max(500),
 });
 
 // ── Cancel order ────────────────────────────────────────────────

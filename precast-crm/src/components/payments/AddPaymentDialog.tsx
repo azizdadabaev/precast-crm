@@ -19,10 +19,10 @@ import { api } from "@/lib/fetcher";
 import { formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
-type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CLICK" | "PAYME" | "OTHER";
+export type PaymentMethod = "CASH" | "BANK_TRANSFER" | "CLICK" | "PAYME" | "OTHER";
 type PaymentSource = "IN_OFFICE_CASH" | "BANK_OR_ONLINE";
 
-const METHODS: Array<{ value: PaymentMethod; label: string }> = [
+export const METHODS: Array<{ value: PaymentMethod; label: string }> = [
   { value: "CASH",          label: "Нақд · Cash" },
   { value: "BANK_TRANSFER", label: "Банк · Bank transfer" },
   { value: "CLICK",         label: "Click" },

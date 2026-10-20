@@ -147,6 +147,7 @@ enum OrderEventType {
   SHIPMENT_LOADED // split: shipment photo + counts saved
   SHIPMENT_DISPATCHED // split: shipment truck left the yard
   SHIPMENT_DELIVERED // split: shipment confirmed delivered
+  PAYMENT_REFUNDED // money given back to the client (negative Payment row)
 }
 
 enum ShipmentStatus {
@@ -813,6 +814,8 @@ model Shipment {
 model Payment {
   id      String        @id @default(cuid())
   orderId String
+  // Negative = a refund given back to the client (always CONFIRMED, written by
+  // POST /api/orders/[id]/refund). Signed so every Σ amount nets it out.
   amount  Decimal       @db.Decimal(14, 2)
   method  PaymentMethod
   status  PaymentStatus @default(PENDING_CONFIRMATION)
@@ -1194,6 +1197,7 @@ enum NotificationType {
   COMMENT_MENTION
   NEW_COMMENT
   AGENT_ESCALATION
+  PAYMENT_OVERPAID // an order now owes the client money back
 }
 
 model Notification {

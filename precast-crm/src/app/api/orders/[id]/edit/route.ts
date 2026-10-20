@@ -17,6 +17,8 @@ import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { lengthKey, loadedByLength } from "@/lib/fulfilment";
+import { becameOwed, refundDue } from "@/lib/overpayment";
+import { notifyIfOverpaid } from "@/lib/overpayment-notify";
 import {
   editLockMessage,
   editPolicy,
@@ -231,6 +233,25 @@ export const PATCH = withPermission<{ id: string }>(
         : confirmedPaid > 0
           ? "PARTIALLY_PAID"
           : "AWAITING_PAYMENT";
+
+    // An edit below what the client already paid means money goes back to
+    // them (owner 2026-10-20, order 2026-08-0024). Ask once before saving —
+    // same 409-and-resend shape as the phone check — never block for good.
+    const refundBefore = refundDue(existing);
+    const refundAfter = refundDue({
+      status: existing.status,
+      totalPrice: newTotal,
+      confirmedPaid,
+      writeOffAmount: writeOff,
+    });
+    if (becameOwed(refundBefore, refundAfter) && !body.confirmOverpay) {
+      const amount = Math.round(refundAfter).toLocaleString("ru-RU");
+      return fail(
+        `Мижоз ${amount} UZS ортиқча тўлаган бўлади — қайтариш керак · The client will have overpaid by ${amount} UZS — a refund is due`,
+        409,
+        { code: "OVERPAY_CONFIRM_REQUIRED", refundDue: refundAfter },
+      );
+    }
 
     // Pricing-snapshot diff for the audit event. Decimal columns come
     // back as strings via Prisma; cast through Number for the diff so
@@ -490,6 +511,7 @@ export const PATCH = withPermission<{ id: string }>(
         clientPhoneAction: phoneDecision.action,
       },
     });
+    await notifyIfOverpaid(existing, refundBefore, refundAfter);
 
     return ok(updated);
   },

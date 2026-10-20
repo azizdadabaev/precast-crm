@@ -26,6 +26,7 @@ import {
   parsePhoneChangeConfirm,
   type PhoneChangeConfirm,
 } from "@/components/calculation/PhoneChangeConfirmDialog";
+import { OverpayConfirmDialog, parseOverpayConfirm } from "@/components/calculation/OverpayConfirmDialog";
 import {
   MultiRoomCalculator,
   recomputeRow,
@@ -99,6 +100,14 @@ function CalculationsInner() {
   const [phoneConfirm, setPhoneConfirm] = useState<{
     request: PhoneChangeConfirm;
     scheduledAt: Date;
+  } | null>(null);
+  /** Set when the edit answered 409 OVERPAY_CONFIRM_REQUIRED: the new total is
+   *  below what the client paid. Carries the phone answer already given so the
+   *  retry does not ask it twice. */
+  const [overpayConfirm, setOverpayConfirm] = useState<{
+    refundDue: number;
+    scheduledAt: Date;
+    confirmPhoneChange: boolean;
   } | null>(null);
   const [prefillNotice, setPrefillNotice] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
@@ -832,7 +841,7 @@ function CalculationsInner() {
    *  are preserved; the route recomputes confirmedPaid + paymentState
    *  for the new total. */
   const editOrder = useMutation({
-    mutationFn: (args: { scheduledAt: Date; confirmPhoneChange?: boolean }) => {
+    mutationFn: (args: { scheduledAt: Date; confirmPhoneChange?: boolean; confirmOverpay?: boolean }) => {
       if (!editingOrderId) throw new Error("Not in edit-mode");
       return api<{ id: string; orderNumber: string }>(
         `/api/orders/${editingOrderId}/edit`,
@@ -866,6 +875,7 @@ function CalculationsInner() {
             clientPhone: client.phone,
             clientAddress: client.address,
             confirmClientPhoneChange: args.confirmPhoneChange ?? false,
+            confirmOverpay: args.confirmOverpay ?? false,
           },
         },
       );
@@ -882,7 +892,7 @@ function CalculationsInner() {
     // A phone-change confirmation is not an error the operator should read
     // as red text — it opens a dialog instead (handled at the call site).
     onError: (e: Error) => {
-      if (parsePhoneChangeConfirm(e)) return;
+      if (parsePhoneChangeConfirm(e) || parseOverpayConfirm(e)) return;
       setError(e.message);
     },
   });
@@ -1238,6 +1248,12 @@ function CalculationsInner() {
             try {
               await editOrder.mutateAsync({ scheduledAt });
             } catch (e) {
+              const overpay = parseOverpayConfirm(e);
+              if (overpay) {
+                setOrderOpen(false);
+                setOverpayConfirm({ refundDue: overpay.refundDue, scheduledAt, confirmPhoneChange: false });
+                return;
+              }
               const request = parsePhoneChangeConfirm(e);
               if (!request) throw e;
               // Not a failure — the server needs a yes/no on the phone
@@ -1267,11 +1283,40 @@ function CalculationsInner() {
                 confirmPhoneChange: true,
               });
             } catch (e) {
+              // The phone is settled but the new total is below what was
+              // paid → ask that next, keeping the phone answer.
+              const overpay = parseOverpayConfirm(e);
+              if (overpay) {
+                setPhoneConfirm(null);
+                setOverpayConfirm({ refundDue: overpay.refundDue, scheduledAt: phoneConfirm.scheduledAt, confirmPhoneChange: true });
+                return;
+              }
               // A different confirmation came back (the number changed
               // hands meanwhile) → ask that question instead. Anything
               // else is already on the page's error banner.
               const next = parsePhoneChangeConfirm(e);
               setPhoneConfirm(next ? { ...phoneConfirm, request: next } : null);
+            }
+          }}
+        />
+      )}
+
+      {/* Edit below what the client already paid: confirm the refund due. */}
+      {overpayConfirm && (
+        <OverpayConfirmDialog
+          refundDue={overpayConfirm.refundDue}
+          pending={editOrder.isPending}
+          onCancel={() => setOverpayConfirm(null)}
+          onConfirm={async () => {
+            try {
+              await editOrder.mutateAsync({
+                scheduledAt: overpayConfirm.scheduledAt,
+                confirmPhoneChange: overpayConfirm.confirmPhoneChange,
+                confirmOverpay: true,
+              });
+            } catch {
+              // Already on the page's error banner (onError).
+              setOverpayConfirm(null);
             }
           }}
         />
