@@ -286,14 +286,6 @@ export function dayContribution(f: OrderFulfilment, day: string): DayContributio
   return c;
 }
 
-/** Whether the day-filtered orders list shows this order on that day: only
- *  when it puts goods on that day, exactly like the calendar cell. An order
- *  loaded the evening before its scheduled day belongs to the loading day
- *  only (owner 2026-10-14, order 2026-10-0039). */
-export function listedOnDay(c: DayContribution): boolean {
-  return contributes(c);
-}
-
 /** Per local day: Σ events + left-to-ship on the scheduled day, across orders. */
 export function dayBuckets(
   items: Array<{ id: string; f: OrderFulfilment }>,

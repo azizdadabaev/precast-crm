@@ -6,9 +6,8 @@ import { CapacityRangeSchema } from "@/lib/validation";
 import { ok } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { CAPACITY_THRESHOLDS } from "@/lib/capacity";
-import { dayBuckets } from "@/lib/fulfilment";
+import { calendarBuckets } from "@/lib/calendar-day";
 import { dayKey } from "@/lib/dashboard-metrics";
-import { FULFILMENT_SELECT, dayWindowWhere, fulfilmentOf } from "@/lib/fulfilment-data";
 
 /**
  * GET /api/orders/capacity?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -23,11 +22,10 @@ import { FULFILMENT_SELECT, dayWindowWhere, fulfilmentOf } from "@/lib/fulfilmen
  * Days outside the requested range or with no orders are simply omitted.
  * The client fills in zeros for empty days.
  *
- * Real data (owner 2026-10-06): a day = goods that actually LEFT that day
- * (each truck on its loading day, a single-truck order on its loading day, an
- * unrecorded remainder on its completion day) + what is still LEFT TO SHIP of
- * orders scheduled that day. A partly shipped order therefore no longer puts
- * its whole m² on its scheduled day. Same engine as the dashboard.
+ * Owner rule 2026-10-21: a day = the WHOLE orders scheduled that day. Trucks
+ * loaded early, late or in parts never move an order to another day — only a
+ * reschedule does (see src/lib/calendar-day.ts). Per-truck dates are for the
+ * dashboard and stock only.
  */
 export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
@@ -38,15 +36,14 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
 
   // Whole LOCAL days. The web sends local-midnight instants and Android sends
   // bare dates (parsed as UTC midnight); both land inside the day they mean.
-  // Truck loads carry real clock times, so the window must cover full days.
   const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   const end = new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1);
   const orders = await prisma.order.findMany({
-    where: { AND: [{ status: { not: "CANCELED" } }, dayWindowWhere(start, end)] },
-    select: FULFILMENT_SELECT,
+    where: { status: { not: "CANCELED" }, scheduledAt: { gte: start, lt: end } },
+    select: { id: true, scheduledAt: true, totalArea: true, totalBlocks: true, totalBeams: true },
   });
 
-  const buckets = dayBuckets(orders.map((o) => ({ id: o.id, f: fulfilmentOf(o) })));
+  const buckets = calendarBuckets(orders);
   const fromKey = dayKey(start);
   const toKey = dayKey(to);
   const days = Array.from(buckets.entries())

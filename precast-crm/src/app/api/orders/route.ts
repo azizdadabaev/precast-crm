@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest } from "next/server";
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PlaceOrderSchema } from "@/lib/validation";
 import { ok, fail, created } from "@/lib/api";
@@ -12,8 +11,6 @@ import { createOrder } from "@/lib/create-order";
 import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms } from "@/lib/regions";
 import { facetsFrom, NON_LIVE_ORDER_STATUSES } from "@/lib/order-facets";
-import { dayContribution, listedOnDay, type DayContribution } from "@/lib/fulfilment";
-import { FULFILMENT_SELECT, dayWindowWhere, fulfilmentOf } from "@/lib/fulfilment-data";
 import { refundDueOrderIds } from "@/lib/overpayment-query";
 
 /** GET /api/orders — order.view. Paginated. Search/status/day/payment filters
@@ -57,29 +54,15 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     where.OR = filters;
   }
 
-  // Day filter (owner 2026-10-06, 2026-10-14): the orders that put something
-  // on that calendar day — a truck loaded, a completion, or what is left to
-  // ship on its scheduled day. An order that shipped on another day is not
-  // listed on its scheduled day. Resolved to an id set so counts, pages and
-  // facets describe the same rows as the calendar cell. Day bounds are the
-  // server's LOCAL calendar, matching the capacity calendar.
-  const dayActivity = new Map<string, DayContribution>();
+  // Day filter (owner rule 2026-10-21): exactly the orders the calendar cell
+  // counts — the live orders SCHEDULED that day, whatever day their trucks
+  // left (src/lib/calendar-day.ts). Day bounds are the server's LOCAL calendar,
+  // matching the capacity calendar.
   if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) {
     const [y, m, d] = day.split("-").map((n) => Number(n));
     if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
-      const start = new Date(y, m - 1, d, 0, 0, 0, 0);
-      const end = new Date(y, m - 1, d + 1, 0, 0, 0, 0);
-      const candidates = await prisma.order.findMany({
-        where: {
-          AND: [dayWindowWhere(start, end), where.OR ? { OR: where.OR as Prisma.OrderWhereInput[] } : {}],
-        },
-        select: FULFILMENT_SELECT,
-      });
-      for (const c of candidates) {
-        const act = dayContribution(fulfilmentOf(c), day);
-        if (listedOnDay(act)) dayActivity.set(c.id, act);
-      }
-      where.id = { in: Array.from(dayActivity.keys()) };
+      where.scheduledAt = { gte: new Date(y, m - 1, d), lt: new Date(y, m - 1, d + 1) };
+      where.NOT = { status: "CANCELED" };
     }
   }
 
@@ -135,17 +118,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
   const facets = facetsFrom(statusGroups, paymentGroups);
 
   return ok({
-    items: dayActivity.size
-      ? items.map((o) => {
-          const a = dayActivity.get(o.id);
-          return a
-            ? {
-                ...o,
-                dayActivity: { ...a, area: Math.round(a.area * 100) / 100, beamMeters: Math.round(a.beamMeters * 10) / 10 },
-              }
-            : o;
-        })
-      : items,
+    items,
     total,
     page,
     pageSize,

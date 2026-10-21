@@ -86,7 +86,7 @@ export function RescheduleDialog({
             <>
               <CapacityCalendar value={date} onChange={setDate} pendingArea={previewArea} disablePast />
               <p className="text-xs text-muted-foreground">
-                Календарда шу буюртманинг жўнатилмаган қисми кўрсатилади:{" "}
+                Календарда буюртма янги кунда тўлиқ кўрсатилади:{" "}
                 <span className="font-mono tabular-nums">{formatNumber(previewArea, 2)} м²</span>
               </p>
             </>

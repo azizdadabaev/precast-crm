@@ -48,7 +48,6 @@ import { LoadTruckDialog } from "@/components/orders/LoadTruckDialog";
 import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 import { canAddLoadedPhoto } from "@/lib/loaded-photos";
 import { editLockMessage, editPolicy } from "@/lib/order-edit-policy";
-import { orderFulfilment, toFulfilmentInput } from "@/lib/fulfilment";
 import { RescheduleDialog } from "@/components/orders/RescheduleDialog";
 import { ShipmentsSection } from "@/components/orders/ShipmentsSection";
 import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCard";
@@ -446,13 +445,6 @@ export default function OrderDetailPage() {
 
   // Load list chips: one per length AND strand count, for the cutting floor.
   const loadLines = useMemo(() => (order ? loadListLines(order.project.calculations) : []), [order]);
-
-  // What is still left to ship — previewed on the reschedule calendar, so a
-  // partly shipped order shows only its remaining part on the new day.
-  const leftToShipArea = useMemo(
-    () => (order ? orderFulfilment(toFulfilmentInput(order)).leftToShip.area : 0),
-    [order],
-  );
 
   if (isLoading || !order) return <div className="p-4 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>;
 
@@ -2011,7 +2003,7 @@ export default function OrderDetailPage() {
         onClose={() => setRescheduleOpen(false)}
         orderId={order.id}
         current={new Date(order.scheduledAt)}
-        previewArea={leftToShipArea}
+        previewArea={Number(order.totalArea)}
         formatLabel={(d) => `${WEEKDAY_UZ[d.getDay()]}, ${formatDate(d)}`}
         onSaved={() => qc.invalidateQueries({ queryKey: ["order", params.id] })}
       />
