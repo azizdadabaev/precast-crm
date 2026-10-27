@@ -74,6 +74,7 @@ class CalculatorRepository @Inject constructor(
     private val currentUser: CurrentUser,
     private val json: Json,
     private val outbox: OutboxGateway,
+    private val capacity: CapacityInvalidator = CapacityInvalidator.None,
 ) {
     /** The signed-in operator's own draft. With nobody signed in there is nothing of theirs to
      *  restore — mirrors `OutboxRepository.observeForOrder`'s own owner guard. */
@@ -142,6 +143,7 @@ class CalculatorRepository @Inject constructor(
         // Null: this is the operator's own tap on a live connection, so AuthInterceptor supplies
         // the current token. Only the outbox drain pins a credential (see EtalonApi.placeOrder).
         api.placeOrder(body, idempotencyKey = idempotencyKey, authorization = null).id
+            .also { capacity.invalidate() } // its m² now sits on a calendar day
     }
 
     /**

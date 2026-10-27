@@ -42,6 +42,7 @@ private class RecordingApi : StubApi() {
         calls += "createShipment:$id"
         return ShipmentDto(id = "s1", number = 1, status = "PENDING")
     }
+    override suspend fun cancelOrder(id: String, body: CancelOrderRequest) { calls += "cancelOrder:$id" }
 }
 
 private class NoopOrders : OrdersGateway {
@@ -115,6 +116,22 @@ class LogisticsRepositoryTest {
         LogisticsRepository(api, SpyOutbox(), orders, GRANTED).createShipment("o1").getOrThrow()
         assertEquals(listOf("createShipment:o1"), api.calls)
         assertEquals(listOf("o1"), orders.refreshed)
+    }
+
+    /** A canceled order leaves its day's load, so a calendar on screen is told to re-ask. */
+    @Test fun `cancelOrder tells the calendar its month changed`() = runTest {
+        var invalidated = 0
+        LogisticsRepository(RecordingApi(), SpyOutbox(), NoopOrders(), GRANTED, CapacityInvalidator { invalidated++ })
+            .cancelOrder("o1", reason = null, password = null).getOrThrow()
+        assertEquals(1, invalidated)
+    }
+
+    @Test fun `a cancel the server refused leaves the calendar alone`() = runTest {
+        var invalidated = 0
+        val res = LogisticsRepository(FailingApi(), SpyOutbox(), NoopOrders(), GRANTED, CapacityInvalidator { invalidated++ })
+            .cancelOrder("o1", reason = null, password = null)
+        assertTrue(res.isFailure)
+        assertEquals(0, invalidated)
     }
 
     @Test fun `an api failure comes back as a Result failure, not an exception`() = runTest {

@@ -248,9 +248,9 @@ open class OrdersListViewModel(
     /** Latched by the first [setView] to Жадвал (or by a restored CALENDAR): before it the grid is
      *  never observed, so a LIST-only session makes no capacity call at all. */
     private val calendarShown = MutableStateFlow(false)
-    /** Bumped by [refreshCalendar]. `CapacityRepository.observe` is a cold flow that reads its
-     *  cache once, so a forced fetch only reaches the screen if the flow is collected again. */
-    private val capacityTick = MutableStateFlow(0)
+    /** Whether [onResume] has run before — the first resume is the screen opening, and the grid's
+     *  own first collection is already asking the server then. */
+    private var resumedOnce = false
     private val exporting = MutableStateFlow(false)
     private val exportFile = MutableStateFlow<File?>(null)
     private val exportFailed = MutableStateFlow(false)
@@ -311,11 +311,13 @@ open class OrdersListViewModel(
 
     /** The cursor month's grid, once the calendar has been shown. Shared (`stateIn`) because both
      *  the grid and the day sheet read it: two independent collections of a cold repository flow
-     *  would be two fetches of the same month. */
+     *  would be two fetches of the same month. The repository's flow stays open, so a re-fetch
+     *  from anywhere — [refreshCalendar], [onResume], an order placed or canceled — reaches it
+     *  without collecting it again. */
     private val capacityFlow: StateFlow<Resource<CapacityMonth>?> =
-        combine(calendarShown, cursorMonth, capacityTick) { shown, m, tick -> if (shown) MonthKey(m, tick) else null }
+        combine(calendarShown, cursorMonth) { shown, m -> if (shown) m else null }
             .distinctUntilChanged()
-            .flatMapLatest { k -> if (k == null) flowOf<Resource<CapacityMonth>?>(null) else capacitySource.observe(k.month) }
+            .flatMapLatest { m -> if (m == null) flowOf<Resource<CapacityMonth>?>(null) else capacitySource.observe(m) }
             .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
@@ -369,7 +371,6 @@ open class OrdersListViewModel(
         }
     }
 
-    private data class MonthKey(val month: YearMonth, val tick: Int)
     private data class Filters(val q: String, val status: OrderStatus?, val payment: PaymentFilter?, val day: LocalDate?)
     private data class Busy(val refreshing: Boolean, val calendarRefreshing: Boolean, val calendarRefreshFailed: Boolean, val loadingMore: Boolean)
     private data class Counts(val facets: OrderFacets?, val total: Int?)
@@ -432,6 +433,9 @@ open class OrdersListViewModel(
     private fun enterCalendar() {
         val first = !calendarShown.value
         calendarShown.value = true
+        // Back in Жадвал after a while in Рўйхат: the month on screen is whatever it was when the
+        // planner left, and an order placed elsewhere since — the web, another phone — is not in it.
+        if (!first) revalidateCalendar()
         if (!first || day.value != null) return
         val today = LocalDate.now(TASHKENT)
         if (YearMonth.from(today) == cursorMonth.value) day.value = today
@@ -446,13 +450,32 @@ open class OrdersListViewModel(
     fun selectDay(d: LocalDate?) { setDay(d) }
 
     /**
+     * The screen came back to the foreground — from an order's detail, another tab, another app.
+     * Anything could have moved on the calendar meanwhile, so the month on screen is asked for
+     * again; quietly, with no spinner and no banner, because nobody asked for it.
+     */
+    fun onResume() {
+        if (!resumedOnce) { resumedOnce = true; return }
+        if (view.value != OrdersView.CALENDAR) return
+        revalidateCalendar()
+        // The day sheet's list with it, so the two halves of the screen stay one answer.
+        dayFilter.value?.let { f -> viewModelScope.launch { source.refreshList(f) } }
+    }
+
+    private fun revalidateCalendar() {
+        if (!calendarShown.value) return
+        viewModelScope.launch { capacitySource.refresh(cursorMonth.value) }
+    }
+
+    /**
      * Pull-to-refresh in Жадвал: the month grid, and the open day's orders with it.
      *
      * **M6** — the forced fetch's answer is not discarded. Over a month whose figures are already
      * on screen a failure raises [OrdersListUiState.calendarRefreshFailed] and leaves those figures
      * where they are; over a month with nothing cached the failure is left to `observe`, which
      * reports it as the capacity resource's own [Resource.Error] — the card and its banner already
-     * say it, and re-collecting the flow would only pay a second round trip to hear it again.
+     * say it. A success needs nothing from here: the repository hands the fresh month to the
+     * `observe` already open behind [capacityFlow].
      */
     fun refreshCalendar() {
         viewModelScope.launch {
@@ -460,7 +483,6 @@ open class OrdersListViewModel(
             calendarRefreshFailed.value = false
             val cached = capacityFlow.value?.dataOrNull != null
             val failed = capacitySource.refresh(cursorMonth.value).isFailure
-            if (!failed || cached) capacityTick.value += 1
             calendarRefreshFailed.value = failed && cached
             dayFilter.value?.let { source.refreshList(it) }
             calendarRefreshing.value = false

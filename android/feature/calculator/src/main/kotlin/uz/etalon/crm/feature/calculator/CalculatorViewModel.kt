@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -842,8 +843,10 @@ open class CalculatorViewModel(
         if (_state.value.capacityMonths.containsKey(month) || !prefetching.add(month)) return
         viewModelScope.launch {
             try {
-                capacity.observe(month).collect { r ->
-                    r.dataOrNull?.let { m -> _state.update { s -> s.copy(capacityMonths = s.capacityMonths + (month to m)) } }
+                // The first answer only: the repository's flow stays open for later re-fetches, and
+                // a label has no use for them — a failed month must free its slot to be asked again.
+                capacity.observe(month).firstOrNull { it !is Resource.Loading }?.dataOrNull?.let { m ->
+                    _state.update { s -> s.copy(capacityMonths = s.capacityMonths + (month to m)) }
                 }
             } finally {
                 prefetching.remove(month)
@@ -873,8 +876,8 @@ open class CalculatorViewModel(
         }
         if (cached != null && !refresh) return
         capacityJob = viewModelScope.launch {
-            // The repository's own flow reads its cache once, so a forced fetch only reaches the
-            // screen if it happens BEFORE the collection starts.
+            // Refreshed BEFORE the collection starts, so its failure can be told apart from the
+            // figures the collection then shows.
             //
             // **M6** — and its answer is not thrown away. A month with figures already on the card
             // keeps them, with «Янгилаб бўлмади» over them; a month with nothing behind it stops

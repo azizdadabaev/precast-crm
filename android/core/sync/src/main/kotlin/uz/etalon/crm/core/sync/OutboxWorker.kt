@@ -13,6 +13,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import uz.etalon.crm.core.data.CapacityInvalidator
 import uz.etalon.crm.core.data.CurrentUser
 import uz.etalon.crm.core.data.OrdersGateway
 import uz.etalon.crm.core.data.runCatchingCancellable
@@ -95,6 +96,7 @@ class OutboxWorker @AssistedInject constructor(
     private val json: Json,
     private val currentUser: CurrentUser,
     private val tokens: TokenProvider,
+    private val capacity: CapacityInvalidator = CapacityInvalidator.None,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -118,6 +120,7 @@ class OutboxWorker @AssistedInject constructor(
         // resetRunning() above recovers it, same as any other stranded row.
         val deferred = mutableListOf<OutboxEntity>()
         val touchedOrders = mutableSetOf<String>()
+        var placedOrder = false
 
         while (true) {
             // Re-read on every pass, not once: the session can end (or change hands) mid-drain,
@@ -136,6 +139,9 @@ class OutboxWorker @AssistedInject constructor(
                     // not in the cache under any id this row knows, and the orders list picks it
                     // up on its next fetch.
                     row.orderId?.let { touchedOrders += it }
+                    // …but its m² has just landed on a calendar day, and a grid on screen would
+                    // otherwise keep the day as it was before the order existed.
+                    if (OutboxKind.from(row.kind) == OutboxKind.PLACE_ORDER) placedOrder = true
                 }
                 OutboxOutcome.Retry -> deferred += row
                 is OutboxOutcome.Fail -> dao.markFailed(row.id, outcome.message, System.currentTimeMillis())
@@ -145,6 +151,7 @@ class OutboxWorker @AssistedInject constructor(
         // One refresh per order, not one per row — several queued rows sharing an order (a
         // truck-load photo followed by a delivery proof) would otherwise cost a round-trip each.
         touchedOrders.forEach { orders.refreshDetail(it) }
+        if (placedOrder) capacity.invalidate()
 
         if (deferred.isEmpty()) return Result.success()
         val now = System.currentTimeMillis()

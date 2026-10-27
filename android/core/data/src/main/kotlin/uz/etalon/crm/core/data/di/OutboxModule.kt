@@ -7,6 +7,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import uz.etalon.crm.core.data.CapacityInvalidator
+import uz.etalon.crm.core.data.CapacityRepository
 import uz.etalon.crm.core.data.CurrentUser
 import uz.etalon.crm.core.data.OrdersGateway
 import uz.etalon.crm.core.data.OrdersRepository
@@ -39,6 +41,9 @@ abstract class OutboxModule {
 
     /** `CapacityRepository`'s narrow view of the session — see [SessionCapacity]. */
     @Binds @Singleton abstract fun sessionCapacity(impl: SessionRepository): SessionCapacity
+
+    /** What order writes tell the calendar — see [CapacityInvalidator]. */
+    @Binds @Singleton abstract fun capacityInvalidator(impl: CapacityRepository): CapacityInvalidator
 
     companion object {
         @Provides @Singleton @Named("outboxDir")

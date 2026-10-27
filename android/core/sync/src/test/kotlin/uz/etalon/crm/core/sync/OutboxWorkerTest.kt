@@ -16,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import uz.etalon.crm.core.data.CapacityInvalidator
 import uz.etalon.crm.core.data.CurrentUser
 import uz.etalon.crm.core.data.OrdersGateway
 import uz.etalon.crm.core.database.EtalonDatabase
@@ -90,12 +91,12 @@ class OutboxWorkerTest {
 
     private fun worker(
         dao: OutboxDao, api: EtalonApi, orders: OrdersGateway, signedIn: String? = SIGNED_IN,
-        tokens: TokenProvider = FakeTokens("tok"),
+        tokens: TokenProvider = FakeTokens("tok"), capacity: CapacityInvalidator = CapacityInvalidator.None,
     ): OutboxWorker {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val factory = object : WorkerFactory() {
             override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
-                OutboxWorker(appContext, workerParameters, dao, api, orders, EtalonJson.create(), CurrentUser { signedIn }, tokens)
+                OutboxWorker(appContext, workerParameters, dao, api, orders, EtalonJson.create(), CurrentUser { signedIn }, tokens, capacity)
         }
         return TestListenableWorkerBuilder<OutboxWorker>(context).setWorkerFactory(factory).build()
     }
@@ -303,6 +304,29 @@ class OutboxWorkerTest {
         // Nothing to refresh: the order this row created is not in the cache under any id the row
         // knows, and refreshDetail("") would be a real network call for an order that never was.
         assertEquals(emptyList<String>(), orders.refreshed)
+    }
+
+    /** An order placed offline lands on a calendar day when the drain sends it — and only then:
+     *  a row the server has not taken yet has put nothing on the calendar. */
+    @Test fun `a drained queued order tells the calendar, a deferred one does not`() = runTest {
+        val dao = db().outboxDao()
+        dao.upsert(placeOrderRow("place-3"))
+        var offline = true
+        val api = object : StubApi() {
+            override suspend fun placeOrder(body: PlaceOrderRequest, idempotencyKey: String, authorization: String?): OrderPlacedDto {
+                if (offline) throw java.io.IOException("offline")
+                return OrderPlacedDto("order-3", "2609-003")
+            }
+        }
+        var invalidated = 0
+        val capacity = CapacityInvalidator { invalidated++ }
+
+        assertEquals(ListenableWorker.Result.retry(), worker(dao, api, RecordingOrders(), capacity = capacity).doWork())
+        assertEquals(0, invalidated)
+
+        offline = false
+        assertEquals(ListenableWorker.Result.success(), worker(dao, api, RecordingOrders(), capacity = capacity).doWork())
+        assertEquals(1, invalidated)
     }
 
     /**

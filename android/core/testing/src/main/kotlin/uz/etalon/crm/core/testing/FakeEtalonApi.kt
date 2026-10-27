@@ -64,7 +64,7 @@ abstract class FakeEtalonApi : EtalonApi {
     override suspend fun sendProjectToChat(id: String) = unused("sendProjectToChat")
     override suspend fun unlockInbox(body: InboxUnlockRequest): InboxUnlockDto = unused("unlockInbox")
     override suspend fun sendOrderToChat(id: String) = unused("sendOrderToChat")
-    override suspend fun cancelOrder(id: String, body: CancelOrderRequest) = unused("cancelOrder")
+    override suspend fun cancelOrder(id: String, body: CancelOrderRequest): Unit = unused("cancelOrder")
 
     override suspend fun loadTruck(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): LoadedPhotoDto = unused("loadTruck")
     override suspend fun addLoadedPhoto(id: String, file: MultipartBody.Part, idempotencyKey: String, authorization: String): GalleryPhotoDto = unused("addLoadedPhoto")

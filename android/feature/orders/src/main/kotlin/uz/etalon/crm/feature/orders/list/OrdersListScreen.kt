@@ -47,6 +47,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import uz.etalon.crm.core.designsystem.calendar.CapacityCalendarCard
 import uz.etalon.crm.core.designsystem.components.ErrorBanner
@@ -124,6 +126,7 @@ fun OrdersListRoute(
     ),
 ) {
     val s by vm.state.collectAsStateWithLifecycle()
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
     OrdersListScreen(
         s = s,
         // The clock is read here and nowhere below: the calendar's «today» ring would otherwise

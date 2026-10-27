@@ -127,7 +127,8 @@ class CalculatorRepositoryTest {
         api: FakeEtalonApi, permissions: PermissionGate = CALC_GRANTED,
         currentUser: CurrentUser = user("u1"), dao: CalculatorDraftDao = FakeDraftDao(),
         outbox: OutboxGateway = CalcSpyOutbox(),
-    ) = CalculatorRepository(dao, api, permissions, currentUser, jsonInstance(), outbox)
+        capacity: CapacityInvalidator = CapacityInvalidator.None,
+    ) = CalculatorRepository(dao, api, permissions, currentUser, jsonInstance(), outbox, capacity)
 
     // ── saveDraft: the wire request ─────────────────────────────────
 
@@ -277,6 +278,15 @@ class CalculatorRepositoryTest {
         // Null, not a placeholder: the interceptor supplies the live token for an online tap.
         // Only the outbox drain pins a credential.
         assertNull(api.lastAuthorization)
+    }
+
+    /** The new order's m² sits on a calendar day now; a grid on screen must not keep the day as it
+     *  was (the 28 Oct bug — the order in the day's list, «0 м²» in the grid above it). */
+    @Test fun `placeOrder tells the calendar its month changed`() = runTest {
+        var invalidated = 0
+        repo(CalcPlacingApi(), capacity = { invalidated++ })
+            .placeOrder(placeInput(rows = listOf(room("A"))), "idem-order-1").getOrThrow()
+        assertEquals(1, invalidated)
     }
 
     /** Prepayment at placement is a later slice, designed for offline — see `PlaceOrderRequest`'s

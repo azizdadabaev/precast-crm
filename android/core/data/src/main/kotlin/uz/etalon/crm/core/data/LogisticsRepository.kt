@@ -32,6 +32,7 @@ class LogisticsRepository @Inject constructor(
     private val outbox: OutboxGateway,
     private val orders: OrdersGateway,
     private val permissions: PermissionGate,
+    private val capacity: CapacityInvalidator = CapacityInvalidator.None,
 ) {
     // ── Queued: the server route is withIdempotency-wrapped ──────
 
@@ -90,7 +91,10 @@ class LogisticsRepository @Inject constructor(
      * order that no longer exists in that form.
      */
     suspend fun cancelOrder(orderId: String, reason: String?, password: String?): Result<Unit> =
-        mutate(orderId) { api.cancelOrder(orderId, CancelOrderRequest(reason = reason, password = password)) }
+        mutate(orderId) {
+            api.cancelOrder(orderId, CancelOrderRequest(reason = reason, password = password))
+            capacity.invalidate() // a canceled order leaves its day's load
+        }
 
     /** «Чатга юбориш». The server renders the card and posts it; nothing about the order itself
      *  changes, so unlike its neighbours here this one does not re-fetch the detail. */

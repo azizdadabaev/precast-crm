@@ -345,8 +345,9 @@ class OrdersListViewModelTest {
         assertEquals(day, vm.state.value.day) // R7: kept even though it is no longer drawn
     }
 
-    /** A list-only session must never pay for the grid, and a month already fetched is served from
-     *  the repository's cache — paging back and forth is free. */
+    /** A list-only session must never pay for the grid, and the ViewModel collects one month at a
+     *  time. Whether a revisited month also goes back to the server is `CapacityRepository`'s call
+     *  (it does, behind the cached figures); this fake answers from its cache. */
     @Test fun `the grid is fetched once per month and never for a list-only session`() = runTest {
         val cap = FakeCapacity()
         val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
@@ -361,6 +362,50 @@ class OrdersListViewModelTest {
         assertEquals(2, cap.fetches)
         vm.prevMonth(); advanceUntilIdle()
         assertEquals(2, cap.fetches) // the second visit is a cache hit
+    }
+
+    /**
+     * The 28 Oct bug: the grid was fetched once and believed for the rest of the session, so an
+     * order placed after it showed in the day sheet's list and not in the grid above it. Coming
+     * back to the screen asks for the month again — but not on the first resume, which is the
+     * screen opening while the grid's own first fetch is already under way.
+     */
+    @Test fun `returning to the screen re-asks for the month on show`() = runTest {
+        val cap = FakeCapacity()
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        vm.onResume(); advanceUntilIdle()
+        assertEquals(1, cap.fetches, "the first resume is the screen opening")
+
+        vm.onResume(); advanceUntilIdle()
+        assertEquals(2, cap.fetches)
+        assertFalse(vm.state.value.isCalendarRefreshing, "a quiet re-check turns no spinner")
+    }
+
+    /** In Рўйхат the grid is not on screen, so a resume there costs nothing — and a session that
+     *  never opened Жадвал never pays for it at all. */
+    @Test fun `a resume in Рўйхат fetches no grid`() = runTest {
+        val cap = FakeCapacity()
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
+        vm.onResume(); vm.onResume(); advanceUntilIdle()
+        assertEquals(0, cap.fetches)
+
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        vm.setView(OrdersView.LIST); advanceUntilIdle()
+        vm.onResume(); advanceUntilIdle()
+        assertEquals(1, cap.fetches)
+    }
+
+    /** Back in Жадвал after Рўйхат: the month is re-asked, since anything may have been placed. */
+    @Test fun `re-entering Жадвал re-asks for the month`() = runTest {
+        val cap = FakeCapacity()
+        val vm = OrdersListViewModel(FakeSource(), capacitySource = cap); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertEquals(1, cap.fetches)
+
+        vm.setView(OrdersView.LIST); advanceUntilIdle()
+        vm.setView(OrdersView.CALENDAR); advanceUntilIdle()
+        assertEquals(2, cap.fetches)
     }
 
     @Test fun `refreshCalendar forces a fetch of the cursor month`() = runTest {
