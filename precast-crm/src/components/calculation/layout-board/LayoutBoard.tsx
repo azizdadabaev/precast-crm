@@ -11,6 +11,7 @@ import { useT } from "@/lib/i18n";
 import { useCalculatorStore } from "@/store/calculator";
 import { roomRect } from "@/lib/layout-board/model";
 import { autoArrange } from "@/lib/layout-board/arrange";
+import { sheetTotals } from "@/lib/layout-board/totals";
 import { BoardCanvas, fitView, type BoardView } from "./BoardCanvas";
 import { Tray } from "./Tray";
 import { ExportSheet } from "./ExportSheet";
@@ -27,8 +28,8 @@ export function LayoutBoard() {
   const canUndo = useCalculatorStore((s) => s.layoutPast.length > 0);
   const canRedo = useCalculatorStore((s) => s.layoutFuture.length > 0);
 
-  const placedCount = rows.filter((r) => r.layout).length;
-  const roomCount = rows.filter((r) => r.result && !r.result.is_extras_only).length;
+  // Same counts the sheet prints: only drawable rooms count as placed.
+  const { placedCount, roomCount } = sheetTotals(rows);
   const [open, setOpen] = React.useState(placedCount > 0);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [view, setView] = React.useState<BoardView>({ scale: 0.12, ox: 40, oy: 40 });

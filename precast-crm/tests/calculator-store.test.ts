@@ -343,3 +343,15 @@ describe("calculator store — layout board", () => {
     expect(parsed.state.rows[0].layout).toEqual({ x: 5, y: 6, rot: 0 });
   });
 });
+
+describe("duplicating a row (Ctrl+Enter)", () => {
+  it("starts the copy in the tray instead of on top of its source", async () => {
+    const { duplicateRowFrom } = await import("../src/components/calculation/MultiRoomCalculator");
+    const src = { ...makeRoom("a", 4.6), layout: { x: 10, y: 20, rot: 0 as const } };
+    const copy = duplicateRowFrom(src, { ...makeRoom("b", 4.6), name: "Хона 2" });
+    expect(copy.id).toBe("b");
+    expect(copy.name).toBe("Хона 2");
+    expect(copy.innerWidth).toBe(4.6);
+    expect(copy.layout).toBeNull();
+  });
+});

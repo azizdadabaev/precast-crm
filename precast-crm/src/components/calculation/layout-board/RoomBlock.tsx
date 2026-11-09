@@ -12,7 +12,7 @@ import { roomLabelLines } from "@/lib/layout-board/labels";
 import type { SlabRow } from "@/components/calculation/MultiRoomCalculator";
 
 /** Wall band around a room. Drawn for ALL rooms before any room, so no band covers a neighbour's beam ends. */
-export function WallBand({ row, layout, wallCm }: { row: SlabRow; layout: RoomLayout; wallCm: number }) {
+export const WallBand = React.memo(function WallBand({ row, layout, wallCm }: { row: SlabRow; layout: RoomLayout; wallCm: number }) {
   const room = roomRect(row, layout);
   return (
     <rect
@@ -23,22 +23,23 @@ export function WallBand({ row, layout, wallCm }: { row: SlabRow; layout: RoomLa
       fill="hsl(var(--muted-foreground) / 0.35)"
     />
   );
-}
+});
 
-export function RoomBlock({
+/** Memoised: a keystroke in the table re-renders only the row that changed (rows keep identity). */
+export const RoomBlock = React.memo(function RoomBlock({
   row,
   number,
   layout,
   selected,
   overlapping,
-  onPointerDown,
+  onPointerDownRoom,
 }: {
   row: SlabRow;
   number: number;
   layout: RoomLayout;
   selected: boolean;
   overlapping: boolean;
-  onPointerDown?: (e: React.PointerEvent<SVGGElement>) => void;
+  onPointerDownRoom?: (e: React.PointerEvent<SVGGElement>, rowId: string) => void;
 }) {
   const r = row.result!;
   const room = roomRect(row, layout);
@@ -60,7 +61,7 @@ export function RoomBlock({
   const cy = room.y + room.h / 2;
 
   return (
-    <g onPointerDown={onPointerDown} style={{ cursor: "grab" }} data-room={row.id}>
+    <g onPointerDown={(e) => onPointerDownRoom?.(e, row.id)} style={{ cursor: "grab" }} data-room={row.id}>
       <rect x={room.x} y={room.y} width={room.w} height={room.h} fill="hsl(var(--card))" />
       {bay.blockCells.map((c, i) => (
         <rect
@@ -123,4 +124,4 @@ export function RoomBlock({
       ))}
     </g>
   );
-}
+});

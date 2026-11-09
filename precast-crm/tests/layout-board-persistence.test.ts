@@ -51,3 +51,21 @@ describe("layout persistence", () => {
     expect(SaveProjectDraftSchema.safeParse({ ...base, layoutWallCm: 150 }).success).toBe(false);
   });
 });
+
+describe("keepSavedLayouts (re-save from a client that doesn't send layouts)", () => {
+  it("keeps each saved position, by seq, for rooms sent without a layout field", async () => {
+    const { keepSavedLayouts } = await import("@/lib/layout-board/carry");
+    const saved = [
+      { seq: 1, layoutJson: { x: 500, y: 0, rot: 0 } },
+      { seq: 0, layoutJson: { x: 0, y: 0, rot: 90 } },
+    ];
+    const out = keepSavedLayouts(saved, [{ n: "a" }, { n: "b" }]);
+    expect(out.map((r) => r.layout)).toEqual([{ x: 0, y: 0, rot: 90 }, { x: 500, y: 0, rot: 0 }]);
+  });
+
+  it("web saves that send layouts (incl. null) are left exactly as sent", async () => {
+    const { keepSavedLayouts } = await import("@/lib/layout-board/carry");
+    const out = keepSavedLayouts([{ seq: 0, layoutJson: { x: 1, y: 1, rot: 0 } }], [{ n: "a", layout: null }]);
+    expect(out[0].layout).toBeNull();
+  });
+});

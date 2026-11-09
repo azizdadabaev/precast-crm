@@ -210,6 +210,21 @@ function widthForColumn(id: ColumnId, overrides: Record<string, number> | null):
   return COLUMN_DEFS[id].defaultWidth;
 }
 
+/** Ctrl+Enter copy of a row: same sizes and pricing, new id/name. */
+export function duplicateRowFrom(src: SlabRow, fresh: SlabRow): SlabRow {
+  return {
+    ...src,
+    id: fresh.id,
+    name: fresh.name,
+    // Manual duplicates aren't a sandbox prefill — drop the
+    // engineering-truth snapshot so the undersize warning
+    // doesn't carry over from the source row.
+    originalWidth: 0,
+    // Start in the «Жойлашув» tray: on its source's spot it would hide under it.
+    layout: null,
+  };
+}
+
 export const PATTERN_LABEL: Record<Pattern, string> = {
   GB: "Г-Б",
   BGB: "Б-Г-Б",
@@ -499,18 +514,7 @@ export function MultiRoomCalculator({
 
         e.preventDefault();
         const fresh = makeRow(rowsRef.current.length + 1);
-        const duplicate: SlabRow = recomputeRow(
-          {
-            ...src,
-            id: fresh.id,
-            name: fresh.name,
-            // Manual duplicates aren't a sandbox prefill — drop the
-            // engineering-truth snapshot so the undersize warning
-            // doesn't carry over from the source row.
-            originalWidth: 0,
-          },
-          pricingRef.current,
-        );
+        const duplicate: SlabRow = recomputeRow(duplicateRowFrom(src, fresh), pricingRef.current);
 
         const next = [
           ...rowsRef.current.slice(0, idx + 1),

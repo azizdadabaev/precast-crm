@@ -5,7 +5,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import type { SlabRow } from "@/components/calculation/MultiRoomCalculator";
-import { isPlaceable } from "@/lib/layout-board/model";
+import { inTray, isPlaceable } from "@/lib/layout-board/model";
 import { fmtFixed } from "@/lib/layout-board/format";
 import { TRAY_DRAG_TYPE } from "./BoardCanvas";
 
@@ -13,7 +13,7 @@ export function Tray({ rows }: { rows: SlabRow[] }) {
   const t = useT();
   const waiting = rows
     .map((r, i) => ({ r, n: i + 1 }))
-    .filter(({ r }) => !r.layout);
+    .filter(({ r }) => inTray(r));
 
   return (
     <div className="flex h-full flex-col gap-2 overflow-y-auto p-2">

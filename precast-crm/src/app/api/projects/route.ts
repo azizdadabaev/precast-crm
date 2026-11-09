@@ -18,6 +18,7 @@ import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms, VILOYATS } from "@/lib/regions";
 import { nextDraftNumber } from "@/lib/draft-number";
 import { copyUploadToProject, isAllowedAnnotationSource } from "@/lib/uploads";
+import { keepSavedLayouts } from "@/lib/layout-board/carry";
 import {
   parseTableQuery,
   isPaginated,
@@ -305,6 +306,8 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
         });
       }
 
+      // Android re-saves web drafts without `layout`: keep the saved board positions.
+      const inputs = keepSavedLayouts(existing.calculations, computed.map((c) => c.input));
       await tx.calculation.deleteMany({ where: { projectId: existing.id } });
       const updated = await tx.project.update({
         where: { id: existing.id },
@@ -334,7 +337,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
           ...(existing.createdById ? {} : { createdById: user.id }),
           calculations: {
             create: computed.map((c, i) => ({
-              ...calcResultToCreatePayload(c.input, c.result),
+              ...calcResultToCreatePayload(inputs[i], c.result),
               seq: i,
               annotationBox: c.input.box
                 ? { x: c.input.box.x, y: c.input.box.y, w: c.input.box.w, h: c.input.box.h }

@@ -23,3 +23,12 @@ export function carryLayouts<T extends object>(
   // null is the operator taking the room off the board and must stay null.
   return next.map((r, i) => (r.layout === undefined ? { ...r, layout: previous[i] ?? null } : r));
 }
+
+/** Re-save over saved rows (draft save, order place/edit): saved positions by seq, then carryLayouts. */
+export function keepSavedLayouts<T extends object>(
+  saved: { seq: number; layoutJson: unknown }[],
+  next: WithLayout<T>[],
+): WithLayout<T>[] {
+  const prev = [...saved].sort((a, b) => a.seq - b.seq).map((c) => layoutFromDb(c.layoutJson));
+  return carryLayouts(prev, next);
+}

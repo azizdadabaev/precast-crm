@@ -52,3 +52,27 @@ describe("buildLayoutSheetSvg", () => {
     expect(svg).toContain("193,02");
   });
 });
+
+describe("sheet totals chips", () => {
+  it("stay on the page and clear of the legend with 6 beam lengths", async () => {
+    const { calculateSlab } = await import("@/services/calculation-engine");
+    const { SHEET_W } = await import("@/lib/layout-board/sheet");
+    const base = rows0708d()[0];
+    const rows = [3.0, 3.5, 4.0, 4.5, 5.0, 5.5].map((w, i) => ({
+      ...base, id: `w${i}`, innerWidth: w, innerLength: 3,
+      result: calculateSlab({ inner_width: w, inner_length: 3 }),
+      layout: { x: i * 400, y: 0, rot: 0 as const },
+    }));
+    const svg = buildLayoutSheetSvg(rows, meta);
+    const chips = [...svg.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="14"/g)]
+      .map((m) => ({ x: +m[1], y: +m[2], w: +m[3], h: +m[4] }));
+    const legend = [...svg.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="44" height="26"/g)].map((m) => ({ x: +m[1], y: +m[2] }));
+    expect(chips.length).toBe(8);
+    const legendLeft = Math.min(...legend.map((l) => l.x));
+    for (const c of chips) {
+      expect(c.x + c.w).toBeLessThanOrEqual(SHEET_W - 120);
+      const sameBand = c.y < legend[0].y + 26 && legend[0].y < c.y + c.h;
+      if (sameBand) expect(c.x + c.w).toBeLessThan(legendLeft);
+    }
+  });
+});

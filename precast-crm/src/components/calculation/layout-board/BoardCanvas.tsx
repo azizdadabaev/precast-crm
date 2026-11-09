@@ -75,13 +75,21 @@ export function BoardCanvas({
     return { layout: { ...want, x: free ? want.x : s.x, y: free ? want.y : s.y }, guides: free ? [] : s.guides };
   };
 
-  function onRoomDown(e: React.PointerEvent, row: SlabRow) {
-    e.stopPropagation();
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-    drag.current = { kind: "room", id: row.id, startX: e.clientX, startY: e.clientY, from: row.layout!, moved: false };
-    onSelect(row.id);
-    svgRef.current?.focus();
-  }
+  // Stable handler (reads rows through a ref) so memoised RoomBlocks skip re-rendering.
+  const rowsRef = React.useRef(rows);
+  rowsRef.current = rows;
+  const onRoomDown = React.useCallback(
+    (e: React.PointerEvent, rowId: string) => {
+      const row = rowsRef.current.find((r) => r.id === rowId);
+      if (!row?.layout) return;
+      e.stopPropagation();
+      (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+      drag.current = { kind: "room", id: row.id, startX: e.clientX, startY: e.clientY, from: row.layout, moved: false };
+      onSelect(row.id);
+      svgRef.current?.focus();
+    },
+    [onSelect],
+  );
 
   function onBackgroundDown(e: React.PointerEvent) {
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
@@ -194,7 +202,7 @@ export function BoardCanvas({
             layout={layoutOf(r)}
             selected={selectedId === r.id}
             overlapping={overlapping.has(r.id)}
-            onPointerDown={(e) => onRoomDown(e, r)}
+            onPointerDownRoom={onRoomDown}
           />
         ))}
         {live?.guides.map((g, i) =>

@@ -114,33 +114,62 @@ export function buildLayoutSheetSvg(rows: SlabRow[], meta: SheetMeta): string {
   out.push(text(SHEET_W - 120, 190, "Yig'ma monolit", 32, { fill: C.muted, anchor: "end" }));
   out.push(`<rect x="120" y="240" width="${SHEET_W - 240}" height="3" fill="${C.ink}"/>`);
 
-  // ── footer: note, chips, legend
-  const fy = SHEET_H - 260;
+  // ── footer: legend (right of the first chip row), chips that wrap, note above them
   const unplaced = totals.roomCount - totals.placedCount;
-  const note = unplaced > 0
-    ? `${unplaced} хона жойлаштирилмаган — миқдорлар барча хоналар бўйича`
-    : `Хона ўлчамлари — ички. Девор қалинлиги ${fmtInt(wall)} см. Балка ҳар томондан ${fmtInt((rows[0]?.bearing ?? 0.15) * 100)} см деворга киради.`;
-  out.push(text(120, fy - 40, note, 28, { fill: unplaced > 0 ? C.accent : C.muted }));
-  out.push(`<rect x="120" y="${fy}" width="${SHEET_W - 240}" height="2" fill="${C.rule}"/>`);
   const chips = [
     ...totals.beamsByLength.map((b) => `Балка ${fmtFixed(b.lengthM)} м — ${fmtInt(b.count)} та`),
     `Ғишт — ${fmtInt(totals.totalBlocks)} та`,
     `Майдон — ${fmtFixed(totals.totalAreaM2)} м²`,
   ];
-  let cx = 120;
-  for (const c of chips) {
-    const w = c.length * 19 + 56;
-    out.push(`<rect x="${cx}" y="${fy + 50}" width="${w}" height="80" rx="14" fill="#FFFFFF" stroke="${C.rule}" stroke-width="2"/>`);
-    out.push(text(cx + 28, fy + 102, c, 34, { weight: 600 }));
-    cx += w + 22;
-  }
   const legend: [string, string, string?][] = [["балка", C.beam], ["ғишт (блок)", C.block, C.blockEdge], ["девор", C.wall]];
+  const legendW = legend.reduce((sum, [label]) => sum + label.length * 17 + 70 + 30, 0);
+  const legendLeft = SHEET_W - 120 - legendW + 30;
+  const left = 120;
+  const firstRowRight = legendLeft - 40;
+  const fullRight = SHEET_W - 120;
+
+  // Wrap chips into rows; shrink the type when two rows at full size are not enough.
+  const place = (font: number) => {
+    const h = Math.round(font * 2.35);
+    const gap = 16;
+    const rowsOut: { x: number; w: number; text: string }[][] = [[]];
+    let x = left;
+    for (const c of chips) {
+      const w = Math.round(c.length * font * 0.56 + font * 1.65);
+      const right = rowsOut.length === 1 ? firstRowRight : fullRight;
+      if (x > left && x + w > right) {
+        rowsOut.push([]);
+        x = left;
+      }
+      rowsOut[rowsOut.length - 1].push({ x, w, text: c });
+      x += w + 22;
+    }
+    return { font, h, gap, rows: rowsOut };
+  };
+  let fit = place(34);
+  if (fit.rows.length > 2) fit = place(26);
+  const chipsH = fit.rows.length * (fit.h + fit.gap) - fit.gap;
+  const fy = SHEET_H - 60 - chipsH - 50;
+
+  const note = unplaced > 0
+    ? `${unplaced} хона жойлаштирилмаган — миқдорлар барча хоналар бўйича`
+    : `Хона ўлчамлари — ички. Девор қалинлиги ${fmtInt(wall)} см. Балка ҳар томондан ${fmtInt((rows[0]?.bearing ?? 0.15) * 100)} см деворга киради.`;
+  out.push(text(120, fy - 40, note, 28, { fill: unplaced > 0 ? C.accent : C.muted }));
+  out.push(`<rect x="120" y="${fy}" width="${SHEET_W - 240}" height="2" fill="${C.rule}"/>`);
+  fit.rows.forEach((row, ri) => {
+    const y = fy + 50 + ri * (fit.h + fit.gap);
+    for (const c of row) {
+      out.push(`<rect x="${c.x}" y="${y}" width="${c.w}" height="${fit.h}" rx="14" fill="#FFFFFF" stroke="${C.rule}" stroke-width="2"/>`);
+      out.push(text(c.x + fit.font * 0.82, y + fit.h * 0.65, c.text, fit.font, { weight: 600 }));
+    }
+  });
+  const ly = fy + 50 + fit.h / 2 - 13;
   let lx = SHEET_W - 120;
   for (const [label, fill, edge] of [...legend].reverse()) {
     const w = label.length * 17 + 70;
     lx -= w;
-    out.push(`<rect x="${lx}" y="${fy + 76}" width="44" height="26" rx="4" fill="${fill}"${edge ? ` stroke="${edge}" stroke-width="2"` : ""}/>`);
-    out.push(text(lx + 56, fy + 99, label, 28, { fill: C.muted }));
+    out.push(`<rect x="${lx}" y="${ly}" width="44" height="26" rx="4" fill="${fill}"${edge ? ` stroke="${edge}" stroke-width="2"` : ""}/>`);
+    out.push(text(lx + 56, ly + 23, label, 28, { fill: C.muted }));
     lx -= 30;
   }
 

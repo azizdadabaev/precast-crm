@@ -35,6 +35,11 @@ export function isPlaceable(row: SlabRow): boolean {
   return row.result != null && !row.result.is_extras_only;
 }
 
+/** Shown in the tray: not placed yet, or placed but no longer a drawable room (so it never vanishes). */
+export function inTray(row: SlabRow): boolean {
+  return !row.layout || !isPlaceable(row);
+}
+
 export function roomRect(row: SlabRow, layout: RoomLayout): CmRect {
   const along = toCm(row.innerLength);
   const across = toCm(row.innerWidth);

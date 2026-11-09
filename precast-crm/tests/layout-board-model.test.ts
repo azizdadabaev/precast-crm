@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  inTray,
   isPlaceable,
   roomRect,
   slabRect,
@@ -70,5 +71,12 @@ describe("layout-board model", () => {
     const a = { x: 0, y: 0, w: 100, h: 100 };
     expect(overlaps(a, { x: 100, y: 0, w: 50, h: 50 })).toBe(false);
     expect(overlaps(a, { x: 99, y: 0, w: 50, h: 50 })).toBe(true);
+  });
+
+  it("inTray: unplaced rooms, and placed rows that are no longer placeable, show in the tray", () => {
+    expect(inTray(row())).toBe(true);
+    expect(inTray(row({ layout: { x: 0, y: 0, rot: 0 } }))).toBe(false);
+    expect(inTray(row({ layout: { x: 0, y: 0, rot: 0 } }, null))).toBe(true);
+    expect(inTray(row({ layout: { x: 0, y: 0, rot: 0 } }, { is_extras_only: true }))).toBe(true);
   });
 });
