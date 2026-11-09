@@ -51,7 +51,18 @@ export function LayoutBoard() {
     const added = autoArrange(rows, placed, wallCm);
     if (added.size === 0) return;
     applyLayouts(added);
-    requestAnimationFrame(fitAll);
+    // Fit to the NEW positions: `rows` in this closure is still the pre-arrange list.
+    const el = boxRef.current;
+    if (el) {
+      const rects = rows
+        .filter((r) => r.result)
+        .map((r) => {
+          const l = added.get(r.id) ?? r.layout;
+          return l ? roomRect(r, l) : null;
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+      setView(fitView(rects, wallCm, el.clientWidth, el.clientHeight));
+    }
   }
 
   const zoom = (k: number) => {
