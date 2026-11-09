@@ -210,7 +210,7 @@ function widthForColumn(id: ColumnId, overrides: Record<string, number> | null):
   return COLUMN_DEFS[id].defaultWidth;
 }
 
-const PATTERN_LABEL: Record<Pattern, string> = {
+export const PATTERN_LABEL: Record<Pattern, string> = {
   GB: "Г-Б",
   BGB: "Б-Г-Б",
   GBG: "Г-Б-Г",

@@ -47,6 +47,7 @@ import { ShareTarget, type ShareData } from "@/components/share/CalculationShare
 import { useTableDesign } from "@/hooks/useTableDesign";
 import { layoutFromDb } from "@/lib/layout-board/carry";
 import { WALL_CM_DEFAULT } from "@/lib/layout-board/model";
+import { LayoutBoard } from "@/components/calculation/layout-board/LayoutBoard";
 
 type ConversationContext = {
   displayName: string;
@@ -1250,6 +1251,9 @@ function CalculationsInner() {
           </>
         }
       />
+
+      {/* «Жойлашув»: drag-drop-snap top-view board of the rooms above. */}
+      <LayoutBoard />
 
       {/* Place Order / Save edits modal — same dialog, two modes.
           editMode hides the up-front payment section and routes the
