@@ -32,6 +32,7 @@ import { Bi, useT } from "@/lib/i18n";
 import { useLivePricing } from "@/hooks/useLivePricing";
 import type { NormBox } from "@/lib/annotation-box";
 import { FILLER_BLOCKS, fillerBlockLetter, fillerBlockName } from "@/lib/filler-block";
+import type { RoomLayout } from "@/lib/layout-board/model";
 
 export interface SlabRow {
   id: string;
@@ -44,6 +45,8 @@ export interface SlabRow {
   forceStartBeam: boolean;    // default false
   patternOverride: Pattern | "AUTO";
   result: SlabResult | null;
+  /** Where the room sits on the «Жойлашув» board (cm); absent = still in the tray. Never affects numbers. */
+  layout?: RoomLayout | null;
   /**
    * Engineering-accurate width snapshot for the undersize warning. Set
    * once when the row is created (via Add Room → 0, or via the tapered
