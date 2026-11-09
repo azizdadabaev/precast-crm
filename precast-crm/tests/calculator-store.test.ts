@@ -273,3 +273,73 @@ function makeRoom(id: string, innerWidth: number) {
     m2PriceReason: null,
   };
 }
+
+describe("calculator store — layout board", () => {
+  const room = (id: string) => ({ ...makeRoom(id, 4.6), innerLength: 4 });
+
+  it("placeRoom puts a row on the board and edits keep its position", async () => {
+    const { recomputeRow } = await import("../src/components/calculation/MultiRoomCalculator");
+    const s = useCalculatorStore.getState();
+    s.setRows([room("a"), room("b")]);
+    useCalculatorStore.getState().placeRoom("a", { x: 10, y: 20, rot: 0 });
+    const placed = useCalculatorStore.getState().rows[0];
+    expect(placed.layout).toEqual({ x: 10, y: 20, rot: 0 });
+    expect(recomputeRow({ ...placed, innerLength: 4.2 }).layout).toEqual({ x: 10, y: 20, rot: 0 });
+  });
+
+  it("deleting a row leaves the other rows' positions alone", () => {
+    const s = useCalculatorStore.getState();
+    s.setRows([room("a"), room("b"), room("c")]);
+    useCalculatorStore.getState().placeRoom("b", { x: 1, y: 2, rot: 0 });
+    useCalculatorStore.getState().placeRoom("c", { x: 3, y: 4, rot: 90 });
+    useCalculatorStore.getState().setRows(useCalculatorStore.getState().rows.filter((r) => r.id !== "a"));
+    expect(useCalculatorStore.getState().rows.map((r) => r.layout)).toEqual([
+      { x: 1, y: 2, rot: 0 },
+      { x: 3, y: 4, rot: 90 },
+    ]);
+  });
+
+  it("rotateRoom turns 90° about the room centre", () => {
+    useCalculatorStore.getState().setRows([room("a")]);
+    useCalculatorStore.getState().placeRoom("a", { x: 0, y: 0, rot: 0 });
+    useCalculatorStore.getState().rotateRoom("a");
+    expect(useCalculatorStore.getState().rows[0].layout).toEqual({ x: -30, y: 30, rot: 90 });
+  });
+
+  it("unplaceRoom sends the room back to the tray (null)", () => {
+    useCalculatorStore.getState().setRows([room("a")]);
+    useCalculatorStore.getState().placeRoom("a", { x: 0, y: 0, rot: 0 });
+    useCalculatorStore.getState().unplaceRoom("a");
+    expect(useCalculatorStore.getState().rows[0].layout).toBeNull();
+  });
+
+  it("undoLayout and redoLayout step through board moves", () => {
+    useCalculatorStore.getState().setRows([room("a")]);
+    useCalculatorStore.getState().placeRoom("a", { x: 0, y: 0, rot: 0 });
+    useCalculatorStore.getState().placeRoom("a", { x: 50, y: 0, rot: 0 });
+    useCalculatorStore.getState().undoLayout();
+    expect(useCalculatorStore.getState().rows[0].layout).toEqual({ x: 0, y: 0, rot: 0 });
+    useCalculatorStore.getState().undoLayout();
+    expect(useCalculatorStore.getState().rows[0].layout ?? null).toBeNull();
+    useCalculatorStore.getState().redoLayout();
+    expect(useCalculatorStore.getState().rows[0].layout).toEqual({ x: 0, y: 0, rot: 0 });
+  });
+
+  it("applyLayouts places several rooms in one undo step", () => {
+    useCalculatorStore.getState().setRows([room("a"), room("b")]);
+    useCalculatorStore.getState().applyLayouts(new Map([["a", { x: 0, y: 0, rot: 0 as const }], ["b", { x: 430, y: 0, rot: 0 as const }]]));
+    expect(useCalculatorStore.getState().rows.map((r) => r.layout?.x)).toEqual([0, 430]);
+    useCalculatorStore.getState().undoLayout();
+    expect(useCalculatorStore.getState().rows.every((r) => !r.layout)).toBe(true);
+  });
+
+  it("persists the wall thickness and row layouts", async () => {
+    useCalculatorStore.getState().setRows([room("a")]);
+    useCalculatorStore.getState().placeRoom("a", { x: 5, y: 6, rot: 0 });
+    useCalculatorStore.getState().setLayoutWallCm(40);
+    await Promise.resolve();
+    const parsed = JSON.parse(memStorage.getItem(ANON_PERSIST_KEY)!);
+    expect(parsed.state.layoutWallCm).toBe(40);
+    expect(parsed.state.rows[0].layout).toEqual({ x: 5, y: 6, rot: 0 });
+  });
+});
