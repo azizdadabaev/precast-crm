@@ -8,18 +8,8 @@
 import * as React from "react";
 import { beamLayout, type CadPattern } from "@/lib/cad/geometry";
 import { roomRect, slabRect, type RoomLayout } from "@/lib/layout-board/model";
-import { fmtFixed } from "@/lib/layout-board/format";
-import { PATTERN_LABEL, type SlabRow } from "@/components/calculation/MultiRoomCalculator";
-
-export function roomLabelLines(row: SlabRow): string[] {
-  const r = row.result!;
-  return [
-    `хона ${fmtFixed(row.innerWidth)} × ${fmtFixed(row.innerLength)}`,
-    `плита ${fmtFixed(r.beam_length)} × ${fmtFixed(r.monolith_length)}`,
-    `${PATTERN_LABEL[r.pattern]} · ${r.beam_count} балка`,
-    `${fmtFixed(r.monolith_area)} м²`,
-  ];
-}
+import { roomLabelLines } from "@/lib/layout-board/labels";
+import type { SlabRow } from "@/components/calculation/MultiRoomCalculator";
 
 /** Wall band around a room. Drawn for ALL rooms before any room, so no band covers a neighbour's beam ends. */
 export function WallBand({ row, layout, wallCm }: { row: SlabRow; layout: RoomLayout; wallCm: number }) {

@@ -13,8 +13,9 @@ import { roomRect } from "@/lib/layout-board/model";
 import { autoArrange } from "@/lib/layout-board/arrange";
 import { BoardCanvas, fitView, type BoardView } from "./BoardCanvas";
 import { Tray } from "./Tray";
+import { ExportSheet } from "./ExportSheet";
 
-export function LayoutBoard({ exportSlot }: { exportSlot?: React.ReactNode }) {
+export function LayoutBoard() {
   const t = useT();
   const rows = useCalculatorStore((s) => s.rows);
   const wallCm = useCalculatorStore((s) => s.layoutWallCm);
@@ -114,7 +115,7 @@ export function LayoutBoard({ exportSlot }: { exportSlot?: React.ReactNode }) {
             <Button variant="outline" size="sm" onClick={fitAll} title={t("Ҳаммасини кўрсатиш", "Fit all")}>
               <Maximize2 className="h-4 w-4" />
             </Button>
-            {exportSlot}
+            <ExportSheet />
           </div>
         )}
       </header>
