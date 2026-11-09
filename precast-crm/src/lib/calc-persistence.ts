@@ -5,13 +5,14 @@
  * all build the same persistence shape. Add fields here once.
  */
 
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   M2_PRICE_TIERS,
   round2,
   type Pattern,
   type SlabResult,
 } from "@/services/calculation-engine";
+import type { RoomLayout } from "@/lib/layout-board/model";
 
 export interface RoomInput {
   name?: string | null;
@@ -31,6 +32,8 @@ export interface RoomInput {
   m2PriceOverrideValue?: number | null;
   /** Optional, max 200 chars. Free text. */
   m2PriceReason?: string | null;
+  /** «Жойлашув» board position; drawing only, never priced. */
+  layout?: RoomLayout | null;
 }
 
 /**
@@ -97,5 +100,6 @@ export function calcResultToCreatePayload(
     patternExtraCost: r.pattern_extra_cost,
     manualExtraBeamsCost: r.manual_extra_beams_cost,
     subtotal,
+    layoutJson: room.layout ? { x: room.layout.x, y: room.layout.y, rot: room.layout.rot } : Prisma.DbNull,
   };
 }

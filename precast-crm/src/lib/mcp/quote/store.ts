@@ -15,6 +15,8 @@ import type { PriceConfig } from '@/services/calculation-engine';
 import type { SlabQuoteResult } from './slab';
 import type { GazoblokCatalogRow } from './gazoblok';
 import { draftMatchesSnapshot, formatQuoteId, quoteStatus, type QuoteStatus } from './status';
+import { carryLayouts, layoutFromDb } from '@/lib/layout-board/carry';
+import type { RoomLayout } from '@/lib/layout-board/model';
 
 const hash6 = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0, 6);
 const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : 'default');
@@ -86,6 +88,7 @@ async function writeSlabQuote(p: Parameters<typeof saveSlabQuote>[0]): Promise<{
   return prisma.$transaction(async (tx) => {
     let project: { id: string; draftNumber: number | null } | null = null;
     let previous: { id: string; number: number } | null = null;
+    let prevLayouts: (RoomLayout | null)[] = [];
     if (p.customerRef) {
       await lockCustomer(tx, p.customerRef);
       const prev = await tx.mcpQuote.findFirst({
@@ -96,7 +99,7 @@ async function writeSlabQuote(p: Parameters<typeof saveSlabQuote>[0]): Promise<{
           project: {
             select: {
               id: true, draftNumber: true, status: true, discountPercent: true, discountAmount: true,
-              calculations: { select: { subtotal: true } },
+              calculations: { orderBy: { seq: 'asc' }, select: { subtotal: true, layoutJson: true } },
             },
           },
         },
@@ -117,6 +120,7 @@ async function writeSlabQuote(p: Parameters<typeof saveSlabQuote>[0]): Promise<{
         )
       ) {
         project = { id: d.id, draftNumber: d.draftNumber };
+        prevLayouts = d.calculations.map((c) => layoutFromDb(c.layoutJson));
       }
     }
 
@@ -124,7 +128,7 @@ async function writeSlabQuote(p: Parameters<typeof saveSlabQuote>[0]): Promise<{
       await tx.calculation.deleteMany({ where: { projectId: project.id } });
       await tx.project.update({
         where: { id: project.id },
-        data: { dimensions, calculations: { create: p.result.calcs } },
+        data: { dimensions, calculations: { create: withLayouts(p.result.calcs, prevLayouts) } },
       });
     } else {
       const maxAgg = await tx.project.aggregate({ _max: { draftNumber: true } });
@@ -285,4 +289,13 @@ export async function loadGazoblokCatalog(): Promise<Array<GazoblokCatalogRow & 
     stockQuantity: r.stock ? r.stock.quantity : null,
     updatedAt: r.updatedAt,
   }));
+}
+
+/** A refreshed MCP draft keeps the operator's «Жойлашув» positions when the room count is unchanged. */
+function withLayouts<T extends { layoutJson?: unknown }>(calcs: T[], prev: (RoomLayout | null)[]): T[] {
+  const carried = carryLayouts(prev, calcs.map(() => ({})));
+  return calcs.map((c, i) => {
+    const l = carried[i].layout;
+    return l ? { ...c, layoutJson: { x: l.x, y: l.y, rot: l.rot } } : c;
+  });
 }

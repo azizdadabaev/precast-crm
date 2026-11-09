@@ -21,6 +21,7 @@ import {
 import type { ApprovalCallback } from './approval-callback';
 import type { ApprovalDraft } from './loop';
 import { createOrder, type CreateOrderInput } from '@/lib/create-order';
+import { layoutFromDb } from '@/lib/layout-board/carry';
 
 export interface PlaceOrderInput {
   /** quote_id + customer details the agent gathered (proposal.approvalDraft). */
@@ -130,6 +131,7 @@ export async function placeAgentOrderFromDraft(input: {
       m2PriceOverride: c.m2PriceOverride,
       m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
       m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
+      layout: layoutFromDb(c.layoutJson),
     })),
     discountPercent: 0,
     discountAmount: 0,

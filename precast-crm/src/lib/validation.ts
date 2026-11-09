@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { M2_PRICE_TIERS } from "@/services/calculation-engine";
+import { RoomLayoutSchema } from "@/lib/layout-board/model";
 
 // ── Enums ───────────────────────────────────────────────────────
 export const LanguageEnum = z.enum(["UZ", "RU"]);
@@ -199,6 +200,8 @@ export const RoomCalcInputBaseSchema = z.object({
     })
     .nullable()
     .optional(),
+  // «Жойлашув» board position (cm). Drawing only — never read by pricing.
+  layout: RoomLayoutSchema.nullable().optional(),
 });
 
 /**
@@ -275,6 +278,8 @@ export const SaveProjectDraftSchema = z.object({
   // null → clear it; object → set it.
   drawing: CalculatorDrawingSchema.nullish(),
   fillerBlock: FillerBlockTypeEnum.nullish(),
+  // Wall gap of the «Жойлашув» board (cm). Absent → leave the saved value.
+  layoutWallCm: z.coerce.number().int().min(0).max(100).nullish(),
 });
 
 // ── Place Order (commits the deal) ──────────────────────────────
@@ -309,6 +314,8 @@ export const PlaceOrderSchema = z.object({
   paymentMethod: PaymentMethodEnum.optional().nullable(),
   receiptUrls: z.array(z.string().max(500)).max(10).default([]),
   fillerBlock: FillerBlockTypeEnum.nullish(),
+  // «Жойлашув» wall gap (cm); absent → keep the saved value.
+  layoutWallCm: z.coerce.number().int().min(0).max(100).nullish(),
 }).refine(
   (v) => !(v.paidAmount > 0) || !!v.paymentMethod,
   { path: ["paymentMethod"], message: "paymentMethod is required when paidAmount > 0" },
@@ -344,6 +351,8 @@ export const EditOrderSchema = z.object({
   // Re-sent after the 409 OVERPAY_CONFIRM_REQUIRED prompt: the operator has
   // seen that the edit leaves the client overpaid and saves anyway.
   confirmOverpay: z.coerce.boolean().optional().default(false),
+  // «Жойлашув» wall gap (cm); absent → keep the saved value.
+  layoutWallCm: z.coerce.number().int().min(0).max(100).nullish(),
 });
 
 // ── Refund (money given back to the client) ─────────────────────

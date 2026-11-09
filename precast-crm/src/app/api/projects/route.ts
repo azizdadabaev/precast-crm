@@ -298,6 +298,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
               m2Price: Number(c.m2Price),
               m2PriceReason: c.m2PriceReason,
               subtotal: Number(c.subtotal),
+              layout: c.layoutJson ?? null,
             })) as Prisma.InputJsonValue,
             createdById: user.id,
           },
@@ -320,6 +321,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
           discountPercent: body.discountPercent,
           discountAmount: body.discountAmount,
           ...(body.fillerBlock !== undefined ? { fillerBlock: body.fillerBlock } : {}),
+          ...(body.layoutWallCm !== undefined ? { layoutWallCm: body.layoutWallCm } : {}),
           // Only set when a linkable conversationId is present; a plain
           // re-save (no link in the body) must not null out an existing link.
           ...(linkConversationId ? { conversationId: linkConversationId } : {}),
@@ -364,6 +366,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
         discountPercent: body.discountPercent,
         discountAmount: body.discountAmount,
         fillerBlock: body.fillerBlock ?? null,
+        layoutWallCm: body.layoutWallCm ?? null,
         conversationId: linkConversationId ?? null,
         createdById: user.id,
         clientId: existingClient?.id ?? null,

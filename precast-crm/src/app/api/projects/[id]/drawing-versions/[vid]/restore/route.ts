@@ -9,6 +9,7 @@ import { withPermission } from "@/lib/api-auth";
 import { calculateSlab, type Pattern } from "@/services/calculation-engine";
 import { loadPricingConfig } from "@/lib/pricing-config";
 import { calcResultToCreatePayload, type RoomInput } from "@/lib/calc-persistence";
+import { layoutFromDb } from "@/lib/layout-board/carry";
 
 /** A room as snapshotted into DrawingVersion.roomsJson by the save path. */
 interface SnapRoom {
@@ -23,6 +24,8 @@ interface SnapRoom {
   m2PriceOverride: boolean;
   m2Price: number;
   m2PriceReason: string | null;
+  /** «Жойлашув» position at snapshot time; absent in versions saved before the board existed. */
+  layout?: unknown;
 }
 
 /**
@@ -70,6 +73,7 @@ export const POST = withPermission<{ id: string; vid: string }>(
             m2Price: Number(c.m2Price),
             m2PriceReason: c.m2PriceReason,
             subtotal: Number(c.subtotal),
+            layout: c.layoutJson ?? null,
           })) as Prisma.InputJsonValue,
           createdById: user.id,
         },
@@ -90,6 +94,7 @@ export const POST = withPermission<{ id: string; vid: string }>(
           m2PriceOverride: room.m2PriceOverride,
           m2PriceOverrideValue: room.m2PriceOverride ? room.m2Price : null,
           m2PriceReason: room.m2PriceReason,
+          layout: layoutFromDb(room.layout),
         };
         return {
           input,

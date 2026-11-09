@@ -23,6 +23,7 @@ import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { normalizePhone } from "@/lib/phone";
 import { nextOrderNumber, orderNumberMonthPrefix } from "@/lib/order-number";
 import { computeOrderTotals } from "@/lib/order-totals";
+import { carryLayouts, layoutFromDb } from "@/lib/layout-board/carry";
 
 export interface OrderActor {
   /** Stamped on OrderEvent.actorId, AuditLog.userId, and (only when
@@ -182,14 +183,22 @@ export async function createOrder(
         include: { calculations: true },
       });
       if (!project) throw new Error("PROJECT_NOT_FOUND");
+      // Rooms sent without a layout keep the draft's saved positions by order.
+      const prevLayouts = [...project.calculations]
+        .sort((a, b) => a.seq - b.seq)
+        .map((c) => layoutFromDb(c.layoutJson));
+      const inputs = carryLayouts(prevLayouts, computed.map((c) => c.input));
       await tx.calculation.deleteMany({ where: { projectId: project.id } });
       await tx.calculation.createMany({
         data: computed.map((c, i) => ({
           projectId: project!.id,
           seq: i,
-          ...calcResultToCreatePayload(c.input, c.result),
+          ...calcResultToCreatePayload(inputs[i], c.result),
         })),
       });
+      if (input.layoutWallCm !== undefined) {
+        await tx.project.update({ where: { id: project.id }, data: { layoutWallCm: input.layoutWallCm } });
+      }
     } else {
       project = await tx.project.create({
         data: {
@@ -201,6 +210,7 @@ export async function createOrder(
           createdById: actor.userId,
           name: null,
           shapeType: input.shapeType,
+          layoutWallCm: input.layoutWallCm ?? null,
           dimensions: input.dimensions ?? {
             width: input.rooms[0].innerWidth,
             length: input.rooms[0].innerLength,
