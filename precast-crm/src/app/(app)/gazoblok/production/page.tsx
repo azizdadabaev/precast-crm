@@ -9,7 +9,8 @@ import { Chip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn, formatDate, formatNumber } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { Bi, useLang, useT } from "@/lib/i18n";
+import { uzPart } from "@/lib/gazoblok-text";
 
 // ─────────────────────────────────────────────────────────────────
 // API shapes. Prisma Decimal fields arrive as STRINGS — but here we
@@ -66,6 +67,7 @@ function isoDateLocal(d: Date): string {
 
 export default function GazoblokProductionPage() {
   const t = useT();
+  const lang = useLang();
   const qc = useQueryClient();
 
   const productsQuery = useQuery<Product[]>({
@@ -177,15 +179,12 @@ export default function GazoblokProductionPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Hammer className="h-6 w-6 text-muted-foreground" />
-          Газоблок ишлаб чиқариш
-          <span className="lang-en text-muted-foreground font-normal text-base">
-            {" "}· Gazoblok production
-          </span>
+          <Bi uz="Газоблок ишлаб чиқариш" en="Gazoblok production" enClassName="text-muted-foreground font-normal text-base" />
         </h1>
         <p className="text-sm text-muted-foreground">
           {t(
             "Бугунги Газоблок маҳсулотини қайд этинг. Ҳар бир қатор омбордаги захирани кўпайтиради.",
-            "Log today's Газоблок output. Each line increments warehouse stock.",
+            "Log today's gazoblok output. Each line increments warehouse stock.",
           )}
         </p>
       </div>
@@ -194,7 +193,7 @@ export default function GazoblokProductionPage() {
       <section className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-4">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-bold uppercase tracking-wider">
-            Янги маҳсулот<span className="lang-en"> · Log production</span>
+            <Bi uz="Янги маҳсулот" en="Log production" enClassName="" />
           </h2>
           <div className="text-xs text-muted-foreground">
             {t("Ҳар бир қатор захирани кўпайтиради.", "Each line increments stock.")}
@@ -205,7 +204,7 @@ export default function GazoblokProductionPage() {
         <div className="flex flex-wrap gap-3">
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
-              Сана<span className="lang-en"> · Date</span> ({t("ихтиёрий", "optional")})
+              <Bi uz="Сана" en="Date" enClassName="" /> ({t("ихтиёрий", "optional")})
             </label>
             <Input
               type="date"
@@ -217,7 +216,7 @@ export default function GazoblokProductionPage() {
           </div>
           <div className="flex-1 min-w-[200px]">
             <label className="block text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
-              Изоҳ<span className="lang-en"> · Notes</span> ({t("ихтиёрий", "optional")})
+              <Bi uz="Изоҳ" en="Notes" enClassName="" /> ({t("ихтиёрий", "optional")})
             </label>
             <Input
               className="h-9 mt-1"
@@ -302,19 +301,20 @@ export default function GazoblokProductionPage() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Button
             variant="outline"
             size="sm"
+            className="h-11 md:h-8"
             onClick={() => setLines((rs) => [...rs, newLine()])}
           >
             <Plus className="h-3.5 w-3.5 mr-1.5" /> {t("Қатор қўшиш", "Add line")}
           </Button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {create.isError && (
               <span className="text-sm text-destructive">
-                {(create.error as Error).message}
+                {uzPart((create.error as Error).message, lang)}
               </span>
             )}
             <Button onClick={() => create.mutate()} disabled={!canSave}>
@@ -333,7 +333,7 @@ export default function GazoblokProductionPage() {
       <section className="space-y-3">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            Сўнгги ёзувлар<span className="lang-en font-normal">{" "}· Recent entries</span>
+            <Bi uz="Сўнгги ёзувлар" en="Recent entries" enClassName="font-normal" />
           </h2>
           <div className="text-xs text-text-tertiary">
             {t("Сўнгги 50 та ёзув", "Last 50 entries")}
@@ -344,7 +344,7 @@ export default function GazoblokProductionPage() {
           <div className="text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>
         ) : entriesQuery.isError ? (
           <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive">
-            {(entriesQuery.error as Error).message}
+            {uzPart((entriesQuery.error as Error).message, lang)}
           </div>
         ) : (entriesQuery.data ?? []).length === 0 ? (
           <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
@@ -352,8 +352,9 @@ export default function GazoblokProductionPage() {
           </div>
         ) : (
           <div className="rounded-lg border border-border bg-card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+            {/* Phones: each row stacks into a card; md+: a normal table. */}
+            <table className="w-full text-sm block md:table">
+              <thead className="hidden md:table-header-group bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="text-left px-3 py-2 w-32">{t("Сана", "Date")}</th>
                   <th className="text-left px-3 py-2 w-40">{t("Ким қайд этди", "Recorded by")}</th>
@@ -362,18 +363,18 @@ export default function GazoblokProductionPage() {
                   <th className="px-3 py-2 w-32"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="block md:table-row-group divide-y">
                 {(entriesQuery.data ?? []).map((e) => {
                   const isVoided = e.voidedAt !== null;
                   return (
-                  <tr key={e.id} className={cn("align-top", isVoided && "opacity-60")}>
-                    <td className={cn("px-3 py-2.5 font-mono whitespace-nowrap", isVoided && "line-through")}>
+                  <tr key={e.id} className={cn("grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1.5 px-4 py-3 md:table-row md:p-0 align-top", isVoided && "opacity-60")}>
+                    <td className={cn("md:table-cell md:px-3 md:py-2.5 font-mono tabular-nums whitespace-nowrap", isVoided && "line-through")}>
                       {formatDate(e.producedAt)}
                     </td>
-                    <td className={cn("px-3 py-2.5 text-muted-foreground", isVoided && "line-through")}>
+                    <td className={cn("md:table-cell md:px-3 md:py-2.5 text-right md:text-left text-muted-foreground break-words", isVoided && "line-through")}>
                       {e.recordedBy?.name ?? "—"}
                     </td>
-                    <td className="px-3 py-2.5">
+                    <td className="col-span-2 md:table-cell md:px-3 md:py-2.5">
                       <div className={cn("flex flex-wrap gap-1.5", isVoided && "line-through")}>
                         {e.lines.map((line) => (
                           <span
@@ -388,24 +389,30 @@ export default function GazoblokProductionPage() {
                         ))}
                       </div>
                     </td>
-                    <td className={cn("px-3 py-2.5 text-xs text-text-tertiary italic", isVoided && "line-through")}>
+                    <td className={cn("col-span-2 md:table-cell md:px-3 md:py-2.5 text-xs text-text-tertiary italic break-words", isVoided && "line-through")}>
                       {e.notes || "—"}
                     </td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                    <td className="col-span-2 md:table-cell md:px-3 md:py-2.5 md:text-right md:whitespace-nowrap">
                       {isVoided ? (
-                        <Chip variant="neutral">{t("Бекор қилинган", "Voided")}</Chip>
+                        <Chip variant="neutral">{t("Ўчирилган", "Voided")}</Chip>
                       ) : (
                         <Button
                           size="sm"
                           variant="outline"
+                          className="h-11 md:h-8 w-full md:w-auto"
                           disabled={voidEntry.isPending && voidEntry.variables === e.id}
                           onClick={() => handleVoidClick(e.id)}
-                          aria-label={t("Бекор қилиш", "Void")}
+                          aria-label={t("Хато ёзувни ўчириш", "Void a wrong entry")}
                         >
                           {confirmVoidId === e.id
                             ? t("Тасдиқлайсизми?", "Confirm?")
-                            : t("Бекор қилиш", "Void")}
+                            : t("Хато ёзувни ўчириш", "Void a wrong entry")}
                         </Button>
+                      )}
+                      {voidEntry.isError && voidEntry.variables === e.id && (
+                        <div className="mt-1 text-[11px] text-destructive whitespace-normal">
+                          {uzPart((voidEntry.error as Error).message, lang)}
+                        </div>
                       )}
                     </td>
                   </tr>

@@ -6,8 +6,9 @@ import { Boxes, Loader2, Plus, Save } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatNumber } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { cn, formatNumber } from "@/lib/utils";
+import { Bi, useLang, useT } from "@/lib/i18n";
+import { parseMoney, uzPart } from "@/lib/gazoblok-text";
 import {
   pricePerM3,
   blocksPerM3,
@@ -42,33 +43,48 @@ interface GazoblokConfig {
 }
 
 // A per-row edit draft. Kept as strings so a field can be cleared mid-edit.
+// Dims are edited in MILLIMETRES (stored in metres); the price is shown
+// grouped («18 000») and read back with parseMoney.
 interface RowDraft {
   label: string;
-  lengthM: string;
-  heightM: string;
-  thicknessM: string;
+  lengthMm: string;
+  heightMm: string;
+  thicknessMm: string;
   pricePerBlock: string;
   lowStockThreshold: string;
+}
+
+/** Stored metres → mm text for an input (0.6 → "600"; keeps 0.1 mm). */
+function mToMmInput(m: string): string {
+  const n = Number(m);
+  return Number.isFinite(n) ? String(Math.round(n * 10000) / 10) : "";
+}
+
+/** «18 000»; a price with tiyin keeps up to 2 decimals. */
+function groupedPrice(price: string): string {
+  const n = Number(price);
+  return Number.isFinite(n) ? formatNumber(n, 2) : price;
 }
 
 function productToDraft(p: Product): RowDraft {
   return {
     label: p.label,
-    lengthM: p.lengthM,
-    heightM: p.heightM,
-    thicknessM: p.thicknessM,
-    pricePerBlock: p.pricePerBlock,
+    lengthMm: mToMmInput(p.lengthM),
+    heightMm: mToMmInput(p.heightM),
+    thicknessMm: mToMmInput(p.thicknessM),
+    pricePerBlock: groupedPrice(p.pricePerBlock),
     lowStockThreshold: String(p.lowStockThreshold),
   };
 }
 
+/** Compares by value, so «18000» typed over «18 000» is not a change. */
 function draftsEqual(a: RowDraft, b: RowDraft): boolean {
   return (
     a.label === b.label &&
-    a.lengthM === b.lengthM &&
-    a.heightM === b.heightM &&
-    a.thicknessM === b.thicknessM &&
-    a.pricePerBlock === b.pricePerBlock &&
+    Number(a.lengthMm) === Number(b.lengthMm) &&
+    Number(a.heightMm) === Number(b.heightMm) &&
+    Number(a.thicknessMm) === Number(b.thicknessMm) &&
+    parseMoney(a.pricePerBlock) === parseMoney(b.pricePerBlock) &&
     a.lowStockThreshold === b.lowStockThreshold
   );
 }
@@ -85,31 +101,33 @@ function isNonNeg(s: string): boolean {
   return Number.isFinite(n) && n >= 0;
 }
 
-/** Build the engine's BlockProduct from Number()-coerced meter dims. */
+/** Build the engine's BlockProduct from mm dims (engine works in metres). */
 function toBlockProduct(
-  lengthM: string,
-  heightM: string,
-  thicknessM: string,
-  pricePerBlock: string,
+  lengthMm: string,
+  heightMm: string,
+  thicknessMm: string,
+  pricePerBlock: number,
 ): BlockProduct {
   return {
-    lengthM: Number(lengthM),
-    heightM: Number(heightM),
-    thicknessM: Number(thicknessM),
-    pricePerBlock: Number(pricePerBlock),
+    lengthM: Number(lengthMm) / 1000,
+    heightM: Number(heightMm) / 1000,
+    thicknessM: Number(thicknessMm) / 1000,
+    pricePerBlock,
   };
-}
-
-/** Format meters as millimetres for display (0.6 m → 600). */
-function mToMm(m: string): string {
-  const n = Number(m);
-  if (!Number.isFinite(n)) return "—";
-  return formatNumber(n * 1000, 0);
 }
 
 export default function GazoblokCatalogPage() {
   const t = useT();
+  const lang = useLang();
   const qc = useQueryClient();
+
+  // Catalog writes need pricing.edit (server enforces it); without it the
+  // page is read-only. Read-only while /me loads so nothing flashes editable.
+  const { data: me } = useQuery<{ permissions: string[] }>({
+    queryKey: ["me"],
+    queryFn: () => api("/api/auth/me"),
+  });
+  const canEdit = me?.permissions.includes("pricing.edit") ?? false;
 
   const productsQuery = useQuery<Product[]>({
     queryKey: ["gazoblok", "products"],
@@ -231,7 +249,7 @@ export default function GazoblokCatalogPage() {
           lengthM: L / 1000,
           heightM: H / 1000,
           thicknessM: T / 1000,
-          pricePerBlock: Number(add.pricePerBlock),
+          pricePerBlock: parseMoney(add.pricePerBlock),
           lowStockThreshold: Number(add.lowStockThreshold),
         },
       });
@@ -250,7 +268,7 @@ export default function GazoblokCatalogPage() {
     isPositive(add.lengthMm) &&
     isPositive(add.heightMm) &&
     isPositive(add.thicknessMm) &&
-    isNonNeg(add.pricePerBlock) &&
+    parseMoney(add.pricePerBlock) !== null &&
     isNonNeg(add.lowStockThreshold);
 
   /** Mirrors the server's duplicate check: same dims on an ACTIVE size. */
@@ -265,7 +283,7 @@ export default function GazoblokCatalogPage() {
         sameDim(p.thicknessM, add.thicknessMm),
     );
     if (duplicate) {
-      setDupError("Бу ўлчам аллақачон мавжуд · This size already exists");
+      setDupError(t("Бу ўлчам аллақачон мавжуд", "This size already exists"));
       return;
     }
     setDupError(null);
@@ -278,25 +296,26 @@ export default function GazoblokCatalogPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Boxes className="h-6 w-6 text-muted-foreground" />
-          Газоблок
-          <span className="lang-en text-muted-foreground font-normal text-base">
-            {" "}· Gazoblok
-          </span>
+          <Bi uz="Газоблок" en="Gazoblok" enClassName="text-muted-foreground font-normal text-base" />
         </h1>
         <p className="text-sm text-muted-foreground">
           {t(
-            "Газоблок ўлчамлари ва ҳар бир блок нархини бошқаринг, шунингдек ягона зичлик маркасини белгиланг. Жадвалдаги ўлчамлар метрда сақланади.",
-            "Manage Газоблок sizes and the price per block, plus the single density grade. Catalog dimensions are stored in metres.",
+            "Газоблок ўлчамлари ва ҳар бир блок нархини бошқаринг, шунингдек ягона зичлик маркасини белгиланг. Ўлчамлар миллиметрда.",
+            "Manage gazoblok sizes and the price per block, plus the single density grade. Sizes in millimetres.",
           )}
         </p>
+        {me && !canEdit && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {t("Нархни фақат нарх ҳуқуқи борлар ўзгартиради", "Only users with pricing rights can change prices")}
+          </p>
+        )}
       </div>
 
       {/* Grade section */}
       <section className="rounded-lg border border-border bg-card overflow-hidden">
         <header className="px-4 py-3 border-b">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Зичлик маркаси · Density grade
-            <span className="lang-en font-normal"> (e.g. D500)</span>
+            <Bi uz="Зичлик маркаси" en="Density grade (e.g. D500)" enClassName="font-normal" />
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
             {t(
@@ -324,11 +343,13 @@ export default function GazoblokCatalogPage() {
               </label>
               <Input
                 className="w-40"
+                readOnly={!canEdit}
                 placeholder="D500"
                 value={grade}
                 onChange={(e) => setGrade(e.target.value)}
               />
             </div>
+            {canEdit && (
             <Button
               disabled={!gradeDirty || grade.trim() === "" || saveGrade.isPending}
               onClick={() => saveGrade.mutate()}
@@ -340,6 +361,7 @@ export default function GazoblokCatalogPage() {
               )}
               {t("Сақлаш", "Save")}
             </Button>
+            )}
             {configQuery.data?.grade && (
               <div className="text-xs text-muted-foreground">
                 {t("Жорий:", "Current:")} {configQuery.data.grade}
@@ -347,7 +369,7 @@ export default function GazoblokCatalogPage() {
             )}
             {saveGrade.isError && (
               <div className="text-sm text-destructive w-full">
-                {(saveGrade.error as Error).message}
+                {uzPart((saveGrade.error as Error).message, lang)}
               </div>
             )}
           </div>
@@ -358,13 +380,12 @@ export default function GazoblokCatalogPage() {
       <section className="rounded-lg border border-border bg-card overflow-hidden">
         <header className="px-4 py-3 border-b">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Каталог · Catalog
-            <span className="lang-en font-normal"> (sizes &amp; prices)</span>
+            <Bi uz="Каталог" en="Catalog (sizes & prices)" enClassName="font-normal" />
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
             {t(
-              "Ўлчамлар метрда. м³ нархи ва 1 м³ даги блоклар сони автоматик ҳисобланади.",
-              "Dimensions in metres. The m³ price and blocks-per-m³ are derived automatically.",
+              "Ўлчамлар миллиметрда. м³ нархи ва 1 м³ даги блоклар сони автоматик ҳисобланади.",
+              "Dimensions in millimetres. The m³ price and blocks-per-m³ are derived automatically.",
             )}
           </div>
         </header>
@@ -386,12 +407,13 @@ export default function GazoblokCatalogPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
+            {/* Phones: each size stacks into a labelled card; md+: a normal table. */}
+            <table className="w-full text-sm block md:table">
+              <thead className="hidden md:table-header-group bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="text-left px-3 py-2">{t("Номи", "Label")}</th>
                   <th className="text-left px-3 py-2">
-                    {t("Ўлчам (м)", "Dims (m)")}
+                    {t("Ўлчам, мм", "Size, mm")}
                   </th>
                   <th className="text-left px-3 py-2">
                     {t("Нарх / блок", "Price / block")}
@@ -404,7 +426,7 @@ export default function GazoblokCatalogPage() {
                   <th className="text-right px-3 py-2"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="block md:table-row-group divide-y">
                 {products.map((p) => {
                   const d = drafts[p.id];
                   if (!d) return null;
@@ -414,16 +436,17 @@ export default function GazoblokCatalogPage() {
                   let perM3 = "—";
                   let perM3Count = "—";
                   const dimsOk =
-                    isPositive(d.lengthM) &&
-                    isPositive(d.heightM) &&
-                    isPositive(d.thicknessM);
+                    isPositive(d.lengthMm) &&
+                    isPositive(d.heightMm) &&
+                    isPositive(d.thicknessMm);
+                  const price = parseMoney(d.pricePerBlock);
                   if (dimsOk) {
-                    const priceOk = isPositive(d.pricePerBlock);
+                    const priceOk = price !== null && price > 0;
                     const bp = toBlockProduct(
-                      d.lengthM,
-                      d.heightM,
-                      d.thicknessM,
-                      priceOk ? d.pricePerBlock : "0",
+                      d.lengthMm,
+                      d.heightMm,
+                      d.thicknessMm,
+                      priceOk ? price : 0,
                     );
                     try {
                       // A non-positive price makes the derived m³ price
@@ -439,94 +462,104 @@ export default function GazoblokCatalogPage() {
 
                   const rowValid =
                     d.label.trim() !== "" &&
-                    isPositive(d.lengthM) &&
-                    isPositive(d.heightM) &&
-                    isPositive(d.thicknessM) &&
-                    isNonNeg(d.pricePerBlock) &&
+                    dimsOk &&
+                    price !== null &&
                     isNonNeg(d.lowStockThreshold);
 
                   const setField = (k: keyof RowDraft, v: string) =>
                     setDrafts((prev) => ({ ...prev, [p.id]: { ...prev[p.id], [k]: v } }));
 
                   return (
-                    <tr key={p.id} className={p.active ? "" : "opacity-50"}>
-                      <td className="px-3 py-2 align-top">
+                    <tr key={p.id} className={cn("grid grid-cols-2 gap-3 p-4 md:table-row md:p-0", !p.active && "opacity-50")}>
+                      <td className="col-span-2 md:table-cell md:px-3 md:py-2 align-top">
+                        <span className="md:hidden block text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t("Номи", "Label")}</span>
                         <Input
-                          className="w-32"
+                          className="w-full md:w-32"
+                          readOnly={!canEdit}
                           value={d.label}
                           onChange={(e) => setField("label", e.target.value)}
                         />
                       </td>
-                      <td className="px-3 py-2 align-top">
+                      <td className="col-span-2 md:table-cell md:px-3 md:py-2 align-top">
+                        <span className="md:hidden block text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t("Ўлчам, мм", "Size, mm")}</span>
                         <div className="flex items-center gap-1">
                           <Input
                             type="number"
-                            inputMode="decimal"
+                            inputMode="numeric"
                             min={0}
-                            step={0.001}
-                            className="w-20 tabular-nums"
-                            value={d.lengthM}
-                            onChange={(e) => setField("lengthM", e.target.value)}
+                            step={1}
+                            readOnly={!canEdit}
+                            className="min-w-0 flex-1 md:flex-none md:w-20 font-mono tabular-nums"
+                            value={d.lengthMm}
+                            onChange={(e) => setField("lengthMm", e.target.value)}
                           />
                           <span className="text-muted-foreground">×</span>
                           <Input
                             type="number"
-                            inputMode="decimal"
+                            inputMode="numeric"
                             min={0}
-                            step={0.001}
-                            className="w-20 tabular-nums"
-                            value={d.heightM}
-                            onChange={(e) => setField("heightM", e.target.value)}
+                            step={1}
+                            readOnly={!canEdit}
+                            className="min-w-0 flex-1 md:flex-none md:w-20 font-mono tabular-nums"
+                            value={d.heightMm}
+                            onChange={(e) => setField("heightMm", e.target.value)}
                           />
                           <span className="text-muted-foreground">×</span>
                           <Input
                             type="number"
-                            inputMode="decimal"
+                            inputMode="numeric"
                             min={0}
-                            step={0.001}
-                            className="w-20 tabular-nums"
-                            value={d.thicknessM}
-                            onChange={(e) => setField("thicknessM", e.target.value)}
+                            step={1}
+                            readOnly={!canEdit}
+                            className="min-w-0 flex-1 md:flex-none md:w-20 font-mono tabular-nums"
+                            value={d.thicknessMm}
+                            onChange={(e) => setField("thicknessMm", e.target.value)}
                           />
-                        </div>
-                        <div className="text-[10px] text-muted-foreground mt-1">
-                          {mToMm(d.lengthM)} × {mToMm(d.heightM)} × {mToMm(d.thicknessM)} mm
                         </div>
                       </td>
-                      <td className="px-3 py-2 align-top">
+                      <td className="md:table-cell md:px-3 md:py-2 align-top">
+                        <span className="md:hidden block text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t("Нарх / блок", "Price / block")}</span>
                         <Input
-                          type="number"
-                          inputMode="numeric"
-                          min={0}
-                          step={1000}
-                          className="w-28 tabular-nums"
+                          inputMode="decimal"
+                          readOnly={!canEdit}
+                          className="w-full md:w-28 font-mono tabular-nums text-right"
                           value={d.pricePerBlock}
                           onChange={(e) => setField("pricePerBlock", e.target.value)}
+                          onBlur={() => {
+                            const v = parseMoney(d.pricePerBlock);
+                            if (v !== null) setField("pricePerBlock", formatNumber(v, 2));
+                          }}
                         />
                         <div className="text-[10px] text-muted-foreground mt-1">UZS</div>
                       </td>
-                      <td className="px-3 py-2 align-top text-right">
+                      <td className="md:table-cell md:px-3 md:py-2 align-top md:text-right">
+                        <span className="md:hidden block text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t("Кам захира", "Low-stock")}</span>
                         <Input
                           type="number"
                           inputMode="numeric"
                           min={0}
                           step={1}
-                          className="w-20 tabular-nums text-right"
+                          readOnly={!canEdit}
+                          className="w-full md:w-20 font-mono tabular-nums text-right"
                           value={d.lowStockThreshold}
                           onChange={(e) => setField("lowStockThreshold", e.target.value)}
                         />
                       </td>
-                      <td className="px-3 py-2 align-top text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                      <td className="md:table-cell md:px-3 md:py-2 align-top md:text-right text-xs text-muted-foreground font-mono tabular-nums whitespace-nowrap">
+                        <span className="md:hidden block font-sans text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t("Хосила", "Derived")}</span>
                         <div>{perM3} {t("UZS/м³", "UZS/m³")}</div>
                         <div>{perM3Count} {t("блок/м³", "blocks/m³")}</div>
                       </td>
-                      <td className="px-3 py-2 align-top text-right tabular-nums whitespace-nowrap">
+                      <td className="md:table-cell md:px-3 md:py-2 align-top md:text-right font-mono tabular-nums whitespace-nowrap">
+                        <span className="md:hidden block font-sans text-[11px] uppercase tracking-wider text-muted-foreground mb-1">{t("Захира", "Stock")}</span>
                         {p.stock ? formatNumber(p.stock.quantity, 0) : "—"}
                       </td>
-                      <td className="px-3 py-2 align-top text-right whitespace-nowrap">
-                        <div className="flex flex-col items-end gap-1">
+                      <td className="col-span-2 md:table-cell md:px-3 md:py-2 align-top md:text-right md:whitespace-nowrap">
+                        {canEdit && (
+                        <div className="flex flex-wrap md:flex-col md:items-end gap-2 md:gap-1">
                           <Button
                             size="sm"
+                            className="h-11 md:h-8"
                             disabled={
                               !rowDirty ||
                               !rowValid ||
@@ -538,10 +571,11 @@ export default function GazoblokCatalogPage() {
                                 id: p.id,
                                 body: {
                                   label: d.label.trim(),
-                                  lengthM: Number(d.lengthM),
-                                  heightM: Number(d.heightM),
-                                  thicknessM: Number(d.thicknessM),
-                                  pricePerBlock: Number(d.pricePerBlock),
+                                  // Operator types mm; catalog stores metres.
+                                  lengthM: Number(d.lengthMm) / 1000,
+                                  heightM: Number(d.heightMm) / 1000,
+                                  thicknessM: Number(d.thicknessMm) / 1000,
+                                  pricePerBlock: price,
                                   lowStockThreshold: Number(d.lowStockThreshold),
                                 },
                               })
@@ -552,6 +586,7 @@ export default function GazoblokCatalogPage() {
                           {p.active ? (
                             <Button
                               size="sm"
+                              className="h-11 md:h-8"
                               variant="outline"
                               disabled={
                                 disableProduct.isPending &&
@@ -566,6 +601,7 @@ export default function GazoblokCatalogPage() {
                           ) : (
                             <Button
                               size="sm"
+                              className="h-11 md:h-8"
                               variant="outline"
                               disabled={
                                 patchProduct.isPending &&
@@ -581,16 +617,17 @@ export default function GazoblokCatalogPage() {
                           {patchProduct.isError &&
                             patchProduct.variables?.id === p.id && (
                               <div className="text-[11px] text-destructive text-right max-w-[12rem] whitespace-normal">
-                                {(patchProduct.error as Error).message}
+                                {uzPart((patchProduct.error as Error).message, lang)}
                               </div>
                             )}
                           {disableProduct.isError &&
                             disableProduct.variables === p.id && (
                               <div className="text-[11px] text-destructive text-right max-w-[12rem] whitespace-normal">
-                                {(disableProduct.error as Error).message}
+                                {uzPart((disableProduct.error as Error).message, lang)}
                               </div>
                             )}
                         </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -602,16 +639,16 @@ export default function GazoblokCatalogPage() {
       </section>
 
       {/* Add size — dims in MILLIMETRES */}
+      {canEdit && (
       <section className="rounded-lg border border-border bg-card overflow-hidden">
         <header className="px-4 py-3 border-b">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Ўлчам қўшиш · Add size
-            <span className="lang-en font-normal"> (dims in mm)</span>
+            <Bi uz="Ўлчам қўшиш" en="Add size (dims in mm)" enClassName="font-normal" />
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
             {t(
-              "Ўлчамларни МИЛЛИМЕТРДА киритинг (масалан 600 × 300 × 200). Каталогга метрда сақланади.",
-              "Enter dimensions in MILLIMETRES (e.g. 600 × 300 × 200). Stored in the catalog as metres.",
+              "Ўлчамларни миллиметрда киритинг (масалан 600 × 300 × 200).",
+              "Enter dimensions in millimetres (e.g. 600 × 300 × 200).",
             )}
           </div>
         </header>
@@ -677,13 +714,15 @@ export default function GazoblokCatalogPage() {
               {t("Нарх / блок (UZS)", "Price / block (UZS)")}
             </label>
             <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              className="w-28 tabular-nums"
+              inputMode="decimal"
+              className="w-28 font-mono tabular-nums text-right"
+              placeholder="18 000"
               value={add.pricePerBlock}
               onChange={(e) => setAdd({ ...add, pricePerBlock: e.target.value })}
+              onBlur={() => {
+                const v = parseMoney(add.pricePerBlock);
+                if (v !== null) setAdd({ ...add, pricePerBlock: formatNumber(v, 2) });
+              }}
             />
           </div>
           <div>
@@ -714,11 +753,12 @@ export default function GazoblokCatalogPage() {
           </Button>
           {(dupError || createProduct.isError) && (
             <div className="text-sm text-destructive w-full">
-              {dupError ?? (createProduct.error as Error).message}
+              {dupError ?? uzPart((createProduct.error as Error).message, lang)}
             </div>
           )}
         </div>
       </section>
+      )}
     </div>
   );
 }

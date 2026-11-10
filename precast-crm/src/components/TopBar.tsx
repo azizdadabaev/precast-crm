@@ -48,6 +48,7 @@ const BREADCRUMB: Record<string, { uz: string; en: string }> = {
   users: { uz: "Фойдаланувчилар", en: "Users" },
   profile: { uz: "Профил", en: "Profile" },
   "change-password": { uz: "Парол", en: "Change Password" },
+  gazoblok: { uz: "Газоблок", en: "Gazoblok" },
 };
 
 function getCrumb(pathname: string): { uz: string; en: string } {
