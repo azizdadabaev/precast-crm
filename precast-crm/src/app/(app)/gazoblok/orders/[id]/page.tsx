@@ -11,7 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Ban, CircleCheck } from "lucide-react";
-import { api } from "@/lib/fetcher";
+import { api, ApiError } from "@/lib/fetcher";
 import { useLang, useT } from "@/lib/i18n";
 import { formatNumber } from "@/lib/utils";
 import { uzPart, parseMoney } from "@/lib/gazoblok-text";
@@ -154,7 +154,10 @@ export default function GazoblokOrderDetailPage() {
     }
     if (target?.created) {
       void api(`/api/gazoblok/orders/${id}/shipments/${target.id}`, { method: "DELETE" })
-        .catch(() => undefined)
+        // 409: another user loaded this truck meanwhile; 404: already removed — the refresh shows it.
+        .catch((e) => {
+          if (!(e instanceof ApiError && (e.status === 409 || e.status === 404))) showError(e);
+        })
         .finally(refresh);
     }
   }

@@ -439,6 +439,8 @@ export const PATCH = withAuth<{ id: string }>(
         throw e;
       }
     }
+    // Read outside the transaction on purpose: amount, method, order and recorder never change
+    // after recording, and the status is re-checked by the compare-and-set under the lock below.
     const payment = await prisma.gazoblokPayment.findUnique({
       where: { id: body.paymentId },
       include: { recordedBy: { select: { name: true } } },

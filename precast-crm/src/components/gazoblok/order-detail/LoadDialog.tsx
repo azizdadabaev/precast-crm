@@ -178,6 +178,8 @@ export function LoadDialog({
       }
       fd.append("loadedLines", JSON.stringify(Object.fromEntries(Object.entries(counts).filter(([, v]) => v > 0))));
       if (showOverBox && overloadOk) fd.append("confirmOverload", "true");
+      // A fresh load expects an empty truck; the server refuses (409) if someone loaded it meanwhile.
+      if (!correcting) fd.append("expectPending", "1");
       const res = await fetch(`/api/gazoblok/orders/${orderId}/shipments/${shipment.id}/load`, { method: "POST", body: fd });
       let json: { ok?: boolean; error?: string; details?: { code?: string; extraBlocks?: number; extraAmount?: number } } = {};
       try {

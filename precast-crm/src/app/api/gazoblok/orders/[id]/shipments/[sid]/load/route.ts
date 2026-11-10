@@ -25,6 +25,8 @@ class LoadRefused extends Error {
 
 type Params = { id: string; sid: string };
 
+const JUST_LOADED = "Бу жўнатма ҳозиргина юкланди — саҳифани янгиланг · This shipment was just loaded — refresh the page";
+
 /**
  * POST /api/gazoblok/orders/[id]/shipments/[sid]/load
  * Multipart: loadedLines (JSON Record<lineId,blocks>), file (0+ photos — optional).
@@ -80,6 +82,13 @@ export const POST = withAuth<Params>(withIdempotency<Params>(async (req: NextReq
     Object.entries(loadedLines).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v) || 0))]),
   );
   const confirmOverload = String(formData.get("confirmOverload") ?? "") === "true";
+  // The web's fresh-load dialog sends expectPending=1: it means "load this EMPTY truck".
+  // If another user loaded it meanwhile, refuse instead of overwriting their load as a
+  // correction. Absent (Android, corrections) = the old behaviour.
+  const expectPending = String(formData.get("expectPending") ?? "") === "1";
+  if (expectPending && shipment.status !== "PENDING") {
+    return fail(JUST_LOADED, 409);
+  }
 
   // Ask for the over-load confirmation BEFORE saving any photo, so the confirmed
   // retry (which re-sends the same photos) doesn't store them twice. Unlocked read —
@@ -136,10 +145,13 @@ export const POST = withAuth<Params>(withIdempotency<Params>(async (req: NextReq
       if (!isOpen(fresh)) {
         throw new Error("GAZOBLOK_ORDER_CLOSED");
       }
-      const current = await tx.gazoblokShipment.findUniqueOrThrow({
+      const current = await tx.gazoblokShipment.findUnique({
         where: { id: params.sid },
         select: { status: true, loadedLines: true },
       });
+      // Deleted after the pre-tx check (the other user's empty-truck cleanup won the lock).
+      if (!current) throw new LoadRefused(404, "Жўнатма топилмади · Shipment not found");
+      if (expectPending && current.status !== "PENDING") throw new LoadRefused(409, JUST_LOADED);
       // The truck may have been delivered after the pre-tx check.
       if (current.status === "DELIVERED" && !can(user, "order.editShipped")) {
         throw new LoadRefused(403, "Етказилган жўнатмани тузатишга рухсат йўқ · You can't correct a delivered shipment");

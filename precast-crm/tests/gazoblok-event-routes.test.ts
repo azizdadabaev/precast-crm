@@ -19,7 +19,7 @@ const eventCreate = vi.fn();
 const tx = {
   $queryRaw: vi.fn(),
   gazoblokOrder: { findUniqueOrThrow: vi.fn(), update: vi.fn() },
-  gazoblokShipment: { findUniqueOrThrow: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  gazoblokShipment: { findUnique: vi.fn(), findUniqueOrThrow: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   gazoblokStockMovement: { groupBy: vi.fn() },
   gazoblokOrderEvent: { create: (...a: unknown[]) => eventCreate(...a) },
   gazoblokPayment: { aggregate: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
@@ -89,7 +89,7 @@ describe("load route payload", () => {
 
   it("first load: sizes, truck total, running loaded / left, photos; legacy keys kept", async () => {
     prismaMock.gazoblokShipment.findFirst.mockResolvedValue({ id: "s2", status: "PENDING", number: 2, loadedLines: null });
-    tx.gazoblokShipment.findUniqueOrThrow.mockResolvedValue({ status: "PENDING", loadedLines: null });
+    tx.gazoblokShipment.findUnique.mockResolvedValue({ status: "PENDING", loadedLines: null });
     const res = await LOAD(loadReq({ A: 400 }), { params: { id: "o1", sid: "s2" } });
     expect(res.status).toBe(200);
     const e = lastEvent();
@@ -104,7 +104,7 @@ describe("load route payload", () => {
 
   it("correction: changed sizes with before, truck total before → after", async () => {
     prismaMock.gazoblokShipment.findFirst.mockResolvedValue({ id: "s2", status: "LOADED", number: 2, loadedLines: { A: 400 } });
-    tx.gazoblokShipment.findUniqueOrThrow.mockResolvedValue({ status: "LOADED", loadedLines: { A: 400 } });
+    tx.gazoblokShipment.findUnique.mockResolvedValue({ status: "LOADED", loadedLines: { A: 400 } });
     tx.gazoblokStockMovement.groupBy.mockResolvedValue([{ productId: "pA", _sum: { change: -400 } }]);
     await LOAD(loadReq({ A: 380 }), { params: { id: "o1", sid: "s2" } });
     const e = lastEvent();
@@ -119,7 +119,7 @@ describe("load route payload", () => {
 
   it("confirmed over-load: extra blocks + money in the payload and message", async () => {
     prismaMock.gazoblokShipment.findFirst.mockResolvedValue({ id: "s2", status: "PENDING", number: 2, loadedLines: null });
-    tx.gazoblokShipment.findUniqueOrThrow.mockResolvedValue({ status: "PENDING", loadedLines: null });
+    tx.gazoblokShipment.findUnique.mockResolvedValue({ status: "PENDING", loadedLines: null });
     await LOAD(loadReq({ A: 1580 }, { confirmOverload: "true" }), { params: { id: "o1", sid: "s2" } });
     const e = lastEvent();
     expect(e.payload).toMatchObject({ overloadConfirmed: true, overBlocks: 80, overshipDelta: 1440000, overTotal: 80 });
