@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Boxes,
@@ -12,6 +12,7 @@ import {
   User,
   Phone,
   MapPin,
+  RotateCcw,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/fetcher";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,8 +20,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { formatNumber } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { Bi, useLang, useT } from "@/lib/i18n";
 import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
+import { parseMoney, uzPart } from "@/lib/gazoblok-text";
+import { parseDecimal } from "@/lib/gazoblok-quantities";
+import type { ReorderDraft } from "@/lib/gazoblok-reorder";
+import {
+  optionalNumber,
+  reorderPrefill,
+  type ReorderPrefill,
+} from "@/lib/gazoblok-reorder-form";
 import {
   orderTotal,
   lineTotal,
@@ -78,9 +87,24 @@ function dims(p: Product) {
   };
 }
 
+// Figures in IBM Plex Mono (--font-num): the app's default mono has no Cyrillic.
+const NUM = "font-[family-name:var(--font-num)] tabular-nums [word-spacing:-0.38em]";
+
+// `?from=<orderId>` reads the URL, which needs a Suspense boundary for next build.
 export default function GazoblokNewOrderPage() {
   const t = useT();
+  return (
+    <Suspense fallback={<div className="p-6 text-muted-foreground">{t("Юкланмоқда…", "Loading…")}</div>}>
+      <NewOrderForm />
+    </Suspense>
+  );
+}
+
+function NewOrderForm() {
+  const t = useT();
+  const lang = useLang();
   const router = useRouter();
+  const fromId = useSearchParams().get("from");
 
   const {
     data: products,
@@ -128,6 +152,28 @@ export default function GazoblokNewOrderPage() {
 
   const [error, setError] = useState<string | null>(null);
 
+  // ── Reorder: `?from=<orderId>` prefills the form once; the operator checks and places ──
+  const draft = useQuery<ReorderDraft>({
+    queryKey: ["gazoblok-reorder-draft", fromId],
+    queryFn: () => api(`/api/gazoblok/orders/${fromId}/reorder`),
+    enabled: !!fromId,
+    retry: false,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  const [reorder, setReorder] = useState<(ReorderPrefill & { source: ReorderDraft["source"] }) | null>(null);
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!draft.data || prefilled.current) return;
+    prefilled.current = true;
+    const p = reorderPrefill(draft.data);
+    setClientName(p.client.name);
+    setClientPhone(p.client.phone);
+    setClientAddress(p.client.address);
+    setLines(p.lines);
+    setReorder({ ...p, source: draft.data.source });
+  }, [draft.data]);
+
   const linesSectionRef = useRef<HTMLElement | null>(null);
 
   function addLine() {
@@ -157,6 +203,13 @@ export default function GazoblokNewOrderPage() {
 
   function removeLine(idx: number) {
     setLines((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  // A reorder's client may take more or less this time («олдин юкланган 220») — quantities stay editable.
+  function setLineQty(idx: number, raw: string) {
+    const n = Math.floor(Number(raw.replace(/\s/g, "")));
+    const quantity = Number.isFinite(n) && n > 0 ? n : 0;
+    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, quantity } : l)));
   }
 
   // ── Stable product list for the wall calculator ──
@@ -202,26 +255,30 @@ export default function GazoblokNewOrderPage() {
     });
   }
 
+  // ── Typed numbers: «1 000 000» and «7,5» are read; blank = not sent; unreadable = null (blocks placing) ──
+  const pctNum = optionalNumber(discountPercent, parseDecimal);
+  const discNum = optionalNumber(discountAmount, parseMoney);
+  const deliveryNum = optionalNumber(deliveryCost, parseMoney);
+  const paidTyped = optionalNumber(paidAmount, parseMoney);
+  const badNumber = [pctNum, discNum, deliveryNum, paidTyped].some((v) => v === null);
+
   // ── Live totals (preview only — server recomputes authoritatively) ──
   const totals = useMemo(
     () =>
       orderTotal(
         lines.map((l) => ({ unitPrice: l.unitPrice, quantity: l.quantity })),
         {
-          discountPercent:
-            discountPercent.trim() === "" ? undefined : Number(discountPercent),
-          discountAmount:
-            discountAmount.trim() === "" ? undefined : Number(discountAmount),
-          deliveryCost:
-            deliveryCost.trim() === "" ? undefined : Number(deliveryCost),
+          discountPercent: pctNum ?? undefined,
+          discountAmount: discNum ?? undefined,
+          deliveryCost: deliveryNum ?? undefined,
         },
       ),
-    [lines, discountPercent, discountAmount, deliveryCost],
+    [lines, pctNum, discNum, deliveryNum],
   );
 
   // ── Payment coupling (mirrors the server-side refine) ──
-  const paidNum = paidAmount.trim() === "" ? 0 : Number(paidAmount);
-  const paidPositive = Number.isFinite(paidNum) && paidNum > 0;
+  const paidNum = paidTyped ?? 0;
+  const paidPositive = paidNum > 0;
   const methodMissing = paidPositive && paymentMethod === "";
   const paidExceedsTotal = paidPositive && paidNum > totals.total;
 
@@ -256,13 +313,9 @@ export default function GazoblokNewOrderPage() {
             quantity: l.quantity,
           })),
           discountPercent:
-            discountAmount.trim() !== "" || discountPercent.trim() === ""
-              ? undefined
-              : Number(discountPercent),
-          discountAmount:
-            discountAmount.trim() === "" ? undefined : Number(discountAmount),
-          deliveryCost:
-            deliveryCost.trim() === "" ? undefined : Number(deliveryCost),
+            discountAmount.trim() !== "" ? undefined : pctNum ?? undefined,
+          discountAmount: discNum ?? undefined,
+          deliveryCost: deliveryNum ?? undefined,
           scheduledAt: scheduledAt
             ? new Date(scheduledAt).toISOString()
             : undefined,
@@ -270,6 +323,7 @@ export default function GazoblokNewOrderPage() {
           paymentMethod:
             paidPositive && paymentMethod !== "" ? paymentMethod : undefined,
           wallEstimate: wallSnapshot ?? undefined,
+          sourceOrderId: reorder?.source.id,
         },
       }),
     onSuccess: (created) => {
@@ -284,12 +338,14 @@ export default function GazoblokNewOrderPage() {
         setNameAsk({ saved: details.savedName ?? "", typed: details.typedName ?? clientName.trim() });
         return;
       }
-      setError(e.message);
+      setError(uzPart(e.message, lang));
     },
   });
 
   const canPlace =
     lines.length > 0 &&
+    lines.every((l) => l.quantity > 0) &&
+    !badNumber &&
     clientName.trim().length > 0 &&
     clientPhone.trim().length > 0 &&
     !methodMissing &&
@@ -339,11 +395,7 @@ export default function GazoblokNewOrderPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Boxes className="h-6 w-6 text-muted-foreground" />
-            Газоблок
-            <span className="lang-en text-muted-foreground font-normal text-base">
-              {" "}
-              · Gazoblok
-            </span>
+            <Bi uz="Газоблок" en="Gazoblok" enClassName="text-muted-foreground font-normal text-base" />
             <span className="text-muted-foreground font-normal">·</span>
             <span className="text-lg font-semibold">
               {t("Янги буюртма", "New order")}
@@ -362,6 +414,46 @@ export default function GazoblokNewOrderPage() {
         <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
           {error}
         </div>
+      )}
+
+      {fromId && draft.isLoading && (
+        <div className="text-sm text-muted-foreground">{t("Аввалги буюртма юкланмоқда…", "Loading the earlier order…")}</div>
+      )}
+      {fromId && draft.isError && (
+        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 px-3 py-2 rounded">
+          {uzPart(draft.error.message, lang)}
+        </div>
+      )}
+      {reorder && (
+        <section className="rounded-lg border border-border bg-muted/40 px-4 py-3 space-y-2 text-sm">
+          <div className="flex items-center gap-2 flex-wrap">
+            <RotateCcw className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">{t("Қайта буюртма", "Reorder")}:</span>
+            <Link href={`/gazoblok/orders/${reorder.source.id}`} className={`${NUM} text-primary hover:underline`}>
+              {reorder.source.orderNumber}
+            </Link>
+            <span>{t("асосида", "as the base")}</span>
+            <span className="text-muted-foreground">
+              · {t("бугунги нархлар; етказиш, чегирма ва сана янгидан киритилади", "today's prices; delivery, discount and date are entered anew")}
+            </span>
+          </div>
+          {reorder.dropped.length > 0 && (
+            <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-warning">
+              <div className="font-medium">
+                {reorder.lines.length === 0
+                  ? t("Барча ўлчамлар архивда — ўлчам қўшинг", "Every size is archived — add a size")
+                  : t("Архивдаги ўлчамлар қўшилмади", "Archived sizes were not added")}
+              </div>
+              <ul className="mt-1 space-y-0.5">
+                {reorder.dropped.map((d, i) => (
+                  <li key={i}>
+                    {d.label} — <span className={NUM}>{formatNumber(d.quantity, 0)}</span> {t("та", "pcs")}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       )}
 
       {/* Customer */}
@@ -432,7 +524,7 @@ export default function GazoblokNewOrderPage() {
                   {activeProducts.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label} — {formatNumber(Number(p.pricePerBlock), 0)} UZS/
-                      {t("дона", "block")}
+                      {t("та", "block")}
                     </option>
                   ))}
                 </Select>
@@ -464,13 +556,13 @@ export default function GazoblokNewOrderPage() {
           {/* Lines table */}
           {lines.length === 0 ? (
             <div className="text-sm text-muted-foreground italic">
-              {t(
-                "Ҳали қатор қўшилмаган.",
-                "No lines yet — add a size and quantity above.",
-              )}
+              {reorder && reorder.lines.length === 0
+                ? t("Барча ўлчамлар архивда — юқоридан ўлчам қўшинг.", "Every size is archived — add a size above.")
+                : t("Ҳали қатор қўшилмаган.", "No lines yet — add a size and quantity above.")}
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <>
+            <table className="hidden sm:table w-full text-sm">
               <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="text-left px-3 py-2">{t("Ўлчам", "Size")}</th>
@@ -487,16 +579,39 @@ export default function GazoblokNewOrderPage() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {lines.map((l, i) => (
+                {lines.map((l, i) => {
+                  const note = reorder?.notes[l.productId];
+                  return (
                   <tr key={l.productId}>
-                    <td className="px-3 py-2 font-medium">{l.productLabel}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
+                    <td className="px-3 py-2">
+                      <div className="font-medium">{l.productLabel}</div>
+                      {note && (
+                        <div className="text-xs text-muted-foreground">
+                          {t("олдин юкланган", "loaded last time")}{" "}
+                          <span className={NUM}>{formatNumber(note.previousLoaded, 0)}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className={`px-3 py-2 text-right ${NUM}`}>
                       {formatNumber(l.unitPrice, 0)}
+                      {note?.previousUnitPrice != null && (
+                        <div className="text-xs text-muted-foreground">
+                          {t("олдин", "was")} {formatNumber(note.previousUnitPrice, 0)}
+                        </div>
+                      )}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {l.quantity}
+                    <td className="px-3 py-2 text-right">
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        aria-label={t("Сони", "Qty")}
+                        className={`h-11 md:h-9 w-20 ml-auto text-right ${NUM}`}
+                        placeholder="0"
+                        value={l.quantity || ""}
+                        onChange={(e) => setLineQty(i, e.target.value)}
+                      />
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                    <td className={`px-3 py-2 text-right font-semibold ${NUM}`}>
                       {formatNumber(lineTotal(l.unitPrice, l.quantity), 0)}
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -510,9 +625,62 @@ export default function GazoblokNewOrderPage() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
+            {/* Phone: stacked rows instead of a clipped table */}
+            <ul className="sm:hidden divide-y border-y text-sm">
+              {lines.map((l, i) => {
+                const note = reorder?.notes[l.productId];
+                return (
+                  <li key={l.productId} className="py-2.5 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-medium">{l.productLabel}</div>
+                        {note && (
+                          <div className="text-xs text-muted-foreground">
+                            {t("олдин юкланган", "loaded last time")}{" "}
+                            <span className={NUM}>{formatNumber(note.previousLoaded, 0)}</span>
+                            {note.previousUnitPrice != null && (
+                              <>
+                                {" · "}
+                                {t("олдин", "was")} <span className={NUM}>{formatNumber(note.previousUnitPrice, 0)}</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={t("Ўчириш", "Remove")}
+                        onClick={() => removeLine(i)}
+                        className="inline-flex shrink-0 items-center justify-center h-11 w-11 text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-muted-foreground ${NUM}`}>{formatNumber(l.unitPrice, 0)} ×</span>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        aria-label={t("Сони", "Qty")}
+                        className={`h-11 w-24 text-right ${NUM}`}
+                        placeholder="0"
+                        value={l.quantity || ""}
+                        onChange={(e) => setLineQty(i, e.target.value)}
+                      />
+                      <span className="text-muted-foreground">{t("та", "pcs")}</span>
+                      <span className={`ml-auto font-semibold ${NUM}`}>
+                        {formatNumber(lineTotal(l.unitPrice, l.quantity), 0)}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            </>
           )}
         </div>
       </section>
@@ -539,44 +707,51 @@ export default function GazoblokNewOrderPage() {
           <div>
             <FieldLabel uz="Чегирма (%)" en="Discount (%)" />
             <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={100}
-              step={1}
-              className="tabular-nums"
+              type="text"
+              inputMode="decimal"
+              className={NUM}
               placeholder="0"
               value={discountPercent}
               disabled={discountAmount.trim() !== ""}
               onChange={(e) => setDiscountPercent(e.target.value)}
             />
+            <BadNumber show={pctNum === null} />
+            {reorder && reorder.hints.discountPercent > 0 && (
+              <Hint>
+                {t("олдин", "last time")}: <span className={NUM}>{formatNumber(reorder.hints.discountPercent, 2)}</span> %
+              </Hint>
+            )}
           </div>
           <div>
             <FieldLabel uz="Чегирма (UZS)" en="Discount (UZS)" />
             <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              className="tabular-nums"
+              type="text"
+              inputMode="decimal"
+              className={NUM}
               placeholder="0"
               value={discountAmount}
               disabled={discountPercent.trim() !== ""}
               onChange={(e) => setDiscountAmount(e.target.value)}
             />
+            <BadNumber show={discNum === null} />
           </div>
           <div>
             <FieldLabel uz="Етказиб бериш (UZS)" en="Delivery (UZS)" />
             <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              className="tabular-nums"
+              type="text"
+              inputMode="decimal"
+              className={NUM}
               placeholder="0"
               value={deliveryCost}
               onChange={(e) => setDeliveryCost(e.target.value)}
             />
+            <BadNumber show={deliveryNum === null} />
+            {reorder && reorder.hints.deliveryCost > 0 && (
+              <Hint>
+                {t("олдин", "last time")}: <span className={NUM}>{formatNumber(reorder.hints.deliveryCost, 0)}</span> UZS ·{" "}
+                {t("мижоз билан қайта келишинг", "agree it with the client again")}
+              </Hint>
+            )}
           </div>
           <div>
             <FieldLabel uz="Режалаштирилган сана" en="Scheduled date" />
@@ -590,15 +765,14 @@ export default function GazoblokNewOrderPage() {
           <div>
             <FieldLabel uz="Тўланди (UZS)" en="Paid up-front (UZS)" />
             <Input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1000}
-              className="tabular-nums"
+              type="text"
+              inputMode="decimal"
+              className={NUM}
               placeholder="0"
               value={paidAmount}
               onChange={(e) => setPaidAmount(e.target.value)}
             />
+            <BadNumber show={paidTyped === null} />
             {paidExceedsTotal && (
               <p className="mt-1 text-xs text-warning">
                 {t(
@@ -663,23 +837,23 @@ export default function GazoblokNewOrderPage() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               {t("Жами", "Total")}
             </span>
-            <span className="text-2xl font-bold tabular-nums">
+            <span className={`text-2xl font-bold ${NUM}`}>
               {formatNumber(totals.total, 0)}{" "}
               <span className="text-sm font-normal text-muted-foreground">
                 UZS
               </span>
             </span>
           </div>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground tabular-nums pt-1">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
             <span>
               {t("Жами блоклар", "Total blocks")}:{" "}
-              <span className="font-medium text-foreground">
+              <span className={`font-medium text-foreground ${NUM}`}>
                 {formatNumber(totals.totalBlocks, 0)}
               </span>
             </span>
             <span>
               м³:{" "}
-              <span className="font-medium text-foreground">
+              <span className={`font-medium text-foreground ${NUM}`}>
                 {formatNumber(totalVolumeM3, 3)}
               </span>
             </span>
@@ -772,11 +946,25 @@ function Labeled({
   );
 }
 
+function BadNumber({ show }: { show: boolean }) {
+  const t = useT();
+  if (!show) return null;
+  return (
+    <p className="mt-1 text-xs text-destructive">
+      {t("Сонни текширинг: масалан 1 000 000 ёки 7,5", "Check the number: e.g. 1 000 000 or 7,5")}
+    </p>
+  );
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="mt-1 text-xs text-muted-foreground">{children}</p>;
+}
+
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between">
       <span className="text-muted-foreground">{label}</span>
-      <span className="tabular-nums">{value}</span>
+      <span className={NUM}>{value}</span>
     </div>
   );
 }

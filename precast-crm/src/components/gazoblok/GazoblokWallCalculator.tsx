@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { Trash2, Plus, Copy, ChevronDown } from "lucide-react";
-import { useT } from "@/lib/i18n";
+import { useLang, useT } from "@/lib/i18n";
+import { uzPart } from "@/lib/gazoblok-text";
 import { formatNumber } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -88,8 +89,8 @@ function orientationOptions(p: CalcProduct | undefined) {
 }
 
 // Standard opening presets (bilingual chip labels rendered via t()).
-const DOOR_PRESET: OpeningRow = { kind: "DOOR", widthM: "0.9", heightM: "2.1", qty: "1" };
-const WINDOW_PRESET: OpeningRow = { kind: "WINDOW", widthM: "1.5", heightM: "1.2", qty: "1" };
+const DOOR_PRESET: OpeningRow = { kind: "DOOR", widthM: "0,9", heightM: "2,1", qty: "1" };
+const WINDOW_PRESET: OpeningRow = { kind: "WINDOW", widthM: "1,5", heightM: "1,2", qty: "1" };
 const OTHER_PRESET: OpeningRow = { kind: "OTHER", widthM: "", heightM: "", qty: "1" };
 
 export function GazoblokWallCalculator({
@@ -98,6 +99,7 @@ export function GazoblokWallCalculator({
   onSnapshotChange,
 }: GazoblokWallCalculatorProps) {
   const t = useT();
+  const lang = useLang();
 
   const [walls, setWalls] = useState<WallRow[]>([newWall()]);
   const [jointMm, setJointMm] = useState(String(DEFAULT_JOINT_MM));
@@ -222,8 +224,14 @@ export function GazoblokWallCalculator({
           const product = w.productId ? products.find((p) => p.id === w.productId) : undefined;
           const oo = orientationOptions(product);
           const activeOrientation = w.orientation ?? "STANDARD";
-          const orientationLabel = (o: { wallCm: number; courseCm: number }) =>
-            t(`Девор ${o.wallCm}см · қатор ${o.courseCm}см`, `Wall ${o.wallCm}cm · course ${o.courseCm}cm`);
+          // Sizes read in мм from the block itself (the orientation logic rounds to cm).
+          const mm = (m: number) => formatNumber(m * 1000, 0);
+          const wallMm = (key: "STANDARD" | "ROTATED") =>
+            mm(key === "STANDARD" ? (product?.thicknessM ?? 0) : (product?.heightM ?? 0));
+          const courseMm = (key: "STANDARD" | "ROTATED") =>
+            mm(key === "STANDARD" ? (product?.heightM ?? 0) : (product?.thicknessM ?? 0));
+          const orientationLabel = (key: "STANDARD" | "ROTATED") =>
+            t(`Девор ${wallMm(key)} мм · қатор ${courseMm(key)} мм`, `Wall ${wallMm(key)} mm · course ${courseMm(key)} mm`);
           return (
             <section
               key={w.id}
@@ -249,7 +257,7 @@ export function GazoblokWallCalculator({
                     {num(w.lengthM) > 0 && num(w.heightM) > 0
                       ? `${formatNumber(num(w.lengthM), 2)} × ${formatNumber(num(w.heightM), 2)} м`
                       : t("Ўлчам киритилмаган", "No dimensions")}
-                    {oo && ` · ${oo[activeOrientation].wallCm}см девор`}
+                    {oo && ` · ${wallMm(activeOrientation)} мм ${t("девор", "wall")}`}
                   </div>
                 </div>
                 {product && (
@@ -347,7 +355,7 @@ export function GazoblokWallCalculator({
                                   : "bg-card text-muted-foreground hover:bg-accent/40"
                               }`}
                             >
-                              {orientationLabel(oo[key])}
+                              {orientationLabel(key)}
                             </button>
                           );
                         })}
@@ -555,7 +563,7 @@ export function GazoblokWallCalculator({
                   {result.warnings.map((wn, i) => (
                     <div key={i}>
                       <Chip variant="warning" size="sm">
-                        {wn.message}
+                        {uzPart(wn.message, lang)}
                       </Chip>
                     </div>
                   ))}
