@@ -106,10 +106,9 @@ function avatarHue(id: string): number {
   return h % 360;
 }
 
-export function CommentThread({ orderId, projectId, gazoblokOrderId }: CommentThreadProps) {
-  const t = useT();
+/** The comment endpoint, cache key and viewer of one thread — shared by the thread and the order history. */
+export function useComments({ orderId, projectId, gazoblokOrderId }: CommentThreadProps) {
   const qc = useQueryClient();
-
   const baseUrl = orderId
     ? `/api/orders/${orderId}/comments`
     : gazoblokOrderId
@@ -133,6 +132,169 @@ export function CommentThread({ orderId, projectId, gazoblokOrderId }: CommentTh
     enabled: Boolean(orderId || projectId || gazoblokOrderId),
   });
 
+  const draftKey = me
+    ? `comment-draft:${me.id}:${orderId ? `o:${orderId}` : gazoblokOrderId ? `g:${gazoblokOrderId}` : `p:${projectId}`}`
+    : null;
+
+  return {
+    baseUrl,
+    me,
+    comments,
+    visible: comments.filter((c) => !c.deletedAt),
+    isLoading,
+    draftKey,
+    invalidate: () => qc.invalidateQueries({ queryKey }),
+  };
+}
+
+export type CommentsState = ReturnType<typeof useComments>;
+export type { CommentDTO };
+
+/** One comment: author, time, body (mentions + links), edit within 30 min, delete. */
+export function CommentItem({
+  c,
+  state,
+  bare = false,
+}: {
+  c: CommentDTO;
+  state: CommentsState;
+  /** Without its own header/border (inside a timeline that shows author and time). */
+  bare?: boolean;
+}) {
+  const t = useT();
+  const { me, comments, baseUrl, invalidate } = state;
+  const [editing, setEditing] = React.useState(false);
+  const [editDraft, setEditDraft] = React.useState("");
+
+  // Route edit/delete to the comment's OWN entity (it may be a draft/project
+  // comment shown inside an order thread), not the page's baseUrl.
+  const commentUrl = (id: string) => {
+    const x = comments.find((y) => y.id === id);
+    return `${x ? commentBase(x) : baseUrl}/${id}`;
+  };
+
+  const editMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: string }) =>
+      api(commentUrl(id), { method: "PATCH", json: { body } }),
+    onSuccess: () => {
+      setEditing(false);
+      setEditDraft("");
+      invalidate();
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api(commentUrl(id), { method: "DELETE" }),
+    onSuccess: invalidate,
+  });
+
+  const isModerator = me?.permissions?.includes("comment.moderate") ?? false;
+  const canEdit = !!me && c.authorId === me.id && Date.now() - new Date(c.createdAt).getTime() < EDIT_WINDOW_MS;
+  const canDelete = !!me && (isModerator || c.authorId === me.id);
+  const edited = (c.editHistory?.length ?? 0) > 0;
+
+  function submitEdit() {
+    const trimmed = editDraft.trim();
+    if (!trimmed || editMut.isPending) return;
+    editMut.mutate({ id: c.id, body: trimmed });
+  }
+
+  return (
+    <div className={bare ? "space-y-1" : "rounded-md border border-border bg-background p-3 space-y-1.5"}>
+      {!bare && (
+        <div className="flex items-baseline gap-2 text-xs">
+          <span className="font-semibold text-sm">{c.author.name}</span>
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {c.author.role}
+          </span>
+          <span className="text-muted-foreground ml-auto tabular-nums">
+            {relativeTime(c.createdAt, t)}
+            {edited && (
+              <span className="ml-1 italic">
+                · {t("таҳрирланди", "edited")}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {editing ? (
+        <div className="space-y-2">
+          <textarea
+            value={editDraft}
+            onChange={(e) => setEditDraft(e.target.value)}
+            rows={3}
+            maxLength={4000}
+            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                submitEdit();
+              }
+            }}
+          />
+          <div className="flex gap-2 justify-end">
+            <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setEditDraft(""); }}>
+              {t("Бекор қилиш", "Cancel")}
+            </Button>
+            <Button size="sm" onClick={submitEdit} disabled={!editDraft.trim() || editMut.isPending}>
+              {editMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t("Сақлаш", "Save")}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className={bare ? "rounded-md border border-border bg-background px-3 py-2 text-sm whitespace-pre-wrap break-words" : "text-sm whitespace-pre-wrap break-words"}>
+            {renderBody(c.body)}
+            {bare && edited && <span className="ml-1 text-xs italic text-muted-foreground">({t("таҳрирланди", "edited")})</span>}
+          </div>
+          {(canEdit || canDelete) && (
+            <div className="flex gap-1 pt-1">
+              {canEdit && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => { setEditing(true); setEditDraft(c.body); }}
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  {t("Таҳрирлаш", "Edit")}
+                </Button>
+              )}
+              {!canEdit && c.authorId === me?.id && (
+                <span className="text-[10px] text-muted-foreground italic px-2 py-1">
+                  {t("30 дақ. таҳрир ойнаси тугаган", "edit window closed")}
+                </span>
+              )}
+              {canDelete && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (confirm(t("Шарҳ ўчирилсинми?", "Delete this comment?"))) {
+                      deleteMut.mutate(c.id);
+                    }
+                  }}
+                  disabled={deleteMut.isPending}
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  {t("Ўчириш", "Delete")}
+                </Button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Write a comment: @mention picker, Ctrl/⌘+Enter, draft kept in localStorage. */
+export function CommentComposer({ state, inline = false }: { state: CommentsState; inline?: boolean }) {
+  const t = useT();
+  const { baseUrl, draftKey, invalidate } = state;
+
   // Mentionable users — lightweight list for the @picker
   const { data: mentionUsers = [] } = useQuery<MentionUser[]>({
     queryKey: ["users", "mentionable"],
@@ -140,14 +302,8 @@ export function CommentThread({ orderId, projectId, gazoblokOrderId }: CommentTh
     staleTime: 5 * 60_000,
   });
 
-  const draftKey = me
-    ? `comment-draft:${me.id}:${orderId ? `o:${orderId}` : gazoblokOrderId ? `g:${gazoblokOrderId}` : `p:${projectId}`}`
-    : null;
-
   const [draft, setDraft] = React.useState("");
   const [draftHydrated, setDraftHydrated] = React.useState(false);
-  const [editingId, setEditingId] = React.useState<string | null>(null);
-  const [editDraft, setEditDraft] = React.useState("");
 
   // Mention picker state
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -260,8 +416,6 @@ export function CommentThread({ orderId, projectId, gazoblokOrderId }: CommentTh
     }
   }, [draft, draftKey, draftHydrated]);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey });
-
   const createMut = useMutation({
     mutationFn: (body: string) => api(baseUrl, { method: "POST", json: { body } }),
     onSuccess: () => {
@@ -273,213 +427,57 @@ export function CommentThread({ orderId, projectId, gazoblokOrderId }: CommentTh
     },
   });
 
-  // Route edit/delete to the comment's OWN entity (it may be a draft/project
-  // comment shown inside an order thread), not the page's baseUrl.
-  const commentUrl = (id: string) => {
-    const c = comments.find((x) => x.id === id);
-    return `${c ? commentBase(c) : baseUrl}/${id}`;
-  };
-
-  const editMut = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: string }) =>
-      api(commentUrl(id), { method: "PATCH", json: { body } }),
-    onSuccess: () => {
-      setEditingId(null);
-      setEditDraft("");
-      invalidate();
-    },
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: (id: string) => api(commentUrl(id), { method: "DELETE" }),
-    onSuccess: invalidate,
-  });
-
-  const isModerator = me?.permissions?.includes("comment.moderate") ?? false;
-  const visible = comments.filter((c) => !c.deletedAt);
-
   function submit() {
     const trimmed = draft.trim();
     if (!trimmed || createMut.isPending) return;
     createMut.mutate(trimmed);
   }
 
-  function submitEdit(id: string) {
-    const trimmed = editDraft.trim();
-    if (!trimmed || editMut.isPending) return;
-    editMut.mutate({ id, body: trimmed });
-  }
-
-  function startEdit(c: CommentDTO) {
-    setEditingId(c.id);
-    setEditDraft(c.body);
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setEditDraft("");
-  }
-
-  function canEdit(c: CommentDTO): boolean {
-    if (!me) return false;
-    if (c.authorId !== me.id) return false;
-    return Date.now() - new Date(c.createdAt).getTime() < EDIT_WINDOW_MS;
-  }
-
-  function canDelete(c: CommentDTO): boolean {
-    if (!me) return false;
-    return isModerator || c.authorId === me.id;
-  }
+  const sendButton = (
+    <Button
+      size="sm"
+      variant={inline ? "outline" : "default"}
+      className={inline ? "h-11 shrink-0 px-4 text-sm" : undefined}
+      onClick={submit}
+      disabled={!draft.trim() || createMut.isPending}
+    >
+      {createMut.isPending ? (
+        <Loader2 className={inline ? "h-4 w-4 animate-spin mr-1.5" : "h-3.5 w-3.5 animate-spin mr-1"} />
+      ) : (
+        <Send className={inline ? "h-4 w-4 mr-1.5" : "h-3.5 w-3.5 mr-1"} />
+      )}
+      {t("Юбориш", "Send")}
+    </Button>
+  );
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-      <div className="flex items-center gap-2">
-        <MessageSquare className="h-4 w-4 text-muted-foreground" />
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Шарҳлар<span className="lang-en text-muted-foreground font-normal"> · Comments</span>
-        </h3>
-        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-          {visible.length}
-        </span>
-      </div>
-
-      <div className="space-y-3">
-        {isLoading && (
-          <div className="text-sm text-muted-foreground flex items-center gap-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            {t("Юкланмоқда…", "Loading…")}
-          </div>
-        )}
-        {!isLoading && visible.length === 0 && (
-          <div className="text-sm text-muted-foreground italic">
-            {t("Ҳозирча шарҳлар йўқ", "No comments yet")}
-          </div>
-        )}
-        {visible.map((c) => {
-          const edited = (c.editHistory?.length ?? 0) > 0;
-          const isEditing = editingId === c.id;
-          return (
-            <div
-              key={c.id}
-              className="rounded-md border border-border bg-background p-3 space-y-1.5"
-            >
-              <div className="flex items-baseline gap-2 text-xs">
-                <span className="font-semibold text-sm">{c.author.name}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {c.author.role}
-                </span>
-                <span className="text-muted-foreground ml-auto tabular-nums">
-                  {relativeTime(c.createdAt, t)}
-                  {edited && (
-                    <span className="ml-1 italic">
-                      · {t("таҳрирланди", "edited")}
-                    </span>
-                  )}
-                </span>
-              </div>
-
-              {isEditing ? (
-                <div className="space-y-2">
-                  <textarea
-                    value={editDraft}
-                    onChange={(e) => setEditDraft(e.target.value)}
-                    rows={3}
-                    maxLength={4000}
-                    className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                        e.preventDefault();
-                        submitEdit(c.id);
-                      }
-                    }}
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <Button size="sm" variant="ghost" onClick={cancelEdit}>
-                      {t("Бекор қилиш", "Cancel")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => submitEdit(c.id)}
-                      disabled={!editDraft.trim() || editMut.isPending}
-                    >
-                      {editMut.isPending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        t("Сақлаш", "Save")
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="text-sm whitespace-pre-wrap break-words">
-                    {renderBody(c.body)}
-                  </div>
-                  {(canEdit(c) || canDelete(c)) && (
-                    <div className="flex gap-1 pt-1">
-                      {canEdit(c) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => startEdit(c)}
-                        >
-                          <Pencil className="h-3 w-3 mr-1" />
-                          {t("Таҳрирлаш", "Edit")}
-                        </Button>
-                      )}
-                      {!canEdit(c) && c.authorId === me?.id && (
-                        <span className="text-[10px] text-muted-foreground italic px-2 py-1">
-                          {t("30 дақ. таҳрир ойнаси тугаган", "edit window closed")}
-                        </span>
-                      )}
-                      {canDelete(c) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                          onClick={() => {
-                            if (confirm(t("Шарҳ ўчирилсинми?", "Delete this comment?"))) {
-                              deleteMut.mutate(c.id);
-                            }
-                          }}
-                          disabled={deleteMut.isPending}
-                        >
-                          <Trash2 className="h-3 w-3 mr-1" />
-                          {t("Ўчириш", "Delete")}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Compose area */}
-      <div className="space-y-2 pt-2 border-t border-border">
+    <div className={inline ? "space-y-1.5" : "space-y-2 pt-2 border-t border-border"}>
+      <div className={inline ? "flex items-start gap-2" : undefined}>
         {/* Relative wrapper so the dropdown is anchored to this block */}
-        <div className="relative">
+        <div className={inline ? "relative min-w-0 flex-1" : "relative"}>
           <textarea
             ref={textareaRef}
             value={draft}
             onChange={handleDraftChange}
             onKeyDown={handleDraftKeyDown}
             onBlur={handleDraftBlur}
-            rows={3}
+            rows={inline ? 1 : 3}
             maxLength={4000}
+            aria-label={t("Шарҳ", "Comment")}
             placeholder={t(
-              "Шарҳ ёзинг… @ билан одам белгилаш",
+              inline ? "Шарҳ ёзинг… @ билан одам белгиланг" : "Шарҳ ёзинг… @ билан одам белгилаш",
               "Write a comment… type @ to mention someone",
             )}
-            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            className={
+              inline
+                ? "block min-h-[44px] w-full resize-y rounded-md border border-input bg-muted/40 px-3 py-[11px] text-sm leading-5 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                : "w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            }
           />
 
-          {/* @mention dropdown — floats above the textarea */}
+          {/* @mention dropdown — floats next to the textarea */}
           {mentionSuggestions.length > 0 && (
-            <div className="absolute bottom-full mb-1 left-0 right-0 z-50 rounded-md border border-border bg-card shadow-lg overflow-hidden">
+            <div className={`absolute ${inline ? "top-full mt-1" : "bottom-full mb-1"} left-0 right-0 z-50 rounded-md border border-border bg-card shadow-lg overflow-hidden`}>
               {mentionSuggestions.map((u, i) => {
                 const hue = avatarHue(u.id);
                 return (
@@ -515,30 +513,62 @@ export function CommentThread({ orderId, projectId, gazoblokOrderId }: CommentTh
             </div>
           )}
         </div>
+        {inline && sendButton}
+      </div>
 
+      {!inline && (
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">
             {t("Ctrl/⌘ + Enter — юбориш", "Ctrl/⌘ + Enter to submit")}
           </span>
-          <Button
-            size="sm"
-            onClick={submit}
-            disabled={!draft.trim() || createMut.isPending}
-          >
-            {createMut.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-            ) : (
-              <Send className="h-3.5 w-3.5 mr-1" />
-            )}
-            {t("Юбориш", "Send")}
-          </Button>
+          {sendButton}
         </div>
-        {createMut.isError && (
-          <div className="text-xs text-destructive">
-            {(createMut.error as Error).message}
+      )}
+      {createMut.isError && (
+        <div className="text-xs text-destructive">
+          {(createMut.error as Error).message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function CommentThread(props: CommentThreadProps) {
+  const t = useT();
+  const state = useComments(props);
+  const { visible, isLoading } = state;
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <MessageSquare className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Шарҳлар<span className="lang-en text-muted-foreground font-normal"> · Comments</span>
+        </h3>
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+          {visible.length}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {isLoading && (
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            {t("Юкланмоқда…", "Loading…")}
           </div>
         )}
+        {!isLoading && visible.length === 0 && (
+          <div className="text-sm text-muted-foreground italic">
+            {t("Ҳозирча шарҳлар йўқ", "No comments yet")}
+          </div>
+        )}
+        {visible.map((c) => (
+          <CommentItem key={c.id} c={c} state={state} />
+        ))}
       </div>
+
+      {/* Compose area */}
+      <CommentComposer state={state} />
     </div>
   );
 }
