@@ -1,0 +1,197 @@
+{
+  "ok": true,
+  "data": {
+    "id": "cmwadma740068a2ztodibeoku",
+    "orderNumber": "B-2026-11-0014",
+    "clientId": "cmwadma720066a2ztmp2lz6pw",
+    "status": "PLACED",
+    "paymentState": "AWAITING_PAYMENT",
+    "confirmedPaid": "0",
+    "linesSubtotal": "3600000",
+    "discountPercent": "0",
+    "discountAmount": "0",
+    "deliveryCost": "300000",
+    "overshipAmount": "360000",
+    "totalPrice": "4260000",
+    "totalBlocks": 200,
+    "totalVolumeM3": "7.2",
+    "scheduledAt": null,
+    "placedAt": "2026-11-10T07:36:21.275Z",
+    "deliveredAt": null,
+    "canceledAt": null,
+    "cancelReason": null,
+    "deliveryProofUrl": null,
+    "deliveryProofUploadedAt": null,
+    "notes": null,
+    "wallEstimate": null,
+    "createdById": "cmwa9qrzj00026s84o0orb51p",
+    "shortClosedAt": null,
+    "shortCloseReason": null,
+    "shortClosedById": null,
+    "client": {
+      "id": "cmwadma720066a2ztmp2lz6pw",
+      "name": "Тест Мижоз",
+      "phone": "998900000000",
+      "address": null,
+      "language": "UZ",
+      "source": null,
+      "notes": null,
+      "createdAt": "2026-11-10T07:36:21.278Z",
+      "updatedAt": "2026-11-10T07:36:21.278Z",
+      "referenceConsent": "NOT_ASKED",
+      "consentNote": null,
+      "consentUpdatedAt": null
+    },
+    "createdBy": {
+      "id": "cmwa9qrzj00026s84o0orb51p",
+      "name": "Тест Оператор"
+    },
+    "lines": [
+      {
+        "id": "cmwadma74006aa2ztp15jfi8r",
+        "orderId": "cmwadma740068a2ztodibeoku",
+        "productId": "cmwaaki2d000011atlu6cezys",
+        "productLabel": "600×300×200",
+        "unitPrice": "18000",
+        "quantity": 200,
+        "lineTotal": "3600000",
+        "product": {
+          "id": "cmwaaki2d000011atlu6cezys",
+          "label": "600×300×200",
+          "lengthM": "0.6",
+          "heightM": "0.3",
+          "thicknessM": "0.2"
+        }
+      }
+    ],
+    "payments": [],
+    "shipments": [
+      {
+        "id": "cmwadmabq006pa2ztntwl4muf",
+        "orderId": "cmwadma740068a2ztodibeoku",
+        "number": 1,
+        "status": "LOADED",
+        "loadedLines": {
+          "cmwadma74006aa2ztp15jfi8r": 120
+        },
+        "loadedPhotoUrls": [],
+        "loadedAt": "2026-11-10T07:36:21.860Z",
+        "deliveredAt": null,
+        "notes": null,
+        "createdAt": "2026-11-10T07:36:21.446Z",
+        "updatedAt": "2026-11-10T07:36:21.861Z"
+      },
+      {
+        "id": "cmwadmaga006wa2zt5u0pwnc1",
+        "orderId": "cmwadma740068a2ztodibeoku",
+        "number": 2,
+        "status": "LOADED",
+        "loadedLines": {
+          "cmwadma74006aa2ztp15jfi8r": 100
+        },
+        "loadedPhotoUrls": [],
+        "loadedAt": "2026-11-10T07:36:21.746Z",
+        "deliveredAt": null,
+        "notes": null,
+        "createdAt": "2026-11-10T07:36:21.610Z",
+        "updatedAt": "2026-11-10T07:36:21.747Z"
+      }
+    ],
+    "events": [
+      {
+        "id": "cmwadmanc0077a2ztyxogq9yi",
+        "orderId": "cmwadma740068a2ztodibeoku",
+        "type": "SHIPMENT_CORRECTED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Жўнатма 1 тузатилди",
+        "payload": {
+          "before": {
+            "cmwadma74006aa2ztp15jfi8r": 150
+          },
+          "number": 1,
+          "shipmentId": "cmwadmabq006pa2ztntwl4muf",
+          "loadedLines": {
+            "cmwadma74006aa2ztp15jfi8r": 120
+          },
+          "overshipDelta": 360000,
+          "overshipAmount": 360000
+        },
+        "createdAt": "2026-11-10T07:36:21.865Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmak70072a2zt7kjj93gb",
+        "orderId": "cmwadma740068a2ztodibeoku",
+        "type": "SHIPMENT_LOADED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Жўнатма 2 юкланди",
+        "payload": {
+          "number": 2,
+          "shipmentId": "cmwadmaga006wa2zt5u0pwnc1",
+          "loadedLines": {
+            "cmwadma74006aa2ztp15jfi8r": 100
+          },
+          "overshipDelta": 900000,
+          "overshipAmount": 900000,
+          "overloadConfirmed": true
+        },
+        "createdAt": "2026-11-10T07:36:21.751Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmadj006ua2ztr6bnzlpv",
+        "orderId": "cmwadma740068a2ztodibeoku",
+        "type": "SHIPMENT_LOADED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Жўнатма 1 юкланди",
+        "payload": {
+          "number": 1,
+          "shipmentId": "cmwadmabq006pa2ztntwl4muf",
+          "loadedLines": {
+            "cmwadma74006aa2ztp15jfi8r": 150
+          }
+        },
+        "createdAt": "2026-11-10T07:36:21.511Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadma74006ca2ztb7jpaue2",
+        "orderId": "cmwadma740068a2ztodibeoku",
+        "type": "ORDER_PLACED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Order placed for Тест Мижоз",
+        "payload": {
+          "totalPrice": 3900000,
+          "totalBlocks": 200
+        },
+        "createdAt": "2026-11-10T07:36:21.281Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      }
+    ],
+    "quantities": [
+      {
+        "lineId": "cmwadma74006aa2ztp15jfi8r",
+        "productId": "cmwaaki2d000011atlu6cezys",
+        "label": "600×300×200",
+        "ordered": 200,
+        "loaded": 220,
+        "left": 0,
+        "over": 20
+      }
+    ],
+    "unpaidOverload": 360000,
+    "refundDue": 0
+  }
+}

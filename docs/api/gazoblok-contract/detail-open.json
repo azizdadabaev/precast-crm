@@ -1,0 +1,149 @@
+{
+  "ok": true,
+  "data": {
+    "id": "cmwadma8q006ha2ztpohot6ij",
+    "orderNumber": "B-2026-11-0015",
+    "clientId": "cmwadma720066a2ztmp2lz6pw",
+    "status": "PLACED",
+    "paymentState": "AWAITING_PAYMENT",
+    "confirmedPaid": "0",
+    "linesSubtotal": "3600000",
+    "discountPercent": "0",
+    "discountAmount": "0",
+    "deliveryCost": "0",
+    "overshipAmount": "0",
+    "totalPrice": "3600000",
+    "totalBlocks": 200,
+    "totalVolumeM3": "7.2",
+    "scheduledAt": null,
+    "placedAt": "2026-11-10T07:36:21.334Z",
+    "deliveredAt": null,
+    "canceledAt": null,
+    "cancelReason": null,
+    "deliveryProofUrl": null,
+    "deliveryProofUploadedAt": null,
+    "notes": null,
+    "wallEstimate": null,
+    "createdById": "cmwa9qrzj00026s84o0orb51p",
+    "shortClosedAt": null,
+    "shortCloseReason": null,
+    "shortClosedById": null,
+    "client": {
+      "id": "cmwadma720066a2ztmp2lz6pw",
+      "name": "Тест Мижоз",
+      "phone": "998900000000",
+      "address": null,
+      "language": "UZ",
+      "source": null,
+      "notes": null,
+      "createdAt": "2026-11-10T07:36:21.278Z",
+      "updatedAt": "2026-11-10T07:36:21.278Z",
+      "referenceConsent": "NOT_ASKED",
+      "consentNote": null,
+      "consentUpdatedAt": null
+    },
+    "createdBy": {
+      "id": "cmwa9qrzj00026s84o0orb51p",
+      "name": "Тест Оператор"
+    },
+    "lines": [
+      {
+        "id": "cmwadma8q006ja2zti4s2l1ve",
+        "orderId": "cmwadma8q006ha2ztpohot6ij",
+        "productId": "cmwaaki2d000011atlu6cezys",
+        "productLabel": "600×300×200",
+        "unitPrice": "18000",
+        "quantity": 200,
+        "lineTotal": "3600000",
+        "product": {
+          "id": "cmwaaki2d000011atlu6cezys",
+          "label": "600×300×200",
+          "lengthM": "0.6",
+          "heightM": "0.3",
+          "thicknessM": "0.2"
+        }
+      }
+    ],
+    "payments": [],
+    "shipments": [
+      {
+        "id": "cmwadmb9m008la2ztqiqqoa9d",
+        "orderId": "cmwadma8q006ha2ztpohot6ij",
+        "number": 1,
+        "status": "LOADED",
+        "loadedLines": {
+          "cmwadma8q006ja2zti4s2l1ve": 50
+        },
+        "loadedPhotoUrls": [],
+        "loadedAt": "2026-11-10T07:36:22.709Z",
+        "deliveredAt": null,
+        "notes": null,
+        "createdAt": "2026-11-10T07:36:22.666Z",
+        "updatedAt": "2026-11-10T07:36:22.710Z"
+      },
+      {
+        "id": "cmwadmbc6008sa2zt4n8vl22c",
+        "orderId": "cmwadma8q006ha2ztpohot6ij",
+        "number": 2,
+        "status": "PENDING",
+        "loadedLines": null,
+        "loadedPhotoUrls": [],
+        "loadedAt": null,
+        "deliveredAt": null,
+        "notes": null,
+        "createdAt": "2026-11-10T07:36:22.758Z",
+        "updatedAt": "2026-11-10T07:36:22.758Z"
+      }
+    ],
+    "events": [
+      {
+        "id": "cmwadmbax008qa2ztvfv29ia1",
+        "orderId": "cmwadma8q006ha2ztpohot6ij",
+        "type": "SHIPMENT_LOADED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Жўнатма 1 юкланди",
+        "payload": {
+          "number": 1,
+          "shipmentId": "cmwadmb9m008la2ztqiqqoa9d",
+          "loadedLines": {
+            "cmwadma8q006ja2zti4s2l1ve": 50
+          }
+        },
+        "createdAt": "2026-11-10T07:36:22.714Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadma8q006la2ztr4qm9m1g",
+        "orderId": "cmwadma8q006ha2ztpohot6ij",
+        "type": "ORDER_PLACED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Order placed for Тест Мижоз",
+        "payload": {
+          "totalPrice": 3600000,
+          "totalBlocks": 200
+        },
+        "createdAt": "2026-11-10T07:36:21.338Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      }
+    ],
+    "quantities": [
+      {
+        "lineId": "cmwadma8q006ja2zti4s2l1ve",
+        "productId": "cmwaaki2d000011atlu6cezys",
+        "label": "600×300×200",
+        "ordered": 200,
+        "loaded": 50,
+        "left": 150,
+        "over": 0
+      }
+    ],
+    "unpaidOverload": 0,
+    "refundDue": 0
+  }
+}

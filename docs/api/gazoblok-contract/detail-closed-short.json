@@ -1,0 +1,275 @@
+{
+  "ok": true,
+  "data": {
+    "id": "cmwadmatb007ca2ztfwkql1b7",
+    "orderNumber": "B-2026-11-0016",
+    "clientId": "cmwadma720066a2ztmp2lz6pw",
+    "status": "DELIVERED",
+    "paymentState": "FULLY_PAID",
+    "confirmedPaid": "1080000",
+    "linesSubtotal": "1080000",
+    "discountPercent": "0",
+    "discountAmount": "0",
+    "deliveryCost": "0",
+    "overshipAmount": "0",
+    "totalPrice": "1080000",
+    "totalBlocks": 60,
+    "totalVolumeM3": "3.6",
+    "scheduledAt": null,
+    "placedAt": "2026-11-10T07:36:22.075Z",
+    "deliveredAt": "2026-11-10T07:36:22.557Z",
+    "canceledAt": null,
+    "cancelReason": null,
+    "deliveryProofUrl": null,
+    "deliveryProofUploadedAt": null,
+    "notes": null,
+    "wallEstimate": null,
+    "createdById": "cmwa9qrzj00026s84o0orb51p",
+    "shortClosedAt": "2026-11-10T07:36:22.319Z",
+    "shortCloseReason": "Мижоз қолганини олмайди (тест)",
+    "shortClosedById": "cmwa9qrzj00026s84o0orb51p",
+    "client": {
+      "id": "cmwadma720066a2ztmp2lz6pw",
+      "name": "Тест Мижоз",
+      "phone": "998900000000",
+      "address": null,
+      "language": "UZ",
+      "source": null,
+      "notes": null,
+      "createdAt": "2026-11-10T07:36:21.278Z",
+      "updatedAt": "2026-11-10T07:36:21.278Z",
+      "referenceConsent": "NOT_ASKED",
+      "consentNote": null,
+      "consentUpdatedAt": null
+    },
+    "createdBy": {
+      "id": "cmwa9qrzj00026s84o0orb51p",
+      "name": "Тест Оператор"
+    },
+    "lines": [
+      {
+        "id": "cmwadmatb007ea2ztolo9e5s9",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "productId": "cmwaaki2d000011atlu6cezys",
+        "productLabel": "600×300×200",
+        "unitPrice": "18000",
+        "quantity": 100,
+        "lineTotal": "1800000",
+        "product": {
+          "id": "cmwaaki2d000011atlu6cezys",
+          "label": "600×300×200",
+          "lengthM": "0.6",
+          "heightM": "0.3",
+          "thicknessM": "0.2"
+        }
+      }
+    ],
+    "payments": [
+      {
+        "id": "cmwadmb310087a2ztnt3hu58o",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "amount": "-720000",
+        "method": "CASH",
+        "status": "CONFIRMED",
+        "recordedById": "cmwa9qrzj00026s84o0orb51p",
+        "recordedAt": "2026-11-10T07:36:22.430Z",
+        "confirmedById": "cmwa9qrzj00026s84o0orb51p",
+        "confirmedAt": "2026-11-10T07:36:22.429Z",
+        "notes": "Қайтарилди",
+        "receipts": []
+      },
+      {
+        "id": "cmwadmav5007ma2ztxrhmd7vg",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "amount": "1800000",
+        "method": "CASH",
+        "status": "CONFIRMED",
+        "recordedById": "cmwa9qrzj00026s84o0orb51p",
+        "recordedAt": "2026-11-10T07:36:22.145Z",
+        "confirmedById": "cmwa9qrzj00026s84o0orb51p",
+        "confirmedAt": "2026-11-10T07:36:22.142Z",
+        "notes": null,
+        "receipts": []
+      }
+    ],
+    "shipments": [
+      {
+        "id": "cmwadmax7007ua2zt23wzvidx",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "number": 1,
+        "status": "DELIVERED",
+        "loadedLines": {
+          "cmwadmatb007ea2ztolo9e5s9": 60
+        },
+        "loadedPhotoUrls": [],
+        "loadedAt": "2026-11-10T07:36:22.272Z",
+        "deliveredAt": "2026-11-10T07:36:22.511Z",
+        "notes": null,
+        "createdAt": "2026-11-10T07:36:22.220Z",
+        "updatedAt": "2026-11-10T07:36:22.512Z"
+      }
+    ],
+    "events": [
+      {
+        "id": "cmwadmb6o008ha2ztuu4lrgvu",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "type": "STATUS_CHANGED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Ҳолат PLACED → DELIVERED",
+        "payload": {
+          "to": "DELIVERED",
+          "from": "PLACED"
+        },
+        "createdAt": "2026-11-10T07:36:22.561Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmb5e008ea2ztw2baq7iy",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "type": "SHIPMENT_DELIVERED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Жўнатма 1 етказилди",
+        "payload": {
+          "number": 1,
+          "shipmentId": "cmwadmax7007ua2zt23wzvidx"
+        },
+        "createdAt": "2026-11-10T07:36:22.514Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmb360089a2ztecnwvc91",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "type": "REFUND_RECORDED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Мижозга қайтарилди: 720 000 UZS (CASH)",
+        "payload": {
+          "amount": 720000,
+          "method": "CASH",
+          "paymentId": "cmwadmb310087a2ztnt3hu58o"
+        },
+        "createdAt": "2026-11-10T07:36:22.434Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmb030082a2ztbfl8nozi",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "type": "ORDER_SHORT_CLOSED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Қисқа ёпилди: Мижоз қолганини олмайди (тест)",
+        "payload": {
+          "after": {
+            "totalPrice": 1080000,
+            "linesSubtotal": 1080000
+          },
+          "before": {
+            "totalPrice": 1800000,
+            "linesSubtotal": 1800000
+          },
+          "reason": "Мижоз қолганини олмайди (тест)",
+          "quantities": [
+            {
+              "label": "600×300×200",
+              "loaded": 60,
+              "ordered": 100
+            }
+          ]
+        },
+        "createdAt": "2026-11-10T07:36:22.323Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmays007za2ztl6369s3f",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "type": "SHIPMENT_LOADED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Жўнатма 1 юкланди",
+        "payload": {
+          "number": 1,
+          "shipmentId": "cmwadmax7007ua2zt23wzvidx",
+          "loadedLines": {
+            "cmwadmatb007ea2ztolo9e5s9": 60
+          }
+        },
+        "createdAt": "2026-11-10T07:36:22.276Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmava007qa2zt8zyqyxyf",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "type": "PAYMENT_CONFIRMED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Тўлов тасдиқланди (ёзувчида тасдиқлаш ҳуқуқи бор): 1 800 000 UZS",
+        "payload": {
+          "amount": 1800000,
+          "paymentId": "cmwadmav5007ma2ztxrhmd7vg",
+          "autoConfirmed": true
+        },
+        "createdAt": "2026-11-10T07:36:22.151Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmav6007oa2ztqb9zv20j",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "type": "PAYMENT_RECORDED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Тўлов ёзилди: 1 800 000 UZS (CASH)",
+        "payload": {
+          "amount": 1800000,
+          "paymentId": "cmwadmav5007ma2ztxrhmd7vg"
+        },
+        "createdAt": "2026-11-10T07:36:22.147Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      },
+      {
+        "id": "cmwadmatb007ga2zt0ka091j5",
+        "orderId": "cmwadmatb007ca2ztfwkql1b7",
+        "type": "ORDER_PLACED",
+        "actorId": "cmwa9qrzj00026s84o0orb51p",
+        "message": "Order placed for Тест Мижоз",
+        "payload": {
+          "totalPrice": 1800000,
+          "totalBlocks": 100
+        },
+        "createdAt": "2026-11-10T07:36:22.079Z",
+        "actor": {
+          "id": "cmwa9qrzj00026s84o0orb51p",
+          "name": "Тест Оператор"
+        }
+      }
+    ],
+    "quantities": [
+      {
+        "lineId": "cmwadmatb007ea2ztolo9e5s9",
+        "productId": "cmwaaki2d000011atlu6cezys",
+        "label": "600×300×200",
+        "ordered": 100,
+        "loaded": 60,
+        "left": 40,
+        "over": 0
+      }
+    ],
+    "unpaidOverload": 0,
+    "refundDue": 0
+  }
+}

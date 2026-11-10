@@ -11,3 +11,6 @@ docs/api/openapi.json text eol=lf
 # Room writes the exported schema with LF. The same trap: a Windows checkout would
 # rewrite it to CRLF, and the next KSP run would then report the file as modified.
 android/core/database/src/main/assets/**/*.json text eol=lf
+
+# Gazoblok API contract fixtures are copied byte-for-byte into the Android tests.
+docs/api/gazoblok-contract/*.json text eol=lf

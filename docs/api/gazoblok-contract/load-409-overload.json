@@ -1,0 +1,16 @@
+{
+  "ok": false,
+  "error": "Буюртмадан ортиқ: +50 та · +900 000 UZS — тасдиқланг · Over the order — confirm first",
+  "details": {
+    "code": "OVERLOAD_CONFIRM_REQUIRED",
+    "extraBlocks": 50,
+    "extraAmount": 900000,
+    "overload": [
+      {
+        "lineId": "cmwadma8q006ja2zti4s2l1ve",
+        "extra": 50,
+        "label": "600×300×200"
+      }
+    ]
+  }
+}
