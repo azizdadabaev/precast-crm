@@ -63,6 +63,11 @@ export function reviewPaymentProblem(o: { status: string }, approve: boolean): R
   }
   return null;
 }
+/** A delivery photo may be added to any order that isn't cancelled (open, delivered or closed short). */
+export function deliveryProofProblem(o: { status: string }): string | null {
+  return o.status === "CANCELED" ? "Бекор қилинган буюртмага сурат қўшиб бўлмайди · Order is canceled" : null;
+}
+
 const NEXT = ["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"] as const;
 export type GazoblokNextStatus = (typeof NEXT)[number];
 

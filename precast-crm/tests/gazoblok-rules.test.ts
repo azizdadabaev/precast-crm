@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canDeliver, canCancel, paymentCeilingProblem, isOpen, recordPaymentProblem, reviewPaymentProblem } from "@/lib/gazoblok-rules";
+import { canDeliver, canCancel, paymentCeilingProblem, isOpen, recordPaymentProblem, reviewPaymentProblem, deliveryProofProblem } from "@/lib/gazoblok-rules";
 
 const q = (ordered: number, loaded: number) => ({
   lineId: "A", productId: "pA", label: "600×300×200", ordered, loaded,
@@ -53,5 +53,12 @@ describe("gazoblok order rules", () => {
     expect(reviewPaymentProblem({ status: "CANCELED" }, false)).toBeNull();
     expect(reviewPaymentProblem({ status: "PLACED" }, true)).toBeNull();
     expect(reviewPaymentProblem({ status: "DELIVERED" }, true)).toBeNull();
+  });
+});
+
+describe("deliveryProofProblem", () => {
+  it("refuses a canceled order and allows every other status", () => {
+    expect(deliveryProofProblem({ status: "CANCELED" })).toBe("Бекор қилинган буюртмага сурат қўшиб бўлмайди · Order is canceled");
+    for (const status of ["PLACED", "IN_PRODUCTION", "DELIVERED"]) expect(deliveryProofProblem({ status })).toBeNull();
   });
 });

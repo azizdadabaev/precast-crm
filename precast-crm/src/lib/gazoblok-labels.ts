@@ -24,4 +24,5 @@ export const EVENT_TYPE_LABELS: Record<string, [string, string]> = {
   ORDER_RESCHEDULED: ["Сана ўзгартирилди", "Date changed"],
   DELIVERY_LOCATION_SET: ["Манзил белгиланди", "Location set"],
   DELIVERY_LOCATION_CLEARED: ["Манзил ўчирилди", "Location cleared"],
+  DELIVERY_PROOF: ["Етказиш сурати", "Delivery photo"],
 };

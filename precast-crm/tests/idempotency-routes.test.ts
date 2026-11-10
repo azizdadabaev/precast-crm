@@ -18,6 +18,7 @@ const ROUTES = [
   "src/app/api/gazoblok/orders/[id]/shipments/[sid]/load/route.ts",
   "src/app/api/gazoblok/orders/[id]/route.ts",
   "src/app/api/gazoblok/upload-receipt/route.ts",
+  "src/app/api/gazoblok/orders/[id]/delivery-proof/route.ts",
 ];
 
 describe("mobile-retried routes are wrapped with withIdempotency", () => {
