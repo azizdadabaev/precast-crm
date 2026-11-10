@@ -19,6 +19,7 @@ import { calcResultToCreatePayload } from "@/lib/calc-persistence";
 import { lengthKey, loadedByLength } from "@/lib/fulfilment";
 import { becameOwed, refundDue } from "@/lib/overpayment";
 import { notifyIfOverpaid } from "@/lib/overpayment-notify";
+import { carryLayouts, layoutFromDb } from "@/lib/layout-board/carry";
 import {
   editLockMessage,
   editPolicy,
@@ -288,14 +289,23 @@ export const PATCH = withPermission<{ id: string }>(
 
     const editTx = prisma.$transaction(async (tx) => {
       // Replace the project's calculations with the freshly-computed ones.
+      // Clients that don't know the board (older Android builds) send rooms without a
+      // layout: keep each room's saved position by order so an edit never wipes it.
+      const prevLayouts = (
+        await tx.calculation.findMany({ where: { projectId: existing.projectId }, orderBy: { seq: "asc" }, select: { layoutJson: true } })
+      ).map((c) => layoutFromDb(c.layoutJson));
+      const inputs = carryLayouts(prevLayouts, computed.map((c) => c.input));
       await tx.calculation.deleteMany({ where: { projectId: existing.projectId } });
       await tx.calculation.createMany({
         data: computed.map((c, i) => ({
           projectId: existing.projectId,
           seq: i,
-          ...calcResultToCreatePayload(c.input, c.result),
+          ...calcResultToCreatePayload(inputs[i], c.result),
         })),
       });
+      if (body.layoutWallCm !== undefined) {
+        await tx.project.update({ where: { id: existing.projectId }, data: { layoutWallCm: body.layoutWallCm } });
+      }
       // Absent (older app builds) leaves the loaders' block choice as it was.
       if (body.fillerBlock !== undefined) {
         await tx.project.update({ where: { id: existing.projectId }, data: { fillerBlock: body.fillerBlock } });

@@ -45,6 +45,9 @@ import { Bi, useT } from "@/lib/i18n";
 import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { ShareTarget, type ShareData } from "@/components/share/CalculationShareCard";
 import { useTableDesign } from "@/hooks/useTableDesign";
+import { layoutFromDb } from "@/lib/layout-board/carry";
+import { WALL_CM_DEFAULT } from "@/lib/layout-board/model";
+import { LayoutBoard } from "@/components/calculation/layout-board/LayoutBoard";
 
 type ConversationContext = {
   displayName: string;
@@ -76,6 +79,7 @@ function CalculationsInner() {
   const discountAmount = useCalculatorStore((s) => s.discountAmount);
   const setDiscountAmount = useCalculatorStore((s) => s.setDiscountAmount);
   const fillerBlock = useCalculatorStore((s) => s.fillerBlock);
+  const layoutWallCm = useCalculatorStore((s) => s.layoutWallCm);
   const draftProjectId = useCalculatorStore((s) => s.draftProjectId);
   const setDraftProjectId = useCalculatorStore((s) => s.setDraftProjectId);
   const editingOrderId = useCalculatorStore((s) => s.editingOrderId);
@@ -428,6 +432,7 @@ function CalculationsInner() {
           id: string;
           drawingJson: unknown;
           fillerBlock: FillerBlock | null;
+          layoutWallCm: number | null;
           calculations: Array<{
             id: string;
             name: string | null;
@@ -441,6 +446,7 @@ function CalculationsInner() {
             m2Price: string;
             m2PriceOverride: boolean;
             m2PriceReason: string | null;
+            layoutJson: unknown;
           }>;
         };
       }>(`/api/orders/${id}`);
@@ -460,6 +466,7 @@ function CalculationsInner() {
         editingOrderId: order.id,
         drawing: normalizeDrawing(order.project.drawingJson),
         fillerBlock: order.project.fillerBlock ?? null,
+        layoutWallCm: order.project.layoutWallCm ?? WALL_CM_DEFAULT,
         client: {
           name: order.client.name,
           phone: order.client.phone,
@@ -487,6 +494,7 @@ function CalculationsInner() {
             m2PriceOverride: c.m2PriceOverride,
             m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
             m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
+            layout: layoutFromDb(c.layoutJson),
           }),
         ),
       });
@@ -511,6 +519,7 @@ function CalculationsInner() {
         tentativeClientAddress: string | null;
         drawingJson: unknown;
         fillerBlock: FillerBlock | null;
+        layoutWallCm: number | null;
         client: {
           id: string;
           name: string;
@@ -532,6 +541,7 @@ function CalculationsInner() {
           m2PriceReason: string | null;
           annotationBox: { x: number; y: number; w: number; h: number } | null;
           annotationImagePath: string | null;
+          layoutJson: unknown;
         }>;
       }>>("/api/projects?status=DRAFT");
       const p = projects.find((x) => x.id === id);
@@ -548,6 +558,7 @@ function CalculationsInner() {
         discountPercent: Number(p.discountPercent),
         discountAmount: Number(p.discountAmount),
         fillerBlock: p.fillerBlock ?? null,
+        layoutWallCm: p.layoutWallCm ?? WALL_CM_DEFAULT,
         // Restore the drawn floor plan so "Draw room" reopens the saved rooms.
         drawing: normalizeDrawing(p.drawingJson),
         rows: p.calculations.map((c) =>
@@ -576,6 +587,7 @@ function CalculationsInner() {
               c.annotationImagePath && c.annotationBox
                 ? { imagePath: c.annotationImagePath, ...c.annotationBox }
                 : null,
+            layout: layoutFromDb(c.layoutJson),
           }),
         ),
       });
@@ -751,6 +763,7 @@ function CalculationsInner() {
           discountPercent,
           discountAmount,
           fillerBlock,
+          layoutWallCm,
           // Persist the drawn outline (CAD sketch) so reopening this draft
           // restores it; null when nothing was drawn / it was cleared.
           drawing,
@@ -766,6 +779,7 @@ function CalculationsInner() {
             m2PriceOverride: r.m2PriceOverride,
             m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
             m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
+            layout: r.layout ?? null,
             box: r.box ?? null,
           })),
         },
@@ -815,10 +829,12 @@ function CalculationsInner() {
             m2PriceOverride: r.m2PriceOverride,
             m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
             m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
+            layout: r.layout ?? null,
           })),
           discountPercent,
           discountAmount,
           fillerBlock,
+          layoutWallCm,
           deliveryCost: 0,
           otherCost: 0,
           scheduledAt: args.scheduledAt.toISOString(),
@@ -860,10 +876,12 @@ function CalculationsInner() {
               m2PriceOverride: r.m2PriceOverride,
               m2PriceOverrideValue: r.m2PriceOverride ? r.m2PriceOverrideValue : null,
               m2PriceReason: r.m2PriceOverride ? r.m2PriceReason : null,
+              layout: r.layout ?? null,
             })),
             discountPercent,
             discountAmount,
             fillerBlock,
+            layoutWallCm,
             deliveryCost: 0,
             otherCost: 0,
             scheduledAt: args.scheduledAt.toISOString(),
@@ -1233,6 +1251,9 @@ function CalculationsInner() {
           </>
         }
       />
+
+      {/* «Жойлашув»: drag-drop-snap top-view board of the rooms above. */}
+      <LayoutBoard />
 
       {/* Place Order / Save edits modal — same dialog, two modes.
           editMode hides the up-front payment section and routes the

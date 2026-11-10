@@ -7,6 +7,7 @@ import {
 import type { ClientDraft } from "@/components/calculation/ClientInfoBar";
 import type { Pt, BeamDir, RoomShape } from "@/lib/cad/geometry";
 import type { FillerBlock } from "@/lib/filler-block";
+import { roomRect, WALL_CM_DEFAULT, type RoomLayout } from "@/lib/layout-board/model";
 
 /**
  * Calculator state — auto-saved to localStorage so in-app navigation,
@@ -102,6 +103,31 @@ const LEGACY_KEY = "calc:autosave:v1";
 /** The pre-Zustand standalone rounding-grid key. Migrated, then deleted. */
 const LEGACY_GRID_KEY = "calculator.roundingGrid";
 
+/** Board positions of every row at one moment, for undo/redo. */
+type LayoutSnapshot = Record<string, RoomLayout | null>;
+const LAYOUT_HISTORY_MAX = 100;
+
+function snapshotLayouts(rows: SlabRow[]): LayoutSnapshot {
+  return Object.fromEntries(rows.map((r) => [r.id, r.layout ?? null]));
+}
+
+function restoreSnapshot(rows: SlabRow[], snap: LayoutSnapshot): SlabRow[] {
+  // Rows added since the snapshot keep their current position.
+  return rows.map((r) => (r.id in snap ? { ...r, layout: snap[r.id] } : r));
+}
+
+/** Apply board positions as one undoable step; a new move clears the redo stack. */
+function withLayouts(
+  s: { rows: SlabRow[]; layoutPast: LayoutSnapshot[] },
+  changes: Map<string, RoomLayout | null>,
+) {
+  return {
+    rows: s.rows.map((r) => (changes.has(r.id) ? { ...r, layout: changes.get(r.id)! } : r)),
+    layoutPast: [...s.layoutPast, snapshotLayouts(s.rows)].slice(-LAYOUT_HISTORY_MAX),
+    layoutFuture: [] as LayoutSnapshot[],
+  };
+}
+
 interface CalculatorState {
   // ── Persisted ──────────────────────────────────────────────
   client: ClientDraft;
@@ -153,6 +179,11 @@ interface CalculatorState {
    *  nothing is being drawn. Persisted like the rest of the draft so it survives
    *  closing the dialog and a refresh. Reset by loadFrom/clearAll. */
   drawing: CalculatorDrawing | null;
+  /** «Жойлашув» board wall gap (cm) rooms snap with. Persisted with the draft. */
+  layoutWallCm: number;
+  /** Board-only undo/redo history (row id → position). Not persisted; reset by loadFrom/clearAll. */
+  layoutPast: LayoutSnapshot[];
+  layoutFuture: LayoutSnapshot[];
 
   // ── Actions ────────────────────────────────────────────────
   setClient: (next: ClientDraft) => void;
@@ -170,6 +201,17 @@ interface CalculatorState {
   setColumnWidths: (widths: Record<string, number> | null) => void;
   setRoundingGrid: (grid: RoundingGrid) => void;
   setDrawing: (drawing: CalculatorDrawing | null) => void;
+  /** Board: put a room at a position (also used for every move). */
+  placeRoom: (rowId: string, layout: RoomLayout) => void;
+  /** Board: send a room back to the tray. */
+  unplaceRoom: (rowId: string) => void;
+  /** Board: turn a placed room 90° about its centre. */
+  rotateRoom: (rowId: string) => void;
+  /** Board: place several rooms in one undo step (auto-arrange). */
+  applyLayouts: (layouts: Map<string, RoomLayout>) => void;
+  setLayoutWallCm: (cm: number) => void;
+  undoLayout: () => void;
+  redoLayout: () => void;
   /**
    * Replace the entire calculator session. Used by /projects "open draft"
    * and by hydration migration. Pass partial state; everything else
@@ -202,6 +244,9 @@ const INITIAL_STATE = {
   columnWidths: null as Record<string, number> | null,
   roundingGrid: 0.1 as RoundingGrid,
   drawing: null as CalculatorDrawing | null,
+  layoutWallCm: WALL_CM_DEFAULT,
+  layoutPast: [] as LayoutSnapshot[],
+  layoutFuture: [] as LayoutSnapshot[],
 };
 
 interface PersistedShape {
@@ -219,6 +264,7 @@ interface PersistedShape {
   columnWidths: Record<string, number> | null;
   roundingGrid: RoundingGrid;
   drawing: CalculatorDrawing | null;
+  layoutWallCm: number;
 }
 
 /**
@@ -336,6 +382,45 @@ export const useCalculatorStore = create<CalculatorState>()(
       setRoundingGrid: (grid) => set({ roundingGrid: grid }),
       setDrawing: (drawing) => set({ drawing }),
 
+      placeRoom: (rowId, layout) => set((s) => withLayouts(s, new Map([[rowId, layout]]))),
+      unplaceRoom: (rowId) => set((s) => withLayouts(s, new Map([[rowId, null]]))),
+      rotateRoom: (rowId) =>
+        set((s) => {
+          const row = s.rows.find((r) => r.id === rowId);
+          if (!row?.layout) return {};
+          const before = roomRect(row, row.layout);
+          const rot: RoomLayout["rot"] = row.layout.rot === 0 ? 90 : 0;
+          const after = roomRect(row, { x: 0, y: 0, rot });
+          const layout: RoomLayout = {
+            x: before.x + before.w / 2 - after.w / 2,
+            y: before.y + before.h / 2 - after.h / 2,
+            rot,
+          };
+          return withLayouts(s, new Map([[rowId, layout]]));
+        }),
+      applyLayouts: (layouts) => set((s) => withLayouts(s, layouts)),
+      setLayoutWallCm: (cm) => set({ layoutWallCm: Math.max(0, Math.min(100, Math.round(cm))) }),
+      undoLayout: () =>
+        set((s) => {
+          const prev = s.layoutPast[s.layoutPast.length - 1];
+          if (!prev) return {};
+          return {
+            rows: restoreSnapshot(s.rows, prev),
+            layoutPast: s.layoutPast.slice(0, -1),
+            layoutFuture: [...s.layoutFuture, snapshotLayouts(s.rows)],
+          };
+        }),
+      redoLayout: () =>
+        set((s) => {
+          const next = s.layoutFuture[s.layoutFuture.length - 1];
+          if (!next) return {};
+          return {
+            rows: restoreSnapshot(s.rows, next),
+            layoutFuture: s.layoutFuture.slice(0, -1),
+            layoutPast: [...s.layoutPast, snapshotLayouts(s.rows)].slice(-LAYOUT_HISTORY_MAX),
+          };
+        }),
+
       loadFrom: (next) =>
         set((s) => ({
           // Reset everything to initial first so a draft-load can't leak
@@ -379,6 +464,7 @@ export const useCalculatorStore = create<CalculatorState>()(
         columnWidths: s.columnWidths,
         roundingGrid: s.roundingGrid,
         drawing: s.drawing,
+        layoutWallCm: s.layoutWallCm,
       }),
       // Re-run the engine on each row after rehydrating. Defends against
       // a calculation rule changing between sessions (rare in production

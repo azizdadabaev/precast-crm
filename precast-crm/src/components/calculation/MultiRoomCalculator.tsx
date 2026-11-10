@@ -32,6 +32,7 @@ import { Bi, useT } from "@/lib/i18n";
 import { useLivePricing } from "@/hooks/useLivePricing";
 import type { NormBox } from "@/lib/annotation-box";
 import { FILLER_BLOCKS, fillerBlockLetter, fillerBlockName } from "@/lib/filler-block";
+import type { RoomLayout } from "@/lib/layout-board/model";
 
 export interface SlabRow {
   id: string;
@@ -44,6 +45,8 @@ export interface SlabRow {
   forceStartBeam: boolean;    // default false
   patternOverride: Pattern | "AUTO";
   result: SlabResult | null;
+  /** Where the room sits on the «Жойлашув» board (cm); absent = still in the tray. Never affects numbers. */
+  layout?: RoomLayout | null;
   /**
    * Engineering-accurate width snapshot for the undersize warning. Set
    * once when the row is created (via Add Room → 0, or via the tapered
@@ -207,7 +210,22 @@ function widthForColumn(id: ColumnId, overrides: Record<string, number> | null):
   return COLUMN_DEFS[id].defaultWidth;
 }
 
-const PATTERN_LABEL: Record<Pattern, string> = {
+/** Ctrl+Enter copy of a row: same sizes and pricing, new id/name. */
+export function duplicateRowFrom(src: SlabRow, fresh: SlabRow): SlabRow {
+  return {
+    ...src,
+    id: fresh.id,
+    name: fresh.name,
+    // Manual duplicates aren't a sandbox prefill — drop the
+    // engineering-truth snapshot so the undersize warning
+    // doesn't carry over from the source row.
+    originalWidth: 0,
+    // Start in the «Жойлашув» tray: on its source's spot it would hide under it.
+    layout: null,
+  };
+}
+
+export const PATTERN_LABEL: Record<Pattern, string> = {
   GB: "Г-Б",
   BGB: "Б-Г-Б",
   GBG: "Г-Б-Г",
@@ -496,18 +514,7 @@ export function MultiRoomCalculator({
 
         e.preventDefault();
         const fresh = makeRow(rowsRef.current.length + 1);
-        const duplicate: SlabRow = recomputeRow(
-          {
-            ...src,
-            id: fresh.id,
-            name: fresh.name,
-            // Manual duplicates aren't a sandbox prefill — drop the
-            // engineering-truth snapshot so the undersize warning
-            // doesn't carry over from the source row.
-            originalWidth: 0,
-          },
-          pricingRef.current,
-        );
+        const duplicate: SlabRow = recomputeRow(duplicateRowFrom(src, fresh), pricingRef.current);
 
         const next = [
           ...rowsRef.current.slice(0, idx + 1),

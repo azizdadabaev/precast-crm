@@ -18,6 +18,7 @@ import { normalizePhone, phoneMatchForms } from "@/lib/phone";
 import { addressSearchForms, VILOYATS } from "@/lib/regions";
 import { nextDraftNumber } from "@/lib/draft-number";
 import { copyUploadToProject, isAllowedAnnotationSource } from "@/lib/uploads";
+import { keepSavedLayouts } from "@/lib/layout-board/carry";
 import {
   parseTableQuery,
   isPaginated,
@@ -298,12 +299,15 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
               m2Price: Number(c.m2Price),
               m2PriceReason: c.m2PriceReason,
               subtotal: Number(c.subtotal),
+              layout: c.layoutJson ?? null,
             })) as Prisma.InputJsonValue,
             createdById: user.id,
           },
         });
       }
 
+      // Android re-saves web drafts without `layout`: keep the saved board positions.
+      const inputs = keepSavedLayouts(existing.calculations, computed.map((c) => c.input));
       await tx.calculation.deleteMany({ where: { projectId: existing.id } });
       const updated = await tx.project.update({
         where: { id: existing.id },
@@ -320,6 +324,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
           discountPercent: body.discountPercent,
           discountAmount: body.discountAmount,
           ...(body.fillerBlock !== undefined ? { fillerBlock: body.fillerBlock } : {}),
+          ...(body.layoutWallCm !== undefined ? { layoutWallCm: body.layoutWallCm } : {}),
           // Only set when a linkable conversationId is present; a plain
           // re-save (no link in the body) must not null out an existing link.
           ...(linkConversationId ? { conversationId: linkConversationId } : {}),
@@ -332,7 +337,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
           ...(existing.createdById ? {} : { createdById: user.id }),
           calculations: {
             create: computed.map((c, i) => ({
-              ...calcResultToCreatePayload(c.input, c.result),
+              ...calcResultToCreatePayload(inputs[i], c.result),
               seq: i,
               annotationBox: c.input.box
                 ? { x: c.input.box.x, y: c.input.box.y, w: c.input.box.w, h: c.input.box.h }
@@ -364,6 +369,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
         discountPercent: body.discountPercent,
         discountAmount: body.discountAmount,
         fillerBlock: body.fillerBlock ?? null,
+        layoutWallCm: body.layoutWallCm ?? null,
         conversationId: linkConversationId ?? null,
         createdById: user.id,
         clientId: existingClient?.id ?? null,

@@ -417,6 +417,8 @@ model Project {
   // direction choices. Shape mirrors `CalculatorDrawing` in the calculator
   // store: { points: {x,y}[], globalDir, dirOverrides }. Null for typed rooms.
   drawingJson Json?
+  // «Жойлашув» board: wall gap (cm) rooms snap with on the top-view layout. Null = 30.
+  layoutWallCm Int?
   status      ProjectStatus @default(DRAFT)
 
   // Grand-total discount carried on the draft so "Save as draft" doesn't
@@ -579,6 +581,8 @@ model Calculation {
   // so the record outlives the source chat. Null for hand-typed rooms.
   annotationBox       Json?
   annotationImagePath String?
+  // «Жойлашув» board position { x, y (cm), rot 0|90 }; null = not placed. Never affects numbers.
+  layoutJson          Json?
 
   seq Int @default(0) // row display order within project
 

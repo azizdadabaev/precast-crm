@@ -22,6 +22,7 @@ import { normalizePhone, extractPhoneFromText } from '@/lib/phone';
 import { withAgentPatternPolicy } from './pattern-policy';
 import { MAX_BEAM_LENGTH_M, MAX_ROOM_COUNT } from './tools/get-quote';
 import { DEFAULT_BEARING, type Pattern } from '@/services/calculation-engine';
+import { carryLayouts, layoutFromDb } from '@/lib/layout-board/carry';
 
 /** Beam length a room would need = inner width + a bearing each side. Mirrors the
  *  engine so the draft can be screened without a full recompute. */
@@ -343,7 +344,7 @@ export async function persistConversationDraft(
           select: {
             name: true, innerWidth: true, innerLength: true, bearing: true, correction: true,
             extraBeams: true, forceStartBeam: true, patternOverride: true,
-            m2PriceOverride: true, m2Price: true, m2PriceReason: true,
+            m2PriceOverride: true, m2Price: true, m2PriceReason: true, layoutJson: true,
           },
         },
       },
@@ -389,7 +390,10 @@ export async function persistConversationDraft(
 
     const { computed } =
       finalRooms === merged.rooms ? mergedTotals : computeOrderTotals(finalRooms, NO_EXTRAS, pricing);
-    const calcs = computed.map((c, i) => ({ ...calcResultToCreatePayload(c.input, c.result), seq: i }));
+    // Keep the operator's «Жойлашув» positions when the re-quote has the same room count.
+    const prevLayouts = (existing?.calculations ?? []).map((c) => layoutFromDb(c.layoutJson));
+    const inputs = carryLayouts(prevLayouts, computed.map((c) => c.input));
+    const calcs = computed.map((c, i) => ({ ...calcResultToCreatePayload(inputs[i], c.result), seq: i }));
     const dimensions = {
       width: finalRooms[0].innerWidth,
       length: finalRooms[0].innerLength,

@@ -1347,6 +1347,45 @@
                             "w",
                             "h"
                           ]
+                        },
+                        "layout": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "x": {
+                              "type": "number",
+                              "minimum": -100000,
+                              "maximum": 100000
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": -100000,
+                              "maximum": 100000
+                            },
+                            "rot": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    0
+                                  ]
+                                },
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    90
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y",
+                            "rot"
+                          ]
                         }
                       },
                       "required": [
@@ -1441,6 +1480,14 @@
                       "TAYSON",
                       "KATTA"
                     ]
+                  },
+                  "layoutWallCm": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 100
                   }
                 },
                 "required": [
@@ -1739,6 +1786,45 @@
                             "w",
                             "h"
                           ]
+                        },
+                        "layout": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "x": {
+                              "type": "number",
+                              "minimum": -100000,
+                              "maximum": 100000
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": -100000,
+                              "maximum": 100000
+                            },
+                            "rot": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    0
+                                  ]
+                                },
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    90
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y",
+                            "rot"
+                          ]
                         }
                       },
                       "required": [
@@ -1917,6 +2003,14 @@
                       "TAYSON",
                       "KATTA"
                     ]
+                  },
+                  "layoutWallCm": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 100
                   }
                 },
                 "required": [
@@ -5510,6 +5604,45 @@
                             "y",
                             "w",
                             "h"
+                          ]
+                        },
+                        "layout": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "x": {
+                              "type": "number",
+                              "minimum": -100000,
+                              "maximum": 100000
+                            },
+                            "y": {
+                              "type": "number",
+                              "minimum": -100000,
+                              "maximum": 100000
+                            },
+                            "rot": {
+                              "anyOf": [
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    0
+                                  ]
+                                },
+                                {
+                                  "type": "number",
+                                  "enum": [
+                                    90
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "x",
+                            "y",
+                            "rot"
                           ]
                         }
                       },

@@ -9,6 +9,7 @@ import { loadPricingConfig } from "@/lib/pricing-config";
 import { computeOrderTotals } from "@/lib/order-totals";
 import { calcResultToCreatePayload, type RoomInput } from "@/lib/calc-persistence";
 import type { Pattern } from "@/services/calculation-engine";
+import { layoutFromDb } from "@/lib/layout-board/carry";
 
 /**
  * POST /api/projects/[id]/add-to-order — order.edit. One-tap "apply this draft
@@ -57,6 +58,7 @@ export const POST = withPermission<{ id: string }>("order.edit", async (_req: Ne
     m2PriceOverride: c.m2PriceOverride,
     m2PriceOverrideValue: c.m2PriceOverride ? Number(c.m2Price) : null,
     m2PriceReason: c.m2PriceOverride ? c.m2PriceReason : null,
+    layout: layoutFromDb(c.layoutJson),
   }));
   const pricing = await loadPricingConfig();
   const added = computeOrderTotals(
