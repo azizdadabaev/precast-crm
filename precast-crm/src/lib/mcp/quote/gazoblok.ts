@@ -11,7 +11,6 @@ import {
   pricePerM3,
 } from '@/services/gazoblok-engine';
 import { resolveGazoblokProduct, type CatalogProduct } from '@/lib/agent/gazoblok-quote';
-import { foldForSearch } from '@/lib/search-fold';
 import { QuoteInputError } from './slab';
 import { textsFor, type Lang } from './texts';
 

@@ -74,3 +74,61 @@ export function planStockReconcile(orders: ReconcileOrder[], includeCanceled: Se
   }
   return plan;
 }
+
+/** Note on every movement the reconcile posts; the undo replay matches against it. */
+export const RECONCILE_NOTE = "Renovation reconcile: loaded before per-truck stock";
+/** Note on every movement an undo replay posts; a second replay of the same moves is refused. */
+export const UNDO_NOTE = "reconcile undo";
+
+type MoveKey = { orderId: string; shipmentId: string; productId: string };
+export type UndoMove = MoveKey & { change: number };
+
+/** The inverse movements (signs flipped, everything else kept) — what the undo file holds. */
+export function invertMoves<T extends { change: number }>(moves: T[]): T[] {
+  return moves.map((m) => ({ ...m, change: -m.change }));
+}
+
+const keyOf = (m: MoveKey) => `${m.orderId}|${m.shipmentId}|${m.productId}`;
+
+function asUndoMove(x: unknown): UndoMove | null {
+  if (!x || typeof x !== "object") return null;
+  const r = x as Record<string, unknown>;
+  const { orderId, shipmentId, productId, change } = r;
+  if (typeof orderId !== "string" || typeof shipmentId !== "string" || typeof productId !== "string") return null;
+  if (typeof change !== "number" || !Number.isInteger(change) || change === 0) return null;
+  return { orderId, shipmentId, productId, change };
+}
+
+/**
+ * Checks an undo file against the posted movements before anything is written.
+ * Every line must cancel exactly one movement the reconcile posted (same order,
+ * truck, size, opposite amount — each posted row matched once), and none of its
+ * trucks/sizes may carry an earlier undo. Anything else → problems, nothing moves.
+ */
+export function planUndo(
+  file: unknown,
+  posted: (MoveKey & { change: number; note: string | null })[],
+): { moves: UndoMove[] } | { problems: string[] } {
+  if (!Array.isArray(file) || file.length === 0) return { problems: ["Undo file must be a non-empty list of moves"] };
+  const problems: string[] = [];
+  const moves: UndoMove[] = [];
+  file.forEach((x, i) => {
+    const m = asUndoMove(x);
+    if (m) moves.push(m);
+    else problems.push(`Line ${i + 1}: needs orderId, shipmentId, productId (text) and a whole non-zero change`);
+  });
+  if (problems.length) return { problems };
+
+  const undone = new Set(posted.filter((p) => p.note === UNDO_NOTE).map(keyOf));
+  const unused = posted.filter((p) => p.note === RECONCILE_NOTE).map((p) => ({ ...p, used: false }));
+  moves.forEach((m, i) => {
+    if (undone.has(keyOf(m))) {
+      problems.push(`Line ${i + 1}: already undone (${keyOf(m)})`);
+      return;
+    }
+    const match = unused.find((p) => !p.used && keyOf(p) === keyOf(m) && p.change === -m.change);
+    if (match) match.used = true;
+    else problems.push(`Line ${i + 1}: no reconcile movement of ${-m.change} for ${keyOf(m)}`);
+  });
+  return problems.length ? { problems } : { moves };
+}
