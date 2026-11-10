@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
-import { withIdempotency } from "@/lib/idempotency";
+import { withIdempotency, formFieldsScope } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import { computeOvership } from "@/lib/gazoblok-overship";
 import { paymentStateFor } from "@/lib/payment-state";
@@ -242,4 +242,4 @@ export const POST = withAuth<Params>(withIdempotency<Params>(async (req: NextReq
   }
 
   return ok(updated);
-}));
+}, { scope: formFieldsScope("loadedLines", "confirmOverload") }));

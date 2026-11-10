@@ -25,8 +25,22 @@ describe("mobile-retried routes are wrapped with withIdempotency", () => {
   for (const rel of ROUTES) {
     it(rel, () => {
       const src = readFileSync(path.resolve(process.cwd(), rel), "utf8");
-      expect(src).toMatch(/import \{ withIdempotency \} from "@\/lib\/idempotency"/);
+      expect(src).toMatch(/import \{ withIdempotency(, \w+)* \} from "@\/lib\/idempotency"/);
       expect(src).toMatch(/withIdempotency(<[^>]+>)?\(/);
+    });
+  }
+});
+
+// Final review #2: routes whose one path carries different actions/bodies must pin
+// the key to the request identity, so a reused key can't replay another action.
+describe("gazoblok routes with several actions per path scope their keys", () => {
+  const SCOPED: [string, RegExp][] = [
+    ["src/app/api/gazoblok/orders/[id]/route.ts", /\{ scope: bodyScope \}/],
+    ["src/app/api/gazoblok/orders/[id]/shipments/[sid]/load/route.ts", /\{ scope: formFieldsScope\("loadedLines", "confirmOverload"\) \}/],
+  ];
+  for (const [rel, re] of SCOPED) {
+    it(rel, () => {
+      expect(readFileSync(path.resolve(process.cwd(), rel), "utf8")).toMatch(re);
     });
   }
 });

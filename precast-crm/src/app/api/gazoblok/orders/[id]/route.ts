@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withAuth, withPermission } from "@/lib/api-auth";
-import { withIdempotency } from "@/lib/idempotency";
+import { withIdempotency, bodyScope } from "@/lib/idempotency";
 import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { GazoblokOrderActionSchema } from "@/lib/gazoblok-validation";
@@ -496,5 +496,5 @@ export const PATCH = withAuth<{ id: string }>(
       );
     }
     return ok(updated);
-  }),
+  }, { scope: bodyScope }),
 );

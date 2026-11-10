@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 type Row = { id: string; userId: string; route: string; status: string; responseStatus: number | null; responseBody: unknown; createdAt: Date };
 const table = new Map<string, Row>();
+const pruneCalls: unknown[] = [];
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     idempotencyKey: {
@@ -22,12 +23,12 @@ vi.mock("@/lib/prisma", () => ({
         return row;
       },
       delete: async ({ where }: { where: { id: string } }) => { table.delete(where.id); },
-      deleteMany: async () => ({ count: 0 }),
+      deleteMany: async (args: unknown) => { pruneCalls.push(args); return { count: 0 }; },
     },
   },
 }));
 
-import { withIdempotency } from "@/lib/idempotency";
+import { withIdempotency, bodyScope, formFieldsScope } from "@/lib/idempotency";
 import { fail } from "@/lib/api";
 import { overloadRefusal } from "@/lib/gazoblok-rules";
 
@@ -37,7 +38,7 @@ const req = (key?: string, url = "http://localhost/api/orders/o1/delivery-proof"
     method: "POST", headers: key ? { "idempotency-key": key } : {},
   });
 
-beforeEach(() => table.clear());
+beforeEach(() => { table.clear(); pruneCalls.length = 0; });
 
 describe("withIdempotency", () => {
   it("passes through when no header is sent", async () => {
@@ -175,5 +176,110 @@ describe("withIdempotency", () => {
     expect(confirmedRetry.headers.get("Idempotency-Replayed")).toBe("true");
     expect(writes).toEqual(["load"]);
     expect(inner).toHaveBeenCalledTimes(2);
+  });
+
+  // Final review #1: a row stuck IN_PROGRESS (handler committed, marking DONE failed)
+  // must never re-open the key — re-running could record a payment twice.
+  it("answers a stale IN_PROGRESS row with IDEMPOTENT_STALE and never runs the handler", async () => {
+    const old = new Date(Date.now() - 10 * 60 * 1000);
+    table.set("u1:k10", { id: "u1:k10", userId: "u1", route: "/api/orders/o1/delivery-proof", status: "IN_PROGRESS", responseStatus: null, responseBody: null, createdAt: old });
+    const inner = vi.fn(async () => Response.json({ ok: true, data: {} }));
+    const res = await withIdempotency(inner)(req("k10"), ctx);
+    expect(res.status).toBe(409);
+    expect((await res.json()).details.code).toBe("IDEMPOTENT_STALE");
+    expect(inner).not.toHaveBeenCalled();
+  });
+
+  it("keeps answering a fresh IN_PROGRESS row with IDEMPOTENT_IN_PROGRESS", async () => {
+    table.set("u1:k11", { id: "u1:k11", userId: "u1", route: "/api/orders/o1/delivery-proof", status: "IN_PROGRESS", responseStatus: null, responseBody: null, createdAt: new Date(Date.now() - 30 * 1000) });
+    const res = await withIdempotency(vi.fn())(req("k11"), ctx);
+    expect(res.status).toBe(409);
+    expect((await res.json()).details.code).toBe("IDEMPOTENT_IN_PROGRESS");
+  });
+
+  it("replays an old DONE row unchanged (stale rule only touches IN_PROGRESS)", async () => {
+    table.set("u1:k12", { id: "u1:k12", userId: "u1", route: "/api/orders/o1/delivery-proof", status: "DONE", responseStatus: 201, responseBody: { ok: true, data: { n: 7 } }, createdAt: new Date(Date.now() - 60 * 60 * 1000) });
+    const inner = vi.fn();
+    const res = await withIdempotency(inner)(req("k12"), ctx);
+    expect(res.status).toBe(201);
+    expect((await res.json()).data.n).toBe(7);
+    expect(inner).not.toHaveBeenCalled();
+  });
+
+  it("prunes only DONE rows after 24 h; stuck IN_PROGRESS rows live 30 days", async () => {
+    await withIdempotency(async () => Response.json({ ok: true, data: {} }))(req("k13"), ctx);
+    expect(pruneCalls).toHaveLength(1);
+    const where = (pruneCalls[0] as { where: { OR: { status?: string; createdAt: { lt: Date } }[] } }).where;
+    const day = 24 * 60 * 60 * 1000;
+    const done = where.OR.find((c) => c.status === "DONE")!;
+    const any = where.OR.find((c) => c.status === undefined)!;
+    expect(Math.round((Date.now() - done.createdAt.lt.getTime()) / day)).toBe(1);
+    expect(Math.round((Date.now() - any.createdAt.lt.getTime()) / day)).toBe(30);
+  });
+
+  // Final review #2: opt-in scope — a key reused with a different body on the same
+  // route is refused instead of replaying the first action's answer.
+  describe("scope option", () => {
+    const url = "http://localhost/api/gazoblok/orders/g1";
+    const patch = (key: string, body: unknown) =>
+      new NextRequest(new URL(url), { method: "PATCH", headers: { "idempotency-key": key, "content-type": "application/json" }, body: JSON.stringify(body) });
+    const scope = async (r: NextRequest) => JSON.stringify(await r.json());
+
+    it("replays the same body and lets the handler still read it", async () => {
+      const seen: unknown[] = [];
+      const inner = vi.fn(async (r: NextRequest) => { seen.push(await r.json()); return Response.json({ ok: true, data: {} }); });
+      const wrapped = withIdempotency(inner, { scope });
+      await wrapped(patch("s1", { action: "record_payment", amount: 100 }), ctx);
+      const b = await wrapped(patch("s1", { action: "record_payment", amount: 100 }), ctx);
+      expect(inner).toHaveBeenCalledTimes(1);
+      expect(seen).toEqual([{ action: "record_payment", amount: 100 }]);
+      expect(b.headers.get("Idempotency-Replayed")).toBe("true");
+    });
+
+    it("refuses a reused key with a different body with 422 IDEMPOTENT_SCOPE_MISMATCH", async () => {
+      const inner = vi.fn(async () => Response.json({ ok: true, data: {} }));
+      const wrapped = withIdempotency(inner, { scope });
+      await wrapped(patch("s2", { action: "record_payment", amount: 100 }), ctx);
+      const res = await wrapped(patch("s2", { action: "close_short" }), ctx);
+      expect(inner).toHaveBeenCalledTimes(1);
+      expect(res.status).toBe(422);
+      expect((await res.json()).details.code).toBe("IDEMPOTENT_SCOPE_MISMATCH");
+    });
+
+    it("scopes multipart on stable fields, not file bytes", async () => {
+      const loadUrl = "http://localhost/api/gazoblok/orders/g1/shipments/s1/load";
+      const form = (lines: string, photo: string) => {
+        const fd = new FormData();
+        fd.set("loadedLines", lines);
+        fd.set("file", new File([photo], "p.jpg", { type: "image/jpeg" }));
+        return new NextRequest(new URL(loadUrl), { method: "POST", headers: { "idempotency-key": "m1" }, body: fd });
+      };
+      const formScope = async (r: NextRequest) => String((await r.formData()).get("loadedLines"));
+      const inner = vi.fn(async (r: NextRequest) => { await r.formData(); return Response.json({ ok: true, data: {} }); });
+      const wrapped = withIdempotency(inner, { scope: formScope });
+      await wrapped(form('{"A":5}', "bytes-1"), ctx);
+      const same = await wrapped(form('{"A":5}', "bytes-2"), ctx);
+      expect(same.headers.get("Idempotency-Replayed")).toBe("true");
+      const diff = await wrapped(form('{"A":6}', "bytes-1"), ctx);
+      expect(diff.status).toBe(422);
+      expect(inner).toHaveBeenCalledTimes(1);
+    });
+
+    it("still reports a different route as IDEMPOTENT_ROUTE_MISMATCH", async () => {
+      const wrapped = withIdempotency(vi.fn(async () => Response.json({ ok: true, data: {} })), { scope });
+      await wrapped(patch("s3", { action: "close_short" }), ctx);
+      const res = await withIdempotency(vi.fn())(req("s3", "http://localhost/api/payments"), ctx);
+      expect((await res.json()).details.code).toBe("IDEMPOTENT_ROUTE_MISMATCH");
+    });
+  });
+
+  it("bodyScope reads the raw body; formFieldsScope reads named fields only", async () => {
+    const r = new NextRequest(new URL("http://localhost/x"), { method: "PATCH", body: '{"action":"close_short"}' });
+    expect(await bodyScope(r)).toBe('{"action":"close_short"}');
+    const fd = new FormData();
+    fd.set("loadedLines", '{"A":1}');
+    fd.set("file", new File(["x"], "p.jpg", { type: "image/jpeg" }));
+    const m = new NextRequest(new URL("http://localhost/x"), { method: "POST", body: fd });
+    expect(await formFieldsScope("loadedLines", "confirmOverload")(m)).toBe(JSON.stringify(['{"A":1}', null]));
   });
 });
