@@ -20,7 +20,7 @@ describe("emitNotifications push fan-out", () => {
     create.mockImplementation(async (args: { data: { userId: string } }) => ({
       id: `n-${args.data.userId}`, type: "PAYMENT_CONFIRMED", userId: args.data.userId,
       title: "Тўлов тасдиқланди", body: null, orderId: "o1", paymentId: "p1",
-      projectId: null, commentId: null, conversationId: null, createdAt: now,
+      projectId: null, commentId: null, conversationId: null, gazoblokOrderId: null, createdAt: now,
     }));
     await emitNotifications({ type: "PAYMENT_CONFIRMED", userIds: ["u1", "u2"], title: "Тўлов тасдиқланди", orderId: "o1", paymentId: "p1" });
     // Let the fire-and-forget promise settle.
@@ -30,7 +30,7 @@ describe("emitNotifications push fan-out", () => {
     expect(userIds).toEqual(["u1"]);
     expect(data).toEqual({
       type: "PAYMENT_CONFIRMED", notificationId: "n-u1", title: "Тўлов тасдиқланди", body: "",
-      orderId: "o1", paymentId: "p1", projectId: "", commentId: "", conversationId: "",
+      orderId: "o1", paymentId: "p1", projectId: "", commentId: "", conversationId: "", gazoblokOrderId: "",
       createdAt: now.toISOString(),
     });
     expect(emit).toHaveBeenCalledTimes(2); // SSE path unchanged
