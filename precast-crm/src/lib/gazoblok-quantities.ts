@@ -114,11 +114,16 @@ export function shortCloseTotals(
   return { linesSubtotal, discountAmount, overshipAmount, totalPrice };
 }
 
-/** "7,5" / "7.5" / " 7 " → number; anything else → null. Operators type a decimal comma. */
+/**
+ * "7,5" / "7.5" / " 7 " / "1 000 000" / "1 000,5" → number; anything else → null.
+ * Operators type a decimal comma, so a comma is always the decimal mark ("1,000" = 1).
+ * Thousands are grouped by a space, NBSP or narrow NBSP (what formatNumber prints),
+ * only between 3-digit groups.
+ */
 export function parseDecimal(s: string): number | null {
-  const t = s.trim().replace(",", ".");
-  if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
-  return Number(t);
+  const t = s.trim();
+  if (!/^-?\d{1,3}([   ]\d{3})*([.,]\d+)?$|^-?\d+([.,]\d+)?$/.test(t)) return null;
+  return Number(t.replace(/[   ]/g, "").replace(",", "."));
 }
 
 /**

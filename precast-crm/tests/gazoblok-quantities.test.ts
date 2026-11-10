@@ -76,6 +76,25 @@ describe("gazoblok quantities", () => {
     expect(parseDecimal("abc")).toBeNull();
     expect(parseDecimal("7,5,1")).toBeNull();
   });
+
+  it("parseDecimal accepts thousands spaces", () => {
+    expect(parseDecimal("1 000 000")).toBe(1000000);
+    expect(parseDecimal("1 000 000")).toBe(1000000);
+    expect(parseDecimal("1 000 000")).toBe(1000000);
+    expect(parseDecimal(" 500 000 ")).toBe(500000);
+    expect(parseDecimal("1 000,5")).toBe(1000.5);
+    expect(parseDecimal("-1 000")).toBe(-1000);
+    expect(parseDecimal("7,5")).toBe(7.5);
+    expect(parseDecimal("1 0 0")).toBeNull();
+    expect(parseDecimal("10 00")).toBeNull();
+    expect(parseDecimal("1 000 00")).toBeNull();
+  });
+
+  it("parseDecimal reads a lone comma as the decimal mark, never thousands", () => {
+    // Project convention is a decimal comma («7,5»); thousands are grouped with spaces only.
+    expect(parseDecimal("1,000")).toBe(1);
+    expect(parseDecimal("1,000,000")).toBeNull();
+  });
 });
 
 describe("clientNamePlan — never rename a client silently", async () => {
