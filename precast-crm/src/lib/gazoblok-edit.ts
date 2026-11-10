@@ -9,7 +9,7 @@ import { round2 } from "@/services/calculation-engine";
 import { blockVolumeM3, lineTotal, orderTotal } from "@/services/gazoblok-engine";
 import { formatNumber } from "@/lib/utils";
 import { computeOvership } from "./gazoblok-overship";
-import { loadedByLine } from "./gazoblok-quantities";
+import { loadedByLine, parseDecimal } from "./gazoblok-quantities";
 import { isOpen } from "./gazoblok-rules";
 import type { GazoblokEditOrderInput } from "./gazoblok-validation";
 
@@ -209,7 +209,8 @@ export function editPlan(input: {
   if ((scheduledAt?.getTime() ?? null) !== (order.scheduledAt?.getTime() ?? null)) {
     changes.push({ field: "date", label: "Сана", before: dayText(order.scheduledAt), after: dayText(scheduledAt) });
   }
-  const notes = edit.notes === undefined ? order.notes : edit.notes?.trim() || null;
+  // A stored "" and null both mean "no note" — compare them as one.
+  const notes = edit.notes === undefined ? order.notes || null : edit.notes?.trim() || null;
   if (notes !== (order.notes || null)) changes.push({ field: "notes", label: "Изоҳ", before: order.notes || "—", after: notes ?? "—" });
 
   if (totalPrice !== was.total) changes.push({ field: "total", label: "Жами", before: money(was.total), after: money(totalPrice) });
@@ -230,6 +231,20 @@ export function editPlan(input: {
     notes,
     changes,
   };
+}
+
+/** The discount-% text the edit dialog opens with: stored percent at 2 dp, blank when none. */
+export function percentFieldText(storedPercent: number): string {
+  return storedPercent > 0 ? formatNumber(storedPercent, 2) : "";
+}
+
+/** What a touched discount-% field sends: undefined while it still shows the stored
+ *  value (re-sending the 2-dp text would drift e.g. 33,333 % to 33,33 %), null when
+ *  unreadable or outside 0–100, else the new percent (blank = 0). */
+export function discountPercentToSend(text: string, storedPercent: number): number | null | undefined {
+  if (text.trim() === percentFieldText(storedPercent)) return undefined;
+  const p = text.trim() === "" ? 0 : parseDecimal(text);
+  return p === null || p < 0 || p > 100 ? null : p;
 }
 
 /** Σ block volume × quantity, 3 dp (as placement stores it). Lines without a product add nothing. */

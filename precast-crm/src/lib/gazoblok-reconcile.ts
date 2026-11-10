@@ -6,6 +6,17 @@
  * posts it on --apply. Cancelled orders with loads are listed, and moved only when
  * the owner names them — whether those blocks really left the yard is his call.
  */
+/** Advisory-lock key shared by every --apply run (reconcile and undo replay). */
+export const RECONCILE_LOCK = "gazoblok_reconcile_stock";
+
+/** Serialize reconcile runs: two at once could both pass the "not yet posted"
+ *  check and post the same movements twice. Held until the transaction ends. */
+export async function lockReconcile(tx: {
+  $executeRaw: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<number>;
+}): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${RECONCILE_LOCK}))`;
+}
+
 export type ReconcileOrder = {
   id: string;
   orderNumber: string;

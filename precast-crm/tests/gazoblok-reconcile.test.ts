@@ -1,10 +1,14 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import path from "path";
 import {
   planStockReconcile,
   invertMoves,
   planUndo,
   RECONCILE_NOTE,
   UNDO_NOTE,
+  RECONCILE_LOCK,
+  lockReconcile,
   type ReconcileOrder,
 } from "@/lib/gazoblok-reconcile";
 
@@ -121,3 +125,27 @@ describe("planUndo — replaying an undo file safely", () => {
   });
 });
 
+// Final review #5: two runs (apply or undo) at once must serialize, or both could
+// pass the "not yet posted" check and post the same movements twice.
+describe("reconcile runs serialize on one advisory lock", () => {
+  it("lockReconcile takes a transaction-scoped advisory lock on the constant key", async () => {
+    const calls: { sql: string; values: unknown[] }[] = [];
+    const tx = {
+      $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+        calls.push({ sql: strings.join("?"), values });
+        return 0;
+      },
+    };
+    await lockReconcile(tx);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].sql).toMatch(/pg_advisory_xact_lock\(hashtext\(\?\)\)/);
+    expect(calls[0].values).toEqual([RECONCILE_LOCK]);
+  });
+
+  it("the script takes the lock first in both the apply and the undo transaction", () => {
+    const src = readFileSync(path.resolve(process.cwd(), "scripts/gazoblok-reconcile-stock.ts"), "utf8");
+    const opens = src.match(/prisma\.\$transaction\(\s*async \(tx\) => \{\s*(\/\/[^\n]*\s*)*await lockReconcile\(tx\);/g) ?? [];
+    expect(opens).toHaveLength(2);
+    expect(src.match(/prisma\.\$transaction\(/g)).toHaveLength(2);
+  });
+});

@@ -16,7 +16,7 @@ import { Select } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLang, useT } from "@/lib/i18n";
 import { formatNumber } from "@/lib/utils";
-import { editPlan } from "@/lib/gazoblok-edit";
+import { discountPercentToSend, editPlan, percentFieldText } from "@/lib/gazoblok-edit";
 import { loadedByLine, parseDecimal } from "@/lib/gazoblok-quantities";
 import { parseMoney, uzPart } from "@/lib/gazoblok-text";
 import type { GazoblokEditOrderInput } from "@/lib/gazoblok-validation";
@@ -118,7 +118,7 @@ function EditForm({ onClose, order, catalog, perms, mode, onSaved }: Props) {
   const storedPercent = Number(order.discountPercent);
   const [rows, setRows] = useState<Row[]>(initialRows);
   const [addId, setAddId] = useState("");
-  const [percent, setPercent] = useState(storedPercent > 0 ? formatNumber(storedPercent, 2) : "");
+  const [percent, setPercent] = useState(percentFieldText(storedPercent));
   const [amount, setAmount] = useState("");
   const [discountTouched, setDiscountTouched] = useState(false);
   const [delivery, setDelivery] = useState(money0(Number(order.deliveryCost)));
@@ -147,9 +147,9 @@ function EditForm({ onClose, order, catalog, perms, mode, onSaved }: Props) {
           if (a === null) return { edit, bad: t("Чегирма суммасини тўғри киритинг", "Enter a valid discount amount") };
           edit.discountAmount = a;
         } else {
-          const p = percent.trim() === "" ? 0 : parseDecimal(percent);
-          if (p === null || p < 0 || p > 100) return { edit, bad: t("Чегирма 0–100 % бўлиши керак", "Discount must be 0–100 %") };
-          edit.discountPercent = p;
+          const p = discountPercentToSend(percent, storedPercent);
+          if (p === null) return { edit, bad: t("Чегирма 0–100 % бўлиши керак", "Discount must be 0–100 %") };
+          if (p !== undefined) edit.discountPercent = p;
         }
       }
       const d = delivery.trim() === "" ? 0 : parseMoney(delivery);
@@ -159,7 +159,7 @@ function EditForm({ onClose, order, catalog, perms, mode, onSaved }: Props) {
     if (date !== dayOf(order.scheduledAt)) edit.scheduledAt = date ? new Date(date) : null;
     if (showMoney && notes.trim() !== (order.notes ?? "").trim()) edit.notes = notes.trim() || null;
     return { edit, bad: null };
-  }, [showMoney, moneyLocked, rows, initialRows, discountTouched, amount, percent, delivery, date, notes, order, t]);
+  }, [showMoney, moneyLocked, rows, initialRows, discountTouched, amount, percent, storedPercent, delivery, date, notes, order, t]);
 
   const preview = useMemo(() => {
     if (built.bad) return null;

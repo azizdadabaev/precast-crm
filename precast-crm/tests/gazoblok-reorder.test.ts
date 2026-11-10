@@ -54,4 +54,23 @@ describe("reorderDraft", () => {
     expect(d.dropped).toHaveLength(3);
     expect(d.previous.scheduledAt).toBeNull();
   });
+
+  // Final review #9: one size on two lines becomes ONE draft line (the form keys rows
+  // by size; placement would otherwise store two lines of the same product).
+  it("merges lines of the same size: quantities and loaded summed, first line's old price kept", () => {
+    const d = reorderDraft(
+      {
+        ...src,
+        lines: [
+          { id: "A", productId: "pA", productLabel: "600×300×200", quantity: 200, unitPrice: 18000 },
+          { id: "A2", productId: "pA", productLabel: "600×300×200", quantity: 50, unitPrice: 19000 },
+        ],
+        shipments: [{ loadedLines: { A: 120, A2: 30 } }],
+      },
+      catalog,
+    );
+    expect(d.lines).toEqual([
+      { productId: "pA", label: "600×300×200", quantity: 250, unitPrice: 20000, previousUnitPrice: 18000, previousLoaded: 150 },
+    ]);
+  });
 });

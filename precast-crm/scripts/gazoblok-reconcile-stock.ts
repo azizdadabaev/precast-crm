@@ -26,7 +26,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { readFileSync, writeFileSync } from "fs";
 import path from "path";
-import { invertMoves, planStockReconcile, planUndo, RECONCILE_NOTE, UNDO_NOTE } from "../src/lib/gazoblok-reconcile";
+import { invertMoves, lockReconcile, planStockReconcile, planUndo, RECONCILE_NOTE, UNDO_NOTE } from "../src/lib/gazoblok-reconcile";
 import { applyGazoblokMovement } from "../src/lib/gazoblok-stock";
 
 type Db = Prisma.TransactionClient;
@@ -115,7 +115,8 @@ async function undo(fileName: string) {
   }
   await prisma.$transaction(
     async (tx) => {
-      // Re-checked inside the transaction so a racing replay can't post twice.
+      await lockReconcile(tx);
+      // Re-checked inside the transaction (under the lock) so a racing replay can't post twice.
       for (const m of await checkUndo(tx, file)) {
         await applyGazoblokMovement(tx, m.productId, m.change, {
           reason: "SHIPMENT_CORRECTION",
@@ -143,6 +144,7 @@ async function main() {
   // Plan inside the transaction so what is written is what was planned.
   const moves = await prisma.$transaction(
     async (tx) => {
+      await lockReconcile(tx);
       const plan = await loadPlan(tx);
       report(plan);
       for (const m of plan.moves) {

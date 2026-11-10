@@ -51,6 +51,13 @@ export function reorderDraft(src: ReorderSource, catalog: CatalogProduct[]): Reo
       dropped.push({ label: p?.label ?? l.productLabel, quantity: l.quantity });
       return;
     }
+    // One size on two lines → one draft line: the new-order form keys rows by size.
+    const same = lines.find((x) => x.productId === p.id);
+    if (same) {
+      same.quantity += l.quantity;
+      same.previousLoaded += qty[i].loaded;
+      return;
+    }
     lines.push({
       productId: p.id,
       label: p.label,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { editScope, editPolicy, editPlan, orderVolumeM3, changesText, type EditChange } from "@/lib/gazoblok-edit";
+import { editScope, editPolicy, editPlan, orderVolumeM3, changesText, discountPercentToSend, percentFieldText, type EditChange } from "@/lib/gazoblok-edit";
 import type { GazoblokEditOrderInput } from "@/lib/gazoblok-validation";
 import { refundDue } from "@/lib/overpayment";
 import { paymentStateFor, remainingBalance } from "@/lib/payment-state";
@@ -227,6 +227,15 @@ describe("editPlan", () => {
     expect(problem(plan({ notes: "" })).status).toBe(409);
   });
 
+  // Final review #3: a stored empty note ("") is the same as no note.
+  it("a stored empty note is not a change: no-op refused, date-only edit logs only the date", () => {
+    expect(problem(plan({}, { order: { notes: "" } })).status).toBe(409);
+    expect(problem(plan({ notes: "" }, { order: { notes: "" } })).status).toBe(409);
+    const r = ok(plan({ scheduledAt: new Date(2026, 10, 14) }, { order: { notes: "" } }));
+    expect(r.changes.map((c) => c.field)).toEqual(["date"]);
+    expect(r.notes).toBeNull();
+  });
+
   it("an edit producing a total below confirmed paid yields refund owed, not negative remaining", () => {
     const r = ok(plan({ lines: [{ lineId: "A", productId: "pA", quantity: 170 }] }));
     expect(r.totals.totalPrice).toBe(3360000);
@@ -253,3 +262,22 @@ describe("changesText", () => {
     expect(changesText(changes)).toMatch(/^600×300×200: 200 → 250 та; Етказиб бериш: 300\s000 → 350\s000 UZS$/);
   });
 });
+
+// Final review #6: the dialog pre-fills the stored percent at 2 dp; touching the field
+// without changing it must not re-send the rounded value (33,333 % → 33,33 % drift).
+describe("discountPercentToSend", () => {
+  it("sends nothing while the field still shows the stored value", () => {
+    expect(percentFieldText(33.3333)).toBe("33,33");
+    expect(discountPercentToSend("33,33", 33.3333)).toBeUndefined();
+    expect(discountPercentToSend(" 33,33 ", 33.3333)).toBeUndefined();
+    expect(discountPercentToSend("", 0)).toBeUndefined();
+  });
+  it("sends a changed value, 0 for a cleared field, null when unreadable or out of range", () => {
+    expect(discountPercentToSend("33,34", 33.3333)).toBe(33.34);
+    expect(discountPercentToSend("5", 0)).toBe(5);
+    expect(discountPercentToSend("", 10)).toBe(0);
+    expect(discountPercentToSend("abc", 10)).toBeNull();
+    expect(discountPercentToSend("150", 10)).toBeNull();
+  });
+});
+
