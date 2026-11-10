@@ -75,6 +75,7 @@ export function GazoblokPaymentsQueue({ canConfirm }: { canConfirm: boolean }) {
       setRejectTarget(null);
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["gazoblok-payments"] });
+      qc.invalidateQueries({ queryKey: ["gazoblok-dashboard"] });
     },
     onError: (e: Error) => {
       setRejectTarget(null);
@@ -155,6 +156,7 @@ export function GazoblokPaymentsQueue({ canConfirm }: { canConfirm: boolean }) {
                           {p.order.orderNumber}
                         </Link>
                         <Chip variant={chip.variant}>{t(chip.uz, chip.en)}</Chip>
+                        {p.order.status === "CANCELED" && <Chip variant="danger">{t("Буюртма бекор қилинган", "Order canceled")}</Chip>}
                       </div>
                       <div className="font-medium break-words">{p.order.client.name}</div>
                       <div className="text-xs font-[var(--font-num)] tabular-nums text-muted-foreground">
@@ -194,6 +196,7 @@ export function GazoblokPaymentsQueue({ canConfirm }: { canConfirm: boolean }) {
                       </div>
                       {p.status === "PENDING_CONFIRMATION" && canConfirm && (
                         <div className="flex flex-wrap justify-end gap-2">
+                          {p.order.status !== "CANCELED" && (
                           <Button
                             variant="outline"
                             className="min-h-11 border-success/40 text-success hover:bg-success hover:text-success-foreground"
@@ -206,6 +209,7 @@ export function GazoblokPaymentsQueue({ canConfirm }: { canConfirm: boolean }) {
                             <CheckCircle2 className="h-4 w-4 mr-1.5" />
                             {t("Тасдиқлаш", "Confirm")}
                           </Button>
+                          )}
                           <Button
                             variant="outline"
                             className="min-h-11 border-destructive/40 text-destructive hover:bg-destructive hover:text-destructive-foreground"
