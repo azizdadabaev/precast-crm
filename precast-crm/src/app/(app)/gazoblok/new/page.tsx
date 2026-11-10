@@ -492,7 +492,7 @@ function NewOrderForm({ fromId, onFresh }: { fromId: string | null; onFresh: () 
             onToggleCalc={() => setCalcOpen((o) => !o)}
             calculator={
               calcProducts.length > 0 ? (
-                <GazoblokWallCalculator products={calcProducts} onAddToOrder={addFromCalculator} onSnapshotChange={setWallSnapshot} />
+                <GazoblokWallCalculator variant="embedded" products={calcProducts} onAddToOrder={addFromCalculator} onSnapshotChange={setWallSnapshot} />
               ) : null
             }
           />

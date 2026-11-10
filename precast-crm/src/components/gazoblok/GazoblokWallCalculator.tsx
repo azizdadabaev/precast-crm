@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Trash2, Plus, Copy, ChevronDown } from "lucide-react";
+import { Trash2, Plus, Copy, ChevronDown, Check } from "lucide-react";
 import { useLang, useT } from "@/lib/i18n";
 import { uzPart } from "@/lib/gazoblok-text";
-import { formatNumber } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -42,6 +42,12 @@ export interface GazoblokWallCalculatorProps {
   products: CalcProduct[];
   onAddToOrder: (perSize: PerSizeResult[]) => void;
   onSnapshotChange: (snap: WallCalcSnapshot | null) => void;
+  /**
+   * "embedded" = inside the new-order form's narrow column: one column with the
+   * result under the walls, fields that wrap by available width, plain labels.
+   * Default keeps the stand-alone two-column layout.
+   */
+  variant?: "default" | "embedded";
 }
 
 interface OpeningRow {
@@ -97,9 +103,17 @@ export function GazoblokWallCalculator({
   products,
   onAddToOrder,
   onSnapshotChange,
+  variant = "default",
 }: GazoblokWallCalculatorProps) {
   const t = useT();
   const lang = useLang();
+  const embedded = variant === "embedded";
+  const Label = embedded ? PlainLabel : FieldLabel;
+  // Form inputs are 44 px on touch, 40 px on desktop (matches the order form).
+  const field = embedded ? "h-11 md:h-10 bg-background" : undefined;
+  const sectionLabel = embedded
+    ? "text-xs font-semibold text-foreground"
+    : "text-[11px] font-bold uppercase tracking-wider text-muted-foreground";
 
   const [walls, setWalls] = useState<WallRow[]>([newWall()]);
   const [jointMm, setJointMm] = useState(String(DEFAULT_JOINT_MM));
@@ -217,7 +231,7 @@ export function GazoblokWallCalculator({
         : t("Бошқа", "Custom");
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_20rem] gap-5 items-start">
+    <div className={embedded ? "space-y-4" : "grid grid-cols-1 lg:grid-cols-[1fr_20rem] gap-5 items-start"}>
       {/* ── Wall builder ──────────────────────────────────────── */}
       <div className="space-y-4">
         {walls.map((w, wi) => {
@@ -261,7 +275,7 @@ export function GazoblokWallCalculator({
                   </div>
                 </div>
                 {product && (
-                  <Chip variant="neutral" size="sm" className="shrink-0">
+                  <Chip variant="neutral" size="sm" className={cn("shrink-0", embedded && "hidden sm:inline-flex")}>
                     {product.label}
                   </Chip>
                 )}
@@ -287,40 +301,48 @@ export function GazoblokWallCalculator({
               {/* Expanded body */}
               {!w.collapsed && (
                 <div className="p-3 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div
+                    className={
+                      embedded
+                        ? "grid grid-cols-1 min-[420px]:grid-cols-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.6fr)] gap-3"
+                        : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"
+                    }
+                  >
                     <div className="lg:col-span-1">
-                      <FieldLabel uz="Ном" en="Name" />
+                      <Label uz="Ном" en="Name" />
                       <Input
+                        className={field}
                         placeholder={t("Ихтиёрий", "Optional")}
                         value={w.name}
                         onChange={(e) => setWall(w.id, { name: e.target.value })}
                       />
                     </div>
                     <div>
-                      <FieldLabel uz="Узунлиги (м)" en="Length (m)" />
+                      <Label uz="Узунлиги (м)" en="Length (m)" />
                       <Input
                         type="text"
                         inputMode="decimal"
-                        className="tabular-nums"
+                        className={cn("tabular-nums", field)}
                         placeholder="0"
                         value={w.lengthM}
                         onChange={(e) => setWall(w.id, { lengthM: e.target.value })}
                       />
                     </div>
                     <div>
-                      <FieldLabel uz="Баландлиги (м)" en="Height (m)" />
+                      <Label uz="Баландлиги (м)" en="Height (m)" />
                       <Input
                         type="text"
                         inputMode="decimal"
-                        className="tabular-nums"
+                        className={cn("tabular-nums", field)}
                         placeholder="0"
                         value={w.heightM}
                         onChange={(e) => setWall(w.id, { heightM: e.target.value })}
                       />
                     </div>
                     <div>
-                      <FieldLabel uz="Блок ўлчами" en="Block size" />
+                      <Label uz="Блок ўлчами" en="Block size" />
                       <Select
+                        className={field}
                         value={w.productId}
                         onChange={(e) => setWall(w.id, { productId: e.target.value })}
                       >
@@ -339,7 +361,7 @@ export function GazoblokWallCalculator({
                   {/* Block orientation — only for asymmetric blocks */}
                   {oo && (
                     <div>
-                      <FieldLabel uz="Блок йўналиши" en="Block orientation" />
+                      <Label uz="Блок йўналиши" en="Block orientation" />
                       <div className="inline-flex rounded-md border border-border overflow-hidden">
                         {(["STANDARD", "ROTATED"] as const).map((key) => {
                           const active = activeOrientation === key;
@@ -365,47 +387,57 @@ export function GazoblokWallCalculator({
 
                   {/* Openings */}
                   <div className="space-y-2">
-                    <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <div className={sectionLabel}>
                       {t("Очиқликлар", "Openings")}
                     </div>
                     {w.openings.map((o, oi) => (
                       <div
                         key={oi}
-                        className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-muted/30 p-2"
+                        className={cn(
+                          "rounded-md border border-border bg-muted/30 p-2",
+                          embedded
+                            ? "grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,4.5rem)_auto] items-end gap-2 sm:flex sm:flex-wrap"
+                            : "flex flex-wrap items-end gap-2",
+                        )}
                       >
-                        <div className="text-xs font-medium min-w-[64px] pb-2">
+                        <div
+                          className={cn(
+                            "text-xs font-medium min-w-[64px]",
+                            embedded ? "col-span-full sm:pb-3" : "pb-2",
+                          )}
+                        >
                           {openingKindLabel(o.kind)}
                         </div>
-                        <div className="w-24">
-                          <FieldLabel uz="Эни (м)" en="Width (m)" />
+                        <div className={embedded ? "sm:w-24" : "w-24"}>
+                          <Label uz="Эни (м)" en="Width (m)" />
                           <Input
                             type="text"
                             inputMode="decimal"
-                            className="tabular-nums"
+                            className={cn("tabular-nums", field)}
                             placeholder="0"
                             value={o.widthM}
                             onChange={(e) => setOpening(w.id, oi, { widthM: e.target.value })}
                           />
                         </div>
-                        <div className="w-24">
-                          <FieldLabel uz="Бўйи (м)" en="Height (m)" />
+                        <div className={embedded ? "sm:w-24" : "w-24"}>
+                          <Label uz="Бўйи (м)" en="Height (m)" />
                           <Input
                             type="text"
                             inputMode="decimal"
-                            className="tabular-nums"
+                            className={cn("tabular-nums", field)}
                             placeholder="0"
                             value={o.heightM}
                             onChange={(e) => setOpening(w.id, oi, { heightM: e.target.value })}
                           />
                         </div>
-                        <div className="w-20">
-                          <FieldLabel uz="Сони" en="Qty" />
+                        <div className={embedded ? "sm:w-20" : "w-20"}>
+                          <Label uz="Сони" en="Qty" />
                           <Input
                             type="number"
                             inputMode="numeric"
                             min={1}
                             step={1}
-                            className="tabular-nums"
+                            className={cn("tabular-nums", field)}
                             placeholder="1"
                             value={o.qty}
                             onChange={(e) => setOpening(w.id, oi, { qty: e.target.value })}
@@ -466,7 +498,11 @@ export function GazoblokWallCalculator({
             onClick={() => setAdvOpen((v) => !v)}
             className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-accent/40 transition-colors"
           >
-            <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            <span
+              className={
+                embedded ? sectionLabel : "text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
+              }
+            >
               {t("Қўшимча", "Advanced")}
             </span>
             <ChevronDown
@@ -476,35 +512,35 @@ export function GazoblokWallCalculator({
           {advOpen && (
             <div className="p-4 border-t grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <FieldLabel uz="Чок (мм)" en="Joint (mm)" />
+                <Label uz="Чок (мм)" en="Joint (mm)" />
                 <Input
                   type="text"
                   inputMode="decimal"
-                  className="tabular-nums"
+                  className={cn("tabular-nums", field)}
                   placeholder={String(DEFAULT_JOINT_MM)}
                   value={jointMm}
                   onChange={(e) => setJointMm(e.target.value)}
                 />
               </div>
               <div>
-                <FieldLabel uz="Чиқинди (%)" en="Waste (%)" />
+                <Label uz="Чиқинди (%)" en="Waste (%)" />
                 <Input
                   type="number"
                   inputMode="numeric"
                   min={0}
                   step={1}
-                  className="tabular-nums"
+                  className={cn("tabular-nums", field)}
                   placeholder={String(DEFAULT_WASTE_PCT)}
                   value={wastePct}
                   onChange={(e) => setWastePct(e.target.value)}
                 />
               </div>
               <div>
-                <FieldLabel uz="Ёпиштиргич (кг/м²)" en="Glue (kg/m²)" />
+                <Label uz="Ёпиштиргич (кг/м²)" en="Glue (kg/m²)" />
                 <Input
                   type="text"
                   inputMode="decimal"
-                  className="tabular-nums"
+                  className={cn("tabular-nums", field)}
                   placeholder={String(DEFAULT_GLUE_KG_PER_M2)}
                   value={glueKg}
                   onChange={(e) => setGlueKg(e.target.value)}
@@ -516,9 +552,13 @@ export function GazoblokWallCalculator({
       </div>
 
       {/* ── Results ───────────────────────────────────────────── */}
-      <aside className="lg:sticky lg:top-4">
+      <aside className={embedded ? undefined : "lg:sticky lg:top-4"}>
         <section className="rounded-lg border border-border bg-card p-4 space-y-4">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          <div
+            className={
+              embedded ? sectionLabel : "text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
+            }
+          >
             {t("Натижа", "Result")}
           </div>
 
@@ -532,7 +572,7 @@ export function GazoblokWallCalculator({
           ) : (
             <>
               {/* Per-size rows */}
-              <div className="space-y-2">
+              <div className={embedded ? "grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2" : "space-y-2"}>
                 {result.perSize.map((p) => (
                   <div key={p.productId} className="text-sm border-b border-border pb-2">
                     <div className="font-medium">{p.label}</div>
@@ -573,7 +613,11 @@ export function GazoblokWallCalculator({
               {/* Grand total */}
               <div className="pt-2 border-t border-border space-y-1">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <span
+                    className={
+                      embedded ? sectionLabel : "text-[11px] font-bold uppercase tracking-wider text-muted-foreground"
+                    }
+                  >
                     {t("Жами", "Total")}
                   </span>
                   <span className="text-xl font-bold tabular-nums">
@@ -597,14 +641,28 @@ export function GazoblokWallCalculator({
                 </div>
               </div>
 
-              <Button
-                type="button"
-                className="w-full"
-                disabled={added || !result || result.totalBlocks <= 0}
-                onClick={handleAddToOrder}
-              >
-                {added ? t("Қўшилди ✓", "Added ✓") : t("Буюртмага қўшиш", "Add to order")}
-              </Button>
+              {embedded ? (
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    className="w-full sm:w-auto min-h-[44px] md:min-h-0 gap-2"
+                    disabled={added || !result || result.totalBlocks <= 0}
+                    onClick={handleAddToOrder}
+                  >
+                    {added && <Check className="h-4 w-4" />}
+                    {added ? t("Блокларга қўшилди", "Added to blocks") : t("Блокларга қўшиш", "Add to blocks")}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={added || !result || result.totalBlocks <= 0}
+                  onClick={handleAddToOrder}
+                >
+                  {added ? t("Қўшилди ✓", "Added ✓") : t("Буюртмага қўшиш", "Add to order")}
+                </Button>
+              )}
             </>
           )}
         </section>
@@ -614,6 +672,16 @@ export function GazoblokWallCalculator({
 }
 
 // ── Small presentational helper (mirrors gazoblok/new/page.tsx) ──
+function PlainLabel({ uz, en }: { uz: string; en: string }) {
+  // Same look as the order form's FieldLabel: sentence case, no wrap-prone caps.
+  return (
+    <div className="mb-1.5 text-xs font-semibold text-foreground">
+      {uz}
+      <span className="lang-en font-medium text-muted-foreground"> · {en}</span>
+    </div>
+  );
+}
+
 function FieldLabel({ uz, en }: { uz: string; en: string }) {
   return (
     <div className="text-[11px] font-bold uppercase tracking-wider mb-1">
