@@ -169,7 +169,7 @@ export function loadPill(o: Pick<DetailOrder, "status" | "shortClosedAt" | "quan
   const over = o.quantities.reduce((s, q) => s + q.over, 0);
   if (over > 0) return { text: `Ортиқча юкланди +${n0(over)}`, tone: "destructive" };
   if (loaded === 0) return { text: "Юкланмаган", tone: "muted" };
-  if (left === 0) return { text: "Ҳаммаси юкланди", tone: "success" };
+  if (left === 0) return { text: "Тўлиқ юкланди", tone: "success" };
   return { text: `Юкланди ${n0(loaded)} / ${n0(ordered)}`, tone: "primary" };
 }
 

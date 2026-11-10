@@ -183,7 +183,7 @@ describe("pills", () => {
     expect(loadPill(order({ quantities: [q("A", 10, 0)] }))).toMatchObject({ text: "Юкланмаган", tone: "muted" });
     expect(N(loadPill(order())!.text)).toBe("Юкланди 940 / 2 040");
     expect(loadPill(order())!.tone).toBe("primary");
-    expect(loadPill(order({ quantities: [q("A", 10, 10)] }))).toMatchObject({ text: "Ҳаммаси юкланди", tone: "success" });
+    expect(loadPill(order({ quantities: [q("A", 10, 10)] }))).toMatchObject({ text: "Тўлиқ юкланди", tone: "success" });
     expect(loadPill(order({ quantities: [q("A", 300, 380)] }))).toMatchObject({ text: "Ортиқча юкланди +80", tone: "destructive" });
     expect(loadPill(order({ shortClosedAt: "x" }))).toMatchObject({ text: "Юкланганича ёпилган", tone: "warning" });
     expect(loadPill(order({ status: "CANCELED" }))).toBeNull();

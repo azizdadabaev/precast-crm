@@ -224,6 +224,15 @@ describe("buildHistory — OLD rows gain sizes without a migration", () => {
     expect(N(deliv.foot!.value!)).toBe("80 та");
   });
 
+  it("an old over-load row gets its extra block count from the replay", () => {
+    const [item] = buildHistory({
+      ...base,
+      lines: [{ id: "A", label: "600×300×200", quantity: 2 }],
+      events: [ev("SHIPMENT_LOADED", { shipmentId: "s1", number: 1, loadedLines: { A: 5 }, overloadConfirmed: true, overshipDelta: 54000 }, "Жўнатма 1 юкланди")],
+    });
+    expect(N(item.alert!.text)).toBe("Буюртмадан ортиқ +3 та · +54 000 UZS — қарз, сотувчи Дилшод");
+  });
+
   it("old legacy English placement + payment rows still read in Uzbek", () => {
     const items = buildHistory({
       ...base,

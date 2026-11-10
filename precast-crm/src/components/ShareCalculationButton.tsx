@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type RefObject } from "react";
+import { useState, type ReactNode, type RefObject } from "react";
 import {
   Send,
   Image as ImageIcon,
@@ -28,6 +28,10 @@ interface ShareCalculationButtonProps {
   fileBase: string;
   /** Optional: disable when there's nothing to capture (e.g. zero calcs). */
   disabled?: boolean;
+  /** Optional button text (default «Юбориш · Send»). */
+  label?: ReactNode;
+  /** Optional leading icon (default Send). */
+  icon?: ReactNode;
 }
 
 /**
@@ -49,6 +53,8 @@ export function ShareCalculationButton({
   targetRef,
   fileBase,
   disabled = false,
+  label,
+  icon,
 }: ShareCalculationButtonProps) {
   const t = useT();
   const [busy, setBusy] = useState<null | "png" | "jpeg" | "copy" | "share">(null);
@@ -221,9 +227,9 @@ export function ShareCalculationButton({
           {anyBusy ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
-            <Send className="h-4 w-4 mr-2" />
+            (icon ?? <Send className="h-4 w-4 mr-2" />)
           )}
-          Юбориш<span className="lang-en"> · Send</span>
+          {label ?? <>Юбориш<span className="lang-en"> · Send</span></>}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">

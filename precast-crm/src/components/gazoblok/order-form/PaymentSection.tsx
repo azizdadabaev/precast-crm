@@ -14,7 +14,7 @@ import type { PaymentMethod } from "./types";
 const ICON = { strokeWidth: 1.75 };
 
 /** Exactly the five methods the API accepts, no default. */
-const METHODS: { key: PaymentMethod; icon: typeof Banknote }[] = [
+export const METHODS: { key: PaymentMethod; icon: typeof Banknote }[] = [
   { key: "CASH", icon: Banknote },
   { key: "BANK_TRANSFER", icon: Landmark },
   { key: "CLICK", icon: Smartphone },

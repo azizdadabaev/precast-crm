@@ -132,10 +132,13 @@ export function buildHistory(input: {
     switch (e.type) {
       case "SHIPMENT_LOADED": {
         const loaded = counts(p.loadedLines);
+        const overBefore = replayTotals().overTotal;
         if (sid) trucks.set(sid, loaded);
         const sizes = sizesOf(p.lines);
         const total = num(p.truckTotal) ?? Object.values(loaded).reduce((s, v) => s + v, 0);
-        const overBlocks = num(p.overBlocks);
+        // Old rows carry no block count: the replay says how many this truck put over the order.
+        const replayedOver = replayTotals().overTotal - overBefore;
+        const overBlocks = num(p.overBlocks) ?? (replayedOver > 0 ? replayedOver : null);
         const overMoney = num(p.overshipDelta);
         const item: HistoryItem = {
           ...base,
