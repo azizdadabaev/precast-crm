@@ -437,16 +437,17 @@ export function CommentComposer({ state, inline = false }: { state: CommentsStat
     <Button
       size="sm"
       variant={inline ? "outline" : "default"}
-      className={inline ? "h-11 shrink-0 px-4 text-sm" : undefined}
+      className={inline ? "h-11 shrink-0 px-3 text-sm sm:px-4" : undefined}
+      aria-label={t("Юбориш", "Send")}
       onClick={submit}
       disabled={!draft.trim() || createMut.isPending}
     >
       {createMut.isPending ? (
-        <Loader2 className={inline ? "h-4 w-4 animate-spin mr-1.5" : "h-3.5 w-3.5 animate-spin mr-1"} />
+        <Loader2 className={inline ? "h-4 w-4 animate-spin sm:mr-1.5" : "h-3.5 w-3.5 animate-spin mr-1"} />
       ) : (
-        <Send className={inline ? "h-4 w-4 mr-1.5" : "h-3.5 w-3.5 mr-1"} />
+        <Send className={inline ? "h-4 w-4 sm:mr-1.5" : "h-3.5 w-3.5 mr-1"} />
       )}
-      {t("Юбориш", "Send")}
+      <span className={inline ? "max-sm:sr-only" : undefined}>{t("Юбориш", "Send")}</span>
     </Button>
   );
 
@@ -470,7 +471,7 @@ export function CommentComposer({ state, inline = false }: { state: CommentsStat
             )}
             className={
               inline
-                ? "block min-h-[44px] w-full resize-y rounded-md border border-input bg-muted/40 px-3 py-[11px] text-sm leading-5 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                ? "block min-h-[44px] w-full resize-none rounded-md border border-input bg-muted/40 px-3 py-[11px] text-sm leading-5 focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
                 : "w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
             }
           />
