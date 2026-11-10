@@ -61,3 +61,15 @@ export function eventText(e: { type: string; message: string | null; payload: un
   }
   return message;
 }
+
+/**
+ * Money typed by an operator, in UZS: "1 000 000" (space, NBSP or narrow NBSP between
+ * 3-digit groups), "1000000", "1 000,50". At most 2 decimals, so "1,000" / "12,500" are
+ * refused rather than read as 1 or 12,5 UZS — a thousands comma must never shrink a sum.
+ * Negatives and empty → null.
+ */
+export function parseMoney(s: string): number | null {
+  const t = s.trim();
+  if (!/^(\d{1,3}([   ]\d{3})+|\d+)([.,]\d{1,2})?$/.test(t)) return null;
+  return Number(t.replace(/[   ]/g, "").replace(",", "."));
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STATUS_LABELS, eventText, placedText, statusChangeText, uzPart } from "@/lib/gazoblok-text";
+import { STATUS_LABELS, eventText, parseMoney, placedText, statusChangeText, uzPart } from "@/lib/gazoblok-text";
 
 describe("gazoblok text", () => {
   it("uzPart keeps the Uzbek half in uz mode", () => {
@@ -50,5 +50,37 @@ describe("gazoblok text", () => {
     expect(eventText({ type: "PAYMENT_RECORDED", message: m, payload: { amount: 500000 } })).toBe(m);
     expect(eventText({ type: "NOTE", message: "Изоҳ", payload: null })).toBe("Изоҳ");
     expect(eventText({ type: "NOTE", message: null, payload: null })).toBe("");
+  });
+});
+
+describe("parseMoney", () => {
+  it("accepts thousands spaces, NBSP, narrow NBSP and plain digits", () => {
+    expect(parseMoney("1 000 000")).toBe(1000000);
+    expect(parseMoney("1 000 000")).toBe(1000000);
+    expect(parseMoney("1 000 000")).toBe(1000000);
+    expect(parseMoney("1000000")).toBe(1000000);
+    expect(parseMoney(" 350 000 ")).toBe(350000);
+    expect(parseMoney("0")).toBe(0);
+  });
+
+  it("accepts a decimal comma or dot with 1–2 digits", () => {
+    expect(parseMoney("1 000,50")).toBe(1000.5);
+    expect(parseMoney("1000,5")).toBe(1000.5);
+    expect(parseMoney("12.25")).toBe(12.25);
+  });
+
+  it("refuses a thousands comma (or dot) so 1,000 never becomes 1 UZS", () => {
+    expect(parseMoney("1,000")).toBeNull();
+    expect(parseMoney("12,500")).toBeNull();
+    expect(parseMoney("1,000,000")).toBeNull();
+    expect(parseMoney("1.000")).toBeNull();
+  });
+
+  it("refuses negatives, empty and junk", () => {
+    expect(parseMoney("-5")).toBeNull();
+    expect(parseMoney("")).toBeNull();
+    expect(parseMoney("   ")).toBeNull();
+    expect(parseMoney("12a")).toBeNull();
+    expect(parseMoney("1 00 000")).toBeNull();
   });
 });
