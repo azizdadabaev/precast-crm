@@ -31,3 +31,11 @@ describe("gazoblok permissions — same keys as beam-and-block (owner 2026-11-10
     expect(gazoblokPageRule("/gazoblok/catalog")).toBe("pricing.edit");
   });
 });
+
+describe("gazoblok dashboard page rule (Stage 2 §3)", () => {
+  it("admits dashboard.view or dashboard.viewBasic, like /dashboard", async () => {
+    const { ruleForPath } = await import("@/lib/page-auth");
+    expect(ruleForPath("/gazoblok/dashboard")).toEqual(["dashboard.view", "dashboard.viewBasic"]);
+    expect(ruleForPath("/gazoblok/orders/x")).toBe("order.view");
+  });
+});

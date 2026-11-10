@@ -64,6 +64,7 @@ export const ROUTE_PERMISSIONS: Record<
   // Газоблок — same permission keys as beam-and-block (owner, 2026-11-10).
   "/gazoblok": "order.view",
   ...GAZOBLOK_PAGE_RULES,
+  "/gazoblok/dashboard": ["dashboard.view", "dashboard.viewBasic"],
   // Self-service: every authenticated user can change their own password
   // and see their own profile, regardless of permission set.
   "/profile": "any-auth",
