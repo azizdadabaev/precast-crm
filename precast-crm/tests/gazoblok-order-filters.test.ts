@@ -68,3 +68,25 @@ describe("gazoblok order filters", () => {
     });
   });
 });
+
+describe("scheduled-day filter (calendar)", () => {
+  it("day=YYYY-MM-DD narrows to that local day's scheduledAt", () => {
+    const w = buildOrderWhere(parseOrderListQuery(new URLSearchParams("day=2026-11-11")), null);
+    expect(w.scheduledAt).toEqual({ gte: new Date(2026, 10, 11), lt: new Date(2026, 10, 12) });
+    expect(w.status).toBeUndefined();
+  });
+
+  it("day=none lists open orders without a date unless a status is picked", () => {
+    expect(buildOrderWhere(parseOrderListQuery(new URLSearchParams("day=none")), null)).toEqual({
+      scheduledAt: null,
+      status: { in: ["PLACED", "IN_PRODUCTION"] },
+    });
+    const w = buildOrderWhere(parseOrderListQuery(new URLSearchParams("day=none&status=DELIVERED")), null);
+    expect(w.status).toBe("DELIVERED");
+  });
+
+  it("drops a malformed day", () => {
+    expect(parseOrderListQuery(new URLSearchParams("day=2026-02-30")).day).toBeUndefined();
+    expect(parseOrderListQuery(new URLSearchParams("day=tomorrow")).day).toBeUndefined();
+  });
+});

@@ -12,7 +12,7 @@ import {
 describe("orders list URL filters", () => {
   it("reads known values and drops unknown or malformed ones", () => {
     const f = filtersFromParams(
-      new URLSearchParams("q=+111 22+&status=DELIVERED&pay=NOPE&flag=debt&seller=u1&from=2026-11-01&to=11.11.2026"),
+      new URLSearchParams("q=+111 22+&status=DELIVERED&pay=NOPE&flag=debt&seller=u1&from=2026-11-01&to=11.11.2026&day=2026-11-11"),
     );
     expect(f).toEqual({
       q: "111 22",
@@ -22,6 +22,7 @@ describe("orders list URL filters", () => {
       seller: "u1",
       from: "2026-11-01",
       to: "",
+      day: "2026-11-11",
     });
   });
 
@@ -34,6 +35,11 @@ describe("orders list URL filters", () => {
   it("round-trips", () => {
     const f = { ...EMPTY_FILTERS, status: "PLACED" as const, pay: "PARTIALLY_PAID" as const, seller: "u2", to: "2026-11-10" };
     expect(filtersFromParams(filtersToParams(f))).toEqual(f);
+  });
+
+  it("keeps day=none and drops a malformed day", () => {
+    expect(filtersFromParams(new URLSearchParams("day=none")).day).toBe("none");
+    expect(filtersFromParams(new URLSearchParams("day=11.11")).day).toBe("");
   });
 
   it("knows when any filter is set", () => {

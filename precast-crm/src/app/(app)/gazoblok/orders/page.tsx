@@ -9,13 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Select } from "@/components/ui/select";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, X } from "lucide-react";
 import { formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { PhoneLink } from "@/components/PhoneLink";
 import { Bi, useT } from "@/lib/i18n";
 import { STATUS_LABELS } from "@/lib/gazoblok-text";
 import type { OrderCounts } from "@/lib/gazoblok-order-list";
+import { dayChipLabel } from "@/lib/gazoblok-calendar";
+import { GazoblokOrdersCalendar } from "@/components/gazoblok/GazoblokOrdersCalendar";
 import {
   EMPTY_FILTERS,
   ORDER_PAGE_SIZE,
@@ -166,6 +168,8 @@ function OrdersList() {
         </Button>
       </div>
 
+      <GazoblokOrdersCalendar selected={filters.day} onSelect={(day) => patch({ day })} />
+
       {/* Search + selects */}
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 basis-full sm:basis-80">
@@ -227,6 +231,23 @@ function OrdersList() {
 
       {/* Status + flag pills — they wrap on phones instead of scrolling */}
       <div className="flex flex-wrap gap-2">
+        {filters.day && (
+          <button
+            type="button"
+            onClick={() => patch({ day: "" })}
+            aria-label={t("Кун фильтрини тозалаш", "Clear the day filter")}
+            className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 rounded-full border border-primary bg-primary text-primary-foreground text-[13px] font-semibold whitespace-nowrap"
+          >
+            {filters.day === "none" ? (
+              t("Санасиз", "No date")
+            ) : (
+              <>
+                {t("кун:", "day:")} <span className={NUM}>{dayChipLabel(filters.day)}</span>
+              </>
+            )}
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
         <Pill active={filters.status === ""} count={c?.all} onClick={() => patch({ status: "" })}>
           {t("Барчаси", "All")}
         </Pill>

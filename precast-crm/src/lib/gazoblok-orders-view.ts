@@ -23,6 +23,8 @@ export type OrderListFilters = {
   /** Placed date bounds, YYYY-MM-DD (the API's format), inclusive. */
   from: string;
   to: string;
+  /** Scheduled day picked on the calendar (YYYY-MM-DD), or "none" = open orders with no date. */
+  day: string;
 };
 
 export const EMPTY_FILTERS: OrderListFilters = {
@@ -33,6 +35,7 @@ export const EMPTY_FILTERS: OrderListFilters = {
   seller: "",
   from: "",
   to: "",
+  day: "",
 };
 
 const KEYS = Object.keys(EMPTY_FILTERS) as (keyof OrderListFilters)[];
@@ -54,6 +57,7 @@ export function filtersFromParams(sp: URLSearchParams): OrderListFilters {
     seller: sp.get("seller")?.trim() ?? "",
     from: isoDay(sp.get("from")),
     to: isoDay(sp.get("to")),
+    day: sp.get("day") === "none" ? "none" : isoDay(sp.get("day")),
   };
 }
 

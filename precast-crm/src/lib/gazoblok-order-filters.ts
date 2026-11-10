@@ -20,6 +20,8 @@ export type OrderListQuery = {
   seller?: string;
   from?: Date;
   to?: Date;
+  /** Scheduled day (calendar): that local day, or "none" = open orders with no date. */
+  day?: { gte: Date; lt: Date } | "none";
   limit: number;
   cursor?: string;
 };
@@ -38,6 +40,13 @@ function localDay(v: string | null, dayOffset: number): Date | undefined {
   return dayOffset ? new Date(y, mo, d + dayOffset) : date;
 }
 
+function scheduledDay(v: string | null): OrderListQuery["day"] {
+  if (v === "none") return "none";
+  const gte = localDay(v, 0);
+  const lt = localDay(v, 1);
+  return gte && lt ? { gte, lt } : undefined;
+}
+
 export function parseOrderListQuery(sp: URLSearchParams): OrderListQuery {
   const rawLimit = Number(sp.get("limit"));
   const limit = sp.get("limit") && Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, Math.trunc(rawLimit))) : 50;
@@ -50,6 +59,7 @@ export function parseOrderListQuery(sp: URLSearchParams): OrderListQuery {
     from: localDay(sp.get("from"), 0),
     // `to` is inclusive for the operator, so the bound is the next day's midnight.
     to: localDay(sp.get("to"), 1),
+    day: scheduledDay(sp.get("day")),
     limit,
     cursor: sp.get("cursor") || undefined,
   };
@@ -81,6 +91,12 @@ export function buildOrderWhere(q: OrderListQuery, flaggedIds: string[] | null):
   if (q.pay) where.paymentState = q.pay;
   if (q.seller) where.createdById = q.seller;
   if (q.from || q.to) where.placedAt = { ...(q.from && { gte: q.from }), ...(q.to && { lt: q.to }) };
+  if (q.day === "none") {
+    where.scheduledAt = null;
+    if (!q.status) where.status = { in: ["PLACED", "IN_PRODUCTION"] };
+  } else if (q.day) {
+    where.scheduledAt = q.day;
+  }
   if (flaggedIds) where.id = { in: flaggedIds };
   return where;
 }
