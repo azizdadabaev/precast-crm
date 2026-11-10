@@ -5,6 +5,10 @@ import { Worker } from "worker_threads";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "@/lib/api-auth";
+import {
+  GAZOBLOK_EXPORT_COLUMNS,
+  gazoblokExportRow,
+} from "@/lib/gazoblok-export";
 
 /**
  * GET /api/orders/export
@@ -24,6 +28,9 @@ import { withPermission } from "@/lib/api-auth";
  * (src/workers/order-export-worker.js) — it's CPU-bound, and on the
  * single-vCPU prod host running it on the event loop froze every other
  * user's requests for the duration of the export.
+ *
+ * Gazoblok orders follow as one extra sheet, GAZOBLOK, after the status
+ * sheets (rows built by src/lib/gazoblok-export.ts).
  */
 const STATUS_ORDER = [
   "PLACED",
@@ -33,7 +40,10 @@ const STATUS_ORDER = [
   "CANCELED",
 ] as const;
 
-function buildWorkbookInWorker(rows: unknown[]): Promise<Buffer> {
+function buildWorkbookInWorker(
+  rows: unknown[],
+  gazoblokRows: unknown[],
+): Promise<Buffer> {
   // Resolved at runtime (never bundled): dev cwd is precast-crm/, prod
   // cwd is /app — both have src/workers/ on disk.
   const workerPath = path.join(
@@ -44,7 +54,12 @@ function buildWorkbookInWorker(rows: unknown[]): Promise<Buffer> {
   );
   return new Promise<Buffer>((resolve, reject) => {
     const worker = new Worker(workerPath, {
-      workerData: { statusOrder: STATUS_ORDER, rows },
+      workerData: {
+        statusOrder: STATUS_ORDER,
+        rows,
+        gazoblokRows,
+        gazoblokColumns: GAZOBLOK_EXPORT_COLUMNS,
+      },
     });
     let settled = false;
     worker.once("message", (buf: Buffer) => {
@@ -131,7 +146,41 @@ export const GET = withPermission(
       };
     });
 
-    const buf = await buildWorkbookInWorker(rows);
+    const gazoblokOrders = await prisma.gazoblokOrder.findMany({
+      take: 10_000,
+      orderBy: { orderNumber: "asc" },
+      include: {
+        client: { select: { name: true, phone: true, address: true } },
+        createdBy: { select: { name: true } },
+        lines: {
+          select: { id: true, productId: true, productLabel: true, quantity: true },
+        },
+        shipments: {
+          select: { status: true, loadedLines: true },
+          orderBy: { number: "asc" },
+        },
+        payments: { select: { amount: true, status: true } },
+      },
+    });
+    const gazoblokRows = gazoblokOrders.map((o) =>
+      gazoblokExportRow({
+        ...o,
+        totalVolumeM3: Number(o.totalVolumeM3),
+        linesSubtotal: Number(o.linesSubtotal),
+        discountPercent: Number(o.discountPercent),
+        discountAmount: Number(o.discountAmount),
+        deliveryCost: Number(o.deliveryCost),
+        overshipAmount: Number(o.overshipAmount),
+        totalPrice: Number(o.totalPrice),
+        confirmedPaid: Number(o.confirmedPaid),
+        payments: o.payments.map((p) => ({
+          amount: Number(p.amount),
+          status: p.status,
+        })),
+      }),
+    );
+
+    const buf = await buildWorkbookInWorker(rows, gazoblokRows);
     const stamp = new Date().toISOString().slice(0, 10);
     return new NextResponse(new Uint8Array(buf), {
       status: 200,

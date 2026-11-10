@@ -49,7 +49,7 @@ const COLUMNS = [
 ];
 
 async function build() {
-  const { statusOrder, rows } = workerData;
+  const { statusOrder, rows, gazoblokRows, gazoblokColumns } = workerData;
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Precast CRM";
@@ -71,6 +71,23 @@ async function build() {
     // Empty sheets get a "(no orders)" row so the workbook structure
     // is self-documenting even when a status has nothing in it.
     if (statusRows.length === 0) {
+      sheet.addRow({ orderNumber: "(no orders)" });
+    }
+  }
+
+  // Gazoblok orders: one sheet after the status sheets, columns from
+  // src/lib/gazoblok-export.ts (passed in so this file stays plain JS).
+  if (gazoblokColumns) {
+    const sheet = wb.addWorksheet("GAZOBLOK");
+    sheet.columns = gazoblokColumns;
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE5E7EB" },
+    };
+    for (const r of gazoblokRows) sheet.addRow(r);
+    if (gazoblokRows.length === 0) {
       sheet.addRow({ orderNumber: "(no orders)" });
     }
   }
