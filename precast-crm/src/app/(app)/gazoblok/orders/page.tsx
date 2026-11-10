@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Select } from "@/components/ui/select";
-import { Loader2, Plus, Search, X } from "lucide-react";
+import { CalendarDays, Loader2, Plus, Search, X } from "lucide-react";
 import { formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { PhoneLink } from "@/components/PhoneLink";
@@ -22,6 +22,8 @@ import {
   EMPTY_FILTERS,
   ORDER_PAGE_SIZE,
   blocksBar,
+  dateFilterFromText,
+  dateFilterToText,
   filtersFromParams,
   filtersToParams,
   hasActiveFilters,
@@ -90,10 +92,16 @@ const FLAG_PILLS: { flag: ListFlag; uz: string; en: string; tone: string; on: st
   },
 ];
 
-// IBM Plex Mono (--font-num) has Cyrillic; the app's default mono does not, so chips and
+// IBM Plex Mono (--font-num) has Cyrillic; the app's default mono does not, so
 // figures use it here (direction.md, «Type scale»).
 const NUM = "font-[family-name:var(--font-num)] tabular-nums [word-spacing:-0.38em]";
-const CHIP_FONT = { fontFamily: "var(--font-num)" };
+// Row chips read in sentence case in the body face, like the order screen's pills: the shared
+// Chip's uppercase mono made «Қ» fall back to another font. Only this list overrides it.
+const CHIP_CASE = "normal-case tracking-normal font-sans text-xs px-2.5 py-1";
+// From 1400 px the calendar is a column beside the list — narrower and the table's columns
+// would squeeze the client name out. Between phones and 1400 px it opens as a side sheet.
+const CAL_SHEET =
+  "sm:max-[1399px]:fixed sm:max-[1399px]:inset-y-0 sm:max-[1399px]:right-0 sm:max-[1399px]:z-[60] sm:max-[1399px]:w-[340px] sm:max-[1399px]:overflow-y-auto sm:max-[1399px]:border-l sm:max-[1399px]:border-border sm:max-[1399px]:bg-background sm:max-[1399px]:p-4 sm:max-[1399px]:shadow-xl";
 
 export default function GazoblokOrdersPage() {
   const t = useT();
@@ -144,6 +152,14 @@ function OrdersList() {
     queryFn: () => api("/api/gazoblok/orders/counts"),
   });
 
+  const [calOpen, setCalOpen] = useState(false);
+  useEffect(() => {
+    if (!calOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCalOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [calOpen]);
+
   const orders = useMemo(() => (list.data?.pages ?? []).flat(), [list.data]);
   const c = counts.data;
   const filtered = hasActiveFilters(filters);
@@ -160,16 +176,59 @@ function OrdersList() {
             {t("Буюртма рақами, мижоз ёки телефон бўйича қидиринг.", "Search by order number, client or phone.")}
           </p>
         </div>
-        <Button asChild className="h-11 w-full sm:w-auto">
-          <Link href="/gazoblok/new">
-            <Plus className="h-4 w-4 mr-2" />
-            {t("Янги буюртма", "New order")}
-          </Link>
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button
+            variant="outline"
+            className="h-11 hidden sm:inline-flex min-[1400px]:hidden"
+            aria-expanded={calOpen}
+            onClick={() => setCalOpen((v) => !v)}
+          >
+            <CalendarDays className="h-4 w-4 mr-2" />
+            {t("Тақвим", "Calendar")}
+            {filters.day && filters.day !== "none" && (
+              <span className={cn("ml-1.5 text-muted-foreground", NUM)}>{dayChipLabel(filters.day)}</span>
+            )}
+          </Button>
+          <Button asChild className="h-11 flex-1 sm:flex-none">
+            <Link href="/gazoblok/new">
+              <Plus className="h-4 w-4 mr-2" />
+              {t("Янги буюртма", "New order")}
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      <GazoblokOrdersCalendar selected={filters.day} onSelect={(day) => patch({ day })} />
+      {/* ≥1400: the list owns the page, the calendar is a narrow right column. Phones keep the
+          folded calendar above the list; widths between open it as a sheet. */}
+      <div className="space-y-5 min-[1400px]:space-y-0 min-[1400px]:grid min-[1400px]:grid-cols-[minmax(0,1fr)_280px] min-[1400px]:gap-6 min-[1400px]:items-start">
+        <aside
+          aria-label={t("Тақвим", "Calendar")}
+          className={cn("min-w-0 min-[1400px]:order-2", calOpen ? CAL_SHEET : "sm:max-[1399px]:hidden")}
+        >
+          {calOpen && (
+            <div className="hidden sm:max-[1399px]:flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold">{t("Тақвим", "Calendar")}</h2>
+              <button
+                type="button"
+                onClick={() => setCalOpen(false)}
+                aria-label={t("Ёпиш", "Close")}
+                className="h-11 w-11 inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          <GazoblokOrdersCalendar selected={filters.day} onSelect={(day) => patch({ day })} />
+        </aside>
+        {calOpen && (
+          <div
+            aria-hidden
+            onClick={() => setCalOpen(false)}
+            className="hidden sm:max-[1399px]:block fixed inset-0 !mt-0 z-50 bg-foreground/20"
+          />
+        )}
 
+        <div className="min-w-0 space-y-5 min-[1400px]:order-1">
       {/* Search + selects */}
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 basis-full sm:basis-80">
@@ -208,24 +267,8 @@ function OrdersList() {
           ))}
         </Select>
         <div className="flex gap-2 w-full sm:w-auto">
-          <label className="flex-1 sm:flex-none flex items-center gap-1.5 text-xs text-muted-foreground">
-            {t("Дан", "From")}
-            <Input
-              type="date"
-              className={cn("h-11 sm:w-40", NUM)}
-              value={filters.from}
-              onChange={(e) => patch({ from: e.target.value })}
-            />
-          </label>
-          <label className="flex-1 sm:flex-none flex items-center gap-1.5 text-xs text-muted-foreground">
-            {t("Гача", "To")}
-            <Input
-              type="date"
-              className={cn("h-11 sm:w-40", NUM)}
-              value={filters.to}
-              onChange={(e) => patch({ to: e.target.value })}
-            />
-          </label>
+          <DateFilter label={t("Дан", "From")} value={filters.from} onChange={(from) => patch({ from })} />
+          <DateFilter label={t("Гача", "To")} value={filters.to} onChange={(to) => patch({ to })} />
         </div>
       </div>
 
@@ -330,7 +373,40 @@ function OrdersList() {
           </Button>
         </div>
       )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+/** «Дан» / «Гача» typed as кк.оо.йййй; the URL keeps YYYY-MM-DD and changes only on a whole date. */
+function DateFilter({ label, value, onChange }: { label: string; value: string; onChange: (ymd: string) => void }) {
+  const t = useT();
+  const [raw, setRaw] = useState(() => dateFilterToText(value));
+  const [editing, setEditing] = useState(false);
+  // «Clear filters» or back/forward changes the URL; keep what's typed when it already means the same day.
+  useEffect(() => setRaw((prev) => (dateFilterFromText(prev) === value ? prev : dateFilterToText(value))), [value]);
+  const bad = !editing && dateFilterFromText(raw) === null;
+  return (
+    <label className="flex-1 sm:flex-none flex items-center gap-1.5 text-xs text-muted-foreground">
+      {label}
+      <Input
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder={t("кк.оо.йййй", "dd.mm.yyyy")}
+        aria-invalid={bad}
+        title={bad ? t("Санани кк.оо.йййй кўринишида ёзинг, масалан 11.11.2026", "Type the date as dd.mm.yyyy, e.g. 11.11.2026") : undefined}
+        className={cn("h-11 min-w-0 sm:w-36", NUM, bad && "border-destructive focus-visible:ring-destructive/40")}
+        value={raw}
+        onFocus={() => setEditing(true)}
+        onBlur={() => setEditing(false)}
+        onChange={(e) => {
+          setRaw(e.target.value);
+          const next = dateFilterFromText(e.target.value);
+          if (next !== null && next !== value) onChange(next);
+        }}
+      />
+    </label>
   );
 }
 
@@ -374,12 +450,12 @@ function useRowChips() {
   const t = useT();
   return {
     status: (o: GazoblokOrder) => (
-      <Chip style={CHIP_FONT} variant={STATUS_VARIANT[o.status]}>{t(STATUS_LABELS[o.status][0], STATUS_LABELS[o.status][1])}</Chip>
+      <Chip className={CHIP_CASE} variant={STATUS_VARIANT[o.status]}>{t(STATUS_LABELS[o.status][0], STATUS_LABELS[o.status][1])}</Chip>
     ),
     // A cancelled order owes nothing — it gets no payment chip.
     payment: (o: GazoblokOrder) =>
       o.status === "CANCELED" ? null : (
-        <Chip style={CHIP_FONT} variant={PAYMENT_META[o.paymentState].variant}>
+        <Chip className={CHIP_CASE} variant={PAYMENT_META[o.paymentState].variant}>
           {t(PAYMENT_META[o.paymentState].uz, PAYMENT_META[o.paymentState].en)}
         </Chip>
       ),
@@ -387,19 +463,19 @@ function useRowChips() {
       const out: React.ReactNode[] = [];
       if (o.unpaidOverload > 0)
         out.push(
-          <Chip style={CHIP_FONT} key="debt" variant="danger">
-            {t("Ортиқча", "Over-load")} {formatNumber(o.unpaidOverload, 0)}
+          <Chip className={CHIP_CASE} key="debt" variant="danger">
+            {t("Ортиқча", "Over-load")} <span className={NUM}>{formatNumber(o.unpaidOverload, 0)}</span>
           </Chip>,
         );
       if (o.refundDue > 0)
         out.push(
-          <Chip style={CHIP_FONT} key="refund" variant="warning">
-            {t("Қайтариш", "Refund")} {formatNumber(o.refundDue, 0)}
+          <Chip className={CHIP_CASE} key="refund" variant="warning">
+            {t("Қайтариш", "Refund")} <span className={NUM}>{formatNumber(o.refundDue, 0)}</span>
           </Chip>,
         );
       if (o.pendingPaymentCount > 0)
         out.push(
-          <Chip style={CHIP_FONT} key="pending" variant="warning">
+          <Chip className={CHIP_CASE} key="pending" variant="warning">
             {t("Тасдиқланмаган", "Unconfirmed")}
           </Chip>,
         );
@@ -426,14 +502,12 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
       <table className="w-full table-fixed text-sm">
         <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
           <tr>
-            <th className="text-left px-3 py-2.5 w-[150px]">№</th>
+            <th className="text-left px-3 py-2.5 w-[132px]">№</th>
             <th className="text-left px-3 py-2.5">{t("Мижоз", "Client")}</th>
-            <th className="text-right px-3 py-2.5 w-[110px]">{t("Блоклар", "Blocks")}</th>
-            <th className="text-right px-3 py-2.5 w-[120px]">{t("Жами, UZS", "Total, UZS")}</th>
-            <th className="text-right px-3 py-2.5 w-[120px]">{t("Қолди, UZS", "Left, UZS")}</th>
+            <th className="hidden xl:table-cell text-right px-3 py-2.5 w-[104px]">{t("Блоклар", "Blocks")}</th>
+            <th className="text-right px-3 py-2.5 w-[128px]">{t("Жами, UZS", "Total, UZS")}</th>
             <th className="text-left px-3 py-2.5 w-[150px]">{t("Ҳолат", "Status")}</th>
-            <th className="text-left px-3 py-2.5 w-[110px]">{t("Тўлов", "Payment")}</th>
-            <th className="text-left px-3 py-2.5 w-[170px]">{t("Белгилар", "Flags")}</th>
+            <th className="text-left px-3 py-2.5 w-[160px]">{t("Тўлов", "Payment")}</th>
           </tr>
         </thead>
         <tbody>
@@ -453,6 +527,13 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
                   <Link href={`/gazoblok/orders/${o.id}`} className="font-bold text-primary hover:underline">
                     {o.orderNumber}
                   </Link>
+                  {/* Under 1280 px the blocks column folds in here so the client name keeps its room. */}
+                  <div className="xl:hidden mt-1.5 grid gap-1 text-[13px]">
+                    <span>
+                      {formatNumber(o.loadedBlocks, 0)} / {formatNumber(o.totalBlocks, 0)}
+                    </span>
+                    <BlocksBar loaded={o.loadedBlocks} ordered={o.totalBlocks} />
+                  </div>
                 </td>
                 <td className="px-3 py-3.5 min-w-0">
                   <Link href={`/gazoblok/orders/${o.id}`} className="block min-w-0 hover:underline">
@@ -464,7 +545,7 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
                     <PhoneLink phone={o.client.phone} />
                   </div>
                 </td>
-                <td className="px-3 py-3.5">
+                <td className="hidden xl:table-cell px-3 py-3.5">
                   <div className="grid gap-1.5">
                     <span className={cn("text-right whitespace-nowrap", NUM)}>
                       {formatNumber(o.loadedBlocks, 0)} / {formatNumber(o.totalBlocks, 0)}
@@ -472,23 +553,21 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
                     <BlocksBar loaded={o.loadedBlocks} ordered={o.totalBlocks} />
                   </div>
                 </td>
-                <td className={cn("px-3 py-3.5 text-right whitespace-nowrap", NUM)}>
-                  {canceled ? "—" : formatNumber(Number(o.totalPrice), 0)}
-                </td>
-                <td
-                  className={cn(
-                    "px-3 py-3.5 text-right whitespace-nowrap",
-                    NUM,
-                    left === 0 && "text-text-tertiary",
+                <td className="px-3 py-3.5 text-right whitespace-nowrap">
+                  <div className={NUM}>{canceled ? "—" : formatNumber(Number(o.totalPrice), 0)}</div>
+                  {left !== null && (
+                    <div className={cn("mt-1 text-xs", left === 0 ? "text-text-tertiary" : "text-muted-foreground")}>
+                      {t("қолди", "left")} <span className={NUM}>{formatNumber(left, 0)}</span>
+                    </div>
                   )}
-                >
-                  {left === null ? "—" : formatNumber(left, 0)}
                 </td>
                 <td className="px-3 py-3.5">{chips.status(o)}</td>
-                <td className="px-3 py-3.5">{chips.payment(o) ?? <span className="text-text-tertiary">—</span>}</td>
                 <td className="px-3 py-3.5">
-                  {flags.length ? (
-                    <div className="flex flex-wrap gap-1.5">{flags}</div>
+                  {chips.payment(o) || flags.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {chips.payment(o)}
+                      {flags}
+                    </div>
                   ) : (
                     <span className="text-text-tertiary">—</span>
                   )}

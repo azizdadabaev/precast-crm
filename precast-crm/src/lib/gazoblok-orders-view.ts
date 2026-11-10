@@ -3,6 +3,7 @@
  * the view), cursor paging and the per-row figures (spec §9, comp 05). Pure,
  * browser-safe: the screen and its tests share it.
  */
+import { formatYmd, parseDmy } from "@/lib/gazoblok-order-form";
 
 export const ORDER_PAGE_SIZE = 50;
 
@@ -95,4 +96,18 @@ export function blocksBar(loaded: number, ordered: number): { fillPct: number; o
     fillPct: (Math.min(loaded, ordered) / scale) * 100,
     overPct: (Math.max(0, loaded - ordered) / scale) * 100,
   };
+}
+
+/**
+ * The «Дан» / «Гача» boxes are typed as кк.оо.йййй (the browser's date input shows
+ * English mm/dd/yyyy). Blank clears the filter (""); a half-typed or impossible date
+ * returns null so the URL keeps its last good value while the user types.
+ */
+export function dateFilterFromText(raw: string): string | null {
+  if (raw.trim() === "") return "";
+  return parseDmy(raw);
+}
+
+export function dateFilterToText(ymd: string): string {
+  return ymd ? formatYmd(ymd) : "";
 }

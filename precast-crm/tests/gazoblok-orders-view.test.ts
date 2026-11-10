@@ -7,6 +7,8 @@ import {
   nextCursor,
   remainingToPay,
   blocksBar,
+  dateFilterFromText,
+  dateFilterToText,
 } from "@/lib/gazoblok-orders-view";
 
 describe("orders list URL filters", () => {
@@ -69,5 +71,25 @@ describe("row figures", () => {
     expect(blocksBar(168, 200)).toEqual({ fillPct: 84, overPct: 0 });
     expect(blocksBar(0, 0)).toEqual({ fillPct: 0, overPct: 0 });
     expect(blocksBar(220, 200)).toEqual({ fillPct: (200 / 220) * 100, overPct: (20 / 220) * 100 });
+  });
+});
+
+describe("date filter typed as кк.оо.йййй", () => {
+  it("turns a complete Uzbek date into the URL's YYYY-MM-DD", () => {
+    expect(dateFilterFromText("01.11.2026")).toBe("2026-11-01");
+    expect(dateFilterFromText(" 1.11.2026 ")).toBe("2026-11-01");
+  });
+  it("clears the filter when the box is emptied", () => {
+    expect(dateFilterFromText("")).toBe("");
+    expect(dateFilterFromText("   ")).toBe("");
+  });
+  it("keeps the filter unchanged while typing or on an impossible date", () => {
+    expect(dateFilterFromText("01.11")).toBeNull();
+    expect(dateFilterFromText("31.02.2026")).toBeNull();
+    expect(dateFilterFromText("2026-11-01")).toBeNull();
+  });
+  it("shows the URL value back as кк.оо.йййй", () => {
+    expect(dateFilterToText("2026-11-01")).toBe("01.11.2026");
+    expect(dateFilterToText("")).toBe("");
   });
 });

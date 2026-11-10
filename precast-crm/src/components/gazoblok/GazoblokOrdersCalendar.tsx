@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * Compact orders calendar for the Gazoblok tab — the CRM orders calendar's look
- * (src/components/orders/CapacityCalendar.tsx) at about half its size. A day shows
- * its whole orders and blocks on the scheduled day; picking one filters the list
- * below (`day=`) and opens that day's list here, where a date can be moved with
- * the order's own schedule dialog. With no day picked the side shows the plan:
- * the month's totals and the open orders that still have no date.
+ * Compact orders calendar for the Gazoblok orders page — the CRM orders calendar's
+ * look (src/components/orders/CapacityCalendar.tsx) shrunk to a narrow column beside
+ * the list. A cell shows the day and its order count (orders and blocks in the
+ * tooltip); picking a day filters the list (`day=`) and opens that day's orders
+ * under the grid, where a date can be moved with the order's own schedule dialog.
+ * With no day picked the panel shows the open orders that still have no date.
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -75,7 +75,7 @@ export function GazoblokOrdersCalendar({ selected, onSelect }: Props) {
   const isCurrentMonth = month === todayKey.slice(0, 7);
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2 items-start min-w-0">
+    <div className="grid gap-4 min-w-0">
       <section className="rounded-lg border border-border bg-card overflow-hidden min-w-0">
         <div className="flex items-center justify-between gap-2 px-1.5 py-1 border-b border-border bg-muted/20">
           <div className="flex items-center gap-0.5 min-w-0">
@@ -99,28 +99,30 @@ export function GazoblokOrdersCalendar({ selected, onSelect }: Props) {
             )}
           </div>
           <div className="flex items-center gap-2 min-w-0">
-            <span className={cn("text-[11px] text-muted-foreground whitespace-nowrap", open && "hidden sm:inline")}>
+            {/* Folded (phones only) the header carries the month's totals; open, the footer does. */}
+            <span className={cn("text-[11px] text-muted-foreground whitespace-nowrap", open ? "hidden" : "sm:hidden")}>
               <span className={NUM}>{formatNumber(totals.orders, 0)}</span> {t("та", "orders")} ·{" "}
               <span className={NUM}>{formatNumber(totals.blocks, 0)}</span> {t("блок", "blocks")}
-              {!open && (cal.data?.unscheduledOpen ?? 0) > 0 && (
+              {(cal.data?.unscheduledOpen ?? 0) > 0 && (
                 <>
                   {" · "}
                   {t("санасиз", "no date")} <span className={NUM}>{formatNumber(cal.data!.unscheduledOpen, 0)}</span>
                 </>
               )}
             </span>
-            <NavButton
-              label={open ? t("Тақвимни йиғиш", "Fold the calendar") : t("Тақвимни очиш", "Open the calendar")}
-              onClick={() => setOpen((v) => !v)}
-            >
-              <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
-            </NavButton>
+            <span className="sm:hidden">
+              <NavButton
+                label={open ? t("Тақвимни йиғиш", "Fold the calendar") : t("Тақвимни очиш", "Open the calendar")}
+                onClick={() => setOpen((v) => !v)}
+              >
+                <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+              </NavButton>
+            </span>
           </div>
         </div>
 
-        {open && (
-          <>
-            <div className="grid grid-cols-7 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/40">
+        <div className={cn(!open && "hidden sm:block")}>
+            <div className="grid grid-cols-7 text-[10px] font-semibold text-muted-foreground border-b border-border bg-muted/40">
               {DOW.map(([uz, en]) => (
                 <div key={en} className="py-1 text-center">{t(uz, en)}</div>
               ))}
@@ -131,63 +133,60 @@ export function GazoblokOrdersCalendar({ selected, onSelect }: Props) {
                 const isSelected = c.key === selected;
                 const isToday = c.key === todayKey;
                 const stripe = d?.flags.debt ? "before:bg-destructive" : d?.flags.unpaid ? "before:bg-muted-foreground/60" : null;
+                const label = d
+                  ? t(
+                      `${dayTitle(c.key, t)} · ${d.orders} та буюртма · ${formatNumber(d.blocks, 0)} та блок${d.flags.debt ? " · ортиқча юклаш қарзи" : d.flags.unpaid ? " · тўланмаган" : ""}`,
+                      `${dayTitle(c.key, t)} · ${d.orders} orders · ${formatNumber(d.blocks, 0)} blocks${d.flags.debt ? " · over-load debt" : d.flags.unpaid ? " · unpaid" : ""}`,
+                    )
+                  : dayTitle(c.key, t);
                 return (
                   <button
                     key={c.key}
                     type="button"
                     aria-pressed={isSelected}
+                    aria-label={label}
+                    title={label}
                     onClick={() => onSelect(isSelected ? "" : c.key)}
-                    title={
-                      d
-                        ? t(
-                            `${c.key} · ${d.orders} та буюртма · ${formatNumber(d.blocks, 0)} та блок`,
-                            `${c.key} · ${d.orders} orders · ${formatNumber(d.blocks, 0)} blocks`,
-                          )
-                        : c.key
-                    }
                     className={cn(
-                      "relative h-11 min-w-0 px-1.5 py-1 border-b border-r border-border/60 text-left transition-colors hover:bg-surface-hover",
+                      "relative h-11 sm:h-10 min-w-0 flex flex-col items-center justify-center gap-0.5 border-b border-r border-border/60 transition-colors hover:bg-surface-hover",
                       "before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r",
                       stripe ? `${stripe} before:opacity-100` : "before:opacity-0",
                       !c.inMonth && "bg-muted/10",
                       isSelected && "bg-primary/8 ring-1 ring-primary ring-inset",
                     )}
                   >
-                    <div className="flex items-start justify-between gap-0.5 leading-none">
-                      <span
-                        className={cn(
-                          "text-[13px] font-semibold tabular-nums rounded-full",
-                          !c.inMonth ? "text-text-tertiary" : isToday ? "text-primary ring-1 ring-primary px-1 -mx-0.5" : "text-foreground",
-                        )}
-                      >
-                        {c.day}
-                      </span>
-                      {d && <span className={cn("text-[10px] font-medium text-text-tertiary", NUM)}>{d.orders}</span>}
-                    </div>
-                    {d && (
-                      <div className={cn("mt-1 text-[10px] leading-none text-muted-foreground truncate", NUM)}>
-                        {formatNumber(d.blocks, 0)}
-                      </div>
-                    )}
+                    <span
+                      className={cn(
+                        "text-xs font-semibold tabular-nums leading-4 rounded-full min-w-5 px-0.5",
+                        !c.inMonth ? "text-text-tertiary" : isToday ? "text-primary ring-1 ring-primary" : "text-foreground",
+                      )}
+                    >
+                      {c.day}
+                    </span>
+                    <span aria-hidden className={cn("text-[9px] leading-none font-medium text-muted-foreground h-2", NUM)}>
+                      {d ? d.orders : ""}
+                    </span>
                   </button>
                 );
               })}
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1.5 text-[10px] text-muted-foreground">
-              <span>
-                {t("Катакда: буюртма сони ва блоклар", "In a cell: orders and blocks")}
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-2 py-1.5 text-[10px] text-muted-foreground">
+              <span className="whitespace-nowrap">
+                <span className={NUM}>{formatNumber(totals.orders, 0)}</span> {t("та", "orders")} ·{" "}
+                <span className={NUM}>{formatNumber(totals.blocks, 0)}</span> {t("блок", "blocks")}
               </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-1 w-3 rounded-sm bg-muted-foreground/60" />
-                {t("Тўланмаган", "Unpaid")}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="inline-block h-1 w-3 rounded-sm bg-destructive" />
-                {t("Ортиқча юклаш қарзи", "Over-load debt")}
+              <span className="inline-flex items-center gap-2.5">
+                <span className="inline-flex items-center gap-1" title={t("Тўланмаган", "Unpaid")}>
+                  <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/60" />
+                  {t("Тўланмаган", "Unpaid")}
+                </span>
+                <span className="inline-flex items-center gap-1" title={t("Ортиқча юклаш қарзи", "Over-load debt")}>
+                  <span className="inline-block h-2 w-2 rounded-full bg-destructive" />
+                  {t("Қарз", "Debt")}
+                </span>
               </span>
             </div>
-          </>
-        )}
+        </div>
         {cal.isError && (
           <p className="px-3 py-2 text-xs text-destructive border-t border-border">
             {t("Тақвимни юклаб бўлмади", "Could not load the calendar")}
@@ -199,8 +198,6 @@ export function GazoblokOrdersCalendar({ selected, onSelect }: Props) {
         folded={!open}
         selected={selected}
         onSelect={onSelect}
-        totals={totals}
-        monthLabel={t(MONTH_UZ_FULL[m - 1], MONTH_EN[m - 1])}
         unscheduledOpen={cal.data?.unscheduledOpen}
       />
     </div>
@@ -227,20 +224,16 @@ function dayTitle(key: string, t: (uz: string, en: string) => string): string {
   return t(`${d} ${MONTH_UZ_FULL[mo - 1]}, ${WEEKDAY_UZ[wd]}`, `${WEEKDAY_EN[wd]}, ${d} ${MONTH_EN[mo - 1]}`);
 }
 
-/** The side of the calendar: the plan when no day is picked, else that day's orders with «move». */
+/** Under the calendar: the undated plan when no day is picked, else that day's orders with «move». */
 function DayPanel({
   folded,
   selected,
   onSelect,
-  totals,
-  monthLabel,
   unscheduledOpen,
 }: {
   folded: boolean;
   selected: string;
   onSelect: (day: string) => void;
-  totals: { orders: number; blocks: number };
-  monthLabel: string;
   unscheduledOpen: number | undefined;
 }) {
   const t = useT();
@@ -274,46 +267,30 @@ function DayPanel({
   if (selected === "") {
     // Folded (phones), the header already carries the month's totals and the undated count.
     if (folded) return null;
+    const undated = unscheduledOpen ?? 0;
     return (
-      <section className="rounded-lg border border-border bg-card p-4 grid gap-4 min-w-0">
-        <div>
-          <h2 className="text-base font-semibold">{t("Режа", "Plan")}</h2>
-          <p className="text-sm text-muted-foreground">
-            {t(
-              "Кунни танланг — ўша куннинг буюртмалари шу ерда чиқади, санасини кўчириш мумкин.",
-              "Pick a day — its orders show here and their date can be moved.",
-            )}
+      <section className="rounded-lg border border-border bg-card px-3 py-2.5 grid gap-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 min-w-0">
+          <p className="text-sm">
+            {t("Санасиз", "No date")}{" "}
+            <span className={cn("font-semibold", NUM, undated > 0 && "text-primary")}>
+              {unscheduledOpen === undefined ? "—" : formatNumber(undated, 0)}
+            </span>{" "}
+            {t("та", "open")}
           </p>
+          {undated > 0 && (
+            <button
+              type="button"
+              onClick={() => onSelect("none")}
+              className="min-h-11 sm:min-h-8 px-2 -mr-2 rounded-md text-xs font-medium text-primary hover:bg-accent whitespace-nowrap"
+            >
+              {t("Сана қўйиш", "Set dates")}
+            </button>
+          )}
         </div>
-        <dl className="grid grid-cols-2 gap-px rounded-md border border-border bg-border overflow-hidden">
-          <div className="bg-card p-3">
-            <dt className="text-xs text-muted-foreground">{monthLabel}</dt>
-            <dd className="mt-1 text-xl font-semibold">
-              <span className={NUM}>{formatNumber(totals.orders, 0)}</span>{" "}
-              <span className="text-sm font-normal text-muted-foreground">{t("та буюртма", "orders")}</span>
-            </dd>
-            <dd className="text-xs text-muted-foreground">
-              <span className={NUM}>{formatNumber(totals.blocks, 0)}</span> {t("та блок", "blocks")}
-            </dd>
-          </div>
-          <div className="bg-card p-3">
-            <dt className="text-xs text-muted-foreground">{t("Санасиз очиқ", "Open, no date")}</dt>
-            <dd className={cn("mt-1 text-xl font-semibold", NUM, (unscheduledOpen ?? 0) > 0 && "text-primary")}>
-              {unscheduledOpen === undefined ? "—" : formatNumber(unscheduledOpen, 0)}
-            </dd>
-            {(unscheduledOpen ?? 0) > 0 && (
-              <dd>
-                <button
-                  type="button"
-                  onClick={() => onSelect("none")}
-                  className="min-h-11 sm:min-h-0 text-xs font-medium text-primary hover:underline"
-                >
-                  {t("Сана қўйиш", "Set dates")}
-                </button>
-              </dd>
-            )}
-          </div>
-        </dl>
+        <p className="text-xs text-muted-foreground">
+          {t("Кунни танланг — буюртмалари шу ерда, санасини кўчириш мумкин.", "Pick a day — its orders show here and can be moved.")}
+        </p>
       </section>
     );
   }
@@ -322,9 +299,9 @@ function DayPanel({
   const blocks = rows.reduce((s, o) => s + o.totalBlocks, 0);
   return (
     <section className="rounded-lg border border-border bg-card min-w-0 overflow-hidden">
-      <header className="flex items-start justify-between gap-3 px-4 py-3 border-b border-border">
+      <header className="flex items-start justify-between gap-3 px-3 py-2.5 border-b border-border">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold">
+          <h2 className="text-sm font-semibold">
             {selected === "none" ? t("Санасиз очиқ буюртмалар", "Open orders with no date") : dayTitle(selected, t)}
           </h2>
           {list.data && (
@@ -355,13 +332,13 @@ function DayPanel({
       ) : rows.length === 0 ? (
         <p className="p-6 text-center text-sm text-muted-foreground">{t("Бу кунга буюртма йўқ", "No orders on this day")}</p>
       ) : (
-        <ul className="divide-y divide-border max-h-[320px] overflow-y-auto">
+        <ul className="divide-y divide-border max-h-[420px] overflow-y-auto">
           {rows.map((o) => {
             const movable = canEdit && isOpen(o);
             return (
-              <li key={o.id} className="flex items-center gap-3 px-4 py-2 min-w-0">
+              <li key={o.id} className="flex items-center gap-2 px-3 py-2 min-w-0">
                 <Link href={`/gazoblok/orders/${o.id}`} className="min-w-0 flex-1 hover:underline">
-                  <div className="flex items-baseline gap-2 min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
                     <span className={cn("text-xs font-bold text-primary whitespace-nowrap", NUM)}>{o.orderNumber}</span>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
                       <span className={NUM}>{formatNumber(o.totalBlocks, 0)}</span> {t("та", "pcs")}
@@ -372,7 +349,7 @@ function DayPanel({
                 {movable && (
                   <Button
                     variant="outline"
-                    className="h-11 sm:h-9 px-3 shrink-0"
+                    className="h-11 sm:h-9 px-2.5 shrink-0"
                     disabled={openSchedule.isPending}
                     onClick={() => openSchedule.mutate(o.id)}
                   >
