@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
-import { withAuth } from "@/lib/api-auth";
+import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
 import {
@@ -13,7 +13,7 @@ import {
 
 /** GET /api/gazoblok/production — auth-only (open to all logged-in users —
  *  owner decision). Recent production entries. */
-export const GET = withAuth(async () => {
+export const GET = withPermission("inventory.view", async () => {
   const entries = await prisma.gazoblokProductionEntry.findMany({
     orderBy: { producedAt: "desc" },
     take: 50,
@@ -28,7 +28,7 @@ export const GET = withAuth(async () => {
 /** POST /api/gazoblok/production — auth-only (open to all logged-in users —
  *  owner decision). Log a day's output; increments stock per line via the
  *  ledger. */
-export const POST = withAuth(async (req: NextRequest, { user }) => {
+export const POST = withPermission("inventory.manage", async (req: NextRequest, { user }) => {
   const body = GazoblokProductionSchema.parse(await req.json());
   const productIds = Array.from(new Set(body.lines.map((l) => l.productId)));
   const products = await prisma.gazoblokProduct.findMany({
@@ -73,7 +73,7 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
  *  owner decision). Void a production entry: posts one reversing stock
  *  movement per line so a mistyped entry can be undone without a manual
  *  adjustment. Idempotent via a compare-and-set on voidedAt. */
-export const PATCH = withAuth(async (req: NextRequest, { user }) => {
+export const PATCH = withPermission("inventory.manage", async (req: NextRequest, { user }) => {
   const body = GazoblokProductionActionSchema.parse(await req.json());
 
   try {

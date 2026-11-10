@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
-import { withAuth } from "@/lib/api-auth";
+import { withAuth, withPermission } from "@/lib/api-auth";
 import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { GazoblokOrderActionSchema } from "@/lib/gazoblok-validation";
@@ -40,7 +40,7 @@ async function recomputePaid(tx: Tx, orderId: string, totalPrice: number) {
 
 /** GET /api/gazoblok/orders/[id] — auth-only (open to all logged-in users —
  *  owner decision). Full order detail. */
-export const GET = withAuth<{ id: string }>(
+export const GET = withPermission<{ id: string }>("order.view", 
   async (_req: NextRequest, { params }) => {
     const order = await prisma.gazoblokOrder.findUnique({
       where: { id: params.id },

@@ -9,6 +9,7 @@ import {
   homeForUser,
   type Action,
 } from "@/lib/permissions";
+import { GAZOBLOK_PAGE_RULES } from "@/lib/gazoblok-permissions";
 
 /**
  * Single source of truth for which page paths require which permissions.
@@ -60,9 +61,9 @@ export const ROUTE_PERMISSIONS: Record<
   // Call → Telegram handoff admin: the presets are what every caller receives,
   // so it sits with the other owner-only settings pages.
   "/handoff": "pricing.edit",
-  // Газоблок (aerated blocks) — open to every authenticated user (no
-  // per-user gating, by owner decision).
-  "/gazoblok": "any-auth",
+  // Газоблок — same permission keys as beam-and-block (owner, 2026-11-10).
+  "/gazoblok": "order.view",
+  ...GAZOBLOK_PAGE_RULES,
   // Self-service: every authenticated user can change their own password
   // and see their own profile, regardless of permission set.
   "/profile": "any-auth",

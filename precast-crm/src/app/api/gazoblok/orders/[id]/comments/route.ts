@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
-import { withAuth } from "@/lib/api-auth";
+import { withPermission } from "@/lib/api-auth";
 import { CommentCreateSchema } from "@/lib/validation";
 import { extractMentions } from "@/lib/comments";
 import { emitNotifications } from "@/lib/notifications";
@@ -14,7 +14,7 @@ const authorSelect = { id: true, name: true, role: true } as const;
 const deletedBySelect = { id: true, name: true } as const;
 
 /** GET /api/gazoblok/orders/[id]/comments — any logged-in user (gazoblok is open) */
-export const GET = withAuth<Params>(
+export const GET = withPermission<Params>("order.view", 
   async (_req: NextRequest, { params }) => {
     const order = await prisma.gazoblokOrder.findUnique({
       where: { id: params.id },
@@ -35,7 +35,7 @@ export const GET = withAuth<Params>(
 );
 
 /** POST /api/gazoblok/orders/[id]/comments — any logged-in user (gazoblok is open) */
-export const POST = withAuth<Params>(
+export const POST = withPermission<Params>("order.view", 
   async (req: NextRequest, { params, user }) => {
     const order = await prisma.gazoblokOrder.findUnique({
       where: { id: params.id },

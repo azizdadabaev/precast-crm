@@ -3,12 +3,12 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
-import { withAuth } from "@/lib/api-auth";
+import { withPermission } from "@/lib/api-auth";
 
 type Params = { id: string };
 
 /** GET /api/gazoblok/orders/[id]/shipments — list shipments for the order. */
-export const GET = withAuth<Params>(async (_req: NextRequest, { params }) => {
+export const GET = withPermission<Params>("order.view", async (_req: NextRequest, { params }) => {
   const shipments = await prisma.gazoblokShipment.findMany({
     where: { orderId: params.id },
     orderBy: { number: "asc" },
@@ -18,7 +18,7 @@ export const GET = withAuth<Params>(async (_req: NextRequest, { params }) => {
 
 /** POST /api/gazoblok/orders/[id]/shipments — add an empty (PENDING) shipment.
  *  Allowed while the order isn't delivered/canceled. */
-export const POST = withAuth<Params>(async (_req: NextRequest, { params }) => {
+export const POST = withPermission<Params>("order.edit", async (_req: NextRequest, { params }) => {
   const order = await prisma.gazoblokOrder.findUnique({
     where: { id: params.id },
     select: { id: true, status: true },

@@ -87,7 +87,7 @@ export const NAV: NavItem[] = [
     label: "Газоблок",
     sub: "Gazoblok",
     icon: Boxes,
-    permission: "any-auth",
+    permission: "order.view",
   },
   {
     href: "/gallery",
@@ -175,14 +175,14 @@ export const OPERATIONS_NAV: NavItem[] = [
     label: "Газоблок и.ч.",
     sub: "Gazoblok production",
     icon: Hammer,
-    permission: "any-auth",
+    permission: "inventory.view",
   },
   {
     href: "/gazoblok/stock",
     label: "Газоблок омбор",
     sub: "Gazoblok stock",
     icon: Warehouse,
-    permission: "any-auth",
+    permission: "inventory.view",
   },
   {
     href: "/ledger",
@@ -256,7 +256,7 @@ export const SETTINGS_NAV: NavItem[] = [
     label: "Газоблок нархлари",
     sub: "Gazoblok catalog",
     icon: Boxes,
-    permission: "any-auth",
+    permission: "pricing.edit",
   },
 ];
 

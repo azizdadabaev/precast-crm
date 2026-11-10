@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
-import { withAuth } from "@/lib/api-auth";
+import { withPermission } from "@/lib/api-auth";
 import { can } from "@/lib/permissions";
 import { paymentStateFor } from "@/lib/payment-state";
 import { recordAudit } from "@/lib/audit";
@@ -17,7 +17,7 @@ const ORDER_STATUSES = ["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"] as c
 
 /** GET /api/gazoblok/orders — auth-only (open to all logged-in users —
  *  owner decision). Filter by q / status. */
-export const GET = withAuth(async (req: NextRequest) => {
+export const GET = withPermission("order.view", async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q")?.trim() ?? "";
   // Whitelist against the enum — an arbitrary string would throw deep in Prisma.
@@ -79,7 +79,7 @@ async function createWithRetry<T>(create: () => Promise<T>): Promise<T> {
  *   5. Optional up-front payment (PENDING_CONFIRMATION)
  * Stock is NOT touched here — it decrements when the order is delivered.
  */
-export const POST = withAuth(async (req: NextRequest, { user }) => {
+export const POST = withPermission("order.create", async (req: NextRequest, { user }) => {
   const body = PlaceGazoblokOrderSchema.parse(await req.json());
 
   const phoneNorm = normalizePhone(body.clientPhone);
@@ -164,6 +164,8 @@ export const POST = withAuth(async (req: NextRequest, { user }) => {
       data: {
         orderNumber,
         clientId: client.id,
+        // Selling operator — the owner asks them about unpaid over-load.
+        createdById: user.id,
         status: "PLACED",
         linesSubtotal: totals.linesSubtotal,
         discountPercent: totals.discountPercent,

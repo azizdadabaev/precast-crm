@@ -3,14 +3,14 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
-import { withAuth } from "@/lib/api-auth";
+import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
 import { GazoblokStockAdjustSchema } from "@/lib/gazoblok-validation";
 
 /** GET /api/gazoblok/stock — auth-only (open to all logged-in users —
  *  owner decision). Active sizes + current quantity. */
-export const GET = withAuth(async () => {
+export const GET = withPermission("inventory.view", async () => {
   const products = await prisma.gazoblokProduct.findMany({
     where: { active: true },
     orderBy: [{ seq: "asc" }, { createdAt: "asc" }],
@@ -21,7 +21,7 @@ export const GET = withAuth(async () => {
 
 /** POST /api/gazoblok/stock — auth-only (open to all logged-in users —
  *  owner decision). Manual signed adjustment. */
-export const POST = withAuth(async (req: NextRequest, { user }) => {
+export const POST = withPermission("inventory.manage", async (req: NextRequest, { user }) => {
   const body = GazoblokStockAdjustSchema.parse(await req.json());
   const product = await prisma.gazoblokProduct.findUnique({
     where: { id: body.productId },

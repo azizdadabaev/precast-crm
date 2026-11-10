@@ -3,14 +3,14 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
-import { withAuth } from "@/lib/api-auth";
+import { withPermission } from "@/lib/api-auth";
 
 type Params = { id: string; sid: string };
 
 /** PATCH /api/gazoblok/orders/[id]/shipments/[sid] — mark a loaded shipment
  *  delivered. Simple flow: LOADED → DELIVERED (loading is the proof the goods
  *  left the warehouse, so an unloaded shipment can't be delivered). */
-export const PATCH = withAuth<Params>(async (_req: NextRequest, { user, params }) => {
+export const PATCH = withPermission<Params>("order.edit", async (_req: NextRequest, { user, params }) => {
   const shipment = await prisma.gazoblokShipment.findFirst({
     where: { id: params.sid, orderId: params.id },
     select: { id: true, status: true, number: true },
@@ -50,7 +50,7 @@ export const PATCH = withAuth<Params>(async (_req: NextRequest, { user, params }
 
 /** DELETE /api/gazoblok/orders/[id]/shipments/[sid] — remove an empty (PENDING)
  *  shipment. Loaded/delivered shipments can't be deleted. */
-export const DELETE = withAuth<Params>(async (_req: NextRequest, { params }) => {
+export const DELETE = withPermission<Params>("order.edit", async (_req: NextRequest, { params }) => {
   const shipment = await prisma.gazoblokShipment.findFirst({
     where: { id: params.sid, orderId: params.id },
     select: { id: true, status: true },
