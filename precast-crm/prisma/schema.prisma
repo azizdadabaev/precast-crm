@@ -281,6 +281,7 @@ model User {
 
   // Saved calculator drafts this user created (operator attribution)
   createdProjects Project[] @relation("ProjectCreatedBy")
+  gazoblokOrdersCreated GazoblokOrder[] @relation("GazoblokOrderCreator")
 
   @@map("users")
 }
@@ -1476,6 +1477,8 @@ enum GazoblokStockReason {
   SALE // -N when an order is delivered
   MANUAL_ADJUSTMENT
   CANCELLATION_RESTOCK // +N when a delivered order is canceled
+  SHIPMENT_LOAD // -N when a truck is loaded (blocks leave the yard) — renovation 2026-11
+  SHIPMENT_CORRECTION // ± difference when a loaded truck's counts are corrected
 }
 
 // Catalog row — one per block size (single density grade).
@@ -1524,6 +1527,7 @@ model GazoblokStockMovement {
   reason            GazoblokStockReason
   productionEntryId String?
   orderId           String?
+  shipmentId        String? // the truck this movement belongs to (per-truck stock)
   actorId           String?
   note              String?
   createdAt         DateTime            @default(now())
@@ -1536,6 +1540,7 @@ model GazoblokStockMovement {
   @@index([productId])
   @@index([orderId])
   @@index([productionEntryId])
+  @@index([shipmentId])
   @@index([createdAt])
   @@map("gazoblok_stock_movements")
 }
@@ -1611,6 +1616,14 @@ model GazoblokOrder {
   // older orders and manual orders have none.
   wallEstimate Json?
 
+  // Selling operator (who placed the order) — owner asks them about unpaid over-load.
+  createdById      String?
+  // Close short: the client stopped before taking everything; billed on loaded blocks.
+  shortClosedAt    DateTime?
+  shortCloseReason String?
+  shortClosedById  String?
+
+  createdBy      User?                   @relation("GazoblokOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
   client         Client                  @relation(fields: [clientId], references: [id])
   lines          GazoblokOrderLine[]
   payments       GazoblokPayment[]
@@ -1623,6 +1636,7 @@ model GazoblokOrder {
   @@index([status])
   @@index([clientId])
   @@index([placedAt])
+  @@index([createdById])
   @@map("gazoblok_orders")
 }
 

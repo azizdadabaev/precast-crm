@@ -18,12 +18,15 @@ export type GazoblokStockReason =
   | "PRODUCTION"
   | "SALE"
   | "MANUAL_ADJUSTMENT"
-  | "CANCELLATION_RESTOCK";
+  | "CANCELLATION_RESTOCK"
+  | "SHIPMENT_LOAD"
+  | "SHIPMENT_CORRECTION";
 
 interface MovementMeta {
   reason: GazoblokStockReason;
   productionEntryId?: string | null;
   orderId?: string | null;
+  shipmentId?: string | null;
   actorId?: string | null;
   note?: string | null;
 }
@@ -57,6 +60,7 @@ export async function applyGazoblokMovement(
       reason: meta.reason,
       productionEntryId: meta.productionEntryId ?? null,
       orderId: meta.orderId ?? null,
+      shipmentId: meta.shipmentId ?? null,
       actorId: meta.actorId ?? null,
       note: meta.note ?? null,
     },
