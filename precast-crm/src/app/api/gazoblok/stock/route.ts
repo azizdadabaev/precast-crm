@@ -7,20 +7,32 @@ import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
 import { GazoblokStockAdjustSchema } from "@/lib/gazoblok-validation";
+import { reservedByProduct } from "@/lib/gazoblok-stock-history";
 
-/** GET /api/gazoblok/stock — auth-only (open to all logged-in users —
- *  owner decision). Active sizes + current quantity. */
+/** GET /api/gazoblok/stock — `inventory.view`. Active sizes + current quantity +
+ *  `reserved`: blocks open orders still need (ordered − loaded, spec §6). */
 export const GET = withPermission("inventory.view", async () => {
-  const products = await prisma.gazoblokProduct.findMany({
-    where: { active: true },
-    orderBy: [{ seq: "asc" }, { createdAt: "asc" }],
-    include: { stock: true },
-  });
-  return ok(products);
+  const [products, openOrders] = await Promise.all([
+    prisma.gazoblokProduct.findMany({
+      where: { active: true },
+      orderBy: [{ seq: "asc" }, { createdAt: "asc" }],
+      include: { stock: true },
+    }),
+    prisma.gazoblokOrder.findMany({
+      where: { status: { in: ["PLACED", "IN_PRODUCTION"] }, shortClosedAt: null },
+      select: {
+        status: true,
+        shortClosedAt: true,
+        lines: { select: { id: true, productId: true, productLabel: true, quantity: true } },
+        shipments: { select: { loadedLines: true } },
+      },
+    }),
+  ]);
+  const reserved = reservedByProduct(openOrders);
+  return ok(products.map((p) => ({ ...p, reserved: reserved.get(p.id) ?? 0 })));
 });
 
-/** POST /api/gazoblok/stock — auth-only (open to all logged-in users —
- *  owner decision). Manual signed adjustment. */
+/** POST /api/gazoblok/stock — `inventory.manage`. Manual signed adjustment. */
 export const POST = withPermission("inventory.manage", async (req: NextRequest, { user }) => {
   const body = GazoblokStockAdjustSchema.parse(await req.json());
   const product = await prisma.gazoblokProduct.findUnique({
