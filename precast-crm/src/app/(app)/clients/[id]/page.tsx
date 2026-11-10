@@ -7,8 +7,9 @@ import { api } from "@/lib/fetcher";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Chip } from "@/components/ui/chip";
 import { ArrowLeft, Plus } from "lucide-react";
-import { formatMoney, formatDate } from "@/lib/utils";
+import { formatMoney, formatDate, formatNumber } from "@/lib/utils";
 import { PhoneLink } from "@/components/PhoneLink";
 
 type OrderStatus = "DRAFT" | "PLACED" | "IN_PRODUCTION" | "LOADED" | "DISPATCHED" | "DELIVERED" | "CANCELED";
@@ -29,6 +30,14 @@ const PAYMENT_STATE_UZ: Record<PaymentState, string> = {
   PARTIALLY_PAID:  "Қисман",
   AWAITING_PAYMENT:"Кутилмоқда",
 };
+
+const GAZOBLOK_PAYMENT_CHIP: Record<PaymentState, "success" | "default" | "neutral"> = {
+  FULLY_PAID:       "success",
+  PARTIALLY_PAID:   "default",
+  AWAITING_PAYMENT: "neutral",
+};
+
+const NUM = "font-[var(--font-num)] tabular-nums";
 
 interface ClientDetail {
   id: string;
@@ -55,6 +64,18 @@ interface ClientDetail {
     totalPrice: string;
     placedAt: string;
   }>;
+  gazoblokOrders: Array<{
+    id: string;
+    orderNumber: string;
+    status: string;
+    paymentState: PaymentState;
+    totalPrice: string;
+    confirmedPaid: string;
+    totalBlocks: number;
+    placedAt: string;
+    shortClosedAt: string | null;
+  }>;
+  gazoblok: { orderCount: number; totalBooked: number; debt: number };
 }
 
 export default function ClientDetailPage() {
@@ -233,6 +254,56 @@ export default function ClientDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {client.gazoblok.orderCount > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Газоблок буюртмалари ({client.gazoblok.orderCount})</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Жами: <span className={`${NUM} text-foreground`}>{formatNumber(client.gazoblok.totalBooked, 0)} UZS</span>
+              {" · "}
+              Қарз:{" "}
+              <span className={`${NUM} ${client.gazoblok.debt > 0 ? "text-destructive font-semibold" : "text-foreground"}`}>
+                {formatNumber(client.gazoblok.debt, 0)} UZS
+              </span>
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border border-y border-border">
+              {client.gazoblokOrders.map((o) => (
+                <li
+                  key={o.id}
+                  className="relative flex min-h-11 flex-wrap items-center gap-x-4 gap-y-1 py-2 hover:bg-accent/40"
+                >
+                  <div className="min-w-0 flex-1">
+                    {/* The whole row is the tap target (≥ 44 px), not just the number. */}
+                    <Link
+                      href={`/gazoblok/orders/${o.id}`}
+                      className="whitespace-nowrap font-mono text-sm font-semibold text-primary after:absolute after:inset-0 hover:underline"
+                    >
+                      {o.orderNumber}
+                    </Link>
+                    <div className="text-xs text-muted-foreground">{formatDate(o.placedAt)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`${NUM} text-sm font-semibold`}>{formatNumber(o.totalPrice, 0)} UZS</div>
+                    <div className={`${NUM} text-xs text-muted-foreground`}>{formatNumber(o.totalBlocks, 0)} та</div>
+                  </div>
+                  <div className="ml-auto">
+                    {o.status === "CANCELED" ? (
+                      <Chip variant="danger">Бекор қилинган</Chip>
+                    ) : (
+                      <Chip variant={GAZOBLOK_PAYMENT_CHIP[o.paymentState]}>
+                        {PAYMENT_STATE_UZ[o.paymentState] ?? o.paymentState}
+                      </Chip>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

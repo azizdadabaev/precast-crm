@@ -124,7 +124,7 @@ export const GET = withPermission("client.view", async (req: NextRequest) => {
     defaultDir: "desc",
   });
   const orderBy = clientOrderBy(sortBy, sortDir);
-  const include = { _count: { select: { deals: true, orders: true } } };
+  const include = { _count: { select: { deals: true, orders: true, gazoblokOrders: true } } };
 
   if (isPaginated(searchParams)) {
     // `totalBooked` (sum of a client's live-order totalPrice) is a groupBy

@@ -10,6 +10,7 @@ import { withPermission } from "@/lib/api-auth";
 import { recordAudit } from "@/lib/audit";
 import { deleteClientCascade } from "@/lib/record-delete";
 import { totalForClient } from "@/lib/client-totals";
+import { clientGazoblokSummary } from "@/lib/gazoblok-dashboard";
 
 type Ctx = { params: { id: string } };
 
@@ -24,6 +25,21 @@ export const GET = withPermission<Ctx["params"]>(
           include: { projects: true },
         },
         orders: { orderBy: { placedAt: "desc" }, take: 20 },
+        gazoblokOrders: {
+          orderBy: { placedAt: "desc" },
+          take: 20,
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            paymentState: true,
+            totalPrice: true,
+            confirmedPaid: true,
+            totalBlocks: true,
+            placedAt: true,
+            shortClosedAt: true,
+          },
+        },
       },
     });
     if (!client) return fail("Мижоз топилмади · Client not found", 404);
@@ -32,15 +48,27 @@ export const GET = withPermission<Ctx["params"]>(
     // is the client's real figure. These two are aggregates over ALL their orders, by exactly the
     // rule `GET /api/clients` uses for its rows — otherwise the panel and the list row disagree
     // about the same customer. Additive: every existing reader of this route ignores them.
-    const [orderCount, groups] = await Promise.all([
+    // The gazoblok summary is likewise taken over ALL the client's gazoblok orders, not the 20 shown.
+    const [orderCount, groups, gazoblokRows] = await Promise.all([
       prisma.order.count({ where: { clientId: client.id } }),
       prisma.order.groupBy({
         by: ["clientId"],
         where: { clientId: client.id, status: { notIn: ["CANCELED", "DRAFT"] } },
         _sum: { totalPrice: true },
       }),
+      prisma.gazoblokOrder.findMany({
+        where: { clientId: client.id },
+        select: { status: true, totalPrice: true, confirmedPaid: true },
+      }),
     ]);
-    return ok({ ...client, totalBooked: totalForClient(client.id, groups), orderCount });
+    const gazoblok = clientGazoblokSummary(
+      gazoblokRows.map((r) => ({
+        status: r.status,
+        totalPrice: Number(r.totalPrice),
+        confirmedPaid: Number(r.confirmedPaid),
+      })),
+    );
+    return ok({ ...client, totalBooked: totalForClient(client.id, groups), orderCount, gazoblok });
   },
 );
 

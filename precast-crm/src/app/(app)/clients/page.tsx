@@ -37,7 +37,7 @@ interface Client {
   language: "UZ" | "RU";
   source: string | null;
   createdAt: string;
-  _count: { deals: number; orders: number };
+  _count: { deals: number; orders: number; gazoblokOrders?: number };
 }
 
 /** Paginated envelope returned by /api/clients when `page` is sent. */
@@ -429,6 +429,11 @@ export default function ClientsPage() {
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono">
                         {c._count.orders}
+                        {(c._count.gazoblokOrders ?? 0) > 0 && (
+                          <div className="text-[11px] text-muted-foreground whitespace-nowrap">
+                            +{c._count.gazoblokOrders} газоблок
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-xs font-mono text-text-tertiary">
                         {formatDate(c.createdAt)}
