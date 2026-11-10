@@ -24,6 +24,8 @@ type LoadLine = GazoblokLine & { unitPrice: number };
 interface Props {
   orderId: string;
   shipment: { id: string; number: number };
+  /** Saved counts of a LOADED/DELIVERED truck being corrected; null for a first load. */
+  initialLoaded?: Record<string, number> | null;
   lines: LoadLine[];
   prevShipments: Array<Record<string, number>>;
   open: boolean;
@@ -43,7 +45,7 @@ function parseCapacity(s: string): number {
 }
 
 export function GazoblokSplitShipmentModal({
-  orderId, shipment, lines, prevShipments,
+  orderId, shipment, lines, prevShipments, initialLoaded,
   open, onClose, onSuccess,
 }: Props) {
   const t = useT();
@@ -57,9 +59,12 @@ export function GazoblokSplitShipmentModal({
     [lines, prevShipments],
   );
 
+  // A correction starts from the truck's saved counts; a first load from what is left.
   const [inputs, setInputs] = useState<Record<string, number>>(() =>
-    Object.fromEntries(lines.map((l) => [l.lineId, available[l.lineId] ?? 0])),
+    Object.fromEntries(lines.map((l) => [l.lineId, initialLoaded ? (initialLoaded[l.lineId] ?? 0) : (available[l.lineId] ?? 0)])),
   );
+  // The server asks before an over-load raises the client's debt.
+  const [overloadAsk, setOverloadAsk] = useState<{ extraBlocks: number; extraAmount: number } | null>(null);
 
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -152,7 +157,7 @@ export function GazoblokSplitShipmentModal({
     setInputs(Object.fromEntries(lines.map((l) => [l.lineId, load.lines[l.lineId] ?? 0])));
   }
 
-  async function submit() {
+  async function submit(confirmOverload = false) {
     setLoading(true);
     setError(null);
     try {
@@ -166,12 +171,21 @@ export function GazoblokSplitShipmentModal({
         Object.entries(inputs).filter(([, v]) => v > 0),
       );
       fd.append("loadedLines", JSON.stringify(counts));
+      if (confirmOverload) fd.append("confirmOverload", "true");
 
       const res = await fetch(`/api/gazoblok/orders/${orderId}/shipments/${shipment.id}/load`, {
         method: "POST",
         body: fd,
       });
-      const json = await res.json() as { ok: boolean; error?: string };
+      const json = await res.json() as {
+        ok: boolean;
+        error?: string;
+        details?: { code?: string; extraBlocks?: number; extraAmount?: number };
+      };
+      if (res.status === 409 && json.details?.code === "OVERLOAD_CONFIRM_REQUIRED") {
+        setOverloadAsk({ extraBlocks: json.details.extraBlocks ?? 0, extraAmount: json.details.extraAmount ?? 0 });
+        return;
+      }
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed");
       onSuccess();
       onClose();
@@ -429,15 +443,34 @@ export function GazoblokSplitShipmentModal({
           </div>
         )}
 
-        <div className="flex gap-2 justify-end">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={loading}>
-            {t("Бекор", "Cancel")}
-          </Button>
-          <Button size="sm" onClick={submit} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-            {t("Жўнатмани юклаш", "Save shipment load")}
-          </Button>
-        </div>
+        {overloadAsk ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-3">
+            <div className="text-sm font-semibold text-destructive">
+              {t("Буюртмадан ортиқ", "Over the order")}: +{formatNumber(overloadAsk.extraBlocks, 0)} {t("та", "blocks")} · +
+              <span className="font-mono tabular-nums">{formatNumber(overloadAsk.extraAmount, 0)}</span> UZS.{" "}
+              {t("Мижоз қарзи шунча ошади.", "The client's debt grows by this much.")}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" size="sm" className="min-h-[44px]" onClick={() => setOverloadAsk(null)} disabled={loading}>
+                {t("Орқага", "Back")}
+              </Button>
+              <Button size="sm" className="min-h-[44px]" onClick={() => submit(true)} disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                {t("Тасдиқлаш ва юклаш", "Confirm and load")}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" onClick={onClose} disabled={loading}>
+              {t("Ёпиш", "Close")}
+            </Button>
+            <Button size="sm" onClick={() => submit(false)} disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+              {initialLoaded ? t("Тузатишни сақлаш", "Save correction") : t("Жўнатмани юклаш", "Save shipment load")}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

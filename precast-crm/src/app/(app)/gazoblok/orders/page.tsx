@@ -11,6 +11,8 @@ import { Boxes, Plus, Search } from "lucide-react";
 import { formatDate, formatNumber, cn } from "@/lib/utils";
 import { PhoneLink } from "@/components/PhoneLink";
 import { useT } from "@/lib/i18n";
+import { unpaidOverload } from "@/lib/gazoblok-quantities";
+import { owesRefund } from "@/lib/overpayment";
 
 type Status = "PLACED" | "IN_PRODUCTION" | "DELIVERED" | "CANCELED";
 type PaymentState = "AWAITING_PAYMENT" | "PARTIALLY_PAID" | "FULLY_PAID";
@@ -22,6 +24,7 @@ interface GazoblokOrder {
   paymentState: PaymentState;
   confirmedPaid: string;
   totalPrice: string;
+  overshipAmount: string;
   totalBlocks: number;
   totalVolumeM3: string;
   discountAmount: string;
@@ -212,7 +215,15 @@ export default function GazoblokOrdersPage() {
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <div className="flex flex-col items-start gap-1">
-                          <Chip variant={pay.variant}>{t(pay.uz, pay.en)}</Chip>
+                          {/* A cancelled order owes nothing — never show it as awaiting payment. */}
+                          {o.status !== "CANCELED" && <Chip variant={pay.variant}>{t(pay.uz, pay.en)}</Chip>}
+                          {Number(o.overshipAmount) > 0 &&
+                            unpaidOverload({ overshipAmount: Number(o.overshipAmount), totalPrice: Number(o.totalPrice), confirmedPaid: Number(o.confirmedPaid) }) > 0 && (
+                              <Chip variant="danger">{t("Ортиқча юклама тўланмаган", "Over-load unpaid")}</Chip>
+                            )}
+                          {owesRefund({ status: o.status, totalPrice: o.totalPrice, confirmedPaid: o.confirmedPaid, writeOffAmount: 0 }) && (
+                            <Chip variant="warning">{t("Қайтариш керак", "Refund owed")}</Chip>
+                          )}
                           {o.pendingPaymentCount > 0 && (
                             <Chip variant="default">{t("Тасдиқ кутилмоқда", "Awaiting confirmation")}</Chip>
                           )}

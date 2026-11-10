@@ -17,4 +17,7 @@ export const EVENT_TYPE_LABELS: Record<string, [string, string]> = {
   PAYMENT_REJECTED: ["Тўлов рад этилди", "Payment rejected"],
   SHIPMENT_LOADED: ["Жўнатма юкланди", "Shipment loaded"],
   SHIPMENT_DELIVERED: ["Жўнатма етказилди", "Shipment delivered"],
+  SHIPMENT_CORRECTED: ["Жўнатма тузатилди", "Shipment corrected"],
+  ORDER_SHORT_CLOSED: ["Буюртма қисқа ёпилди", "Order closed short"],
+  REFUND_RECORDED: ["Мижозга пул қайтарилди", "Refund recorded"],
 };

@@ -28,6 +28,10 @@ interface Props {
   // Lines carry the frozen unitPrice for the load modal's over-ship surcharge preview.
   lines: Array<GazoblokLine & { unitPrice: number }>;
   orderStatus: string;
+  /** Trucks can be loaded or corrected only while the order is open (not delivered / cancelled / closed short). */
+  orderOpen: boolean;
+  canEdit: boolean;
+  canEditShipped: boolean;
   onRefresh: () => void;
 }
 
@@ -50,7 +54,7 @@ const STATUS_LABELS: Record<ShipmentStatus, { uz: string; en: string }> = {
 };
 
 export function GazoblokShipmentsSection({
-  orderId, shipments, lines, orderStatus, onRefresh,
+  orderId, shipments, lines, orderStatus, orderOpen, canEdit, canEditShipped, onRefresh,
 }: Props) {
   const t = useT();
   const [loadModalShipment, setLoadModalShipment] = useState<ShipmentData | null>(null);
@@ -156,7 +160,9 @@ export function GazoblokShipmentsSection({
       .map((s) => (s.loadedLines as Record<string, number>) ?? {});
   }
 
-  const canAddMore = orderStatus !== "DELIVERED" && orderStatus !== "CANCELED";
+  const canAddMore = orderOpen && canEdit;
+  const canCorrect = (s: ShipmentData) =>
+    orderOpen && (s.status === "LOADED" ? canEdit : s.status === "DELIVERED" ? canEditShipped : false);
 
   return (
     <div className="rounded-lg border bg-background overflow-hidden">
@@ -195,7 +201,7 @@ export function GazoblokShipmentsSection({
 
                 {orderStatus !== "CANCELED" && (
                   <div className="flex gap-2">
-                    {s.status === "PENDING" && (
+                    {s.status === "PENDING" && orderOpen && canEdit && (
                       <>
                         <Button
                           size="sm"
@@ -221,7 +227,12 @@ export function GazoblokShipmentsSection({
                         </Button>
                       </>
                     )}
-                    {s.status === "LOADED" && (
+                    {canCorrect(s) && (
+                      <Button size="sm" variant="outline" onClick={() => setLoadModalShipment(s)}>
+                        {t("Тузатиш", "Correct")}
+                      </Button>
+                    )}
+                    {s.status === "LOADED" && canEdit && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -295,6 +306,7 @@ export function GazoblokShipmentsSection({
         <GazoblokSplitShipmentModal
           orderId={orderId}
           shipment={{ id: loadModalShipment.id, number: loadModalShipment.number }}
+          initialLoaded={loadModalShipment.status === "PENDING" ? null : loadModalShipment.loadedLines}
           lines={lines}
           prevShipments={prevShipmentsFor(loadModalShipment.id)}
           open={true}
