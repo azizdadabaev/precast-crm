@@ -52,7 +52,7 @@ const PAYMENT_META: Record<
   PaymentState,
   { uz: string; en: string; variant: React.ComponentProps<typeof Chip>["variant"] }
 > = {
-  AWAITING_PAYMENT: { uz: "Кутилмоқда", en: "Awaiting", variant: "warning" },
+  AWAITING_PAYMENT: { uz: "Кутилмоқда", en: "Awaiting", variant: "neutral" },
   PARTIALLY_PAID:   { uz: "Қисман",     en: "Partial",  variant: "default" },
   FULLY_PAID:       { uz: "Тўлиқ",      en: "Paid",     variant: "success" },
 };

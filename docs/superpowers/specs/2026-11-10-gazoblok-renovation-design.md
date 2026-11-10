@@ -115,7 +115,7 @@ missing ones and the who/when display.)
 
 | Gazoblok action | Permission |
 |---|---|
-| see orders list/detail | `order.view` (others' orders also need `order.viewAll`, by `createdById`) |
+| see orders list/detail | `order.view` — sees all orders, same as beam-and-block (owner 2026-11-10: "same permission levels"; `order.viewAll` is unused CRM-wide) |
 | place order / reorder | `order.create` |
 | shipments: create, load, deliver, correct (before delivered), close short | `order.edit` |
 | correct a delivered shipment | `order.editShipped` |

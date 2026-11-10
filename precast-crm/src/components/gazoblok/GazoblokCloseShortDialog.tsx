@@ -54,11 +54,11 @@ export function GazoblokCloseShortDialog({
     <Dialog open={open} onOpenChange={(v) => { if (!v && !close.isPending) onClose(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{t("Қолганини олмайди — буюртмани ёпиш", "Client takes no more — close the order")}</DialogTitle>
+          <DialogTitle>{t("Юкланганича ёпиш", "Close as loaded")}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           {t(
-            "Буюртма юкланган блоклар бўйича қайта ҳисобланади. Юкланмаганлари омборда қолади. Кейин юклаш бўлмайди.",
+            "Мижоз қолганини олмайди. Буюртма юкланган блоклар бўйича қайта ҳисобланади. Юкланмаганлари омборда қолади. Кейин юклаш бўлмайди.",
             "The order is re-billed on the blocks that were loaded. Unloaded blocks stay in stock. No more loading after this.",
           )}
         </p>

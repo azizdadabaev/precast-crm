@@ -118,13 +118,13 @@ const STATUS_META: Record<Status, { uz: string; en: string; variant: React.Compo
 };
 
 const PAYMENT_STATE_META: Record<PaymentState, { uz: string; en: string; variant: React.ComponentProps<typeof Chip>["variant"] }> = {
-  AWAITING_PAYMENT: { uz: "Тўлов кутилмоқда", en: "Awaiting payment", variant: "warning" },
+  AWAITING_PAYMENT: { uz: "Тўлов кутилмоқда", en: "Awaiting payment", variant: "neutral" },
   PARTIALLY_PAID:   { uz: "Қисман тўланган",  en: "Partially paid",   variant: "default" },
   FULLY_PAID:       { uz: "Тўлиқ тўланган",   en: "Fully paid",       variant: "success" },
 };
 
 const PAYMENT_STATUS_META: Record<PaymentStatus, { uz: string; en: string; variant: React.ComponentProps<typeof Chip>["variant"] }> = {
-  PENDING_CONFIRMATION: { uz: "Кутилмоқда",   en: "Pending",   variant: "warning" },
+  PENDING_CONFIRMATION: { uz: "Тасдиқланмаган", en: "Unconfirmed",   variant: "warning" },
   CONFIRMED:            { uz: "Тасдиқланган", en: "Confirmed", variant: "success" },
   REJECTED:             { uz: "Рад этилган",  en: "Rejected",  variant: "danger" },
 };
@@ -549,7 +549,7 @@ export default function GazoblokOrderDetailPage() {
                   setCloseShortOpen(true);
                 }}
               >
-                {t("Қолганини олмайди — ёпиш", "Client takes no more — close")}
+                {t("Юкланганича ёпиш", "Close as loaded")}
               </Button>
             )}
             {canCancelNow && (
