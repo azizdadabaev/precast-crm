@@ -111,3 +111,47 @@ export function parseDecimal(s: string): number | null {
   if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
   return Number(t);
 }
+
+/**
+ * One truck load or correction. Stock follows the truck: per product the change is
+ * −(blocks now on this truck) − (already posted for this truck), so a correction
+ * moves only the difference and a truck loaded before per-truck stock is written
+ * off once, on its first touch. Over-load counts only what THIS load adds beyond the
+ * truck's previous counts (an already-confirmed over-load is not asked again).
+ */
+export function planLoad(input: {
+  lines: { id: string; productId: string | null; quantity: number }[];
+  otherShipments: ShipmentLoad[];
+  prevLoaded: Record<string, number> | null;
+  postedForShipment: Record<string, number>; // productId → Σ change already posted for this truck
+  nextLoaded: Record<string, number>;
+}): {
+  unknownLineIds: string[];
+  overload: { lineId: string; extra: number }[];
+  stockMoves: { productId: string; change: number }[];
+} {
+  const byId = new Map(input.lines.map((l) => [l.id, l]));
+  const unknownLineIds = Object.keys(input.nextLoaded).filter((k) => !byId.has(k));
+
+  const others = loadedByLine(input.otherShipments);
+  const overload: { lineId: string; extra: number }[] = [];
+  for (const l of input.lines) {
+    const base = others.get(l.id) ?? 0;
+    const before = Math.max(0, base + (input.prevLoaded?.[l.id] ?? 0) - l.quantity);
+    const after = Math.max(0, base + (input.nextLoaded[l.id] ?? 0) - l.quantity);
+    if (after > before) overload.push({ lineId: l.id, extra: after - before });
+  }
+
+  const nextByProduct = new Map<string, number>();
+  for (const [lineId, n] of Object.entries(input.nextLoaded)) {
+    const pid = byId.get(lineId)?.productId;
+    if (pid) nextByProduct.set(pid, (nextByProduct.get(pid) ?? 0) + n);
+  }
+  const products = new Set([...nextByProduct.keys(), ...Object.keys(input.postedForShipment)]);
+  const stockMoves: { productId: string; change: number }[] = [];
+  for (const pid of products) {
+    const change = -(nextByProduct.get(pid) ?? 0) - (input.postedForShipment[pid] ?? 0);
+    if (change !== 0) stockMoves.push({ productId: pid, change });
+  }
+  return { unknownLineIds, overload, stockMoves };
+}

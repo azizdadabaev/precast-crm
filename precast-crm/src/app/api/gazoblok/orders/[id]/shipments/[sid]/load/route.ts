@@ -9,31 +9,49 @@ import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import { computeOvership } from "@/lib/gazoblok-overship";
 import { paymentStateFor } from "@/lib/payment-state";
 import { round2 } from "@/services/calculation-engine";
+import { can } from "@/lib/permissions";
+import { planLoad } from "@/lib/gazoblok-quantities";
+import { isOpen } from "@/lib/gazoblok-rules";
+import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
+import { formatNumber } from "@/lib/utils";
+
+/** Thrown inside the transaction; turned into a 4xx after rollback. */
+class LoadRefused extends Error {
+  constructor(public status: number, message: string, public details?: unknown) {
+    super(message);
+  }
+}
 
 type Params = { id: string; sid: string };
 
 /**
  * POST /api/gazoblok/orders/[id]/shipments/[sid]/load
  * Multipart: loadedLines (JSON Record<lineId,blocks>), file (0+ photos — optional).
- * Sets status → LOADED. Over-shipment is ALLOWED: loading more blocks than a line
- * ordered grows the payable total by a surcharge (Σ over-blocks × frozen unitPrice).
- * The recompute runs INSIDE the write transaction under a FOR UPDATE lock so a
- * concurrent load reads committed truth and totalPrice stays single-sourced.
+ * Sets status → LOADED (a DELIVERED truck stays DELIVERED when corrected).
+ * Stock follows the truck (renovation 2026-11): the blocks on it are written off now,
+ * and a correction posts only the difference. Over-shipment is ALLOWED but must be
+ * confirmed (form field confirmOverload=true): loading more than a line ordered grows
+ * the payable total by a surcharge (Σ over-blocks × frozen unitPrice). Everything runs
+ * INSIDE one transaction under a FOR UPDATE lock on the order.
+ * Permissions: order.edit; a DELIVERED truck also needs order.editShipped.
  */
 export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) => {
+  if (!can(user, "order.edit")) return fail("Юклашга рухсат йўқ · You can't load trucks", 403);
   const shipment = await prisma.gazoblokShipment.findFirst({
     where: { id: params.sid, orderId: params.id },
     select: { id: true, status: true, number: true },
   });
   if (!shipment) return fail("Жўнатма топилмади · Shipment not found", 404);
-  if (shipment.status === "DELIVERED") return fail("Жўнатма етказилган · Shipment already delivered", 422);
+  if (shipment.status === "DELIVERED" && !can(user, "order.editShipped")) {
+    return fail("Етказилган жўнатмани тузатишга рухсат йўқ · You can't correct a delivered shipment", 403);
+  }
 
   const order = await prisma.gazoblokOrder.findUnique({
     where: { id: params.id },
-    select: { status: true },
+    select: { status: true, shortClosedAt: true },
   });
   if (!order) return fail("Буюртма топилмади · Order not found", 404);
-  if (order.status === "CANCELED" || order.status === "DELIVERED") {
+  if (!isOpen(order)) {
     return fail("Буюртма ёпилган — юклаб бўлмайди · Order is closed — cannot load", 409);
   }
 
@@ -55,6 +73,7 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
   loadedLines = Object.fromEntries(
     Object.entries(loadedLines).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v) || 0))]),
   );
+  const confirmOverload = String(formData.get("confirmOverload") ?? "") === "true";
 
   // Photos are OPTIONAL. Save each provided image. File I/O stays outside the
   // transaction — an orphan file on a rejected load is harmless, a long tx isn't.
@@ -82,24 +101,75 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
         where: { id: params.id },
         select: {
           status: true,
+          shortClosedAt: true,
           linesSubtotal: true,
           discountAmount: true,
           deliveryCost: true,
           confirmedPaid: true,
-          lines: { select: { id: true, quantity: true, unitPrice: true } },
+          lines: { select: { id: true, productId: true, productLabel: true, quantity: true, unitPrice: true } },
           shipments: { where: { id: { not: params.sid } }, select: { loadedLines: true } },
         },
       });
-      // Re-check under the lock: a racing set_status may have closed the order
-      // after the pre-tx fast-path check passed.
-      if (fresh.status === "CANCELED" || fresh.status === "DELIVERED") {
+      // Re-check under the lock: a racing set_status / close short may have closed
+      // the order after the pre-tx fast-path check passed.
+      if (!isOpen(fresh)) {
         throw new Error("GAZOBLOK_ORDER_CLOSED");
+      }
+      const current = await tx.gazoblokShipment.findUniqueOrThrow({
+        where: { id: params.sid },
+        select: { status: true, loadedLines: true },
+      });
+      const posted = await tx.gazoblokStockMovement.groupBy({
+        by: ["productId"],
+        where: { shipmentId: params.sid },
+        _sum: { change: true },
+      });
+      const prevLoaded = (current.loadedLines as Record<string, number> | null) ?? null;
+      const plan = planLoad({
+        lines: fresh.lines,
+        otherShipments: fresh.shipments,
+        prevLoaded,
+        postedForShipment: Object.fromEntries(posted.map((p) => [p.productId, p._sum.change ?? 0])),
+        nextLoaded: loadedLines,
+      });
+      if (plan.unknownLineIds.length) {
+        throw new LoadRefused(422, "Буюртмада йўқ ўлчам юкланди · A size that is not on this order was loaded", {
+          unknownLineIds: plan.unknownLineIds,
+        });
+      }
+      if (plan.overload.length && !confirmOverload) {
+        const priceOf = (lineId: string) => Number(fresh.lines.find((l) => l.id === lineId)!.unitPrice);
+        const extraAmount = round2(plan.overload.reduce((sum, o) => sum + o.extra * priceOf(o.lineId), 0));
+        const extraBlocks = plan.overload.reduce((sum, o) => sum + o.extra, 0);
+        throw new LoadRefused(
+          409,
+          `Буюртмадан ортиқ: +${formatNumber(extraBlocks, 0)} та · +${formatNumber(extraAmount, 2)} UZS — тасдиқланг · Over the order — confirm first`,
+          {
+            code: "OVERLOAD_CONFIRM_REQUIRED",
+            extraBlocks,
+            extraAmount,
+            overload: plan.overload.map((o) => ({
+              ...o,
+              label: fresh.lines.find((l) => l.id === o.lineId)!.productLabel,
+            })),
+          },
+        );
+      }
+      const isCorrection = prevLoaded !== null && current.status !== "PENDING";
+      for (const m of plan.stockMoves) {
+        await applyGazoblokMovement(tx, m.productId, m.change, {
+          reason: isCorrection ? "SHIPMENT_CORRECTION" : "SHIPMENT_LOAD",
+          orderId: params.id,
+          shipmentId: params.sid,
+          actorId: user.id,
+          note: `Жўнатма ${shipment.number}`,
+        });
       }
 
       const s = await tx.gazoblokShipment.update({
         where: { id: params.sid },
         data: {
-          status: "LOADED",
+          status: current.status === "DELIVERED" ? "DELIVERED" : "LOADED",
           loadedLines,
           loadedAt: new Date(),
           ...(photoUrls.length ? { loadedPhotoUrls: { push: photoUrls } } : {}),
@@ -134,13 +204,15 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
       await tx.gazoblokOrderEvent.create({
         data: {
           orderId: params.id,
-          type: "SHIPMENT_LOADED",
+          type: isCorrection ? "SHIPMENT_CORRECTED" : "SHIPMENT_LOADED",
           actorId: user.id,
-          message: `Жўнатма ${shipment.number} юкланди`,
+          message: isCorrection ? `Жўнатма ${shipment.number} тузатилди` : `Жўнатма ${shipment.number} юкланди`,
           payload: {
             shipmentId: params.sid,
             number: shipment.number,
             loadedLines,
+            ...(isCorrection ? { before: prevLoaded } : {}),
+            ...(plan.overload.length ? { overloadConfirmed: true } : {}),
             // Only surface the surcharge when THIS load pushed a line over.
             ...(overshipDelta > 0
               ? { overshipDelta, overshipAmount: after.overshipAmount }
@@ -151,6 +223,7 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
       return s;
     });
   } catch (e) {
+    if (e instanceof LoadRefused) return fail(e.message, e.status, e.details);
     if (e instanceof Error && e.message === "GAZOBLOK_ORDER_CLOSED") {
       return fail("Буюртма ёпилган — юклаб бўлмайди · Order is closed — cannot load", 409);
     }
