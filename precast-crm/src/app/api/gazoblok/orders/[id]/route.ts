@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withAuth, withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { GazoblokOrderActionSchema } from "@/lib/gazoblok-validation";
@@ -99,7 +100,7 @@ export const GET = withPermission<{ id: string }>("order.view",
  *   record_refund   — payment.confirm: money back (negative confirmed payment).
  */
 export const PATCH = withAuth<{ id: string }>(
-  async (req: NextRequest, { user, params }) => {
+  withIdempotency<{ id: string }>(async (req: NextRequest, { user, params }) => {
     const body = GazoblokOrderActionSchema.parse(await req.json());
     const order = await prisma.gazoblokOrder.findUnique({
       where: { id: params.id },
@@ -492,5 +493,5 @@ export const PATCH = withAuth<{ id: string }>(
       );
     }
     return ok(updated);
-  },
+  }),
 );

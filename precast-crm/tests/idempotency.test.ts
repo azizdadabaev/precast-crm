@@ -28,6 +28,8 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import { withIdempotency } from "@/lib/idempotency";
+import { fail } from "@/lib/api";
+import { overloadRefusal } from "@/lib/gazoblok-rules";
 
 const ctx = { user: { id: "u1", email: "", name: "", role: "SALES" as const, permissions: [], isActive: true, mustChangePassword: false }, params: {} };
 const req = (key?: string, url = "http://localhost/api/orders/o1/delivery-proof") =>
@@ -142,5 +144,36 @@ describe("withIdempotency", () => {
     expect(b.status).toBe(200);
     expect(await a.text()).toBe("not json");
     expect(await b.text()).toBe("not json");
+  });
+  // Gazoblok truck load (Stage 4 W1): a 409 OVERLOAD_CONFIRM_REQUIRED is a definitive
+  // answer, so it is stored like any 4xx. The phone resends a dropped request with the
+  // SAME key (gets the same 409 back, nothing written) and sends the confirmed load
+  // (confirmOverload=true) under a NEW key, which runs fresh.
+  it("stores an over-load 409 for its key; the confirmed resend under a new key runs", async () => {
+    const url = "http://localhost/api/gazoblok/orders/g1/shipments/s1/load";
+    const refusal = overloadRefusal([{ id: "A", productLabel: "600×300×200", unitPrice: 18000 }], [{ lineId: "A", extra: 5 }])!;
+    const writes: string[] = [];
+    const inner = vi.fn(async (r: NextRequest) => {
+      if (r.headers.get("x-confirm") !== "true") return fail(refusal.message, refusal.status, refusal.details);
+      writes.push("load");
+      return Response.json({ ok: true, data: { id: "s1", status: "LOADED" } });
+    });
+    const wrapped = withIdempotency(inner);
+    const send = (key: string, confirm: boolean) =>
+      wrapped(new NextRequest(new URL(url), { method: "POST", headers: { "idempotency-key": key, "x-confirm": String(confirm) } }), ctx);
+
+    const first = await send("load-1", false);
+    expect(first.status).toBe(409);
+    const retried = await send("load-1", false);
+    expect(retried.status).toBe(409);
+    expect(retried.headers.get("Idempotency-Replayed")).toBe("true");
+    expect((await retried.json()).details.code).toBe("OVERLOAD_CONFIRM_REQUIRED");
+
+    const confirmed = await send("load-2", true);
+    expect(confirmed.status).toBe(200);
+    const confirmedRetry = await send("load-2", true);
+    expect(confirmedRetry.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(writes).toEqual(["load"]);
+    expect(inner).toHaveBeenCalledTimes(2);
   });
 });

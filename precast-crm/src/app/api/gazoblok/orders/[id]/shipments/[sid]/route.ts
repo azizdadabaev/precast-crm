@@ -4,13 +4,14 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 
 type Params = { id: string; sid: string };
 
 /** PATCH /api/gazoblok/orders/[id]/shipments/[sid] — mark a loaded shipment
  *  delivered. Simple flow: LOADED → DELIVERED (loading is the proof the goods
  *  left the warehouse, so an unloaded shipment can't be delivered). */
-export const PATCH = withPermission<Params>("order.edit", async (_req: NextRequest, { user, params }) => {
+export const PATCH = withPermission<Params>("order.edit", withIdempotency<Params>(async (_req: NextRequest, { user, params }) => {
   const shipment = await prisma.gazoblokShipment.findFirst({
     where: { id: params.sid, orderId: params.id },
     select: { id: true, status: true, number: true },
@@ -52,7 +53,7 @@ export const PATCH = withPermission<Params>("order.edit", async (_req: NextReque
   });
   if (!updated) return fail("Жўнатма аллақачон етказилган · Already delivered", 409);
   return ok(updated);
-});
+}));
 
 /** DELETE /api/gazoblok/orders/[id]/shipments/[sid] — remove an empty (PENDING)
  *  shipment. Loaded/delivered shipments can't be deleted. */

@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { isOpen } from "@/lib/gazoblok-rules";
 
 type Params = { id: string };
@@ -19,7 +20,7 @@ export const GET = withPermission<Params>("order.view", async (_req: NextRequest
 
 /** POST /api/gazoblok/orders/[id]/shipments — add an empty (PENDING) shipment.
  *  Allowed while the order isn't delivered/canceled. */
-export const POST = withPermission<Params>("order.edit", async (_req: NextRequest, { params }) => {
+export const POST = withPermission<Params>("order.edit", withIdempotency<Params>(async (_req: NextRequest, { params }) => {
   const order = await prisma.gazoblokOrder.findUnique({
     where: { id: params.id },
     select: { id: true, status: true, shortClosedAt: true },
@@ -48,4 +49,4 @@ export const POST = withPermission<Params>("order.edit", async (_req: NextReques
     shipment = await addNext();
   }
   return created(shipment);
-});
+}));

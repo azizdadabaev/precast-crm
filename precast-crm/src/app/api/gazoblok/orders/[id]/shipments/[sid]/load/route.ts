@@ -5,6 +5,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
+import { withIdempotency } from "@/lib/idempotency";
 import { saveImageFromFormData, UploadError } from "@/lib/uploads";
 import { computeOvership } from "@/lib/gazoblok-overship";
 import { paymentStateFor } from "@/lib/payment-state";
@@ -34,7 +35,7 @@ type Params = { id: string; sid: string };
  * INSIDE one transaction under a FOR UPDATE lock on the order.
  * Permissions: order.edit; a DELIVERED truck also needs order.editShipped.
  */
-export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) => {
+export const POST = withAuth<Params>(withIdempotency<Params>(async (req: NextRequest, { user, params }) => {
   if (!can(user, "order.edit")) return fail("Юклашга рухсат йўқ · You can't load trucks", 403);
   const shipment = await prisma.gazoblokShipment.findFirst({
     where: { id: params.sid, orderId: params.id },
@@ -241,4 +242,4 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
   }
 
   return ok(updated);
-});
+}));
