@@ -37,6 +37,16 @@ export function moneyText(n: number): string {
   return frac === 0 ? whole : `${whole},${String(frac).padStart(2, "0")}`;
 }
 
+/** Idempotency-Key for placing: kept only while the form body is byte-identical (a network
+ *  retry is answered with the first result); any change to the form gets a new key. */
+export function placementKey(
+  prev: { body: string; key: string } | null,
+  body: string,
+  newKey: () => string,
+): { body: string; key: string } {
+  return prev && prev.body === body ? prev : { body, key: newKey() };
+}
+
 /** − / + on a size: an unreadable value counts as 0; 0 shows as an empty box. */
 export function stepQty(raw: string, delta: number): string {
   const n = Math.max(0, (parseQty(raw) ?? 0) + delta);

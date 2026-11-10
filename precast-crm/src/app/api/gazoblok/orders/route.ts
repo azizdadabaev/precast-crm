@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ok, created, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
+import { withIdempotency, bodyScope } from "@/lib/idempotency";
 import { can } from "@/lib/permissions";
 import { paymentStateFor } from "@/lib/payment-state";
 import { recordAudit } from "@/lib/audit";
@@ -107,8 +108,10 @@ async function createWithRetry<T>(create: () => Promise<T>): Promise<T> {
  *   5. Optional up-front payment (PENDING_CONFIRMATION, or CONFIRMED for payment.confirm)
  *      with its optional receipt photos (payment.record, like the upload route)
  * Stock is NOT touched here — it moves per truck when blocks are loaded.
+ * A network retry must not place the order (with its payment and receipts) twice: the
+ * web form sends one Idempotency-Key per form state, pinned to the body; no header = old behaviour.
  */
-export const POST = withPermission("order.create", async (req: NextRequest, { user }) => {
+export const POST = withPermission("order.create", withIdempotency(async (req: NextRequest, { user }) => {
   const body = PlaceGazoblokOrderSchema.parse(await req.json());
 
   // A receipt is a payment record: same gate as the upload route and record_payment.
@@ -356,4 +359,4 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   })();
 
   return created(order);
-});
+}, { scope: bodyScope }));

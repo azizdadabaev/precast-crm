@@ -19,6 +19,7 @@ const ROUTES = [
   "src/app/api/gazoblok/orders/[id]/route.ts",
   "src/app/api/gazoblok/upload-receipt/route.ts",
   "src/app/api/gazoblok/orders/[id]/delivery-proof/route.ts",
+  "src/app/api/gazoblok/orders/route.ts",
 ];
 
 describe("mobile-retried routes are wrapped with withIdempotency", () => {
@@ -36,6 +37,7 @@ describe("mobile-retried routes are wrapped with withIdempotency", () => {
 describe("gazoblok routes with several actions per path scope their keys", () => {
   const SCOPED: [string, RegExp][] = [
     ["src/app/api/gazoblok/orders/[id]/route.ts", /\{ scope: bodyScope \}/],
+    ["src/app/api/gazoblok/orders/route.ts", /\{ scope: bodyScope \}/],
     ["src/app/api/gazoblok/orders/[id]/shipments/[sid]/load/route.ts", /\{ scope: formFieldsScope\("loadedLines", "confirmOverload"\) \}/],
   ];
   for (const [rel, re] of SCOPED) {

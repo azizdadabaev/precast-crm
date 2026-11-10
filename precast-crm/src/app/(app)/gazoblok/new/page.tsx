@@ -22,6 +22,7 @@ import {
   orderProblems,
   parseDmy,
   paymentPreview,
+  placementKey,
   qtyFromLines,
   scheduledAtIso,
   type DiscountMode,
@@ -253,33 +254,41 @@ function NewOrderForm({ fromId, onFresh }: { fromId: string | null; onFresh: () 
     [badIds, sizes],
   );
 
+  const placeKey = useRef<{ body: string; key: string } | null>(null);
   const placeOrder = useMutation({
-    mutationFn: () =>
-      api<PlacedOrder>("/api/gazoblok/orders", {
+    mutationFn: () => {
+      const body = JSON.stringify({
+        clientName: name.trim(),
+        clientNameDecision: decisionValue ?? undefined,
+        clientPhone: phone.trim(),
+        clientAddress: address.trim() || undefined,
+        lines: lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
+        ...(discount ?? {}),
+        deliveryCost: deliveryNum ?? undefined,
+        scheduledAt: scheduledYmd ? scheduledAtIso(scheduledYmd) : undefined,
+        notes: notes.trim() || undefined,
+        paidAmount: paid > 0 ? paid : undefined,
+        paymentMethod: paid > 0 && method !== "" ? method : undefined,
+        receiptUrls: paid > 0 && receiptUrls.length ? receiptUrls : undefined,
+        wallEstimate: wallSnapshot ?? undefined,
+        sourceOrderId: reorder?.source.id,
+      });
+      placeKey.current = placementKey(placeKey.current, body, () => crypto.randomUUID());
+      return api<PlacedOrder>("/api/gazoblok/orders", {
         method: "POST",
-        json: {
-          clientName: name.trim(),
-          clientNameDecision: decisionValue ?? undefined,
-          clientPhone: phone.trim(),
-          clientAddress: address.trim() || undefined,
-          lines: lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
-          ...(discount ?? {}),
-          deliveryCost: deliveryNum ?? undefined,
-          scheduledAt: scheduledYmd ? scheduledAtIso(scheduledYmd) : undefined,
-          notes: notes.trim() || undefined,
-          paidAmount: paid > 0 ? paid : undefined,
-          paymentMethod: paid > 0 && method !== "" ? method : undefined,
-          receiptUrls: paid > 0 && receiptUrls.length ? receiptUrls : undefined,
-          wallEstimate: wallSnapshot ?? undefined,
-          sourceOrderId: reorder?.source.id,
-        },
-      }),
+        body,
+        headers: { "Idempotency-Key": placeKey.current.key },
+      });
+    },
     onSuccess: (created) => {
+      placeKey.current = null;
       setError(null);
       setPlaced({ order: created, paid, pending: paid > 0 && !canConfirm });
       document.querySelector("main")?.scrollTo({ top: 0 });
     },
     onError: (e: Error) => {
+      // A server answer is final for this key; only a lost connection retries with the same key.
+      if (e instanceof ApiError) placeKey.current = null;
       const details =
         e instanceof ApiError ? (e.payload as { details?: { code?: string; savedName?: string } })?.details : undefined;
       if (details?.code === "CLIENT_NAME_MISMATCH") {

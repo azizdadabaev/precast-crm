@@ -12,6 +12,19 @@ vi.mock("@/lib/notifications", () => ({
 const productFindMany = vi.fn();
 const clientFindUnique = vi.fn();
 const paymentFindFirst = vi.fn();
+// In-memory idempotency rows (I3).
+const keys = new Map<string, Record<string, unknown>>();
+const idempotencyKey = {
+  findUnique: vi.fn(async ({ where }: { where: { id: string } }) => keys.get(where.id) ?? null),
+  create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+    keys.set(data.id as string, { ...data, status: "IN_PROGRESS", responseStatus: null, createdAt: new Date() });
+  }),
+  update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+    keys.set(where.id, { ...keys.get(where.id), ...data });
+  }),
+  delete: vi.fn(async ({ where }: { where: { id: string } }) => keys.delete(where.id)),
+  deleteMany: vi.fn(async () => ({ count: 0 })),
+};
 const tx = {
   client: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
   gazoblokOrder: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
@@ -25,6 +38,9 @@ vi.mock("@/lib/prisma", () => ({
     client: { findUnique: (...a: unknown[]) => clientFindUnique(...a) },
     gazoblokOrder: { findUnique: vi.fn() },
     gazoblokPayment: { findFirst: (...a: unknown[]) => paymentFindFirst(...a) },
+    get idempotencyKey() {
+      return idempotencyKey;
+    },
     $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
   },
 }));
@@ -44,15 +60,16 @@ const body = (extra: Record<string, unknown> = {}) => ({
   lines: [{ productId: "p1", quantity: 100 }],
   ...extra,
 });
-const req = (json: unknown) =>
+const req = (json: unknown, key?: string) =>
   new NextRequest(new URL("http://localhost/api/gazoblok/orders"), {
     method: "POST",
     body: JSON.stringify(json),
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(key ? { "idempotency-key": key } : {}) },
   });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  keys.clear();
   productFindMany.mockResolvedValue([
     { id: "p1", label: "600×300×200", pricePerBlock: 18_000, lengthM: 0.6, heightM: 0.3, thicknessM: 0.2, active: true },
   ]);
@@ -135,5 +152,34 @@ describe("POST /api/gazoblok/orders — receipt photo with the placement payment
     expect(rec.message.replace(/[  ]/g, " ")).toBe("Тўлов ёзилди: 500 000 UZS · Click · чек 1 та");
     const conf = tx.gazoblokOrderEvent.create.mock.calls[1][0].data;
     expect(conf.payload).toMatchObject({ paymentId: "pay1", method: "CLICK", autoConfirmed: true });
+  });
+});
+
+describe("POST /api/gazoblok/orders — duplicate protection (I3)", () => {
+  beforeEach(() => vi.mocked(getCurrentUser).mockResolvedValue(owner));
+  const paid = () => body({ paidAmount: 500_000, paymentMethod: "CASH", receiptUrls: [receipt] });
+
+  it("a network retry with the same key and body places once and replays the first answer", async () => {
+    const a = await POST(req(paid(), "k-1"), { params: {} });
+    const b = await POST(req(paid(), "k-1"), { params: {} });
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(201);
+    expect(b.headers.get("Idempotency-Replayed")).toBe("true");
+    expect(tx.gazoblokOrder.create).toHaveBeenCalledTimes(1);
+    expect(tx.gazoblokPayment.create).toHaveBeenCalledTimes(1);
+    expect(tx.gazoblokReceipt.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("the same key with a changed form is refused, not replayed", async () => {
+    await POST(req(paid(), "k-2"), { params: {} });
+    const b = await POST(req(body({ lines: [{ productId: "p1", quantity: 200 }] }), "k-2"), { params: {} });
+    expect(b.status).toBe(422);
+    expect(tx.gazoblokOrder.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("without the header nothing changes (two posts, two orders)", async () => {
+    await POST(req(paid()), { params: {} });
+    await POST(req(paid()), { params: {} });
+    expect(tx.gazoblokOrder.create).toHaveBeenCalledTimes(2);
   });
 });

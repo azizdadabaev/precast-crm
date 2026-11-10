@@ -4,6 +4,7 @@ import {
   groupDigits,
   stepQty,
   moneyText,
+  placementKey,
   formLines,
   badQtyIds,
   addPerSize,
@@ -217,5 +218,17 @@ describe("stockTone", () => {
     expect(stockTone(0, 50)).toBe("none");
     expect(stockTone(49, 50)).toBe("low");
     expect(stockTone(50, 50)).toBe("ok");
+  });
+});
+
+describe("placementKey (I3)", () => {
+  let n = 0;
+  const fresh = () => `k${++n}`;
+  it("the same form body keeps its key (a network retry); any change gets a new one", () => {
+    const a = placementKey(null, '{"q":1}', fresh);
+    expect(placementKey(a, '{"q":1}', fresh)).toBe(a);
+    const b = placementKey(a, '{"q":2}', fresh);
+    expect(b.key).not.toBe(a.key);
+    expect(b.body).toBe('{"q":2}');
   });
 });
