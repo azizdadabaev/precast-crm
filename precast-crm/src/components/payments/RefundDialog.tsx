@@ -24,6 +24,10 @@ interface Props {
   /** What the client is owed back (refundDue). Pre-fills and caps the amount. */
   due: number;
   onRefunded: () => void;
+  /** Called instead of POST /api/orders/[id]/refund (gazoblok posts to its own route). */
+  submit?: (v: { amount: number; method: PaymentMethod; paidOn: string; note: string }) => Promise<void>;
+  /** false hides the date field (paidOn is then today) — default true. */
+  showDate?: boolean;
 }
 
 function todayLocal(): string {
@@ -36,7 +40,7 @@ function todayLocal(): string {
  * refund can be partial, never more than is due; the reason is required so
  * the order's history explains where the money went.
  */
-export function RefundDialog({ open, onClose, orderId, due, onRefunded }: Props) {
+export function RefundDialog({ open, onClose, orderId, due, onRefunded, submit: customSubmit, showDate = true }: Props) {
   const t = useT();
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState<PaymentMethod>("CASH");
@@ -66,10 +70,9 @@ export function RefundDialog({ open, onClose, orderId, due, onRefunded }: Props)
       // Noon local keeps the chosen day the same day in every timezone.
       const [y, m, d] = date.split("-").map(Number);
       const paidOn = new Date(y, m - 1, d, 12).toISOString();
-      await api(`/api/orders/${orderId}/refund`, {
-        method: "POST",
-        json: { amount, method, paidOn, note: note.trim() },
-      });
+      const body = { amount, method, paidOn, note: note.trim() };
+      if (customSubmit) await customSubmit(body);
+      else await api(`/api/orders/${orderId}/refund`, { method: "POST", json: body });
       onRefunded();
       onClose();
     } catch (e) {
@@ -129,7 +132,7 @@ export function RefundDialog({ open, onClose, orderId, due, onRefunded }: Props)
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className={showDate ? "grid grid-cols-2 gap-3" : "grid gap-3"}>
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider font-bold">
                 Усул<span className="lang-en"> · Method</span>
@@ -144,7 +147,7 @@ export function RefundDialog({ open, onClose, orderId, due, onRefunded }: Props)
                 ))}
               </select>
             </div>
-            <div className="space-y-1.5">
+            {showDate && <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider font-bold">
                 Сана<span className="lang-en"> · Date</span>
               </Label>
@@ -155,7 +158,7 @@ export function RefundDialog({ open, onClose, orderId, due, onRefunded }: Props)
                 onChange={(e) => setDate(e.target.value)}
                 className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm tabular-nums"
               />
-            </div>
+            </div>}
           </div>
 
           <div className="space-y-1.5">
