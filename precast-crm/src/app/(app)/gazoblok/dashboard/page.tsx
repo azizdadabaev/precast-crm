@@ -9,7 +9,6 @@ import { GazoblokKpis } from "@/components/gazoblok/dashboard/GazoblokKpis";
 import { GazoblokRevenueChart } from "@/components/gazoblok/dashboard/GazoblokRevenueChart";
 import { GazoblokOverloadTable } from "@/components/gazoblok/dashboard/GazoblokOverloadTable";
 import { GazoblokStockTable } from "@/components/gazoblok/dashboard/GazoblokStockTable";
-import { GazoblokTrucks } from "@/components/gazoblok/dashboard/GazoblokTrucks";
 import { GazoblokDayPlan } from "@/components/gazoblok/dashboard/GazoblokDayPlan";
 
 function SkeletonBlock({ h }: { h: string }) {
@@ -19,7 +18,7 @@ function SkeletonBlock({ h }: { h: string }) {
 /**
  * Gazoblok's own dashboard, apart from the beam-and-block one. Money arrives as
  * `null` for dashboard.viewBasic users (stripped server-side), so those users see
- * only stock, trucks and the 7-day plan.
+ * only stock and the 7-day plan.
  */
 export default function GazoblokDashboardPage() {
   const t = useT();
@@ -44,8 +43,8 @@ export default function GazoblokDashboardPage() {
         </h1>
         <p className="text-sm text-muted-foreground">
           {t(
-            "Пул, қарзлар, омбор ва машиналар. Йиғма монолитдан алоҳида.",
-            "Money, debts, stock and trucks. Separate from beam-and-block.",
+            "Пул, қарзлар, омбор ва режа. Йиғма монолитдан алоҳида.",
+            "Money, debts, stock and plan. Separate from beam-and-block.",
           )}
         </p>
       </div>
@@ -77,7 +76,6 @@ export default function GazoblokDashboardPage() {
               <GazoblokStockTable stock={data.stock} />
             </div>
           </div>
-          <GazoblokTrucks trucks={data.trucks} />
           <GazoblokDayPlan plan={data.plan} unscheduledOpen={data.unscheduledOpen} />
         </>
       )}
