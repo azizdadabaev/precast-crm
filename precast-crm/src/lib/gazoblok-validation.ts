@@ -103,6 +103,8 @@ export const PlaceGazoblokOrderSchema = z.object({
   paidAmount: z.number().min(0).default(0),
   paymentMethod: PaymentMethodEnum.optional(),
   wallEstimate: WallEstimateSnapshotSchema.optional(),
+  // Reorder: the past order this one was copied from (link only, nothing else is copied).
+  sourceOrderId: z.string().min(1).optional(),
 }).refine((b) => b.paidAmount === 0 || !!b.paymentMethod, {
   message: "Тўлов усулини танланг · Payment method is required when an amount is paid",
   path: ["paymentMethod"],
@@ -139,9 +141,30 @@ export const GazoblokOrderActionSchema = z.discriminatedUnion("action", [
     action: z.literal("record_refund"),
     amount: z.number().positive(),
     method: PaymentMethodEnum,
-    notes: z.string().trim().optional(),
+    // Money leaving the business needs a stated reason.
+    notes: z.string().trim().min(5).max(500),
   }),
 ]);
+
+const EditLineSchema = z.object({
+  lineId: z.string().min(1).optional(),
+  productId: z.string().min(1),
+  quantity: z.number().int().min(1),
+});
+
+/** Edit / reschedule an open order. Every field optional; at least one present.
+ *  Lines, discount and delivery are "money" edits; date and notes alone are a reschedule. */
+export const GazoblokEditOrderSchema = z.object({
+  lines: z.array(EditLineSchema).min(1).max(50).optional(),
+  discountPercent: z.number().min(0).max(100).optional(),
+  discountAmount: z.number().min(0).optional(),
+  deliveryCost: z.number().min(0).optional(),
+  scheduledAt: z.coerce.date().nullable().optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
+}).refine((b) => Object.values(b).some((v) => v !== undefined), {
+  message: "Ўзгариш йўқ · Nothing to change",
+});
+export type GazoblokEditOrderInput = z.infer<typeof GazoblokEditOrderSchema>;
 
 /** Log a day's production (one line per product). */
 export const GazoblokProductionSchema = z.object({

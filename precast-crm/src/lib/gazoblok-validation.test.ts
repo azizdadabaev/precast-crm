@@ -4,6 +4,7 @@ import {
   GazoblokOrderActionSchema,
   GazoblokStockAdjustSchema,
   GazoblokProductionSchema,
+  GazoblokEditOrderSchema,
 } from "./gazoblok-validation";
 
 const baseOrder = {
@@ -70,5 +71,32 @@ describe("GazoblokProductionSchema producedAt", () => {
     expect(GazoblokProductionSchema.safeParse({
       lines: [{ productId: "p1", quantity: 5 }],
     }).success).toBe(true);
+  });
+});
+
+describe("GazoblokEditOrderSchema (stage 3 edit contract)", () => {
+  it("rejects an empty edit", () => {
+    expect(GazoblokEditOrderSchema.safeParse({}).success).toBe(false);
+  });
+  it("accepts clearing the date only", () => {
+    expect(GazoblokEditOrderSchema.safeParse({ scheduledAt: null }).success).toBe(true);
+  });
+  it("rejects a zero quantity line", () => {
+    expect(GazoblokEditOrderSchema.safeParse({ lines: [{ productId: "p", quantity: 0 }] }).success).toBe(false);
+  });
+});
+
+describe("reorder link and refund notes", () => {
+  it("PlaceGazoblokOrderSchema keeps sourceOrderId", () => {
+    const r = PlaceGazoblokOrderSchema.safeParse({ ...baseOrder, sourceOrderId: "o1" });
+    expect(r.success && r.data.sourceOrderId).toBe("o1");
+  });
+  const refund = (extra: object) =>
+    GazoblokOrderActionSchema.safeParse({ action: "record_refund", amount: 500_000, method: "CASH", ...extra });
+  it("record_refund without notes fails", () => {
+    expect(refund({}).success).toBe(false);
+  });
+  it("record_refund with a reason passes", () => {
+    expect(refund({ notes: "Ортиқча тўлов" }).success).toBe(true);
   });
 });

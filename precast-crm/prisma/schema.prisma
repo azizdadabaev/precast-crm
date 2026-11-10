@@ -1624,8 +1624,17 @@ model GazoblokOrder {
   shortClosedAt    DateTime?
   shortCloseReason String?
   shortClosedById  String?
+  // Reorder: the past order this one was copied from (stage 3, 2026-11).
+  sourceOrderId    String?
+  // Delivery map pin, same fields as the beam-and-block Order (stage 3, 2026-11).
+  deliveryLat           Float?
+  deliveryLng           Float?
+  deliveryLocationUrl   String?
+  deliveryLocationLabel String?
 
   createdBy      User?                   @relation("GazoblokOrderCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  sourceOrder    GazoblokOrder?          @relation("GazoblokReorder", fields: [sourceOrderId], references: [id], onDelete: SetNull)
+  reorders       GazoblokOrder[]         @relation("GazoblokReorder")
   client         Client                  @relation(fields: [clientId], references: [id])
   lines          GazoblokOrderLine[]
   payments       GazoblokPayment[]
@@ -1639,6 +1648,7 @@ model GazoblokOrder {
   @@index([clientId])
   @@index([placedAt])
   @@index([createdById])
+  @@index([sourceOrderId])
   @@map("gazoblok_orders")
 }
 
