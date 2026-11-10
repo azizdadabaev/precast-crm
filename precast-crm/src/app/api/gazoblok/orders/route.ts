@@ -12,6 +12,7 @@ import { normalizePhone } from "@/lib/phone";
 import { orderTotal, lineTotal, blockVolumeM3 } from "@/services/gazoblok-engine";
 import { nextGazoblokOrderNumber, gazoblokMonthPrefix } from "@/lib/gazoblok-number";
 import { PlaceGazoblokOrderSchema } from "@/lib/gazoblok-validation";
+import { clientNamePlan } from "@/lib/gazoblok-quantities";
 
 const ORDER_STATUSES = ["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"] as const;
 
@@ -133,6 +134,16 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   const month = placedAt.getMonth() + 1;
   const monthPrefix = gazoblokMonthPrefix(year, month);
 
+  // Never rename an existing client silently — ask the operator first.
+  const known = await prisma.client.findUnique({ where: { phone: phoneNorm }, select: { name: true } });
+  if (known && clientNamePlan(known.name, body.clientName, body.clientNameDecision) === "ask") {
+    return fail(
+      `Бу рақам «${known.name}» номи билан сақланган · This phone is saved under «${known.name}»`,
+      409,
+      { code: "CLIENT_NAME_MISMATCH", savedName: known.name, typedName: body.clientName },
+    );
+  }
+
   const order = await createWithRetry(() => prisma.$transaction(async (tx) => {
     // 1. Resolve or create Client (same dedup posture as the floor order route)
     let client = await tx.client.findUnique({ where: { phone: phoneNorm } });
@@ -142,7 +153,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
       });
     } else {
       const updates: { name?: string; address?: string } = {};
-      if (client.name !== body.clientName) updates.name = body.clientName;
+      if (clientNamePlan(client.name, body.clientName, body.clientNameDecision) === "update") updates.name = body.clientName;
       if (body.clientAddress && client.address !== body.clientAddress) {
         updates.address = body.clientAddress;
       }

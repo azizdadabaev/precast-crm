@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Chip } from "@/components/ui/chip";
+import { parseDecimal } from "@/lib/gazoblok-quantities";
+
+/** Operators type a decimal comma («7,5»); unreadable input counts as 0. */
+const num = (v: string) => parseDecimal(String(v)) ?? 0;
 import {
   estimateProject,
   DEFAULT_JOINT_MM,
@@ -132,29 +136,29 @@ export function GazoblokWallCalculator({
   );
 
   const opts: ProjectEstimateOpts = {
-    jointMm: jointMm.trim() === "" ? undefined : Number(jointMm),
-    wastePct: wastePct.trim() === "" ? undefined : Number(wastePct),
-    glueKgPerM2: glueKg.trim() === "" ? undefined : Number(glueKg),
+    jointMm: jointMm.trim() === "" ? undefined : num(jointMm),
+    wastePct: wastePct.trim() === "" ? undefined : num(wastePct),
+    glueKgPerM2: glueKg.trim() === "" ? undefined : num(glueKg),
   };
 
   const readyWalls: WallInput[] = useMemo(
     () =>
       walls
-        .filter((w) => Number(w.lengthM) > 0 && Number(w.heightM) > 0)
+        .filter((w) => num(w.lengthM) > 0 && num(w.heightM) > 0)
         .map((w) => ({
           id: w.id,
           name: w.name.trim() || undefined,
-          lengthM: Number(w.lengthM),
-          heightM: Number(w.heightM),
+          lengthM: num(w.lengthM),
+          heightM: num(w.heightM),
           productId: w.productId,
           orientation: w.orientation,
           openings: w.openings
-            .filter((o) => Number(o.widthM) > 0 && Number(o.heightM) > 0 && Number(o.qty) >= 1)
+            .filter((o) => num(o.widthM) > 0 && num(o.heightM) > 0 && num(o.qty) >= 1)
             .map((o) => ({
               kind: o.kind,
-              widthM: Number(o.widthM),
-              heightM: Number(o.heightM),
-              qty: Math.floor(Number(o.qty)),
+              widthM: num(o.widthM),
+              heightM: num(o.heightM),
+              qty: Math.floor(num(o.qty)),
             })),
         })),
     [walls],
@@ -242,8 +246,8 @@ export function GazoblokWallCalculator({
                     {w.name.trim() || `${t("Девор", "Wall")} ${wi + 1}`}
                   </div>
                   <div className="text-xs text-muted-foreground tabular-nums">
-                    {Number(w.lengthM) > 0 && Number(w.heightM) > 0
-                      ? `${formatNumber(Number(w.lengthM), 2)} × ${formatNumber(Number(w.heightM), 2)} м`
+                    {num(w.lengthM) > 0 && num(w.heightM) > 0
+                      ? `${formatNumber(num(w.lengthM), 2)} × ${formatNumber(num(w.heightM), 2)} м`
                       : t("Ўлчам киритилмаган", "No dimensions")}
                     {oo && ` · ${oo[activeOrientation].wallCm}см девор`}
                   </div>
@@ -287,10 +291,8 @@ export function GazoblokWallCalculator({
                     <div>
                       <FieldLabel uz="Узунлиги (м)" en="Length (m)" />
                       <Input
-                        type="number"
+                        type="text"
                         inputMode="decimal"
-                        min={0}
-                        step={0.1}
                         className="tabular-nums"
                         placeholder="0"
                         value={w.lengthM}
@@ -300,10 +302,8 @@ export function GazoblokWallCalculator({
                     <div>
                       <FieldLabel uz="Баландлиги (м)" en="Height (m)" />
                       <Input
-                        type="number"
+                        type="text"
                         inputMode="decimal"
-                        min={0}
-                        step={0.1}
                         className="tabular-nums"
                         placeholder="0"
                         value={w.heightM}
@@ -371,10 +371,8 @@ export function GazoblokWallCalculator({
                         <div className="w-24">
                           <FieldLabel uz="Эни (м)" en="Width (m)" />
                           <Input
-                            type="number"
+                            type="text"
                             inputMode="decimal"
-                            min={0}
-                            step={0.1}
                             className="tabular-nums"
                             placeholder="0"
                             value={o.widthM}
@@ -384,10 +382,8 @@ export function GazoblokWallCalculator({
                         <div className="w-24">
                           <FieldLabel uz="Бўйи (м)" en="Height (m)" />
                           <Input
-                            type="number"
+                            type="text"
                             inputMode="decimal"
-                            min={0}
-                            step={0.1}
                             className="tabular-nums"
                             placeholder="0"
                             value={o.heightM}
@@ -474,10 +470,8 @@ export function GazoblokWallCalculator({
               <div>
                 <FieldLabel uz="Чок (мм)" en="Joint (mm)" />
                 <Input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min={0}
-                  step={0.5}
                   className="tabular-nums"
                   placeholder={String(DEFAULT_JOINT_MM)}
                   value={jointMm}
@@ -500,10 +494,8 @@ export function GazoblokWallCalculator({
               <div>
                 <FieldLabel uz="Ёпиштиргич (кг/м²)" en="Glue (kg/m²)" />
                 <Input
-                  type="number"
+                  type="text"
                   inputMode="decimal"
-                  min={0}
-                  step={0.1}
                   className="tabular-nums"
                   placeholder={String(DEFAULT_GLUE_KG_PER_M2)}
                   value={glueKg}

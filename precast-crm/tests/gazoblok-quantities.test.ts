@@ -63,3 +63,17 @@ describe("gazoblok quantities", () => {
     expect(parseDecimal("7,5,1")).toBeNull();
   });
 });
+
+describe("clientNamePlan — never rename a client silently", async () => {
+  const { clientNamePlan } = await import("@/lib/gazoblok-quantities");
+  it("same name (ignoring spaces and case) needs no question", () => {
+    expect(clientNamePlan("Тохиржон Ака", " тохиржон  ака ")).toBe("same");
+  });
+  it("a different name asks first", () => {
+    expect(clientNamePlan("Тохиржон", "Анвар")).toBe("ask");
+  });
+  it("follows the operator's answer", () => {
+    expect(clientNamePlan("Тохиржон", "Анвар", "keep")).toBe("keep");
+    expect(clientNamePlan("Тохиржон", "Анвар", "update")).toBe("update");
+  });
+});

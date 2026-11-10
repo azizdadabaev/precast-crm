@@ -13,7 +13,8 @@ import {
   Phone,
   MapPin,
 } from "lucide-react";
-import { api } from "@/lib/fetcher";
+import { api, ApiError } from "@/lib/fetcher";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -239,12 +240,15 @@ export default function GazoblokNewOrderPage() {
     return v;
   }, [lines, products]);
 
+  // The phone belongs to a client saved under another name: ask, never rename silently.
+  const [nameAsk, setNameAsk] = useState<{ saved: string; typed: string } | null>(null);
   const placeOrder = useMutation({
-    mutationFn: () =>
+    mutationFn: (clientNameDecision?: "keep" | "update") =>
       api<CreatedOrder>("/api/gazoblok/orders", {
         method: "POST",
         json: {
           clientName: clientName.trim(),
+          clientNameDecision,
           clientPhone: clientPhone.trim(),
           clientAddress: clientAddress.trim() || undefined,
           lines: lines.map((l) => ({
@@ -270,9 +274,18 @@ export default function GazoblokNewOrderPage() {
       }),
     onSuccess: (created) => {
       setError(null);
+      setNameAsk(null);
       router.push("/gazoblok/orders/" + created.id);
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => {
+      const details = e instanceof ApiError ? (e.payload as { details?: { code?: string; savedName?: string; typedName?: string } })?.details : undefined;
+      if (details?.code === "CLIENT_NAME_MISMATCH") {
+        setError(null);
+        setNameAsk({ saved: details.savedName ?? "", typed: details.typedName ?? clientName.trim() });
+        return;
+      }
+      setError(e.message);
+    },
   });
 
   const canPlace =
@@ -677,7 +690,7 @@ export default function GazoblokNewOrderPage() {
           className="w-full"
           size="lg"
           disabled={!canPlace}
-          onClick={() => placeOrder.mutate()}
+          onClick={() => placeOrder.mutate(undefined)}
         >
           {placeOrder.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -687,6 +700,32 @@ export default function GazoblokNewOrderPage() {
           {t("Буюртма бериш", "Place order")}
         </Button>
       </section>
+
+      <Dialog open={!!nameAsk} onOpenChange={(v) => { if (!v && !placeOrder.isPending) setNameAsk(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("Бу рақам бошқа ном билан сақланган", "This phone is saved under another name")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "Мижоз номи ўзгарса, унинг аввалги буюртмаларида ҳам ўзгаради.",
+              "Renaming the client also changes the name on their earlier orders.",
+            )}
+          </p>
+          <div className="grid gap-2 text-sm">
+            <div><span className="text-muted-foreground">{t("Сақланган", "Saved")}: </span><b>{nameAsk?.saved}</b></div>
+            <div><span className="text-muted-foreground">{t("Киритилган", "Typed")}: </span><b>{nameAsk?.typed}</b></div>
+          </div>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <Button className="min-h-[44px] flex-1" disabled={placeOrder.isPending} onClick={() => placeOrder.mutate("keep")}>
+              {t("Сақланган номни қолдириш", "Keep the saved name")}
+            </Button>
+            <Button variant="outline" className="min-h-[44px] flex-1" disabled={placeOrder.isPending} onClick={() => placeOrder.mutate("update")}>
+              {t("Номни янгилаш", "Update the name")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

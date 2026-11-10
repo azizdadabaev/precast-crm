@@ -155,3 +155,18 @@ export function planLoad(input: {
   }
   return { unknownLineIds, overload, stockMoves };
 }
+
+/**
+ * Placing an order with an existing client's phone must never rename that client
+ * silently (their older orders would change name too). Same name → nothing to ask;
+ * otherwise the operator chooses to keep the saved name or update it.
+ */
+export function clientNamePlan(
+  existing: string,
+  typed: string,
+  decision?: "keep" | "update",
+): "same" | "ask" | "keep" | "update" {
+  const norm = (s: string) => s.trim().replace(/\s+/g, " ").toLocaleLowerCase("uz");
+  if (norm(existing) === norm(typed)) return "same";
+  return decision ?? "ask";
+}

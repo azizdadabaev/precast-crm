@@ -85,6 +85,9 @@ export const WallEstimateSnapshotSchema = z.object({
 /** Place a new газоблок order. */
 export const PlaceGazoblokOrderSchema = z.object({
   clientName: z.string().trim().min(1),
+  // When the phone belongs to a client saved under another name, the operator
+  // decides: keep the saved name or update it (never a silent rename).
+  clientNameDecision: z.enum(["keep", "update"]).optional(),
   clientPhone: z.string().trim().min(1),
   clientAddress: z.string().trim().optional(),
   lines: z.array(OrderLineSchema).min(1),
