@@ -11,7 +11,7 @@ import { Loader2, Scissors } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLang, useT } from "@/lib/i18n";
-import { uzPart } from "@/lib/gazoblok-text";
+import { uzPart, uzsText } from "@/lib/gazoblok-text";
 import { cn, formatNumber } from "@/lib/utils";
 import { shortCloseTotals, type LineQty } from "@/lib/gazoblok-quantities";
 import { NUM } from "@/components/gazoblok/order-form/ui";
@@ -107,23 +107,23 @@ export function CloseShortDialog({
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-muted-foreground">{t("Жами", "Total")}</span>
               <span>
-                <span className={cn(NUM, "text-muted-foreground line-through")}>{n0(totals.totalPrice)}</span> →{" "}
-                <b className={cn(NUM, "text-[15px]")}>{n0(next.totalPrice)}</b> UZS
+                <span className={cn(NUM, "text-muted-foreground line-through")}>{uzsText(totals.totalPrice)}</span> →{" "}
+                <b className={cn(NUM, "text-[15px]")}>{uzsText(next.totalPrice)}</b> UZS
               </span>
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-muted-foreground">{t("Тўланган", "Paid")}</span>
-              <span className={cn(NUM, "font-semibold", confirmedPaid > 0 ? "text-success" : "text-muted-foreground")}>{n0(confirmedPaid)}</span>
+              <span className={cn(NUM, "font-semibold", confirmedPaid > 0 ? "text-success" : "text-muted-foreground")}>{uzsText(confirmedPaid)}</span>
             </div>
             {refund >= 0.01 ? (
               <div className="flex items-baseline justify-between gap-3 font-semibold text-warning">
                 <span>{t("Қайтариш керак бўлади", "Refund will be owed")}</span>
-                <span className={NUM}>{n0(refund)}</span>
+                <span className={NUM}>{uzsText(refund)}</span>
               </div>
             ) : debt >= 0.01 ? (
               <div className="flex items-baseline justify-between gap-3">
                 <span className="text-muted-foreground">{t("Қарздорлик бўлади", "Debt will be")}</span>
-                <span className={cn(NUM, "font-semibold text-destructive")}>{n0(debt)}</span>
+                <span className={cn(NUM, "font-semibold text-destructive")}>{uzsText(debt)}</span>
               </div>
             ) : null}
           </div>

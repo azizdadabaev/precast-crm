@@ -4,10 +4,11 @@ import { useState } from "react";
 import { Ban, Check, CircleCheck, Clock, Loader2, Plus, Receipt, Undo2, Wallet, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ReceiptPicker } from "@/components/payments/ReceiptPicker";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
-import { parseMoney } from "@/lib/gazoblok-text";
+import { parseMoney, uzsText } from "@/lib/gazoblok-text";
+import { moneyText } from "@/lib/gazoblok-order-form";
 import { paymentRow, regroupMoney } from "@/lib/gazoblok-order-screen";
 import { dotDateTime, isAutoConfirmed } from "@/lib/gazoblok-detail";
 import { ErrorText, Help, NUM, SectionCard } from "@/components/gazoblok/order-form/ui";
@@ -16,7 +17,6 @@ import type { PaymentMethod } from "@/components/gazoblok/order-form/types";
 import type { Payment } from "./types";
 import { BTN_OUTLINE, BTN_PRIMARY, ICON, Pill } from "./ui";
 
-const n0 = (v: number) => formatNumber(v, 0);
 const METHOD_ICON = Object.fromEntries(METHODS.map((m) => [m.key, m.icon])) as Record<string, (typeof METHODS)[number]["icon"]>;
 
 export function PaymentsCard({
@@ -86,7 +86,7 @@ export function PaymentsCard({
       action={
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[13px] text-muted-foreground">
-            {t("Тасдиқланган", "Confirmed")} <b className={cn(NUM, "text-foreground")}>{n0(paid)}</b> <span className={NUM}>/ {n0(total)}</span>
+            {t("Тасдиқланган", "Confirmed")} <b className={cn(NUM, "text-foreground")}>{uzsText(paid)}</b> <span className={NUM}>/ {uzsText(total)}</span>
           </span>
           {canAdd && !formOpen && (
             <button type="button" className={BTN_OUTLINE} onClick={() => onFormOpen(true)} data-action="open-payment">
@@ -212,7 +212,7 @@ export function PaymentsCard({
               onBlur={() => onAmountRaw(regroupMoney(amountRaw))}
               className={cn(NUM, "h-11 bg-background md:h-10", (unreadable || tooHigh || (pressed && amount === null)) && "border-destructive")}
             />
-            <button type="button" className={cn(BTN_OUTLINE, "shrink-0")} onClick={() => onAmountRaw(n0(payable))}>
+            <button type="button" className={cn(BTN_OUTLINE, "shrink-0")} onClick={() => onAmountRaw(moneyText(payable))}>
               {t("Тўлиқ", "Full")}
             </button>
           </div>
@@ -220,14 +220,14 @@ export function PaymentsCard({
             <ErrorText>{t("Сонни текширинг: масалан 1 000 000", "Check the number: e.g. 1 000 000")}</ErrorText>
           ) : tooHigh ? (
             <ErrorText>
-              {t("Сумма қолдиқдан ошиб кетди: қолдиқ", "Amount exceeds the balance:")} <span className={NUM}>{n0(payable)}</span> UZS
+              {t("Сумма қолдиқдан ошиб кетди: қолдиқ", "Amount exceeds the balance:")} <span className={NUM}>{uzsText(payable)}</span> UZS
             </ErrorText>
           ) : (
             <Help>
-              {t("Қарздорлик", "Debt")}: <span className={NUM}>{n0(payable)}</span> UZS
+              {t("Қарздорлик", "Debt")}: <span className={NUM}>{uzsText(payable)}</span> UZS
               {unpaidOverload > 0 && (
                 <>
-                  {" "}— {t("шундан ортиқча юклама", "of which over-load")} <span className={NUM}>{n0(unpaidOverload)}</span>
+                  {" "}— {t("шундан ортиқча юклама", "of which over-load")} <span className={NUM}>{uzsText(unpaidOverload)}</span>
                 </>
               )}
             </Help>

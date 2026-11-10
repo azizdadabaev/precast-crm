@@ -14,7 +14,7 @@ import { formatNumber, cn } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { PhoneLink } from "@/components/PhoneLink";
 import { Bi, useT } from "@/lib/i18n";
-import { STATUS_LABELS } from "@/lib/gazoblok-text";
+import { STATUS_LABELS, uzsText } from "@/lib/gazoblok-text";
 import type { OrderCounts } from "@/lib/gazoblok-order-list";
 import { dayChipLabel } from "@/lib/gazoblok-calendar";
 import { GazoblokOrdersCalendar } from "@/components/gazoblok/GazoblokOrdersCalendar";
@@ -464,13 +464,13 @@ function useRowChips() {
       if (o.unpaidOverload > 0)
         out.push(
           <Chip className={CHIP_CASE} key="debt" variant="danger">
-            {t("Ортиқча", "Over-load")} <span className={NUM}>{formatNumber(o.unpaidOverload, 0)}</span>
+            {t("Ортиқча", "Over-load")} <span className={NUM}>{uzsText(o.unpaidOverload)}</span>
           </Chip>,
         );
       if (o.refundDue > 0)
         out.push(
           <Chip className={CHIP_CASE} key="refund" variant="warning">
-            {t("Қайтариш", "Refund")} <span className={NUM}>{formatNumber(o.refundDue, 0)}</span>
+            {t("Қайтариш", "Refund")} <span className={NUM}>{uzsText(o.refundDue)}</span>
           </Chip>,
         );
       if (o.pendingPaymentCount > 0)
@@ -554,10 +554,10 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
                   </div>
                 </td>
                 <td className="px-3 py-3.5 text-right whitespace-nowrap">
-                  <div className={NUM}>{canceled ? "—" : formatNumber(Number(o.totalPrice), 0)}</div>
+                  <div className={NUM}>{canceled ? "—" : uzsText(Number(o.totalPrice))}</div>
                   {left !== null && (
                     <div className={cn("mt-1 text-xs", left === 0 ? "text-text-tertiary" : "text-muted-foreground")}>
-                      {t("қолди", "left")} <span className={NUM}>{formatNumber(left, 0)}</span>
+                      {t("қолди", "left")} <span className={NUM}>{uzsText(left)}</span>
                     </div>
                   )}
                 </td>
@@ -597,7 +597,7 @@ function OrdersCards({ orders }: { orders: GazoblokOrder[] }) {
             >
               <span className={cn("text-[13px] text-muted-foreground", NUM)}>{o.orderNumber}</span>
               <span className={cn("text-right text-base font-semibold whitespace-nowrap", NUM)}>
-                {canceled ? "—" : formatNumber(Number(o.totalPrice), 0)}
+                {canceled ? "—" : uzsText(Number(o.totalPrice))}
               </span>
               <span className={cn("font-semibold text-[15px] truncate", canceled && "text-muted-foreground")} title={o.client.name}>
                 {o.client.name}
@@ -605,7 +605,7 @@ function OrdersCards({ orders }: { orders: GazoblokOrder[] }) {
               <span className="text-right text-[13px] text-muted-foreground whitespace-nowrap">
                 {left === null ? null : (
                   <>
-                    {t("Қолди", "Left")} <span className={NUM}>{formatNumber(left, 0)}</span>
+                    {t("Қолди", "Left")} <span className={NUM}>{uzsText(left)}</span>
                   </>
                 )}
               </span>

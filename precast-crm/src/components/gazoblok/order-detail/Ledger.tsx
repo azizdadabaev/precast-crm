@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn, formatNumber } from "@/lib/utils";
+import { uzsText } from "@/lib/gazoblok-text";
 import { useT } from "@/lib/i18n";
 import { NUM } from "@/components/gazoblok/order-form/ui";
 import type { nextAction, Pill as PillT, PrimaryKind } from "@/lib/gazoblok-detail";
@@ -150,28 +151,28 @@ export function Ledger({
               <span className={cn(NUM, "font-semibold")}>{l.label}</span>
               <span className={cn(NUM, "text-muted-foreground")}>
                 {" "}
-                {n0(l.quantity)} × {n0(l.unitPrice)}
+                {n0(l.quantity)} × {uzsText(l.unitPrice)}
               </span>
             </span>
-            <span className={NUM}>{n0(l.lineTotal)}</span>
+            <span className={NUM}>{uzsText(l.lineTotal)}</span>
           </div>
         ))}
         <div className="mt-1 space-y-2 border-t border-dashed border-border pt-2">
-          {row(t("Блоклар суммаси", "Blocks subtotal"), n0(linesSubtotal))}
+          {row(t("Блоклар суммаси", "Blocks subtotal"), uzsText(linesSubtotal))}
           {discountAmount > 0 &&
             row(
               <>
                 {t("Чегирма", "Discount")} <span className={NUM}>{formatNumber(discountPercent, 2)}</span> %
               </>,
-              `−${n0(discountAmount)}`,
+              `−${uzsText(discountAmount)}`,
             )}
-          {row(t("Етказиш", "Delivery"), n0(deliveryCost))}
+          {row(t("Етказиш", "Delivery"), uzsText(deliveryCost))}
           {overshipAmount > 0 && (
             <div className="flex items-baseline justify-between gap-3 text-destructive">
               <span>
                 {t("Ортиқча юклама", "Over-load")} +<span className={NUM}>{n0(overBlocks)}</span> {t("та", "pcs")}
               </span>
-              <span className={NUM}>+{n0(overshipAmount)}</span>
+              <span className={NUM}>+{uzsText(overshipAmount)}</span>
             </div>
           )}
         </div>
@@ -184,13 +185,13 @@ export function Ledger({
             className={cn(NUM, "text-[30px] font-bold leading-none tracking-tight", canceled && "text-muted-foreground line-through")}
             data-testid="ledger-total"
           >
-            {n0(total)}
+            {uzsText(total)}
             <span className="ml-1.5 font-sans text-[13px] font-medium text-muted-foreground">UZS</span>
           </span>
         </div>
         {shortClosed && totalBefore !== null && totalBefore !== total && (
           <div className="mt-1.5 text-right text-xs text-muted-foreground">
-            {t("аввал", "was")} <span className={cn(NUM, "line-through")}>{n0(totalBefore)}</span> — {t("юкланганича ёпилди", "closed as loaded")}
+            {t("аввал", "was")} <span className={cn(NUM, "line-through")}>{uzsText(totalBefore)}</span> — {t("юкланганича ёпилди", "closed as loaded")}
           </div>
         )}
       </div>
@@ -198,18 +199,18 @@ export function Ledger({
       <div className="space-y-2 border-b border-border px-5 py-3 text-[13px]">
         <div className="flex items-baseline justify-between">
           <span className="text-muted-foreground">{t("Тўланган", "Paid")}</span>
-          <span className={cn(NUM, "font-semibold", paid > 0 ? "text-success" : "text-muted-foreground")}>{n0(paid)}</span>
+          <span className={cn(NUM, "font-semibold", paid > 0 ? "text-success" : "text-muted-foreground")}>{uzsText(paid)}</span>
         </div>
         {refundDue >= 0.01 ? (
           <div className="flex items-baseline justify-between">
             <span className="text-muted-foreground">{t("Ортиқча тўланган", "Overpaid")}</span>
-            <span className={cn(NUM, "font-bold text-warning")}>{n0(refundDue)}</span>
+            <span className={cn(NUM, "font-bold text-warning")}>{uzsText(refundDue)}</span>
           </div>
         ) : (
           <div className="flex items-baseline justify-between">
             <span className="text-muted-foreground">{t("Қарздорлик", "Debt")}</span>
             <span className={cn(NUM, "font-bold", debt > 0.005 && !canceled ? "text-destructive" : "text-muted-foreground")} data-testid="ledger-debt">
-              {n0(canceled ? 0 : debt)}
+              {uzsText(canceled ? 0 : debt)}
             </span>
           </div>
         )}
@@ -223,8 +224,8 @@ export function Ledger({
               {t("Ортиқча юклама", "Over-load")}
             </div>
             {row(t("Блок", "Blocks"), `+${n0(overBlocks)} та`, "[&>span:last-child]:font-semibold [&>span:last-child]:text-foreground")}
-            {row(t("Сумма", "Amount"), `+${n0(overshipAmount)}`, "[&>span:last-child]:font-semibold [&>span:last-child]:text-foreground")}
-            {row(t("Тўланмаган", "Unpaid"), n0(unpaidOverload), unpaidOverload > 0 ? "[&>span:last-child]:font-bold [&>span:last-child]:text-destructive" : "[&>span:last-child]:text-success")}
+            {row(t("Сумма", "Amount"), `+${uzsText(overshipAmount)}`, "[&>span:last-child]:font-semibold [&>span:last-child]:text-foreground")}
+            {row(t("Тўланмаган", "Unpaid"), uzsText(unpaidOverload), unpaidOverload > 0 ? "[&>span:last-child]:font-bold [&>span:last-child]:text-destructive" : "[&>span:last-child]:text-success")}
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-muted-foreground">{t("Сотувчи", "Seller")}</span>
               <span className="font-semibold">{sellerName ?? "—"}</span>
@@ -238,8 +239,8 @@ export function Ledger({
               {t("Мижозга қайтариш керак", "Refund owed to the client")}
             </div>
             <p className="text-muted-foreground">
-              {t("Тўланган", "Paid")} <span className={cn(NUM, "text-foreground")}>{n0(paid)}</span> − {t("янги жами", "new total")}{" "}
-              <span className={cn(NUM, "text-foreground")}>{n0(total)}</span> = <b className={cn(NUM, "text-foreground")}>{n0(refundDue)}</b> UZS.{" "}
+              {t("Тўланган", "Paid")} <span className={cn(NUM, "text-foreground")}>{uzsText(paid)}</span> − {t("янги жами", "new total")}{" "}
+              <span className={cn(NUM, "text-foreground")}>{uzsText(total)}</span> = <b className={cn(NUM, "text-foreground")}>{uzsText(refundDue)}</b> UZS.{" "}
               {t("Фақат тўловни тасдиқловчи қайтаради.", "Only a payment approver can refund.")}
             </p>
           </div>
@@ -360,7 +361,7 @@ export function MobileActionBar({ debt, refund, primary, pending, onPrimary }: {
         >
           <div className="text-[11px] text-muted-foreground">{refund >= 0.01 ? t("Қайтариш керак", "Refund owed") : t("Қарздорлик", "Debt")}</div>
           <div className={cn(NUM, "text-[18px] font-bold leading-tight", refund >= 0.01 ? "text-warning" : debt > 0.005 ? "text-destructive" : "text-success")}>
-            {n0(refund >= 0.01 ? refund : debt)}
+            {uzsText(refund >= 0.01 ? refund : debt)}
           </div>
         </button>
         {primary && (

@@ -16,6 +16,15 @@ export const STATUS_LABELS: Record<Status, [string, string]> = {
 
 const SEP = " · ";
 
+const TWO_DP = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** Money on screen, one rule everywhere (owner 2026-11-10): sums are whole UZS; an older
+ *  row's tiyin show, as two digits, only when they are non-zero («36 298 738,80», «0,80»). */
+export function uzsText(v: number): string {
+  const cents = Math.round(v * 100);
+  return cents % 100 === 0 ? formatNumber(cents / 100 + 0, 0) : TWO_DP.format(cents / 100);
+}
+
 /** API messages are "Узбекча · English"; UZ-only mode shows the part before the first separator. */
 export function uzPart(message: string, lang: "uz" | "bilingual"): string {
   if (lang === "bilingual") return message;

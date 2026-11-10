@@ -9,7 +9,7 @@
 import { formatNumber } from "@/lib/utils";
 import { EVENT_TYPE_LABELS } from "@/lib/gazoblok-labels";
 import { methodName, orderTotals } from "@/lib/gazoblok-event-payload";
-import { statusChangeText } from "@/lib/gazoblok-text";
+import { statusChangeText, uzsText } from "@/lib/gazoblok-text";
 import { loadedByLine } from "@/lib/gazoblok-quantities";
 
 export type Tone = "primary" | "success" | "destructive" | "warning" | "muted";
@@ -54,7 +54,7 @@ type PaymentIn = {
 type LineIn = { id: string; label: string; quantity: number };
 
 const n0 = (v: number) => formatNumber(v, 0);
-const uzs = (v: number) => `${formatNumber(v, 2)} UZS`;
+const uzs = (v: number) => `${uzsText(v)} UZS`;
 const ta = (v: number) => `${n0(v)} та`;
 const GONE = "ўчирилган ўлчам";
 
@@ -153,7 +153,7 @@ export function buildHistory(input: {
           const blocks = overBlocks !== null ? `+${n0(overBlocks)} та · ` : "";
           item.alert = {
             tone: "destructive",
-            text: `Буюртмадан ортиқ ${blocks}+${n0(overMoney)} UZS — қарз, сотувчи ${input.sellerName ?? "—"}`,
+            text: `Буюртмадан ортиқ ${blocks}+${uzsText(overMoney)} UZS — қарз, сотувчи ${input.sellerName ?? "—"}`,
           };
         }
         items.push(item);
@@ -210,10 +210,10 @@ export function buildHistory(input: {
           const left = Math.max(0, ordered - loaded);
           return { label: String(q.label ?? ""), value: `${n0(loaded)} / ${n0(ordered)} та`, ...(left > 0 ? { note: `${n0(left)} олинмади` } : {}) };
         });
-        if (after !== null) rows.push({ label: "Жами", value: `${n0(after)} UZS`, ...(before !== null ? { before: n0(before) } : {}) });
+        if (after !== null) rows.push({ label: "Жами", value: `${uzsText(after)} UZS`, ...(before !== null ? { before: uzsText(before) } : {}) });
         const refund = num(p.refundDue);
         const sub: HistoryItem["sub"] = [];
-        if (refund !== null && refund >= 0.01) sub.push({ text: `Қайтариш керак ${n0(refund)} UZS`, tone: "warning" });
+        if (refund !== null && refund >= 0.01) sub.push({ text: `Қайтариш керак ${uzsText(refund)} UZS`, tone: "warning" });
         const reason = str(p.reason);
         if (reason) sub.push({ text: `Сабаб: ${reason}` });
         items.push({ ...base, group: "load", icon: "closeShort", tone: "warning", title: "Юкланганича ёпилди", rows, sub });
@@ -233,12 +233,12 @@ export function buildHistory(input: {
         };
         if (sizes) {
           item.rows = sizes.map((s) => ({ label: s.label, value: ta(s.qty) }));
-          item.foot = { label: "Ҳаммаси", value: blocks !== null ? ta(blocks) : undefined, right: total !== null ? `${n0(total)} UZS` : undefined };
+          item.foot = { label: "Ҳаммаси", value: blocks !== null ? ta(blocks) : undefined, right: total !== null ? `${uzsText(total)} UZS` : undefined };
         } else {
           const name = /^Order placed for (.+)$/.exec(message)?.[1] ?? /—\s*(.+)$/.exec(message)?.[1] ?? null;
           if (name) item.sub.push({ text: name });
           if (blocks !== null) item.sub.push({ text: ta(blocks) });
-          if (total !== null) item.sub.push({ text: `${n0(total)} UZS` });
+          if (total !== null) item.sub.push({ text: `${uzsText(total)} UZS` });
         }
         items.push(item);
         break;

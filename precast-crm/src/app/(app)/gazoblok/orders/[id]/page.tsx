@@ -14,7 +14,8 @@ import { ArrowLeft, Ban, CircleCheck } from "lucide-react";
 import { api, ApiError } from "@/lib/fetcher";
 import { useLang, useT } from "@/lib/i18n";
 import { formatNumber } from "@/lib/utils";
-import { uzPart, parseMoney } from "@/lib/gazoblok-text";
+import { uzPart, parseMoney, uzsText } from "@/lib/gazoblok-text";
+import { moneyText } from "@/lib/gazoblok-order-form";
 import { refundBody } from "@/lib/gazoblok-order-screen";
 import { screenActions } from "@/lib/gazoblok-order-screen";
 import { blockWeightKg } from "@/lib/gazoblok-weight";
@@ -252,7 +253,7 @@ export default function GazoblokOrderDetailPage() {
         break;
       }
       case "pay":
-        setPayAmount(n0(p.amount ?? 0));
+        setPayAmount(moneyText(p.amount ?? 0));
         setPayFormOpen(true);
         requestAnimationFrame(() => document.getElementById("sec-payments")?.scrollIntoView({ behavior: "smooth", block: "start" }));
         break;
@@ -377,7 +378,7 @@ export default function GazoblokOrderDetailPage() {
             formOpen={payFormOpen}
             onFormOpen={(o) => {
               setPayFormOpen(o);
-              if (o && !payAmount) setPayAmount(n0(toPay));
+              if (o && !payAmount) setPayAmount(moneyText(toPay));
             }}
             amountRaw={payAmount}
             onAmountRaw={setPayAmount}
@@ -499,7 +500,7 @@ export default function GazoblokOrderDetailPage() {
           title={t("Тўловни рад этиш", "Reject the payment")}
           text={
             <>
-              {n0(Number(confirm.payment.amount))} UZS
+              {uzsText(Number(confirm.payment.amount))} UZS
             </>
           }
           reasonLabel={t("Рад этиш сабаби", "Rejection reason")}

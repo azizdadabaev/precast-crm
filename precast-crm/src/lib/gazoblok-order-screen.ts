@@ -4,7 +4,7 @@
  */
 import { formatNumber } from "@/lib/utils";
 import { canDeliver, isOpen } from "@/lib/gazoblok-rules";
-import { parseMoney } from "@/lib/gazoblok-text";
+import { parseMoney, uzsText } from "@/lib/gazoblok-text";
 import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
 import type { LineQty } from "@/lib/gazoblok-quantities";
 
@@ -62,7 +62,7 @@ export function paymentRow(
   const pending = p.status === "PENDING_CONFIRMATION";
   return {
     refund,
-    amountText: refund ? `−${formatNumber(-amount, 0)}` : formatNumber(amount, 0),
+    amountText: refund ? `−${uzsText(-amount)}` : uzsText(amount),
     canApprove: pending && orderStatus !== "CANCELED",
     canReject: pending,
   };
@@ -76,7 +76,7 @@ export function refundBody(v: { amount: number; method: string; paidOn: string; 
 /** Regroup a typed sum on blur («1500000» → «1 500 000»); unreadable text stays as typed. */
 export function regroupMoney(s: string): string {
   const n = parseMoney(s);
-  return n === null ? s : formatNumber(n, 0);
+  return n === null ? s : uzsText(n);
 }
 
 const firstWord = (s: string) => s.trim().split(/\s+/)[0]?.replace(/[^\p{L}]/gu, "").toLowerCase() ?? "";

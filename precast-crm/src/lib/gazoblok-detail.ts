@@ -6,6 +6,7 @@
  */
 import { formatNumber } from "@/lib/utils";
 import { canDeliver, isOpen } from "@/lib/gazoblok-rules";
+import { uzsText } from "@/lib/gazoblok-text";
 import type { LineQty } from "@/lib/gazoblok-quantities";
 import type { Tone } from "@/lib/gazoblok-history";
 
@@ -130,11 +131,11 @@ export function nextAction(o: DetailOrder, perms: string[]) {
   let primary: Primary | null = null;
   if (o.status === "CANCELED") primary = null;
   else if (o.refundDue >= 0.01 && can("payment.confirm"))
-    primary = { kind: "refund", label: `Пулни қайтариш · ${n0(o.refundDue)} UZS`, amount: o.refundDue };
+    primary = { kind: "refund", label: `Пулни қайтариш · ${uzsText(o.refundDue)} UZS`, amount: o.refundDue };
   else if (open && left > 0 && can("order.edit")) primary = { kind: "load", label: `Жўнатма юклаш · ${n0(left)} та қолди` };
   else if (active && onRoad.length && can("order.edit"))
     primary = { kind: "deliverTruck", label: `Жўнатма ${onRoad[0].number} етказилди`, shipmentId: onRoad[0].id };
-  else if (toPay > 0.005 && can("payment.record")) primary = { kind: "pay", label: `Тўлов қўшиш · ${n0(toPay)} UZS`, amount: toPay };
+  else if (toPay > 0.005 && can("payment.record")) primary = { kind: "pay", label: `Тўлов қўшиш · ${uzsText(toPay)} UZS`, amount: toPay };
   else if (pendingPay && can("payment.confirm")) primary = { kind: "confirmPayment", label: "Тўловни тасдиқлаш", paymentId: pendingPay.id };
   else if (active && deliverProblem === null && can("order.edit")) primary = { kind: "markDelivered", label: "Етказилди деб ёпиш" };
   else if (o.status === "DELIVERED" && can("order.create")) primary = { kind: "reorder", label: "Қайта буюртма" };
@@ -145,7 +146,7 @@ export function nextAction(o: DetailOrder, perms: string[]) {
     if (left === 0 && loaded === 0 && !o.shortClosedAt) blockers.push("Ҳали ҳеч нарса юкланмаган");
     if (onRoad.length) blockers.push(`${n0(onRoad.length)} та жўнатма йўлда — етказилмаган`);
     if (empty.length) blockers.push(`${n0(empty.length)} та жўнатма бўш — юкланг ёки ўчиринг`);
-    if (owed > 0.005) blockers.push(`${n0(owed)} UZS тўланмаган`);
+    if (owed > 0.005) blockers.push(`${uzsText(owed)} UZS тўланмаган`);
   }
 
   const secondary = {

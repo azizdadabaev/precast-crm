@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/fetcher";
 import { useLang, useT } from "@/lib/i18n";
-import { uzPart } from "@/lib/gazoblok-text";
+import { uzPart, uzsText } from "@/lib/gazoblok-text";
 import { cn, formatNumber } from "@/lib/utils";
 import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 import { loadedByLine } from "@/lib/gazoblok-quantities";
@@ -345,7 +345,7 @@ export function LoadDialog({
                   <TriangleAlert className="h-4 w-4 shrink-0" {...ICON} />
                   <span>
                     {t("Буюртмадан ортиқ", "Over the order")}: +<span className={NUM}>{n0(askBlocks)}</span> {t("та", "pcs")} · +
-                    <span className={NUM}>{n0(askAmount)}</span> UZS
+                    <span className={NUM}>{uzsText(askAmount)}</span> UZS
                   </span>
                 </div>
                 <p className="mt-1 text-muted-foreground">

@@ -8,6 +8,7 @@ import { cn, formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
 import type { DiscountMode } from "@/lib/gazoblok-order-form";
+import { uzsText } from "@/lib/gazoblok-text";
 import { BadNumber, ErrorText, FIELD, FIELD_ERR, FieldLabel, Help, NUM, SectionCard } from "./ui";
 import type { PaymentMethod } from "./types";
 
@@ -119,7 +120,7 @@ export function PaymentSection({
               ={" "}
               {discountMode === "percent" ? (
                 <>
-                  <span className={cn(NUM, "text-foreground")}>−{formatNumber(discountApplied.amount, 0)}</span> UZS
+                  <span className={cn(NUM, "text-foreground")}>−{uzsText(discountApplied.amount)}</span> UZS
                 </>
               ) : (
                 <>
@@ -158,7 +159,7 @@ export function PaymentSection({
             <BadNumber show />
           ) : overTotal ? (
             <ErrorText>
-              {t("Тўлов жамидан кўп бўлолмайди: жами", "Payment can't exceed the total:")} <span className={NUM}>{formatNumber(total, 0)}</span> UZS
+              {t("Тўлов жамидан кўп бўлолмайди: жами", "Payment can't exceed the total:")} <span className={NUM}>{uzsText(total)}</span> UZS
             </ErrorText>
           ) : (
             <Help>{t("«Тўлиқ» — жами суммани ёзади", "«Full» types the whole total")}</Help>
