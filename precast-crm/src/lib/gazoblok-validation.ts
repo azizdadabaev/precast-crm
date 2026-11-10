@@ -102,12 +102,17 @@ export const PlaceGazoblokOrderSchema = z.object({
   // Optional up-front payment (auto-confirmed when the recorder can confirm).
   paidAmount: z.number().min(0).default(0),
   paymentMethod: PaymentMethodEnum.optional(),
+  // Receipt photo(s) of that payment, uploaded first via /api/gazoblok/upload-receipt (owner 2026-11-10: optional).
+  receiptUrls: z.array(GazoblokUploadUrl).max(20).default([]),
   wallEstimate: WallEstimateSnapshotSchema.optional(),
   // Reorder: the past order this one was copied from (link only, nothing else is copied).
   sourceOrderId: z.string().min(1).optional(),
 }).refine((b) => b.paidAmount === 0 || !!b.paymentMethod, {
   message: "Тўлов усулини танланг · Payment method is required when an amount is paid",
   path: ["paymentMethod"],
+}).refine((b) => b.receiptUrls.length === 0 || b.paidAmount > 0, {
+  message: "Чек тўлов билан бирга бўлади · A receipt needs a paid amount",
+  path: ["receiptUrls"],
 });
 
 /** Actions on an existing order (status flow + payments). */

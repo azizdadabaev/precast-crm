@@ -105,10 +105,16 @@ async function createWithRetry<T>(create: () => Promise<T>): Promise<T> {
  *   3. Allocate "B-YYYY-MM-NNNN" for the month
  *   4. Create the order + lines + ORDER_PLACED event (a reorder links its source)
  *   5. Optional up-front payment (PENDING_CONFIRMATION, or CONFIRMED for payment.confirm)
+ *      with its optional receipt photos (payment.record, like the upload route)
  * Stock is NOT touched here — it moves per truck when blocks are loaded.
  */
 export const POST = withPermission("order.create", async (req: NextRequest, { user }) => {
   const body = PlaceGazoblokOrderSchema.parse(await req.json());
+
+  // A receipt is a payment record: same gate as the upload route and record_payment.
+  if (body.receiptUrls.length && !can(user, "payment.record")) {
+    return fail("Тўлов ёзишга рухсат йўқ · You can't record payments", 403);
+  }
 
   const phoneNorm = normalizePhone(body.clientPhone);
   if (!phoneNorm) return fail("Телефон рақами керак · Phone is required", 422);
@@ -282,6 +288,17 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           payload: { amount: paidAmount, method: body.paymentMethod, atPlacement: true },
         },
       });
+      if (body.receiptUrls.length) {
+        await tx.gazoblokReceipt.createMany({
+          data: body.receiptUrls.map((url) => ({
+            orderId: createdOrder.id,
+            paymentId: p.id,
+            imageUrl: url,
+            source: "CRM_UPLOAD" as const,
+            uploadedById: user.id,
+          })),
+        });
+      }
       if (autoConfirm) {
         const paymentState = paymentStateFor(paidAmount, 0, totals.total);
         const updatedOrder = await tx.gazoblokOrder.update({
