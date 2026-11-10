@@ -8,6 +8,7 @@ import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ConfirmPaymentDialog, type PaymentForConfirm } from "@/components/payments/ConfirmPaymentDialog";
+import { GazoblokPaymentsQueue } from "@/components/gazoblok/GazoblokPaymentsQueue";
 import { formatDateTime, formatNumber } from "@/lib/utils";
 import { PhoneLink } from "@/components/PhoneLink";
 import { cn } from "@/lib/utils";
@@ -266,6 +267,8 @@ export default function PaymentsPage() {
           </div>
         )}
       </div>
+
+      <GazoblokPaymentsQueue canConfirm={canConfirm} />
 
       <ConfirmPaymentDialog
         open={!!confirmTarget}
