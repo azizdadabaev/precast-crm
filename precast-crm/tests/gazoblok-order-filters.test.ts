@@ -73,7 +73,13 @@ describe("scheduled-day filter (calendar)", () => {
   it("day=YYYY-MM-DD narrows to that local day's scheduledAt", () => {
     const w = buildOrderWhere(parseOrderListQuery(new URLSearchParams("day=2026-11-11")), null);
     expect(w.scheduledAt).toEqual({ gte: new Date(2026, 10, 11), lt: new Date(2026, 10, 12) });
-    expect(w.status).toBeUndefined();
+    // Same orders the calendar counts for that day: cancelled ones are left out (M1)…
+    expect(w.status).toEqual({ not: "CANCELED" });
+  });
+
+  it("day=YYYY-MM-DD with a picked status keeps that status (even CANCELED)", () => {
+    const w = buildOrderWhere(parseOrderListQuery(new URLSearchParams("day=2026-11-11&status=CANCELED")), null);
+    expect(w.status).toBe("CANCELED");
   });
 
   it("day=none lists open orders without a date unless a status is picked", () => {

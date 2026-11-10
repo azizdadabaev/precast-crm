@@ -96,6 +96,8 @@ export function buildOrderWhere(q: OrderListQuery, flaggedIds: string[] | null):
     if (!q.status) where.status = { in: ["PLACED", "IN_PRODUCTION"] };
   } else if (q.day) {
     where.scheduledAt = q.day;
+    // The calendar doesn't count cancelled orders on a day; the list for that day matches it.
+    if (!q.status) where.status = { not: "CANCELED" };
   }
   if (flaggedIds) where.id = { in: flaggedIds };
   return where;
