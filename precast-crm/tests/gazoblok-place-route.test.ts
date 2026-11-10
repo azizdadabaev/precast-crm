@@ -123,4 +123,17 @@ describe("POST /api/gazoblok/orders — receipt photo with the placement payment
     await POST(req(body({ paidAmount: 500_000, paymentMethod: "CLICK", receiptUrls: [receipt] })), { params: {} });
     await vi.waitFor(() => expect(emitNotifications).toHaveBeenCalledTimes(2));
   });
+
+  it("the placement history names every size with its count and price; the advance its method and receipts", async () => {
+    vi.mocked(getCurrentUser).mockResolvedValue(owner);
+    await POST(req(body({ paidAmount: 500_000, paymentMethod: "CLICK", receiptUrls: [receipt] })), { params: {} });
+    const placed = tx.gazoblokOrder.create.mock.calls[0][0].data.events.create;
+    expect(placed.payload.lines).toEqual([{ label: "600×300×200", qty: 100, unitPrice: 18_000 }]);
+    const rec = tx.gazoblokOrderEvent.create.mock.calls[0][0].data;
+    expect(rec.type).toBe("PAYMENT_RECORDED");
+    expect(rec.payload).toMatchObject({ paymentId: "pay1", amount: 500_000, method: "CLICK", receipts: 1, atPlacement: true });
+    expect(rec.message.replace(/[  ]/g, " ")).toBe("Тўлов ёзилди: 500 000 UZS · Click · чек 1 та");
+    const conf = tx.gazoblokOrderEvent.create.mock.calls[1][0].data;
+    expect(conf.payload).toMatchObject({ paymentId: "pay1", method: "CLICK", autoConfirmed: true });
+  });
 });

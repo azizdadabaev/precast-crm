@@ -18,7 +18,7 @@ import { placedNotice, paymentPendingNotice, recipients } from "@/lib/gazoblok-n
 import { parseOrderListQuery, orderFlags } from "@/lib/gazoblok-order-filters";
 import { orderListWhere, orderListExtras, reorderSourceProblem } from "@/lib/gazoblok-order-list";
 import { placedText } from "@/lib/gazoblok-text";
-import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
+import { paymentDecisionMessage, paymentRecordedMessage, placedLines } from "@/lib/gazoblok-event-payload";
 import { formatNumber } from "@/lib/utils";
 
 /** GET /api/gazoblok/orders — `order.view`. Query (all optional, spec §9): q (order
@@ -256,6 +256,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
             payload: {
               totalPrice: totals.total,
               totalBlocks: totals.totalBlocks,
+              lines: placedLines(lineRows),
               ...(reorderOf ? { reorderOf } : {}),
             },
           },
@@ -284,8 +285,8 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           orderId: createdOrder.id,
           type: "PAYMENT_RECORDED",
           actorId: user.id,
-          message: `Тўлов ёзилди: ${formatNumber(paidAmount, 2)} UZS (${PAYMENT_METHOD_LABELS[body.paymentMethod]?.[0] ?? body.paymentMethod})`,
-          payload: { amount: paidAmount, method: body.paymentMethod, atPlacement: true },
+          message: paymentRecordedMessage({ amount: paidAmount, method: body.paymentMethod, receipts: body.receiptUrls.length }),
+          payload: { paymentId: p.id, amount: paidAmount, method: body.paymentMethod, receipts: body.receiptUrls.length, atPlacement: true },
         },
       });
       if (body.receiptUrls.length) {
@@ -311,8 +312,8 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
             orderId: createdOrder.id,
             type: "PAYMENT_CONFIRMED",
             actorId: user.id,
-            message: `Тўлов тасдиқланди: ${formatNumber(paidAmount, 2)} UZS`,
-            payload: { paymentId: p.id, amount: paidAmount, autoConfirmed: true },
+            message: paymentDecisionMessage({ approve: true, amount: paidAmount, method: body.paymentMethod, auto: true }),
+            payload: { paymentId: p.id, amount: paidAmount, method: body.paymentMethod, autoConfirmed: true },
           },
         });
         return updatedOrder;

@@ -14,6 +14,7 @@ import { can } from "@/lib/permissions";
 import { planLoad } from "@/lib/gazoblok-quantities";
 import { isOpen, overloadRefusal } from "@/lib/gazoblok-rules";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
+import { loadExtras, loadMessage } from "@/lib/gazoblok-event-payload";
 
 /** Thrown inside the transaction; turned into a 4xx after rollback. */
 class LoadRefused extends Error {
@@ -212,18 +213,29 @@ export const POST = withAuth<Params>(withIdempotency<Params>(async (req: NextReq
       });
 
       const overshipDelta = round2(after.overshipAmount - before.overshipAmount);
+      // Sizes + counts and the running loaded / left go into the history (owner 2026-11-10).
+      const extras = loadExtras({
+        lines: fresh.lines,
+        otherShipments: fresh.shipments,
+        prevLoaded,
+        nextLoaded: loadedLines,
+        isCorrection,
+        photos: photoUrls.length,
+      });
+      const overBlocks = plan.overload.reduce((s, o) => s + o.extra, 0);
       await tx.gazoblokOrderEvent.create({
         data: {
           orderId: params.id,
           type: isCorrection ? "SHIPMENT_CORRECTED" : "SHIPMENT_LOADED",
           actorId: user.id,
-          message: isCorrection ? `Жўнатма ${shipment.number} тузатилди` : `Жўнатма ${shipment.number} юкланди`,
+          message: loadMessage(shipment.number, extras, isCorrection, overshipDelta > 0 ? { blocks: overBlocks, amount: overshipDelta } : null),
           payload: {
             shipmentId: params.sid,
             number: shipment.number,
             loadedLines,
             ...(isCorrection ? { before: prevLoaded } : {}),
-            ...(plan.overload.length ? { overloadConfirmed: true } : {}),
+            ...extras,
+            ...(plan.overload.length ? { overloadConfirmed: true, overBlocks } : {}),
             // Only surface the surcharge when THIS load pushed a line over.
             ...(overshipDelta > 0
               ? { overshipDelta, overshipAmount: after.overshipAmount }

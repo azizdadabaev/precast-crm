@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ok, fail } from "@/lib/api";
 import { withPermission } from "@/lib/api-auth";
 import { withIdempotency } from "@/lib/idempotency";
+import { deliverExtras, deliverMessage } from "@/lib/gazoblok-event-payload";
 
 type Params = { id: string; sid: string };
 
@@ -23,7 +24,7 @@ export const PATCH = withPermission<Params>("order.edit", withIdempotency<Params
   }
   const order = await prisma.gazoblokOrder.findUnique({
     where: { id: params.id },
-    select: { status: true },
+    select: { status: true, lines: { select: { id: true, productLabel: true, quantity: true } } },
   });
   if (!order) return fail("Буюртма топилмади · Order not found", 404);
   if (order.status === "CANCELED") {
@@ -40,13 +41,15 @@ export const PATCH = withPermission<Params>("order.edit", withIdempotency<Params
     });
     if (moved.count === 0) return null;
     const s = await tx.gazoblokShipment.findUniqueOrThrow({ where: { id: params.sid } });
+    // The truck's sizes as delivered, read under the lock, go into the history line.
+    const delivered = deliverExtras(order.lines, s.loadedLines as Record<string, number> | null);
     await tx.gazoblokOrderEvent.create({
       data: {
         orderId: params.id,
         type: "SHIPMENT_DELIVERED",
         actorId: user.id,
-        message: `Жўнатма ${shipment.number} етказилди`,
-        payload: { shipmentId: params.sid, number: shipment.number },
+        message: deliverMessage(shipment.number, delivered),
+        payload: { shipmentId: params.sid, number: shipment.number, ...delivered },
       },
     });
     return s;

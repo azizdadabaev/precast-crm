@@ -20,6 +20,12 @@ import {
 } from "@/lib/gazoblok-rules";
 import { orderVolumeM3 } from "@/lib/gazoblok-edit";
 import { statusChangeText } from "@/lib/gazoblok-text";
+import {
+  closeShortExtras,
+  closeShortMessage,
+  paymentDecisionMessage,
+  paymentRecordedMessage,
+} from "@/lib/gazoblok-event-payload";
 import { refundDue, refundProblem } from "@/lib/overpayment";
 import { formatNumber } from "@/lib/utils";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
@@ -223,17 +229,31 @@ export const PATCH = withAuth<{ id: string }>(
               paymentState: paid.paymentState,
             },
           });
+          const quantities = plan.quantities.map((q) => ({ label: q.label, ordered: q.ordered, loaded: q.loaded }));
+          const extras = closeShortExtras({
+            quantities,
+            totalBefore: Number(fresh.totalPrice),
+            totalAfter: plan.totalPrice,
+            confirmedPaid: paid.confirmedPaid,
+          });
           await tx.gazoblokOrderEvent.create({
             data: {
               orderId: order.id,
               type: "ORDER_SHORT_CLOSED",
               actorId: user.id,
-              message: `Қисқа ёпилди: ${body.reason}`,
+              message: closeShortMessage({
+                quantities,
+                totalBefore: Number(fresh.totalPrice),
+                totalAfter: plan.totalPrice,
+                refundDue: extras.refundDue,
+                reason: body.reason,
+              }),
               payload: {
                 reason: body.reason,
                 before: { totalPrice: Number(fresh.totalPrice), linesSubtotal: Number(fresh.linesSubtotal) },
                 after: { totalPrice: plan.totalPrice, linesSubtotal: plan.linesSubtotal },
-                quantities: plan.quantities.map((q) => ({ label: q.label, ordered: q.ordered, loaded: q.loaded })),
+                quantities,
+                ...extras,
               },
             },
           });
@@ -301,8 +321,8 @@ export const PATCH = withAuth<{ id: string }>(
             orderId: order.id,
             type: "PAYMENT_RECORDED",
             actorId: user.id,
-            message: `Тўлов ёзилди: ${formatNumber(body.amount, 2)} UZS (${body.method})`,
-            payload: { paymentId: p.id, amount: body.amount },
+            message: paymentRecordedMessage({ amount: body.amount, method: body.method, receipts: body.receiptUrls.length }),
+            payload: { paymentId: p.id, amount: body.amount, method: body.method, receipts: body.receiptUrls.length },
           },
         });
         if (body.receiptUrls.length) {
@@ -331,8 +351,8 @@ export const PATCH = withAuth<{ id: string }>(
               orderId: order.id,
               type: "PAYMENT_CONFIRMED",
               actorId: user.id,
-              message: `Тўлов тасдиқланди (ёзувчида тасдиқлаш ҳуқуқи бор): ${formatNumber(body.amount, 2)} UZS`,
-              payload: { paymentId: p.id, amount: body.amount, autoConfirmed: true },
+              message: paymentDecisionMessage({ approve: true, amount: body.amount, method: body.method, auto: true }),
+              payload: { paymentId: p.id, amount: body.amount, method: body.method, autoConfirmed: true },
             },
           });
         }
@@ -419,7 +439,10 @@ export const PATCH = withAuth<{ id: string }>(
         throw e;
       }
     }
-    const payment = await prisma.gazoblokPayment.findUnique({ where: { id: body.paymentId } });
+    const payment = await prisma.gazoblokPayment.findUnique({
+      where: { id: body.paymentId },
+      include: { recordedBy: { select: { name: true } } },
+    });
     if (!payment || payment.orderId !== order.id) {
       return fail("Тўлов топилмади · Payment not found", 404);
     }
@@ -455,6 +478,14 @@ export const PATCH = withAuth<{ id: string }>(
         if (cas.count === 0) throw new Error("GAZOBLOK_PAYMENT_CONFLICT");
 
         const { confirmedPaid, paymentState } = await recomputePaid(tx, order.id, freshTotal);
+        // Amount, method, who recorded it and the reason go into the history line.
+        const decided = {
+          paymentId: payment.id,
+          amount: Number(payment.amount),
+          method: payment.method,
+          recordedBy: payment.recordedBy?.name ?? null,
+          ...(!body.approve && body.rejectionReason ? { reason: body.rejectionReason } : {}),
+        };
 
         return tx.gazoblokOrder.update({
           where: { id: order.id },
@@ -465,8 +496,8 @@ export const PATCH = withAuth<{ id: string }>(
               create: {
                 type: body.approve ? "PAYMENT_CONFIRMED" : "PAYMENT_REJECTED",
                 actorId: user.id,
-                message: body.approve ? "Тўлов тасдиқланди" : "Тўлов рад этилди",
-                payload: { paymentId: payment.id },
+                message: paymentDecisionMessage({ approve: body.approve, ...decided }),
+                payload: decided,
               },
             },
           },
