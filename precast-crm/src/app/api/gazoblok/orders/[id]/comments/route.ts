@@ -58,14 +58,13 @@ export const POST = withPermission<Params>("order.view",
 
     const recipients = mentionedUserIds.filter((id) => id !== user.id);
     if (recipients.length) {
-      // Notification model has no gazoblok-order link, so the mention fires with
-      // the order number in the title (no deep link). commentId is still carried.
       void emitNotifications({
         type: "COMMENT_MENTION",
         userIds: recipients,
         title: `${user.name} сизни газоблок буюртма #${order.orderNumber} да эслади · ${user.name} mentioned you on gazoblok order #${order.orderNumber}`,
         body: body.body.slice(0, 160),
         commentId: comment.id,
+        gazoblokOrderId: order.id,
       });
     }
 

@@ -13,6 +13,8 @@ import { orderTotal, lineTotal, blockVolumeM3 } from "@/services/gazoblok-engine
 import { nextGazoblokOrderNumber, gazoblokMonthPrefix } from "@/lib/gazoblok-number";
 import { PlaceGazoblokOrderSchema } from "@/lib/gazoblok-validation";
 import { clientNamePlan } from "@/lib/gazoblok-quantities";
+import { emitNotifications, usersWithPermission } from "@/lib/notifications";
+import { placedNotice, paymentPendingNotice, recipients } from "@/lib/gazoblok-notify";
 
 const ORDER_STATUSES = ["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"] as const;
 
@@ -266,6 +268,29 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
     message: `Placed газоблок order ${order.orderNumber}`,
     metadata: { orderNumber: order.orderNumber, totalPrice: totals.total },
   });
+
+  // Bell notices after commit; a failure here must never fail the placement.
+  void (async () => {
+    try {
+      const to = recipients(await usersWithPermission("payment.confirm"), user.id);
+      await emitNotifications({
+        ...placedNotice({ id: order.id, orderNumber: order.orderNumber, clientName: order.client.name }),
+        userIds: to,
+      });
+      const pending = await prisma.gazoblokPayment.findFirst({
+        where: { orderId: order.id, status: "PENDING_CONFIRMATION" },
+        select: { id: true, amount: true, method: true },
+      });
+      if (pending) {
+        await emitNotifications({
+          ...paymentPendingNotice(order, { id: pending.id, amount: Number(pending.amount), method: pending.method }),
+          userIds: to,
+        });
+      }
+    } catch (err) {
+      console.error("[gazoblok] placement notices failed:", err);
+    }
+  })();
 
   return created(order);
 });

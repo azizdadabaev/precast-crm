@@ -13,6 +13,8 @@ import { lineQuantities, unpaidOverload } from "@/lib/gazoblok-quantities";
 import { closeShortPlan, nextStatusProblem, paymentCeilingProblem } from "@/lib/gazoblok-rules";
 import { refundDue, refundProblem } from "@/lib/overpayment";
 import { formatNumber } from "@/lib/utils";
+import { emitNotifications, usersWithPermission } from "@/lib/notifications";
+import { paymentPendingNotice, paymentDecisionNotice, recipients } from "@/lib/gazoblok-notify";
 
 type Tx = Prisma.TransactionClient;
 
@@ -317,6 +319,19 @@ export const PATCH = withAuth<{ id: string }>(
         targetId: order.id,
         message: `Recorded ${body.amount} (${body.method})`,
       });
+      // Bell after commit: a pending payment waits for payment.confirm holders.
+      // A notice failure must never fail the recorded payment.
+      if (!autoConfirm) {
+        const notice = paymentPendingNotice(order, { id: payment.id, amount: body.amount, method: body.method });
+        void (async () => {
+          try {
+            const to = recipients(await usersWithPermission("payment.confirm"), user.id);
+            await emitNotifications({ ...notice, userIds: to });
+          } catch (err) {
+            console.error("[gazoblok] payment-pending notice failed:", err);
+          }
+        })();
+      }
       return ok(payment);
     }
 
@@ -436,6 +451,14 @@ export const PATCH = withAuth<{ id: string }>(
       targetId: order.id,
       message: `${body.approve ? "Confirmed" : "Rejected"} payment`,
     });
+    // Tell the recorder how their payment was decided (after commit, never fatal).
+    if (payment.recordedById) {
+      const to = recipients([payment.recordedById], user.id);
+      const notice = paymentDecisionNotice(order, { id: payment.id, amount: Number(payment.amount) }, body.approve);
+      void emitNotifications({ ...notice, userIds: to }).catch((err) =>
+        console.error("[gazoblok] payment-decision notice failed:", err),
+      );
+    }
     return ok(updated);
   },
 );
