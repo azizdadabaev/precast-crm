@@ -20,7 +20,7 @@ export const GET = withPermission<Params>("order.view",
       where: { id: params.id },
       select: { id: true },
     });
-    if (!order) return fail("Order not found", 404);
+    if (!order) return fail("Буюртма топилмади · Order not found", 404);
 
     const comments = await prisma.comment.findMany({
       where: { deletedAt: null, gazoblokOrderId: params.id },
@@ -41,7 +41,7 @@ export const POST = withPermission<Params>("order.view",
       where: { id: params.id },
       select: { id: true, orderNumber: true },
     });
-    if (!order) return fail("Order not found", 404);
+    if (!order) return fail("Буюртма топилмади · Order not found", 404);
 
     const body = CommentCreateSchema.parse(await req.json());
     const mentionedUserIds = await extractMentions(body.body);

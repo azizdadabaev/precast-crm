@@ -643,7 +643,7 @@ export default function GazoblokCatalogPage() {
       <section className="rounded-lg border border-border bg-card overflow-hidden">
         <header className="px-4 py-3 border-b">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            <Bi uz="Ўлчам қўшиш" en="Add size (dims in mm)" enClassName="font-normal" />
+            <Bi uz="Ўлчам қўшиш" en="Add size (mm)" enClassName="font-normal" />
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
             {t(

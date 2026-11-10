@@ -64,7 +64,7 @@ export const POST = withAuth<Params>(withIdempotency<Params>(async (req: NextReq
   try {
     formData = await req.formData();
   } catch {
-    return fail("Expected multipart/form-data", 400);
+    return fail("Сўров нотўғри: multipart/form-data керак · Expected multipart/form-data", 400);
   }
 
   let loadedLines: Record<string, number> = {};
@@ -72,7 +72,7 @@ export const POST = withAuth<Params>(withIdempotency<Params>(async (req: NextReq
     const raw = formData.get("loadedLines");
     if (raw) loadedLines = JSON.parse(String(raw));
   } catch {
-    return fail("Invalid loadedLines JSON", 400);
+    return fail("Юкланган қаторлар нотўғри · Invalid loadedLines JSON", 400);
   }
   // Coerce to non-negative integers.
   loadedLines = Object.fromEntries(

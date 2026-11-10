@@ -32,14 +32,14 @@ export const PATCH = withAuth<Params>(
       },
     });
     if (!existing || existing.gazoblokOrderId !== params.id) {
-      return fail("Comment not found", 404);
+      return fail("Изоҳ топилмади · Comment not found", 404);
     }
-    if (existing.deletedAt) return fail("Comment is deleted", 422);
-    if (existing.authorId !== user.id) return fail("Not your comment", 403);
+    if (existing.deletedAt) return fail("Изоҳ ўчирилган · Comment is deleted", 422);
+    if (existing.authorId !== user.id) return fail("Бу изоҳ сизники эмас · Not your comment", 403);
 
     const ageMs = Date.now() - existing.createdAt.getTime();
     if (ageMs > EDIT_WINDOW_MINUTES * 60_000) {
-      return fail(`Edit window expired (${EDIT_WINDOW_MINUTES} min)`, 422);
+      return fail(`Таҳрирлаш муддати ўтди (${EDIT_WINDOW_MINUTES} дақ) · Edit window expired (${EDIT_WINDOW_MINUTES} min)`, 422);
     }
 
     const body = CommentEditSchema.parse(await req.json());
@@ -73,13 +73,13 @@ export const DELETE = withAuth<Params>(
       select: { id: true, gazoblokOrderId: true, authorId: true, deletedAt: true },
     });
     if (!existing || existing.gazoblokOrderId !== params.id) {
-      return fail("Comment not found", 404);
+      return fail("Изоҳ топилмади · Comment not found", 404);
     }
-    if (existing.deletedAt) return fail("Comment already deleted", 422);
+    if (existing.deletedAt) return fail("Изоҳ аллақачон ўчирилган · Comment already deleted", 422);
 
     const isModerator = can(user, "comment.moderate");
     if (!isModerator && existing.authorId !== user.id) {
-      return fail("Not authorized to delete this comment", 403);
+      return fail("Бу изоҳни ўчиришга рухсат йўқ · Not authorized to delete this comment", 403);
     }
 
     const updated = await prisma.comment.update({
