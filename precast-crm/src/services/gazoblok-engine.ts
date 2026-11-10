@@ -371,7 +371,9 @@ export function orderTotal(
       linesSubtotal > 0 ? round2((discountAmount / linesSubtotal) * 100) : 0;
   } else {
     discountPercent = Math.max(0, Math.min(100, opts.discountPercent ?? 0));
-    discountAmount = round2((linesSubtotal * discountPercent) / 100);
+    // Whole UZS (owner 2026-11-10): a percent of the subtotal is rounded once, here, so
+    // subtotal − discount + delivery = total holds exactly with whole numbers.
+    discountAmount = Math.round((linesSubtotal * discountPercent) / 100);
   }
   const total = round2(linesSubtotal - discountAmount + deliveryCost);
   return { linesSubtotal, discountPercent, discountAmount, deliveryCost, total, totalBlocks };

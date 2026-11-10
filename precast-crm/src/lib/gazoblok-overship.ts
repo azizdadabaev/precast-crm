@@ -9,7 +9,6 @@
 //   overshipAmount = Σ_line  max(0, shippedQty(line) − line.quantity) × unitPrice
 //   shippedQty(line) = Σ over all shipments of loadedLines[line.id]
 
-import { round2 } from "@/services/calculation-engine";
 
 /** One frozen order line, as the surcharge math sees it. */
 export interface OvershipLine {
@@ -56,5 +55,6 @@ export function computeOvership(
     overshipAmount += over * Number(l.unitPrice);
   }
 
-  return { perLine, overshipAmount: round2(overshipAmount) };
+  // Whole UZS (owner 2026-11-10).
+  return { perLine, overshipAmount: Math.round(overshipAmount) };
 }

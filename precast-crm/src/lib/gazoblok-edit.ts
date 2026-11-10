@@ -185,8 +185,11 @@ export function editPlan(input: {
   else {
     // No new discount: scale the stored amount to the new subtotal, as close-short does.
     // Equals the stored percent, without the drift of re-applying a percent rounded to 2 dp.
+    // Rescaled sums are whole UZS (owner 2026-11-10); an unchanged subtotal keeps the stored
+    // amount as it is, so an older fractional row isn't touched by a date or note edit.
     const oldSub = Number(order.linesSubtotal);
-    const scaled = oldSub > 0 ? round2((Number(order.discountAmount) * newSub) / oldSub) : 0;
+    const stored = Number(order.discountAmount);
+    const scaled = oldSub <= 0 ? 0 : newSub === oldSub ? stored : Math.round((stored * newSub) / oldSub);
     discount = scaled > 0 ? { discountAmount: scaled } : { discountPercent: Number(order.discountPercent) };
   }
   const t = orderTotal(next, { ...discount, deliveryCost });

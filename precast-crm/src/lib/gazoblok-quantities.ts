@@ -107,9 +107,10 @@ export function shortCloseTotals(
     over += Math.max(0, n - l.quantity) * Number(l.unitPrice);
   }
   const linesSubtotal = round2(sub);
-  const overshipAmount = round2(over);
+  // Whole UZS (owner 2026-11-10): the re-billed discount and the surcharge are rounded once.
+  const overshipAmount = Math.round(over);
   const oldSub = Number(o.linesSubtotal);
-  const discountAmount = oldSub > 0 ? round2((Number(o.discountAmount) * linesSubtotal) / oldSub) : 0;
+  const discountAmount = oldSub > 0 ? Math.round((Number(o.discountAmount) * linesSubtotal) / oldSub) : 0;
   const totalPrice = round2(linesSubtotal - discountAmount + Number(o.deliveryCost) + overshipAmount);
   return { linesSubtotal, discountAmount, overshipAmount, totalPrice };
 }
