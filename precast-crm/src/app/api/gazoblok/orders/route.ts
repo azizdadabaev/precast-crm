@@ -15,44 +15,70 @@ import { PlaceGazoblokOrderSchema } from "@/lib/gazoblok-validation";
 import { clientNamePlan } from "@/lib/gazoblok-quantities";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 import { placedNotice, paymentPendingNotice, recipients } from "@/lib/gazoblok-notify";
+import { parseOrderListQuery, orderFlags } from "@/lib/gazoblok-order-filters";
+import { orderListWhere, orderListExtras, reorderSourceProblem } from "@/lib/gazoblok-order-list";
+import { placedText } from "@/lib/gazoblok-text";
+import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
+import { formatNumber } from "@/lib/utils";
 
-const ORDER_STATUSES = ["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"] as const;
-
-/** GET /api/gazoblok/orders — auth-only (open to all logged-in users —
- *  owner decision). Filter by q / status. */
+/** GET /api/gazoblok/orders — `order.view`. Query (all optional, spec §9): q (order
+ *  number / client name / phone digits, partial numbers too), status, pay, flag
+ *  (debt|refund|unconfirmed), seller, from/to (YYYY-MM-DD), limit (50, max 200),
+ *  cursor (last row's id). Returns an array, newest first; each row adds
+ *  pendingPaymentCount, loadedBlocks, unpaidOverload, refundDue. */
 export const GET = withPermission("order.view", async (req: NextRequest) => {
-  const { searchParams } = new URL(req.url);
-  const q = searchParams.get("q")?.trim() ?? "";
-  // Whitelist against the enum — an arbitrary string would throw deep in Prisma.
-  const statusParam = searchParams.get("status");
-  const status = (ORDER_STATUSES as readonly string[]).includes(statusParam ?? "")
-    ? (statusParam as (typeof ORDER_STATUSES)[number])
-    : undefined;
+  const query = parseOrderListQuery(new URL(req.url).searchParams);
 
-  const where: Record<string, unknown> = {};
-  if (status) where.status = status;
-  if (q) {
-    where.OR = [
-      { orderNumber: { contains: q, mode: "insensitive" } },
-      { client: { name: { contains: q, mode: "insensitive" } } },
-      { client: { phone: { contains: q } } },
-    ];
+  // Flags are money rules, not columns — resolve them over a light select of every order.
+  let flaggedIds: string[] | null = null;
+  if (query.flag) {
+    const flag = query.flag;
+    const light = await prisma.gazoblokOrder.findMany({
+      select: {
+        id: true,
+        status: true,
+        totalPrice: true,
+        confirmedPaid: true,
+        overshipAmount: true,
+        _count: { select: { payments: { where: { status: "PENDING_CONFIRMATION" } } } },
+      },
+    });
+    flaggedIds = light
+      .filter((o) =>
+        orderFlags({
+          status: o.status,
+          totalPrice: Number(o.totalPrice),
+          confirmedPaid: Number(o.confirmedPaid),
+          overshipAmount: Number(o.overshipAmount),
+          pendingCount: o._count.payments,
+        })[flag],
+      )
+      .map((o) => o.id);
   }
 
   const orders = await prisma.gazoblokOrder.findMany({
-    where,
-    orderBy: [{ placedAt: "desc" }],
-    take: 100,
+    where: orderListWhere(query, flaggedIds),
+    orderBy: [{ placedAt: "desc" }, { id: "desc" }],
+    take: query.limit,
+    ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     include: {
       client: { select: { id: true, name: true, phone: true } },
       lines: true,
       payments: { where: { status: "PENDING_CONFIRMATION" }, select: { id: true } },
+      shipments: { select: { loadedLines: true } },
     },
   });
-  // Expose only the count — the raw payments array stays server-side.
-  return ok(orders.map(({ payments, ...rest }) => ({
+  // Expose only counts and sums — raw payments and shipments stay server-side.
+  return ok(orders.map(({ payments, shipments, ...rest }) => ({
     ...rest,
     pendingPaymentCount: payments.length,
+    ...orderListExtras({
+      status: rest.status,
+      totalPrice: Number(rest.totalPrice),
+      confirmedPaid: Number(rest.confirmedPaid),
+      overshipAmount: Number(rest.overshipAmount),
+      shipments,
+    }),
   })));
 });
 
@@ -73,20 +99,19 @@ async function createWithRetry<T>(create: () => Promise<T>): Promise<T> {
 }
 
 /**
- * POST /api/gazoblok/orders — auth-only (open to all logged-in users —
- * owner decision). Atomic:
+ * POST /api/gazoblok/orders — `order.create`. Atomic:
  *   1. Resolve/create the Client (dedup by normalized phone)
  *   2. Snapshot each line's product label + unit price + quantity
  *   3. Allocate "B-YYYY-MM-NNNN" for the month
- *   4. Create the order + lines + ORDER_PLACED event
- *   5. Optional up-front payment (PENDING_CONFIRMATION)
- * Stock is NOT touched here — it decrements when the order is delivered.
+ *   4. Create the order + lines + ORDER_PLACED event (a reorder links its source)
+ *   5. Optional up-front payment (PENDING_CONFIRMATION, or CONFIRMED for payment.confirm)
+ * Stock is NOT touched here — it moves per truck when blocks are loaded.
  */
 export const POST = withPermission("order.create", async (req: NextRequest, { user }) => {
   const body = PlaceGazoblokOrderSchema.parse(await req.json());
 
   const phoneNorm = normalizePhone(body.clientPhone);
-  if (!phoneNorm) return fail("phone is required", 422);
+  if (!phoneNorm) return fail("Телефон рақами керак · Phone is required", 422);
 
   const productIds = Array.from(new Set(body.lines.map((l) => l.productId)));
   // Archived sizes can't be ordered at their stale price.
@@ -129,13 +154,28 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
 
   const paidAmount = body.paidAmount ?? 0;
   if (paidAmount > totals.total) {
-    return fail(`paidAmount (${paidAmount}) cannot exceed total (${totals.total})`, 422);
+    return fail(
+      `Тўлов жамидан кўп бўлолмайди: ${formatNumber(paidAmount, 2)} > ${formatNumber(totals.total, 2)} UZS · Payment cannot exceed the total`,
+      422,
+    );
   }
 
   const placedAt = new Date();
   const year = placedAt.getFullYear();
   const month = placedAt.getMonth() + 1;
   const monthPrefix = gazoblokMonthPrefix(year, month);
+
+  // A reorder must come from an existing order of this same client.
+  let reorderOf: string | null = null;
+  if (body.sourceOrderId) {
+    const source = await prisma.gazoblokOrder.findUnique({
+      where: { id: body.sourceOrderId },
+      select: { orderNumber: true, client: { select: { phone: true } } },
+    });
+    const problem = reorderSourceProblem(source, phoneNorm);
+    if (problem) return fail(problem.message, problem.status);
+    reorderOf = source!.orderNumber;
+  }
 
   // Never rename an existing client silently — ask the operator first.
   const known = await prisma.client.findUnique({ where: { phone: phoneNorm }, select: { name: true } });
@@ -180,6 +220,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
         clientId: client.id,
         // Selling operator — the owner asks them about unpaid over-load.
         createdById: user.id,
+        sourceOrderId: body.sourceOrderId ?? null,
         status: "PLACED",
         linesSubtotal: totals.linesSubtotal,
         discountPercent: totals.discountPercent,
@@ -205,8 +246,12 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           create: {
             type: "ORDER_PLACED",
             actorId: user.id,
-            message: `Order placed for ${client.name}`,
-            payload: { totalPrice: totals.total, totalBlocks: totals.totalBlocks },
+            message: placedText(client.name, reorderOf),
+            payload: {
+              totalPrice: totals.total,
+              totalBlocks: totals.totalBlocks,
+              ...(reorderOf ? { reorderOf } : {}),
+            },
           },
         },
       },
@@ -233,7 +278,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
           orderId: createdOrder.id,
           type: "PAYMENT_RECORDED",
           actorId: user.id,
-          message: `Payment of ${paidAmount} recorded at placement (${body.paymentMethod}).`,
+          message: `Тўлов ёзилди: ${formatNumber(paidAmount, 2)} UZS (${PAYMENT_METHOD_LABELS[body.paymentMethod]?.[0] ?? body.paymentMethod})`,
           payload: { amount: paidAmount, method: body.paymentMethod, atPlacement: true },
         },
       });
@@ -249,7 +294,7 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
             orderId: createdOrder.id,
             type: "PAYMENT_CONFIRMED",
             actorId: user.id,
-            message: `Payment ${p.id.slice(-6)} auto-confirmed (recorder has confirm rights): ${paidAmount}`,
+            message: `Тўлов тасдиқланди: ${formatNumber(paidAmount, 2)} UZS`,
             payload: { paymentId: p.id, amount: paidAmount, autoConfirmed: true },
           },
         });
