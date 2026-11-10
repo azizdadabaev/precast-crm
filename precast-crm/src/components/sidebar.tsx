@@ -90,6 +90,13 @@ export const NAV: NavItem[] = [
     permission: "order.view",
   },
   {
+    href: "/gazoblok/dashboard",
+    label: "Газоблок бошқаруви",
+    sub: "Gazoblok dashboard",
+    icon: Boxes,
+    permission: ["dashboard.view", "dashboard.viewBasic"],
+  },
+  {
     href: "/gallery",
     label: "Галерея",
     sub: "Gallery",
