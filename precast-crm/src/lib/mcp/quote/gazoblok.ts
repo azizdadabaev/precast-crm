@@ -2,11 +2,11 @@
 //
 // Priced per catalog size (owner: "price per size is enough" — grade is echoed,
 // not priced). Quantities come from the CRM's gazoblok engine: lineTotal,
-// blockVolumeM3 / pricePerM3, and estimateWall for a wall area.
+// blockVolumeM3 / pricePerM3, and estimateSingleWall (the CRM calculator rule) for a wall area.
 
 import {
   blockVolumeM3,
-  estimateWall,
+  estimateSingleWall,
   lineTotal,
   pricePerM3,
 } from '@/services/gazoblok-engine';
@@ -52,12 +52,6 @@ export interface GazoblokQuoteResult {
 const sizeKey = (s: string) => s.toLowerCase().replace(/\s+/g, '').replace(/[×*х]/g, 'x');
 const positive = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
 
-/** Yangiqo'rg'on in Latin, Cyrillic Uzbek or Russian spelling. */
-function isYangiqorgon(district: string): boolean {
-  const f = foldForSearch(district);
-  return f.includes('yangiqorgon') || f.includes('yangikurgan');
-}
-
 function pickProduct(input: GazoblokQuoteInput, catalog: GazoblokCatalogRow[]): GazoblokCatalogRow {
   const active = catalog.filter((p) => p.active !== false);
   const sizes = active.map((p) => p.label).join(', ');
@@ -97,10 +91,11 @@ export function buildGazoblokQuote(input: GazoblokQuoteInput, catalog: GazoblokC
     blocks = Math.ceil(input.volume_m3 / blockVolumeM3(p) - 1e-9);
   } else {
     if (!positive(input.wall_area_m2)) throw new QuoteInputError('INVALID_INPUT', 'wall_area_m2 must be a positive number.');
-    blocks = estimateWall(p, { lengthM: input.wall_area_m2 as number, heightM: 1 }).blocksNeeded;
+    blocks = estimateSingleWall(p, { lengthM: input.wall_area_m2 as number, heightM: 1 }).blocksNeeded;
   }
 
-  const delivery_included = input.district ? isYangiqorgon(input.district) : null;
+  // Owner 2026-11-10: delivery is agreed by the operator, never promised automatically.
+  const delivery_included = null;
   return {
     lang,
     size: p.label,

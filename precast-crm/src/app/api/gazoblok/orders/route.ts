@@ -87,7 +87,8 @@ export const POST = withPermission("order.create", async (req: NextRequest, { us
   if (!phoneNorm) return fail("phone is required", 422);
 
   const productIds = Array.from(new Set(body.lines.map((l) => l.productId)));
-  const products = await prisma.gazoblokProduct.findMany({ where: { id: { in: productIds } } });
+  // Archived sizes can't be ordered at their stale price.
+  const products = await prisma.gazoblokProduct.findMany({ where: { id: { in: productIds }, active: true } });
   const byId = new Map(products.map((p) => [p.id, p]));
   for (const l of body.lines) {
     if (!byId.has(l.productId)) {

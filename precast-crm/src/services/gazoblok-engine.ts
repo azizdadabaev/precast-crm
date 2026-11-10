@@ -294,6 +294,28 @@ export function estimateProject(
   };
 }
 
+/**
+ * One wall, quoted exactly like the CRM wall calculator (estimateProject: default
+ * 2 mm joint, standard orientation). The AI agent and the MCP quote use this so a
+ * wall gets the same block count everywhere (they used estimateWall before:
+ * 585 vs 579 blocks on 100 m²). Openings are one area subtracted from the wall.
+ */
+export function estimateSingleWall(
+  p: BlockProduct,
+  input: { lengthM: number; heightM: number; openingsM2?: number; wastePct?: number },
+): { blocksNeeded: number; wastePct: number } {
+  const wastePct = input.wastePct ?? DEFAULT_WASTE_PCT;
+  const openings = (input.openingsM2 ?? 0) > 0
+    ? [{ kind: "OTHER" as const, widthM: input.openingsM2 as number, heightM: 1, qty: 1 }]
+    : [];
+  const r = estimateProject(
+    [{ id: "wall", lengthM: input.lengthM, heightM: input.heightM, productId: "p", openings, orientation: "STANDARD" }],
+    new Map([["p", { ...p, label: "" }]]),
+    { wastePct },
+  );
+  return { blocksNeeded: r.totalBlocks, wastePct };
+}
+
 // ── Order line + totals ─────────────────────────────────────────
 
 export interface OrderLineInput {

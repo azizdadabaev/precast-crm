@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { estimateWall } from '@/services/gazoblok-engine';
+import { estimateSingleWall } from '@/services/gazoblok-engine';
 import { buildGazoblokQuote, type GazoblokCatalogRow } from './gazoblok';
 import { QuoteInputError } from './slab';
 
@@ -26,15 +26,15 @@ describe('buildGazoblokQuote', () => {
     expect(buildGazoblokQuote({ thickness_cm: 20, volume_m3: 3.61 }, CATALOG).blocks).toBe(101);
   });
   it('turns a wall area into blocks with the CRM estimator (waste included)', () => {
-    const expected = estimateWall(CATALOG[0], { lengthM: 10, heightM: 1 }).blocksNeeded;
+    const expected = estimateSingleWall(CATALOG[0], { lengthM: 10, heightM: 1 }).blocksNeeded;
     expect(buildGazoblokQuote({ thickness_cm: 20, wall_area_m2: 10 }, CATALOG).blocks).toBe(expected);
   });
-  it('delivery is included only inside Yangiqo\'rg\'on, in any script', () => {
-    expect(buildGazoblokQuote({ thickness_cm: 20, quantity_blocks: 10, district: 'Янгиқўрғон тумани' }, CATALOG).delivery_included).toBe(true);
-    expect(buildGazoblokQuote({ thickness_cm: 20, quantity_blocks: 10, district: "Yangiqo'rg'on" }, CATALOG).delivery_included).toBe(true);
-    expect(buildGazoblokQuote({ thickness_cm: 20, quantity_blocks: 10, district: 'Янгикурган' }, CATALOG).delivery_included).toBe(true);
-    expect(buildGazoblokQuote({ thickness_cm: 20, quantity_blocks: 10, district: 'Namangan shahri' }, CATALOG).delivery_included).toBe(false);
-    expect(buildGazoblokQuote({ thickness_cm: 20, quantity_blocks: 10 }, CATALOG).delivery_included).toBeNull();
+  it('never promises delivery automatically — the operator agrees it (owner 2026-11-10)', () => {
+    for (const district of ['Янгиқўрғон тумани', "Yangiqo'rg'on", 'Namangan shahri', undefined]) {
+      const q = buildGazoblokQuote({ thickness_cm: 20, quantity_blocks: 10, district }, CATALOG);
+      expect(q.delivery_included).toBeNull();
+      expect(q.delivery_note).toBe('Yetkazib berish operator bilan kelishiladi');
+    }
   });
   it('in_stock is yes/no only: false when the order exceeds tracked stock, true when untracked', () => {
     expect(buildGazoblokQuote({ thickness_cm: 20, quantity_blocks: 600 }, CATALOG).in_stock).toBe(false);

@@ -10,7 +10,7 @@
 // from a kind:'slab' quote.
 
 import {
-  estimateWall,
+  estimateSingleWall,
   lineTotal,
   type BlockProduct,
 } from '@/services/gazoblok-engine';
@@ -114,7 +114,7 @@ export function buildGazoblokQuote(
   let wall: GazoblokQuotePayload['wall'];
 
   if ('wall' in request) {
-    const est = estimateWall(product, {
+    const est = estimateSingleWall(product, {
       lengthM: request.wall.lengthM,
       heightM: request.wall.heightM,
       openingsM2: request.wall.openingsM2,

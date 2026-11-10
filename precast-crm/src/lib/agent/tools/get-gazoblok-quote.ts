@@ -7,6 +7,7 @@
 
 import { z } from 'zod';
 import { GazoblokError } from '@/services/gazoblok-engine';
+import { GAZOBLOK_DENSITY_KG_PER_M3 } from '@/lib/gazoblok-weight';
 import {
   buildGazoblokQuote,
   resolveGazoblokProduct,
@@ -23,10 +24,8 @@ import {
 
 const DEFAULT_VALIDITY_MS = 24 * 60 * 60 * 1000;
 
-// Gazoblok is D600 (≈600 kg/m³ dry, owner-confirmed). Per-block weight = block
-// volume × this density — gives ≈22 kg for a 600×300×200 block and stays correct
-// across sizes. Approximate, for a transport estimate only.
-const GAZOBLOK_DENSITY_KG_M3 = 600;
+// Per-block weight = block volume × the shared gazoblok density (611 kg/m³ ⇒ 22 kg
+// for a 600×300×200 block, owner-confirmed). Approximate, for a transport estimate only.
 
 export const GetGazoblokQuoteInput = z
   .object({
@@ -130,7 +129,7 @@ export function runGetGazoblokQuote(
   }
 
   const p = quote.payload;
-  const weight_kg = Math.round(p.quantity * product.lengthM * product.heightM * product.thicknessM * GAZOBLOK_DENSITY_KG_M3);
+  const weight_kg = Math.round(p.quantity * product.lengthM * product.heightM * product.thicknessM * GAZOBLOK_DENSITY_KG_PER_M3);
   return toolOk({
     price: quote.price,
     unit_price: p.unitPrice,

@@ -30,10 +30,13 @@ export const PATCH = withPermission<Params>("order.edit", async (_req: NextReque
   }
 
   const updated = await prisma.$transaction(async (tx) => {
-    const s = await tx.gazoblokShipment.update({
-      where: { id: params.sid },
+    // Guarded: only a LOADED truck becomes DELIVERED, so a double click can't log it twice.
+    const moved = await tx.gazoblokShipment.updateMany({
+      where: { id: params.sid, status: "LOADED" },
       data: { status: "DELIVERED", deliveredAt: new Date() },
     });
+    if (moved.count === 0) return null;
+    const s = await tx.gazoblokShipment.findUniqueOrThrow({ where: { id: params.sid } });
     await tx.gazoblokOrderEvent.create({
       data: {
         orderId: params.id,
@@ -45,6 +48,7 @@ export const PATCH = withPermission<Params>("order.edit", async (_req: NextReque
     });
     return s;
   });
+  if (!updated) return fail("Жўнатма аллақачон етказилган · Already delivered", 409);
   return ok(updated);
 });
 

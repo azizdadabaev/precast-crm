@@ -43,14 +43,17 @@ const OrderLineSchema = z.object({
 
 // Receipt URLs must point at files the gazoblok uploader actually mints
 // (see /api/gazoblok/upload-receipt → saveBufferToUploads('receipts/gazoblok/<userId>')).
-const GazoblokUploadUrl = z.string().refine(
-  (u) => u.startsWith("/uploads/receipts/gazoblok/"),
+/** No "..", backslashes or encoded dots: a URL must not climb out of its folder. */
+const staysInFolder = (u: string) => !/(\.\.|\\|%2e|%5c)/i.test(u);
+
+export const GazoblokUploadUrl = z.string().refine(
+  (u) => u.startsWith("/uploads/receipts/gazoblok/") && staysInFolder(u),
   { message: "Нотўғри файл манзили · Invalid receipt URL" },
 );
 
 // Delivery proofs may also be shipment photos saved under /uploads/gazoblok/orders/<id>/.
 const GazoblokDeliveryProofUrl = z.string().refine(
-  (u) => u.startsWith("/uploads/receipts/gazoblok/") || u.startsWith("/uploads/gazoblok/"),
+  (u) => (u.startsWith("/uploads/receipts/gazoblok/") || u.startsWith("/uploads/gazoblok/")) && staysInFolder(u),
   { message: "Нотўғри файл манзили · Invalid proof URL" },
 );
 

@@ -38,7 +38,7 @@ export const TEXTS: Record<Lang, QuoteTexts> = {
     gazIncludes: 'faqat gazoblok',
     deliveryIncluded: "Yangiqo'rg'on tumani ichida yetkazib berish narxga kiradi",
     deliveryNotIncluded: 'Yetkazib berish narxga kirmaydi, transport alohida kelishiladi',
-    deliveryUnknown: "Yetkazib berish: Yangiqo'rg'on tumani ichida bepul, boshqa joylarga alohida kelishiladi",
+    deliveryUnknown: 'Yetkazib berish operator bilan kelishiladi',
   },
   ru: {
     roomName: (n) => `Комната ${n}`,
@@ -58,7 +58,7 @@ export const TEXTS: Record<Lang, QuoteTexts> = {
     gazIncludes: 'только газоблок',
     deliveryIncluded: 'Доставка по Янгикурганскому району включена в цену',
     deliveryNotIncluded: 'Доставка не включена, транспорт оговаривается отдельно',
-    deliveryUnknown: 'Доставка: по Янгикурганскому району бесплатно, в другие места оговаривается отдельно',
+    deliveryUnknown: 'Доставка оговаривается с оператором',
   },
   en: {
     roomName: (n) => `Room ${n}`,
@@ -78,7 +78,7 @@ export const TEXTS: Record<Lang, QuoteTexts> = {
     gazIncludes: 'gazoblok only',
     deliveryIncluded: "Delivery within Yangiqo'rg'on district is included",
     deliveryNotIncluded: 'Delivery is not included; transport is agreed separately',
-    deliveryUnknown: "Delivery: free within Yangiqo'rg'on district, elsewhere agreed separately",
+    deliveryUnknown: 'Delivery is agreed with the operator',
   },
 };
 

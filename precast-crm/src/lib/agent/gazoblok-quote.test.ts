@@ -6,7 +6,7 @@ import {
 } from './gazoblok-quote';
 import { verifyQuoteToken } from './quote-token';
 import type { GazoblokQuotePayload } from './gazoblok-quote';
-import { estimateWall, lineTotal, GazoblokError } from '@/services/gazoblok-engine';
+import { estimateSingleWall, lineTotal, GazoblokError } from '@/services/gazoblok-engine';
 
 const SECRET = 'quote-secret-key';
 const ISSUED = 1_700_000_000_000;
@@ -52,9 +52,9 @@ describe('buildGazoblokQuote', () => {
     expect(v!.price).toBe(q.price);
   });
 
-  it('prices a wall by deriving the block count from estimateWall', () => {
+  it('prices a wall with the CRM calculator rule (estimateSingleWall)', () => {
     const wall = { lengthM: 10, heightM: 3, openingsM2: 2 };
-    const est = estimateWall(P200, wall);
+    const est = estimateSingleWall(P200, wall);
     const q = buildGazoblokQuote(P200, { wall }, { secret: SECRET, issuedAt: ISSUED });
     expect(q.quantity).toBe(est.blocksNeeded);
     expect(q.price).toBe(lineTotal(P200.pricePerBlock, est.blocksNeeded));

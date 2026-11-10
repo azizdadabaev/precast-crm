@@ -34,8 +34,8 @@ describe('runGetGazoblokQuote', () => {
     const res = runGetGazoblokQuote({ thickness_mm: 200, quantity: 50 }, deps());
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    // 0.6 × 0.3 × 0.2 m³ × 600 kg/m³ = 21.6 kg/block → 50 × 21.6 = 1080 kg.
-    expect(res.data.weight_kg).toBe(1080);
+    // Shared density 611 kg/m³: 0.6 × 0.3 × 0.2 m³ × 611 = 21.996 kg/block → 50 blocks ≈ 1100 kg.
+    expect(res.data.weight_kg).toBe(1100);
     expect(Math.round(res.data.weight_kg / 50)).toBe(22); // matches owner's "D600 = 22kg"
   });
 
