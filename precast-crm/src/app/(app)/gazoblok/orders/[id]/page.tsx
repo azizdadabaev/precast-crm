@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -11,7 +11,9 @@ import {
   CheckCircle2,
   Factory,
   Loader2,
+  Pencil,
   Plus,
+  Repeat,
   Truck,
 } from "lucide-react";
 import { api } from "@/lib/fetcher";
@@ -21,7 +23,7 @@ import { Select } from "@/components/ui/select";
 import { Chip } from "@/components/ui/chip";
 import { formatDate, formatDateTime, formatNumber } from "@/lib/utils";
 import { PhoneLink } from "@/components/PhoneLink";
-import { useT } from "@/lib/i18n";
+import { useLang, useT } from "@/lib/i18n";
 import { CommentThread } from "@/components/comments/CommentThread";
 import { ReceiptPicker } from "@/components/payments/ReceiptPicker";
 import { GazoblokShipmentsSection } from "@/components/gazoblok/GazoblokShipmentsSection";
@@ -30,6 +32,24 @@ import { PAYMENT_METHOD_LABELS, EVENT_TYPE_LABELS } from "@/lib/gazoblok-labels"
 import { GazoblokQuantitiesTable } from "@/components/gazoblok/GazoblokQuantitiesTable";
 import { GazoblokDebtPanel } from "@/components/gazoblok/GazoblokDebtPanel";
 import { GazoblokCloseShortDialog } from "@/components/gazoblok/GazoblokCloseShortDialog";
+import {
+  GazoblokEditOrderDialog,
+  type GazoblokCatalogProduct,
+} from "@/components/gazoblok/GazoblokEditOrderDialog";
+import { GazoblokShareCard, shareCaption } from "@/components/gazoblok/GazoblokShareCard";
+import { ShareCalculationButton } from "@/components/ShareCalculationButton";
+import { SendQuoteToChatButton } from "@/components/inbox/SendQuoteToChatButton";
+import { DeliveryLocationCard } from "@/components/logistics/DeliveryLocationCard";
+import { eventText, parseMoney, uzPart } from "@/lib/gazoblok-text";
+import {
+  cancelBlock,
+  deliverBlockers,
+  historyLine,
+  paymentRow,
+  regroupMoney,
+  screenActions,
+  totalTone,
+} from "@/lib/gazoblok-order-screen";
 import type { LineQty } from "@/lib/gazoblok-quantities";
 
 type GazoblokShipmentStatus = "PENDING" | "LOADED" | "DELIVERED";
@@ -49,10 +69,20 @@ interface OrderDetail {
   totalBlocks: number;
   totalVolumeM3: string;
   linesSubtotal: string;
+  discountPercent: string;
   discountAmount: string;
   deliveryCost: string;
   overshipAmount: string;
+  notes: string | null;
   scheduledAt: string | null;
+  sourceOrder: { id: string; orderNumber: string } | null;
+  reorders: Array<{ id: string; orderNumber: string }>;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  deliveryLocationUrl: string | null;
+  deliveryLocationLabel: string | null;
+  deliveryProofUrl: string | null;
+  deliveryProofUploadedAt: string | null;
   placedAt: string | null;
   deliveredAt: string | null;
   canceledAt: string | null;
@@ -94,11 +124,13 @@ interface OrderDetail {
     confirmedAt: string | null;
     notes: string | null;
     receipts: Array<{ id: string; imageUrl: string }>;
+    recordedBy: { id: string; name: string } | null;
   }>;
   events: Array<{
     id: string;
     type: string;
     message: string | null;
+    payload: unknown;
     createdAt: string;
     actor: { id: string; name: string } | null;
   }>;
@@ -112,9 +144,9 @@ interface StockWarning {
 
 const STATUS_META: Record<Status, { uz: string; en: string; variant: React.ComponentProps<typeof Chip>["variant"] }> = {
   PLACED:        { uz: "Қабул қилинган",   en: "Placed",        variant: "default" },
-  IN_PRODUCTION: { uz: "Ишлаб чиқилмоқда", en: "In production", variant: "warning" },
+  IN_PRODUCTION: { uz: "Ишлаб чиқилмоқда", en: "In production", variant: "default" },
   DELIVERED:     { uz: "Етказилган",       en: "Delivered",     variant: "success" },
-  CANCELED:      { uz: "Бекор қилинган",   en: "Canceled",      variant: "danger" },
+  CANCELED:      { uz: "Бекор қилинган",   en: "Canceled",      variant: "neutral" },
 };
 
 const PAYMENT_STATE_META: Record<PaymentState, { uz: string; en: string; variant: React.ComponentProps<typeof Chip>["variant"] }> = {
@@ -133,8 +165,12 @@ const PAYMENT_METHODS: PaymentMethod[] = ["CASH", "BANK_TRANSFER", "CLICK", "PAY
 
 export default function GazoblokOrderDetailPage() {
   const t = useT();
+  const lang = useLang();
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [editMode, setEditMode] = useState<"full" | "schedule" | null>(null);
+  const showError = (e: Error) => setError(uzPart(e.message, lang));
 
   const [error, setError] = useState<string | null>(null);
   const [stockWarning, setStockWarning] = useState(false);
@@ -163,12 +199,27 @@ export default function GazoblokOrderDetailPage() {
   const canEdit = perms.includes("order.edit");
   const canCancelPerm = perms.includes("order.cancel");
   const canRecord = perms.includes("payment.record");
+  const canEditShipped = perms.includes("order.editShipped");
   const [closeShortOpen, setCloseShortOpen] = useState(false);
+
+  // Catalog for the edit dialog's «add a size» — only fetched once the dialog opens.
+  const { data: catalog } = useQuery<GazoblokCatalogProduct[]>({
+    queryKey: ["gazoblok", "products"],
+    queryFn: () => api("/api/gazoblok/products"),
+    enabled: editMode === "full",
+  });
 
   function refresh() {
     qc.invalidateQueries({ queryKey: ["gazoblok-order", id] });
     qc.invalidateQueries({ queryKey: ["gazoblok-orders"] });
   }
+
+  const deliveryLocation = useMutation({
+    mutationFn: (body: { lat: number | null; lng: number | null; url?: string | null; label?: string | null }) =>
+      api(`/api/gazoblok/orders/${id}/delivery-location`, { method: "PATCH", json: body }),
+    onSuccess: refresh,
+    onError: showError,
+  });
 
   const setStatus = useMutation({
     mutationFn: (vars: { status: Status; reason?: string }) =>
@@ -190,7 +241,7 @@ export default function GazoblokOrderDetailPage() {
       // Close the dialogs so the error banner isn't hidden behind the overlay.
       setCancelOpen(false);
       setDeliverOpen(false);
-      setError(e.message);
+      showError(e);
     },
   });
 
@@ -205,7 +256,7 @@ export default function GazoblokOrderDetailPage() {
       setPayReceiptUrls([]);
       refresh();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: showError,
   });
 
   const confirmPayment = useMutation({
@@ -226,7 +277,7 @@ export default function GazoblokOrderDetailPage() {
     },
     onError: (e: Error) => {
       setRejectPaymentId(null);
-      setError(e.message);
+      showError(e);
     },
   });
 
@@ -238,9 +289,9 @@ export default function GazoblokOrderDetailPage() {
   function submitPayment(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const amount = Number(payAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError(t("Тўғри сумма киритинг", "Enter a valid amount"));
+    const amount = parseMoney(payAmount);
+    if (amount === null || amount <= 0) {
+      setError(t("Тўғри сумма киритинг: масалан 1 000 000", "Enter a valid amount: e.g. 1 000 000"));
       return;
     }
     recordPayment.mutate({ amount, method: payMethod, receiptUrls: payReceiptUrls });
@@ -297,16 +348,26 @@ export default function GazoblokOrderDetailPage() {
       : avgPerBlockKg,
   }));
 
+  const actions = screenActions(order, perms);
   const canStartProduction = canEdit && order.status === "PLACED" && !order.shortClosedAt;
   const canDeliver = canEdit && (order.status === "PLACED" || order.status === "IN_PRODUCTION");
+  const deliverReasons = deliverBlockers({
+    quantities: order.quantities,
+    shortClosedAt: order.shortClosedAt,
+    openShipments: order.shipments.filter((sh) => sh.status !== "DELIVERED").length,
+    remaining: totalNum - paidNum,
+  });
   // Cancel only while nothing has left the yard; after a load the order is closed short.
-  const canCancelNow = canCancelPerm && isOpenOrder && loadedTotal === 0;
+  const canCancelShown = canCancelPerm && isOpenOrder;
+  const cancelBlocked = cancelBlock(loadedTotal);
   const canCloseShort = canEdit && isOpenOrder && loadedTotal > 0 && leftTotal > 0;
   // 0.005 tolerance: totals arrive as decimal strings — don't let float dust
   // (e.g. remaining 0.0000001) keep the payment form open on a settled order.
   const canRecordPayment = canRecord && !isCanceled && remainingNum > 0.005;
-  const payAmountNum = Number(payAmount);
-  const payAmountTooHigh = Number.isFinite(payAmountNum) && payAmountNum > remainingNum + 0.005;
+  const payAmountNum = parseMoney(payAmount);
+  const payAmountUnreadable = payAmount.trim() !== "" && payAmountNum === null;
+  const payAmountTooHigh = payAmountNum !== null && payAmountNum > remainingNum + 0.005;
+  const shareFileBase = `Gazoblok-${order.orderNumber}`;
 
   return (
     <div className="space-y-5">
@@ -332,7 +393,7 @@ export default function GazoblokOrderDetailPage() {
       {/* Header card */}
       <div className="rounded-lg border bg-background p-4 sm:p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
               Газоблок буюртмаси<span className="lang-en"> · Gazoblok order</span>
             </div>
@@ -342,7 +403,7 @@ export default function GazoblokOrderDetailPage() {
               {!isCanceled && <Chip variant={payState.variant}>{t(payState.uz, payState.en)}</Chip>}
               {order.shortClosedAt && <Chip variant="warning">{t("Қисқа ёпилган", "Closed short")}</Chip>}
             </div>
-            <div className="text-sm text-muted-foreground mt-2">
+            <div className="text-sm text-muted-foreground mt-2 break-words">
               {t("Мижоз:", "Client:")}{" "}
               <Link href={`/clients/${order.client.id}`} className="text-foreground font-medium hover:underline">
                 {order.client.name}
@@ -354,11 +415,48 @@ export default function GazoblokOrderDetailPage() {
             <div className="text-sm text-muted-foreground mt-1">
               {t("Сотувчи:", "Seller:")} <span className="text-foreground font-medium">{order.createdBy?.name ?? "—"}</span>
             </div>
+            {order.sourceOrder && (
+              <div className="text-sm text-muted-foreground mt-1">
+                {t("Такрорий буюртма:", "Reorder of:")}{" "}
+                <Link href={`/gazoblok/orders/${order.sourceOrder.id}`} className="font-mono tabular-nums text-primary hover:underline">
+                  {order.sourceOrder.orderNumber}
+                </Link>{" "}
+                {t("асосида", "")}
+              </div>
+            )}
+            {order.reorders.length > 0 && (
+              <div className="text-sm text-muted-foreground mt-1">
+                {t("Қайта буюртмалар:", "Reorders:")}{" "}
+                {order.reorders.map((r, i) => (
+                  <span key={r.id}>
+                    {i > 0 && ", "}
+                    <Link href={`/gazoblok/orders/${r.id}`} className="font-mono tabular-nums text-primary hover:underline">
+                      {r.orderNumber}
+                    </Link>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              {order.scheduledAt && (
+              {(order.scheduledAt || actions.edit) && (
                 <span className="inline-flex items-center gap-1.5">
                   <Calendar className="h-3.5 w-3.5" />
-                  {t("Жадвал:", "Scheduled:")} <span className="tabular-nums font-medium text-foreground">{formatDate(order.scheduledAt)}</span>
+                  {t("Жадвал:", "Scheduled:")}{" "}
+                  <span className="tabular-nums font-medium text-foreground">
+                    {order.scheduledAt ? formatDate(order.scheduledAt) : "—"}
+                  </span>
+                  {actions.edit && (
+                    <button
+                      type="button"
+                      className="min-h-[44px] px-2 text-primary hover:underline"
+                      onClick={() => {
+                        setError(null);
+                        setEditMode("schedule");
+                      }}
+                    >
+                      {t("Санани ўзгартириш", "Change date")}
+                    </button>
+                  )}
                 </span>
               )}
               {order.placedAt && (
@@ -368,16 +466,75 @@ export default function GazoblokOrderDetailPage() {
                 <span className="tabular-nums">{t("Етказилган", "Delivered")} {formatDate(order.deliveredAt)}</span>
               )}
             </div>
+            {order.notes && (
+              <div className="mt-2 text-sm text-muted-foreground break-words">
+                {t("Изоҳ:", "Notes:")} <span className="text-foreground">{order.notes}</span>
+              </div>
+            )}
           </div>
-          <div className="text-right min-w-[14rem]">
-            <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+          <div className="w-full sm:w-auto sm:min-w-[16rem] space-y-1 text-sm">
+            <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold sm:text-right">
               Жами<span className="lang-en"> · Total</span>
             </div>
-            <div className="text-3xl font-black tabular-nums text-success font-mono">
+            <div className={`text-3xl font-black tabular-nums font-mono sm:text-right ${totalTone(order.paymentState)}`}>
               {formatNumber(totalNum, 0)}
               <span className="text-xs text-muted-foreground font-normal ml-1">UZS</span>
             </div>
+            <Row
+              label={t("Тўланган", "Paid")}
+              value={formatNumber(paidNum, 0)}
+              valueClassName={paidNum > 0 ? "text-success" : "text-muted-foreground"}
+            />
+            {!isCanceled && (
+              <Row
+                label={t("Қолди", "Remaining")}
+                value={formatNumber(remainingNum, 0)}
+                valueClassName={remainingNum > 0.005 ? "text-foreground" : "text-muted-foreground"}
+              />
+            )}
+            {overshipNum > 0 && (
+              <Row
+                label={t("Шундан ортиқча юклаш", "Of which over-load")}
+                value={formatNumber(overshipNum, 0)}
+                valueClassName="text-destructive"
+              />
+            )}
           </div>
+        </div>
+
+        {/* Header actions — 44 px targets, wrap on phones */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {actions.edit && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-[44px]"
+              onClick={() => {
+                setError(null);
+                setEditMode("full");
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1.5" />
+              {t("Таҳрирлаш", "Edit")}
+            </Button>
+          )}
+          {actions.reorder && (
+            <Button variant="outline" size="sm" className="min-h-[44px]" asChild>
+              <Link href={`/gazoblok/new?from=${order.id}`}>
+                <Repeat className="h-3.5 w-3.5 mr-1.5" />
+                {t("Қайта буюртма", "Reorder")}
+              </Link>
+            </Button>
+          )}
+          <ShareCalculationButton targetRef={cardRef} fileBase={shareFileBase} />
+          {actions.chat && (
+            <SendQuoteToChatButton
+              targetRef={cardRef}
+              conversationId={null}
+              fileBase={shareFileBase}
+              caption={shareCaption(order)}
+            />
+          )}
         </div>
 
         {order.shortClosedAt && order.shortCloseReason && (
@@ -391,6 +548,17 @@ export default function GazoblokOrderDetailPage() {
           </div>
         )}
       </div>
+
+      <GazoblokDebtPanel
+        orderId={order.id}
+        overBlocks={overTotal}
+        overshipAmount={overshipNum}
+        unpaidOverload={order.unpaidOverload}
+        sellerName={order.createdBy?.name ?? null}
+        refundDue={order.refundDue}
+        canRefund={canConfirm}
+        onChanged={refresh}
+      />
 
       {/* Lines */}
       <div className="rounded-lg border border-border bg-card overflow-hidden">
@@ -425,34 +593,15 @@ export default function GazoblokOrderDetailPage() {
             label={t("ЖАМИ", "TOTAL")}
             value={`${formatNumber(totalNum, 0)} UZS`}
             strong
-          />
-          <Row
-            label={t("Тўланган", "Paid")}
-            value={formatNumber(paidNum, 0)}
-            valueClassName={paidNum > 0 ? "text-success" : "text-muted-foreground"}
-          />
-          <Row
-            label={t("Қолди", "Remaining")}
-            value={remainingNum === 0 && paidNum > 0 ? t("Тўланган", "Paid") : formatNumber(remainingNum, 0)}
-            valueClassName={remainingNum > 0 ? "text-warning" : "text-success"}
+            valueClassName={totalTone(order.paymentState)}
           />
           <div className="flex items-center justify-between pt-1.5 text-xs text-muted-foreground border-t border-border/60 mt-1.5">
             <span>{t("Блоклар", "Blocks")}: <span className="font-mono font-semibold text-foreground">{formatNumber(order.totalBlocks, 0)}</span></span>
-            <span>{t("Ҳажм", "Volume")}: <span className="font-mono font-semibold text-foreground">{formatNumber(Number(order.totalVolumeM3), 2)} m³</span></span>
+            <span>{t("Ҳажм", "Volume")}: <span className="font-mono font-semibold text-foreground">{formatNumber(Number(order.totalVolumeM3), 2)} м³</span></span>
           </div>
         </div>
       </div>
 
-      <GazoblokDebtPanel
-        orderId={order.id}
-        overBlocks={overTotal}
-        overshipAmount={overshipNum}
-        unpaidOverload={order.unpaidOverload}
-        sellerName={order.createdBy?.name ?? null}
-        refundDue={order.refundDue}
-        canRefund={canConfirm}
-        onChanged={refresh}
-      />
 
       {/* Estimate — read-only snapshot of the wall calculator that produced this order */}
       {order.wallEstimate && (() => {
@@ -508,7 +657,7 @@ export default function GazoblokOrderDetailPage() {
       })()}
 
       {/* Status actions */}
-      {!isCanceled && (canStartProduction || canDeliver || canCancelNow || canCloseShort) && (
+      {!isCanceled && (canStartProduction || canDeliver || canCancelShown || canCloseShort) && (
         <div className="rounded-lg border bg-background p-4 shadow-sm">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
             Ҳолат<span className="lang-en"> · Status actions</span>
@@ -518,6 +667,7 @@ export default function GazoblokOrderDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-[44px]"
                 disabled={setStatus.isPending}
                 onClick={() => advance("IN_PRODUCTION")}
               >
@@ -528,8 +678,8 @@ export default function GazoblokOrderDetailPage() {
             {canDeliver && (
               <Button
                 size="sm"
-                className="bg-success hover:bg-success/90 text-success-foreground"
-                disabled={setStatus.isPending}
+                className="min-h-[44px] bg-success hover:bg-success/90 text-success-foreground"
+                disabled={setStatus.isPending || deliverReasons.length > 0}
                 onClick={() => {
                   setError(null);
                   setDeliverOpen(true);
@@ -552,12 +702,13 @@ export default function GazoblokOrderDetailPage() {
                 {t("Юкланганича ёпиш", "Close as loaded")}
               </Button>
             )}
-            {canCancelNow && (
+            {canCancelShown && (
               <Button
                 variant="outline"
                 size="sm"
-                className="border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive hover:text-white hover:border-destructive transition-colors"
-                disabled={setStatus.isPending}
+                className="min-h-[44px] border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive hover:text-white hover:border-destructive transition-colors"
+                disabled={setStatus.isPending || cancelBlocked !== null}
+                title={cancelBlocked ?? undefined}
                 onClick={() => {
                   setError(null);
                   setCancelReason("");
@@ -569,12 +720,22 @@ export default function GazoblokOrderDetailPage() {
               </Button>
             )}
           </div>
+          {((canDeliver && deliverReasons.length > 0) || (canCancelShown && cancelBlocked)) && (
+            <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+              {canDeliver && deliverReasons.map((r) => (
+                <li key={r}>{t("Етказилди:", "Delivered:")} {uzPart(r, lang)}</li>
+              ))}
+              {canCancelShown && cancelBlocked && (
+                <li>{t("Бекор қилиб бўлмайди:", "Cannot cancel:")} <span className="font-mono tabular-nums">{cancelBlocked}</span></li>
+              )}
+            </ul>
+          )}
         </div>
       )}
 
       {/* Payments */}
       <div className="rounded-lg border bg-background overflow-hidden">
-        <div className="px-4 py-3 border-b flex items-baseline justify-between">
+        <div className="px-4 py-3 border-b flex flex-wrap items-baseline justify-between gap-2">
           <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
             Тўловлар<span className="lang-en"> · Payments</span>
           </div>
@@ -584,88 +745,89 @@ export default function GazoblokOrderDetailPage() {
         </div>
 
         {order.payments.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead className="bg-muted/40 text-[11px] uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="text-left px-3 py-2">{t("Усул", "Method")}</th>
-                  <th className="text-right px-3 py-2">{t("Сумма", "Amount")}</th>
-                  <th className="text-left px-3 py-2">{t("Ҳолат", "Status")}</th>
-                  <th className="text-left px-3 py-2">{t("Қайд этилди", "Recorded")}</th>
-                  <th className="px-3 py-2 w-44"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {order.payments.map((p) => {
-                  const ps = PAYMENT_STATUS_META[p.status];
-                  return (
-                    <tr key={p.id} className="hover:bg-muted/20">
-                      <td className="px-3 py-2 text-xs uppercase tracking-wider">
-                        <div>{PAYMENT_METHOD_LABELS[p.method] ? t(...PAYMENT_METHOD_LABELS[p.method]) : p.method}</div>
-                        {p.receipts.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {p.receipts.map((r) => (
-                              <a
-                                key={r.id}
-                                href={r.imageUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={t("Чекни очиш", "Open receipt")}
-                                className="block h-8 w-8 overflow-hidden rounded ring-1 ring-border hover:ring-primary"
-                              >
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={r.imageUrl} alt={t("Чек", "Receipt")} className="h-full w-full object-cover" />
-                              </a>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{formatNumber(Number(p.amount), 0)}</td>
-                      <td className="px-3 py-2">
+          <ul className="divide-y">
+            {order.payments.map((p) => {
+              const ps = PAYMENT_STATUS_META[p.status];
+              const row = paymentRow(p, order.status);
+              return (
+                <li key={p.id} className="px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                  <div className="min-w-0 flex-1 basis-40">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`font-mono tabular-nums font-semibold ${row.refund ? "text-warning" : ""}`}>
+                        {row.amountText}
+                        <span className="text-[10px] font-normal text-muted-foreground ml-1">UZS</span>
+                      </span>
+                      {row.refund ? (
+                        <Chip variant="warning">{t("Қайтарилди", "Refunded")}</Chip>
+                      ) : (
                         <Chip variant={ps.variant}>{t(ps.uz, ps.en)}</Chip>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">
-                        {p.recordedAt ? formatDate(p.recordedAt) : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {p.status === "PENDING_CONFIRMATION" && canConfirm && (
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-success/40 text-success hover:bg-success hover:text-white"
-                              disabled={confirmPayment.isPending}
-                              onClick={() => {
-                                setError(null);
-                                confirmPayment.mutate({ paymentId: p.id, approve: true });
-                              }}
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                              {t("Тасдиқлаш", "Confirm")}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="border-destructive/40 text-destructive hover:bg-destructive hover:text-white"
-                              disabled={confirmPayment.isPending}
-                              onClick={() => {
-                                setError(null);
-                                setRejectReason("");
-                                setRejectPaymentId(p.id);
-                              }}
-                            >
-                              <Ban className="h-3.5 w-3.5 mr-1" />
-                              {t("Рад этиш", "Reject")}
-                            </Button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      )}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground break-words">
+                      {PAYMENT_METHOD_LABELS[p.method] ? t(...PAYMENT_METHOD_LABELS[p.method]) : p.method}
+                      {" · "}
+                      {p.recordedBy?.name ?? "—"}
+                      {" · "}
+                      <span className="font-mono tabular-nums">{p.recordedAt ? formatDateTime(p.recordedAt) : "—"}</span>
+                    </div>
+                    {row.refund && p.notes && (
+                      <div className="mt-1 text-xs text-muted-foreground break-words">{p.notes}</div>
+                    )}
+                    {p.receipts.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {p.receipts.map((r) => (
+                          <a
+                            key={r.id}
+                            href={r.imageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={t("Чекни очиш", "Open receipt")}
+                            className="block h-11 w-11 overflow-hidden rounded ring-1 ring-border hover:ring-primary"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={r.imageUrl} alt={t("Чек", "Receipt")} className="h-full w-full object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {canConfirm && (row.canApprove || row.canReject) && (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {row.canApprove && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="min-h-[44px] border-success/40 text-success hover:bg-success hover:text-white"
+                          disabled={confirmPayment.isPending}
+                          onClick={() => {
+                            setError(null);
+                            confirmPayment.mutate({ paymentId: p.id, approve: true });
+                          }}
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                          {t("Тасдиқлаш", "Confirm")}
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-h-[44px] border-destructive/40 text-destructive hover:bg-destructive hover:text-white"
+                        disabled={confirmPayment.isPending}
+                        onClick={() => {
+                          setError(null);
+                          setRejectReason("");
+                          setRejectPaymentId(p.id);
+                        }}
+                      >
+                        <Ban className="h-3.5 w-3.5 mr-1" />
+                        {t("Рад этиш", "Reject")}
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         ) : (
           <div className="px-4 py-6 text-sm text-muted-foreground">{t("Тўлов йўқ.", "No payments yet.")}</div>
         )}
@@ -678,15 +840,18 @@ export default function GazoblokOrderDetailPage() {
                 {t("Сумма", "Amount")}
               </label>
               <Input
-                type="number"
-                min={0}
-                max={remainingNum}
-                step="any"
-                inputMode="numeric"
-                placeholder={t("масалан 1000000", "e.g. 1000000")}
+                inputMode="decimal"
+                className="min-h-[44px] font-mono tabular-nums"
+                placeholder={t("масалан 1 000 000", "e.g. 1 000 000")}
                 value={payAmount}
                 onChange={(e) => setPayAmount(e.target.value)}
+                onBlur={() => setPayAmount(regroupMoney(payAmount))}
               />
+              {payAmountUnreadable && (
+                <div className="text-xs text-destructive mt-1">
+                  {t("Сонни текширинг: масалан 1 000 000", "Check the number: e.g. 1 000 000")}
+                </div>
+              )}
               {payAmountTooHigh && (
                 <div className="text-xs text-warning mt-1">
                   {t("Сумма қолдиқдан ошиб кетди", "Amount exceeds remaining balance")}
@@ -716,7 +881,7 @@ export default function GazoblokOrderDetailPage() {
                 uploadUrl="/api/gazoblok/upload-receipt"
               />
             </div>
-            <Button type="submit" size="sm" disabled={recordPayment.isPending}>
+            <Button type="submit" size="sm" className="min-h-[44px]" disabled={recordPayment.isPending || payAmountUnreadable}>
               {recordPayment.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
               ) : (
@@ -727,6 +892,37 @@ export default function GazoblokOrderDetailPage() {
           </form>
         )}
       </div>
+
+      <DeliveryLocationCard
+        lat={order.deliveryLat}
+        lng={order.deliveryLng}
+        url={order.deliveryLocationUrl}
+        label={order.deliveryLocationLabel}
+        canEdit={actions.pin}
+        onSave={(v) => deliveryLocation.mutateAsync(v).then(() => undefined)}
+        onClear={() => deliveryLocation.mutateAsync({ lat: null, lng: null }).then(() => undefined)}
+      />
+
+      {order.deliveryProofUrl && (
+        <div className="rounded-lg border bg-background overflow-hidden">
+          <div className="px-4 py-3 border-b text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            {t("Етказиш сурати", "Delivery photo")}
+            {order.deliveryProofUploadedAt && (
+              <span className="ml-2 font-normal font-mono tabular-nums normal-case tracking-normal">
+                {formatDateTime(order.deliveryProofUploadedAt)}
+              </span>
+            )}
+          </div>
+          <a href={order.deliveryProofUrl} target="_blank" rel="noopener noreferrer" className="block p-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={order.deliveryProofUrl}
+              alt={t("Етказиш сурати", "Delivery photo")}
+              className="max-h-72 max-w-full rounded ring-1 ring-border object-contain"
+            />
+          </a>
+        </div>
+      )}
 
       {/* Shipments — split-load the order across one or more trucks */}
       <GazoblokShipmentsSection
@@ -751,17 +947,21 @@ export default function GazoblokOrderDetailPage() {
         </div>
         {order.events.length > 0 ? (
           <ul className="divide-y">
-            {order.events.map((e) => (
-              <li key={e.id} className="px-4 py-2.5 text-sm flex items-baseline justify-between gap-4">
-                <div>
-                  <span className="font-medium">{e.actor?.name ?? t("Тизим", "System")}</span>
-                  <span className="text-muted-foreground"> · </span>
-                  <span>{EVENT_TYPE_LABELS[e.type] ? t(...EVENT_TYPE_LABELS[e.type]) : e.type}</span>
-                  {e.message && <span className="text-muted-foreground"> — {e.message}</span>}
-                </div>
-                <span className="text-xs text-muted-foreground tabular-nums shrink-0">{formatDateTime(e.createdAt)}</span>
-              </li>
-            ))}
+            {order.events.map((e) => {
+              const label = EVENT_TYPE_LABELS[e.type] ? t(...EVENT_TYPE_LABELS[e.type]) : e.type;
+              const line = historyLine(label, eventText(e));
+              return (
+                <li key={e.id} className="px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 sm:grid-cols-[10rem_1fr_auto]">
+                  <span className="font-medium break-words">{e.actor?.name ?? t("Тизим", "System")}</span>
+                  <span className="text-xs text-muted-foreground font-mono tabular-nums text-right sm:order-last">
+                    {formatDateTime(e.createdAt)}
+                  </span>
+                  <span className="col-span-2 sm:col-span-1 break-words">
+                    {line}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <div className="px-4 py-6 text-sm text-muted-foreground">{t("Ёзув йўқ.", "No activity yet.")}</div>
@@ -791,10 +991,11 @@ export default function GazoblokOrderDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-[44px]"
                 onClick={() => setDeliverOpen(false)}
                 disabled={setStatus.isPending}
               >
-                {t("Ёпиш", "Close")}
+                {t("Орқага", "Back")}
               </Button>
               <Button
                 size="sm"
@@ -867,6 +1068,26 @@ export default function GazoblokOrderDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Off-screen, fixed-width card — the capture target of «Расм» and «Чатга юбориш». */}
+      <div aria-hidden="true" className="pointer-events-none fixed top-0 left-[-99999px]">
+        <GazoblokShareCard ref={cardRef} order={order} />
+      </div>
+
+      {editMode && (
+        <GazoblokEditOrderDialog
+          open
+          onClose={() => setEditMode(null)}
+          order={order}
+          catalog={catalog ?? []}
+          perms={{ edit: canEdit, editShipped: canEditShipped }}
+          mode={editMode}
+          onSaved={() => {
+            setEditMode(null);
+            refresh();
+          }}
+        />
       )}
 
       <GazoblokCloseShortDialog
@@ -963,7 +1184,7 @@ function Row({
       <span className={strong ? "text-[11px] font-bold uppercase tracking-wider text-muted-foreground" : "text-muted-foreground"}>
         {label}
       </span>
-      <span className={`font-mono tabular-nums ${strong ? "font-extrabold text-base text-success" : "font-semibold"} ${valueClassName ?? ""}`}>
+      <span className={`font-mono tabular-nums ${strong ? "font-extrabold text-base" : "font-semibold"} ${valueClassName ?? ""}`}>
         {value}
       </span>
     </div>

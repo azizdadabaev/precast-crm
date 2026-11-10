@@ -10,7 +10,8 @@ import { Loader2 } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useT } from "@/lib/i18n";
+import { useLang, useT } from "@/lib/i18n";
+import { uzPart } from "@/lib/gazoblok-text";
 import { formatNumber } from "@/lib/utils";
 import { shortCloseTotals, type LineQty } from "@/lib/gazoblok-quantities";
 
@@ -34,6 +35,7 @@ export function GazoblokCloseShortDialog({
   onDone: () => void;
 }) {
   const t = useT();
+  const lang = useLang();
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const loaded = new Map(quantities.map((q) => [q.lineId, q.loaded]));
@@ -46,7 +48,7 @@ export function GazoblokCloseShortDialog({
       onDone();
       onClose();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) => setError(uzPart(e.message, lang)),
   });
   const n = (v: number) => formatNumber(v, 0);
 

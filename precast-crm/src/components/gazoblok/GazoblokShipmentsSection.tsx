@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Truck, Package, CheckCircle2, Clock, Loader2, Trash2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { useT } from "@/lib/i18n";
+import { useLang, useT } from "@/lib/i18n";
+import { uzPart } from "@/lib/gazoblok-text";
 import { formatDate } from "@/lib/utils";
 import { GazoblokSplitShipmentModal } from "./GazoblokSplitShipmentModal";
 import type { GazoblokLine } from "@/lib/gazoblok-weight";
@@ -57,6 +58,7 @@ export function GazoblokShipmentsSection({
   orderId, shipments, lines, orderStatus, orderOpen, canEdit, canEditShipped, onRefresh,
 }: Props) {
   const t = useT();
+  const lang = useLang();
   const [loadModalShipment, setLoadModalShipment] = useState<ShipmentData | null>(null);
   const [deliveringId, setDeliveringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export function GazoblokShipmentsSection({
       if (!res.ok || !json.ok) throw new Error(json.error ?? genericError);
       onRefresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : genericError);
+      setError(e instanceof Error ? uzPart(e.message, lang) : genericError);
     } finally {
       setCreatingNew(false);
     }
@@ -104,7 +106,7 @@ export function GazoblokShipmentsSection({
       if (!res.ok || !json.ok) throw new Error(json.error ?? genericError);
       onRefresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : genericError);
+      setError(e instanceof Error ? uzPart(e.message, lang) : genericError);
     } finally {
       setDeletingId(null);
     }
@@ -126,7 +128,7 @@ export function GazoblokShipmentsSection({
       if (!res.ok || !json.ok) throw new Error(json.error ?? genericError);
       onRefresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : genericError);
+      setError(e instanceof Error ? uzPart(e.message, lang) : genericError);
     } finally {
       setDeliveringId(null);
     }

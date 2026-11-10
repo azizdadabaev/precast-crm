@@ -5,7 +5,8 @@ import { Camera, Upload, Loader2, ChevronDown, ChevronUp, Zap, X } from "lucide-
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useT } from "@/lib/i18n";
+import { useLang, useT } from "@/lib/i18n";
+import { uzPart } from "@/lib/gazoblok-text";
 import { formatNumber } from "@/lib/utils";
 import { prepareImageForUpload } from "@/lib/image/prepare-upload";
 import {
@@ -49,6 +50,8 @@ export function GazoblokSplitShipmentModal({
   open, onClose, onSuccess,
 }: Props) {
   const t = useT();
+  const lang = useLang();
+  const genericError = t("Хатолик юз берди. Қайта уриниб кўринг.", "Something went wrong. Try again.");
   const fileRef = useRef<HTMLInputElement>(null);
 
   // What's still loadable for THIS shipment = order total − what PRIOR shipments
@@ -186,11 +189,11 @@ export function GazoblokSplitShipmentModal({
         setOverloadAsk({ extraBlocks: json.details.extraBlocks ?? 0, extraAmount: json.details.extraAmount ?? 0 });
         return;
       }
-      if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed");
+      if (!res.ok || !json.ok) throw new Error(json.error ?? genericError);
       onSuccess();
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed");
+      setError(e instanceof Error ? uzPart(e.message, lang) : genericError);
     } finally {
       setLoading(false);
     }
@@ -463,7 +466,7 @@ export function GazoblokSplitShipmentModal({
         ) : (
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" onClick={onClose} disabled={loading}>
-              {t("Ёпиш", "Close")}
+              {t("Орқага", "Back")}
             </Button>
             <Button size="sm" onClick={() => submit(false)} disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}

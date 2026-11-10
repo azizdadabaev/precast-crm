@@ -28,6 +28,9 @@ interface Props {
   submit?: (v: { amount: number; method: PaymentMethod; paidOn: string; note: string }) => Promise<void>;
   /** false hides the date field (paidOn is then today) — default true. */
   showDate?: boolean;
+  /** When set, the amount is a text field read with this parser (null = unreadable, e.g. a
+   *  thousands comma) instead of the calculator NumberInput. */
+  parseAmount?: (s: string) => number | null;
 }
 
 function todayLocal(): string {
@@ -40,9 +43,13 @@ function todayLocal(): string {
  * refund can be partial, never more than is due; the reason is required so
  * the order's history explains where the money went.
  */
-export function RefundDialog({ open, onClose, orderId, due, onRefunded, submit: customSubmit, showDate = true }: Props) {
+export function RefundDialog({ open, onClose, orderId, due, onRefunded, submit: customSubmit, showDate = true, parseAmount }: Props) {
   const t = useT();
-  const [amount, setAmount] = useState(0);
+  const [numberAmount, setAmount] = useState(0);
+  const [amountText, setAmountText] = useState("");
+  const parsedText = parseAmount ? parseAmount(amountText) : null;
+  const amount = parseAmount ? parsedText ?? 0 : numberAmount;
+  const unreadable = !!parseAmount && amountText.trim() !== "" && parsedText === null;
   const [method, setMethod] = useState<PaymentMethod>("CASH");
   const [date, setDate] = useState(todayLocal());
   const [note, setNote] = useState("");
@@ -52,6 +59,7 @@ export function RefundDialog({ open, onClose, orderId, due, onRefunded, submit: 
   useEffect(() => {
     if (open) {
       setAmount(Math.round(due));
+      setAmountText(formatNumber(Math.round(due), 0));
       setMethod("CASH");
       setDate(todayLocal());
       setNote("");
@@ -113,18 +121,33 @@ export function RefundDialog({ open, onClose, orderId, due, onRefunded, submit: 
               Қайтарилган сумма<span className="lang-en"> · Amount returned</span>
             </Label>
             <div className="relative">
-              <NumberInput
-                step="1000"
-                min="0"
-                integer
-                className="grid-input is-numeric h-9 w-full rounded border border-input pr-12"
-                value={amount}
-                onChange={(n) => setAmount(Math.max(0, n))}
-              />
+              {parseAmount ? (
+                <input
+                  inputMode="decimal"
+                  aria-label={t("Қайтарилган сумма", "Amount returned")}
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 pr-12 text-sm font-mono tabular-nums text-right"
+                  value={amountText}
+                  onChange={(e) => setAmountText(e.target.value)}
+                />
+              ) : (
+                <NumberInput
+                  step="1000"
+                  min="0"
+                  integer
+                  className="grid-input is-numeric h-9 w-full rounded border border-input pr-12"
+                  value={numberAmount}
+                  onChange={(n) => setAmount(Math.max(0, n))}
+                />
+              )}
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
                 UZS
               </span>
             </div>
+            {unreadable && (
+              <p className="text-xs text-destructive">
+                {t("Сонни текширинг: масалан 150 000", "Check the number: e.g. 150 000")}
+              </p>
+            )}
             {!validAmount && amount > 0 && (
               <p className="text-xs text-destructive">
                 {t(`${formatNumber(due, 0)} UZS дан ошмайди`, `Cannot exceed ${formatNumber(due, 0)} UZS`)}

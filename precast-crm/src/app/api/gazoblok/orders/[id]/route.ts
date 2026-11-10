@@ -61,7 +61,10 @@ export const GET = withPermission<{ id: string }>("order.view",
         lines: { include: { product: { select: { id: true, label: true, lengthM: true, heightM: true, thicknessM: true } } } },
         payments: {
           orderBy: { recordedAt: "desc" },
-          include: { receipts: { orderBy: { createdAt: "asc" }, select: { id: true, imageUrl: true } } },
+          include: {
+            receipts: { orderBy: { createdAt: "asc" }, select: { id: true, imageUrl: true } },
+            recordedBy: { select: { id: true, name: true } },
+          },
         },
         shipments: { orderBy: { number: "asc" } },
         sourceOrder: { select: { id: true, orderNumber: true } },
