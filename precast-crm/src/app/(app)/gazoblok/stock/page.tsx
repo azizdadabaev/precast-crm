@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Warehouse } from "lucide-react";
 import { api } from "@/lib/fetcher";
@@ -10,6 +10,7 @@ import { Chip } from "@/components/ui/chip";
 import { stockTier } from "@/lib/inventory";
 import { cn, formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { GazoblokStockHistory } from "@/components/gazoblok/GazoblokStockHistory";
 
 // ─────────────────────────────────────────────────────────────────
 // API shapes. Prisma Decimal fields (dims/price) arrive as STRINGS —
@@ -28,7 +29,12 @@ interface Product {
   active: boolean;
   seq: number;
   stock: { quantity: number } | null;
+  /** Blocks open orders still need (ordered − loaded). */
+  reserved: number;
 }
+
+// Size · in stock · needed · free · low-at · adjust (desktop); phones stack.
+const ROW_GRID = "grid lg:grid-cols-[minmax(0,1.2fr)_repeat(4,minmax(0,0.8fr))_minmax(260px,2fr)]";
 
 /** Format meters as millimetres (0.6 m → 600). */
 function mToMm(m: string): string {
@@ -86,26 +92,25 @@ export default function GazoblokStockPage() {
             {t("Фаол Газоблок ўлчами йўқ.", "No active Газоблок sizes yet.")}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="text-left px-3 py-2">{t("Ўлчам", "Size")}</th>
-                  <th className="text-left px-3 py-2">{t("Ўлчам (мм)", "Dims (mm)")}</th>
-                  <th className="text-right px-3 py-2">{t("Сони", "Qty")}</th>
-                  <th className="text-right px-3 py-2">{t("Кам захира остонаси", "Low-stock at")}</th>
-                  <th className="text-left px-3 py-2 w-[280px]">{t("Тузатиш", "Adjust")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {products.map((p) => (
-                  <Row key={p.id} product={p} t={t} />
-                ))}
-              </tbody>
-            </table>
+          <div>
+            <div className={cn(ROW_GRID, "hidden lg:grid bg-muted text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border")}>
+              <div className="px-3 py-2">{t("Ўлчам, мм", "Size, mm")}</div>
+              <div className="px-3 py-2 text-right">{t("Омборда", "In stock")}</div>
+              <div className="px-3 py-2 text-right">{t("Буюртмаларга керак", "Needed by orders")}</div>
+              <div className="px-3 py-2 text-right">{t("Бўш", "Free")}</div>
+              <div className="px-3 py-2 text-right">{t("Чегара", "Low at")}</div>
+              <div className="px-3 py-2">{t("Тузатиш", "Adjust")}</div>
+            </div>
+            <ul className="divide-y divide-border">
+              {products.map((p) => (
+                <Row key={p.id} product={p} t={t} />
+              ))}
+            </ul>
           </div>
         )}
       </section>
+
+      <GazoblokStockHistory />
     </div>
   );
 }
@@ -121,15 +126,7 @@ function Row({
   const qty = product.stock?.quantity ?? 0;
   const tier = stockTier(qty, product.lowStockThreshold);
 
-  // Colored left border marks an alert only — healthy rows carry no border.
-  const rowBorder =
-    tier === "critical"
-      ? "border-l-[3px] border-l-destructive"
-      : tier === "low"
-        ? "border-l-[3px] border-l-warning"
-        : "";
-  const badgeVariant =
-    tier === "critical" ? "danger" : tier === "low" ? "warning" : "success";
+  const free = qty - product.reserved;
 
   const [change, setChange] = useState("");
   const [note, setNote] = useState("");
@@ -173,20 +170,30 @@ function Row({
   }
 
   return (
-    <tr className={cn(rowBorder, "hover:bg-surface-hover transition-colors")}>
-      <td className="px-3 py-2.5 font-semibold">{product.label}</td>
-      <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-        {mToMm(product.lengthM)} × {mToMm(product.heightM)} × {mToMm(product.thicknessM)}
-      </td>
-      <td className="px-3 py-2.5 text-right">
-        <Chip variant={badgeVariant} size="md">
-          {formatNumber(qty, 0)}
-        </Chip>
-      </td>
-      <td className="px-3 py-2.5 text-right font-mono text-text-tertiary tabular-nums">
-        {product.lowStockThreshold}
-      </td>
-      <td className="px-3 py-2.5">
+    <li className={cn(ROW_GRID, "grid-cols-3 gap-x-2 gap-y-1.5 px-4 py-3 lg:gap-0 lg:px-0 lg:py-0 lg:items-center hover:bg-surface-hover transition-colors")}>
+      <div className="col-span-3 lg:col-span-1 flex items-center justify-between lg:justify-start gap-2 lg:px-3 lg:py-2.5">
+        <span className="font-mono tabular-nums font-semibold" title={product.label}>
+          {mToMm(product.lengthM)}×{mToMm(product.heightM)}×{mToMm(product.thicknessM)}
+        </span>
+        {qty <= 0 ? (
+          <Chip variant="danger" size="md">{t("Тугаган", "Out")}</Chip>
+        ) : tier === "critical" ? (
+          <Chip variant="danger" size="md">{t("Жуда кам", "Very low")}</Chip>
+        ) : tier === "low" ? (
+          <Chip variant="warning" size="md">{t("Кам", "Low")}</Chip>
+        ) : null}
+      </div>
+      <Cell label={t("Омборда", "In stock")} className={cn(qty <= 0 && "text-destructive font-semibold")}>
+        {formatNumber(qty, 0)}
+      </Cell>
+      <Cell label={t("Керак", "Needed")}>{formatNumber(product.reserved, 0)}</Cell>
+      <Cell label={t("Бўш", "Free")} className={cn(free < 0 && "text-destructive font-semibold")}>
+        {free < 0 ? "−" + formatNumber(-free, 0) : formatNumber(free, 0)}
+      </Cell>
+      <div className="hidden lg:block px-3 py-2.5 text-right font-mono tabular-nums text-text-tertiary">
+        {formatNumber(product.lowStockThreshold, 0)}
+      </div>
+      <div className="col-span-3 lg:col-span-1 pt-1 lg:pt-2.5 lg:pb-2.5 lg:px-3">
         <div className="flex items-center gap-2">
           <Input
             type="number"
@@ -223,7 +230,17 @@ function Row({
             {t("Диққат: захира манфий бўлди", "Warning: stock is now negative")}
           </div>
         )}
-      </td>
-    </tr>
+      </div>
+    </li>
+  );
+}
+
+/** Number cell; on phones the column name sits above the figure (comp 08). */
+function Cell({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("font-mono tabular-nums lg:text-right lg:px-3 lg:py-2.5", className)}>
+      <span className="lg:hidden block font-sans text-[11.5px] font-semibold text-muted-foreground">{label}</span>
+      {children}
+    </div>
   );
 }

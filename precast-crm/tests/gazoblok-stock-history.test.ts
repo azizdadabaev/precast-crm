@@ -22,6 +22,18 @@ describe("gazoblok stock history", () => {
     ).toBe("Машина юкланди · Жўнатма 2 · B-2026-11-0012");
   });
 
+  it("movementText does not repeat a note that only names the shipment", () => {
+    expect(
+      movementText({ reason: "SHIPMENT_LOAD", note: "Жўнатма 1", shipmentNumber: 1, orderNumber: "B-2026-11-0012" }),
+    ).toBe("Машина юкланди · Жўнатма 1 · B-2026-11-0012");
+    expect(
+      movementText({ reason: "SHIPMENT_CORRECTION", note: " Жўнатма 3 ", shipmentNumber: 3, orderNumber: null }),
+    ).toBe("Юк тузатилди · Жўнатма 3");
+    expect(
+      movementText({ reason: "SHIPMENT_LOAD", note: "Жўнатма 1", shipmentNumber: null, orderNumber: null }),
+    ).toBe("Машина юкланди · «Жўнатма 1»");
+  });
+
   it("movementText for a manual adjustment quotes the note", () => {
     expect(
       movementText({ reason: "MANUAL_ADJUSTMENT", note: "Синган блоклар", shipmentNumber: null, orderNumber: null }),

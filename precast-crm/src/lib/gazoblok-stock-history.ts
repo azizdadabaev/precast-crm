@@ -24,10 +24,12 @@ export function movementText(m: {
   orderNumber: string | null;
 }): string {
   const parts = [MOVEMENT_REASON_LABELS[m.reason]?.[0] ?? m.reason];
-  if (m.shipmentNumber != null) parts.push(`Жўнатма ${m.shipmentNumber}`);
+  const shipment = m.shipmentNumber != null ? `Жўнатма ${m.shipmentNumber}` : null;
+  if (shipment) parts.push(shipment);
   if (m.orderNumber) parts.push(m.orderNumber);
   const note = m.note?.trim();
-  if (note) parts.push(`«${note}»`);
+  // The truck-load route stores «Жўнатма N» as the note; don't print it twice.
+  if (note && note !== shipment) parts.push(`«${note}»`);
   return parts.join(" · ");
 }
 
