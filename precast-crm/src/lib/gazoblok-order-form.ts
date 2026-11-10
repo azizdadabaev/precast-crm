@@ -29,6 +29,14 @@ export function groupDigits(n: number): string {
   return String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
+/** A sum typed back into a money field («Тўлиқ»): «28 006 400», «1 000,5» → «1 000,50». */
+export function moneyText(n: number): string {
+  const cents = Math.round(n * 100);
+  const whole = groupDigits(Math.trunc(cents / 100));
+  const frac = cents % 100;
+  return frac === 0 ? whole : `${whole},${String(frac).padStart(2, "0")}`;
+}
+
 /** − / + on a size: an unreadable value counts as 0; 0 shows as an empty box. */
 export function stepQty(raw: string, delta: number): string {
   const n = Math.max(0, (parseQty(raw) ?? 0) + delta);

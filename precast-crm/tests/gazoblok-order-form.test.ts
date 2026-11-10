@@ -3,6 +3,7 @@ import {
   parseQty,
   groupDigits,
   stepQty,
+  moneyText,
   formLines,
   badQtyIds,
   addPerSize,
@@ -53,6 +54,14 @@ describe("groupDigits / stepQty", () => {
     expect(stepQty("1", -1)).toBe("");
     expect(stepQty("", -1)).toBe("");
     expect(stepQty("abc", 1)).toBe("1");
+  });
+});
+
+describe("moneyText", () => {
+  it("writes a sum parseMoney reads back", () => {
+    expect(moneyText(28006400)).toBe("28 006 400");
+    expect(moneyText(1000.5)).toBe("1 000,50");
+    expect(moneyText(0)).toBe("0");
   });
 });
 
