@@ -12,7 +12,7 @@ export type ReconcileOrder = {
   status: string;
   lines: { id: string; productId: string | null; productLabel: string }[];
   shipments: { id: string; number: number; status: string; loadedLines: unknown }[];
-  movements: { shipmentId: string | null; productId: string; change: number }[];
+  movements: { shipmentId: string | null; productId: string; change: number; reason: string }[];
   placedEventActorId: string | null;
   createdById: string | null;
 };
@@ -41,7 +41,10 @@ export function planStockReconcile(orders: ReconcileOrder[], includeCanceled: Se
   const plan: ReconcilePlan = { moves: [], canceledWithLoads: [], createdByBackfill: [] };
   for (const o of orders) {
     if (!o.createdById && o.placedEventActorId) plan.createdByBackfill.push({ orderId: o.id, userId: o.placedEventActorId });
-    if (o.status === "DELIVERED") continue;
+    // Decided by the ledger, not the status: the old code wrote a delivered order off with
+    // one SALE row. An order delivered after the switch (before --apply) has none and still
+    // needs its per-truck write-offs.
+    if (o.movements.some((m) => m.reason === "SALE")) continue;
 
     const moves: ReconcileMove[] = [];
     for (const sh of o.shipments) {

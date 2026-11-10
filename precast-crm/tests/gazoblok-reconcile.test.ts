@@ -22,13 +22,21 @@ describe("planStockReconcile", () => {
   });
 
   it("only posts what is not yet posted for that shipment", () => {
-    const p = planStockReconcile([base({ movements: [{ shipmentId: "s1", productId: "pA", change: -100 }] })], new Set());
+    const p = planStockReconcile([base({ movements: [{ shipmentId: "s1", productId: "pA", change: -100, reason: "SHIPMENT_LOAD" }] })], new Set());
     expect(p.moves.map((m) => m.change)).toEqual([-50]);
   });
 
-  it("leaves delivered orders alone (already written off)", () => {
-    const p = planStockReconcile([base({ status: "DELIVERED" })], new Set());
+  it("leaves orders the old delivery already wrote off (SALE row) alone", () => {
+    const p = planStockReconcile(
+      [base({ status: "DELIVERED", movements: [{ shipmentId: null, productId: "pA", change: -150, reason: "SALE" }] })],
+      new Set(),
+    );
     expect(p.moves).toEqual([]);
+  });
+
+  it("writes off a DELIVERED order that never got the old SALE write-off (delivered after the switch)", () => {
+    const p = planStockReconcile([base({ status: "DELIVERED" })], new Set());
+    expect(p.moves.map((m) => m.change)).toEqual([-150]);
   });
 
   it("lists cancelled orders with loads and moves only the ones the owner names", () => {

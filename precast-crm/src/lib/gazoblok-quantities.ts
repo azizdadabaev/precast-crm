@@ -89,20 +89,29 @@ export function unpaidOverload(o: { overshipAmount: number; totalPrice: number; 
 }
 
 /**
- * Close short: bill the blocks that were actually loaded. Lines at loaded × unitPrice
- * (over-loaded lines bill at loaded too, so no separate surcharge), discount scaled
- * to the new subtotal, delivery unchanged.
+ * Close short: bill the blocks that were actually loaded. Each line bills
+ * min(loaded, ordered) × unitPrice with the discount scaled to that subtotal; blocks
+ * loaded beyond the order stay a full-price over-load surcharge (spec §4.4), so the
+ * debt and the selling operator it points at survive the close. Delivery unchanged.
  */
 export function shortCloseTotals(
   lines: PricedLine[],
   loaded: Map<string, number>,
   o: { linesSubtotal: number; discountAmount: number; deliveryCost: number },
-): { linesSubtotal: number; discountAmount: number; totalPrice: number } {
-  const linesSubtotal = round2(lines.reduce((s, l) => s + (loaded.get(l.id) ?? 0) * Number(l.unitPrice), 0));
+): { linesSubtotal: number; discountAmount: number; overshipAmount: number; totalPrice: number } {
+  let sub = 0;
+  let over = 0;
+  for (const l of lines) {
+    const n = loaded.get(l.id) ?? 0;
+    sub += Math.min(n, l.quantity) * Number(l.unitPrice);
+    over += Math.max(0, n - l.quantity) * Number(l.unitPrice);
+  }
+  const linesSubtotal = round2(sub);
+  const overshipAmount = round2(over);
   const oldSub = Number(o.linesSubtotal);
   const discountAmount = oldSub > 0 ? round2((Number(o.discountAmount) * linesSubtotal) / oldSub) : 0;
-  const totalPrice = round2(linesSubtotal - discountAmount + Number(o.deliveryCost));
-  return { linesSubtotal, discountAmount, totalPrice };
+  const totalPrice = round2(linesSubtotal - discountAmount + Number(o.deliveryCost) + overshipAmount);
+  return { linesSubtotal, discountAmount, overshipAmount, totalPrice };
 }
 
 /** "7,5" / "7.5" / " 7 " → number; anything else → null. Operators type a decimal comma. */

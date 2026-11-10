@@ -187,7 +187,7 @@ export const PATCH = withAuth<{ id: string }>(
               shortClosedById: user.id,
               linesSubtotal: plan.linesSubtotal,
               discountAmount: plan.discountAmount,
-              overshipAmount: 0,
+              overshipAmount: plan.overshipAmount,
               totalPrice: plan.totalPrice,
               totalBlocks: plan.quantities.reduce((s, l) => s + l.loaded, 0),
               paymentState: paid.paymentState,

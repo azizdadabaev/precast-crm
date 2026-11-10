@@ -30,6 +30,8 @@ export const PATCH = withPermission<Params>("order.edit", async (_req: NextReque
   }
 
   const updated = await prisma.$transaction(async (tx) => {
+    // Same order lock as a load/correction, so a correction can't write LOADED back over this.
+    await tx.$queryRaw`SELECT id FROM gazoblok_orders WHERE id = ${params.id} FOR UPDATE`;
     // Guarded: only a LOADED truck becomes DELIVERED, so a double click can't log it twice.
     const moved = await tx.gazoblokShipment.updateMany({
       where: { id: params.sid, status: "LOADED" },

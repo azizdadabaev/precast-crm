@@ -37,7 +37,7 @@ async function main() {
       createdById: true,
       lines: { select: { id: true, productId: true, productLabel: true } },
       shipments: { select: { id: true, number: true, status: true, loadedLines: true } },
-      stockMovements: { select: { shipmentId: true, productId: true, change: true } },
+      stockMovements: { select: { shipmentId: true, productId: true, change: true, reason: true } },
       events: { where: { type: "ORDER_PLACED" }, select: { actorId: true }, take: 1, orderBy: { createdAt: "asc" } },
     },
     orderBy: { placedAt: "asc" },

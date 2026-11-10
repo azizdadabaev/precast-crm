@@ -89,12 +89,12 @@ export function closeShortPlan(o: {
   deliveryCost: number;
 }):
   | { problem: string }
-  | { linesSubtotal: number; discountAmount: number; totalPrice: number; overshipAmount: 0; quantities: LineQty[] } {
+  | { linesSubtotal: number; discountAmount: number; totalPrice: number; overshipAmount: number; quantities: LineQty[] } {
   if (!isOpen(o)) return { problem: "Буюртма ёпилган · The order is already closed" };
   const quantities = lineQuantities(o.lines, o.shipments);
   if (quantities.every((l) => l.loaded === 0)) {
     return { problem: "Ҳеч нарса юкланмаган — буюртмани бекор қилинг · Nothing was loaded — cancel the order instead" };
   }
   const loaded = new Map(quantities.map((l) => [l.lineId, l.loaded]));
-  return { ...shortCloseTotals(o.lines, loaded, o), overshipAmount: 0, quantities };
+  return { ...shortCloseTotals(o.lines, loaded, o), quantities };
 }

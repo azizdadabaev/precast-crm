@@ -51,7 +51,21 @@ describe("gazoblok quantities", () => {
       discountAmount: 560000,
       deliveryCost: 300000,
     });
-    expect(t).toEqual({ linesSubtotal: 2700000, discountAmount: 270000, totalPrice: 2730000 });
+    expect(t).toEqual({ linesSubtotal: 2700000, discountAmount: 270000, overshipAmount: 0, totalPrice: 2730000 });
+  });
+
+  it("shortCloseTotals keeps an over-loaded line's extra at full price (debt stays visible)", () => {
+    const mixed = [
+      { id: "A", quantity: 100, unitPrice: 10 },
+      { id: "B", quantity: 100, unitPrice: 10 },
+    ];
+    const t = shortCloseTotals(mixed, new Map([["A", 50], ["B", 150]]), {
+      linesSubtotal: 2000,
+      discountAmount: 200,
+      deliveryCost: 0,
+    });
+    // Billed on min(loaded, ordered) = 50 + 100 → 1 500, discount 10 % → 150; extra 50 × 10 at full price.
+    expect(t).toEqual({ linesSubtotal: 1500, discountAmount: 150, overshipAmount: 500, totalPrice: 1850 });
   });
 
   it("parseDecimal accepts a decimal comma", () => {

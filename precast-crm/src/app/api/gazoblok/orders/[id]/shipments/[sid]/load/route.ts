@@ -119,6 +119,10 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
         where: { id: params.sid },
         select: { status: true, loadedLines: true },
       });
+      // The truck may have been delivered after the pre-tx check.
+      if (current.status === "DELIVERED" && !can(user, "order.editShipped")) {
+        throw new LoadRefused(403, "Етказилган жўнатмани тузатишга рухсат йўқ · You can't correct a delivered shipment");
+      }
       const posted = await tx.gazoblokStockMovement.groupBy({
         by: ["productId"],
         where: { shipmentId: params.sid },
