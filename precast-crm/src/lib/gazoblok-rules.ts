@@ -4,6 +4,7 @@
  */
 import { formatNumber } from "@/lib/utils";
 import { lineQuantities, shortCloseTotals, type LineQty } from "./gazoblok-quantities";
+import { round2 } from "@/services/calculation-engine";
 
 /**
  * DELIVERED needs: every size loaded at least as ordered (or the order was closed
@@ -116,4 +117,29 @@ export function closeShortPlan(o: {
   }
   const loaded = new Map(quantities.map((l) => [l.lineId, l.loaded]));
   return { ...shortCloseTotals(o.lines, loaded, o), quantities };
+}
+
+/**
+ * The 409 a truck load gets when it pushes a line over the order and the loader
+ * has not confirmed yet: extra blocks, the surcharge (extra × frozen unit price)
+ * and which sizes. Null when nothing goes over.
+ */
+export function overloadRefusal(
+  lines: { id: string; productLabel: string; unitPrice: number }[],
+  overload: { lineId: string; extra: number }[],
+): { status: number; message: string; details: unknown } | null {
+  if (!overload.length) return null;
+  const line = (id: string) => lines.find((l) => l.id === id)!;
+  const extraAmount = round2(overload.reduce((sum, o) => sum + o.extra * line(o.lineId).unitPrice, 0));
+  const extraBlocks = overload.reduce((sum, o) => sum + o.extra, 0);
+  return {
+    status: 409,
+    message: `Буюртмадан ортиқ: +${formatNumber(extraBlocks, 0)} та · +${formatNumber(extraAmount, 2)} UZS — тасдиқланг · Over the order — confirm first`,
+    details: {
+      code: "OVERLOAD_CONFIRM_REQUIRED",
+      extraBlocks,
+      extraAmount,
+      overload: overload.map((o) => ({ ...o, label: line(o.lineId).productLabel })),
+    },
+  };
 }

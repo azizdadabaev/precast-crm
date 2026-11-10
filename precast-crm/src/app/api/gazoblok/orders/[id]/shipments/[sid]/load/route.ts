@@ -11,9 +11,8 @@ import { paymentStateFor } from "@/lib/payment-state";
 import { round2 } from "@/services/calculation-engine";
 import { can } from "@/lib/permissions";
 import { planLoad } from "@/lib/gazoblok-quantities";
-import { isOpen } from "@/lib/gazoblok-rules";
+import { isOpen, overloadRefusal } from "@/lib/gazoblok-rules";
 import { applyGazoblokMovement } from "@/lib/gazoblok-stock";
-import { formatNumber } from "@/lib/utils";
 
 /** Thrown inside the transaction; turned into a 4xx after rollback. */
 class LoadRefused extends Error {
@@ -39,7 +38,7 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
   if (!can(user, "order.edit")) return fail("Юклашга рухсат йўқ · You can't load trucks", 403);
   const shipment = await prisma.gazoblokShipment.findFirst({
     where: { id: params.sid, orderId: params.id },
-    select: { id: true, status: true, number: true },
+    select: { id: true, status: true, number: true, loadedLines: true },
   });
   if (!shipment) return fail("Жўнатма топилмади · Shipment not found", 404);
   if (shipment.status === "DELIVERED" && !can(user, "order.editShipped")) {
@@ -48,7 +47,12 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
 
   const order = await prisma.gazoblokOrder.findUnique({
     where: { id: params.id },
-    select: { status: true, shortClosedAt: true },
+    select: {
+      status: true,
+      shortClosedAt: true,
+      lines: { select: { id: true, productId: true, productLabel: true, quantity: true, unitPrice: true } },
+      shipments: { where: { id: { not: params.sid } }, select: { loadedLines: true } },
+    },
   });
   if (!order) return fail("Буюртма топилмади · Order not found", 404);
   if (!isOpen(order)) {
@@ -74,6 +78,21 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
     Object.entries(loadedLines).map(([k, v]) => [k, Math.max(0, Math.floor(Number(v) || 0))]),
   );
   const confirmOverload = String(formData.get("confirmOverload") ?? "") === "true";
+
+  // Ask for the over-load confirmation BEFORE saving any photo, so the confirmed
+  // retry (which re-sends the same photos) doesn't store them twice. Unlocked read —
+  // the same check runs again under the lock below.
+  if (!confirmOverload) {
+    const { overload } = planLoad({
+      lines: order.lines,
+      otherShipments: order.shipments,
+      prevLoaded: (shipment.loadedLines as Record<string, number> | null) ?? null,
+      postedForShipment: {},
+      nextLoaded: loadedLines,
+    });
+    const ask = overloadRefusal(order.lines.map((l) => ({ ...l, unitPrice: Number(l.unitPrice) })), overload);
+    if (ask) return fail(ask.message, ask.status, ask.details);
+  }
 
   // Photos are OPTIONAL. Save each provided image. File I/O stays outside the
   // transaction — an orphan file on a rejected load is harmless, a long tx isn't.
@@ -141,23 +160,10 @@ export const POST = withAuth<Params>(async (req: NextRequest, { user, params }) 
           unknownLineIds: plan.unknownLineIds,
         });
       }
-      if (plan.overload.length && !confirmOverload) {
-        const priceOf = (lineId: string) => Number(fresh.lines.find((l) => l.id === lineId)!.unitPrice);
-        const extraAmount = round2(plan.overload.reduce((sum, o) => sum + o.extra * priceOf(o.lineId), 0));
-        const extraBlocks = plan.overload.reduce((sum, o) => sum + o.extra, 0);
-        throw new LoadRefused(
-          409,
-          `Буюртмадан ортиқ: +${formatNumber(extraBlocks, 0)} та · +${formatNumber(extraAmount, 2)} UZS — тасдиқланг · Over the order — confirm first`,
-          {
-            code: "OVERLOAD_CONFIRM_REQUIRED",
-            extraBlocks,
-            extraAmount,
-            overload: plan.overload.map((o) => ({
-              ...o,
-              label: fresh.lines.find((l) => l.id === o.lineId)!.productLabel,
-            })),
-          },
-        );
+      if (!confirmOverload) {
+        // Race safety: another truck may have loaded since the pre-check.
+        const ask = overloadRefusal(fresh.lines.map((l) => ({ ...l, unitPrice: Number(l.unitPrice) })), plan.overload);
+        if (ask) throw new LoadRefused(ask.status, ask.message, ask.details);
       }
       const isCorrection = prevLoaded !== null && current.status !== "PENDING";
       for (const m of plan.stockMoves) {

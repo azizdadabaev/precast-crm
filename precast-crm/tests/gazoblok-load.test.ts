@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { planLoad } from "@/lib/gazoblok-quantities";
+import { overloadRefusal } from "@/lib/gazoblok-rules";
 
 const lines = [
   { id: "A", productId: "pA", quantity: 200 },
@@ -43,3 +44,30 @@ describe("planLoad — one truck load or correction", () => {
     expect(same.overload).toEqual([]);
   });
 });
+
+describe("overloadRefusal — the confirm-first answer, same before and inside the transaction", () => {
+  const priced = [
+    { id: "A", productLabel: "600×300×200", unitPrice: 18000.5 },
+    { id: "B", productLabel: "600×300×300", unitPrice: 20000 },
+  ];
+
+  it("is null when nothing goes over", () => {
+    expect(overloadRefusal(priced, [])).toBeNull();
+  });
+
+  it("totals the extra blocks and money and labels each line", () => {
+    const r = overloadRefusal(priced, [{ lineId: "A", extra: 50 }, { lineId: "B", extra: 2 }]);
+    expect(r?.status).toBe(409);
+    expect(r?.message).toMatch(/^Буюртмадан ортиқ: \+52 та · \+940\s025 UZS/);
+    expect(r?.details).toEqual({
+      code: "OVERLOAD_CONFIRM_REQUIRED",
+      extraBlocks: 52,
+      extraAmount: 940025,
+      overload: [
+        { lineId: "A", extra: 50, label: "600×300×200" },
+        { lineId: "B", extra: 2, label: "600×300×300" },
+      ],
+    });
+  });
+});
+
