@@ -1220,6 +1220,7 @@ model Notification {
   projectId      String?
   commentId      String?
   conversationId String? // inbox chat — agent escalations link here (→ /inbox?c=…)
+  gazoblokOrderId String? // gazoblok order — bell opens /gazoblok/orders/{id}
 
   // Unread state per-user.
   readAt DateTime?
@@ -1227,6 +1228,7 @@ model Notification {
   @@index([userId, readAt, createdAt])
   @@index([userId, createdAt])
   @@index([orderId])
+  @@index([gazoblokOrderId])
   @@map("notifications")
 }
 

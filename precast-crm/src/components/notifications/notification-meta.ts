@@ -40,6 +40,7 @@ export const TYPE_META: Record<
  * and Toast share the same routing semantics).
  */
 export function targetUrl(n: NotificationItem): string | null {
+  if (n.gazoblokOrderId) return `/gazoblok/orders/${n.gazoblokOrderId}`;
   if (n.orderId) return `/orders/${n.orderId}`;
   if (n.paymentId) return `/payments`;
   if (n.projectId) return `/projects/${n.projectId}`;

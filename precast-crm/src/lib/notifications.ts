@@ -13,6 +13,7 @@ export interface CreateNotificationInput {
   projectId?: string | null;
   commentId?: string | null;
   conversationId?: string | null;
+  gazoblokOrderId?: string | null;
 }
 
 /**
@@ -39,6 +40,7 @@ export async function emitNotifications(
             projectId: input.projectId ?? null,
             commentId: input.commentId ?? null,
             conversationId: input.conversationId ?? null,
+            gazoblokOrderId: input.gazoblokOrderId ?? null,
           },
         }),
       ),
@@ -57,6 +59,7 @@ export async function emitNotifications(
           projectId: row.projectId,
           commentId: row.commentId,
           conversationId: row.conversationId,
+          gazoblokOrderId: row.gazoblokOrderId,
           createdAt: row.createdAt.toISOString(),
           readAt: null,
         }),
@@ -76,6 +79,7 @@ export async function emitNotifications(
         projectId: row.projectId ?? "",
         commentId: row.commentId ?? "",
         conversationId: row.conversationId ?? "",
+        gazoblokOrderId: row.gazoblokOrderId ?? "",
         createdAt: row.createdAt.toISOString(),
       });
     }

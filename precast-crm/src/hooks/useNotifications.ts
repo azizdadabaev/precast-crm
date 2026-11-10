@@ -13,6 +13,7 @@ export interface NotificationItem {
   projectId: string | null;
   commentId: string | null;
   conversationId: string | null;
+  gazoblokOrderId: string | null;
   createdAt: string;
   readAt: string | null;
 }
