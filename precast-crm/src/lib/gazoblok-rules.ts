@@ -43,6 +43,25 @@ export function isOpen(o: { status: string; shortClosedAt: Date | string | null 
 }
 
 type Refusal = { status: number; message: string };
+
+/**
+ * Money may be recorded on any order that isn't cancelled: a closed-short order
+ * can still owe its loaded part, and the ceiling check stops over-payment.
+ */
+export function recordPaymentProblem(o: { status: string }): Refusal | null {
+  if (o.status === "CANCELED") {
+    return { status: 422, message: "Бекор қилинган буюртмага тўлов ёзиб бўлмайди · Cannot record payment on a canceled order" };
+  }
+  return null;
+}
+
+/** A pending payment on a cancelled order can only be rejected — confirming would count money on a dead order. */
+export function reviewPaymentProblem(o: { status: string }, approve: boolean): Refusal | null {
+  if (approve && o.status === "CANCELED") {
+    return { status: 409, message: "Буюртма бекор қилинган — тўловни тасдиқлаб бўлмайди · Order is canceled — cannot confirm payment" };
+  }
+  return null;
+}
 const NEXT = ["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"] as const;
 export type GazoblokNextStatus = (typeof NEXT)[number];
 

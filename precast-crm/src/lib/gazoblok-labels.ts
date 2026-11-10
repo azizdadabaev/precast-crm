@@ -20,4 +20,8 @@ export const EVENT_TYPE_LABELS: Record<string, [string, string]> = {
   SHIPMENT_CORRECTED: ["Жўнатма тузатилди", "Shipment corrected"],
   ORDER_SHORT_CLOSED: ["Буюртма қисқа ёпилди", "Order closed short"],
   REFUND_RECORDED: ["Мижозга пул қайтарилди", "Refund recorded"],
+  ORDER_EDITED: ["Буюртма таҳрирланди", "Order edited"],
+  ORDER_RESCHEDULED: ["Сана ўзгартирилди", "Date changed"],
+  DELIVERY_LOCATION_SET: ["Манзил белгиланди", "Location set"],
+  DELIVERY_LOCATION_CLEARED: ["Манзил ўчирилди", "Location cleared"],
 };

@@ -80,3 +80,13 @@ describe("closeShortPlan", () => {
     expect(refundProblem(270000, 270000)).toBeNull();
   });
 });
+
+describe("event labels", () => {
+  it("names the Stage 3 order events", async () => {
+    const { EVENT_TYPE_LABELS } = await import("@/lib/gazoblok-labels");
+    expect(EVENT_TYPE_LABELS.ORDER_EDITED[0]).toBe("Буюртма таҳрирланди");
+    expect(EVENT_TYPE_LABELS.ORDER_RESCHEDULED[0]).toBe("Сана ўзгартирилди");
+    expect(EVENT_TYPE_LABELS.DELIVERY_LOCATION_SET[0]).toBe("Манзил белгиланди");
+    expect(EVENT_TYPE_LABELS.DELIVERY_LOCATION_CLEARED[0]).toBe("Манзил ўчирилди");
+  });
+});

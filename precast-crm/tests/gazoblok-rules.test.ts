@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canDeliver, canCancel, paymentCeilingProblem, isOpen } from "@/lib/gazoblok-rules";
+import { canDeliver, canCancel, paymentCeilingProblem, isOpen, recordPaymentProblem, reviewPaymentProblem } from "@/lib/gazoblok-rules";
 
 const q = (ordered: number, loaded: number) => ({
   lineId: "A", productId: "pA", label: "600×300×200", ordered, loaded,
@@ -36,5 +36,22 @@ describe("gazoblok order rules", () => {
     expect(isOpen({ status: "DELIVERED", shortClosedAt: null })).toBe(false);
     expect(isOpen({ status: "CANCELED", shortClosedAt: null })).toBe(false);
     expect(isOpen({ status: "PLACED", shortClosedAt: new Date() })).toBe(false);
+  });
+
+  it("recordPaymentProblem refuses only a cancelled order (closed-short and delivered still take money)", () => {
+    expect(recordPaymentProblem({ status: "CANCELED" })).toEqual({ status: 422, message: expect.stringMatching(/Бекор қилинган/) });
+    expect(recordPaymentProblem({ status: "PLACED" })).toBeNull();
+    expect(recordPaymentProblem({ status: "IN_PRODUCTION" })).toBeNull();
+    expect(recordPaymentProblem({ status: "DELIVERED" })).toBeNull();
+  });
+
+  it("reviewPaymentProblem refuses approving on a cancelled order; rejecting stays allowed", () => {
+    expect(reviewPaymentProblem({ status: "CANCELED" }, true)).toEqual({
+      status: 409,
+      message: "Буюртма бекор қилинган — тўловни тасдиқлаб бўлмайди · Order is canceled — cannot confirm payment",
+    });
+    expect(reviewPaymentProblem({ status: "CANCELED" }, false)).toBeNull();
+    expect(reviewPaymentProblem({ status: "PLACED" }, true)).toBeNull();
+    expect(reviewPaymentProblem({ status: "DELIVERED" }, true)).toBeNull();
   });
 });
