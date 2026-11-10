@@ -46,6 +46,20 @@ export function LayoutBoard() {
     setView(fitView(rects, wallCm, el.clientWidth, el.clientHeight));
   }, [rows, wallCm]);
 
+  // Show the whole house when the board opens with rooms already placed (e.g. a reopened draft),
+  // once per opening — later moves must not keep re-framing the view under the operator.
+  const framed = React.useRef(false);
+  React.useEffect(() => {
+    if (!open) {
+      framed.current = false;
+      return;
+    }
+    if (!framed.current && placedCount > 0) {
+      framed.current = true;
+      requestAnimationFrame(fitAll);
+    }
+  }, [open, placedCount, fitAll]);
+
   function arrange() {
     const placed = new Map(rows.filter((r) => r.layout).map((r) => [r.id, r.layout!]));
     const added = autoArrange(rows, placed, wallCm);

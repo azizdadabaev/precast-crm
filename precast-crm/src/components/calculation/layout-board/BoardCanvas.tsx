@@ -45,7 +45,7 @@ export function BoardCanvas({
   rows: SlabRow[];
   wallCm: number;
   view: BoardView;
-  onViewChange: (v: BoardView) => void;
+  onViewChange: React.Dispatch<React.SetStateAction<BoardView>>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
 }) {
@@ -136,15 +136,28 @@ export function BoardCanvas({
     setLive(null);
   }
 
-  function onWheel(e: React.WheelEvent) {
-    const box = svgRef.current!.getBoundingClientRect();
-    const px = e.clientX - box.left;
-    const py = e.clientY - box.top;
-    const k = Math.exp(-e.deltaY * 0.0015);
-    const scale = Math.max(0.02, Math.min(2, view.scale * k));
-    const f = scale / view.scale;
-    onViewChange({ scale, ox: px - (px - view.ox) * f, oy: py - (py - view.oy) * f });
-  }
+  // Wheel / trackpad pinch zooms about the cursor. A native NON-passive listener is required:
+  // React's onWheel is passive, so it could not stop the calculator page from scrolling too.
+  React.useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const box = el.getBoundingClientRect();
+      const px = e.clientX - box.left;
+      const py = e.clientY - box.top;
+      const lines = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? box.height : 1; // Firefox line/page deltas
+      const k = Math.exp(-e.deltaY * lines * (e.ctrlKey ? 0.01 : 0.0015)); // ctrl = pinch: small deltas
+      // Functional update: fast wheel events each build on the latest zoom, not a stale render.
+      onViewChange((v) => {
+        const scale = Math.max(0.02, Math.min(2, v.scale * k));
+        const f = scale / v.scale;
+        return { scale, ox: px - (px - v.ox) * f, oy: py - (py - v.oy) * f };
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [onViewChange]);
 
   function onKey(e: React.KeyboardEvent) {
     const mod = e.ctrlKey || e.metaKey;
@@ -181,7 +194,6 @@ export function BoardCanvas({
       onPointerMove={onMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      onWheel={onWheel}
       onKeyDown={onKey}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes(TRAY_DRAG_TYPE)) e.preventDefault();
