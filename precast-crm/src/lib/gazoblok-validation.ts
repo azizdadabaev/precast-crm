@@ -123,6 +123,18 @@ export const GazoblokOrderActionSchema = z.discriminatedUnion("action", [
     approve: z.boolean().default(true),
     rejectionReason: z.string().trim().optional(),
   }),
+  // The client stopped before taking everything: bill what was loaded (renovation 2026-11).
+  z.object({
+    action: z.literal("close_short"),
+    reason: z.string().trim().min(3).max(500),
+  }),
+  // Money back to the client (negative confirmed payment), like beam-and-block.
+  z.object({
+    action: z.literal("record_refund"),
+    amount: z.number().positive(),
+    method: PaymentMethodEnum,
+    notes: z.string().trim().optional(),
+  }),
 ]);
 
 /** Log a day's production (one line per product). */

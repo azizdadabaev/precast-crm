@@ -7,12 +7,36 @@ import { ok, fail } from "@/lib/api";
 import { withAuth } from "@/lib/api-auth";
 import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
-import {
-  decrementGazoblokForOrder,
-  type NegativeStockWarning,
-} from "@/lib/gazoblok-stock";
 import { GazoblokOrderActionSchema } from "@/lib/gazoblok-validation";
 import { paymentStateFor, remainingBalance } from "@/lib/payment-state";
+import { lineQuantities, unpaidOverload } from "@/lib/gazoblok-quantities";
+import { closeShortPlan, nextStatusProblem, paymentCeilingProblem } from "@/lib/gazoblok-rules";
+import { refundDue, refundProblem } from "@/lib/overpayment";
+import { formatNumber } from "@/lib/utils";
+
+type Tx = Prisma.TransactionClient;
+
+/** Thrown inside a transaction; turned into a 4xx after rollback. */
+class Refused extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+/** Lock the order row so money/stock/status writes on one order serialize. */
+async function lockOrder(tx: Tx, id: string) {
+  await tx.$queryRaw`SELECT id FROM gazoblok_orders WHERE id = ${id} FOR UPDATE`;
+}
+
+/** Re-aggregate confirmed money (refunds are negative) and the payment state. */
+async function recomputePaid(tx: Tx, orderId: string, totalPrice: number) {
+  const agg = await tx.gazoblokPayment.aggregate({
+    where: { orderId, status: "CONFIRMED" },
+    _sum: { amount: true },
+  });
+  const confirmedPaid = Number(agg._sum.amount ?? 0);
+  return { confirmedPaid, paymentState: paymentStateFor(confirmedPaid, 0, totalPrice) };
+}
 
 /** GET /api/gazoblok/orders/[id] — auth-only (open to all logged-in users —
  *  owner decision). Full order detail. */
@@ -22,6 +46,7 @@ export const GET = withAuth<{ id: string }>(
       where: { id: params.id },
       include: {
         client: true,
+        createdBy: { select: { id: true, name: true } },
         lines: { include: { product: { select: { id: true, label: true, lengthM: true, heightM: true, thicknessM: true } } } },
         payments: {
           orderBy: { recordedAt: "desc" },
@@ -35,20 +60,31 @@ export const GET = withAuth<{ id: string }>(
       },
     });
     if (!order) return fail("Буюртма топилмади · Order not found", 404);
-    return ok(order);
+    // The strict picture the screen shows: ordered / loaded / left / over per size,
+    // the unpaid part of an over-load, and money owed back.
+    return ok({
+      ...order,
+      quantities: lineQuantities(order.lines, order.shipments),
+      unpaidOverload: unpaidOverload({
+        overshipAmount: Number(order.overshipAmount),
+        totalPrice: Number(order.totalPrice),
+        confirmedPaid: Number(order.confirmedPaid),
+      }),
+      refundDue: refundDue({ status: order.status, totalPrice: order.totalPrice, confirmedPaid: order.confirmedPaid, writeOffAmount: 0 }),
+    });
   },
 );
 
 /**
- * PATCH /api/gazoblok/orders/[id] — auth-only (open to all logged-in users —
- * owner decision), except confirm_payment which enforces payment.confirm
- * in-handler. One of three actions:
- *   set_status      — move through PLACED → IN_PRODUCTION → DELIVERED / CANCELED.
- *                     DELIVERED decrements stock and is TERMINAL (no cancel after
- *                     delivery). CANCELED is only reachable before delivery, so
- *                     restock-on-cancel intentionally does not exist.
- *   record_payment  — add a PENDING_CONFIRMATION payment.
- *   confirm_payment — confirm/reject a payment, recompute confirmedPaid + paymentState.
+ * PATCH /api/gazoblok/orders/[id] — every write locks the order row first.
+ *   set_status      — PLACED ⇄ IN_PRODUCTION (order.edit); DELIVERED (order.edit,
+ *                     everything loaded or closed short, trucks delivered, paid —
+ *                     moves NO stock: stock moved per truck); CANCELED (order.cancel,
+ *                     only while nothing is loaded). Finished orders are final.
+ *   close_short     — order.edit: bill what was loaded; no more loading.
+ *   record_payment  — payment.record: add a payment (ceiling checked under the lock).
+ *   confirm_payment — payment.confirm: confirm/reject, recompute confirmedPaid + state.
+ *   record_refund   — payment.confirm: money back (negative confirmed payment).
  */
 export const PATCH = withAuth<{ id: string }>(
   async (req: NextRequest, { user, params }) => {
@@ -61,59 +97,29 @@ export const PATCH = withAuth<{ id: string }>(
 
     // ── set_status ──────────────────────────────────────────────
     if (body.action === "set_status") {
-      if (order.status === "CANCELED") {
-        return fail("Бекор қилинган буюртмани ўзгартириб бўлмайди · Cannot change a canceled order", 409);
-      }
-      // A delivered order is TERMINAL — it can't be moved back or canceled (a
-      // completed, typically fully-paid order). This also prevents the stock
-      // corruption a back-and-forth transition would cause.
-      if (order.status === "DELIVERED" && body.status !== "DELIVERED") {
-        return fail("Етказилган буюртмани ўзгартириб бўлмайди · A delivered order can't be changed", 409);
-      }
       const next = body.status;
-      if (next === "DELIVERED" && order.status !== "DELIVERED") {
-        // Owner rule (2026-07-23): core parity — no delivery with outstanding debt.
-        const remaining = Number(order.totalPrice) - Number(order.confirmedPaid);
-        if (remaining > 0.005) {
-          return fail(
-            "Тўлиқ тўланмаган буюртмани етказиб бўлмайди — аввал тўловни тасдиқланг · Order must be fully paid before delivery",
-            409,
-          );
-        }
-        const openShipments = await prisma.gazoblokShipment.count({
-          where: { orderId: order.id, status: { not: "DELIVERED" } },
-        });
-        if (openShipments > 0) {
-          return fail(
-            "Аввал барча жўнатмаларни етказинг · Deliver all shipments first",
-            409,
-          );
-        }
-      }
-      // Decrement by the ACTUAL shipped count when it exceeds the ordered
-      // quantity (over-shipment); never below ordered. Sums this order's
-      // shipments' loadedLines per line id.
-      const shipped = await prisma.gazoblokShipment.findMany({
-        where: { orderId: order.id },
-        select: { loadedLines: true },
-      });
-      const shippedByLine = new Map<string, number>();
-      for (const sh of shipped) {
-        const loaded = (sh.loadedLines as Record<string, number> | null) ?? {};
-        for (const [lineId, cnt] of Object.entries(loaded)) {
-          shippedByLine.set(lineId, (shippedByLine.get(lineId) ?? 0) + Number(cnt));
-        }
-      }
-      const lineMoves = order.lines.map((l) => ({
-        productId: l.productId,
-        quantity: Math.max(l.quantity, shippedByLine.get(l.id) ?? 0),
-      }));
-
       try {
         const result = await prisma.$transaction(async (tx) => {
-          const data: Prisma.GazoblokOrderUpdateManyMutationInput = { status: next };
+          await lockOrder(tx, order.id);
+          const fresh = await tx.gazoblokOrder.findUniqueOrThrow({
+            where: { id: order.id },
+            include: { lines: true, shipments: { select: { status: true, loadedLines: true } } },
+          });
+          const problem = nextStatusProblem(
+            {
+              status: fresh.status,
+              shortClosedAt: fresh.shortClosedAt,
+              quantities: lineQuantities(fresh.lines, fresh.shipments),
+              openShipments: fresh.shipments.filter((sh) => sh.status !== "DELIVERED").length,
+              remaining: Number(fresh.totalPrice) - Number(fresh.confirmedPaid),
+            },
+            next,
+            { edit: can(user, "order.edit"), cancel: can(user, "order.cancel") },
+          );
+          if (problem) throw new Refused(problem.status, problem.message);
 
-          if (next === "DELIVERED" && order.status !== "DELIVERED") {
+          const data: Prisma.GazoblokOrderUpdateInput = { status: next };
+          if (next === "DELIVERED") {
             data.deliveredAt = new Date();
             if (body.deliveryProofUrl) {
               data.deliveryProofUrl = body.deliveryProofUrl;
@@ -124,32 +130,17 @@ export const PATCH = withAuth<{ id: string }>(
             data.canceledAt = new Date();
             if (body.reason) data.cancelReason = body.reason;
           }
-
-          // Compare-and-set: only wins if the status we validated against is
-          // still current. Prevents a concurrent duplicate transition from
-          // double-decrementing stock or double-logging the change.
-          const cas = await tx.gazoblokOrder.updateMany({
-            where: { id: order.id, status: order.status },
-            data,
-          });
-          if (cas.count === 0) throw new Error("GAZOBLOK_STATUS_CONFLICT");
-
-          let stockWarnings: NegativeStockWarning[] = [];
-          if (next === "DELIVERED" && order.status !== "DELIVERED") {
-            stockWarnings = await decrementGazoblokForOrder(tx, order.id, lineMoves, user.id);
-          }
-
+          await tx.gazoblokOrder.update({ where: { id: order.id }, data });
           await tx.gazoblokOrderEvent.create({
             data: {
               orderId: order.id,
               type: "STATUS_CHANGED",
               actorId: user.id,
-              message: `Status ${order.status} → ${next}`,
-              payload: { from: order.status, to: next },
+              message: `Ҳолат ${fresh.status} → ${next}`,
+              payload: { from: fresh.status, to: next, ...(body.reason ? { reason: body.reason } : {}) },
             },
           });
-          const o = await tx.gazoblokOrder.findUniqueOrThrow({ where: { id: order.id } });
-          return { order: o, stockWarnings };
+          return tx.gazoblokOrder.findUniqueOrThrow({ where: { id: order.id } });
         });
 
         recordAudit({
@@ -159,42 +150,109 @@ export const PATCH = withAuth<{ id: string }>(
           targetId: order.id,
           message: `${order.orderNumber}: ${order.status} → ${next}`,
         });
-        return ok({ ...result.order, stockWarnings: result.stockWarnings });
+        // Stock moves per truck now; delivery itself never writes stock off.
+        return ok({ ...result, stockWarnings: [] });
       } catch (e) {
-        if (e instanceof Error && e.message === "GAZOBLOK_STATUS_CONFLICT") {
-          return fail("Буюртма ҳолати ўзгарган — саҳифани янгиланг · Order was changed — reload and retry", 409);
-        }
+        if (e instanceof Refused) return fail(e.message, e.status);
+        throw e;
+      }
+    }
+
+    // ── close_short ─────────────────────────────────────────────
+    if (body.action === "close_short") {
+      if (!can(user, "order.edit")) return fail("Буюртмани ўзгартиришга рухсат йўқ · You can't change orders", 403);
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          await lockOrder(tx, order.id);
+          const fresh = await tx.gazoblokOrder.findUniqueOrThrow({
+            where: { id: order.id },
+            include: { lines: true, shipments: { select: { loadedLines: true } } },
+          });
+          const plan = closeShortPlan({
+            status: fresh.status,
+            shortClosedAt: fresh.shortClosedAt,
+            lines: fresh.lines.map((l) => ({ ...l, unitPrice: Number(l.unitPrice) })),
+            shipments: fresh.shipments,
+            linesSubtotal: Number(fresh.linesSubtotal),
+            discountAmount: Number(fresh.discountAmount),
+            deliveryCost: Number(fresh.deliveryCost),
+          });
+          if ("problem" in plan) throw new Refused(409, plan.problem);
+          const paid = await recomputePaid(tx, order.id, plan.totalPrice);
+          await tx.gazoblokOrder.update({
+            where: { id: order.id },
+            data: {
+              shortClosedAt: new Date(),
+              shortCloseReason: body.reason,
+              shortClosedById: user.id,
+              linesSubtotal: plan.linesSubtotal,
+              discountAmount: plan.discountAmount,
+              overshipAmount: 0,
+              totalPrice: plan.totalPrice,
+              totalBlocks: plan.quantities.reduce((s, l) => s + l.loaded, 0),
+              paymentState: paid.paymentState,
+            },
+          });
+          await tx.gazoblokOrderEvent.create({
+            data: {
+              orderId: order.id,
+              type: "ORDER_SHORT_CLOSED",
+              actorId: user.id,
+              message: `Қисқа ёпилди: ${body.reason}`,
+              payload: {
+                reason: body.reason,
+                before: { totalPrice: Number(fresh.totalPrice), linesSubtotal: Number(fresh.linesSubtotal) },
+                after: { totalPrice: plan.totalPrice, linesSubtotal: plan.linesSubtotal },
+                quantities: plan.quantities.map((q) => ({ label: q.label, ordered: q.ordered, loaded: q.loaded })),
+              },
+            },
+          });
+          return tx.gazoblokOrder.findUniqueOrThrow({ where: { id: order.id } });
+        });
+        recordAudit({
+          userId: user.id,
+          action: "gazoblok.order.closeShort",
+          targetType: "gazoblok_order",
+          targetId: order.id,
+          message: `${order.orderNumber}: closed short — ${body.reason}`,
+        });
+        return ok(result);
+      } catch (e) {
+        if (e instanceof Refused) return fail(e.message, e.status);
         throw e;
       }
     }
 
     // ── record_payment ──────────────────────────────────────────
     if (body.action === "record_payment") {
+      if (!can(user, "payment.record")) return fail("Тўлов ёзишга рухсат йўқ · You can't record payments", 403);
       if (order.status === "CANCELED") {
         return fail("Бекор қилинган буюртмага тўлов ёзиб бўлмайди · Cannot record payment on a canceled order", 422);
-      }
-      // Remaining = total − confirmedPaid − sum(PENDING). Blocks double-recording
-      // while a previous payment is still in the owner's queue.
-      const pendingAgg = await prisma.gazoblokPayment.aggregate({
-        where: { orderId: order.id, status: "PENDING_CONFIRMATION" },
-        _sum: { amount: true },
-      });
-      const pendingSum = Number(pendingAgg._sum.amount ?? 0);
-      const remaining = remainingBalance(
-        Number(order.totalPrice), Number(order.confirmedPaid), 0, pendingSum,
-      );
-      if (body.amount > remaining + 0.005) {
-        return fail(
-          `Сумма қолдиқдан ошиб кетди (қолдиқ ${remaining}) · Amount exceeds remaining balance (${remaining})`,
-          422,
-        );
       }
 
       // Recorder with payment.confirm is the confirming authority — their own
       // entries skip the queue and land CONFIRMED in one step.
       const autoConfirm = can(user, "payment.confirm");
       const now = new Date();
-      const payment = await prisma.$transaction(async (tx) => {
+      let payment;
+      try {
+      payment = await prisma.$transaction(async (tx) => {
+        // Ceiling under the lock: two payments for the full remainder can't both pass.
+        // Remaining = total − confirmedPaid − sum(PENDING).
+        await lockOrder(tx, order.id);
+        const fresh = await tx.gazoblokOrder.findUniqueOrThrow({
+          where: { id: order.id },
+          select: { totalPrice: true, confirmedPaid: true },
+        });
+        const pendingAgg = await tx.gazoblokPayment.aggregate({
+          where: { orderId: order.id, status: "PENDING_CONFIRMATION" },
+          _sum: { amount: true },
+        });
+        const remaining = remainingBalance(
+          Number(fresh.totalPrice), Number(fresh.confirmedPaid), 0, Number(pendingAgg._sum.amount ?? 0),
+        );
+        const tooMuch = paymentCeilingProblem(body.amount, remaining);
+        if (tooMuch) throw new Refused(422, tooMuch);
         const p = await tx.gazoblokPayment.create({
           data: {
             orderId: order.id,
@@ -211,7 +269,7 @@ export const PATCH = withAuth<{ id: string }>(
             orderId: order.id,
             type: "PAYMENT_RECORDED",
             actorId: user.id,
-            message: `Payment of ${body.amount} recorded (${body.method}).`,
+            message: `Тўлов ёзилди: ${formatNumber(body.amount, 2)} UZS (${body.method})`,
             payload: { paymentId: p.id, amount: body.amount },
           },
         });
@@ -231,12 +289,7 @@ export const PATCH = withAuth<{ id: string }>(
         // now (same effect confirm_payment would have had), and log a
         // PAYMENT_CONFIRMED event so the audit trail mirrors a manual confirm.
         if (autoConfirm) {
-          const agg = await tx.gazoblokPayment.aggregate({
-            where: { orderId: order.id, status: "CONFIRMED" },
-            _sum: { amount: true },
-          });
-          const confirmedPaid = Number(agg._sum.amount ?? 0);
-          const paymentState = paymentStateFor(confirmedPaid, 0, Number(order.totalPrice));
+          const { confirmedPaid, paymentState } = await recomputePaid(tx, order.id, Number(fresh.totalPrice));
           await tx.gazoblokOrder.update({
             where: { id: order.id },
             data: { confirmedPaid, paymentState },
@@ -246,13 +299,17 @@ export const PATCH = withAuth<{ id: string }>(
               orderId: order.id,
               type: "PAYMENT_CONFIRMED",
               actorId: user.id,
-              message: `Payment ${p.id.slice(-6)} auto-confirmed (recorder has confirm rights): ${body.amount}`,
+              message: `Тўлов тасдиқланди (ёзувчида тасдиқлаш ҳуқуқи бор): ${formatNumber(body.amount, 2)} UZS`,
               payload: { paymentId: p.id, amount: body.amount, autoConfirmed: true },
             },
           });
         }
         return p;
       });
+      } catch (e) {
+        if (e instanceof Refused) return fail(e.message, e.status);
+        throw e;
+      }
       recordAudit({
         userId: user.id,
         action: "gazoblok.payment.record",
@@ -263,12 +320,59 @@ export const PATCH = withAuth<{ id: string }>(
       return ok(payment);
     }
 
-    // ── confirm_payment ─────────────────────────────────────────
-    // Confirming/rejecting a payment is restricted to users with the
-    // maker-checker payment.confirm permission (same authority as the floor
-    // side). set_status and record_payment stay open to any logged-in user.
+    // ── confirm_payment / record_refund ─────────────────────────
+    // Both are restricted to the maker-checker payment.confirm permission
+    // (same authority as the floor side).
     if (!can(user, "payment.confirm")) {
       return fail("Тўловни тасдиқлашга рухсат йўқ · You can't confirm payments", 403);
+    }
+
+    if (body.action === "record_refund") {
+      try {
+        const refund = await prisma.$transaction(async (tx) => {
+          await lockOrder(tx, order.id);
+          const fresh = await tx.gazoblokOrder.findUniqueOrThrow({ where: { id: order.id } });
+          const due = refundDue({ status: fresh.status, totalPrice: fresh.totalPrice, confirmedPaid: fresh.confirmedPaid, writeOffAmount: 0 });
+          const why = refundProblem(due, body.amount);
+          if (why) throw new Refused(422, why);
+          const now = new Date();
+          const p = await tx.gazoblokPayment.create({
+            data: {
+              orderId: order.id,
+              amount: -body.amount,
+              method: body.method,
+              status: "CONFIRMED",
+              recordedById: user.id,
+              confirmedById: user.id,
+              confirmedAt: now,
+              notes: body.notes ?? "Қайтарилди",
+            },
+          });
+          const paid = await recomputePaid(tx, order.id, Number(fresh.totalPrice));
+          await tx.gazoblokOrder.update({ where: { id: order.id }, data: paid });
+          await tx.gazoblokOrderEvent.create({
+            data: {
+              orderId: order.id,
+              type: "REFUND_RECORDED",
+              actorId: user.id,
+              message: `Мижозга қайтарилди: ${formatNumber(body.amount, 2)} UZS (${body.method})`,
+              payload: { paymentId: p.id, amount: body.amount, method: body.method },
+            },
+          });
+          return p;
+        });
+        recordAudit({
+          userId: user.id,
+          action: "gazoblok.payment.refund",
+          targetType: "gazoblok_order",
+          targetId: order.id,
+          message: `Refunded ${body.amount} (${body.method})`,
+        });
+        return ok(refund);
+      } catch (e) {
+        if (e instanceof Refused) return fail(e.message, e.status);
+        throw e;
+      }
     }
     const payment = await prisma.gazoblokPayment.findUnique({ where: { id: body.paymentId } });
     if (!payment || payment.orderId !== order.id) {
@@ -281,6 +385,10 @@ export const PATCH = withAuth<{ id: string }>(
     let updated;
     try {
       updated = await prisma.$transaction(async (tx) => {
+        await lockOrder(tx, order.id);
+        const freshTotal = Number(
+          (await tx.gazoblokOrder.findUniqueOrThrow({ where: { id: order.id }, select: { totalPrice: true } })).totalPrice,
+        );
         // Compare-and-set: the pre-tx PENDING check above is only a fast path —
         // this guard is what stops two concurrent reviews of the same payment.
         const cas = await tx.gazoblokPayment.updateMany({
@@ -296,12 +404,7 @@ export const PATCH = withAuth<{ id: string }>(
         });
         if (cas.count === 0) throw new Error("GAZOBLOK_PAYMENT_CONFLICT");
 
-        const agg = await tx.gazoblokPayment.aggregate({
-          where: { orderId: order.id, status: "CONFIRMED" },
-          _sum: { amount: true },
-        });
-        const confirmedPaid = Number(agg._sum.amount ?? 0);
-        const paymentState = paymentStateFor(confirmedPaid, 0, Number(order.totalPrice));
+        const { confirmedPaid, paymentState } = await recomputePaid(tx, order.id, freshTotal);
 
         return tx.gazoblokOrder.update({
           where: { id: order.id },
@@ -312,7 +415,7 @@ export const PATCH = withAuth<{ id: string }>(
               create: {
                 type: body.approve ? "PAYMENT_CONFIRMED" : "PAYMENT_REJECTED",
                 actorId: user.id,
-                message: body.approve ? "Payment confirmed" : "Payment rejected",
+                message: body.approve ? "Тўлов тасдиқланди" : "Тўлов рад этилди",
                 payload: { paymentId: payment.id },
               },
             },
