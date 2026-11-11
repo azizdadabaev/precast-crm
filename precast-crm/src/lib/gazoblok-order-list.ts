@@ -5,7 +5,7 @@
 import type { Prisma } from "@prisma/client";
 import { digitsOnly, normalizePhone } from "@/lib/phone";
 import { buildOrderWhere, orderFlags, type OrderListQuery } from "@/lib/gazoblok-order-filters";
-import { loadedByLine, unpaidOverload } from "@/lib/gazoblok-quantities";
+import { deliveredWithoutTrucks, loadedByLine, unpaidOverload } from "@/lib/gazoblok-quantities";
 import { refundDue } from "@/lib/overpayment";
 
 /**
@@ -39,15 +39,18 @@ export function orderListWhere(q: OrderListQuery, flaggedIds: string[] | null): 
 /** A cancelled order carries no over-load debt (same rule as orderFlags). */
 export function orderListExtras(o: {
   status: string;
+  totalBlocks: number;
   totalPrice: number;
   confirmedPaid: number;
   overshipAmount: number;
   shipments: { loadedLines: unknown }[];
-}): { loadedBlocks: number; unpaidOverload: number; refundDue: number } {
+}): { loadedBlocks: number; deliveredWithoutTrucks: boolean; unpaidOverload: number; refundDue: number } {
   let loadedBlocks = 0;
   for (const n of Array.from(loadedByLine(o.shipments).values())) loadedBlocks += n;
+  const noTrucks = deliveredWithoutTrucks(o.status, o.shipments);
   return {
-    loadedBlocks,
+    loadedBlocks: noTrucks ? o.totalBlocks : loadedBlocks,
+    deliveredWithoutTrucks: noTrucks,
     unpaidOverload: o.status === "CANCELED" ? 0 : unpaidOverload(o),
     refundDue: refundDue({ status: o.status, totalPrice: o.totalPrice, confirmedPaid: o.confirmedPaid, writeOffAmount: 0 }),
   };

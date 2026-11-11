@@ -47,6 +47,7 @@ interface GazoblokOrder {
   client: { id: string; name: string; phone: string };
   pendingPaymentCount: number;
   loadedBlocks: number;
+  deliveredWithoutTrucks: boolean;
   unpaidOverload: number;
   refundDue: number;
 }
@@ -551,6 +552,11 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
                       {formatNumber(o.loadedBlocks, 0)} / {formatNumber(o.totalBlocks, 0)}
                     </span>
                     <BlocksBar loaded={o.loadedBlocks} ordered={o.totalBlocks} />
+                    {o.deliveredWithoutTrucks && (
+                      <span className="text-right text-[11px] text-muted-foreground">
+                        {t("машиналар қайд этилмаган", "no trucks on file")}
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-3 py-3.5 text-right whitespace-nowrap">

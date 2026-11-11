@@ -10,7 +10,7 @@ import { can } from "@/lib/permissions";
 import { recordAudit } from "@/lib/audit";
 import { GazoblokOrderActionSchema } from "@/lib/gazoblok-validation";
 import { paymentStateFor, remainingBalance } from "@/lib/payment-state";
-import { lineQuantities, unpaidOverload } from "@/lib/gazoblok-quantities";
+import { deliveredWithoutTrucks, displayLineQuantities, lineQuantities, unpaidOverload } from "@/lib/gazoblok-quantities";
 import {
   closeShortPlan,
   nextStatusProblem,
@@ -86,7 +86,8 @@ export const GET = withPermission<{ id: string }>("order.view",
     // the unpaid part of an over-load, and money owed back.
     return ok({
       ...order,
-      quantities: lineQuantities(order.lines, order.shipments),
+      quantities: displayLineQuantities(order.lines, order.shipments, order.status),
+      deliveredWithoutTrucks: deliveredWithoutTrucks(order.status, order.shipments),
       unpaidOverload: unpaidOverload({
         overshipAmount: Number(order.overshipAmount),
         totalPrice: Number(order.totalPrice),

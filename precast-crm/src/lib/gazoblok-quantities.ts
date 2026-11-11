@@ -50,6 +50,22 @@ export function lineQuantities(lines: QtyLine[], shipments: ShipmentLoad[]): Lin
   });
 }
 
+/**
+ * Orders delivered before per-truck records began (deployed 2026-11-10) were closed in one
+ * step with no trucks on file, and stock was written off at delivery: everything ordered left.
+ * Screens show such an order as fully loaded; the stored order is never changed.
+ */
+export function deliveredWithoutTrucks(status: string, shipments: ShipmentLoad[]): boolean {
+  return status === "DELIVERED" && shipments.every((s) => Object.values(loadsOf(s)).every((n) => n === 0));
+}
+
+/** lineQuantities for screens and exports: a delivered order without trucks reads as fully loaded. */
+export function displayLineQuantities(lines: QtyLine[], shipments: ShipmentLoad[], status: string): LineQty[] {
+  const q = lineQuantities(lines, shipments);
+  if (!deliveredWithoutTrucks(status, shipments)) return q;
+  return q.map((x) => ({ ...x, loaded: x.ordered, left: 0, over: 0 }));
+}
+
 /** Per-line change a re-load (correction) makes: next − prev, non-zero entries only. */
 export function loadDelta(prev: Record<string, number> | null, next: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};

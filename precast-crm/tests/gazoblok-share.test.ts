@@ -21,7 +21,7 @@ const base: ShareOrder = {
 describe("gazoblok share card", () => {
   it("open order: rows carry ordered quantities, totals reconcile", () => {
     const s = shareSummary(base);
-    expect(s.rows).toEqual([{ key: "l1", label: "600×300×200", quantity: 100, unitPrice: 10000, sum: 1000000 }]);
+    expect(s.rows).toEqual([{ key: "l1", label: "600×300×200", quantity: 100, over: 0, unitPrice: 10000, sum: 1000000 }]);
     expect(s.subtotal).toBe(1000000);
     expect(s.overship).toBe(0);
     expect(s.total).toBe(1250000);
@@ -30,15 +30,26 @@ describe("gazoblok share card", () => {
     expect(s.weightKg).toBeCloseTo(3.6 * 611, 6);
   });
 
-  it("open order with an over-load shows it as its own line", () => {
+  it("open order with an over-load prints what really left: loaded quantity, extra inside the row", () => {
+    // Owner 2026-11-11: the PNG printed the ordered 100 though 110 were loaded.
     const s = shareSummary({
       ...base,
       overshipAmount: "100000",
       totalPrice: "1350000",
-      shipments: [{ loadedLines: { l1: 110 } }],
+      shipments: [{ loadedLines: { l1: 60 } }, { loadedLines: { l1: 50 } }],
     });
+    expect(s.rows[0].quantity).toBe(110);
+    expect(s.rows[0].over).toBe(10);
+    expect(s.rows[0].sum).toBe(1100000);
+    expect(s.overship).toBe(0);
+    expect(s.subtotal - s.discount + s.delivery + s.overship).toBe(s.total);
+    expect(s.weightKg).toBeCloseTo(110 * 0.036 * 611, 6);
+  });
+
+  it("open order loaded less than ordered still prints the ordered quantity (what is billed)", () => {
+    const s = shareSummary({ ...base, shipments: [{ loadedLines: { l1: 40 } }] });
     expect(s.rows[0].quantity).toBe(100);
-    expect(s.overship).toBe(100000);
+    expect(s.rows[0].over).toBe(0);
     expect(s.subtotal - s.discount + s.delivery + s.overship).toBe(s.total);
   });
 

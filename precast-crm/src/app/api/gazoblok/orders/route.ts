@@ -75,6 +75,7 @@ export const GET = withPermission("order.view", async (req: NextRequest) => {
     pendingPaymentCount: payments.length,
     ...orderListExtras({
       status: rest.status,
+      totalBlocks: rest.totalBlocks,
       totalPrice: Number(rest.totalPrice),
       confirmedPaid: Number(rest.confirmedPaid),
       overshipAmount: Number(rest.overshipAmount),

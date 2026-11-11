@@ -51,14 +51,15 @@ function bar(ordered: number, loaded: number, delivered: number, left: number, o
   return { delivered: pct(del), onRoad: pct(inOrderLoaded - del), left: pct(left), over: pct(over) };
 }
 
-export function loadSummary(quantities: LineQty[], shipments: Truck[]) {
+/** `deliveredWithoutTrucks`: an order closed before per-truck records — all of it was delivered. */
+export function loadSummary(quantities: LineQty[], shipments: Truck[], opts: { deliveredWithoutTrucks?: boolean } = {}) {
   const delivered = new Map<string, number>();
   for (const s of shipments) {
     if (s.status !== "DELIVERED") continue;
     for (const [k, v] of Object.entries(s.loadedLines ?? {})) delivered.set(k, (delivered.get(k) ?? 0) + (Number(v) || 0));
   }
   const rows: LoadRow[] = quantities.map((q) => {
-    const d = delivered.get(q.lineId) ?? 0;
+    const d = opts.deliveredWithoutTrucks ? q.loaded : delivered.get(q.lineId) ?? 0;
     return {
       lineId: q.lineId,
       label: q.label,

@@ -226,6 +226,13 @@ export function LoadCard({
             <Truck className="mt-0.5 h-5 w-5 shrink-0" {...ICON} />
             {canceled ? (
               <span>{t("Буюртма бекор қилинган — жўнатма юкланмаган.", "The order was cancelled — no shipment loaded.")}</span>
+            ) : status === "DELIVERED" ? (
+              <span>
+                {t(
+                  "Машиналар қайд этилмаган — буюртма жўнатмалар ёзилишидан олдин етказилган, ҳаммаси юкланган деб ҳисобланади.",
+                  "No trucks on file — delivered before shipments were recorded; counted as fully loaded.",
+                )}
+              </span>
             ) : (
               <span>
                 <b className="text-foreground">{t("Ҳали жўнатма юкланмаган.", "No shipment loaded yet.")}</b>{" "}

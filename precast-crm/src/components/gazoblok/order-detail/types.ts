@@ -71,6 +71,7 @@ export interface OrderDetail {
   shortClosedAt: string | null;
   shortCloseReason: string | null;
   quantities: LineQty[];
+  deliveredWithoutTrucks: boolean;
   unpaidOverload: number;
   refundDue: number;
   createdBy: { id: string; name: string } | null;

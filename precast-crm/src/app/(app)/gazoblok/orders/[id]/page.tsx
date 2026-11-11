@@ -166,7 +166,7 @@ export default function GazoblokOrderDetailPage() {
   const derived = useMemo(() => {
     if (!order) return null;
     const labelById = new Map(order.lines.map((l) => [l.id, l.productLabel]));
-    const summary = loadSummary(order.quantities, order.shipments);
+    const summary = loadSummary(order.quantities, order.shipments, { deliveredWithoutTrucks: order.deliveredWithoutTrucks });
     const history = buildHistory({
       events: order.events,
       lines: order.lines.map((l) => ({ id: l.id, label: l.productLabel, quantity: l.quantity })),

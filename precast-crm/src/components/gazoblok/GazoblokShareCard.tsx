@@ -104,7 +104,10 @@ export const GazoblokShareCard = React.forwardRef<HTMLDivElement, Props>(functio
             {s.rows.map((r) => (
               <tr key={r.key}>
                 <td style={td("left", { fontWeight: 600 })}>{r.label}</td>
-                <td style={td("right")}>{n0(r.quantity)}</td>
+                <td style={td("right")}>
+                  {n0(r.quantity)}
+                  {r.over > 0 && <div style={{ fontSize: "0.8em", color: "#B4500F" }}>+{n0(r.over)} ортиқча</div>}
+                </td>
                 <td style={td("right")}>{n0(r.unitPrice)}</td>
                 <td style={td("right", { fontWeight: 600 })}>{n0(r.sum)}</td>
               </tr>

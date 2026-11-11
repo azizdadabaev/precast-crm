@@ -4,7 +4,7 @@
  * into one row. Headers are English like the beam sheets beside it.
  */
 import { round2 } from "@/services/calculation-engine";
-import { lineQuantities, unpaidOverload } from "@/lib/gazoblok-quantities";
+import { displayLineQuantities, unpaidOverload } from "@/lib/gazoblok-quantities";
 
 export type GazoblokExportInput = {
   id: string;
@@ -70,7 +70,7 @@ export const GAZOBLOK_EXPORT_COLUMNS: { header: string; key: string; width: numb
 ];
 
 export function gazoblokExportRow(o: GazoblokExportInput): Record<string, string | number | Date | null> {
-  const qty = lineQuantities(o.lines, o.shipments);
+  const qty = displayLineQuantities(o.lines, o.shipments, o.status);
   const pending = round2(
     o.payments.filter((p) => p.status === "PENDING_CONFIRMATION").reduce((s, p) => s + p.amount, 0),
   );

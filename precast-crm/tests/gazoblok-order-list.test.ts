@@ -69,18 +69,19 @@ describe("orderListExtras", () => {
   it("sums loaded blocks and reports unpaid over-load and refund due", () => {
     const extras = orderListExtras({
       status: "PLACED",
+      totalBlocks: 160,
       totalPrice: 4_260_000,
       confirmedPaid: 3_900_000,
       overshipAmount: 360_000,
       shipments: [{ loadedLines: { A: 100 } }, { loadedLines: { A: 68, B: 5 } }, { loadedLines: null }],
     });
-    expect(extras).toEqual({ loadedBlocks: 173, unpaidOverload: 360_000, refundDue: 0 });
+    expect(extras).toEqual({ loadedBlocks: 173, deliveredWithoutTrucks: false, unpaidOverload: 360_000, refundDue: 0 });
   });
 
   it("a cancelled paid order owes its whole payment back and no over-load debt", () => {
     expect(
-      orderListExtras({ status: "CANCELED", totalPrice: 1_300_000, confirmedPaid: 500_000, overshipAmount: 300_000, shipments: [] }),
-    ).toEqual({ loadedBlocks: 0, unpaidOverload: 0, refundDue: 500_000 });
+      orderListExtras({ status: "CANCELED", totalBlocks: 50, totalPrice: 1_300_000, confirmedPaid: 500_000, overshipAmount: 300_000, shipments: [] }),
+    ).toEqual({ loadedBlocks: 0, deliveredWithoutTrucks: false, unpaidOverload: 0, refundDue: 500_000 });
   });
 });
 

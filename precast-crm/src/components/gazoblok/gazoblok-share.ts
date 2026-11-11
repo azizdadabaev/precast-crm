@@ -33,7 +33,7 @@ export type ShareOrder = {
 };
 
 export type ShareSummary = {
-  rows: { key: string; label: string; quantity: number; unitPrice: number; sum: number }[];
+  rows: { key: string; label: string; quantity: number; over: number; unitPrice: number; sum: number }[];
   subtotal: number;
   discount: number;
   delivery: number;
@@ -51,11 +51,16 @@ export function shareSummary(o: ShareOrder): ShareSummary {
   const blockM3 = (l: ShareOrder["lines"][number]) =>
     l.product ? Number(l.product.lengthM) * Number(l.product.heightM) * Number(l.product.thicknessM) : avgBlockM3;
 
+  // Open order: a line loaded past its order prints what really left (owner 2026-11-11). The
+  // over-load is billed at the line's unit price, so its money moves from its own line into the row.
   const rows = o.lines.map((l) => {
-    const quantity = closed ? loaded.get(l.id) ?? 0 : l.quantity;
+    const got = loaded.get(l.id) ?? 0;
+    const quantity = closed ? got : Math.max(l.quantity, got);
+    const over = closed ? 0 : Math.max(0, got - l.quantity);
     const unitPrice = Number(l.unitPrice);
-    return { key: l.id, label: l.productLabel, quantity, unitPrice, sum: round2(unitPrice * quantity) };
+    return { key: l.id, label: l.productLabel, quantity, over, unitPrice, sum: round2(unitPrice * quantity) };
   });
+  const overInRows = rows.some((r) => r.over > 0);
   const weightKg = orderWeightKg(o.lines.map((l, i) => ({
     lineId: l.id,
     label: l.productLabel,
@@ -71,7 +76,7 @@ export function shareSummary(o: ShareOrder): ShareSummary {
     subtotal: round2(rows.reduce((s, r) => s + r.sum, 0)),
     discount: Number(o.discountAmount),
     delivery: Number(o.deliveryCost),
-    overship: closed ? 0 : Number(o.overshipAmount),
+    overship: closed || overInRows ? 0 : Number(o.overshipAmount),
     total: Number(o.totalPrice),
     weightKg,
     volumeM3,
