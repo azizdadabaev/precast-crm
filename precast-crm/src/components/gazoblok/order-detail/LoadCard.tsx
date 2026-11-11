@@ -126,6 +126,8 @@ export function LoadCard({
               <span className={cn(NUM, "font-semibold text-foreground")}>{n0(summary.trucks)}</span> {t("та жўнатма", "shipments")} · ~
               <span className={cn(NUM, "font-semibold text-foreground")}>{formatNumber(weightT, 1)}</span> т
             </>
+          ) : status === "DELIVERED" ? (
+            t("Машиналар қайд этилмаган", "No trucks on file")
           ) : (
             t("Ҳали жўнатма юкланмаган", "No shipment loaded yet")
           )}
