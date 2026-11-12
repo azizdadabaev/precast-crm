@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Loader2, PanelRightClose } from "lucide-react";
 import { api } from "@/lib/fetcher";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
@@ -47,9 +47,11 @@ type Props = {
   /** The list's `day` filter: "YYYY-MM-DD", "none" (open, no date) or "". */
   selected: string;
   onSelect: (day: string) => void;
+  /** Wide screens only: folds the whole calendar column away so the list takes the page. */
+  onCollapse?: () => void;
 };
 
-export function GazoblokOrdersCalendar({ selected, onSelect }: Props) {
+export function GazoblokOrdersCalendar({ selected, onSelect, onCollapse }: Props) {
   const t = useT();
   const todayKey = dayKey(new Date());
   const [month, setMonth] = useState(() =>
@@ -118,6 +120,13 @@ export function GazoblokOrdersCalendar({ selected, onSelect }: Props) {
                 <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
               </NavButton>
             </span>
+            {onCollapse && (
+              <span className="hidden min-[1400px]:inline-flex">
+                <NavButton label={t("Тақвимни йиғиш", "Fold the calendar")} onClick={onCollapse}>
+                  <PanelRightClose className="h-4 w-4" />
+                </NavButton>
+              </span>
+            )}
           </div>
         </div>
 

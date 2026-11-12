@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Select } from "@/components/ui/select";
-import { CalendarDays, Loader2, Plus, Search, X } from "lucide-react";
+import { CalendarDays, Copy, Loader2, Phone, Plus, Search, Truck, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatNumber, cn } from "@/lib/utils";
-import { formatPhone } from "@/lib/phone";
-import { PhoneLink } from "@/components/PhoneLink";
+import { digitsOnly, formatPhone } from "@/lib/phone";
 import { Bi, useT } from "@/lib/i18n";
 import { STATUS_LABELS, uzsText } from "@/lib/gazoblok-text";
 import type { OrderCounts } from "@/lib/gazoblok-order-list";
@@ -69,13 +69,14 @@ const PAYMENT_META: Record<ListPay, { uz: string; en: string; variant: ChipVaria
   FULLY_PAID: { uz: "Тўлиқ", en: "Paid", variant: "success" },
 };
 
-const FLAG_PILLS: { flag: ListFlag; uz: string; en: string; tone: string; on: string }[] = [
+const FLAG_PILLS: { flag: ListFlag; uz: string; en: string; tone: string; on: string; md: string }[] = [
   {
     flag: "debt",
     uz: "Ортиқча юклаш",
     en: "Over-load",
     tone: "border-destructive/45 text-destructive",
     on: "bg-destructive text-destructive-foreground border-destructive",
+    md: "md:text-destructive md:border-destructive",
   },
   {
     flag: "refund",
@@ -83,6 +84,7 @@ const FLAG_PILLS: { flag: ListFlag; uz: string; en: string; tone: string; on: st
     en: "Refund due",
     tone: "border-warning/50 text-warning",
     on: "bg-warning text-warning-foreground border-warning",
+    md: "md:text-warning md:border-warning",
   },
   {
     flag: "unconfirmed",
@@ -90,6 +92,7 @@ const FLAG_PILLS: { flag: ListFlag; uz: string; en: string; tone: string; on: st
     en: "Unconfirmed",
     tone: "border-warning/50 text-warning",
     on: "bg-warning text-warning-foreground border-warning",
+    md: "md:text-warning md:border-warning",
   },
 ];
 
@@ -99,8 +102,8 @@ const NUM = "font-[family-name:var(--font-num)] tabular-nums [word-spacing:-0.38
 // Row chips read in sentence case in the body face, like the order screen's pills: the shared
 // Chip's uppercase mono made «Қ» fall back to another font. Only this list overrides it.
 const CHIP_CASE = "normal-case tracking-normal font-sans text-xs px-2.5 py-1";
-// From 1400 px the calendar is a column beside the list — narrower and the table's columns
-// would squeeze the client name out. Between phones and 1400 px it opens as a side sheet.
+// From 1400 px the calendar is a column beside the list, folded away with its own button.
+// Between phones and 1400 px it opens as a side sheet; phones keep it folded above the list.
 const CAL_SHEET =
   "sm:max-[1399px]:fixed sm:max-[1399px]:inset-y-0 sm:max-[1399px]:right-0 sm:max-[1399px]:z-[60] sm:max-[1399px]:w-[340px] sm:max-[1399px]:overflow-y-auto sm:max-[1399px]:border-l sm:max-[1399px]:border-border sm:max-[1399px]:bg-background sm:max-[1399px]:p-4 sm:max-[1399px]:shadow-xl";
 
@@ -153,7 +156,9 @@ function OrdersList() {
     queryFn: () => api("/api/gazoblok/orders/counts"),
   });
 
+  // `calOpen` is the side sheet (640–1399 px); `calFolded` hides the column (from 1400 px).
   const [calOpen, setCalOpen] = useState(false);
+  const [calFolded, setCalFolded] = useState(false);
   useEffect(() => {
     if (!calOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCalOpen(false);
@@ -178,18 +183,6 @@ function OrdersList() {
           </p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
-          <Button
-            variant="outline"
-            className="h-11 hidden sm:inline-flex min-[1400px]:hidden"
-            aria-expanded={calOpen}
-            onClick={() => setCalOpen((v) => !v)}
-          >
-            <CalendarDays className="h-4 w-4 mr-2" />
-            {t("Тақвим", "Calendar")}
-            {filters.day && filters.day !== "none" && (
-              <span className={cn("ml-1.5 text-muted-foreground", NUM)}>{dayChipLabel(filters.day)}</span>
-            )}
-          </Button>
           <Button asChild className="h-11 flex-1 sm:flex-none">
             <Link href="/gazoblok/new">
               <Plus className="h-4 w-4 mr-2" />
@@ -199,12 +192,20 @@ function OrdersList() {
         </div>
       </div>
 
-      {/* ≥1400: the list owns the page, the calendar is a narrow right column. Phones keep the
-          folded calendar above the list; widths between open it as a sheet. */}
-      <div className="space-y-5 min-[1400px]:space-y-0 min-[1400px]:grid min-[1400px]:grid-cols-[minmax(0,1fr)_280px] min-[1400px]:gap-6 min-[1400px]:items-start">
+      <div
+        className={cn(
+          "space-y-5 min-[1400px]:space-y-0",
+          !calFolded &&
+            "min-[1400px]:grid min-[1400px]:grid-cols-[minmax(0,1fr)_280px] min-[1400px]:gap-6 min-[1400px]:items-start",
+        )}
+      >
         <aside
           aria-label={t("Тақвим", "Calendar")}
-          className={cn("min-w-0 min-[1400px]:order-2", calOpen ? CAL_SHEET : "sm:max-[1399px]:hidden")}
+          className={cn(
+            "min-w-0 min-[1400px]:order-2",
+            calOpen ? CAL_SHEET : "sm:max-[1399px]:hidden",
+            calFolded && "min-[1400px]:hidden",
+          )}
         >
           {calOpen && (
             <div className="hidden sm:max-[1399px]:flex items-center justify-between mb-3">
@@ -219,7 +220,11 @@ function OrdersList() {
               </button>
             </div>
           )}
-          <GazoblokOrdersCalendar selected={filters.day} onSelect={(day) => patch({ day })} />
+          <GazoblokOrdersCalendar
+            selected={filters.day}
+            onSelect={(day) => patch({ day })}
+            onCollapse={() => setCalFolded(true)}
+          />
         </aside>
         {calOpen && (
           <div
@@ -229,13 +234,13 @@ function OrdersList() {
           />
         )}
 
-        <div className="min-w-0 space-y-5 min-[1400px]:order-1">
+      <div className="flex flex-col gap-5 sm:gap-4 min-w-0 min-[1400px]:order-1">
       {/* Search + selects */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 basis-full sm:basis-80">
+      <div className="flex flex-wrap gap-3 sm:gap-2">
+        <div className="relative flex-1 basis-full sm:basis-64">
           <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
           <Input
-            className="pl-9 h-11"
+            className="pl-9 h-11 sm:h-9"
             placeholder={t("Буюртма № · Мижоз · Телефон", "Order # · Client · Phone")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -243,7 +248,7 @@ function OrdersList() {
         </div>
         <Select
           aria-label={t("Тўлов", "Payment")}
-          className="h-11 w-full sm:w-44"
+          className="h-11 sm:h-9 w-full sm:w-40"
           value={filters.pay}
           onChange={(e) => patch({ pay: e.target.value as ListPay | "" })}
         >
@@ -256,7 +261,7 @@ function OrdersList() {
         </Select>
         <Select
           aria-label={t("Сотувчи", "Seller")}
-          className="h-11 w-full sm:w-48"
+          className="h-11 sm:h-9 w-full sm:w-44"
           value={filters.seller}
           onChange={(e) => patch({ seller: e.target.value })}
         >
@@ -271,16 +276,29 @@ function OrdersList() {
           <DateFilter label={t("Дан", "From")} value={filters.from} onChange={(from) => patch({ from })} />
           <DateFilter label={t("Гача", "To")} value={filters.to} onChange={(to) => patch({ to })} />
         </div>
+        {/* From 1400 px this shows only while the column is folded; the calendar carries its own fold button. */}
+        <Button
+          variant="outline"
+          className={cn("h-9 hidden sm:inline-flex sm:ml-auto", !calFolded && "min-[1400px]:hidden")}
+          onClick={() => {
+            if (window.matchMedia("(min-width: 1400px)").matches) setCalFolded(false);
+            else setCalOpen((v) => !v);
+          }}
+        >
+          <CalendarDays className="h-4 w-4 mr-2" />
+          {t("Тақвим", "Calendar")}
+        </Button>
       </div>
 
-      {/* Status + flag pills — they wrap on phones instead of scrolling */}
-      <div className="flex flex-wrap gap-2">
+      {/* Status + flag picks: pills that wrap on phones, one row of slim tabs from 768 px */}
+      <div className="flex flex-wrap gap-2 md:gap-x-4 md:gap-y-0 md:items-end md:justify-between md:border-b md:border-border-strong">
+        <div className="contents md:flex md:flex-wrap md:items-center md:gap-0.5">
         {filters.day && (
           <button
             type="button"
             onClick={() => patch({ day: "" })}
             aria-label={t("Кун фильтрини тозалаш", "Clear the day filter")}
-            className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 rounded-full border border-primary bg-primary text-primary-foreground text-[13px] font-semibold whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 min-h-[44px] px-3.5 rounded-full border border-primary bg-primary text-primary-foreground text-[13px] font-semibold whitespace-nowrap md:min-h-0 md:h-7 md:px-2.5 md:mr-1.5 md:text-xs"
           >
             {filters.day === "none" ? (
               t("Санасиз", "No date")
@@ -305,7 +323,8 @@ function OrdersList() {
             {t(STATUS_LABELS[s][0], STATUS_LABELS[s][1])}
           </Pill>
         ))}
-        <span className="hidden md:block w-px self-stretch bg-border my-1 mx-0.5" aria-hidden />
+        </div>
+        <div className="contents md:flex md:flex-wrap md:items-center md:gap-0.5">
         {FLAG_PILLS.map((f) => (
           <Pill
             key={f.flag}
@@ -313,11 +332,14 @@ function OrdersList() {
             count={c?.flags[f.flag]}
             tone={f.tone}
             activeTone={f.on}
+            mdActive={f.md}
+            dot
             onClick={() => patch({ flag: filters.flag === f.flag ? "" : f.flag })}
           >
             {t(f.uz, f.en)}
           </Pill>
         ))}
+        </div>
       </div>
 
       {/* List */}
@@ -374,7 +396,7 @@ function OrdersList() {
           </Button>
         </div>
       )}
-        </div>
+      </div>
       </div>
     </div>
   );
@@ -397,7 +419,7 @@ function DateFilter({ label, value, onChange }: { label: string; value: string; 
         placeholder={t("кк.оо.йййй", "dd.mm.yyyy")}
         aria-invalid={bad}
         title={bad ? t("Санани кк.оо.йййй кўринишида ёзинг, масалан 11.11.2026", "Type the date as dd.mm.yyyy, e.g. 11.11.2026") : undefined}
-        className={cn("h-11 min-w-0 sm:w-36", NUM, bad && "border-destructive focus-visible:ring-destructive/40")}
+        className={cn("h-11 sm:h-9 min-w-0 sm:w-32", NUM, bad && "border-destructive focus-visible:ring-destructive/40")}
         value={raw}
         onFocus={() => setEditing(true)}
         onBlur={() => setEditing(false)}
@@ -416,6 +438,8 @@ function Pill({
   count,
   tone,
   activeTone = "bg-foreground text-background border-foreground",
+  mdActive = "md:text-foreground md:border-foreground",
+  dot = false,
   onClick,
   children,
 }: {
@@ -423,6 +447,9 @@ function Pill({
   count: number | undefined;
   tone?: string;
   activeTone?: string;
+  /** From 768 px the pick is a tab: the active one keeps only its text and underline colour. */
+  mdActive?: string;
+  dot?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -433,9 +460,16 @@ function Pill({
       onClick={onClick}
       className={cn(
         "inline-flex items-center gap-1.5 min-h-[44px] px-3.5 rounded-full border text-[13px] font-semibold whitespace-nowrap transition-colors",
-        active ? activeTone : cn("bg-card border-border-strong text-foreground hover:bg-surface-hover", tone),
+        "md:min-h-0 md:h-[34px] md:px-2.5 md:-mb-px md:rounded-none md:border-0 md:border-b-2 md:bg-transparent",
+        active
+          ? cn(activeTone, "md:bg-transparent", mdActive)
+          : cn(
+              "bg-card border-border-strong text-foreground hover:bg-surface-hover md:border-transparent md:hover:bg-transparent",
+              tone ?? "md:text-muted-foreground md:hover:text-foreground",
+            ),
       )}
     >
+      {dot && <span aria-hidden className="hidden md:inline-block h-1.5 w-1.5 rounded-full bg-current" />}
       {children}
       {count !== undefined && (
         <span className={cn(NUM, "font-medium", active ? "opacity-70" : "text-muted-foreground")}>
@@ -495,20 +529,78 @@ function BlocksBar({ loaded, ordered }: { loaded: number; ordered: number }) {
   );
 }
 
+/** The phone number opens a small menu — call or copy — instead of dialling straight away. */
+function PhoneMenu({ phone, className }: { phone: string; className?: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [copy, setCopy] = useState<"idle" | "done" | "failed">("idle");
+  const formatted = formatPhone(phone);
+  if (!formatted) return null;
+  const tel = `+${digitsOnly(phone)}`;
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setCopy("idle");
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          // The row itself opens the order; the phone must not.
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "rounded px-1 -mx-1 text-xs text-primary hover:underline whitespace-nowrap font-[family-name:var(--font-num)] tabular-nums",
+            className,
+          )}
+        >
+          {formatted}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-52" onClick={(e) => e.stopPropagation()}>
+        <a href={`tel:${tel}`} className="flex items-center gap-2 h-10 px-2.5 rounded-md text-sm hover:bg-accent">
+          <Phone className="h-4 w-4 text-muted-foreground" />
+          {t("Қўнғироқ қилиш", "Call")}
+        </a>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 h-10 px-2.5 rounded-md text-sm text-left hover:bg-accent"
+          onClick={() =>
+            navigator.clipboard.writeText(tel).then(
+              () => setCopy("done"),
+              () => setCopy("failed"),
+            )
+          }
+        >
+          <Copy className="h-4 w-4 text-muted-foreground" />
+          {copy === "done"
+            ? t("Нусха олинди", "Copied")
+            : copy === "failed"
+              ? t("Нусха олиб бўлмади", "Could not copy")
+              : t("Нусха олиш", "Copy")}
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
   const t = useT();
+  const router = useRouter();
   const chips = useRowChips();
   return (
-    <div className="hidden md:block">
-      <table className="w-full table-fixed text-sm">
+    <div className="hidden lg:block overflow-x-auto">
+      <table className="w-full min-w-[1040px] table-fixed text-[13px]">
         <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
-          <tr>
-            <th className="text-left px-3 py-2.5 w-[132px]">№</th>
-            <th className="text-left px-3 py-2.5">{t("Мижоз", "Client")}</th>
-            <th className="hidden xl:table-cell text-right px-3 py-2.5 w-[104px]">{t("Блоклар", "Blocks")}</th>
-            <th className="text-right px-3 py-2.5 w-[128px]">{t("Жами, UZS", "Total, UZS")}</th>
-            <th className="text-left px-3 py-2.5 w-[150px]">{t("Ҳолат", "Status")}</th>
-            <th className="text-left px-3 py-2.5 w-[160px]">{t("Тўлов", "Payment")}</th>
+          <tr className="h-8">
+            <th className="text-left pl-3 pr-2 w-[126px]">№</th>
+            <th className="text-left px-2">{t("Мижоз", "Client")}</th>
+            <th className="text-left px-2 w-[186px]">{t("Юкланди / буюртма", "Loaded / ordered")}</th>
+            <th className="text-right px-2 w-[100px]">{t("Жами, UZS", "Total, UZS")}</th>
+            <th className="text-right px-2 w-[100px]">{t("Қолди", "Left")}</th>
+            <th className="text-left px-2 w-[152px]">{t("Ҳолат", "Status")}</th>
+            <th className="text-left pl-2 pr-3 w-[280px]">{t("Тўлов", "Payment")}</th>
           </tr>
         </thead>
         <tbody>
@@ -516,66 +608,71 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
             const canceled = o.status === "CANCELED";
             const left = remainingToPay(o);
             const flags = chips.flags(o);
+            const href = `/gazoblok/orders/${o.id}`;
             return (
               <tr
                 key={o.id}
+                onClick={() => router.push(href)}
                 className={cn(
-                  "border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors align-top",
+                  "h-11 cursor-pointer border-b last:border-b-0 border-border/60 hover:bg-surface-hover transition-colors",
                   canceled && "text-muted-foreground",
                 )}
               >
-                <td className={cn("px-3 py-3.5 text-xs whitespace-nowrap", NUM)}>
-                  <Link href={`/gazoblok/orders/${o.id}`} className="font-bold text-primary hover:underline">
+                <td className={cn("pl-3 pr-2 text-xs whitespace-nowrap", NUM)}>
+                  <Link href={href} onClick={(e) => e.stopPropagation()} className="font-bold text-primary hover:underline">
                     {o.orderNumber}
                   </Link>
-                  {/* Under 1280 px the blocks column folds in here so the client name keeps its room. */}
-                  <div className="xl:hidden mt-1.5 grid gap-1 text-[13px]">
-                    <span>
-                      {formatNumber(o.loadedBlocks, 0)} / {formatNumber(o.totalBlocks, 0)}
-                    </span>
-                    <BlocksBar loaded={o.loadedBlocks} ordered={o.totalBlocks} />
-                  </div>
                 </td>
-                <td className="px-3 py-3.5 min-w-0">
-                  <Link href={`/gazoblok/orders/${o.id}`} className="block min-w-0 hover:underline">
-                    <div className="font-medium truncate" title={o.client.name}>
+                <td className="px-2">
+                  <div className="flex items-baseline gap-2.5 min-w-0 whitespace-nowrap">
+                    <span className="font-medium truncate" title={o.client.name}>
                       {o.client.name}
-                    </div>
-                  </Link>
-                  <div className="text-xs truncate">
-                    <PhoneLink phone={o.client.phone} />
+                    </span>
+                    {/* Under 1440 px the name needs the room; the phone stays on the order page. */}
+                    <PhoneMenu phone={o.client.phone} className="hidden min-[1440px]:inline-block shrink-0" />
                   </div>
                 </td>
-                <td className="hidden xl:table-cell px-3 py-3.5">
-                  <div className="grid gap-1.5">
-                    <span className={cn("text-right whitespace-nowrap", NUM)}>
-                      {formatNumber(o.loadedBlocks, 0)} / {formatNumber(o.totalBlocks, 0)}
+                <td className="px-2">
+                  <div className="flex items-center gap-2">
+                    {/* Fixed slots, wide enough for five digits, so the figures line up down the list. */}
+                    <span className={cn("grid grid-cols-[46px_12px_46px] shrink-0 whitespace-nowrap text-[12.5px]", NUM)}>
+                      <span className={cn("text-right font-semibold", o.loadedBlocks > o.totalBlocks && "text-destructive")}>
+                        {formatNumber(o.loadedBlocks, 0)}
+                      </span>
+                      <span className="text-center text-muted-foreground">/</span>
+                      <span className="text-muted-foreground">{formatNumber(o.totalBlocks, 0)}</span>
                     </span>
-                    <BlocksBar loaded={o.loadedBlocks} ordered={o.totalBlocks} />
+                    <span className="w-9 shrink-0">
+                      <BlocksBar loaded={o.loadedBlocks} ordered={o.totalBlocks} />
+                    </span>
                     {o.deliveredWithoutTrucks && (
-                      <span className="text-right text-[11px] text-muted-foreground">
-                        {t("машиналар қайд этилмаган", "no trucks on file")}
+                      <span
+                        role="img"
+                        aria-label={t("Машиналар қайд этилмаган", "No trucks on file")}
+                        title={t("Машиналар қайд этилмаган", "No trucks on file")}
+                        className="relative inline-flex shrink-0 text-muted-foreground"
+                      >
+                        <Truck className="h-3.5 w-3.5" aria-hidden />
+                        <span aria-hidden className="absolute left-1/2 top-1/2 h-px w-[18px] -translate-x-1/2 -translate-y-1/2 rotate-45 bg-current" />
                       </span>
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-3.5 text-right whitespace-nowrap">
-                  <div className={NUM}>{canceled ? "—" : uzsText(Number(o.totalPrice))}</div>
-                  {left !== null && (
-                    <div className={cn("mt-1 text-xs", left === 0 ? "text-text-tertiary" : "text-muted-foreground")}>
-                      {t("қолди", "left")} <span className={NUM}>{uzsText(left)}</span>
-                    </div>
-                  )}
+                <td className={cn("px-2 text-right whitespace-nowrap text-[12.5px]", NUM)}>
+                  {canceled ? "—" : uzsText(Number(o.totalPrice))}
                 </td>
-                <td className="px-3 py-3.5">{chips.status(o)}</td>
-                <td className="px-3 py-3.5">
+                <td className={cn("px-2 text-right whitespace-nowrap text-[12.5px]", NUM, !left && "text-muted-foreground")}>
+                  {left ? uzsText(left) : "—"}
+                </td>
+                <td className="px-2">{chips.status(o)}</td>
+                <td className="pl-2 pr-3">
                   {chips.payment(o) || flags.length ? (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex items-center gap-1.5 overflow-hidden">
                       {chips.payment(o)}
                       {flags}
                     </div>
                   ) : (
-                    <span className="text-text-tertiary">—</span>
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </td>
               </tr>
@@ -591,7 +688,7 @@ function OrdersCards({ orders }: { orders: GazoblokOrder[] }) {
   const t = useT();
   const chips = useRowChips();
   return (
-    <ul className="md:hidden divide-y divide-border">
+    <ul className="lg:hidden divide-y divide-border">
       {orders.map((o) => {
         const canceled = o.status === "CANCELED";
         const left = remainingToPay(o);
