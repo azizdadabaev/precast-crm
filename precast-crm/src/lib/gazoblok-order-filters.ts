@@ -7,6 +7,7 @@ import type { Prisma, GazoblokOrderStatus } from "@prisma/client";
 import { normalizePhone } from "@/lib/phone";
 import { unpaidOverload } from "@/lib/gazoblok-quantities";
 import { refundDue, OVERPAY_ALERT_MIN } from "@/lib/overpayment";
+import { shortGazoblokSearchPrefix } from "@/lib/gazoblok-number";
 
 const STATUSES = ["PLACED", "IN_PRODUCTION", "DELIVERED", "CANCELED"] as const;
 const PAY_STATES = ["AWAITING_PAYMENT", "PARTIALLY_PAID", "FULLY_PAID"] as const;
@@ -76,11 +77,25 @@ export function phoneDigits(q: string): string | null {
   return normalizePhone(q) || null;
 }
 
+/**
+ * Branches matching a typed order number: the stored «B-2026-11-0004» as text,
+ * plus the short «G61104» people see on screen (matched on the stored number).
+ */
+export function orderNumberSearch(
+  q: string,
+  currentYear = new Date().getFullYear(),
+): Prisma.GazoblokOrderWhereInput[] {
+  const or: Prisma.GazoblokOrderWhereInput[] = [{ orderNumber: { contains: q, mode: "insensitive" } }];
+  const prefix = shortGazoblokSearchPrefix(q, currentYear);
+  if (prefix) or.push({ orderNumber: { startsWith: prefix } });
+  return or;
+}
+
 export function buildOrderWhere(q: OrderListQuery, flaggedIds: string[] | null): Prisma.GazoblokOrderWhereInput {
   const where: Prisma.GazoblokOrderWhereInput = {};
   if (q.q) {
     const or: Prisma.GazoblokOrderWhereInput[] = [
-      { orderNumber: { contains: q.q, mode: "insensitive" } },
+      ...orderNumberSearch(q.q),
       { client: { name: { contains: q.q, mode: "insensitive" } } },
     ];
     const digits = phoneDigits(q.q);

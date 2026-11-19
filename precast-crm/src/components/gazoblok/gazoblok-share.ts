@@ -9,6 +9,7 @@ import { formatNumber } from "@/lib/utils";
 import { blockWeightKg, orderWeightKg, GAZOBLOK_DENSITY_KG_PER_M3 } from "@/lib/gazoblok-weight";
 import { loadedByLine } from "@/lib/gazoblok-quantities";
 import { round2 } from "@/services/calculation-engine";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 /** The fields of the order detail GET the card reads (Decimals arrive as strings). */
 export type ShareOrder = {
@@ -87,7 +88,7 @@ export function shareSummary(o: ShareOrder): ShareSummary {
 export function shareCaption(o: ShareOrder): string {
   const s = shareSummary(o);
   return [
-    `№${o.orderNumber}${o.client.name ? ` · ${o.client.name}` : ""}`,
+    `№${shortGazoblokNumber(o.orderNumber)}${o.client.name ? ` · ${o.client.name}` : ""}`,
     `Жами: ${formatNumber(s.total, 0)} so'm`,
     `Оғирлик: ${formatNumber(Math.round(s.weightKg), 0)} кг`,
   ].join("\n");

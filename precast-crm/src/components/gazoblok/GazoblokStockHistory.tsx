@@ -13,6 +13,7 @@ import { MOVEMENT_REASON_LABELS, movementText } from "@/lib/gazoblok-stock-histo
 import { queueStamp } from "@/lib/gazoblok-payments-queue";
 import { uzPart } from "@/lib/gazoblok-text";
 import { cn, formatNumber } from "@/lib/utils";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 interface Movement {
   id: string;
@@ -175,7 +176,7 @@ function signed(n: number): string {
 
 function MovementRow({ m }: { m: Movement }) {
   const t = useT();
-  const orderNumber = m.order?.orderNumber ?? null;
+  const orderNumber = m.order ? shortGazoblokNumber(m.order.orderNumber) : null;
   const text = movementText({ reason: m.reason, note: m.note, shipmentNumber: m.shipmentNumber, orderNumber });
   // The order number inside the text links to the order.
   const [before, after] = m.order && orderNumber ? text.split(orderNumber, 2) : [text, undefined];

@@ -5,6 +5,7 @@
  */
 import { round2 } from "@/services/calculation-engine";
 import { displayLineQuantities, unpaidOverload } from "@/lib/gazoblok-quantities";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 export type GazoblokExportInput = {
   id: string;
@@ -76,7 +77,7 @@ export function gazoblokExportRow(o: GazoblokExportInput): Record<string, string
   );
   const trucksDone = o.shipments.filter((s) => s.status === "LOADED" || s.status === "DELIVERED").length;
   return {
-    orderNumber: o.orderNumber,
+    orderNumber: shortGazoblokNumber(o.orderNumber),
     status: o.status,
     paymentState: o.paymentState,
     clientName: o.client?.name ?? "",

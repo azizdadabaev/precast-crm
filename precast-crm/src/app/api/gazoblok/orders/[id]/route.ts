@@ -30,6 +30,7 @@ import { refundDue, refundProblem } from "@/lib/overpayment";
 import { formatNumber } from "@/lib/utils";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
 import { paymentPendingNotice, paymentDecisionNotice, recipients } from "@/lib/gazoblok-notify";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 type Tx = Prisma.TransactionClient;
 
@@ -171,7 +172,7 @@ export const PATCH = withAuth<{ id: string }>(
           action: "gazoblok.order.status",
           targetType: "gazoblok_order",
           targetId: order.id,
-          message: `${order.orderNumber}: ${order.status} → ${next}`,
+          message: `${shortGazoblokNumber(order.orderNumber)}: ${order.status} → ${next}`,
         });
         // Stock moves per truck now; delivery itself never writes stock off.
         return ok({ ...result, stockWarnings: [] });
@@ -265,7 +266,7 @@ export const PATCH = withAuth<{ id: string }>(
           action: "gazoblok.order.closeShort",
           targetType: "gazoblok_order",
           targetId: order.id,
-          message: `${order.orderNumber}: closed short — ${body.reason}`,
+          message: `${shortGazoblokNumber(order.orderNumber)}: closed short — ${body.reason}`,
         });
         return ok(result);
       } catch (e) {

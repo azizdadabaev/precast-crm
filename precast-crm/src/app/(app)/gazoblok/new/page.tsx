@@ -40,6 +40,7 @@ import { PlacedScreen } from "@/components/gazoblok/order-form/PlacedScreen";
 import { NUM } from "@/components/gazoblok/order-form/ui";
 import { useClientLookup } from "@/components/gazoblok/order-form/useClientLookup";
 import type { FormProduct, PaymentMethod, PlacedOrder } from "@/components/gazoblok/order-form/types";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 // ── API types ───────────────────────────────────────────────────
 // Decimal fields arrive from Prisma as JSON STRINGS — always wrap with Number() before any math.
@@ -430,7 +431,7 @@ function NewOrderForm({ fromId, onFresh }: { fromId: string | null; onFresh: () 
               <div className="text-sm font-semibold">
                 {t("Қайта буюртма", "Reorder")} ·{" "}
                 <Link href={`/gazoblok/orders/${reorder.source.id}`} className={cn(NUM, "text-primary hover:underline")}>
-                  {reorder.source.orderNumber}
+                  {shortGazoblokNumber(reorder.source.orderNumber)}
                 </Link>{" "}
                 {t("асосида", "as the base")}
               </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { GazoblokOverload } from "@/lib/gazoblok-dashboard";
 import { useT } from "@/lib/i18n";
 import { formatNumber } from "@/lib/utils";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 const NUM = "font-[var(--font-num)] tabular-nums";
 
@@ -37,7 +38,7 @@ export function GazoblokOverloadTable({ overload }: { overload: GazoblokOverload
                       {op.orders.map((o) => (
                         <Link key={o.id} href={`/gazoblok/orders/${o.id}`}
                           className={`${NUM} inline-flex min-h-11 md:min-h-0 items-center text-xs text-primary hover:underline`}>
-                          {o.orderNumber}
+                          {shortGazoblokNumber(o.orderNumber)}
                         </Link>
                       ))}
                     </div>

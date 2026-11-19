@@ -6,6 +6,7 @@
 import type { CreateNotificationInput } from "@/lib/notifications";
 import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
 import { formatNumber } from "@/lib/utils";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 export type GazoblokNotice = Omit<CreateNotificationInput, "userIds">;
 
@@ -25,7 +26,7 @@ function methodLabel(method: string): string {
 export function placedNotice(o: OrderRef & { clientName: string }): GazoblokNotice {
   return {
     type: "ORDER_PLACED",
-    title: `Янги газоблок буюртма №${o.orderNumber} · New gazoblok order #${o.orderNumber}`,
+    title: `Янги газоблок буюртма №${shortGazoblokNumber(o.orderNumber)} · New gazoblok order #${shortGazoblokNumber(o.orderNumber)}`,
     body: o.clientName,
     gazoblokOrderId: o.id,
   };
@@ -37,7 +38,7 @@ export function paymentPendingNotice(
 ): GazoblokNotice {
   return {
     type: "PAYMENT_RECORDED",
-    title: `Газоблок тўлови ${uzs(p.amount)} · №${o.orderNumber} · Gazoblok payment ${uzs(p.amount)} · #${o.orderNumber}`,
+    title: `Газоблок тўлови ${uzs(p.amount)} · №${shortGazoblokNumber(o.orderNumber)} · Gazoblok payment ${uzs(p.amount)} · #${shortGazoblokNumber(o.orderNumber)}`,
     body: methodLabel(p.method),
     gazoblokOrderId: o.id,
     paymentId: p.id,
@@ -53,7 +54,7 @@ export function paymentDecisionNotice(
   const en = approved ? "confirmed" : "rejected";
   return {
     type: approved ? "PAYMENT_CONFIRMED" : "PAYMENT_REJECTED",
-    title: `Газоблок тўловингиз ${uz}: ${uzs(p.amount)} · №${o.orderNumber} · Your gazoblok payment was ${en}: ${uzs(p.amount)} · #${o.orderNumber}`,
+    title: `Газоблок тўловингиз ${uz}: ${uzs(p.amount)} · №${shortGazoblokNumber(o.orderNumber)} · Your gazoblok payment was ${en}: ${uzs(p.amount)} · #${shortGazoblokNumber(o.orderNumber)}`,
     gazoblokOrderId: o.id,
     paymentId: p.id,
   };

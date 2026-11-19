@@ -37,6 +37,7 @@ import { Ledger, MobileActionBar } from "@/components/gazoblok/order-detail/Ledg
 import { WallEstimateCard } from "@/components/gazoblok/order-detail/WallEstimateCard";
 import { ConfirmDialog } from "@/components/gazoblok/order-detail/ConfirmDialog";
 import { ICON } from "@/components/gazoblok/order-detail/ui";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 type Status = OrderDetail["status"];
 type LoadTarget = { id: string; number: number; initial: Record<string, number> | null; created: boolean };
@@ -308,7 +309,7 @@ export default function GazoblokOrderDetailPage() {
   return (
     <div className="max-w-[1240px] pb-28 xl:pb-0">
       <DetailHeader
-        orderNumber={order.orderNumber}
+        orderNumber={shortGazoblokNumber(order.orderNumber)}
         status={order.status}
         loadPill={lPill}
         payPill={pPill}
@@ -321,7 +322,7 @@ export default function GazoblokOrderDetailPage() {
         tools={{ edit: actions.edit, reorder: actions.reorder, chat: actions.chat }}
         banner={banner}
         shareRef={cardRef}
-        shareFileBase={`Gazoblok-${order.orderNumber}`}
+        shareFileBase={`Gazoblok-${shortGazoblokNumber(order.orderNumber)}`}
         shareCaption={shareCaption(order)}
         onEdit={() => {
           setError(null);
@@ -445,7 +446,7 @@ export default function GazoblokOrderDetailPage() {
       {loadTarget && (
         <LoadDialog
           orderId={order.id}
-          orderNumber={order.orderNumber}
+          orderNumber={shortGazoblokNumber(order.orderNumber)}
           clientName={order.client.name}
           sellerName={order.createdBy?.name ?? null}
           shipment={{ id: loadTarget.id, number: loadTarget.number }}
@@ -461,7 +462,7 @@ export default function GazoblokOrderDetailPage() {
       {closeShortOpen && (
         <CloseShortDialog
           orderId={order.id}
-          orderNumber={order.orderNumber}
+          orderNumber={shortGazoblokNumber(order.orderNumber)}
           clientName={order.client.name}
           quantities={order.quantities}
           lines={order.lines.map((l) => ({ id: l.id, quantity: l.quantity, unitPrice: Number(l.unitPrice) }))}

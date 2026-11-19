@@ -13,6 +13,7 @@ import { changesText, editPlan, editPolicy, editScope, orderVolumeM3 } from "@/l
 import { loadedByLine } from "@/lib/gazoblok-quantities";
 import { paymentStateFor } from "@/lib/payment-state";
 import { refundDue } from "@/lib/overpayment";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 type Tx = Prisma.TransactionClient;
 
@@ -167,7 +168,7 @@ export const PATCH = withAuth<{ id: string }>(async (req: NextRequest, { user, p
       action: "gazoblok.order.edit",
       targetType: "gazoblok_order",
       targetId: result.response.id,
-      message: `${result.orderNumber}: ${result.message}`,
+      message: `${shortGazoblokNumber(result.orderNumber)}: ${result.message}`,
     });
     return ok(result.response);
   } catch (e) {

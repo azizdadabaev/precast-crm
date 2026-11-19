@@ -76,7 +76,7 @@ describe("gazoblok share card", () => {
 
   it("caption mirrors beam-and-block", () => {
     const w = formatNumber(Math.round(3.6 * 611), 0);
-    expect(shareCaption(base)).toBe(`№B-2026-11-0007 · Алишер
+    expect(shareCaption(base)).toBe(`№G61107 · Алишер
 Жами: ${formatNumber(1250000, 0)} so'm
 Оғирлик: ${w} кг`);
   });

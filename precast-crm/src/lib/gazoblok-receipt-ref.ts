@@ -1,4 +1,5 @@
 import { parseOrderRef } from "./order-receipt-ref";
+import { expandShortGazoblokNumber } from "./gazoblok-number";
 
 /**
  * Extract a gazoblok order number ("B-YYYY-MM-NNNN") from a free-text bot
@@ -6,11 +7,17 @@ import { parseOrderRef } from "./order-receipt-ref";
  * autofilled from `currentYear`, exactly like the floor short form). The "B-"
  * prefix is what marks it as gazoblok — Cyrillic "Б" is accepted too and
  * normalized to the stored Latin "B-". Returns the validated gazoblok order
- * number, or null if no gazoblok ref is present.
+ * number, or null if no gazoblok ref is present. The short form shown on screen
+ * («G61104», Cyrillic «Г» too) is accepted when it stands as its own word.
  *
  * MUST be tried BEFORE parseOrderRef: "B-06-0010" contains "06-0010", which the
  * floor parser would otherwise grab as a floor order.
  */
+function parseShortRef(caption: string, currentYear: number): string | null {
+  const m = caption.match(/(?<![\p{L}\d])[GgГг]\d{5,7}(?![\p{L}\d])/u);
+  return m ? expandShortGazoblokNumber(m[0], currentYear) : null;
+}
+
 export function parseGazoblokOrderRef(
   caption: string | null | undefined,
   currentYear: number,
@@ -18,7 +25,7 @@ export function parseGazoblokOrderRef(
   if (!caption) return null;
   // Latin B/b or Cyrillic Б/б, then the floor-style date-number tail.
   const m = caption.match(/[BbБб]-\s*((?:\d{4}-\d{2}-\d{4})|(?:\d{2}-\d{4}))/);
-  if (!m) return null;
+  if (!m) return parseShortRef(caption, currentYear);
   const floor = parseOrderRef(m[1], currentYear); // validates → "YYYY-MM-NNNN"
   return floor ? `B-${floor}` : null;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { phoneDigits, buildOrderWhere, parseOrderListQuery, orderFlags } from "@/lib/gazoblok-order-filters";
+import { phoneDigits, buildOrderWhere, orderNumberSearch, parseOrderListQuery, orderFlags } from "@/lib/gazoblok-order-filters";
 
 describe("gazoblok order filters", () => {
   it("phone search is digits-only", () => {
@@ -89,6 +89,17 @@ describe("scheduled-day filter (calendar)", () => {
     });
     const w = buildOrderWhere(parseOrderListQuery(new URLSearchParams("day=none&status=DELIVERED")), null);
     expect(w.status).toBe("DELIVERED");
+  });
+
+  it("a short order number as shown on screen finds the stored long number", () => {
+    expect(orderNumberSearch("G61104", 2026)).toEqual([
+      { orderNumber: { contains: "G61104", mode: "insensitive" } },
+      { orderNumber: { startsWith: "B-2026-11-0004" } },
+    ]);
+    expect(orderNumberSearch("г611", 2026)).toContainEqual({ orderNumber: { startsWith: "B-2026-11-" } });
+    // The long form and names keep the single text branch.
+    expect(orderNumberSearch("B-2026-11", 2026)).toEqual([{ orderNumber: { contains: "B-2026-11", mode: "insensitive" } }]);
+    expect(orderNumberSearch("Голиб", 2026)).toHaveLength(1);
   });
 
   it("drops a malformed day", () => {

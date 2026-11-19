@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { PlanDay } from "@/lib/gazoblok-dashboard";
 import { useT } from "@/lib/i18n";
 import { formatNumber } from "@/lib/utils";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 const NUM = "font-[var(--font-num)] tabular-nums";
 
@@ -40,7 +41,7 @@ export function GazoblokDayPlan({ plan, unscheduledOpen }: { plan: PlanDay[]; un
                   {d.orders.map((o) => (
                     <Link key={o.id} href={`/gazoblok/orders/${o.id}`}
                       className="inline-flex min-h-11 md:min-h-0 md:py-0.5 items-center gap-1.5 text-xs hover:underline">
-                      <span className={`${NUM} text-primary`}>{o.orderNumber}</span>
+                      <span className={`${NUM} text-primary`}>{shortGazoblokNumber(o.orderNumber)}</span>
                       <span className="text-muted-foreground break-words">{o.clientName} · <span className={NUM}>{formatNumber(o.blocksLeft, 0)}</span> {t("та", "pcs")}</span>
                     </Link>
                   ))}

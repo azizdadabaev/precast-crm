@@ -12,7 +12,7 @@ const order = { id: "gz1", orderNumber: "B-2026-11-0012" };
 describe("gazoblok-notify", () => {
   it("placedNotice: bilingual title, client name body, ORDER_PLACED", () => {
     const n = placedNotice({ ...order, clientName: "Акмал Каримов" });
-    expect(n.title).toBe("Янги газоблок буюртма №B-2026-11-0012 · New gazoblok order #B-2026-11-0012");
+    expect(n.title).toBe("Янги газоблок буюртма №G61112 · New gazoblok order #G61112");
     expect(n.body).toBe("Акмал Каримов");
     expect(n.type).toBe("ORDER_PLACED");
   });
@@ -22,7 +22,7 @@ describe("gazoblok-notify", () => {
     expect(n.type).toBe("PAYMENT_RECORDED");
     expect(n.title).toContain(formatNumber(1500000, 0));
     expect(n.title).toContain("UZS");
-    expect(n.title).toContain("№B-2026-11-0012");
+    expect(n.title).toContain("№G61112");
     expect(n.body).toBe("Click");
     expect(n.paymentId).toBe("p1");
   });

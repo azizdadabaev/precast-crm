@@ -10,6 +10,7 @@ import { formatNumber } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_TABLE_DESIGN } from "@/lib/table-design-config";
 import { shareSummary, type ShareOrder } from "./gazoblok-share";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 export { shareCaption, type ShareOrder } from "./gazoblok-share";
 
@@ -82,7 +83,7 @@ export const GazoblokShareCard = React.forwardRef<HTMLDivElement, Props>(functio
 
       {/* ── Number + client ── */}
       <div style={{ marginTop: 14, display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16 }}>
-        <span style={{ fontSize: 16, fontWeight: 900, color: "#0f172a", whiteSpace: "nowrap", ...mono }}>№{order.orderNumber}</span>
+        <span style={{ fontSize: 16, fontWeight: 900, color: "#0f172a", whiteSpace: "nowrap", ...mono }}>№{shortGazoblokNumber(order.orderNumber)}</span>
         <span style={{ fontSize: 12, color: cfg.dimText, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           <span style={{ fontWeight: 600, color: "#1e293b" }}>{order.client.name}</span>
           {order.client.phone && <span style={mono}> · {formatPhone(order.client.phone)}</span>}

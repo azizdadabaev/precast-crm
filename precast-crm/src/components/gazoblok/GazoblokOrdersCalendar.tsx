@@ -21,6 +21,7 @@ import { isOpen } from "@/lib/gazoblok-rules";
 import { monthCells, parseMonthParam, shiftMonth, type GazoblokCalendar } from "@/lib/gazoblok-calendar";
 import { MONTH_UZ_FULL } from "@/components/gazoblok/dashboard/GazoblokKpis";
 import { GazoblokEditOrderDialog, type GazoblokEditOrderDetail } from "@/components/gazoblok/GazoblokEditOrderDialog";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 // Same figure style as the orders list (IBM Plex Mono, tightened thousands gap).
 const NUM = "font-[family-name:var(--font-num)] tabular-nums [word-spacing:-0.38em]";
@@ -348,7 +349,7 @@ function DayPanel({
               <li key={o.id} className="flex items-center gap-2 px-3 py-2 min-w-0">
                 <Link href={`/gazoblok/orders/${o.id}`} className="min-w-0 flex-1 hover:underline">
                   <div className="flex flex-wrap items-baseline gap-x-2 min-w-0">
-                    <span className={cn("text-xs font-bold text-primary whitespace-nowrap", NUM)}>{o.orderNumber}</span>
+                    <span className={cn("text-xs font-bold text-primary whitespace-nowrap", NUM)}>{shortGazoblokNumber(o.orderNumber)}</span>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
                       <span className={NUM}>{formatNumber(o.totalBlocks, 0)}</span> {t("та", "pcs")}
                     </span>

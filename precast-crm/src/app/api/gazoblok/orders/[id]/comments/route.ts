@@ -7,6 +7,7 @@ import { withPermission } from "@/lib/api-auth";
 import { CommentCreateSchema } from "@/lib/validation";
 import { extractMentions } from "@/lib/comments";
 import { emitNotifications } from "@/lib/notifications";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 type Params = { id: string };
 
@@ -61,7 +62,7 @@ export const POST = withPermission<Params>("order.view",
       void emitNotifications({
         type: "COMMENT_MENTION",
         userIds: recipients,
-        title: `${user.name} сизни газоблок буюртма #${order.orderNumber} да эслади · ${user.name} mentioned you on gazoblok order #${order.orderNumber}`,
+        title: `${user.name} сизни газоблок буюртма #${shortGazoblokNumber(order.orderNumber)} да эслади · ${user.name} mentioned you on gazoblok order #${shortGazoblokNumber(order.orderNumber)}`,
         body: body.body.slice(0, 160),
         commentId: comment.id,
         gazoblokOrderId: order.id,

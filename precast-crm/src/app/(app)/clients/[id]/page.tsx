@@ -11,6 +11,7 @@ import { Chip } from "@/components/ui/chip";
 import { ArrowLeft, Plus } from "lucide-react";
 import { formatMoney, formatDate, formatNumber } from "@/lib/utils";
 import { PhoneLink } from "@/components/PhoneLink";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 type OrderStatus = "DRAFT" | "PLACED" | "IN_PRODUCTION" | "LOADED" | "DISPATCHED" | "DELIVERED" | "CANCELED";
 type PaymentState = "FULLY_PAID" | "PARTIALLY_PAID" | "AWAITING_PAYMENT";
@@ -281,7 +282,7 @@ export default function ClientDetailPage() {
                       href={`/gazoblok/orders/${o.id}`}
                       className="whitespace-nowrap font-mono text-sm font-semibold text-primary after:absolute after:inset-0 hover:underline"
                     >
-                      {o.orderNumber}
+                      {shortGazoblokNumber(o.orderNumber)}
                     </Link>
                     <div className="text-xs text-muted-foreground">{formatDate(o.placedAt)}</div>
                   </div>

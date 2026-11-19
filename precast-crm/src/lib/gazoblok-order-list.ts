@@ -4,7 +4,7 @@
  */
 import type { Prisma } from "@prisma/client";
 import { digitsOnly, normalizePhone } from "@/lib/phone";
-import { buildOrderWhere, orderFlags, type OrderListQuery } from "@/lib/gazoblok-order-filters";
+import { buildOrderWhere, orderFlags, orderNumberSearch, type OrderListQuery } from "@/lib/gazoblok-order-filters";
 import { deliveredWithoutTrucks, loadedByLine, unpaidOverload } from "@/lib/gazoblok-quantities";
 import { refundDue } from "@/lib/overpayment";
 
@@ -28,7 +28,7 @@ export function orderListWhere(q: OrderListQuery, flaggedIds: string[] | null): 
   const where = buildOrderWhere({ ...q, q: "" }, flaggedIds);
   if (q.q) {
     where.OR = [
-      { orderNumber: { contains: q.q, mode: "insensitive" } },
+      ...orderNumberSearch(q.q),
       { client: { name: { contains: q.q, mode: "insensitive" } } },
       ...phoneSearchFragments(q.q).map((f) => ({ client: { phone: { contains: f } } })),
     ];

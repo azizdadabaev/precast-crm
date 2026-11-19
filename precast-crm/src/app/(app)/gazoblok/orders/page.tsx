@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -157,8 +158,9 @@ function OrdersList() {
   });
 
   // `calOpen` is the side sheet (640–1399 px); `calFolded` hides the column (from 1400 px).
+  // The column starts folded so the list has the full width; «Тақвим» brings it back.
   const [calOpen, setCalOpen] = useState(false);
-  const [calFolded, setCalFolded] = useState(false);
+  const [calFolded, setCalFolded] = useState(true);
   useEffect(() => {
     if (!calOpen) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCalOpen(false);
@@ -594,13 +596,13 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
       <table className="w-full min-w-[1040px] table-fixed text-[13px]">
         <thead className="bg-muted text-[11px] uppercase tracking-wider text-muted-foreground">
           <tr className="h-8">
-            <th className="text-left pl-3 pr-2 w-[126px]">№</th>
+            <th className="text-left pl-3 pr-2 w-[72px]">№</th>
             <th className="text-left px-2">{t("Мижоз", "Client")}</th>
-            <th className="text-left px-2 w-[186px]">{t("Юкланди / буюртма", "Loaded / ordered")}</th>
+            <th className="text-left px-2 w-[174px]">{t("Юкланди / буюртма", "Loaded / ordered")}</th>
             <th className="text-right px-2 w-[100px]">{t("Жами, UZS", "Total, UZS")}</th>
             <th className="text-right px-2 w-[100px]">{t("Қолди", "Left")}</th>
             <th className="text-left px-2 w-[152px]">{t("Ҳолат", "Status")}</th>
-            <th className="text-left pl-2 pr-3 w-[280px]">{t("Тўлов", "Payment")}</th>
+            <th className="text-left pl-2 pr-3 w-[256px]">{t("Тўлов", "Payment")}</th>
           </tr>
         </thead>
         <tbody>
@@ -620,22 +622,36 @@ function OrdersTable({ orders }: { orders: GazoblokOrder[] }) {
               >
                 <td className={cn("pl-3 pr-2 text-xs whitespace-nowrap", NUM)}>
                   <Link href={href} onClick={(e) => e.stopPropagation()} className="font-bold text-primary hover:underline">
-                    {o.orderNumber}
+                    {shortGazoblokNumber(o.orderNumber)}
                   </Link>
                 </td>
                 <td className="px-2">
-                  <div className="flex items-baseline gap-2.5 min-w-0 whitespace-nowrap">
-                    <span className="font-medium truncate" title={o.client.name}>
-                      {o.client.name}
-                    </span>
-                    {/* Under 1440 px the name needs the room; the phone stays on the order page. */}
-                    <PhoneMenu phone={o.client.phone} className="hidden min-[1440px]:inline-block shrink-0" />
+                  {/* The name comes first; the phone joins on every row where both fit. Measured on the
+                      column, not the window, because the sidebar and the calendar change its width.
+                      Narrow column: one clipped line — a phone that does not fit beside the full name
+                      wraps to a second line and is cut off. Wide column: a name slot, then the phone. */}
+                  <div className="[container-type:inline-size]">
+                    <div
+                      className={cn(
+                        "flex h-5 flex-wrap content-start items-baseline gap-x-2.5 gap-y-3 overflow-clip whitespace-nowrap",
+                        "[@container_(min-width:400px)]:grid [@container_(min-width:400px)]:h-auto [@container_(min-width:400px)]:grid-cols-[clamp(240px,45%,320px)_minmax(0,1fr)] [@container_(min-width:400px)]:overflow-visible",
+                      )}
+                    >
+                      <span className="min-w-0 max-w-full truncate font-medium" title={o.client.name}>
+                        {o.client.name}
+                      </span>
+                      <PhoneMenu
+                        phone={o.client.phone}
+                        className="ml-auto shrink-0 [@container_(min-width:400px)]:-ml-1 [@container_(min-width:400px)]:justify-self-start"
+                      />
+                    </div>
                   </div>
                 </td>
                 <td className="px-2">
                   <div className="flex items-center gap-2">
-                    {/* Fixed slots, wide enough for five digits, so the figures line up down the list. */}
-                    <span className={cn("grid grid-cols-[46px_12px_46px] shrink-0 whitespace-nowrap text-[12.5px]", NUM)}>
+                    {/* Fixed slots so the figures line up down the list. Sized for four digits; a rare
+                        five-digit count spills a few pixels into the padding beside it. */}
+                    <span className={cn("grid grid-cols-[40px_12px_40px] shrink-0 whitespace-nowrap text-[12.5px]", NUM)}>
                       <span className={cn("text-right font-semibold", o.loadedBlocks > o.totalBlocks && "text-destructive")}>
                         {formatNumber(o.loadedBlocks, 0)}
                       </span>
@@ -698,7 +714,7 @@ function OrdersCards({ orders }: { orders: GazoblokOrder[] }) {
               href={`/gazoblok/orders/${o.id}`}
               className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-3.5 hover:bg-surface-hover"
             >
-              <span className={cn("text-[13px] text-muted-foreground", NUM)}>{o.orderNumber}</span>
+              <span className={cn("text-[13px] text-muted-foreground", NUM)}>{shortGazoblokNumber(o.orderNumber)}</span>
               <span className={cn("text-right text-base font-semibold whitespace-nowrap", NUM)}>
                 {canceled ? "—" : uzsText(Number(o.totalPrice))}
               </span>

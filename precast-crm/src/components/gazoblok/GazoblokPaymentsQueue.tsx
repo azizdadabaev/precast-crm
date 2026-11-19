@@ -12,6 +12,7 @@ import { cn, formatNumber } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { PAYMENT_METHOD_LABELS } from "@/lib/gazoblok-labels";
 import { QUEUE_DEFAULT, queueStamp, type QueueStatus } from "@/lib/gazoblok-payments-queue";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 interface QueueItem {
   id: string;
@@ -153,7 +154,7 @@ export function GazoblokPaymentsQueue({ canConfirm }: { canConfirm: boolean }) {
                           href={`/gazoblok/orders/${p.order.id}`}
                           className="font-[var(--font-num)] tabular-nums text-sm font-bold text-primary hover:underline"
                         >
-                          {p.order.orderNumber}
+                          {shortGazoblokNumber(p.order.orderNumber)}
                         </Link>
                         <Chip variant={chip.variant}>{t(chip.uz, chip.en)}</Chip>
                         {p.order.status === "CANCELED" && <Chip variant="danger">{t("Буюртма бекор қилинган", "Order canceled")}</Chip>}
@@ -247,7 +248,7 @@ export function GazoblokPaymentsQueue({ canConfirm }: { canConfirm: boolean }) {
               Тўловни рад этиш<span className="lang-en font-normal"> · Reject payment</span>
             </h3>
             <div className="text-sm text-muted-foreground">
-              <span className="font-[var(--font-num)] tabular-nums">{rejectTarget.order.orderNumber}</span> ·{" "}
+              <span className="font-[var(--font-num)] tabular-nums">{shortGazoblokNumber(rejectTarget.order.orderNumber)}</span> ·{" "}
               <span className="font-[var(--font-num)] tabular-nums">
                 {formatNumber(Number(rejectTarget.amount), 0)} UZS
               </span>

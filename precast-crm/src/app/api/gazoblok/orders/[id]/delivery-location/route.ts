@@ -10,6 +10,7 @@ import { recordAudit } from "@/lib/audit";
 import { GAZOBLOK_PERMISSION } from "@/lib/gazoblok-permissions";
 import { isOpen } from "@/lib/gazoblok-rules";
 import { DeliveryLocationBody } from "@/app/api/orders/[id]/delivery-location/schema";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 type Tx = Prisma.TransactionClient;
 
@@ -82,7 +83,7 @@ export const PATCH = withPermission<{ id: string }>(GAZOBLOK_PERMISSION.editOrde
       action: "gazoblok.order.deliveryLocation",
       targetType: "gazoblok_order",
       targetId: result.updated.id,
-      message: `${result.orderNumber}: ${message}`,
+      message: `${shortGazoblokNumber(result.orderNumber)}: ${message}`,
     });
     return ok(result.updated);
   } catch (e) {

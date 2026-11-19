@@ -11,7 +11,7 @@ import { paymentStateFor } from "@/lib/payment-state";
 import { recordAudit } from "@/lib/audit";
 import { normalizePhone } from "@/lib/phone";
 import { orderTotal, lineTotal, blockVolumeM3 } from "@/services/gazoblok-engine";
-import { nextGazoblokOrderNumber, gazoblokMonthPrefix } from "@/lib/gazoblok-number";
+import { nextGazoblokOrderNumber, gazoblokMonthPrefix, shortGazoblokNumber } from "@/lib/gazoblok-number";
 import { PlaceGazoblokOrderSchema } from "@/lib/gazoblok-validation";
 import { clientNamePlan } from "@/lib/gazoblok-quantities";
 import { emitNotifications, usersWithPermission } from "@/lib/notifications";
@@ -332,7 +332,7 @@ export const POST = withPermission("order.create", withIdempotency(async (req: N
     action: "gazoblok.order.place",
     targetType: "gazoblok_order",
     targetId: order.id,
-    message: `Placed газоблок order ${order.orderNumber}`,
+    message: `Placed газоблок order ${shortGazoblokNumber(order.orderNumber)}`,
     metadata: { orderNumber: order.orderNumber, totalPrice: totals.total },
   });
 

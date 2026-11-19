@@ -20,6 +20,7 @@ import { discountPercentToSend, editPlan, percentFieldText } from "@/lib/gazoblo
 import { loadedByLine, parseDecimal } from "@/lib/gazoblok-quantities";
 import { parseMoney, uzPart } from "@/lib/gazoblok-text";
 import type { GazoblokEditOrderInput } from "@/lib/gazoblok-validation";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 /** The fields of the order detail GET this dialog reads. */
 export type GazoblokEditOrderDetail = {
@@ -68,7 +69,7 @@ export function GazoblokEditOrderDialog(props: Props) {
         <DialogHeader>
           <DialogTitle>
             {props.mode === "schedule" ? t("Санани ўзгартириш", "Change the date") : t("Буюртмани таҳрирлаш", "Edit order")}
-            <span className="ml-2 font-mono tabular-nums text-sm font-normal text-muted-foreground">{props.order.orderNumber}</span>
+            <span className="ml-2 font-mono tabular-nums text-sm font-normal text-muted-foreground">{shortGazoblokNumber(props.order.orderNumber)}</span>
           </DialogTitle>
         </DialogHeader>
         {/* Mounted only while open, so every opening starts from the saved order. */}

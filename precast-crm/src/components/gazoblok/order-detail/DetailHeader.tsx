@@ -27,6 +27,7 @@ import { ShareCalculationButton } from "@/components/ShareCalculationButton";
 import { SendQuoteToChatButton } from "@/components/inbox/SendQuoteToChatButton";
 import { dotDate, type Pill as PillT } from "@/lib/gazoblok-detail";
 import { BTN_OUTLINE, ICON, Pill } from "./ui";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 const STATUS: Record<string, { uz: string; en: string; icon: typeof Inbox }> = {
   PLACED: { uz: "Қабул қилинган", en: "Placed", icon: Inbox },
@@ -163,7 +164,7 @@ export function DetailHeader({
             <RotateCcw className="h-4 w-4" {...ICON} />
             {t("Қайта буюртма:", "Reorder of:")}{" "}
             <Link href={`/gazoblok/orders/${sourceOrder.id}`} className={cn(NUM, "text-primary hover:underline")}>
-              {sourceOrder.orderNumber}
+              {shortGazoblokNumber(sourceOrder.orderNumber)}
             </Link>{" "}
             {t("асосида", "")}
           </span>
@@ -176,7 +177,7 @@ export function DetailHeader({
               <span key={r.id}>
                 {i > 0 && ", "}
                 <Link href={`/gazoblok/orders/${r.id}`} className={cn(NUM, "text-primary hover:underline")}>
-                  {r.orderNumber}
+                  {shortGazoblokNumber(r.orderNumber)}
                 </Link>
               </span>
             ))}

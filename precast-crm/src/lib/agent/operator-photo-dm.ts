@@ -21,6 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { can } from "@/lib/permissions";
 import { parseOrderRef } from "@/lib/order-receipt-ref";
 import { parseGazoblokOrderRef } from "@/lib/gazoblok-receipt-ref";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 import { recordAudit } from "@/lib/audit";
 import { botTruckPhotoAction } from "@/lib/loaded-photos";
 import { loadOrderWithPhoto } from "@/lib/order-load";
@@ -135,7 +136,7 @@ async function promptKind(session: PhotoSession): Promise<void> {
   session.buttonsSent = true;
   await tgSendMessageWithInlineKeyboard(
     session.chatId,
-    `№${session.order.orderNumber} — расм тури? · Receipt or truck?`,
+    `№${shortGazoblokNumber(session.order.orderNumber)} — расм тури? · Receipt or truck?`,
     kindButtons(session.token, session.order.system),
   );
 }
@@ -436,12 +437,12 @@ export async function handleOperatorPhotoCallback(cbq: OperatorPhotoCallbackQuer
         targetType: "order",
         targetId: order.id,
         message: didTransition
-          ? `Order ${order.orderNumber} loaded onto truck via bot`
-          : `Loaded photo(s) added to ${order.orderNumber} via bot (${added})`,
+          ? `Order ${shortGazoblokNumber(order.orderNumber)} loaded onto truck via bot`
+          : `Loaded photo(s) added to ${shortGazoblokNumber(order.orderNumber)} via bot (${added})`,
       });
     }
 
-    let summary = attachSummary(order.orderNumber, parsed.kind, added, dup, failed);
+    let summary = attachSummary(shortGazoblokNumber(order.orderNumber), parsed.kind, added, dup, failed);
     if (didTransition) summary += " · 📦 юкланди → LOADED";
     await tgAnswerCallbackQuery(cbq.id, { text: summary });
     if (chatId && messageId) {

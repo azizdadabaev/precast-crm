@@ -145,3 +145,11 @@ describe("orderCounts", () => {
     });
   });
 });
+
+describe("orderListWhere · short order number", () => {
+  it("searches the stored number by the short form people see", () => {
+    const year = new Date().getFullYear();
+    const w = orderListWhere(parseOrderListQuery(new URLSearchParams(`q=G${year % 10}1104`)), null);
+    expect(w.OR).toContainEqual({ orderNumber: { startsWith: `B-${year}-11-0004` } });
+  });
+});

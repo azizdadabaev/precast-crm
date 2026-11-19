@@ -14,6 +14,7 @@ import { SendQuoteToChatButton } from "@/components/inbox/SendQuoteToChatButton"
 import { NUM } from "./ui";
 import { StatePill } from "./OrderLedger";
 import type { PlacedOrder } from "./types";
+import { shortGazoblokNumber } from "@/lib/gazoblok-number";
 
 const ICON = { strokeWidth: 1.75 };
 const AUTO_OPEN_S = 5;
@@ -89,7 +90,7 @@ export function PlacedScreen({
           <h2 className="text-[20px] font-bold tracking-tight">{t("Буюртма қабул қилинди", "Order placed")}</h2>
           <div className="text-[13px] text-muted-foreground">
             <span className={cn(NUM, "font-semibold text-foreground")} data-testid="placed-number">
-              {order.orderNumber}
+              {shortGazoblokNumber(order.orderNumber)}
             </span>{" "}
             · {dmyHm(order.placedAt)}
           </div>
@@ -154,7 +155,7 @@ export function PlacedScreen({
               <SendQuoteToChatButton
                 targetRef={cardRef}
                 conversationId={null}
-                fileBase={`Gazoblok-${order.orderNumber}`}
+                fileBase={`Gazoblok-${shortGazoblokNumber(order.orderNumber)}`}
                 caption={shareCaption(detail.data)}
               />
             ) : (
