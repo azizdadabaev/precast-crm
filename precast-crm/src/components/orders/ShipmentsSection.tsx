@@ -150,7 +150,9 @@ export function ShipmentsSection({
     }
   }
 
-  const canAddMore = ["IN_PRODUCTION", "DISPATCHED"].includes(orderStatus);
+  // Same statuses the shipments route accepts. An order stays PLACED until its
+  // first truck is dispatched, so PLACED must offer the next truck too.
+  const canAddMore = ["PLACED", "IN_PRODUCTION", "DISPATCHED"].includes(orderStatus);
 
   return (
     <div className="rounded-lg border bg-background overflow-hidden">
